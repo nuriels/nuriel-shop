@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
 # ============================================================
-# תעודת SSL אוטומטית לכל חנות בתת-דומיין (<slug>.nuri1.fit)
+# תעודות SSL של החנויות — סנכרון בין השרת לפאנל הפלטפורמה
 # ============================================================
 # רץ כל דקה (systemd: nuriel-store-certs.timer — מותקן ע"י
 # install-store-certs.sh). בכל ריצה:
-#   1. קורא את רשימת החנויות מהמסד (דרך Kong המקומי, service role).
-#   2. לחנות שאין לה עדיין תעודה — מנפיק תעודת Let's Encrypt (HTTP-01,
-#      webroot). ה-DNS הכללי (*.nuri1.fit) כבר מפנה לשרת, ובלוק ה-80
-#      הכללי (nuriel-stores-wildcard) מגיש את קובץ האימות.
-#   3. כותב מחדש את /etc/nginx/sites-available/nuriel-stores-ssl: בלוק
+#   1. קורא מהמסד (Kong המקומי, service role — ssl_agent_targets): כל
+#      החנויות, בקשות "חידוש תעודה" מהפאנל, וכתובות של חנויות שנמחקו.
+#   2. חנות בתת-דומיין (<slug>.nuri1.fit) שאין לה תעודה — מנפיק תעודת
+#      Let's Encrypt (HTTP-01, webroot). ה-DNS הכללי מפנה לשרת, ובלוק
+#      ה-80 הכללי (nuriel-stores-wildcard) מגיש את קובץ האימות.
+#   3. בקשת חידוש מהפאנל — certbot renew --force-renewal לתעודה הזו.
+#   4. חנות שנמחקה — מוחק את התעודה שלה (רק תעודה שהסקריפט הזה הנפיק).
+#   5. מדווח למסד (ssl_agent_report) את התוקף / השגיאה של כל תעודה —
+#      זה מה שמוצג בפאנל ליד כל חנות.
+#   6. כותב מחדש את /etc/nginx/sites-available/nuriel-stores-ssl: בלוק
 #      80 (הפניה ל-https) + בלוק 443 לכל חנות שיש לה תעודה. אם השתנה —
 #      nginx -t ואז reload; אם הבדיקה נכשלת — מחזיר את הקובץ הקודם.
-# חידוש התעודות: certbot.timer הרגיל של השרת (עם reload ל-nginx).
+# חידוש שוטף: certbot.timer הרגיל של השרת (עם reload ל-nginx).
 #
 # לא נוגע באתרים אחרים בשרת: שם שכבר מוגדר בבלוק nginx אחר (למשל
-# kobi.nuri1.fit) מדלגים עליו, וחנות ברירת המחדל (nuriel-shop) כבר
-# מוגדרת בקובץ משלה. תקלה זמנית (Kong לא עונה) — לא משנה כלום.
+# kobi.nuri1.fit) מדלגים עליו. חנות ברירת המחדל (nuriel-shop) מוגדרת
+# בקובץ משלה — לה רק מדווחים תוקף ומחדשים לפי בקשה. תקלה זמנית (Kong
+# לא עונה) — לא משנה כלום.
 # ============================================================
 set -Eeuo pipefail
 
@@ -58,16 +64,104 @@ SERVICE_KEY="$(env_get SUPABASE_SERVICE_ROLE_KEY)"
   log "חסר TENANT_BASE_DOMAIN או SUPABASE_SERVICE_ROLE_KEY ב-$ENV_FILE"
   exit 1
 }
+# הכתובת של חנות ברירת המחדל (התעודה שלה מנוהלת ע"י certbot --nginx)
+DEFAULT_HOST="$(env_get PUBLIC_SITE_URL)"
+DEFAULT_HOST="${DEFAULT_HOST#*://}"
+DEFAULT_HOST="${DEFAULT_HOST%%/*}"
+DEFAULT_HOST="${DEFAULT_HOST%%:*}"
+DEFAULT_HOST="${DEFAULT_HOST,,}"
 
-# --- 1. החנויות (בלי חנות ברירת המחדל) ---
-# תקלה כאן עוצרת את הריצה בלי לגעת בהגדרות הקיימות
-slugs="$(
-  curl -fsS --max-time 20 \
-    -H "apikey: $SERVICE_KEY" -H "Authorization: Bearer $SERVICE_KEY" -H "Accept: text/csv" \
-    "$KONG_URL/rest/v1/tenants?select=slug&is_default=is.false&order=slug" | tail -n +2
-)"
+rpc() {
+  curl -fsS --max-time 30 -X POST \
+    -H "apikey: $SERVICE_KEY" -H "Authorization: Bearer $SERVICE_KEY" \
+    -H "Content-Type: application/json" "$@"
+}
 
-# --- שמות שכבר מוגדרים בבלוקים אחרים של nginx (אתרים אחרים בשרת) ---
+# ------------------------------------------------------------
+# עזרים לתעודות
+# ------------------------------------------------------------
+HOST_RE='^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$'
+has_cert() { [[ -f "$LE_DIR/renewal/$1.conf" && -f "$LE_DIR/live/$1/fullchain.pem" ]]; }
+# תעודה שהסקריפט הזה הנפיק (ולא של אתר אחר / certbot --nginx)
+is_ours() { [[ -f "$LE_DIR/renewal/$1.conf" ]] && grep -qF -- "$WEBROOT" "$LE_DIR/renewal/$1.conf"; }
+
+# "<issued> <expires>" בפורמט ISO
+cert_dates() {
+  local pem="$LE_DIR/live/$1/cert.pem" nb na
+  [[ -f "$pem" ]] || pem="$LE_DIR/live/$1/fullchain.pem"
+  nb="$(openssl x509 -noout -startdate -in "$pem" 2>/dev/null | cut -d= -f2)" || return 1
+  na="$(openssl x509 -noout -enddate -in "$pem" 2>/dev/null | cut -d= -f2)" || return 1
+  [[ -n "$nb" && -n "$na" ]] || return 1
+  echo "$(date -u -d "$nb" +%Y-%m-%dT%H:%M:%SZ) $(date -u -d "$na" +%Y-%m-%dT%H:%M:%SZ)"
+}
+
+# השורה המשמעותית בלוג של certbot (לתצוגה בפאנל)
+cert_error() {
+  local line
+  line="$(grep -E 'Detail:|[Ee]rror' "$1" 2>/dev/null | tail -n 1 || true)"
+  [[ -n "$line" ]] || line="$(grep -v '^[[:space:]]*$' "$1" 2>/dev/null | tail -n 1 || true)"
+  sed 's/^[[:space:]]*//' <<<"${line:-certbot נכשל}" | cut -c1-300
+}
+
+issue() {
+  local host=$1
+  log "מנפיק תעודה ל-$host"
+  if certbot certonly --webroot -w "$WEBROOT" -d "$host" --cert-name "$host" \
+    --non-interactive --agree-tos --keep-until-expiring \
+    --deploy-hook "systemctl reload nginx" >"$STATE_DIR/$host.log" 2>&1; then
+    rm -f "$STATE_DIR/$host.failed"
+    log "✓ תעודה הונפקה ל-$host"
+  else
+    touch "$STATE_DIR/$host.failed"
+    log "✗ ההנפקה ל-$host נכשלה (ניסיון חוזר בעוד שעה) — פרטים: $STATE_DIR/$host.log"
+    return 1
+  fi
+}
+
+# חידוש מיידי לפי בקשה מהפאנל (ההגדרות של התעודה — מקובץ ה-renewal שלה)
+renew_now() {
+  local host=$1
+  log "מחדש את התעודה של $host (בקשה מהפאנל)"
+  if certbot renew --cert-name "$host" --force-renewal --non-interactive \
+    >"$STATE_DIR/$host.renew.log" 2>&1; then
+    log "✓ התעודה של $host חודשה"
+  else
+    log "✗ החידוש של $host נכשל — פרטים: $STATE_DIR/$host.renew.log"
+    return 1
+  fi
+}
+
+# חידוש ידני שנכשל — השגיאה נשארת בפאנל עד שהתעודה מתחדשת (ידנית או אוטומטית):
+# נשמרת יחד עם תאריך התפוגה של התעודה באותו רגע
+remember_renew_error() { # host error
+  local dates
+  dates="$(cert_dates "$1" || true)"
+  printf '%s\n%s\n' "${dates#* }" "$2" >"$STATE_DIR/$1.renew-error"
+}
+renew_error() { # host expires → השגיאה, אם התעודה לא התחדשה מאז
+  local f="$STATE_DIR/$1.renew-error"
+  [[ -f "$f" ]] || return 0
+  if [[ "$(head -n 1 "$f")" == "$2" ]]; then tail -n +2 "$f"; else rm -f "$f"; fi
+}
+
+json_str() {
+  local v=${1//\\/\\\\}
+  v=${v//\"/\\\"}
+  printf '"%s"' "$(printf '%s' "$v" | tr -d '\000-\037')"
+}
+reports=()
+add_report() { # host tenant status issued expires error handled
+  reports+=("{\"host\":$(json_str "$1"),\"tenant_id\":$(json_str "$2"),\"status\":$(json_str "$3"),\"issued_at\":$(json_str "$4"),\"expires_at\":$(json_str "$5"),\"error\":$(json_str "$6"),\"renewal_handled\":$(json_str "$7")}")
+}
+
+# ------------------------------------------------------------
+# 1. מה לטפל בו
+# ------------------------------------------------------------
+# תקלה כאן עוצרת את הריצה בלי לגעת בהגדרות הקיימות.
+# CSV: kind,tenant_id,slug,is_default,host,renew_requested_at
+targets="$(rpc -H "Accept: text/csv" -d '{}' "$KONG_URL/rest/v1/rpc/ssl_agent_targets" | tail -n +2)"
+
+# שמות שכבר מוגדרים בבלוקים אחרים של nginx (אתרים אחרים בשרת)
 taken_names="$(
   nginx -T 2>/dev/null | awk -v own="$SITE_NAME" '
     /^# configuration file / { file = $4; next }
@@ -80,11 +174,53 @@ taken_names="$(
     }' | sort -u
 )"
 
-has_cert() { [[ -f "$LE_DIR/renewal/$1.conf" && -f "$LE_DIR/live/$1/fullchain.pem" ]]; }
-
 ready_hosts=()
-while IFS= read -r slug; do
-  [[ -z "$slug" ]] && continue
+removed_hosts=()
+while IFS=, read -r kind tenant_id slug is_default host renew_at; do
+  [[ -z "$kind" ]] && continue
+
+  # --- חנות שנמחקה: התעודה שלה כבר לא נחוצה ---
+  if [[ "$kind" == deleted ]]; then
+    [[ "$host" =~ $HOST_RE ]] || continue
+    if is_ours "$host"; then
+      if certbot delete --cert-name "$host" --non-interactive >"$STATE_DIR/$host.delete.log" 2>&1; then
+        log "✓ התעודה של $host נמחקה (החנות נמחקה)"
+      else
+        log_once "delete-$host" "✗ מחיקת התעודה של $host נכשלה — פרטים: $STATE_DIR/$host.delete.log"
+        continue
+      fi
+    fi
+    rm -f "$STATE_DIR/$host".* "$STATE_DIR/notes/"*"-$host"
+    removed_hosts+=("$host")
+    continue
+  fi
+
+  handled=""
+
+  # --- חנות ברירת המחדל: רק תוקף + חידוש לפי בקשה ---
+  if [[ "$is_default" == t || "$is_default" == true ]]; then
+    [[ "$DEFAULT_HOST" =~ $HOST_RE ]] || continue
+    host="$DEFAULT_HOST"
+    if [[ -n "$renew_at" ]]; then
+      handled="$renew_at"
+      if has_cert "$host"; then
+        if renew_now "$host"; then
+          rm -f "$STATE_DIR/$host.renew-error"
+        else
+          remember_renew_error "$host" "$(cert_error "$STATE_DIR/$host.renew.log")"
+        fi
+      fi
+    fi
+    if has_cert "$host" && dates="$(cert_dates "$host")"; then
+      error="$(renew_error "$host" "${dates#* }")"
+      add_report "$host" "$tenant_id" active "${dates% *}" "${dates#* }" "$error" "$handled"
+    else
+      add_report "$host" "$tenant_id" external "" "" "" "$handled"
+    fi
+    continue
+  fi
+
+  # --- חנות בתת-דומיין ---
   # רק תווים חוקיים לשם דומיין — לא מעבירים שום דבר אחר ל-certbot / nginx
   if [[ ! "$slug" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
     log_once "invalid-${slug//[^A-Za-z0-9_-]/_}" "מדלג על slug לא תקין: $slug"
@@ -94,31 +230,58 @@ while IFS= read -r slug; do
 
   if grep -qxF -- "$host" <<<"$taken_names"; then
     log_once "taken-$host" "מדלג על $host — השם כבר מוגדר באתר אחר בשרת"
+    add_report "$host" "$tenant_id" blocked "" "" "" "$renew_at"
     continue
+  fi
+
+  if [[ -n "$renew_at" ]]; then
+    handled="$renew_at"
+    if has_cert "$host"; then
+      if renew_now "$host"; then
+        rm -f "$STATE_DIR/$host.renew-error"
+      else
+        remember_renew_error "$host" "$(cert_error "$STATE_DIR/$host.renew.log")"
+      fi
+    else
+      # בקשה מהפאנל = לנסות עכשיו, גם בתוך שעת ההמתנה אחרי כישלון
+      rm -f "$STATE_DIR/$host.failed"
+    fi
   fi
 
   if ! has_cert "$host"; then
     marker="$STATE_DIR/$host.failed"
-    if [[ -f "$marker" ]] && (($(date +%s) - $(stat -c %Y "$marker") < RETRY_AFTER_SECONDS)); then
-      continue
-    fi
-    log "מנפיק תעודה ל-$host"
-    if certbot certonly --webroot -w "$WEBROOT" -d "$host" --cert-name "$host" \
-      --non-interactive --agree-tos --keep-until-expiring \
-      --deploy-hook "systemctl reload nginx" >"$STATE_DIR/$host.log" 2>&1; then
-      rm -f "$marker"
-      log "✓ תעודה הונפקה ל-$host"
-    else
-      touch "$marker"
-      log "✗ ההנפקה ל-$host נכשלה (ניסיון חוזר בעוד שעה) — פרטים: $STATE_DIR/$host.log"
-      continue
+    if [[ ! -f "$marker" ]] || (($(date +%s) - $(stat -c %Y "$marker") >= RETRY_AFTER_SECONDS)); then
+      issue "$host" || true
     fi
   fi
 
-  has_cert "$host" && ready_hosts+=("$host")
-done <<<"$slugs"
+  if has_cert "$host" && dates="$(cert_dates "$host")"; then
+    error="$(renew_error "$host" "${dates#* }")"
+    add_report "$host" "$tenant_id" active "${dates% *}" "${dates#* }" "$error" "$handled"
+    ready_hosts+=("$host")
+  elif has_cert "$host"; then
+    add_report "$host" "$tenant_id" active "" "" "" "$handled"
+    ready_hosts+=("$host")
+  elif [[ -f "$STATE_DIR/$host.failed" ]]; then
+    add_report "$host" "$tenant_id" error "" "" "$(cert_error "$STATE_DIR/$host.log")" "$handled"
+  else
+    add_report "$host" "$tenant_id" pending "" "" "" "$handled"
+  fi
+done < <(tr -d '"\r' <<<"$targets")
 
-# --- 3. קובץ ה-nginx של החנויות ---
+# ------------------------------------------------------------
+# 2. דיווח למסד (מה שמוצג בפאנל)
+# ------------------------------------------------------------
+rows_json="[$(IFS=,; echo "${reports[*]}")]"
+removed_json="["
+for h in "${removed_hosts[@]}"; do removed_json+="$(json_str "$h"),"; done
+removed_json="${removed_json%,}]"
+rpc -o /dev/null -d "{\"_rows\":$rows_json,\"_removed\":$removed_json}" \
+  "$KONG_URL/rest/v1/rpc/ssl_agent_report" || log "✗ הדיווח למסד נכשל"
+
+# ------------------------------------------------------------
+# 3. קובץ ה-nginx של החנויות
+# ------------------------------------------------------------
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 {

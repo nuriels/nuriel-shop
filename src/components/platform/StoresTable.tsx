@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Lock, LockOpen, UserPlus } from "lucide-react";
+import { Lock, LockOpen, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, TenantPlan, TenantStatus } from "@/integrations/supabase/types";
@@ -13,6 +13,8 @@ import {
   StoreCredentials,
   type StoreAdminCredentials,
 } from "@/components/platform/StoreCredentials";
+import { DeleteStoreDialog } from "@/components/platform/DeleteStoreDialog";
+import { SslCell } from "@/components/platform/SslCell";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,21 +56,24 @@ export type Store = Database["public"]["Functions"]["platform_list_tenants"]["Re
 
 /**
  * לוח הבקרה של החנויות: מנוי (שינוי במקום), סטטוס עם הקפאה / שחרור,
- * פרטי הבעלים ונתוני שימוש. כל פעולה רצה בפונקציה במסד שבודקת בעצמה
- * שהקורא הוא מנהל-על.
+ * תעודת SSL (תוקף + חידוש), פרטי הבעלים, נתוני שימוש ומחיקה. כל פעולה
+ * רצה בפונקציה במסד שבודקת בעצמה שהקורא הוא מנהל-על.
  */
 export function StoresTable({
   stores,
   storeUrl,
   onChanged,
+  onRemoved,
 }: {
   stores: Store[];
   storeUrl: (store: Pick<Store, "slug" | "domain">) => string | null;
   onChanged: (store: Partial<Store> & { id: string }) => void;
+  onRemoved: (id: string) => void;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toSuspend, setToSuspend] = useState<Store | null>(null);
   const [adminFor, setAdminFor] = useState<Store | null>(null);
+  const [toDelete, setToDelete] = useState<Store | null>(null);
 
   const setPlan = async (store: Store, plan: TenantPlan) => {
     setBusyId(store.id);
@@ -111,6 +116,7 @@ export function StoresTable({
             <TableHead>בעלים</TableHead>
             <TableHead>מנוי</TableHead>
             <TableHead>סטטוס</TableHead>
+            <TableHead>תעודת SSL</TableHead>
             <TableHead>נתונים</TableHead>
             <TableHead>נוצרה</TableHead>
             <TableHead className="text-left">פעולות</TableHead>
@@ -180,6 +186,15 @@ export function StoresTable({
                   )}
                 </TableCell>
 
+                <TableCell>
+                  <SslCell
+                    store={store}
+                    onRequested={(requestedAt) =>
+                      onChanged({ id: store.id, ssl_renew_requested_at: requestedAt })
+                    }
+                  />
+                </TableCell>
+
                 <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
                   {store.admins} מנהלים · {store.customers} לקוחות
                   <br />
@@ -225,6 +240,18 @@ export function StoresTable({
                         <Lock className="size-4" /> הקפא חנות / חסום
                       </Button>
                     )}
+                    {!store.is_default && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        disabled={busy}
+                        title="מחיקת החנות לצמיתות"
+                        onClick={() => setToDelete(store)}
+                      >
+                        <Trash2 className="size-4" /> מחיקה
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -256,6 +283,14 @@ export function StoresTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DeleteStoreDialog
+        // מפתח לפי חנות — כל פתיחה מתחילה בשדה ריק
+        key={`delete-${toDelete?.id ?? "closed"}`}
+        store={toDelete}
+        onClose={() => setToDelete(null)}
+        onDeleted={onRemoved}
+      />
 
       <CreateAdminDialog
         // מפתח לפי חנות — כל פתיחה מתחילה בטופס נקי

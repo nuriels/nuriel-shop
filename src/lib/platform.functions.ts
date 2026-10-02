@@ -184,6 +184,45 @@ export const createStoreAdmin = createServerFn({ method: "POST" })
     return credentials;
   });
 
+/**
+ * מחיקת חנות לצמיתות (מנהל-על בלבד; לא החנות הראשית). לאישור צריך להקליד
+ * את כתובת החנות. סדר הפעולות:
+ * 1. platform_delete_tenant — כל המידע במסד, בטרנזקציה אחת (או הכל או כלום).
+ * 2. חשבונות ההתחברות של החנות (Auth) — כדי שהאימיילים יתפנו.
+ * 3. הקבצים של החנות ב-Storage (תמונות מוצרים, לוגו, באנרים).
+ * תעודת ה-SSL והגדרת ה-nginx של הכתובת מוסרות בשרת תוך דקה (store-certs.sh).
+ */
+export const deleteStore = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { tenantId: string; confirmSlug: string }) => {
+    const tenantId = String(input?.tenantId ?? "").trim();
+    if (!/^[0-9a-f-]{36}$/.test(tenantId)) throw new Error("חנות לא תקינה");
+    return { tenantId, confirmSlug: normalizeSlug(input?.confirmSlug) };
+  })
+  .handler(async ({ data, context }) => {
+    // הבדיקות (מנהל-על, לא החנות הראשית, כתובת לאישור) — במסד, עם החיבור של המשתמש
+    const { data: deleted, error } = await context.supabase.rpc("platform_delete_tenant", {
+      _tenant: data.tenantId,
+      _confirm_slug: data.confirmSlug,
+    });
+    if (error || !deleted) throw new Error(error?.message ?? "מחיקת החנות נכשלה");
+
+    const { deleteAuthUsers, removeTenantStorage } = await import("@/lib/platform.server");
+    const auth = await deleteAuthUsers(deleted.user_ids ?? []);
+    const storage = await removeTenantStorage(data.tenantId);
+    const warnings = [...auth.errors, ...storage.errors];
+    if (warnings.length > 0)
+      console.error("[deleteStore] cleanup warnings", data.tenantId, warnings);
+
+    return {
+      slug: deleted.slug,
+      rows: deleted.rows,
+      users: auth.users,
+      files: storage.files,
+      warnings,
+    };
+  });
+
 /** שם ברירת המחדל לחנות שעוד לא הגדירה שם עסק */
 export const DEFAULT_STORE_NAME = "החנות שלי";
 /** הכותרת הקבועה של פאנל ניהול הפלטפורמה */

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Lock } from "lucide-react";
+import { AlertTriangle, Lock, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthState } from "@/hooks/useAuthState";
 import { FORBIDDEN_PAGE } from "@/lib/blocked-pages";
+import { SSL_AGENT_STALE_MS } from "@/lib/ssl-status";
 import { PLATFORM_SITE_NAME } from "@/lib/platform.functions";
 import { CreateStoreForm, type CreatedStore } from "@/components/platform/CreateStoreForm";
 import { PlatformAdminsCard } from "@/components/platform/PlatformAdminsCard";
@@ -118,8 +119,28 @@ function PlatformConsole({
     void load();
   }, [load]);
 
+  // מחכים לשרת (חידוש שהתבקש, או חנות חדשה שעוד אין לה תעודה) — מרעננים כל 15 שניות
+  const waitingForServer = stores.some(
+    (s) => s.ssl_renew_requested_at !== null || (!s.is_default && s.ssl_status === null),
+  );
+  useEffect(() => {
+    if (!waitingForServer) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 15_000);
+    return () => clearInterval(timer);
+  }, [waitingForServer, load]);
+
   const active = stores.filter((s) => s.status === "active").length;
   const suspended = stores.length - active;
+  const lastReport = stores.reduce<string | null>(
+    (latest, s) =>
+      s.ssl_checked_at && (!latest || s.ssl_checked_at > latest) ? s.ssl_checked_at : latest,
+    null,
+  );
+  const agentStale =
+    stores.length > 0 &&
+    (!lastReport || Date.now() - new Date(lastReport).getTime() > SSL_AGENT_STALE_MS);
 
   return (
     <>
@@ -160,12 +181,34 @@ function PlatformConsole({
         </Card>
       )}
 
+      {agentStale && (
+        <Card className="border-amber-500 bg-amber-50">
+          <CardContent className="flex items-start gap-3 py-4 text-sm text-amber-900">
+            <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+            <div>
+              {lastReport
+                ? `השרת לא דיווח על תעודות ה-SSL מאז ${new Date(lastReport).toLocaleString("he-IL")}.`
+                : "השרת עוד לא דיווח על תעודות ה-SSL."}{" "}
+              חנויות חדשות לא יקבלו תעודה וחידוש מהפאנל לא יבוצע עד שהטיימר בשרת ירוץ. בדיקה בשרת:{" "}
+              <code dir="ltr" className="rounded bg-amber-100 px-1">
+                journalctl -u nuriel-store-certs -n 20
+              </code>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
-        <CardHeader>
-          <CardTitle>חנויות ({stores.length})</CardTitle>
-          <CardDescription>
-            {active} פעילות · {suspended} מוקפאות
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div className="space-y-1.5">
+            <CardTitle>חנויות ({stores.length})</CardTitle>
+            <CardDescription>
+              {active} פעילות · {suspended} מוקפאות
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void load()}>
+            <RefreshCw className="size-4" /> רענון
+          </Button>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <StoresTable
@@ -174,6 +217,10 @@ function PlatformConsole({
             onChanged={(change) =>
               setStores((list) => list.map((s) => (s.id === change.id ? { ...s, ...change } : s)))
             }
+            onRemoved={(id) => {
+              setStores((list) => list.filter((s) => s.id !== id));
+              setCreated((c) => (c?.id === id ? null : c));
+            }}
           />
         </CardContent>
       </Card>

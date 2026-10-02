@@ -4,6 +4,8 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type TenantPlan = "trial" | "basic" | "pro" | "enterprise";
 /** סטטוס חנות (tenants.status) — חנות מוקפאת נעולה ללקוחות */
 export type TenantStatus = "active" | "suspended";
+/** מצב תעודת SSL של חנות (tenant_ssl.status) — מדווח ע"י deploy/ssl/store-certs.sh */
+export type TenantSslStatus = "active" | "pending" | "error" | "blocked" | "external";
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
@@ -1152,8 +1154,20 @@ export type Database = {
           customers: number;
           products: number;
           orders: number;
+          ssl_host: string | null;
+          ssl_status: TenantSslStatus | null;
+          ssl_issued_at: string | null;
+          ssl_expires_at: string | null;
+          ssl_error: string | null;
+          ssl_checked_at: string | null;
+          ssl_renew_requested_at: string | null;
         }[];
       };
+      platform_delete_tenant: {
+        Args: { _tenant: string; _confirm_slug: string };
+        Returns: { slug: string; rows: number; user_ids: string[] };
+      };
+      platform_request_ssl_renewal: { Args: { _tenant: string }; Returns: string };
       platform_create_tenant: {
         Args: {
           _slug: string;

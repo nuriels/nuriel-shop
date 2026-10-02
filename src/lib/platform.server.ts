@@ -1,8 +1,10 @@
 /**
- * פאנל הפלטפורמה — צד שרת בלבד: יצירת חשבון מנהל לחנות.
+ * פאנל הפלטפורמה — צד שרת בלבד: חשבון מנהל לחנות חדשה, וניקוי חשבונות
+ * וקבצים של חנות שנמחקה.
  *
- * נוצר כאן (ולא ב-SQL) כי צריך את ה-Auth API של Supabase. הסיסמה הזמנית
- * מוצגת למנהל-העל פעם אחת; בכניסה הראשונה מנהל החנות חייב לקבוע סיסמה משלו.
+ * נעשה כאן (ולא ב-SQL) כי צריך את ה-Auth API ואת ה-Storage API של Supabase.
+ * הסיסמה הזמנית מוצגת למנהל-העל פעם אחת; בכניסה הראשונה מנהל החנות חייב
+ * לקבוע סיסמה משלו.
  */
 
 import { randomInt } from "node:crypto";
@@ -67,4 +69,81 @@ export async function provisionStoreAdmin(
   }
 
   return { email, tempPassword: password, loginUrl: `${originForTenant(tenant)}/login` };
+}
+
+// ============================================================
+// מחיקת חנות: חשבונות התחברות וקבצים (המידע במסד כבר נמחק ב-platform_delete_tenant)
+// ============================================================
+
+/** הדליים שבהם לכל חנות תיקייה משלה: <tenant_id>/... */
+export const TENANT_BUCKETS = ["product-images", "branding"] as const;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+type ListedItem = { name: string; id: string | null };
+/** החלק של ה-Storage API שצריך כאן (מאפשר בדיקה בלי שרת) */
+export type BucketApi = {
+  list(
+    path: string,
+    options: { limit: number; offset: number },
+  ): Promise<{ data: ListedItem[] | null; error: { message: string } | null }>;
+  remove(paths: string[]): Promise<{ error: { message: string } | null }>;
+};
+
+async function listFilesRecursive(bucket: BucketApi, prefix: string): Promise<string[]> {
+  const PAGE = 1000;
+  const files: string[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await bucket.list(prefix, { limit: PAGE, offset });
+    if (error) throw new Error(error.message);
+    const items = data ?? [];
+    for (const item of items) {
+      const path = `${prefix}/${item.name}`;
+      // תיקייה = פריט בלי id
+      if (item.id === null) files.push(...(await listFilesRecursive(bucket, path)));
+      else files.push(path);
+    }
+    if (items.length < PAGE) break;
+  }
+  return files;
+}
+
+/** מוחק את כל הקבצים של החנות (התיקייה <tenant_id>/ בכל דלי) */
+export async function removeTenantStorage(
+  tenantId: string,
+  bucketFor: (bucket: string) => BucketApi = (b) => supabaseAdminUnscoped.storage.from(b),
+): Promise<{ files: number; errors: string[] }> {
+  // בלי מזהה תקין התיקייה הייתה "" = כל הקבצים של כל החנויות
+  if (!UUID.test(tenantId)) throw new Error("מזהה חנות לא תקין");
+  let files = 0;
+  const errors: string[] = [];
+  for (const name of TENANT_BUCKETS) {
+    try {
+      const bucket = bucketFor(name);
+      const paths = await listFilesRecursive(bucket, tenantId);
+      for (let i = 0; i < paths.length; i += 500) {
+        const chunk = paths.slice(i, i + 500);
+        const { error } = await bucket.remove(chunk);
+        if (error) throw new Error(error.message);
+        files += chunk.length;
+      }
+    } catch (error) {
+      errors.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return { files, errors };
+}
+
+/** מוחק את חשבונות ההתחברות של החנות (מנהלי-על לא מגיעים לכאן — ראו platform_delete_tenant) */
+export async function deleteAuthUsers(
+  userIds: string[],
+): Promise<{ users: number; errors: string[] }> {
+  let users = 0;
+  const errors: string[] = [];
+  for (const id of userIds) {
+    const { error } = await supabaseAdminUnscoped.auth.admin.deleteUser(id);
+    if (!error || /not.?found/i.test(error.message)) users += 1;
+    else errors.push(`${id}: ${error.message}`);
+  }
+  return { users, errors };
 }
