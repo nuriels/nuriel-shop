@@ -1,23 +1,50 @@
-# פורטל B2B להזמנת משקאות — kobi.nuri1.fit
-# שם פרויקט ייחודי כדי לא להתנגש עם nuri / Moments / inv (המלאי הישן) שרצים באותו שרת.
-name: kobi-app
+# ============================================================
+# פורטל B2B להזמנת משקאות — SaaS מרובה חנויות
+# מיועד ל-Coolify (Build Pack: Docker Compose). עובד גם מקומית:
+#   cp .env.example .env && docker compose up -d --build
+#
+# ב-Coolify:
+#   • אין ports / container_name / network — Coolify ו-Traefik מנהלים אותם.
+#   • הדומיין מוגדר במסך השירות "app" כולל הפורט הפנימי, למשל:
+#       https://shop.example.com:3000
+#     (הפורט רק אומר ל-Traefik לאן לנתב בתוך הקונטיינר — הוא לא נחשף החוצה).
+#   • ${VAR:?} = משתנה חובה: Coolify מציג אותו במסך Environment Variables
+#     והפריסה נכשלת מראש אם הוא ריק.
+# ============================================================
 
 services:
   app:
-    build: .
-    container_name: kobi-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # נאפים לבאנדל הדפדפן בזמן הבנייה — אותם ערכים כמו בזמן ריצה,
+        # כך שב-Coolify מגדירים כל משתנה פעם אחת בלבד.
+        VITE_SUPABASE_URL: ${SUPABASE_URL:?}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?}
     restart: unless-stopped
-    env_file: .env.production
-    ports:
-      # קשור ל-loopback בלבד — הגישה מבחוץ עוברת דרך Nginx (kobi.nuri1.fit).
-      # 3500 נבחר כי 3300 תפוס ע"י moments, 3400 ע"י inv, ו-8000/8100/8200 ע"י שלושת ה-Kong.
-      - "127.0.0.1:3500:3000"
+    # tini כ-PID 1: עצירה/פריסה מחדש מהירה ונקייה (SIGTERM מגיע ל-Node)
+    init: true
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # --- Supabase (מנוהל או self-hosted ב-Coolify) ---
+      SUPABASE_URL: ${SUPABASE_URL:?}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?}
+      # סוד! עוקף RLS — רק בצד השרת, לעולם לא ב-VITE_*
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?}
+      # --- מיילים (Resend) — ריק = ההזמנות נקלטות אבל מיילים לא נשלחים ---
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # כתובת בסיס לקישורי איפוס סיסמה שנשלחים במייל
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
-      interval: 60s
-      timeout: 10s
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/robots.txt').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 20s
     logging:
       driver: json-file
       options:

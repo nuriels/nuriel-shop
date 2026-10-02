@@ -1,9 +1,22 @@
+# --- לא נדרש לבנייה ---
 node_modules
 .output
 dist
 .git
+.github
 .lovable
+.tanstack
+.nitro
+.vinxi
+.vscode
+.idea
 *.md
 !README.md
-.env.production
 deploy/
+supabase/
+scripts/
+schema.sql
+
+# --- סודות: לעולם לא בתוך ה-image (מגיעים מ-Coolify בזמן ריצה/בנייה) ---
+.env
+.env.*
