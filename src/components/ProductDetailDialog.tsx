@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { VatNote } from "@/components/VatNote";
 import { Flame, Package, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -147,6 +148,7 @@ export function ProductDetailDialog({
                   <span className="numeric text-3xl font-bold text-accent">
                     {formatIls(product.price)}
                   </span>
+                  <VatNote className="text-sm sm:text-sm" />
                   {onSale && product.original_price !== null && (
                     <span className="numeric text-base text-muted-foreground line-through">
                       {formatIls(product.original_price)}

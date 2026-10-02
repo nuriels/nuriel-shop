@@ -12,6 +12,7 @@ import {
 } from "@/lib/pdf/document.server";
 import { calculateVat, DEFAULT_VAT_RATE } from "@/lib/vat";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/orders";
+import { DEFAULT_STORE_NAME } from "@/lib/branding";
 
 const BRANDING_BUCKET = "branding";
 
@@ -128,7 +129,7 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
     createdAt: order.created_at,
     statusLabel: ORDER_STATUS_LABEL[order.status] ?? "",
     business: {
-      name: settings?.business_name?.trim() || settings?.site_title?.trim() || "סוכנות המשקאות",
+      name: settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME,
       taxId: settings?.business_tax_id ?? "",
       address: settings?.business_address ?? "",
       phone: settings?.business_phone ?? "",

@@ -10,6 +10,7 @@ import { toVisualRtl } from "./rtl";
 import type { VatBreakdown } from "@/lib/vat";
 import { ORDER_HOURS } from "@/lib/order-hours";
 import { formatUnitIls } from "@/lib/catalog";
+import { DEFAULT_STORE_NAME } from "@/lib/branding";
 
 export type DocumentBusiness = {
   name: string;
@@ -157,7 +158,7 @@ export async function buildOrderDocumentPdf(
   }
 
   y = businessTextTop + 2;
-  write(data.business.name || "סוכנות המשקאות", RIGHT, y, { size: 15, bold: true });
+  write(data.business.name || DEFAULT_STORE_NAME, RIGHT, y, { size: 15, bold: true });
   y += 5.5;
 
   const businessLines = [

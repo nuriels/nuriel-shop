@@ -69,8 +69,10 @@
   --color-brass: var(--accent);
   /* צללים בגוון ירוק-מרתף במקום אפור ניטרלי */
   --shadow-soft: 0 18px 40px -24px oklch(0.27 0.04 170 / 0.45);
-  --shadow-card: 0 1px 2px oklch(0.27 0.04 170 / 0.06), 0 8px 24px -18px oklch(0.27 0.04 170 / 0.35);
-  --shadow-lift: 0 2px 4px oklch(0.27 0.04 170 / 0.08), 0 18px 36px -20px oklch(0.27 0.04 170 / 0.42);
+  --shadow-card:
+    0 1px 2px oklch(0.27 0.04 170 / 0.06), 0 8px 24px -18px oklch(0.27 0.04 170 / 0.35);
+  --shadow-lift:
+    0 2px 4px oklch(0.27 0.04 170 / 0.08), 0 18px 36px -20px oklch(0.27 0.04 170 / 0.42);
 }
 
 :root {
@@ -113,8 +115,14 @@
   --sidebar-accent-foreground: oklch(0.32 0.03 170);
   --sidebar-border: oklch(0.902 0.012 160);
   --sidebar-ring: oklch(0.575 0.105 78);
+  /* פס "מרתף" (כותרת ופוטר). צבע מותג של החנות מחליף את הערכים האלה —
+     ראו src/lib/brand-theme.ts */
+  --cellar-base: oklch(0.26 0.033 170);
+  --cellar-top: oklch(0.28 0.036 171);
+  --cellar-bottom: oklch(0.23 0.028 168);
+  --cellar-glow: oklch(0.36 0.05 168 / 0.55);
+  --cellar-foreground: oklch(0.96 0.01 95);
 }
-
 
 .dark {
   --background: oklch(0.19 0.022 170);
@@ -190,7 +198,7 @@
 }
 
 @utility gradient-brand {
-  background-image: linear-gradient(150deg, oklch(0.3 0.04 172) 0%, oklch(0.24 0.03 168) 100%);
+  background-image: linear-gradient(150deg, var(--cellar-top) 0%, var(--cellar-bottom) 100%);
 }
 
 @utility text-gradient-brand {
@@ -202,11 +210,11 @@
 
 /* פס "מרתף" כהה: משמש בכותרת העמוד הראשי ובפוטר */
 @utility surface-cellar {
-  background-color: oklch(0.26 0.033 170);
+  background-color: var(--cellar-base);
   background-image:
-    radial-gradient(120% 90% at 88% 0%, oklch(0.36 0.05 168 / 0.55) 0%, transparent 60%),
-    linear-gradient(180deg, oklch(0.28 0.036 171) 0%, oklch(0.23 0.028 168) 100%);
-  color: oklch(0.96 0.01 95);
+    radial-gradient(120% 90% at 88% 0%, var(--cellar-glow) 0%, transparent 60%),
+    linear-gradient(180deg, var(--cellar-top) 0%, var(--cellar-bottom) 100%);
+  color: var(--cellar-foreground);
 }
 
 /* מספרים בעמודות מחיר — רוחב אחיד כדי שהטורים יתיישרו */
@@ -272,4 +280,35 @@ html.a11y-focus :focus-visible {
   outline: 3px solid var(--primary) !important;
   outline-offset: 2px !important;
   border-radius: 4px;
+}
+
+/* מסך "שבת שלום": הבהוב עדין של להבות הנרות (כבוי למי שביקש פחות תנועה) */
+@keyframes sabbath-flicker {
+  0%,
+  100% {
+    transform: scale(1, 1) rotate(0deg);
+  }
+  30% {
+    transform: scale(0.96, 1.05) rotate(-2deg);
+  }
+  60% {
+    transform: scale(1.03, 0.97) rotate(1.5deg);
+  }
+}
+@keyframes sabbath-pulse {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sabbath-flame {
+    animation: sabbath-flicker 2.4s ease-in-out infinite;
+  }
+  .sabbath-glow {
+    animation: sabbath-pulse 3.2s ease-in-out infinite;
+  }
 }

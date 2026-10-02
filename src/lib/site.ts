@@ -1,5 +1,7 @@
 import { getTenantId, supabase } from "@/integrations/supabase/client";
 import { compressLogoImage, compressProductImage } from "@/lib/image";
+import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { normalizeBrandColor } from "@/lib/brand-theme";
 
 export const BRANDING_BUCKET = "branding";
 export const PRODUCT_IMAGES_BUCKET = "product-images";
@@ -42,6 +44,10 @@ export type SiteSettings = {
    * אין מתג בממשק; הפעלה עתידית = עדכון במסד (ראו מסמך ההמשך).
    */
   price_tiers_enabled: boolean;
+  /** מצב שבת: הקטלוג מוסתר ואי אפשר להזמין (נאכף גם במסד) */
+  is_sabbath_mode: boolean;
+  /** צבע המותג (#rrggbb); null = עיצוב ברירת המחדל — ראו brand-theme.ts */
+  brand_color: string | null;
 };
 
 export type EmailSettings = {
@@ -50,7 +56,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -60,7 +66,7 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     .maybeSingle();
   if (data) return data as SiteSettings;
   return {
-    site_title: "סוכנות המשקאות",
+    site_title: DEFAULT_STORE_NAME,
     logo_path: null,
     about_content: "",
     contact_content: "",
@@ -79,13 +85,27 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     maintenance_message: "",
     email_signature: "",
     price_tiers_enabled: false,
+    is_sabbath_mode: false,
+    brand_color: null,
   };
 }
 
 export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
   // מתג הדרגים לא נשמר מטופס ההגדרות — משנים אותו רק במסד, בכוונה
   const { price_tiers_enabled, ...editable } = settings;
-  const { error } = await supabase.from("site_settings").update(editable).eq("id", true);
+  const { error } = await supabase
+    .from("site_settings")
+    .update({ ...editable, brand_color: normalizeBrandColor(editable.brand_color) })
+    .eq("id", true);
+  if (error) throw error;
+}
+
+/** מתג מצב שבת — נשמר מיד (בלי שאר הטופס), כדי שלא יישכח לפני כניסת שבת */
+export async function saveSabbathMode(on: boolean): Promise<void> {
+  const { error } = await supabase
+    .from("site_settings")
+    .update({ is_sabbath_mode: on })
+    .eq("id", true);
   if (error) throw error;
 }
 

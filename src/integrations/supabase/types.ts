@@ -984,6 +984,8 @@ export type Database = {
         Row: {
           tenant_id: string;
           about_content: string;
+          brand_color: string | null;
+          is_sabbath_mode: boolean;
           business_address: string;
           business_email: string;
           business_name: string;
@@ -1008,6 +1010,8 @@ export type Database = {
         Insert: {
           tenant_id?: string;
           about_content?: string;
+          brand_color?: string | null;
+          is_sabbath_mode?: boolean;
           business_address?: string;
           business_email?: string;
           business_name?: string;
@@ -1032,6 +1036,8 @@ export type Database = {
         Update: {
           tenant_id?: string;
           about_content?: string;
+          brand_color?: string | null;
+          is_sabbath_mode?: boolean;
           business_address?: string;
           business_email?: string;
           business_name?: string;

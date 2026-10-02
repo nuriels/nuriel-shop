@@ -16,6 +16,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { hostMode, PLATFORM_PATHS } from "@/lib/host-mode";
 import { SUSPENDED_ALLOWED_PATHS } from "@/lib/blocked-pages";
 import { DEFAULT_STORE_NAME, getSiteSeo } from "@/lib/platform.functions";
+import { brandThemeCss, normalizeBrandColor } from "@/lib/brand-theme";
+import { StorefrontGate } from "@/components/StorefrontGate";
 
 function NotFoundComponent() {
   return (
@@ -92,13 +94,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     }
     return { hostMode: mode };
   },
-  // שם האתר ל-SEO: נטען פעם אחת (השם לא משתנה בין עמודים), ומתרענן ברענון העמוד
+  // שם האתר ל-SEO, צבע המותג ומצב שבת: נטענים פעם אחת לטעינת עמוד (גם ב-SSR,
+  // בלי הבהוב), ומתרעננים ברענון העמוד או אחרי שמירת ההגדרות (router.invalidate)
   loader: () => getSiteSeo(),
   staleTime: Infinity,
   head: ({ loaderData }) => {
     // חנות בלי שם עסק מוגדר → "החנות שלי"; דומיין הניהול → שם קבוע (מהשרת)
     const siteName = loaderData?.siteName || DEFAULT_STORE_NAME;
+    // צבע המותג של החנות → משתני העיצוב (כותרת, פוטר, כפתורים ראשיים)
+    const brandColor = normalizeBrandColor(loaderData?.brandColor);
+    const brandCss = brandThemeCss(brandColor);
     return {
+      styles: brandCss ? [{ children: brandCss }] : [],
       meta: [
         { charSet: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
@@ -113,6 +120,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: siteName },
         { name: "twitter:description", content: siteName },
+        // צבע שורת הדפדפן בטלפון
+        ...(brandColor ? [{ name: "theme-color", content: brandColor }] : []),
       ],
       links: [
         { rel: "stylesheet", href: appCss },
@@ -149,11 +158,18 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const site = Route.useLoaderData();
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      {/* מצב שבת: לקוחות ואורחים רואים "שבת שלום" במקום עמודי החנות */}
+      <StorefrontGate
+        sabbath={site?.sabbath === true}
+        storeName={site?.siteName || DEFAULT_STORE_NAME}
+      >
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+      </StorefrontGate>
       <AccessibilityWidget />
       <Toaster position="top-center" />
     </QueryClientProvider>

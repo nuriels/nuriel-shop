@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProductDetailDialog } from "@/components/ProductDetailDialog";
 import { QuantityDialog } from "@/components/QuantityDialog";
+import { VatNote } from "@/components/VatNote";
 import {
   discountPercent,
   formatIls,
@@ -111,7 +112,7 @@ export function CatalogGrid({
                 </h3>
               </button>
               {product.description && (
-                <p className="hidden text-xs leading-5 text-muted-foreground sm:line-clamp-2">
+                <p className="line-clamp-1 text-xs leading-5 text-muted-foreground sm:line-clamp-2">
                   {product.description}
                 </p>
               )}
@@ -122,6 +123,7 @@ export function CatalogGrid({
                     <span className="numeric text-lg font-bold text-accent sm:text-xl">
                       {formatIls(product.price)}
                     </span>
+                    <VatNote />
                     {product.original_price !== null && (
                       <span className="numeric text-xs text-muted-foreground line-through sm:text-sm">
                         {formatIls(product.original_price)}

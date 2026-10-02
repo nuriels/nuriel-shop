@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { VatNote } from "@/components/VatNote";
 import { Minus, Package, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -227,7 +228,13 @@ export function QuantityDialog({
                 {item.name}
               </DialogTitle>
               <DialogDescription className="numeric">
-                {item.price !== null ? `${formatIls(item.price)} ליחידה` : "מחיר לפי הצעה"}
+                {item.price !== null ? (
+                  <>
+                    {formatIls(item.price)} ליחידה <VatNote />
+                  </>
+                ) : (
+                  "מחיר לפי הצעה"
+                )}
               </DialogDescription>
             </div>
           </div>

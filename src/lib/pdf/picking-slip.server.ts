@@ -7,6 +7,7 @@
 
 import { jsPDF } from "jspdf";
 import { toVisualRtl } from "./rtl";
+import { DEFAULT_STORE_NAME } from "@/lib/branding";
 
 export type PickingItem = {
   name: string;
@@ -125,7 +126,7 @@ export async function buildPickingSlipPdf(
   }
 
   y = businessTextTop + 2;
-  write(data.sellerName || "סוכנות המשקאות", RIGHT, y, { size: 15, bold: true });
+  write(data.sellerName || DEFAULT_STORE_NAME, RIGHT, y, { size: 15, bold: true });
   y += 6;
 
   const boxWidth = 62;

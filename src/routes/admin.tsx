@@ -1,6 +1,7 @@
-import { createFileRoute, Link, useRouteContext } from "@tanstack/react-router";
+import { createFileRoute, Link, useLoaderData, useRouteContext } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { AppFooter } from "@/components/AppFooter";
+import { SabbathStaffBanner } from "@/components/StorefrontGate";
 import { SiteHeader } from "@/components/SiteHeader";
 import { OrderManagementPanel } from "@/components/OrderManagementPanel";
 import { AdminUsersPanel } from "@/components/AdminUsersPanel";
@@ -68,9 +69,11 @@ function AdminPage() {
   const isAdmin = role?.role === "admin";
   // חנות שהוקפאה ע"י מנהל הפלטפורמה: הלקוחות רואים נעילה, והמנהל רואה כאן הסבר
   const { hostMode } = useRouteContext({ from: "__root__" });
+  const site = useLoaderData({ from: "__root__" });
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      {isAdmin && site?.sabbath && <SabbathStaffBanner isAdmin />}
       <SiteHeader role={role} email={session?.user.email ?? null} onSignOut={signOut} />
       <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 px-3 py-6 sm:px-4">
         {hostMode.suspended && (

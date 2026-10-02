@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -370,11 +371,10 @@ function Index() {
           <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 sm:py-14 lg:grid-cols-[1.3fr_1fr] lg:items-end">
             <div className="max-w-xl">
               <h1 className="font-display text-3xl leading-tight text-primary-foreground sm:text-4xl">
-                {settings?.site_title ?? "קטלוג המשקאות שלנו"}
+                {settings?.site_title?.trim() || DEFAULT_STORE_NAME}
               </h1>
               <p className="mt-3 text-base leading-7 text-primary-foreground/75">
-                אספקה סיטונאית לבתי עסק: מוגזים, מים, בירות, יינות ומשקאות חריפים. עיינו בקטלוג
-                המלא, ופתחו חשבון עסקי כדי לראות מחירים ולהזמין.
+                עיינו בקטלוג המלא, ופתחו חשבון עסקי כדי לראות מחירים ולהזמין.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Button

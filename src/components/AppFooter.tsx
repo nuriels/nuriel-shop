@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { APP_VERSION } from "@/lib/branding";
+import { APP_VERSION, DEFAULT_STORE_NAME } from "@/lib/branding";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 
 export function AppFooter() {
   const { settings } = useSiteSettings();
-  const title = settings?.business_name?.trim() || settings?.site_title || "סוכנות המשקאות";
+  const title =
+    settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME;
+  const year = new Date().getFullYear();
   const phone = settings?.support_phone?.trim() || settings?.business_phone?.trim() || "";
 
   return (
@@ -50,12 +52,15 @@ export function AppFooter() {
       <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3 text-xs text-primary-foreground/55">
           <span>
-            כל הזכויות שמורות לנוריאל מחשבים 2025 |{" "}
-            <a href="https://nuriel-shop.co.il" dir="ltr" className="hover:text-accent">
-              nuriel-shop.co.il
-            </a>
+            © {year} {title}. כל הזכויות שמורות.
           </span>
-          <span dir="ltr">גרסה {APP_VERSION}</span>
+          <span>
+            מופעל ע״י{" "}
+            <a href="https://nuriel-shop.co.il" className="hover:text-accent">
+              נוריאל מחשבים
+            </a>{" "}
+            · <span dir="ltr">גרסה {APP_VERSION}</span>
+          </span>
         </div>
       </div>
     </footer>

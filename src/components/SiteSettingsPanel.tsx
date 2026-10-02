@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useRouter } from "@tanstack/react-router";
 import { Loader2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -15,10 +16,14 @@ import {
   type SiteSettings,
 } from "@/lib/site";
 import { defaultPrivacyPolicy, defaultTermsOfService } from "@/lib/legal";
+import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { BrandColorField } from "@/components/BrandColorField";
+import { SabbathModeCard } from "@/components/SabbathModeCard";
 
 /** ניהול תוכן האתר, מיתוג ופרטי העסק (משפיע על עמודי אודות/תנאים/פרטיות) */
 export function SiteSettingsPanel() {
   const { settings, refresh } = useSiteSettings();
+  const router = useRouter();
   const [form, setForm] = useState<SiteSettings | null>(settings);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -66,6 +71,8 @@ export function SiteSettingsPanel() {
     try {
       await saveSiteSettings(form);
       await refreshSiteSettings();
+      // צבע המותג ושם החנות נטענים ב-root (גם ל-SSR) — מרעננים כדי שיחולו מיד
+      await router.invalidate();
       toast.success("ההגדרות נשמרו");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "שמירת ההגדרות נכשלה");
@@ -79,9 +86,15 @@ export function SiteSettingsPanel() {
       <div>
         <h2 className="text-xl font-bold text-foreground">הגדרות אתר ותוכן</h2>
         <p className="text-sm text-muted-foreground">
-          כותרת האתר, לוגו, עמודי אודות/יצירת קשר ומסמכים משפטיים
+          מצב שבת, מיתוג וצבע החנות, פרטי העסק, תצוגת מע״מ, עמודי אודות ומסמכים משפטיים
         </p>
       </div>
+
+      <SabbathModeCard
+        checked={form.is_sabbath_mode}
+        storeName={form.business_name.trim() || form.site_title || DEFAULT_STORE_NAME}
+        onSaved={(on) => patch({ is_sabbath_mode: on })}
+      />
 
       <Card className="shadow-card">
         <CardHeader>
@@ -116,6 +129,11 @@ export function SiteSettingsPanel() {
               {uploading && <Loader2 className="size-4 animate-spin" />}
             </div>
           </div>
+          <BrandColorField
+            value={form.brand_color}
+            onChange={(next) => patch({ brand_color: next })}
+            storeName={form.business_name.trim() || form.site_title || DEFAULT_STORE_NAME}
+          />
         </CardContent>
       </Card>
 
@@ -288,7 +306,7 @@ export function SiteSettingsPanel() {
               <span className="block text-xs text-muted-foreground">
                 {form.prices_include_vat
                   ? "מוצג ללקוח סה״כ סופי אחד, בלי תוספת."
-                  : `בעגלה ובמסמכים יתווסף אוטומטית מע״מ ${form.vat_rate}% מעל סכום המוצרים.`}
+                  : `ליד כל מחיר בקטלוג יופיע "+ מע״מ", ובעגלה ובמסמכים יתווסף אוטומטית מע״מ ${form.vat_rate}% מעל סכום המוצרים.`}
               </span>
             </span>
             <Switch

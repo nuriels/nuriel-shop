@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { TenantPlan, TenantStatus } from "@/integrations/supabase/types";
+import { DEFAULT_STORE_NAME } from "@/lib/branding";
 
 /**
  * באיזה דומיין אנחנו: פאנל ניהול הפלטפורמה (PLATFORM_ADMIN_HOST) או אתר של חנות.
@@ -223,27 +224,37 @@ export const deleteStore = createServerFn({ method: "POST" })
     };
   });
 
-/** שם ברירת המחדל לחנות שעוד לא הגדירה שם עסק */
-export const DEFAULT_STORE_NAME = "החנות שלי";
+export { DEFAULT_STORE_NAME } from "@/lib/branding";
 /** הכותרת הקבועה של פאנל ניהול הפלטפורמה */
 export const PLATFORM_SITE_NAME = "מערכת ניהול אתר אינטרנט";
 
 /**
- * השם שמוצג ב-title / Open Graph: בדומיין הניהול — קבוע; בחנות — שם העסק
- * מהגדרות החנות (site_settings.business_name), ואם ריק — "החנות שלי".
+ * מה שה-root route צריך כבר ב-SSR (בלי הבהוב בטעינה):
+ * - siteName: ל-title / Open Graph — בדומיין הניהול שם קבוע; בחנות שם העסק
+ *   מהגדרות החנות (site_settings.business_name), ואם ריק — "החנות שלי".
+ * - brandColor: צבע המותג של החנות (null = עיצוב ברירת המחדל).
+ * - sabbath: מצב שבת — הלקוחות רואים מסך "שבת שלום" במקום הקטלוג.
+ * - isDefaultStore: החנות הראשית (הלוגו המובנה שייך רק לה).
  */
 export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => {
   const { isPlatformRequest, maybeCurrentTenant } =
     await import("@/integrations/supabase/tenant.server");
-  if (isPlatformRequest()) return { siteName: PLATFORM_SITE_NAME };
-  if (!maybeCurrentTenant()) return { siteName: DEFAULT_STORE_NAME };
+  const none = { brandColor: null, sabbath: false, isDefaultStore: false };
+  if (isPlatformRequest()) return { siteName: PLATFORM_SITE_NAME, ...none };
+  const tenant = maybeCurrentTenant();
+  if (!tenant) return { siteName: DEFAULT_STORE_NAME, ...none };
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin
     .from("site_settings")
-    .select("business_name")
+    .select("business_name, brand_color, is_sabbath_mode")
     .eq("id", true)
     .maybeSingle();
   const storeName = data?.business_name?.trim();
-  return { siteName: storeName || DEFAULT_STORE_NAME };
+  return {
+    siteName: storeName || DEFAULT_STORE_NAME,
+    brandColor: data?.brand_color ?? null,
+    sabbath: data?.is_sabbath_mode === true,
+    isDefaultStore: tenant.is_default,
+  };
 });

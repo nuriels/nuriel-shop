@@ -1,4 +1,4 @@
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link, useLoaderData, useRouter } from "@tanstack/react-router";
 import {
   ChevronRight,
   ClipboardList,
@@ -16,6 +16,7 @@ import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useCanGoBack } from "@/hooks/useBackToClose";
 import type { UserRole } from "@/hooks/useAuthState";
 import logo from "@/assets/logo";
+import { DEFAULT_STORE_NAME } from "@/lib/branding";
 
 /**
  * כותרת האתר: פס "מרתף" כהה שמחזיק את הלוגו, הניווט וסל ההזמנה.
@@ -35,9 +36,12 @@ export function SiteHeader({
   onOpenCart?: () => void;
 }) {
   const { settings, logoUrl } = useSiteSettings();
+  const site = useLoaderData({ from: "__root__" });
   const router = useRouter();
   const canGoBack = useCanGoBack();
-  const title = settings?.site_title ?? "סוכנות המשקאות";
+  const title = settings?.site_title?.trim() || site?.siteName || DEFAULT_STORE_NAME;
+  // הלוגו המובנה שייך לחנות הראשית; חנות בלי לוגו מקבלת את האות הראשונה של שמה
+  const logoSrc = logoUrl ?? (site?.isDefaultStore ? logo.url : null);
 
   const navLinkClass =
     "inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-primary-foreground/75 transition-colors hover:bg-white/10 hover:text-primary-foreground";
@@ -59,11 +63,20 @@ export function SiteHeader({
           </button>
         )}
         <Link to="/" className="flex min-w-0 items-center gap-3">
-          <img
-            src={logoUrl ?? logo.url}
-            alt={title}
-            className="h-10 w-auto max-w-32 shrink-0 rounded-md bg-white/95 object-contain p-1 sm:h-11"
-          />
+          {logoSrc ? (
+            <img
+              src={logoSrc}
+              alt={title}
+              className="h-10 w-auto max-w-32 shrink-0 rounded-md bg-white/95 object-contain p-1 sm:h-11"
+            />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="font-display grid size-10 shrink-0 place-items-center rounded-md bg-primary-foreground text-xl font-bold text-primary sm:size-11"
+            >
+              {title.trim().charAt(0)}
+            </span>
+          )}
           <span className="font-display hidden truncate text-lg text-primary-foreground sm:block">
             {title}
           </span>

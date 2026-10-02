@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { VatNote } from "@/components/VatNote";
 import { Flame, Package, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductDetailDialog } from "@/components/ProductDetailDialog";
@@ -72,6 +73,7 @@ export function HotDealsStrip({
               {item.price !== null ? (
                 <p className="flex flex-wrap items-baseline gap-1.5">
                   <span className="numeric font-bold text-accent">{formatIls(item.price)}</span>
+                  <VatNote />
                   {item.original_price !== null && (
                     <span className="numeric text-xs text-muted-foreground line-through">
                       {formatIls(item.original_price)}
