@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthState } from "@/hooks/useAuthState";
-import { createStoreAdmin } from "@/lib/platform.functions";
+import { createStoreAdmin, PLATFORM_SITE_NAME } from "@/lib/platform.functions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,7 @@ type Created = {
 
 export const Route = createFileRoute("/platform")({
   ssr: false,
-  head: () => ({ meta: [{ title: "ניהול הפלטפורמה" }] }),
+  head: () => ({ meta: [{ title: PLATFORM_SITE_NAME }] }),
   component: PlatformPage,
 });
 

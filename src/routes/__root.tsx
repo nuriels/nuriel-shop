@@ -15,6 +15,7 @@ import appCss from "../styles.css?url";
 import { AccessibilityWidget } from "@/components/AccessibilityWidget";
 import { Toaster } from "@/components/ui/sonner";
 import { hostMode, PLATFORM_PATHS } from "@/lib/host-mode";
+import { DEFAULT_STORE_NAME, getSiteSeo } from "@/lib/platform.functions";
 
 function NotFoundComponent() {
   return (
@@ -86,33 +87,40 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     }
     return { hostMode: mode };
   },
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      // מה שמוצג בשיתוף קישור (ווטסאפ / רשתות) ובתוצאות חיפוש
-      { title: "יין כיד המלך" },
-      { name: "description", content: "יין כיד המלך - מכירת שתיה בסיטונאות" },
-      { property: "og:title", content: "יין כיד המלך" },
-      { property: "og:description", content: "יין כיד המלך - מכירת שתיה בסיטונאות" },
-      { property: "og:site_name", content: "יין כיד המלך" },
-      { property: "og:type", content: "website" },
-      { property: "og:locale", content: "he_IL" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "יין כיד המלך" },
-      { name: "twitter:description", content: "יין כיד המלך - מכירת שתיה בסיטונאות" },
-    ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/png", href: "/favicon.png" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Frank+Ruhl+Libre:wght@500;700;900&display=swap",
-      },
-    ],
-  }),
+  // שם האתר ל-SEO: נטען פעם אחת (השם לא משתנה בין עמודים), ומתרענן ברענון העמוד
+  loader: () => getSiteSeo(),
+  staleTime: Infinity,
+  head: ({ loaderData }) => {
+    // חנות בלי שם עסק מוגדר → "החנות שלי"; דומיין הניהול → שם קבוע (מהשרת)
+    const siteName = loaderData?.siteName || DEFAULT_STORE_NAME;
+    return {
+      meta: [
+        { charSet: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        // מה שמוצג בשיתוף קישור (ווטסאפ / רשתות) ובתוצאות חיפוש
+        { title: siteName },
+        { name: "description", content: siteName },
+        { property: "og:title", content: siteName },
+        { property: "og:description", content: siteName },
+        { property: "og:site_name", content: siteName },
+        { property: "og:type", content: "website" },
+        { property: "og:locale", content: "he_IL" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: siteName },
+        { name: "twitter:description", content: siteName },
+      ],
+      links: [
+        { rel: "stylesheet", href: appCss },
+        { rel: "icon", type: "image/png", href: "/favicon.png" },
+        { rel: "preconnect", href: "https://fonts.googleapis.com" },
+        { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+        {
+          rel: "stylesheet",
+          href: "https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Frank+Ruhl+Libre:wght@500;700;900&display=swap",
+        },
+      ],
+    };
+  },
 
   shellComponent: RootShell,
   component: RootComponent,

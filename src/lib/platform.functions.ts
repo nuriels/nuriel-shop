@@ -85,3 +85,28 @@ export const createStoreAdmin = createServerFn({ method: "POST" })
       loginUrl: `${originForTenant(tenant)}/login`,
     };
   });
+
+/** שם ברירת המחדל לחנות שעוד לא הגדירה שם עסק */
+export const DEFAULT_STORE_NAME = "החנות שלי";
+/** הכותרת הקבועה של פאנל ניהול הפלטפורמה */
+export const PLATFORM_SITE_NAME = "מערכת ניהול אתר אינטרנט";
+
+/**
+ * השם שמוצג ב-title / Open Graph: בדומיין הניהול — קבוע; בחנות — שם העסק
+ * מהגדרות החנות (site_settings.business_name), ואם ריק — "החנות שלי".
+ */
+export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => {
+  const { isPlatformRequest, maybeCurrentTenant } =
+    await import("@/integrations/supabase/tenant.server");
+  if (isPlatformRequest()) return { siteName: PLATFORM_SITE_NAME };
+  if (!maybeCurrentTenant()) return { siteName: DEFAULT_STORE_NAME };
+
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await supabaseAdmin
+    .from("site_settings")
+    .select("business_name")
+    .eq("id", true)
+    .maybeSingle();
+  const storeName = data?.business_name?.trim();
+  return { siteName: storeName || DEFAULT_STORE_NAME };
+});

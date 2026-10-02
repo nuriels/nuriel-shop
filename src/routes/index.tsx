@@ -47,12 +47,6 @@ export const Route = createFileRoute("/")({
     if (search["view"] === "new" || search["view"] === "promo") result.view = search["view"];
     return result;
   },
-  head: () => ({
-    meta: [
-      { title: "יין כיד המלך" },
-      { name: "description", content: "יין כיד המלך - מכירת שתיה בסיטונאות" },
-    ],
-  }),
   component: Index,
 });
 
