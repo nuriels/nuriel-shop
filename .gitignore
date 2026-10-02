@@ -32,5 +32,6 @@ dist-ssr
 *.sw?
 .env.production
 
-# נוצר בשרת ע"י deploy/setup-selfhost.sh --env-only — לא ב-git
+# נוצרים בשרת ע"י deploy/setup-selfhost.sh — לא ב-git
 .env
+docker-compose.override.yml
