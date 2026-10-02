@@ -6,12 +6,15 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  notFound,
+  redirect,
 } from "@tanstack/react-router";
 import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { AccessibilityWidget } from "@/components/AccessibilityWidget";
 import { Toaster } from "@/components/ui/sonner";
+import { hostMode, PLATFORM_PATHS } from "@/lib/host-mode";
 
 function NotFoundComponent() {
   return (
@@ -71,6 +74,18 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  // הפרדת ממשקים לפי דומיין: בדומיין של פאנל הפלטפורמה רק /platform (ו-login),
+  // ובאתרי החנויות /platform לא קיים. רץ גם ב-SSR וגם בכל ניווט בדפדפן.
+  beforeLoad: async ({ location }) => {
+    const mode = await hostMode();
+    if (mode.platform && !PLATFORM_PATHS.test(location.pathname)) {
+      throw redirect({ to: "/platform" });
+    }
+    if (!mode.platform && location.pathname.startsWith("/platform")) {
+      throw notFound();
+    }
+    return { hostMode: mode };
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },

@@ -88,18 +88,53 @@ export function currentTenantId(): string {
   return tenant.id;
 }
 
+/** הגדרות הפלטפורמה מהסביבה */
+function platformEnv() {
+  return {
+    siteUrl: process.env["PUBLIC_SITE_URL"]?.trim().replace(/\/$/, "") || null,
+    baseDomain: process.env["TENANT_BASE_DOMAIN"]?.trim().toLowerCase() || null,
+    adminHost: process.env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase() || null,
+  };
+}
+
+/** הבקשה הגיעה מדומיין פאנל ניהול הפלטפורמה (PLATFORM_ADMIN_HOST)? */
+export function isPlatformRequest(): boolean {
+  const { adminHost } = platformEnv();
+  return adminHost !== null && storage.getStore()?.host === adminHost;
+}
+
+/** בסיס הדומיין של חנויות בתת-דומיין (<slug>.<base>), לתצוגה בפאנל הפלטפורמה */
+export function tenantBaseDomain(): string | null {
+  return platformEnv().baseDomain;
+}
+
 /**
- * כתובת הבסיס של החנות, לקישורים במיילים (איפוס סיסמה, הזמנות, הסכמים).
+ * תת-דומיין של הפלטפורמה שלא שייך לאף חנות. tenant_for_host נופל לחנות
+ * ברירת המחדל כשאין התאמה, ולכן כאן בודקים שההתאמה הייתה אמיתית — אחרת
+ * shop-that-doesnt-exist.<base> היה מציג את החנות הראשית.
+ */
+export function isUnknownStoreHost(host: string, tenant: Tenant): boolean {
+  const { baseDomain, adminHost } = platformEnv();
+  if (!baseDomain || !host.endsWith(`.${baseDomain}`) || host === adminHost) return false;
+  const label = host.slice(0, -(baseDomain.length + 1));
+  return tenant.is_default && tenant.domain !== host && label !== tenant.slug;
+}
+
+/** כתובת הבסיס של חנות מסוימת — מרשומת החנות במסד */
+export function originForTenant(tenant: Tenant | null): string {
+  const { siteUrl, baseDomain } = platformEnv();
+  if (tenant?.domain) return `https://${tenant.domain}`;
+  if (tenant?.is_default && siteUrl) return siteUrl;
+  if (tenant && baseDomain) return `https://${tenant.slug}.${baseDomain}`;
+  // PUBLIC_SITE_URL שייך לחנות ברירת המחדל — לא שולחים לקוח של חנות אחרת לשם
+  if (siteUrl && !tenant) return siteUrl;
+  throw new Error("לא הוגדרה כתובת לחנות (tenants.domain / TENANT_BASE_DOMAIN / PUBLIC_SITE_URL)");
+}
+
+/**
+ * כתובת הבסיס של החנות הנוכחית, לקישורים במיילים (איפוס סיסמה, הזמנות, הסכמים).
  * נבנית מרשומת החנות במסד — לא מכותרות הבקשה, שנשלטות ע"י הפונה.
  */
 export function tenantSiteOrigin(): string {
-  const tenant = maybeCurrentTenant();
-  const configured = process.env["PUBLIC_SITE_URL"]?.trim().replace(/\/$/, "");
-  const baseDomain = process.env["TENANT_BASE_DOMAIN"]?.trim().toLowerCase();
-  if (tenant?.domain) return `https://${tenant.domain}`;
-  if (tenant?.is_default && configured) return configured;
-  if (tenant && baseDomain) return `https://${tenant.slug}.${baseDomain}`;
-  // PUBLIC_SITE_URL שייך לחנות ברירת המחדל — לא שולחים לקוח של חנות אחרת לשם
-  if (configured && !tenant) return configured;
-  throw new Error("לא הוגדרה כתובת לחנות (tenants.domain / TENANT_BASE_DOMAIN / PUBLIC_SITE_URL)");
+  return originForTenant(maybeCurrentTenant());
 }

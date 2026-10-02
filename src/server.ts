@@ -3,6 +3,7 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import {
+  isUnknownStoreHost,
   maybeCurrentTenant,
   requestHost,
   resolveTenant,
@@ -78,7 +79,7 @@ export default {
         return await runWithTenant(host, null, () => handle(request, env, ctx));
       }
       const tenant = await resolveTenant(host);
-      if (!tenant) {
+      if (!tenant || isUnknownStoreHost(host, tenant)) {
         return new Response(STORE_NOT_FOUND_HTML, {
           status: 404,
           headers: { "content-type": "text/html; charset=utf-8" },

@@ -1106,6 +1106,33 @@ export type Database = {
     Functions: {
       current_tenant_id: { Args: Record<string, never>; Returns: string | null };
       tenant_for_host: { Args: { _host: string }; Returns: string | null };
+      is_platform_admin: { Args: { _user_id?: string }; Returns: boolean };
+      platform_list_tenants: {
+        Args: Record<string, never>;
+        Returns: {
+          id: string;
+          slug: string;
+          name: string;
+          domain: string | null;
+          is_default: boolean;
+          created_at: string;
+          admins: number;
+          customers: number;
+          products: number;
+          orders: number;
+        }[];
+      };
+      platform_create_tenant: {
+        Args: { _slug: string; _name: string; _domain?: string | null };
+        Returns: {
+          id: string;
+          slug: string;
+          name: string;
+          domain: string | null;
+          is_default: boolean;
+          created_at: string;
+        };
+      };
       picking_manager_approve: { Args: { _order_id: string }; Returns: Record<string, unknown> };
       picking_return: { Args: { _order_id: string }; Returns: undefined };
       stock_lookup: { Args: { _query: string }; Returns: Record<string, unknown>[] };

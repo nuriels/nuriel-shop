@@ -16,6 +16,7 @@ import { Route as AgentRouteImport } from './routes/agent'
 import { Route as AgreementRouteImport } from './routes/agreement'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OrdersRouteImport } from './routes/orders'
+import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
@@ -57,6 +58,11 @@ const OrdersRoute = OrdersRouteImport.update({
   path: '/orders',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlatformRoute = PlatformRouteImport.update({
+  id: '/platform',
+  path: '/platform',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/agreement': typeof AgreementRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
+  '/platform': typeof PlatformRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   '/agreement': typeof AgreementRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
+  '/platform': typeof PlatformRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -120,6 +128,7 @@ export interface FileRoutesById {
   '/agreement': typeof AgreementRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
+  '/platform': typeof PlatformRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/agreement'
     | '/login'
     | '/orders'
+    | '/platform'
     | '/privacy'
     | '/register'
     | '/reset-password'
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/agreement'
     | '/login'
     | '/orders'
+    | '/platform'
     | '/privacy'
     | '/register'
     | '/reset-password'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/agreement'
     | '/login'
     | '/orders'
+    | '/platform'
     | '/privacy'
     | '/register'
     | '/reset-password'
@@ -179,6 +191,7 @@ export interface RootRouteChildren {
   AgreementRoute: typeof AgreementRoute
   LoginRoute: typeof LoginRoute
   OrdersRoute: typeof OrdersRoute
+  PlatformRoute: typeof PlatformRoute
   PrivacyRoute: typeof PrivacyRoute
   RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
@@ -237,6 +250,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrdersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/platform': {
+      id: '/platform'
+      path: '/platform'
+      fullPath: '/platform'
+      preLoaderRoute: typeof PlatformRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/privacy': {
       id: '/privacy'
       path: '/privacy'
@@ -283,6 +303,7 @@ const rootRouteChildren: RootRouteChildren = {
   AgreementRoute: AgreementRoute,
   LoginRoute: LoginRoute,
   OrdersRoute: OrdersRoute,
+  PlatformRoute: PlatformRoute,
   PrivacyRoute: PrivacyRoute,
   RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,

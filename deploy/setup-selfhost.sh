@@ -17,7 +17,8 @@
 #
 # כל ההגדרות ניתנות לשינוי במשתני סביבה (ברירות המחדל — של nuriel-shop):
 #   PROJECT, SB_DIR, API_URL, SITE_URL, TENANT_BASE_DOMAIN, APP_PORT,
-#   KONG_HTTP_PORT, KONG_HTTPS_PORT, ADMIN_EMAIL, DEFAULT_TENANT_SLUG,
+#   KONG_HTTP_PORT, KONG_HTTPS_PORT, ADMIN_EMAIL, PLATFORM_ADMIN_EMAIL,
+#   PLATFORM_ADMIN_HOST, DEFAULT_TENANT_SLUG,
 #   DEFAULT_TENANT_NAME, RESEND_API_KEY, GOOGLE_CLIENT_ID + GOOGLE_SECRET
 #
 # מה הסקריפט עושה:
@@ -49,6 +50,9 @@ POOLER_PORT="${POOLER_PORT:-5437}"
 POOLER_TX_PORT="${POOLER_TX_PORT:-6547}"
 SERVICES="db meta studio kong auth rest storage"
 ADMIN_EMAIL="${ADMIN_EMAIL:-nuriel.sh1@gmail.com}"
+# מנהל הפלטפורמה (מעל כל החנויות) ודומיין פאנל הניהול שלו
+PLATFORM_ADMIN_EMAIL="${PLATFORM_ADMIN_EMAIL:-$ADMIN_EMAIL}"
+PLATFORM_ADMIN_HOST="${PLATFORM_ADMIN_HOST:-nuriel.nuri1.fit}"
 DEFAULT_TENANT_SLUG="${DEFAULT_TENANT_SLUG:-nuriel-shop}"
 DEFAULT_TENANT_NAME="${DEFAULT_TENANT_NAME:-Nuriel Shop}"
 # כתובות שמותר לחזור אליהן אחרי התחברות (Google / קישורי מייל) — האתר הראשי וכל החנויות
@@ -106,6 +110,8 @@ RESEND_API_KEY=${resend_key}
 PUBLIC_SITE_URL=${SITE_URL}
 # חנויות בתת-דומיין: <slug>.${TENANT_BASE_DOMAIN}
 TENANT_BASE_DOMAIN=${TENANT_BASE_DOMAIN}
+# דומיין פאנל ניהול הפלטפורמה (/platform) — לא משמש כחנות
+PLATFORM_ADMIN_HOST=${PLATFORM_ADMIN_HOST}
 EOF
   umask 022
   # פורט מקומי בלבד — הגישה מבחוץ רק דרך Nginx (כמו שאר האפליקציות בשרת)
@@ -365,6 +371,17 @@ psql_db -c "
     FROM auth.users u, public.tenants t
    WHERE u.email = '$ADMIN_EMAIL' AND t.is_default
   ON CONFLICT (user_id) DO UPDATE SET role = 'admin', is_approved = true, is_blocked = false;"
+
+# מנהל הפלטפורמה — רק אם כבר יש לו חשבון (נוצר למעלה או התחבר פעם אחת)
+log "מנהל הפלטפורמה: $PLATFORM_ADMIN_EMAIL"
+psql_db -qAt -c "
+  INSERT INTO public.platform_admins (user_id)
+  SELECT id FROM auth.users WHERE lower(email) = lower('$PLATFORM_ADMIN_EMAIL')
+  ON CONFLICT (user_id) DO NOTHING;
+  SELECT CASE WHEN count(*) > 0 THEN '  ✓ מוגדר כמנהל הפלטפורמה'
+              ELSE '  ⚠ אין עדיין חשבון לכתובת הזו — להתחבר פעם אחת ולהריץ שוב' END
+    FROM public.platform_admins pa JOIN auth.users u ON u.id = pa.user_id
+   WHERE lower(u.email) = lower('$PLATFORM_ADMIN_EMAIL');"
 
 # ============================================================
 # 6. קבצי הסביבה של האפליקציה
