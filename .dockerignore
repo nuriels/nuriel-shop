@@ -1,0 +1,9 @@
+node_modules
+.output
+dist
+.git
+.lovable
+*.md
+!README.md
+.env.production
+deploy/

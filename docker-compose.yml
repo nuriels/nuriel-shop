@@ -1,0 +1,25 @@
+# פורטל B2B להזמנת משקאות — kobi.nuri1.fit
+# שם פרויקט ייחודי כדי לא להתנגש עם nuri / Moments / inv (המלאי הישן) שרצים באותו שרת.
+name: kobi-app
+
+services:
+  app:
+    build: .
+    container_name: kobi-app
+    restart: unless-stopped
+    env_file: .env.production
+    ports:
+      # קשור ל-loopback בלבד — הגישה מבחוץ עוברת דרך Nginx (kobi.nuri1.fit).
+      # 3500 נבחר כי 3300 תפוס ע"י moments, 3400 ע"י inv, ו-8000/8100/8200 ע"י שלושת ה-Kong.
+      - "127.0.0.1:3500:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,2 @@
+REVOKE ALL ON FUNCTION public.approve_order(_order_id uuid, _cancelled_item_ids uuid[], _quantities jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.approve_order(_order_id uuid, _cancelled_item_ids uuid[], _quantities jsonb) TO authenticated, service_role;

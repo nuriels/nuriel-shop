@@ -1,0 +1,262 @@
+import { useEffect, useState } from "react";
+import { Loader2, Package, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { formatIls } from "@/lib/catalog";
+import { ORDER_STATUSES, ORDER_STATUS_LABEL, type OrderRow, type OrderStatus } from "@/lib/orders";
+import { calculateVat } from "@/lib/vat";
+
+type Draft = {
+  id: string;
+  name: string;
+  barcode: string | null;
+  quantity: number;
+  unitPrice: number;
+  removed: boolean;
+};
+
+/**
+ * עריכת הזמנה: סטטוס, כמות/מחיר לכל פריט ומחיקת פריטים.
+ * בבקשת הצעת מחיר אפשר גם לתמחר את הפריטים ולהמיר אותה להזמנה מחייבת.
+ */
+export function OrderEditDialog({
+  order,
+  onClose,
+  onSaved,
+}: {
+  order: OrderRow | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [status, setStatus] = useState<OrderStatus>("pending");
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [convertToOrder, setConvertToOrder] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!order) return;
+    setStatus(order.status);
+    setConvertToOrder(false);
+    setDrafts(
+      order.order_items.map((item) => ({
+        id: item.id,
+        name: item.product_name ?? "מוצר",
+        barcode: item.product_barcode,
+        quantity: item.quantity,
+        unitPrice: Number(item.unit_price),
+        removed: false,
+      })),
+    );
+  }, [order]);
+
+  if (!order) return null;
+
+  const isQuote = order.kind === "quote";
+  const activeTotal = drafts
+    .filter((d) => !d.removed)
+    .reduce((sum, d) => sum + d.quantity * d.unitPrice, 0);
+  const vat = calculateVat(activeTotal, {
+    pricesIncludeVat: order.prices_include_vat ?? true,
+    vatRate: Number(order.vat_rate ?? 18),
+  });
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const toRemove = drafts.filter((d) => d.removed).map((d) => d.id);
+      const toUpdate = drafts.filter((d) => !d.removed);
+
+      if (toRemove.length > 0) {
+        const { error } = await supabase.from("order_items").delete().in("id", toRemove);
+        if (error) throw error;
+      }
+      for (const item of toUpdate) {
+        const { error } = await supabase
+          .from("order_items")
+          .update({ quantity: item.quantity, unit_price: item.unitPrice })
+          .eq("id", item.id);
+        if (error) throw error;
+      }
+      const orderPatch: { status?: OrderStatus; kind?: "order" | "quote" } = {};
+      if (status !== order.status) orderPatch.status = status;
+      if (isQuote && convertToOrder) orderPatch.kind = "order";
+      if (Object.keys(orderPatch).length > 0) {
+        const { error } = await supabase.from("orders").update(orderPatch).eq("id", order.id);
+        if (error) throw error;
+      }
+      toast.success(
+        isQuote && convertToOrder ? "הבקשה תומחרה והומרה להזמנה" : "ההזמנה עודכנה בהצלחה",
+      );
+      onSaved();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "עדכון ההזמנה נכשל");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent dir="rtl" className="max-h-[90vh] overflow-y-auto text-right sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            {isQuote ? "בקשה להצעת מחיר" : "עריכת הזמנה"} {order.order_number}
+          </DialogTitle>
+          <DialogDescription>
+            {isQuote
+              ? "אפשר לתמחר את הפריטים ולהמיר את הבקשה להזמנה מחייבת"
+              : "שינוי סטטוס, כמויות, מחירים או מחיקת פריטים"}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          <Label>סטטוס הזמנה</Label>
+          <Select value={status} onValueChange={(v) => setStatus(v as OrderStatus)}>
+            <SelectTrigger dir="rtl">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent dir="rtl">
+              {ORDER_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {ORDER_STATUS_LABEL[s]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-3">
+          {drafts.map((item, index) => (
+            <div
+              key={item.id}
+              className={`grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-2 rounded-lg border border-border/60 p-3 ${
+                item.removed ? "opacity-40" : ""
+              }`}
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <Package className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0">
+                  <span
+                    title={item.name}
+                    className="line-clamp-2 break-words text-sm font-bold leading-snug"
+                  >
+                    {item.name}
+                  </span>
+                  {item.barcode && (
+                    <span
+                      dir="ltr"
+                      className="numeric block text-right text-xs text-muted-foreground"
+                    >
+                      {item.barcode}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <Input
+                type="number"
+                min={1}
+                disabled={item.removed}
+                className="h-9 w-16 text-center"
+                value={item.quantity}
+                onChange={(e) =>
+                  setDrafts((cur) =>
+                    cur.map((d, i) =>
+                      i === index
+                        ? { ...d, quantity: Math.max(1, Number(e.target.value) || 1) }
+                        : d,
+                    ),
+                  )
+                }
+              />
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                disabled={item.removed}
+                className="h-9 w-24 text-center"
+                value={item.unitPrice}
+                onChange={(e) =>
+                  setDrafts((cur) =>
+                    cur.map((d, i) =>
+                      i === index
+                        ? { ...d, unitPrice: Math.max(0, Number(e.target.value) || 0) }
+                        : d,
+                    ),
+                  )
+                }
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="הסרת פריט"
+                className="text-destructive hover:text-destructive"
+                onClick={() =>
+                  setDrafts((cur) =>
+                    cur.map((d, i) => (i === index ? { ...d, removed: !d.removed } : d)),
+                  )
+                }
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+
+        {isQuote && (
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent/5 p-3">
+            <span className="space-y-1">
+              <span className="block text-sm font-medium">להמיר את הבקשה להזמנה מחייבת</span>
+              <span className="block text-xs text-muted-foreground">
+                אחרי ההמרה הלקוח יראה מחירים במסמך ובעמוד ההזמנות שלו.
+              </span>
+            </span>
+            <Switch checked={convertToOrder} onCheckedChange={setConvertToOrder} />
+          </label>
+        )}
+
+        <div className="space-y-1.5 border-t border-border pt-4 text-sm">
+          {vat.showBreakdown && (
+            <>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>סה״כ לפני מע״מ</span>
+                <span className="numeric">{formatIls(vat.net)}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>מע״מ {vat.vatRate}%</span>
+                <span className="numeric">{formatIls(vat.vat)}</span>
+              </div>
+            </>
+          )}
+          <div className="flex items-center justify-between text-base">
+            <span className="font-medium">סה״כ מעודכן</span>
+            <span className="numeric text-xl font-bold text-accent">{formatIls(vat.gross)}</span>
+          </div>
+        </div>
+
+        <Button size="lg" className="w-full" disabled={busy} onClick={save}>
+          {busy && <Loader2 className="size-4 animate-spin" />}
+          {busy ? "שומר..." : "שמירת שינויים"}
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
