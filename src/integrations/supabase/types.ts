@@ -8,8 +8,36 @@ export type Database = {
   };
   public: {
     Tables: {
+      tenants: {
+        Row: {
+          created_at: string;
+          domain: string | null;
+          id: string;
+          is_default: boolean;
+          name: string;
+          slug: string;
+        };
+        Insert: {
+          created_at?: string;
+          domain?: string | null;
+          id?: string;
+          is_default?: boolean;
+          name: string;
+          slug: string;
+        };
+        Update: {
+          created_at?: string;
+          domain?: string | null;
+          id?: string;
+          is_default?: boolean;
+          name?: string;
+          slug?: string;
+        };
+        Relationships: [];
+      };
       categories: {
         Row: {
+          tenant_id: string;
           created_at: string;
           image_url: string | null;
           show_on_home: boolean;
@@ -18,6 +46,7 @@ export type Database = {
           sort_order: number;
         };
         Insert: {
+          tenant_id?: string;
           created_at?: string;
           image_url?: string | null;
           show_on_home?: boolean;
@@ -26,6 +55,7 @@ export type Database = {
           sort_order?: number;
         };
         Update: {
+          tenant_id?: string;
           created_at?: string;
           image_url?: string | null;
           show_on_home?: boolean;
@@ -37,6 +67,7 @@ export type Database = {
       };
       customer_invites: {
         Row: {
+          tenant_id: string;
           agent_id: string | null;
           created_at: string;
           created_by: string | null;
@@ -50,6 +81,7 @@ export type Database = {
           used_by: string | null;
         };
         Insert: {
+          tenant_id?: string;
           agent_id?: string | null;
           created_at?: string;
           created_by?: string | null;
@@ -63,6 +95,7 @@ export type Database = {
           used_by?: string | null;
         };
         Update: {
+          tenant_id?: string;
           agent_id?: string | null;
           created_at?: string;
           created_by?: string | null;
@@ -79,6 +112,7 @@ export type Database = {
       };
       customer_profiles: {
         Row: {
+          tenant_id: string;
           agent_id: string | null;
           age_confirmed: boolean;
           business_address: string | null;
@@ -94,6 +128,7 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          tenant_id?: string;
           agent_id?: string | null;
           age_confirmed?: boolean;
           business_address: string | null;
@@ -109,6 +144,7 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          tenant_id?: string;
           agent_id?: string | null;
           age_confirmed?: boolean;
           business_address?: string | null;
@@ -142,18 +178,21 @@ export type Database = {
       };
       email_settings: {
         Row: {
+          tenant_id: string;
           id: boolean;
           notify_admin_user_ids: string[];
           sender_email: string;
           updated_at: string;
         };
         Insert: {
+          tenant_id?: string;
           id?: boolean;
           notify_admin_user_ids?: string[];
           sender_email?: string;
           updated_at?: string;
         };
         Update: {
+          tenant_id?: string;
           id?: boolean;
           notify_admin_user_ids?: string[];
           sender_email?: string;
@@ -163,6 +202,7 @@ export type Database = {
       };
       customer_emails: {
         Row: {
+          tenant_id: string;
           created_at: string;
           error: string | null;
           html: string;
@@ -175,6 +215,7 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          tenant_id?: string;
           created_at?: string;
           error?: string | null;
           html: string;
@@ -187,6 +228,7 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          tenant_id?: string;
           created_at?: string;
           error?: string | null;
           html?: string;
@@ -210,16 +252,19 @@ export type Database = {
       };
       customer_carts: {
         Row: {
+          tenant_id: string;
           items: Json;
           updated_at: string;
           user_id: string;
         };
         Insert: {
+          tenant_id?: string;
           items?: Json;
           updated_at?: string;
           user_id: string;
         };
         Update: {
+          tenant_id?: string;
           items?: Json;
           updated_at?: string;
           user_id?: string;
@@ -236,6 +281,7 @@ export type Database = {
       };
       global_products: {
         Row: {
+          tenant_id: string;
           barcode: string | null;
           category: string;
           colors: string[];
@@ -270,6 +316,7 @@ export type Database = {
           out_of_stock_auto: boolean;
         };
         Insert: {
+          tenant_id?: string;
           barcode?: string | null;
           category: string;
           colors?: string[];
@@ -304,6 +351,7 @@ export type Database = {
           out_of_stock_auto?: boolean;
         };
         Update: {
+          tenant_id?: string;
           barcode?: string | null;
           category?: string;
           colors?: string[];
@@ -349,6 +397,7 @@ export type Database = {
       };
       order_items: {
         Row: {
+          tenant_id: string;
           created_at: string;
           id: string;
           is_deposit: boolean;
@@ -369,6 +418,7 @@ export type Database = {
           reserved_quantity: number;
         };
         Insert: {
+          tenant_id?: string;
           created_at?: string;
           id?: string;
           is_deposit?: boolean;
@@ -389,6 +439,7 @@ export type Database = {
           reserved_quantity?: number;
         };
         Update: {
+          tenant_id?: string;
           created_at?: string;
           id?: string;
           is_deposit?: boolean;
@@ -427,6 +478,7 @@ export type Database = {
       };
       orders: {
         Row: {
+          tenant_id: string;
           agent_id: string | null;
           created_at: string;
           customer_id: string;
@@ -447,6 +499,7 @@ export type Database = {
           vat_rate: number;
         };
         Insert: {
+          tenant_id?: string;
           agent_id?: string | null;
           created_at?: string;
           customer_id: string;
@@ -467,6 +520,7 @@ export type Database = {
           vat_rate?: number;
         };
         Update: {
+          tenant_id?: string;
           agent_id?: string | null;
           created_at?: string;
           customer_id?: string;
@@ -505,6 +559,7 @@ export type Database = {
       };
       password_reset_requests: {
         Row: {
+          tenant_id: string;
           admin_note: string | null;
           created_at: string;
           email: string;
@@ -515,6 +570,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          tenant_id?: string;
           admin_note?: string | null;
           created_at?: string;
           email: string;
@@ -525,6 +581,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          tenant_id?: string;
           admin_note?: string | null;
           created_at?: string;
           email?: string;
@@ -538,6 +595,7 @@ export type Database = {
       };
       pending_products: {
         Row: {
+          tenant_id: string;
           barcode: string | null;
           created_at: string;
           created_by: string | null;
@@ -550,6 +608,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          tenant_id?: string;
           barcode?: string | null;
           created_at?: string;
           created_by?: string | null;
@@ -562,6 +621,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          tenant_id?: string;
           barcode?: string | null;
           created_at?: string;
           created_by?: string | null;
@@ -585,6 +645,7 @@ export type Database = {
       };
       password_reset_tokens: {
         Row: {
+          tenant_id: string;
           created_at: string;
           created_by: string | null;
           expires_at: string;
@@ -594,6 +655,7 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          tenant_id?: string;
           created_at?: string;
           created_by?: string | null;
           expires_at: string;
@@ -603,6 +665,7 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          tenant_id?: string;
           created_at?: string;
           created_by?: string | null;
           expires_at?: string;
@@ -623,6 +686,7 @@ export type Database = {
       };
       staff_notifications: {
         Row: {
+          tenant_id: string;
           body: string;
           created_at: string;
           id: string;
@@ -633,6 +697,7 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          tenant_id?: string;
           body?: string;
           created_at?: string;
           id?: string;
@@ -643,6 +708,7 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          tenant_id?: string;
           body?: string;
           created_at?: string;
           id?: string;
@@ -664,6 +730,7 @@ export type Database = {
       };
       service_agreements: {
         Row: {
+          tenant_id: string;
           created_at: string;
           sent_at: string | null;
           signature_svg: string | null;
@@ -677,6 +744,7 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          tenant_id?: string;
           created_at?: string;
           sent_at?: string | null;
           signature_svg?: string | null;
@@ -690,6 +758,7 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          tenant_id?: string;
           created_at?: string;
           sent_at?: string | null;
           signature_svg?: string | null;
@@ -714,6 +783,7 @@ export type Database = {
       };
       product_drafts: {
         Row: {
+          tenant_id: string;
           created_at: string;
           created_by: string | null;
           data: Json;
@@ -722,6 +792,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          tenant_id?: string;
           created_at?: string;
           created_by?: string | null;
           data?: Json;
@@ -730,6 +801,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          tenant_id?: string;
           created_at?: string;
           created_by?: string | null;
           data?: Json;
@@ -741,6 +813,7 @@ export type Database = {
       };
       home_banner_slides: {
         Row: {
+          tenant_id: string;
           alt_text: string;
           created_at: string;
           desktop_height: number | null;
@@ -758,6 +831,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          tenant_id?: string;
           alt_text?: string;
           created_at?: string;
           desktop_height?: number | null;
@@ -775,6 +849,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          tenant_id?: string;
           alt_text?: string;
           created_at?: string;
           desktop_height?: number | null;
@@ -795,6 +870,7 @@ export type Database = {
       };
       stock_counts: {
         Row: {
+          tenant_id: string;
           applied_at: string | null;
           applied_by: string | null;
           created_at: string;
@@ -806,6 +882,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          tenant_id?: string;
           applied_at?: string | null;
           applied_by?: string | null;
           created_at?: string;
@@ -817,6 +894,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          tenant_id?: string;
           applied_at?: string | null;
           applied_by?: string | null;
           created_at?: string;
@@ -831,6 +909,7 @@ export type Database = {
       };
       stock_count_lines: {
         Row: {
+          tenant_id: string;
           applied_quantity: number | null;
           count_id: string;
           counted_at: string;
@@ -844,6 +923,7 @@ export type Database = {
           reserved_open: number | null;
         };
         Insert: {
+          tenant_id?: string;
           applied_quantity?: number | null;
           count_id: string;
           counted_at?: string;
@@ -857,6 +937,7 @@ export type Database = {
           reserved_open?: number | null;
         };
         Update: {
+          tenant_id?: string;
           applied_quantity?: number | null;
           count_id?: string;
           counted_at?: string;
@@ -873,6 +954,7 @@ export type Database = {
       };
       site_settings: {
         Row: {
+          tenant_id: string;
           about_content: string;
           business_address: string;
           business_email: string;
@@ -896,6 +978,7 @@ export type Database = {
           vat_rate: number;
         };
         Insert: {
+          tenant_id?: string;
           about_content?: string;
           business_address?: string;
           business_email?: string;
@@ -919,6 +1002,7 @@ export type Database = {
           vat_rate?: number;
         };
         Update: {
+          tenant_id?: string;
           about_content?: string;
           business_address?: string;
           business_email?: string;
@@ -945,6 +1029,7 @@ export type Database = {
       };
       user_custom_prices: {
         Row: {
+          tenant_id: string;
           custom_price: number;
           product_id: string;
           updated_at: string;
@@ -952,6 +1037,7 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          tenant_id?: string;
           custom_price: number;
           product_id: string;
           updated_at?: string;
@@ -959,6 +1045,7 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          tenant_id?: string;
           custom_price?: number;
           product_id?: string;
           updated_at?: string;
@@ -969,6 +1056,7 @@ export type Database = {
       };
       user_roles: {
         Row: {
+          tenant_id: string;
           agent_number: string | null;
           created_at: string;
           email: string;
@@ -982,6 +1070,7 @@ export type Database = {
           display_name: string | null;
         };
         Insert: {
+          tenant_id?: string;
           agent_number?: string | null;
           created_at?: string;
           email: string;
@@ -995,6 +1084,7 @@ export type Database = {
           display_name?: string | null;
         };
         Update: {
+          tenant_id?: string;
           agent_number?: string | null;
           created_at?: string;
           email?: string;
@@ -1014,6 +1104,8 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      current_tenant_id: { Args: Record<string, never>; Returns: string | null };
+      tenant_for_host: { Args: { _host: string }; Returns: string | null };
       picking_manager_approve: { Args: { _order_id: string }; Returns: Record<string, unknown> };
       picking_return: { Args: { _order_id: string }; Returns: undefined };
       stock_lookup: { Args: { _query: string }; Returns: Record<string, unknown>[] };

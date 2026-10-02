@@ -1,5 +1,5 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "nuriel-shop",
   "private": true,
   "sideEffects": false,
   "type": "module",
@@ -10,7 +10,6 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "build:server": "NITRO_PRESET=node-server vite build",
     "start": "node .output/server/index.mjs"
   },
   "overrides": {
@@ -79,7 +78,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
-    "@lovable.dev/vite-tanstack-config": "^2.15.0",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

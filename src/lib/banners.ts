@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { compressDesktopBannerImage, compressMobileBannerImage } from "@/lib/image";
-import { BRANDING_BUCKET } from "@/lib/site";
+import { BRANDING_BUCKET, tenantStoragePrefix } from "@/lib/site";
 
 export type BannerPlacement = "top" | "bottom";
 export type BannerDevice = "desktop" | "mobile";
@@ -263,7 +263,7 @@ export async function uploadBannerImage(file: File, device: BannerDevice): Promi
     };
   }
 
-  const path = `site/banners/${device}-${Date.now()}-${Math.round(Math.random() * 1e6)}.${upload.extension}`;
+  const path = `${await tenantStoragePrefix()}/site/banners/${device}-${Date.now()}-${Math.round(Math.random() * 1e6)}.${upload.extension}`;
   const { error } = await supabase.storage.from(BRANDING_BUCKET).upload(path, upload.file, {
     upsert: false,
     contentType: upload.type,
@@ -282,7 +282,10 @@ export async function removeBannerFiles(urls: string[]): Promise<void> {
       const index = url.indexOf(marker);
       return index === -1 ? null : decodeURIComponent(url.slice(index + marker.length));
     })
-    .filter((path): path is string => path !== null && path.startsWith("site/banners/"));
+    // נתיב חדש: <tenant_id>/site/banners/...; נתיב ישן (לפני ההפרדה): site/banners/...
+    .filter(
+      (path): path is string => path !== null && /^(?:[0-9a-f-]{36}\/)?site\/banners\//.test(path),
+    );
   if (paths.length === 0) return;
   await supabase.storage.from(BRANDING_BUCKET).remove(paths);
 }

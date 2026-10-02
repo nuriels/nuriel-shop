@@ -17,7 +17,7 @@ const SERVER_FAILURE = "תקלה זמנית בשרת ההתחברות. נסו ש
 
 /**
  * לוג שרת להתחברות. לעולם לא רושם סיסמה. האימייל ממוסך חלקית.
- * לצפייה: docker logs kobi-app 2>&1 | grep '\[login\]'
+ * לצפייה: בלוגים של הקונטיינר (Coolify → Logs) לחפש '[login]'
  */
 function logLogin(
   level: "info" | "warn" | "error",
@@ -142,6 +142,20 @@ export const loginWithIdentifier = createServerFn({ method: "POST" })
           "החשבון עדיין לא אומת. פנו למנהל המערכת או אפסו סיסמה כדי להשלים את ההרשמה.",
         );
       }
+      throw new Error(GENERIC_FAILURE);
+    }
+
+    // חשבון של חנות אחרת לא מתחבר דרך האתר הזה (אותה הודעה כמו סיסמה שגויה —
+    // לא חושף שהחשבון קיים במקום אחר במערכת)
+    const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
+    const { currentTenantId } = await import("@/integrations/supabase/tenant.server");
+    const { data: membership } = await supabaseAdminUnscoped
+      .from("user_roles")
+      .select("tenant_id")
+      .eq("user_id", result.session.user.id)
+      .maybeSingle();
+    if (membership && membership.tenant_id !== currentTenantId()) {
+      logLogin("warn", "account belongs to another store", { ip, email: maskEmail(email) });
       throw new Error(GENERIC_FAILURE);
     }
 

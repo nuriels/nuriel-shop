@@ -653,8 +653,8 @@ export const notifyCustomerAssigned = createServerFn({ method: "POST" })
       ]);
     if (!recipient?.email) return { sent: false };
 
-    const origin =
-      process.env["PUBLIC_SITE_URL"]?.trim().replace(/\/$/, "") || "https://kobi.nuri1.fit";
+    const { tenantSiteOrigin } = await import("@/integrations/supabase/tenant.server");
+    const origin = tenantSiteOrigin();
     const link = `${origin}${recipient.role === "admin" ? "/admin?tab=users" : "/agent"}`;
     const customerLabel = profile.business_name?.trim() || customerRole?.email || "לקוח";
 

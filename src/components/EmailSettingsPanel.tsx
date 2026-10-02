@@ -156,7 +156,7 @@ export function EmailSettingsPanel() {
                 )}
                 {diagnostics.siteUrlConfigured
                   ? "כתובת האתר מוגדרת (קישורי איפוס סיסמה ייבנו נכון)"
-                  : "PUBLIC_SITE_URL לא מוגדר — קישורי איפוס ייבנו לפי כתובת הבקשה"}
+                  : "כתובת החנות לא מוגדרת (דומיין לחנות או TENANT_BASE_DOMAIN / PUBLIC_SITE_URL) — קישורים במיילים לא יישלחו"}
               </li>
             </ul>
           )}

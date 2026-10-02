@@ -1,8 +1,18 @@
-import { supabase } from "@/integrations/supabase/client";
+import { getTenantId, supabase } from "@/integrations/supabase/client";
 import { compressLogoImage, compressProductImage } from "@/lib/image";
 
 export const BRANDING_BUCKET = "branding";
 export const PRODUCT_IMAGES_BUCKET = "product-images";
+
+/**
+ * תיקיית הקבצים של החנות הנוכחית ב-Storage: <tenant_id>/...
+ * מדיניות ה-Storage מאפשרת למנהל לכתוב רק לתיקייה של החנות שלו.
+ */
+export async function tenantStoragePrefix(): Promise<string> {
+  const tenantId = await getTenantId();
+  if (!tenantId) throw new Error("החנות לא זוהתה — נסו לרענן את הדף");
+  return tenantId;
+}
 
 export type SiteSettings = {
   site_title: string;
@@ -98,7 +108,7 @@ export async function saveEmailSettings(settings: EmailSettings): Promise<void> 
   if (error) throw error;
 }
 
-/** לוגו האתר מאוחסן בנתיב ציבורי קבוע — אין צורך בכתובת חתומה */
+/** לוגו האתר מאוחסן בנתיב ציבורי (<tenant_id>/site/...) — אין צורך בכתובת חתומה */
 export function resolveSiteLogoUrl(path: string | null): string | null {
   if (path === null || path === "") return null;
   if (/^https?:\/\//i.test(path)) return path;
@@ -111,7 +121,7 @@ export async function uploadSiteLogo(file: File): Promise<string> {
   if (file.size > 10 * 1024 * 1024) throw new Error("גודל התמונה המקסימלי הוא 10MB");
   // הלוגו נשמר כ-PNG דחוס: שומר שקיפות, ונתמך גם ביצירת מסמכי ה-PDF
   const { file: optimized, extension } = await compressLogoImage(file);
-  const path = `site/logo-${Date.now()}.${extension}`;
+  const path = `${await tenantStoragePrefix()}/site/logo-${Date.now()}.${extension}`;
   const { error } = await supabase.storage.from(BRANDING_BUCKET).upload(path, optimized, {
     upsert: true,
     contentType: optimized.type,
@@ -143,7 +153,7 @@ export async function uploadProductImage(file: File): Promise<ProductImageUpload
     originalBytes,
     compressedBytes,
   } = await compressProductImage(file);
-  const path = `products/${Date.now()}-${Math.round(Math.random() * 1e6)}.${extension}`;
+  const path = `${await tenantStoragePrefix()}/products/${Date.now()}-${Math.round(Math.random() * 1e6)}.${extension}`;
   const { error } = await supabase.storage.from(PRODUCT_IMAGES_BUCKET).upload(path, optimized, {
     upsert: false,
     contentType: optimized.type,

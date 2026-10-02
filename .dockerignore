@@ -4,7 +4,6 @@ node_modules
 dist
 .git
 .github
-.lovable
 .tanstack
 .nitro
 .vinxi

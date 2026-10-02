@@ -27,23 +27,31 @@
    תחליף לייעוץ משפטי** — יש להעביר לבדיקת עו"ד לפני פרסום לציבור, בפרט את
    סעיפי הביטול, האחריות והגבלת הגיל למכירת אלכוהול.
 
-## Development
+## פיתוח מקומי
 
-Prefer working locally? You need Node.js/Bun.
+נדרשים Bun ו-Node.js 22.
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
 bun install
-bun run dev
+cp .env.example .env   # למלא SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY / SUPABASE_SERVICE_ROLE_KEY
+bun run dev            # http://localhost:8080
 ```
 
-This project was built with [Lovable](https://lovable.dev).
+## פריסה (Coolify)
 
-## Build with Lovable
+`docker-compose.yml` מוכן ל-Coolify (Build Pack: Docker Compose). המשתנים
+הנדרשים מפורטים ב-`.env.example`. מיגרציות ה-SQL שב-`supabase/migrations`
+מורצות ידנית ב-Supabase (SQL Editor) לפי סדר שמות הקבצים.
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/aa832928-43f9-434a-b241-e211b29678ef).
+## ריבוי חנויות (Multi-tenant)
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+- כל חנות היא שורה בטבלה `tenants`. החנות של כל בקשה נקבעת לפי הדומיין:
+  `tenants.domain` (דומיין מלא), אחרת תת-דומיין `slug.<TENANT_BASE_DOMAIN>`,
+  אחרת חנות ברירת המחדל.
+- כל הטבלאות כוללות `tenant_id` ומוגנות ב-RLS; הפונקציות במסד מסוננות לפי
+  החנות; קוד השרת משתמש ב-`supabaseAdmin` שמסונן אוטומטית לחנות של הבקשה.
+- קבצים ב-Storage נשמרים תחת `<tenant_id>/...`.
+- הקמת חנות חדשה (ב-SQL Editor):
+  `INSERT INTO tenants (slug, name, domain) VALUES ('shop2', 'שם החנות', 'shop2.example.com');`
+  — שורות ההגדרות נוצרות אוטומטית. מנהל החנות נרשם באתר שלה ואז מקודם:
+  `UPDATE user_roles SET role = 'admin', is_approved = true WHERE email = '...';`

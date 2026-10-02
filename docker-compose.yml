@@ -37,8 +37,11 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?}
       # --- מיילים (Resend) — ריק = ההזמנות נקלטות אבל מיילים לא נשלחים ---
       RESEND_API_KEY: ${RESEND_API_KEY:-}
-      # כתובת בסיס לקישורי איפוס סיסמה שנשלחים במייל
+      # כתובת חנות ברירת המחדל — לקישורים במיילים (איפוס סיסמה, הזמנות)
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
+      # דומיין בסיס לחנויות בתת-דומיין: shop2.<TENANT_BASE_DOMAIN>
+      # (חנות עם דומיין משלה מוגדרת ב-tenants.domain ולא צריכה את זה)
+      TENANT_BASE_DOMAIN: ${TENANT_BASE_DOMAIN:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/robots.txt').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s

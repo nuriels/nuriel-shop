@@ -10,12 +10,10 @@ WORKDIR /app
 
 COPY package.json bun.lock bunfig.toml ./
 
-# ה-lockfile של Lovable נועל 10 חבילות למירור פרטי (europe-west1-npm.pkg.dev)
-# שאינו נגיש מחוץ לסביבת Lovable — מחליפים לרג'יסטרי הציבורי לפני ההתקנה.
 # cache mount: בנייה חוזרת ב-Coolify לא מורידה שוב את כל החבילות.
+# --frozen-lockfile: בדיוק הגרסאות שב-bun.lock, בלי עדכונים שקטים.
 RUN --mount=type=cache,target=/root/.bun/install/cache \
-    sed -i 's#https://europe-west1-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache#https://registry.npmjs.org#g' bun.lock \
- && bun install --no-progress
+    bun install --frozen-lockfile --no-progress
 
 # ---------- שלב 2: בנייה ----------
 FROM deps AS build
@@ -34,8 +32,7 @@ COPY . .
 RUN test -n "$VITE_SUPABASE_URL" && test -n "$VITE_SUPABASE_PUBLISHABLE_KEY" \
  || (echo "Missing build args VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY" >&2; exit 1)
 
-# ברירת המחדל של Lovable היא cloudflare-module; בשרת שלנו נדרש Node אמיתי.
-ENV NITRO_PRESET=node-server
+# vite.config.ts בונה שרת Node עצמאי (Nitro preset: node-server)
 RUN bun run build
 
 # ---------- שלב 3: הרצה רזה ----------

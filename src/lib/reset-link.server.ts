@@ -7,13 +7,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sendEmail, renderEmailHtml, escapeHtml } from "@/lib/email.server";
+import { tenantSiteOrigin } from "@/integrations/supabase/tenant.server";
 
 /** תוקף הקישור: 3 שעות בדיוק */
 export const RESET_TOKEN_TTL_MS = 3 * 60 * 60 * 1000;
 /** הגבלת קצב: מספר קישורים מקסימלי לאותו משתמש בשעה */
 const MAX_REQUESTS_PER_HOUR = 5;
-
-const CANONICAL_SITE_URL = "https://kobi.nuri1.fit";
 
 export function hashResetToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -30,10 +29,8 @@ export function maskEmail(email: string): string {
 async function resolveSiteOrigin(): Promise<string> {
   // חשוב: לא נגזר מכותרות הבקשה. כותרת Origin/Host נשלטת ע"י הפונה,
   // ולכן קודם אפשר היה לבקש איפוס סיסמה עם Origin מזויף ולקבל קישור
-  // שמצביע לדומיין של התוקף — עם טוקן תקף.
-  const configured = process.env["PUBLIC_SITE_URL"]?.trim();
-  if (configured) return configured.replace(/\/$/, "");
-  return CANONICAL_SITE_URL;
+  // שמצביע לדומיין של התוקף — עם טוקן תקף. הכתובת נבנית מרשומת החנות במסד.
+  return tenantSiteOrigin();
 }
 
 /**

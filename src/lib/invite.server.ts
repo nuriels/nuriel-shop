@@ -10,16 +10,14 @@ import { randomBytes } from "node:crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { emailActionButton, renderEmailHtml, sendEmail } from "@/lib/email.server";
 import { hashResetToken } from "@/lib/reset-link.server";
+import { tenantSiteOrigin } from "@/integrations/supabase/tenant.server";
 
 /** תוקף הזמנה: 7 ימים */
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-const CANONICAL_SITE_URL = "https://kobi.nuri1.fit";
-
 function siteOrigin(): string {
   // לא נגזר מכותרות הבקשה — ראו resolveSiteOrigin ב-reset-link.server
-  const configured = process.env["PUBLIC_SITE_URL"]?.trim();
-  return (configured || CANONICAL_SITE_URL).replace(/\/$/, "");
+  return tenantSiteOrigin();
 }
 
 export type InviteRow = {

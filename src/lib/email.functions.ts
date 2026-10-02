@@ -255,6 +255,15 @@ export const getEmailDiagnostics = createServerFn({ method: "POST" })
       apiKeyHint: apiKey === "" ? null : `••••${apiKey.slice(-4)}`,
       senderEmail,
       senderDomain: senderEmail.includes("@") ? senderEmail.split("@")[1] : null,
-      siteUrlConfigured: (process.env["PUBLIC_SITE_URL"]?.trim() ?? "") !== "",
+      // כתובת החנות לקישורים במיילים (tenants.domain / TENANT_BASE_DOMAIN / PUBLIC_SITE_URL)
+      siteUrlConfigured: await (async () => {
+        const { tenantSiteOrigin } = await import("@/integrations/supabase/tenant.server");
+        try {
+          tenantSiteOrigin();
+          return true;
+        } catch {
+          return false;
+        }
+      })(),
     };
   });
