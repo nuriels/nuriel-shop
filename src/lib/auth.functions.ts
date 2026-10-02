@@ -148,13 +148,20 @@ export const loginWithIdentifier = createServerFn({ method: "POST" })
     // חשבון של חנות אחרת לא מתחבר דרך האתר הזה (אותה הודעה כמו סיסמה שגויה —
     // לא חושף שהחשבון קיים במקום אחר במערכת)
     const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
-    const { currentTenantId } = await import("@/integrations/supabase/tenant.server");
+    const { currentTenantId, isPlatformRequest } =
+      await import("@/integrations/supabase/tenant.server");
+    const { isPlatformAdminUser } = await import("@/integrations/supabase/client.server");
     const { data: membership } = await supabaseAdminUnscoped
       .from("user_roles")
       .select("tenant_id")
       .eq("user_id", result.session.user.id)
       .maybeSingle();
-    if (membership && membership.tenant_id !== currentTenantId()) {
+    // חריג יחיד: מנהל-על (מכל חנות) שנכנס לפאנל הפלטפורמה
+    if (
+      membership &&
+      membership.tenant_id !== currentTenantId() &&
+      !(isPlatformRequest() && (await isPlatformAdminUser(result.session.user.id)))
+    ) {
       logLogin("warn", "account belongs to another store", { ip, email: maskEmail(email) });
       throw new Error(GENERIC_FAILURE);
     }

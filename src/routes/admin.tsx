@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouteContext } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { AppFooter } from "@/components/AppFooter";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -66,11 +66,22 @@ function AdminPage() {
   };
 
   const isAdmin = role?.role === "admin";
+  // חנות שהוקפאה ע"י מנהל הפלטפורמה: הלקוחות רואים נעילה, והמנהל רואה כאן הסבר
+  const { hostMode } = useRouteContext({ from: "__root__" });
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader role={role} email={session?.user.email ?? null} onSignOut={signOut} />
       <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 px-3 py-6 sm:px-4">
+        {hostMode.suspended && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
+            <p className="font-semibold text-destructive">האתר נעול זמנית ללקוחות</p>
+            <p className="text-muted-foreground">
+              החנות הוקפאה ע"י מנהל הפלטפורמה. הלקוחות רואים עמוד נעילה ולא יכולים להזמין, ופאנל
+              הניהול ממשיך לעבוד. להסדרת המנוי פנו למנהל הפלטפורמה.
+            </p>
+          </div>
+        )}
         {loading ? null : !isAdmin ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center gap-3 py-12 text-center">

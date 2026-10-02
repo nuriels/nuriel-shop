@@ -9,13 +9,16 @@ export type Tenant = {
   name: string;
   domain: string | null;
   is_default: boolean;
+  /** active / suspended — חנות מוקפאת נעולה ללקוחות (src/server.ts) */
+  status: "active" | "suspended";
 };
 
 type TenantContext = { host: string; tenant: Tenant | null };
 
 const storage = new AsyncLocalStorage<TenantContext>();
 const cache = new Map<string, { tenant: Tenant | null; expires: number }>();
-const CACHE_TTL_MS = 60_000;
+// קצר: הקפאה / שחרור חנות בפאנל הפלטפורמה נכנסים לתוקף תוך כ-15 שניות
+const CACHE_TTL_MS = 15_000;
 
 function serviceEnv() {
   const url = process.env["SUPABASE_URL"];
@@ -62,7 +65,7 @@ export async function resolveTenant(host: string): Promise<Tenant | null> {
   let tenant: Tenant | null = null;
   if (id) {
     const rowRes = await fetch(
-      `${url}/rest/v1/tenants?id=eq.${encodeURIComponent(id)}&select=id,slug,name,domain,is_default`,
+      `${url}/rest/v1/tenants?id=eq.${encodeURIComponent(id)}&select=id,slug,name,domain,is_default,status`,
       { headers },
     );
     if (!rowRes.ok) throw new Error(`tenant lookup failed (HTTP ${rowRes.status})`);
@@ -120,8 +123,15 @@ export function isUnknownStoreHost(host: string, tenant: Tenant): boolean {
   return tenant.is_default && tenant.domain !== host && label !== tenant.slug;
 }
 
+/** חנות הבקשה מוקפאת (ולא דומיין הפלטפורמה)? */
+export function isSuspendedStoreRequest(): boolean {
+  return !isPlatformRequest() && maybeCurrentTenant()?.status === "suspended";
+}
+
 /** כתובת הבסיס של חנות מסוימת — מרשומת החנות במסד */
-export function originForTenant(tenant: Tenant | null): string {
+export function originForTenant(
+  tenant: Pick<Tenant, "slug" | "domain" | "is_default"> | null,
+): string {
   const { siteUrl, baseDomain } = platformEnv();
   if (tenant?.domain) return `https://${tenant.domain}`;
   if (tenant?.is_default && siteUrl) return siteUrl;

@@ -1,6 +1,6 @@
 import { getHostMode } from "@/lib/platform.functions";
 
-export type HostMode = { platform: boolean; baseDomain: string | null };
+export type HostMode = { platform: boolean; suspended: boolean; baseDomain: string | null };
 
 // הדומיין לא משתנה בזמן שהעמוד פתוח — בדפדפן שואלים את השרת פעם אחת בלבד
 let cached: Promise<HostMode> | undefined;

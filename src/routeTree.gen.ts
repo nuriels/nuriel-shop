@@ -14,6 +14,8 @@ import { Route as AboutRouteImport } from './routes/about'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AgentRouteImport } from './routes/agent'
 import { Route as AgreementRouteImport } from './routes/agreement'
+import { Route as ForbiddenRouteImport } from './routes/forbidden'
+import { Route as LockedRouteImport } from './routes/locked'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as PlatformRouteImport } from './routes/platform'
@@ -46,6 +48,16 @@ const AgentRoute = AgentRouteImport.update({
 const AgreementRoute = AgreementRouteImport.update({
   id: '/agreement',
   path: '/agreement',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForbiddenRoute = ForbiddenRouteImport.update({
+  id: '/forbidden',
+  path: '/forbidden',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LockedRoute = LockedRouteImport.update({
+  id: '/locked',
+  path: '/locked',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -95,6 +107,8 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/agent': typeof AgentRoute
   '/agreement': typeof AgreementRoute
+  '/forbidden': typeof ForbiddenRoute
+  '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
   '/platform': typeof PlatformRoute
@@ -110,6 +124,8 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/agent': typeof AgentRoute
   '/agreement': typeof AgreementRoute
+  '/forbidden': typeof ForbiddenRoute
+  '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
   '/platform': typeof PlatformRoute
@@ -126,6 +142,8 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/agent': typeof AgentRoute
   '/agreement': typeof AgreementRoute
+  '/forbidden': typeof ForbiddenRoute
+  '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
   '/platform': typeof PlatformRoute
@@ -143,6 +161,8 @@ export interface FileRouteTypes {
     | '/admin'
     | '/agent'
     | '/agreement'
+    | '/forbidden'
+    | '/locked'
     | '/login'
     | '/orders'
     | '/platform'
@@ -158,6 +178,8 @@ export interface FileRouteTypes {
     | '/admin'
     | '/agent'
     | '/agreement'
+    | '/forbidden'
+    | '/locked'
     | '/login'
     | '/orders'
     | '/platform'
@@ -173,6 +195,8 @@ export interface FileRouteTypes {
     | '/admin'
     | '/agent'
     | '/agreement'
+    | '/forbidden'
+    | '/locked'
     | '/login'
     | '/orders'
     | '/platform'
@@ -189,6 +213,8 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AgentRoute: typeof AgentRoute
   AgreementRoute: typeof AgreementRoute
+  ForbiddenRoute: typeof ForbiddenRoute
+  LockedRoute: typeof LockedRoute
   LoginRoute: typeof LoginRoute
   OrdersRoute: typeof OrdersRoute
   PlatformRoute: typeof PlatformRoute
@@ -234,6 +260,20 @@ declare module '@tanstack/react-router' {
       path: '/agreement'
       fullPath: '/agreement'
       preLoaderRoute: typeof AgreementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forbidden': {
+      id: '/forbidden'
+      path: '/forbidden'
+      fullPath: '/forbidden'
+      preLoaderRoute: typeof ForbiddenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/locked': {
+      id: '/locked'
+      path: '/locked'
+      fullPath: '/locked'
+      preLoaderRoute: typeof LockedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -301,6 +341,8 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AgentRoute: AgentRoute,
   AgreementRoute: AgreementRoute,
+  ForbiddenRoute: ForbiddenRoute,
+  LockedRoute: LockedRoute,
   LoginRoute: LoginRoute,
   OrdersRoute: OrdersRoute,
   PlatformRoute: PlatformRoute,

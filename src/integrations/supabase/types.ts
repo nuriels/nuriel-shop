@@ -1,5 +1,10 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
+/** סוג מנוי של חנות (tenants.plan) */
+export type TenantPlan = "trial" | "basic" | "pro" | "enterprise";
+/** סטטוס חנות (tenants.status) — חנות מוקפאת נעולה ללקוחות */
+export type TenantStatus = "active" | "suspended";
+
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
@@ -16,6 +21,11 @@ export type Database = {
           is_default: boolean;
           name: string;
           slug: string;
+          owner_email: string | null;
+          tax_id: string | null;
+          plan: TenantPlan;
+          status: TenantStatus;
+          status_changed_at: string | null;
         };
         Insert: {
           created_at?: string;
@@ -24,6 +34,11 @@ export type Database = {
           is_default?: boolean;
           name: string;
           slug: string;
+          owner_email?: string | null;
+          tax_id?: string | null;
+          plan?: TenantPlan;
+          status?: TenantStatus;
+          status_changed_at?: string | null;
         };
         Update: {
           created_at?: string;
@@ -32,7 +47,18 @@ export type Database = {
           is_default?: boolean;
           name?: string;
           slug?: string;
+          owner_email?: string | null;
+          tax_id?: string | null;
+          plan?: TenantPlan;
+          status?: TenantStatus;
+          status_changed_at?: string | null;
         };
+        Relationships: [];
+      };
+      platform_admins: {
+        Row: { user_id: string; created_at: string };
+        Insert: { user_id: string; created_at?: string };
+        Update: { user_id?: string; created_at?: string };
         Relationships: [];
       };
       categories: {
@@ -1117,6 +1143,11 @@ export type Database = {
           domain: string | null;
           is_default: boolean;
           created_at: string;
+          owner_email: string | null;
+          tax_id: string | null;
+          plan: TenantPlan;
+          status: TenantStatus;
+          status_changed_at: string | null;
           admins: number;
           customers: number;
           products: number;
@@ -1124,16 +1155,32 @@ export type Database = {
         }[];
       };
       platform_create_tenant: {
-        Args: { _slug: string; _name: string; _domain?: string | null };
-        Returns: {
-          id: string;
-          slug: string;
-          name: string;
-          domain: string | null;
-          is_default: boolean;
-          created_at: string;
+        Args: {
+          _slug: string;
+          _name: string;
+          _owner_email?: string | null;
+          _tax_id?: string | null;
+          _plan?: TenantPlan;
+          _status?: TenantStatus;
+          _domain?: string | null;
         };
+        Returns: Database["public"]["Tables"]["tenants"]["Row"];
       };
+      platform_set_tenant_status: {
+        Args: { _tenant: string; _status: TenantStatus };
+        Returns: Database["public"]["Tables"]["tenants"]["Row"];
+      };
+      platform_set_tenant_plan: {
+        Args: { _tenant: string; _plan: TenantPlan };
+        Returns: Database["public"]["Tables"]["tenants"]["Row"];
+      };
+      platform_list_admins: {
+        Args: Record<string, never>;
+        Returns: { user_id: string; email: string; created_at: string }[];
+      };
+      platform_add_admin: { Args: { _email: string }; Returns: string };
+      platform_remove_admin: { Args: { _user_id: string }; Returns: undefined };
+      tenant_is_active: { Args: { _tenant: string }; Returns: boolean };
       picking_manager_approve: { Args: { _order_id: string }; Returns: Record<string, unknown> };
       picking_return: { Args: { _order_id: string }; Returns: undefined };
       stock_lookup: { Args: { _query: string }; Returns: Record<string, unknown>[] };

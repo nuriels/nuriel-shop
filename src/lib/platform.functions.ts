@@ -1,14 +1,19 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { TenantPlan, TenantStatus } from "@/integrations/supabase/types";
 
 /**
  * באיזה דומיין אנחנו: פאנל ניהול הפלטפורמה (PLATFORM_ADMIN_HOST) או אתר של חנות.
  * נקרא מ-beforeLoad של ה-root route (גם ב-SSR וגם בניווט בדפדפן).
  */
 export const getHostMode = createServerFn({ method: "GET" }).handler(async () => {
-  const { isPlatformRequest, tenantBaseDomain } =
+  const { isPlatformRequest, isSuspendedStoreRequest, tenantBaseDomain } =
     await import("@/integrations/supabase/tenant.server");
-  return { platform: isPlatformRequest(), baseDomain: tenantBaseDomain() };
+  return {
+    platform: isPlatformRequest(),
+    suspended: isSuspendedStoreRequest(),
+    baseDomain: tenantBaseDomain(),
+  };
 });
 
 /** אותו פורמט כמו ב-DB (platform_slug_problem) — כדי לא לשלוח בקשה על קלט שבור */
@@ -36,112 +41,147 @@ export const checkStoreSlug = createServerFn({ method: "POST" })
     return { slug: data.slug, available: problem === null, message: problem };
   });
 
+export const TENANT_PLANS = ["trial", "basic", "pro", "enterprise"] as const;
+export const TENANT_STATUSES = ["active", "suspended"] as const;
+
+export const PLAN_LABELS: Record<TenantPlan, string> = {
+  trial: "ניסיון (Trial)",
+  basic: "בסיסי",
+  pro: "מקצועי",
+  enterprise: "ארגוני",
+};
+export const STATUS_LABELS: Record<TenantStatus, string> = {
+  active: "פעילה",
+  suspended: "מוקפאת",
+};
+
+const EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeEmail(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+/** ח.פ / עוסק מורשה: ספרות בלבד — מקפים ורווחים מההקלדה מוסרים */
+function normalizeTaxId(value: unknown): string {
+  return String(value ?? "").replace(/[\s-]/g, "");
+}
+
+export type CreateStoreInput = {
+  name: string;
+  slug: string;
+  ownerEmail: string;
+  taxId?: string;
+  plan?: TenantPlan;
+  status?: TenantStatus;
+};
+
 /**
- * הקמת חנות חדשה מהטופס בפאנל הפלטפורמה: שם + כתובת (slug).
- * יוצר רשומה ב-tenants דרך platform_create_tenant (בודקת הרשאה, פורמט
- * ושה-slug פנוי; ה-UNIQUE במסד מכריע גם בהקמות במקביל). שורות ההגדרות
- * של החנות נוצרות בטריגר במסד.
+ * הקמת חנות חדשה מהטופס בפאנל הפלטפורמה.
+ * 1. platform_create_tenant — בודקת הרשאה, פורמט, שה-slug פנוי ואת כל
+ *    השדות (ה-UNIQUE במסד מכריע גם בהקמות במקביל). שורות ההגדרות של
+ *    החנות נוצרות בטריגר במסד.
+ * 2. חשבון למנהל החנות (האימייל שבטופס) עם סיסמה זמנית — מוחזרת פעם אחת.
+ *    אם רק השלב הזה נכשל, החנות נשארת ואפשר ליצור מנהל מהטבלה.
  */
 export const createStore = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { name: string; slug: string }) => {
+  .inputValidator((input: CreateStoreInput) => {
     const name = String(input?.name ?? "").trim();
     const slug = normalizeSlug(input?.slug);
+    const ownerEmail = normalizeEmail(input?.ownerEmail);
+    const taxId = normalizeTaxId(input?.taxId);
+    const plan = input?.plan ?? "trial";
+    const status = input?.status ?? "active";
     if (name.length < 1 || name.length > 120) throw new Error("שם החנות חייב להכיל 1 עד 120 תווים");
     if (!SLUG_FORMAT.test(slug)) {
       throw new Error("כתובת: 3-63 תווים, אותיות אנגליות קטנות, ספרות ומקפים (לא בהתחלה או בסוף)");
     }
-    return { name, slug };
+    if (!EMAIL_FORMAT.test(ownerEmail)) throw new Error("אימייל מנהל החנות לא תקין");
+    if (taxId !== "" && !/^[0-9]{5,12}$/.test(taxId)) {
+      throw new Error("ח.פ / עוסק מורשה: ספרות בלבד (5 עד 12)");
+    }
+    if (!TENANT_PLANS.includes(plan)) throw new Error("סוג מנוי לא מוכר");
+    if (!TENANT_STATUSES.includes(status)) throw new Error("סטטוס לא מוכר");
+    return { name, slug, ownerEmail, taxId, plan, status };
   })
   .handler(async ({ data, context }) => {
+    // ההרשאה נבדקת במסד עם החיבור של המשתמש עצמו (לא service role)
+    const { data: isPlatformAdmin } = await context.supabase.rpc("is_platform_admin", {});
+    if (isPlatformAdmin !== true) throw new Error("רק מנהל הפלטפורמה יכול להקים חנויות");
+
+    const { provisionStoreAdmin, storeAdminEmailProblem } = await import("@/lib/platform.server");
+    const { originForTenant } = await import("@/integrations/supabase/tenant.server");
+
+    // לא מקימים חנות שהמנהל שלה לא יוכל להיווצר
+    const emailProblem = await storeAdminEmailProblem(data.ownerEmail);
+    if (emailProblem) throw new Error(emailProblem);
+
     const { data: tenant, error } = await context.supabase.rpc("platform_create_tenant", {
       _slug: data.slug,
       _name: data.name,
+      _owner_email: data.ownerEmail,
+      _tax_id: data.taxId || null,
+      _plan: data.plan,
+      _status: data.status,
     });
     if (error || !tenant) throw new Error(error?.message ?? "הקמת החנות נכשלה");
 
-    const { originForTenant } = await import("@/integrations/supabase/tenant.server");
+    let admin: Awaited<ReturnType<typeof provisionStoreAdmin>> | null = null;
+    let adminError: string | null = null;
+    try {
+      admin = await provisionStoreAdmin(tenant, data.ownerEmail);
+    } catch (e) {
+      adminError = e instanceof Error ? e.message : String(e);
+    }
+
     return {
       id: tenant.id,
       name: tenant.name,
       slug: tenant.slug,
       url: originForTenant(tenant),
+      admin,
+      adminError,
     };
   });
 
 /**
- * מנהל ראשון לחנות שהוקמה בפאנל הפלטפורמה. נוצר כאן (ולא ב-SQL) כי
- * צריך את ה-Auth API של Supabase. מחזיר סיסמה זמנית שמוצגת פעם אחת;
- * בכניסה הראשונה המנהל חייב לקבוע סיסמה משלו.
+ * מנהל לחנות קיימת (למשל חנות שהוקמה בלי מנהל, או שיצירת המנהל נכשלה
+ * בהקמה). מחזיר סיסמה זמנית שמוצגת פעם אחת.
  */
 export const createStoreAdmin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { tenantId: string; email: string }) => {
     const tenantId = String(input?.tenantId ?? "").trim();
-    const email = String(input?.email ?? "")
-      .trim()
-      .toLowerCase();
+    const email = normalizeEmail(input?.email);
     if (!/^[0-9a-f-]{36}$/.test(tenantId)) throw new Error("חנות לא תקינה");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("כתובת אימייל לא תקינה");
+    if (!EMAIL_FORMAT.test(email)) throw new Error("כתובת אימייל לא תקינה");
     return { tenantId, email };
   })
   .handler(async ({ data, context }) => {
-    // ההרשאה נבדקת במסד עם החיבור של המשתמש עצמו (לא service role)
     const { data: isPlatformAdmin } = await context.supabase.rpc("is_platform_admin", {});
     if (isPlatformAdmin !== true) throw new Error("רק מנהל הפלטפורמה יכול להוסיף מנהלי חנויות");
 
     const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
-    const { originForTenant } = await import("@/integrations/supabase/tenant.server");
-    const { randomInt } = await import("node:crypto");
+    const { provisionStoreAdmin } = await import("@/lib/platform.server");
 
     const { data: tenant } = await supabaseAdminUnscoped
       .from("tenants")
-      .select("id, slug, name, domain, is_default")
+      .select("id, slug, domain, is_default, owner_email")
       .eq("id", data.tenantId)
       .maybeSingle();
     if (!tenant) throw new Error("החנות לא נמצאה");
 
-    const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-    const block = () =>
-      Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join("");
-    const tempPassword = `${block()}-${block()}-${block()}`;
-
-    // חשבון התחברות אחד לכל אימייל בכל הפלטפורמה — מנהל של חנות אחרת לא יכול להיות גם כאן
-    const { data: created, error: createError } = await supabaseAdminUnscoped.auth.admin.createUser(
-      {
-        email: data.email,
-        password: tempPassword,
-        email_confirm: true,
-      },
-    );
-    if (createError || !created.user) {
-      const message = createError?.message ?? "";
-      if (/already|exists|registered|duplicate/i.test(message)) {
-        throw new Error("כתובת האימייל הזו כבר רשומה במערכת (בחנות זו או בחנות אחרת)");
-      }
-      throw new Error(message || "יצירת המשתמש נכשלה");
+    const credentials = await provisionStoreAdmin(tenant, data.email);
+    // חנות בלי אימייל בעלים — המנהל הראשון הוא הבעלים
+    if (!tenant.owner_email) {
+      await supabaseAdminUnscoped
+        .from("tenants")
+        .update({ owner_email: data.email })
+        .eq("id", tenant.id);
     }
-
-    const { error: roleError } = await supabaseAdminUnscoped.from("user_roles").insert({
-      tenant_id: tenant.id,
-      user_id: created.user.id,
-      email: data.email,
-      role: "admin",
-      is_approved: true,
-      is_blocked: false,
-      must_change_password: true,
-    });
-    if (roleError) {
-      // לא משאירים חשבון התחברות בלי שיוך לחנות
-      await supabaseAdminUnscoped.auth.admin.deleteUser(created.user.id);
-      throw new Error(roleError.message);
-    }
-
-    return {
-      email: data.email,
-      tempPassword,
-      loginUrl: `${originForTenant(tenant)}/login`,
-    };
+    return credentials;
   });
 
 /** שם ברירת המחדל לחנות שעוד לא הגדירה שם עסק */

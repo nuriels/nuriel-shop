@@ -72,7 +72,7 @@ function createSupabaseAdminClient(tenantId: string | null) {
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
 // טבלאות בלי tenant_id (רמת הפלטפורמה) — לא מסוננות
-const PLATFORM_TABLES = new Set(["tenants"]);
+const PLATFORM_TABLES = new Set(["tenants", "platform_admins"]);
 
 type Row = Record<string, unknown>;
 
@@ -153,3 +153,16 @@ export const supabaseAdminUnscoped = new Proxy({} as AdminClient, {
     return Reflect.get(_unscoped, prop, receiver);
   },
 });
+
+/**
+ * מנהל-על של הפלטפורמה? (platform_admins) — מנהל-על יכול להשתייך לחנות
+ * כלשהי ועדיין להיכנס לפאנל הפלטפורמה בדומיין שלו.
+ */
+export async function isPlatformAdminUser(userId: string): Promise<boolean> {
+  const { data } = await supabaseAdminUnscoped
+    .from("platform_admins")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data !== null;
+}

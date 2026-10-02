@@ -109,7 +109,12 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
       .eq("user_id", data.claims.sub)
       .maybeSingle();
     if (roleRow && roleRow.tenant_id !== tenantId) {
-      throw new Error("Unauthorized: account belongs to another store");
+      // חריג יחיד: מנהל-על בדומיין של פאנל הפלטפורמה
+      const { isPlatformRequest } = await import("./tenant.server");
+      const { isPlatformAdminUser } = await import("./client.server");
+      if (!(isPlatformRequest() && (await isPlatformAdminUser(data.claims.sub)))) {
+        throw new Error("Unauthorized: account belongs to another store");
+      }
     }
     if (roleRow?.is_blocked) {
       throw new Error("Unauthorized: account blocked");

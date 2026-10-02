@@ -6,7 +6,6 @@ import {
   useRouter,
   HeadContent,
   Scripts,
-  notFound,
   redirect,
 } from "@tanstack/react-router";
 import { type ReactNode } from "react";
@@ -15,6 +14,7 @@ import appCss from "../styles.css?url";
 import { AccessibilityWidget } from "@/components/AccessibilityWidget";
 import { Toaster } from "@/components/ui/sonner";
 import { hostMode, PLATFORM_PATHS } from "@/lib/host-mode";
+import { SUSPENDED_ALLOWED_PATHS } from "@/lib/blocked-pages";
 import { DEFAULT_STORE_NAME, getSiteSeo } from "@/lib/platform.functions";
 
 function NotFoundComponent() {
@@ -82,8 +82,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     if (mode.platform && !PLATFORM_PATHS.test(location.pathname)) {
       throw redirect({ to: "/platform" });
     }
-    if (!mode.platform && location.pathname.startsWith("/platform")) {
-      throw notFound();
+    // מנהל חנות (או כל אחד) שמקליד /platform בדומיין של חנות — 403
+    if (!mode.platform && /^\/platform(\/|$)/.test(location.pathname)) {
+      throw redirect({ to: "/forbidden" });
+    }
+    // חנות מוקפאת: הלקוחות רואים רק את עמוד הנעילה; פאנל הניהול של החנות פתוח
+    if (mode.suspended && !SUSPENDED_ALLOWED_PATHS.test(location.pathname)) {
+      throw redirect({ to: "/locked" });
     }
     return { hostMode: mode };
   },

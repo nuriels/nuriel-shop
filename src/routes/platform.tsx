@@ -1,38 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Lock } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthState } from "@/hooks/useAuthState";
+import { FORBIDDEN_PAGE } from "@/lib/blocked-pages";
 import { PLATFORM_SITE_NAME } from "@/lib/platform.functions";
 import { CreateStoreForm, type CreatedStore } from "@/components/platform/CreateStoreForm";
+import { PlatformAdminsCard } from "@/components/platform/PlatformAdminsCard";
+import { StoreCredentials } from "@/components/platform/StoreCredentials";
+import { StoresTable, type Store } from "@/components/platform/StoresTable";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-type Store = {
-  id: string;
-  slug: string;
-  name: string;
-  domain: string | null;
-  is_default: boolean;
-  created_at: string;
-  admins: number;
-  customers: number;
-  products: number;
-  orders: number;
-};
-
+// /platform זמין רק בדומיין של פאנל הפלטפורמה. בדומיין של חנות השרת
+// (src/server.ts) מחזיר 403, וה-root route מפנה ל-/forbidden בניווט פנימי.
 export const Route = createFileRoute("/platform")({
   ssr: false,
-  head: () => ({ meta: [{ title: PLATFORM_SITE_NAME }] }),
+  head: () => ({ meta: [{ title: PLATFORM_SITE_NAME }, { name: "robots", content: "noindex" }] }),
   component: PlatformPage,
 });
 
@@ -60,7 +45,7 @@ function PlatformPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
           <h1 className="text-lg font-bold">ניהול הפלטפורמה</h1>
           {session && (
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -73,8 +58,8 @@ function PlatformPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
-        {loading || (session && isPlatformAdmin === null) ? null : !session ? (
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
+        {loading || (session && isPlatformAdmin === null) ? null : !session || !userId ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
               <p className="text-sm text-muted-foreground">יש להתחבר כמנהל הפלטפורמה.</p>
@@ -84,13 +69,27 @@ function PlatformPage() {
             </CardContent>
           </Card>
         ) : !isPlatformAdmin ? (
-          <Card className="border-dashed">
-            <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              העמוד הזה מיועד למנהלי הפלטפורמה בלבד.
+          <Card className="mx-auto max-w-md">
+            <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+              <div className="mb-2 grid size-14 place-items-center rounded-full bg-destructive/10">
+                <Lock className="size-6 text-destructive" />
+              </div>
+              <div className="text-xs font-bold tracking-widest text-destructive">403</div>
+              <h2 className="text-xl font-bold">{FORBIDDEN_PAGE.title}</h2>
+              <p className="text-sm text-muted-foreground">
+                החשבון <span dir="ltr">{session.user.email}</span> אינו מנהל פלטפורמה.
+              </p>
+              <Button variant="outline" className="mt-3" onClick={() => supabase.auth.signOut()}>
+                התחברות עם חשבון אחר
+              </Button>
             </CardContent>
           </Card>
         ) : (
-          <PlatformConsole storeUrl={storeUrl} baseDomain={hostMode.baseDomain} />
+          <PlatformConsole
+            storeUrl={storeUrl}
+            baseDomain={hostMode.baseDomain}
+            currentUserId={userId}
+          />
         )}
       </main>
     </div>
@@ -100,9 +99,11 @@ function PlatformPage() {
 function PlatformConsole({
   storeUrl,
   baseDomain,
+  currentUserId,
 }: {
   storeUrl: (store: Pick<Store, "slug" | "domain">) => string | null;
   baseDomain: string | null;
+  currentUserId: string;
 }) {
   const [stores, setStores] = useState<Store[]>([]);
   const [created, setCreated] = useState<CreatedStore | null>(null);
@@ -116,6 +117,9 @@ function PlatformConsole({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const active = stores.filter((s) => s.status === "active").length;
+  const suspended = stores.length - active;
 
   return (
     <>
@@ -131,12 +135,27 @@ function PlatformConsole({
         <Card className="border-primary">
           <CardHeader>
             <CardTitle>החנות "{created.name}" הוקמה</CardTitle>
+            <CardDescription>
+              כתובת:{" "}
+              <a
+                href={created.url}
+                target="_blank"
+                rel="noreferrer"
+                dir="ltr"
+                className="underline"
+              >
+                {created.url}
+              </a>
+            </CardDescription>
           </CardHeader>
-          <CardContent className="text-sm">
-            כתובת:{" "}
-            <a href={created.url} target="_blank" rel="noreferrer" dir="ltr" className="underline">
-              {created.url}
-            </a>
+          <CardContent>
+            {created.admin ? (
+              <StoreCredentials credentials={created.admin} />
+            ) : (
+              <p className="text-sm text-destructive">
+                מנהל החנות לא נוצר: {created.adminError}. אפשר ליצור מנהל מהטבלה למטה.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -144,49 +163,22 @@ function PlatformConsole({
       <Card>
         <CardHeader>
           <CardTitle>חנויות ({stores.length})</CardTitle>
+          <CardDescription>
+            {active} פעילות · {suspended} מוקפאות
+          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>חנות</TableHead>
-                <TableHead>כתובת</TableHead>
-                <TableHead>מנהלים</TableHead>
-                <TableHead>לקוחות</TableHead>
-                <TableHead>מוצרים</TableHead>
-                <TableHead>הזמנות</TableHead>
-                <TableHead>נוצרה</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {stores.map((store) => {
-                const url = storeUrl(store);
-                return (
-                  <TableRow key={store.id}>
-                    <TableCell className="font-medium">
-                      {store.name} {store.is_default && <Badge variant="secondary">ראשית</Badge>}
-                    </TableCell>
-                    <TableCell dir="ltr" className="text-left">
-                      {url ? (
-                        <a href={url} target="_blank" rel="noreferrer" className="underline">
-                          {url.replace(/^https:\/\//, "")}
-                        </a>
-                      ) : (
-                        store.slug
-                      )}
-                    </TableCell>
-                    <TableCell>{store.admins}</TableCell>
-                    <TableCell>{store.customers}</TableCell>
-                    <TableCell>{store.products}</TableCell>
-                    <TableCell>{store.orders}</TableCell>
-                    <TableCell>{new Date(store.created_at).toLocaleDateString("he-IL")}</TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <StoresTable
+            stores={stores}
+            storeUrl={storeUrl}
+            onChanged={(change) =>
+              setStores((list) => list.map((s) => (s.id === change.id ? { ...s, ...change } : s)))
+            }
+          />
         </CardContent>
       </Card>
+
+      <PlatformAdminsCard currentUserId={currentUserId} />
     </>
   );
 }
