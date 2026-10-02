@@ -126,12 +126,26 @@ fi
 systemctl reload nginx
 ok "nginx עודכן"
 
-# בדיקה: קובץ אימות נגיש דרך תת-דומיין אקראי
+# בדיקה: קובץ אימות נגיש דרך תת-דומיין אקראי.
+# reload של nginx נטען ברקע — נותנים לו עד 10 שניות לפני שקובעים שנכשל
 token="check-$RANDOM$RANDOM"
-echo "$token" >"$WEBROOT/.well-known/acme-challenge/$token"
-got="$(curl -fsS --max-time 10 -H "Host: $probe" "http://127.0.0.1/.well-known/acme-challenge/$token" || true)"
-rm -f "$WEBROOT/.well-known/acme-challenge/$token"
-[[ "$got" == "$token" ]] || fail "קובץ האימות לא נגיש דרך $probe"
+token_file="$WEBROOT/.well-known/acme-challenge/$token"
+token_url="http://127.0.0.1/.well-known/acme-challenge/$token"
+echo "$token" >"$token_file"
+chmod 644 "$token_file"
+got=""
+for _ in $(seq 1 20); do
+  got="$(curl -sS --max-time 5 -H "Host: $probe" "$token_url" 2>/dev/null || true)"
+  [[ "$got" == "$token" ]] && break
+  sleep 0.5
+done
+if [[ "$got" != "$token" ]]; then
+  echo "  התשובה שהתקבלה מ-nginx עבור $probe:" >&2
+  curl -sS -i --max-time 5 -H "Host: $probe" "$token_url" 2>&1 | head -n 15 | sed 's/^/    /' >&2 || true
+  rm -f "$token_file"
+  fail "קובץ האימות לא נגיש דרך $probe (בלוק ה-nginx נשאר, ההתקנה לא הושלמה — שלחו את הפלט)"
+fi
+rm -f "$token_file"
 ok "אימות Let's Encrypt נגיש דרך תתי-הדומיין"
 
 echo "▶ 4. systemd timer (כל דקה)"
