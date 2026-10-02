@@ -11,6 +11,64 @@ export const getHostMode = createServerFn({ method: "GET" }).handler(async () =>
   return { platform: isPlatformRequest(), baseDomain: tenantBaseDomain() };
 });
 
+/** אותו פורמט כמו ב-DB (platform_slug_problem) — כדי לא לשלוח בקשה על קלט שבור */
+const SLUG_FORMAT = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
+
+function normalizeSlug(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * בדיקת כתובת חנות בזמן ההקלדה: פורמט, כתובת שמורה, כתובת תפוסה.
+ * הבדיקה עצמה רצה במסד (platform_slug_problem) עם החיבור של המשתמש,
+ * כך שרק מנהל פלטפורמה יכול להפעיל אותה.
+ */
+export const checkStoreSlug = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { slug: string }) => ({ slug: normalizeSlug(input?.slug) }))
+  .handler(async ({ data, context }) => {
+    const { data: problem, error } = await context.supabase.rpc("platform_slug_problem", {
+      _slug: data.slug,
+    });
+    if (error) throw new Error(error.message);
+    return { slug: data.slug, available: problem === null, message: problem };
+  });
+
+/**
+ * הקמת חנות חדשה מהטופס בפאנל הפלטפורמה: שם + כתובת (slug).
+ * יוצר רשומה ב-tenants דרך platform_create_tenant (בודקת הרשאה, פורמט
+ * ושה-slug פנוי; ה-UNIQUE במסד מכריע גם בהקמות במקביל). שורות ההגדרות
+ * של החנות נוצרות בטריגר במסד.
+ */
+export const createStore = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { name: string; slug: string }) => {
+    const name = String(input?.name ?? "").trim();
+    const slug = normalizeSlug(input?.slug);
+    if (name.length < 1 || name.length > 120) throw new Error("שם החנות חייב להכיל 1 עד 120 תווים");
+    if (!SLUG_FORMAT.test(slug)) {
+      throw new Error("כתובת: 3-63 תווים, אותיות אנגליות קטנות, ספרות ומקפים (לא בהתחלה או בסוף)");
+    }
+    return { name, slug };
+  })
+  .handler(async ({ data, context }) => {
+    const { data: tenant, error } = await context.supabase.rpc("platform_create_tenant", {
+      _slug: data.slug,
+      _name: data.name,
+    });
+    if (error || !tenant) throw new Error(error?.message ?? "הקמת החנות נכשלה");
+
+    const { originForTenant } = await import("@/integrations/supabase/tenant.server");
+    return {
+      id: tenant.id,
+      name: tenant.name,
+      slug: tenant.slug,
+      url: originForTenant(tenant),
+    };
+  });
+
 /**
  * מנהל ראשון לחנות שהוקמה בפאנל הפלטפורמה. נוצר כאן (ולא ב-SQL) כי
  * צריך את ה-Auth API של Supabase. מחזיר סיסמה זמנית שמוצגת פעם אחת;

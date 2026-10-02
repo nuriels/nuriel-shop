@@ -1107,6 +1107,7 @@ export type Database = {
       current_tenant_id: { Args: Record<string, never>; Returns: string | null };
       tenant_for_host: { Args: { _host: string }; Returns: string | null };
       is_platform_admin: { Args: { _user_id?: string }; Returns: boolean };
+      platform_slug_problem: { Args: { _slug: string }; Returns: string | null };
       platform_list_tenants: {
         Args: Record<string, never>;
         Returns: {
