@@ -32,6 +32,13 @@ export type Database = {
           plan: TenantPlan;
           status: TenantStatus;
           status_changed_at: string | null;
+          custom_domain: string | null;
+          custom_domain_status: string | null;
+          custom_domain_error: string | null;
+          custom_domain_verified_at: string | null;
+          custom_domain_checked_at: string | null;
+          custom_domain_ssl_expires_at: string | null;
+          custom_domain_updated_at: string | null;
         };
         Insert: {
           created_at?: string;
@@ -45,6 +52,13 @@ export type Database = {
           plan?: TenantPlan;
           status?: TenantStatus;
           status_changed_at?: string | null;
+          custom_domain?: string | null;
+          custom_domain_status?: string | null;
+          custom_domain_error?: string | null;
+          custom_domain_verified_at?: string | null;
+          custom_domain_checked_at?: string | null;
+          custom_domain_ssl_expires_at?: string | null;
+          custom_domain_updated_at?: string | null;
         };
         Update: {
           created_at?: string;
@@ -58,6 +72,13 @@ export type Database = {
           plan?: TenantPlan;
           status?: TenantStatus;
           status_changed_at?: string | null;
+          custom_domain?: string | null;
+          custom_domain_status?: string | null;
+          custom_domain_error?: string | null;
+          custom_domain_verified_at?: string | null;
+          custom_domain_checked_at?: string | null;
+          custom_domain_ssl_expires_at?: string | null;
+          custom_domain_updated_at?: string | null;
         };
         Relationships: [];
       };

@@ -16,6 +16,12 @@
 #   6. כותב מחדש את /etc/nginx/sites-available/nuriel-stores-ssl: בלוק
 #      80 (הפניה ל-https) + בלוק 443 לכל חנות שיש לה תעודה. אם השתנה —
 #      nginx -t ואז reload; אם הבדיקה נכשלת — מחזיר את הקובץ הקודם.
+#   7. דומיינים מותאמים אישית (custom_domain שה-DNS שלו אומת בפאנל החנות —
+#      custom_domain_targets), בקובץ nginx נפרד: nuriel-stores-custom.
+#      ריצה ראשונה: בלוק 80 (קבצי אימות + האתר ב-http). ריצה שאחריה: תעודת
+#      Let's Encrypt (HTTP-01) + בלוק 443 + הפניה ל-https. מדווח למסד
+#      (custom_domain_report) → "פעיל" בפאנל החנות. דומיין שהוסר — יוצא
+#      מ-nginx והתעודה שלו נמחקת. תקלה בחלק הזה לא נוגעת בתתי-הדומיין.
 # חידוש שוטף: certbot.timer הרגיל של השרת (עם reload ל-nginx).
 #
 # לא נוגע באתרים אחרים בשרת: שם שכבר מוגדר בבלוק nginx אחר (למשל
@@ -161,11 +167,12 @@ add_report() { # host tenant status issued expires error handled
 # CSV: kind,tenant_id,slug,is_default,host,renew_requested_at
 targets="$(rpc -H "Accept: text/csv" -d '{}' "$KONG_URL/rest/v1/rpc/ssl_agent_targets" | tail -n +2)"
 
-# שמות שכבר מוגדרים בבלוקים אחרים של nginx (אתרים אחרים בשרת)
+# שמות שכבר מוגדרים בבלוקים אחרים של nginx (אתרים אחרים בשרת) — בלי
+# הקבצים של הסקריפט הזה עצמו (nuriel-stores-ssl / -custom / -wildcard)
 taken_names="$(
-  nginx -T 2>/dev/null | awk -v own="$SITE_NAME" '
+  nginx -T 2>/dev/null | awk '
     /^# configuration file / { file = $4; next }
-    index(file, own) == 0 && $1 == "server_name" {
+    index(file, "nuriel-stores-") == 0 && $1 == "server_name" {
       for (i = 2; i <= NF; i++) {
         if ($i ~ /^#/) break
         gsub(/;/, "", $i)
@@ -278,6 +285,184 @@ for h in "${removed_hosts[@]}"; do removed_json+="$(json_str "$h"),"; done
 removed_json="${removed_json%,}]"
 rpc -o /dev/null -d "{\"_rows\":$rows_json,\"_removed\":$removed_json}" \
   "$KONG_URL/rest/v1/rpc/ssl_agent_report" || log "✗ הדיווח למסד נכשל"
+
+# ------------------------------------------------------------
+# 2ב. דומיינים מותאמים אישית (www.his-shop.co.il → החנות)
+# ------------------------------------------------------------
+CUSTOM_SITE_NAME=nuriel-stores-custom
+CUSTOM_SITE_FILE="$NGINX_DIR/sites-available/$CUSTOM_SITE_NAME"
+CUSTOM_SITE_LINK="$NGINX_DIR/sites-enabled/$CUSTOM_SITE_NAME"
+# הדומיינים שהסקריפט מנהל — כדי למחוק תעודה של דומיין שהוסר מהחנות
+CUSTOM_LIST="$STATE_DIR/custom-domains.list"
+DOMAIN_RE='^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,63}|xn--[a-z0-9-]{1,59})$'
+
+custom_block() { # host → בלוקי nginx (80 תמיד; 443 + הפניה כשיש תעודה)
+  local host=$1 l6_80="" l6_443="" ssl_opts=""
+  if [[ -f /proc/net/if_inet6 ]]; then
+    l6_80="    listen [::]:80;"
+    l6_443="    listen [::]:443 ssl;"
+  fi
+  [[ -f "$LE_DIR/options-ssl-nginx.conf" ]] && ssl_opts="    include $LE_DIR/options-ssl-nginx.conf;"
+  if has_cert "$host"; then
+    cat <<EOF
+
+server {
+    listen 80;
+$l6_80
+    server_name $host;
+    location ^~ /.well-known/acme-challenge/ {
+        root $WEBROOT;
+        default_type text/plain;
+    }
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+$l6_443
+    server_name $host;
+    ssl_certificate $LE_DIR/live/$host/fullchain.pem;
+    ssl_certificate_key $LE_DIR/live/$host/privkey.pem;
+$ssl_opts
+    include $PROXY_SNIPPET;
+}
+EOF
+  else
+    # עד שהתעודה מוכנה: קבצי האימות של Let's Encrypt, והאתר עצמו ב-http
+    cat <<EOF
+
+server {
+    listen 80;
+$l6_80
+    server_name $host;
+    location ^~ /.well-known/acme-challenge/ {
+        root $WEBROOT;
+        default_type text/plain;
+    }
+    include $PROXY_SNIPPET;
+}
+EOF
+  fi
+}
+
+custom_row() { # tenant domain status [expires] [error]
+  local row="{\"tenant_id\":$(json_str "$1"),\"domain\":$(json_str "$2"),\"status\":$(json_str "$3")"
+  [[ -n "${4:-}" ]] && row+=",\"expires_at\":$(json_str "$4")"
+  [[ -n "${5:-}" ]] && row+=",\"error\":$(json_str "$5")"
+  printf '%s}' "$row"
+}
+
+sync_custom_domains() {
+  local csv
+  # מסד בלי הפונקציה (לפני המיגרציה) או תקלה זמנית — לא נוגעים בכלום
+  if ! csv="$(rpc -H "Accept: text/csv" -d '{}' "$KONG_URL/rest/v1/rpc/custom_domain_targets" 2>/dev/null)"; then
+    log_once "custom-targets-unavailable" "דומיינים מותאמים: custom_domain_targets לא זמין (מיגרציה 20261019110000?) — מדלג"
+    return 0
+  fi
+
+  local -a hosts=() rows=()
+  local tenant_id slug domain status marker dates
+  while IFS=, read -r tenant_id slug domain status; do
+    [[ -z "$domain" ]] && continue
+    # רק שם דומיין תקין — לא מעבירים שום דבר אחר ל-certbot / nginx
+    if [[ ! "$domain" =~ $DOMAIN_RE || "$domain" == "$BASE_DOMAIN" || "$domain" == *".$BASE_DOMAIN" ]]; then
+      log_once "custom-invalid-${domain//[^a-z0-9.-]/_}" "מדלג על דומיין מותאם לא תקין: $domain"
+      continue
+    fi
+    if grep -qxF -- "$domain" <<<"$taken_names"; then
+      log_once "custom-taken-$domain" "מדלג על $domain — השם כבר מוגדר באתר אחר בשרת"
+      rows+=("$(custom_row "$tenant_id" "$domain" error "" "הדומיין כבר מוגדר באתר אחר בשרת — פנו לתמיכה")")
+      continue
+    fi
+    hosts+=("$domain")
+
+    # הנפקה רק אחרי שבלוק ה-80 של הדומיין כבר פעיל ב-nginx (מהריצה הקודמת) —
+    # אחרת Let's Encrypt לא ימצא את קובץ האימות
+    if ! has_cert "$domain" && [[ -L "$CUSTOM_SITE_LINK" ]] &&
+      grep -qF -- "server_name $domain;" "$CUSTOM_SITE_FILE" 2>/dev/null; then
+      marker="$STATE_DIR/$domain.failed"
+      if [[ ! -f "$marker" ]] || (($(date +%s) - $(stat -c %Y "$marker") >= RETRY_AFTER_SECONDS)); then
+        issue "$domain" || true
+      fi
+    fi
+
+    if has_cert "$domain"; then
+      dates="$(cert_dates "$domain" || true)"
+      rows+=("$(custom_row "$tenant_id" "$domain" active "${dates#* }")")
+    elif [[ -f "$STATE_DIR/$domain.failed" ]]; then
+      rows+=("$(custom_row "$tenant_id" "$domain" error "" "$(cert_error "$STATE_DIR/$domain.log")")")
+    else
+      rows+=("$(custom_row "$tenant_id" "$domain" pending)")
+    fi
+  done < <(tail -n +2 <<<"$csv" | tr -d '"\r')
+
+  # --- קובץ ה-nginx של הדומיינים המותאמים ---
+  if ((${#hosts[@]} > 0)) || [[ -f "$CUSTOM_SITE_FILE" ]]; then
+    local ctmp cbackup="" host
+    ctmp="$(mktemp)"
+    {
+      echo "# נוצר אוטומטית ע\"י deploy/ssl/store-certs.sh — דומיינים מותאמים של חנויות. לא לערוך ידנית"
+      echo "# דומיינים: ${#hosts[@]}"
+      for host in "${hosts[@]}"; do custom_block "$host"; done
+    } >"$ctmp"
+    if [[ -f "$CUSTOM_SITE_FILE" ]] && cmp -s "$ctmp" "$CUSTOM_SITE_FILE" && [[ -L "$CUSTOM_SITE_LINK" ]]; then
+      rm -f -- "$ctmp"
+    else
+      if [[ -f "$CUSTOM_SITE_FILE" ]]; then
+        cbackup="$STATE_DIR/$CUSTOM_SITE_NAME.previous"
+        cp "$CUSTOM_SITE_FILE" "$cbackup"
+      fi
+      install -m 0644 "$ctmp" "$CUSTOM_SITE_FILE"
+      rm -f -- "$ctmp"
+      ln -sfn "$CUSTOM_SITE_FILE" "$CUSTOM_SITE_LINK"
+      if nginx -t >/dev/null 2>"$STATE_DIR/nginx-test-custom.log"; then
+        systemctl reload nginx
+        log "✓ nginx עודכן — ${#hosts[@]} דומיינים מותאמים"
+      else
+        if [[ -n "$cbackup" ]]; then
+          cp "$cbackup" "$CUSTOM_SITE_FILE"
+        else
+          rm -f -- "$CUSTOM_SITE_LINK" "$CUSTOM_SITE_FILE"
+        fi
+        log "✗ בדיקת nginx לדומיינים המותאמים נכשלה — הוחזרה ההגדרה הקודמת. פרטים: $STATE_DIR/nginx-test-custom.log"
+        return 1
+      fi
+    fi
+  fi
+
+  # --- דומיין שהוסר מהחנות: התעודה שלו נמחקת (אחרי שיצא מ-nginx) ---
+  local old
+  if [[ -f "$CUSTOM_LIST" ]]; then
+    while IFS= read -r old; do
+      [[ -z "$old" || ! "$old" =~ $DOMAIN_RE ]] && continue
+      printf '%s\n' "${hosts[@]}" | grep -qxF -- "$old" && continue
+      if is_ours "$old"; then
+        if certbot delete --cert-name "$old" --non-interactive >"$STATE_DIR/$old.delete.log" 2>&1; then
+          log "✓ התעודה של $old נמחקה (הדומיין הוסר מהחנות)"
+        else
+          log_once "delete-$old" "✗ מחיקת התעודה של $old נכשלה — פרטים: $STATE_DIR/$old.delete.log"
+          continue
+        fi
+      fi
+      rm -f -- "${STATE_DIR:?}/${old:?}".* "${STATE_DIR:?}/notes/"*"-${old:?}"
+    done <"$CUSTOM_LIST"
+  fi
+  printf '%s\n' "${hosts[@]}" | grep -v '^$' >"$CUSTOM_LIST" || true
+
+  # --- דיווח למסד (מה שמנהל החנות רואה בפאנל) ---
+  if ((${#rows[@]} > 0)); then
+    rpc -o /dev/null -d "{\"_rows\":[$(
+      IFS=,
+      echo "${rows[*]}"
+    )]}" "$KONG_URL/rest/v1/rpc/custom_domain_report" || log "✗ הדיווח על הדומיינים המותאמים נכשל"
+  fi
+  return 0
+}
+
+# תקלה בדומיינים המותאמים לא עוצרת את הטיפול בתתי-הדומיין
+sync_custom_domains || log "✗ הטיפול בדומיינים המותאמים נכשל בריצה הזו (ניסיון חוזר בעוד דקה)"
 
 # ------------------------------------------------------------
 # 3. קובץ ה-nginx של החנויות

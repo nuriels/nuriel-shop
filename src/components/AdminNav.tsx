@@ -7,6 +7,7 @@ import {
   ClipboardList,
   FolderTree,
   Gift,
+  Globe,
   Inbox,
   LayoutTemplate,
   Mail,
@@ -54,6 +55,7 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
       { value: "home", label: "עיצוב מסך הבית", icon: LayoutTemplate },
       { value: "site", label: "הגדרות אתר", icon: Settings },
       { value: "email", label: "הגדרות מייל", icon: Mail },
+      { value: "domain", label: "דומיין משלכם", icon: Globe },
     ],
   },
 ];

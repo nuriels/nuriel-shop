@@ -11,6 +11,12 @@ export type Tenant = {
   is_default: boolean;
   /** active / suspended — חנות מוקפאת נעולה ללקוחות (src/server.ts) */
   status: "active" | "suspended";
+  /** דומיין מותאם שמנהל החנות חיבר (www.his-shop.co.il) — null = אין */
+  custom_domain: string | null;
+  /** pending / verified / active / error */
+  custom_domain_status: string | null;
+  /** ה-DNS אומת — הדומיין המותאם מנותב לחנות */
+  custom_domain_verified: boolean;
 };
 
 type TenantContext = { host: string; tenant: Tenant | null };
@@ -65,11 +71,28 @@ export async function resolveTenant(host: string): Promise<Tenant | null> {
   let tenant: Tenant | null = null;
   if (id) {
     const rowRes = await fetch(
-      `${url}/rest/v1/tenants?id=eq.${encodeURIComponent(id)}&select=id,slug,name,domain,is_default,status`,
+      `${url}/rest/v1/tenants?id=eq.${encodeURIComponent(id)}&select=id,slug,name,domain,is_default,status,custom_domain,custom_domain_status,custom_domain_verified_at`,
       { headers },
     );
     if (!rowRes.ok) throw new Error(`tenant lookup failed (HTTP ${rowRes.status})`);
-    tenant = ((await rowRes.json()) as Tenant[])[0] ?? null;
+    const row = (
+      (await rowRes.json()) as (Omit<Tenant, "custom_domain_verified"> & {
+        custom_domain_verified_at?: string | null;
+      })[]
+    )[0];
+    tenant = row
+      ? {
+          id: row.id,
+          slug: row.slug,
+          name: row.name,
+          domain: row.domain,
+          is_default: row.is_default,
+          status: row.status,
+          custom_domain: row.custom_domain ?? null,
+          custom_domain_status: row.custom_domain_status ?? null,
+          custom_domain_verified: Boolean(row.custom_domain_verified_at),
+        }
+      : null;
   }
   cache.set(host, { tenant, expires: Date.now() + CACHE_TTL_MS });
   return tenant;
@@ -111,16 +134,39 @@ export function tenantBaseDomain(): string | null {
   return platformEnv().baseDomain;
 }
 
+/** "https://shop.example.com/x" → "shop.example.com" */
+function hostOfUrl(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 /**
- * תת-דומיין של הפלטפורמה שלא שייך לאף חנות. tenant_for_host נופל לחנות
- * ברירת המחדל כשאין התאמה, ולכן כאן בודקים שההתאמה הייתה אמיתית — אחרת
- * shop-that-doesnt-exist.<base> היה מציג את החנות הראשית.
+ * כתובת שלא שייכת לאף חנות. tenant_for_host נופל לחנות ברירת המחדל כשאין
+ * התאמה, ולכן כאן בודקים שההתאמה הייתה אמיתית:
+ *  - תת-דומיין של הפלטפורמה: shop-that-doesnt-exist.<base> לא מציג את החנות הראשית.
+ *  - דומיין חיצוני: רק הדומיין המלא של החנות (tenants.domain), דומיין מותאם
+ *    שה-DNS שלו אומת, או כתובת האתר הראשית. דומיין מותאם שעוד לא אומת (או
+ *    שהוסר) לא מציג שום חנות.
+ * localhost / כתובת IP — כמו קודם (חנות ברירת המחדל).
  */
 export function isUnknownStoreHost(host: string, tenant: Tenant): boolean {
-  const { baseDomain, adminHost } = platformEnv();
-  if (!baseDomain || !host.endsWith(`.${baseDomain}`) || host === adminHost) return false;
-  const label = host.slice(0, -(baseDomain.length + 1));
-  return tenant.is_default && tenant.domain !== host && label !== tenant.slug;
+  const { baseDomain, adminHost, siteUrl } = platformEnv();
+  if (!baseDomain || host === adminHost || host === baseDomain) return false;
+  if (host.endsWith(`.${baseDomain}`)) {
+    const label = host.slice(0, -(baseDomain.length + 1));
+    return tenant.is_default && tenant.domain !== host && label !== tenant.slug;
+  }
+  if (tenant.domain === host) return false;
+  if (tenant.custom_domain === host && tenant.custom_domain_verified) return false;
+  if (hostOfUrl(siteUrl) === host) return false;
+  if (host === "localhost" || /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith("[")) {
+    return false;
+  }
+  return true;
 }
 
 /** חנות הבקשה מוקפאת (ולא דומיין הפלטפורמה)? */
@@ -128,12 +174,21 @@ export function isSuspendedStoreRequest(): boolean {
   return !isPlatformRequest() && maybeCurrentTenant()?.status === "suspended";
 }
 
-/** כתובת הבסיס של חנות מסוימת — מרשומת החנות במסד */
+/**
+ * כתובת הבסיס של חנות מסוימת — מרשומת החנות במסד: דומיין מלא, דומיין מותאם
+ * פעיל (עם תעודת SSL), תת-דומיין, או כתובת האתר הראשית.
+ */
 export function originForTenant(
-  tenant: Pick<Tenant, "slug" | "domain" | "is_default"> | null,
+  tenant:
+    | (Pick<Tenant, "slug" | "domain" | "is_default"> &
+        Partial<Pick<Tenant, "custom_domain" | "custom_domain_status">>)
+    | null,
 ): string {
   const { siteUrl, baseDomain } = platformEnv();
   if (tenant?.domain) return `https://${tenant.domain}`;
+  if (tenant?.custom_domain && tenant.custom_domain_status === "active") {
+    return `https://${tenant.custom_domain}`;
+  }
   if (tenant?.is_default && siteUrl) return siteUrl;
   if (tenant && baseDomain) return `https://${tenant.slug}.${baseDomain}`;
   // PUBLIC_SITE_URL שייך לחנות ברירת המחדל — לא שולחים לקוח של חנות אחרת לשם

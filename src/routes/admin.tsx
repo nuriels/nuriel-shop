@@ -15,6 +15,7 @@ import { CartPromotionsPanel } from "@/components/sales/CartPromotionsPanel";
 import { HomeBannersPanel } from "@/components/HomeBannersPanel";
 import { StockCountPanel } from "@/components/StockCountPanel";
 import { EmailSettingsPanel } from "@/components/EmailSettingsPanel";
+import { CustomDomainPanel } from "@/components/CustomDomainPanel";
 import { CustomPricesPanel } from "@/components/CustomPricesPanel";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { AdminNav } from "@/components/AdminNav";
@@ -164,6 +165,9 @@ function AdminPage() {
               </TabsContent>
               <TabsContent value="email">
                 <EmailSettingsPanel />
+              </TabsContent>
+              <TabsContent value="domain">
+                <CustomDomainPanel />
               </TabsContent>
             </Tabs>
           </div>

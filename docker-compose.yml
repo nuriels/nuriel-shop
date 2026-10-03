@@ -49,6 +49,9 @@ services:
       TENANT_BASE_DOMAIN: ${TENANT_BASE_DOMAIN:-}
       # דומיין פאנל ניהול הפלטפורמה (/platform) — לא משמש כחנות
       PLATFORM_ADMIN_HOST: ${PLATFORM_ADMIN_HOST:-}
+      # דומיינים מותאמים של חנויות: כתובות ה-IP של השרת לבדיקת רשומת A (אופציונלי —
+      # ברירת מחדל: הכתובת ש-<slug>.<TENANT_BASE_DOMAIN> מפנה אליה)
+      SERVER_PUBLIC_IPS: ${SERVER_PUBLIC_IPS:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/robots.txt').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
