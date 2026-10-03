@@ -124,7 +124,7 @@ function OrderDetails({
         </DialogDescription>
       </DialogHeader>
 
-      <OrderStatusSteps status={order.status} />
+      <OrderStatusSteps status={order.status} attempts={order.delivery_attempts ?? 0} />
 
       {/* ---------- פריטים ---------- */}
       <section aria-label="פריטים" className="rounded-xl border border-border">

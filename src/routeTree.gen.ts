@@ -27,7 +27,9 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as WarehouseRouteImport } from './routes/warehouse'
+import { Route as AdminOrdersRouteImport } from './routes/admin_.orders'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
+import { Route as CourierTokenRouteImport } from './routes/courier.$token'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -119,9 +121,19 @@ const WarehouseRoute = WarehouseRouteImport.update({
   path: '/warehouse',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminOrdersRoute = AdminOrdersRouteImport.update({
+  id: '/admin_/orders',
+  path: '/admin/orders',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminSettingsRoute = AdminSettingsRouteImport.update({
   id: '/admin_/settings',
   path: '/admin/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CourierTokenRoute = CourierTokenRouteImport.update({
+  id: '/courier/$token',
+  path: '/courier/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -144,7 +156,9 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
+  '/admin/orders': typeof AdminOrdersRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/courier/$token': typeof CourierTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -165,7 +179,9 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
+  '/admin/orders': typeof AdminOrdersRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/courier/$token': typeof CourierTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -187,7 +203,9 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
+  '/admin_/orders': typeof AdminOrdersRoute
   '/admin_/settings': typeof AdminSettingsRoute
+  '/courier/$token': typeof CourierTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -210,7 +228,9 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/warehouse'
+    | '/admin/orders'
     | '/admin/settings'
+    | '/courier/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -231,7 +251,9 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/warehouse'
+    | '/admin/orders'
     | '/admin/settings'
+    | '/courier/$token'
   id:
     | '__root__'
     | '/'
@@ -252,7 +274,9 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/warehouse'
+    | '/admin_/orders'
     | '/admin_/settings'
+    | '/courier/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -274,7 +298,9 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   TermsRoute: typeof TermsRoute
   WarehouseRoute: typeof WarehouseRoute
+  AdminOrdersRoute: typeof AdminOrdersRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
+  CourierTokenRoute: typeof CourierTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -405,11 +431,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WarehouseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/orders': {
+      id: '/admin_/orders'
+      path: '/admin/orders'
+      fullPath: '/admin/orders'
+      preLoaderRoute: typeof AdminOrdersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/settings': {
       id: '/admin_/settings'
       path: '/admin/settings'
       fullPath: '/admin/settings'
       preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/courier/$token': {
+      id: '/courier/$token'
+      path: '/courier/$token'
+      fullPath: '/courier/$token'
+      preLoaderRoute: typeof CourierTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -434,7 +474,9 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   TermsRoute: TermsRoute,
   WarehouseRoute: WarehouseRoute,
+  AdminOrdersRoute: AdminOrdersRoute,
   AdminSettingsRoute: AdminSettingsRoute,
+  CourierTokenRoute: CourierTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

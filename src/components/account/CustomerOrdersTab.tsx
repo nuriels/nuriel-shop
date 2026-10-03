@@ -28,7 +28,7 @@ type Filter = "all" | "active" | "completed" | "cancelled";
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "הכל" },
   { id: "active", label: "בתהליך" },
-  { id: "completed", label: "נשלחו" },
+  { id: "completed", label: "נשלחו / נמסרו" },
   { id: "cancelled", label: "בוטלו" },
 ];
 

@@ -35,7 +35,7 @@ import {
 } from "@/lib/catalog";
 import { calculateVat, DEFAULT_VAT_RATE } from "@/lib/vat";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { ORDER_STATUSES, ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/orders";
+import { ORDER_CREATE_STATUSES, ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/orders";
 import { sendOrderEmails } from "@/lib/email.functions";
 import { fetchAllRows } from "@/lib/fetch-all";
 
@@ -598,7 +598,7 @@ export function CreateOrderDialog({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent dir="rtl">
-                        {ORDER_STATUSES.map((s) => (
+                        {ORDER_CREATE_STATUSES.map((s) => (
                           <SelectItem key={s} value={s}>
                             {ORDER_STATUS_LABEL[s]}
                           </SelectItem>

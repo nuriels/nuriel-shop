@@ -74,7 +74,10 @@ export function PickingPanel({
     [orders, meId],
   );
   const done = useMemo(
-    () => orders?.filter((o) => o.status === "shipped" || o.status === "picked") ?? [],
+    () =>
+      orders?.filter((o) =>
+        ["picked", "awaiting_courier", "shipped", "delivered"].includes(o.status),
+      ) ?? [],
     [orders],
   );
   const open = openId ? (orders?.find((o) => o.id === openId) ?? null) : null;
@@ -161,7 +164,7 @@ export function PickingPanel({
               ? ` · לוקטו ${order.picked_lines}/${order.total_lines}`
               : ""}
             {order.picker_name
-              ? ` · ${order.status === "shipped" ? "ליקט/ה" : "אצל"}: ${order.picker_name}`
+              ? ` · ${order.status === "picking" ? "אצל" : "ליקט/ה"}: ${order.picker_name}`
               : ""}
             {order.approved_by_name && order.approved_by_name !== order.picker_name
               ? ` · אישר: ${order.approved_by_name}`

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSiteSettings, refreshSiteSettings } from "@/hooks/useSiteSettings";
 import {
+  labelSizeProblem,
   saveSiteSettings,
   uploadSiteLogo,
   resolveSiteLogoUrl,
@@ -19,6 +20,7 @@ import { defaultPrivacyPolicy, defaultTermsOfService } from "@/lib/legal";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { BrandColorField } from "@/components/BrandColorField";
 import { SabbathModeCard } from "@/components/SabbathModeCard";
+import { LabelSizeCard } from "@/components/delivery/LabelSizeCard";
 
 /** האם שני מצבי הגדרות זהים (כל השדות פשוטים: טקסט / מספר / בוליאני / null) */
 function sameSettings(a: SiteSettings, b: SiteSettings): boolean {
@@ -76,6 +78,11 @@ export function SiteSettingsPanel() {
   };
 
   const save = async () => {
+    const labelProblem = labelSizeProblem(form.label_width_mm, form.label_height_mm);
+    if (labelProblem) {
+      toast.error(`מדבקות משלוח — ${labelProblem}`);
+      return;
+    }
     setBusy(true);
     try {
       await saveSiteSettings(form);
@@ -98,7 +105,8 @@ export function SiteSettingsPanel() {
         <div className="min-w-0">
           <h2 className="text-xl font-bold text-foreground">הגדרות אתר ותוכן</h2>
           <p className="text-sm text-muted-foreground">
-            מצב שבת, מיתוג וצבע החנות, פרטי העסק, תצוגת מע״מ, עמודי אודות ומסמכים משפטיים
+            מצב שבת, מיתוג וצבע החנות, פרטי העסק, תצוגת מע״מ, מדבקות משלוח, עמודי אודות ומסמכים
+            משפטיים
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -394,6 +402,14 @@ export function SiteSettingsPanel() {
           </p>
         </CardContent>
       </Card>
+
+      <LabelSizeCard
+        width={form.label_width_mm}
+        height={form.label_height_mm}
+        storeName={form.business_name || form.site_title}
+        storePhone={form.support_phone || form.business_phone}
+        onChange={patch}
+      />
 
       <Card className="shadow-card">
         <CardHeader className="flex flex-row items-center justify-between gap-2">

@@ -49,9 +49,31 @@ export function cartDepositTotal(items: CartItem[]): number {
 }
 
 export type OrderStatus =
-  "pending" | "agent_review" | "picking" | "picked" | "shipped" | "cancelled";
+  | "pending"
+  | "agent_review"
+  | "picking"
+  | "picked"
+  | "awaiting_courier"
+  | "shipped"
+  | "delivered"
+  | "cancelled";
 
 export const ORDER_STATUSES: OrderStatus[] = [
+  "pending",
+  "agent_review",
+  "picking",
+  "picked",
+  "awaiting_courier",
+  "shipped",
+  "delivered",
+  "cancelled",
+];
+
+/**
+ * הסטטוסים שאפשר לבחור ביצירת הזמנה ידנית. "ממתינה לשליח" ו"נמסרה" נקבעים
+ * רק בזרימת המשלוח (מסירה לשליח עם קישור / דיווח השליח).
+ */
+export const ORDER_CREATE_STATUSES: OrderStatus[] = [
   "pending",
   "agent_review",
   "picking",
@@ -65,16 +87,44 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   agent_review: "בטיפול סוכן",
   picking: "בליקוט והכנה",
   picked: "לוקטה — בבדיקה לפני משלוח",
-  shipped: "נשלחה / בוצעה",
+  awaiting_courier: "ממתינה לשליח",
+  shipped: "נשלחה",
+  delivered: "נמסרה ללקוח",
   cancelled: "בוטלה",
 };
 
 /**
+ * הסטטוס לתצוגה, כולל ניסיונות משלוח שנכשלו:
+ * "ממתינה לשליח · משלוח נכשל — ניסיון 2".
+ */
+export function orderStatusText(order: {
+  status: OrderStatus;
+  delivery_attempts?: number | null;
+}): string {
+  const base = ORDER_STATUS_LABEL[order.status] ?? order.status;
+  const attempts = order.delivery_attempts ?? 0;
+  if (order.status === "awaiting_courier" && attempts > 0) {
+    return `${base} · משלוח נכשל — ניסיון ${attempts}`;
+  }
+  return base;
+}
+
+/** אפשר לסמן כ"נשלחה" (ידנית או במרוכז)? — לא הצעות מחיר ולא הזמנות שהסתיימו */
+export function canMarkShipped(order: { status: OrderStatus; kind: OrderKind }): boolean {
+  return order.kind === "order" && !["cancelled", "shipped", "delivered"].includes(order.status);
+}
+
+/** אפשר למסור לשליח? (אותו כלל כמו ב-assign_order_courier) */
+export function canAssignCourier(order: { status: OrderStatus; kind: OrderKind }): boolean {
+  return order.kind === "order" && order.status !== "cancelled" && order.status !== "delivered";
+}
+
+/**
  * קבוצות סטטוס לסרגל הצד (ניהול + אזור אישי של הלקוח):
  *   ממתינות לאישור = התקבלה + בטיפול סוכן · מאושרות = בליקוט והכנה ·
- *   בוצעו = נשלחה · מבוטלות — בנפרד.
+ *   ממתינות לשליח · בוצעו = נשלחה / נמסרה · מבוטלות — בנפרד.
  */
-export type OrderGroup = "awaiting" | "approved" | "completed" | "cancelled";
+export type OrderGroup = "awaiting" | "approved" | "courier" | "completed" | "cancelled";
 
 export const ORDER_GROUPS: {
   id: OrderGroup;
@@ -101,11 +151,19 @@ export const ORDER_GROUPS: {
     customerHint: "ההזמנה אושרה ונמצאת בהכנה במחסן.",
   },
   {
+    id: "courier",
+    label: "ממתינות לשליח",
+    statuses: ["awaiting_courier"],
+    staffHint:
+      'נמסרו לשליח עם קישור אישי (בלי התחברות). השליח מסמן בקישור "נמסר" או "משלוח נכשל" — ואז ההזמנה נשארת כאן והמונה עולה.',
+    customerHint: "ההזמנה ארוזה ומחכה לשליח. נעדכן כשתימסר.",
+  },
+  {
     id: "completed",
     label: "בוצעו",
-    statuses: ["shipped"],
-    staffHint: "הזמנות שנשלחו ללקוח.",
-    customerHint: "הזמנות שנשלחו אליך. אפשר להזמין שוב בלחיצה.",
+    statuses: ["shipped", "delivered"],
+    staffHint: "הזמנות שנשלחו או נמסרו ללקוח.",
+    customerHint: "הזמנות שנשלחו או נמסרו אליך. אפשר להזמין שוב בלחיצה.",
   },
   {
     id: "cancelled",
@@ -128,7 +186,9 @@ export const ORDER_STATUS_BADGE: Record<
   agent_review: "secondary",
   picking: "secondary",
   picked: "secondary",
+  awaiting_courier: "default",
   shipped: "outline",
+  delivered: "outline",
   cancelled: "destructive",
 };
 
@@ -169,12 +229,19 @@ export type OrderRow = OrderContactFields & {
   vat_rate: number | null;
   prices_include_vat: boolean | null;
   created_at: string;
+  /** כמה פעמים השליח דיווח "משלוח נכשל" */
+  delivery_attempts: number;
+  last_delivery_failure_note: string | null;
+  last_delivery_failure_at: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
   order_items: OrderItemRow[];
 };
 
 /** העמודות שנטענות בכל מסכי ההזמנות (לקוח, סוכן ומנהל) */
 export const ORDER_SELECT_COLUMNS =
   "id, customer_id, agent_id, order_number, status, kind, total, note, vat_rate, prices_include_vat, created_at, " +
+  "delivery_attempts, last_delivery_failure_note, last_delivery_failure_at, shipped_at, delivered_at, " +
   `${ORDER_CONTACT_COLUMNS}, ` +
   "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit, is_gift)";
 

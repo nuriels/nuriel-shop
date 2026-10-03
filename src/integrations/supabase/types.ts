@@ -8,6 +8,8 @@ export type TenantStatus = "active" | "suspended";
 export type CartPromotionCondition = "min_subtotal" | "category_quantity";
 /** מצב תעודת SSL של חנות (tenant_ssl.status) — מדווח ע"י deploy/ssl/store-certs.sh */
 export type TenantSslStatus = "active" | "pending" | "error" | "blocked" | "external";
+/** יומן המשלוח של הזמנה (order_delivery_events.kind) */
+export type DeliveryEventKind = "courier_assigned" | "delivery_failed" | "delivered" | "shipped";
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
@@ -168,6 +170,102 @@ export type Database = {
         Row: { user_id: string; created_at: string };
         Insert: { user_id: string; created_at?: string };
         Update: { user_id?: string; created_at?: string };
+        Relationships: [];
+      };
+      tenant_secrets: {
+        Row: {
+          tenant_id: string;
+          resend_api_key: string | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          tenant_id?: string;
+          resend_api_key?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          tenant_id?: string;
+          resend_api_key?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      order_courier_links: {
+        Row: {
+          order_id: string;
+          tenant_id: string;
+          token: string;
+          courier_name: string | null;
+          courier_phone: string | null;
+          created_at: string;
+          created_by: string | null;
+          expires_at: string;
+          opened_count: number;
+          last_opened_at: string | null;
+        };
+        Insert: {
+          order_id: string;
+          tenant_id?: string;
+          token: string;
+          courier_name?: string | null;
+          courier_phone?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          expires_at?: string;
+          opened_count?: number;
+          last_opened_at?: string | null;
+        };
+        Update: {
+          order_id?: string;
+          tenant_id?: string;
+          token?: string;
+          courier_name?: string | null;
+          courier_phone?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          expires_at?: string;
+          opened_count?: number;
+          last_opened_at?: string | null;
+        };
+        Relationships: [];
+      };
+      order_delivery_events: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          order_id: string;
+          kind: DeliveryEventKind;
+          attempt: number | null;
+          note: string | null;
+          actor: "staff" | "courier";
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          order_id: string;
+          kind: DeliveryEventKind;
+          attempt?: number | null;
+          note?: string | null;
+          actor: "staff" | "courier";
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          order_id?: string;
+          kind?: DeliveryEventKind;
+          attempt?: number | null;
+          note?: string | null;
+          actor?: "staff" | "courier";
+          created_by?: string | null;
+          created_at?: string;
+        };
         Relationships: [];
       };
       categories: {
@@ -664,6 +762,12 @@ export type Database = {
           shipping_address: string | null;
           shipping_zip: string | null;
           terms_accepted_at: string | null;
+          delivery_attempts: number;
+          last_delivery_failure_at: string | null;
+          last_delivery_failure_note: string | null;
+          courier_assigned_at: string | null;
+          shipped_at: string | null;
+          delivered_at: string | null;
         };
         Insert: {
           tenant_id?: string;
@@ -699,6 +803,12 @@ export type Database = {
           shipping_address?: string | null;
           shipping_zip?: string | null;
           terms_accepted_at?: string | null;
+          delivery_attempts?: number;
+          last_delivery_failure_at?: string | null;
+          last_delivery_failure_note?: string | null;
+          courier_assigned_at?: string | null;
+          shipped_at?: string | null;
+          delivered_at?: string | null;
         };
         Update: {
           tenant_id?: string;
@@ -734,6 +844,12 @@ export type Database = {
           shipping_address?: string | null;
           shipping_zip?: string | null;
           terms_accepted_at?: string | null;
+          delivery_attempts?: number;
+          last_delivery_failure_at?: string | null;
+          last_delivery_failure_note?: string | null;
+          courier_assigned_at?: string | null;
+          shipped_at?: string | null;
+          delivered_at?: string | null;
         };
         Relationships: [
           {
@@ -1174,6 +1290,8 @@ export type Database = {
           terms_content: string;
           updated_at: string;
           vat_rate: number;
+          label_width_mm: number;
+          label_height_mm: number;
         };
         Insert: {
           tenant_id?: string;
@@ -1201,6 +1319,8 @@ export type Database = {
           terms_content?: string;
           updated_at?: string;
           vat_rate?: number;
+          label_width_mm?: number;
+          label_height_mm?: number;
         };
         Update: {
           tenant_id?: string;
@@ -1228,6 +1348,8 @@ export type Database = {
           terms_content?: string;
           updated_at?: string;
           vat_rate?: number;
+          label_width_mm?: number;
+          label_height_mm?: number;
         };
         Relationships: [];
       };
@@ -1515,6 +1637,39 @@ export type Database = {
       };
       stock_reserved_open: { Args: never; Returns: { product_id: string; reserved: number }[] };
       resolve_login_email: { Args: { _identifier: string }; Returns: string | null };
+      platform_tenant_email_keys: {
+        Args: never;
+        Returns: {
+          tenant_id: string;
+          has_key: boolean;
+          key_hint: string | null;
+          updated_at: string;
+        }[];
+      };
+      platform_set_tenant_resend_key: {
+        Args: { _tenant: string; _key: string | null };
+        Returns: string | null;
+      };
+      assign_order_courier: {
+        Args: {
+          _order_ids: string[];
+          _courier_name?: string | null;
+          _courier_phone?: string | null;
+          _renew?: boolean;
+        };
+        Returns: {
+          order_id: string;
+          order_number: string;
+          token: string;
+          expires_at: string;
+          delivery_attempts: number;
+        }[];
+      };
+      courier_delivery: { Args: { _token: string }; Returns: Json };
+      courier_report: {
+        Args: { _token: string; _delivered: boolean; _note?: string | null };
+        Returns: Json;
+      };
     };
     Enums: {
       [_ in never]: never;

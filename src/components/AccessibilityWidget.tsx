@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Accessibility, Contrast, Link2, MousePointerClick, RotateCcw, Type, X } from "lucide-react";
+import {
+  Accessibility,
+  Contrast,
+  Link2,
+  MousePointerClick,
+  RotateCcw,
+  Type,
+  X,
+} from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 
@@ -21,8 +29,11 @@ function loadSettings(): A11ySettings {
     if (raw === null) return DEFAULTS;
     const parsed = JSON.parse(raw) as Partial<A11ySettings>;
     return {
-      fontStep: ([0, 1, 2, 3] as const).includes(parsed.fontStep as 0) ? (parsed.fontStep as A11ySettings["fontStep"]) : 0,
-      contrast: parsed.contrast === "high" || parsed.contrast === "invert" ? parsed.contrast : "normal",
+      fontStep: ([0, 1, 2, 3] as const).includes(parsed.fontStep as 0)
+        ? (parsed.fontStep as A11ySettings["fontStep"])
+        : 0,
+      contrast:
+        parsed.contrast === "high" || parsed.contrast === "invert" ? parsed.contrast : "normal",
       links: parsed.links === true,
       focus: parsed.focus === true,
     };
@@ -83,7 +94,11 @@ export function AccessibilityWidget() {
     settings.fontStep === 0 && settings.contrast === "normal" && !settings.links && !settings.focus;
 
   return (
-    <div dir="rtl" className="fixed bottom-4 right-4 z-[60] flex flex-col items-end print:hidden">
+    // --a11y-bottom: עמוד עם סרגל פעולות קבוע בתחתית (עמוד השליח) מרים את הכפתור מעליו
+    <div
+      dir="rtl"
+      className="fixed bottom-[var(--a11y-bottom,1rem)] right-4 z-[60] flex flex-col items-end print:hidden"
+    >
       {open && (
         <div
           ref={panelRef}
@@ -96,7 +111,12 @@ export function AccessibilityWidget() {
               <Accessibility className="size-4" aria-hidden="true" />
               נגישות
             </p>
-            <Button size="sm" variant="ghost" aria-label="סגירת תפריט הנגישות" onClick={() => setOpen(false)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label="סגירת תפריט הנגישות"
+              onClick={() => setOpen(false)}
+            >
               <X className="size-4" />
             </Button>
           </div>
@@ -112,7 +132,11 @@ export function AccessibilityWidget() {
                   variant="outline"
                   aria-label="הקטנת טקסט"
                   disabled={settings.fontStep === 0}
-                  onClick={() => update({ fontStep: Math.max(0, settings.fontStep - 1) as A11ySettings["fontStep"] })}
+                  onClick={() =>
+                    update({
+                      fontStep: Math.max(0, settings.fontStep - 1) as A11ySettings["fontStep"],
+                    })
+                  }
                 >
                   א-
                 </Button>
@@ -124,7 +148,11 @@ export function AccessibilityWidget() {
                   variant="outline"
                   aria-label="הגדלת טקסט"
                   disabled={settings.fontStep === 3}
-                  onClick={() => update({ fontStep: Math.min(3, settings.fontStep + 1) as A11ySettings["fontStep"] })}
+                  onClick={() =>
+                    update({
+                      fontStep: Math.min(3, settings.fontStep + 1) as A11ySettings["fontStep"],
+                    })
+                  }
                 >
                   א+
                 </Button>

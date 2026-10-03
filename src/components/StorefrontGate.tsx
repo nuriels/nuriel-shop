@@ -5,11 +5,11 @@ import { useAuthState } from "@/hooks/useAuthState";
 import { SabbathScreen } from "@/components/SabbathScreen";
 
 /**
- * עמודים שפתוחים גם בשבת: אזורי הצוות, התחברות, ועמודי מידע. כל השאר
- * (הקטלוג, ההזמנות, ההסכם) מוחלף במסך "שבת שלום".
+ * עמודים שפתוחים גם בשבת: אזורי הצוות, התחברות, עמוד השליח ועמודי מידע.
+ * כל השאר (הקטלוג, ההזמנות, ההסכם) מוחלף במסך "שבת שלום".
  */
 const OPEN_ON_SABBATH =
-  /^\/(admin|admin-handoff|agent|warehouse|login|register|reset-password|locked|forbidden|platform|about|terms|privacy)(\/|$)/;
+  /^\/(admin|admin-handoff|agent|warehouse|courier|login|register|reset-password|locked|forbidden|platform|about|terms|privacy)(\/|$)/;
 
 /**
  * שער החנות: כשמצב שבת דולק, לקוחות ואורחים רואים מסך "שבת שלום" על כל

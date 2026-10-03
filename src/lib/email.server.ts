@@ -1,6 +1,7 @@
 // שליחת מיילים דרך Resend (REST API — ללא תלות חבילה נוספת).
-// דורש משתני סביבה בצד השרת: RESEND_API_KEY (מפתח ה-API של Resend).
-// אם המפתח או כתובת השולח לא הוגדרו, השליחה מדולגת בשקט (לא חוסמת הזמנה).
+// המפתח: של החנות (tenant_secrets — מוגדר פעם אחת בפאנל הפלטפורמה), ואם
+// לחנות אין מפתח — המפתח הכללי של השרת (משתנה הסביבה RESEND_API_KEY).
+// אם אין מפתח או כתובת שולח, השליחה מדולגת בשקט (לא חוסמת הזמנה).
 
 export type EmailAttachment = {
   filename: string;
@@ -60,13 +61,120 @@ export async function sendEmail(input: SendEmailInput): Promise<SendResult> {
   return result;
 }
 
-async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
-  const apiKey = process.env["RESEND_API_KEY"];
-  if (!apiKey) {
-    // חשוב לרשום ללוג: בלי המפתח שום מייל לא יוצא, וזה נכשל "בשקט"
-    console.error("[email] RESEND_API_KEY missing — email skipped:", input.subject);
-    return { sent: false, reason: "RESEND_API_KEY לא הוגדר בשרת" };
+export type ResendKeySource = "store" | "server";
+
+export type ResolvedResendKey = { key: string; source: ResendKeySource } | null;
+
+const storeKeyCache = new Map<string, { key: string | null; expires: number }>();
+// שינוי מפתח בפאנל הפלטפורמה מנקה את המטמון מיד (forgetStoreResendKey);
+// ה-TTL הוא רק רשת ביטחון
+const STORE_KEY_TTL_MS = 60_000;
+
+/** מפתח החנות מ-tenant_secrets (שרת בלבד), עם מטמון קצר */
+async function loadStoreResendKey(tenantId: string): Promise<string | null> {
+  const hit = storeKeyCache.get(tenantId);
+  if (hit && hit.expires > Date.now()) return hit.key;
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("tenant_secrets")
+      .select("resend_api_key")
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const key = data?.resend_api_key?.trim() || null;
+    storeKeyCache.set(tenantId, { key, expires: Date.now() + STORE_KEY_TTL_MS });
+    return key;
+  } catch (error) {
+    // תקלה בקריאה — נופלים למפתח הכללי, לא מפילים את השליחה
+    console.error("[email] failed to load the store's Resend key", error);
+    return null;
   }
+}
+
+/**
+ * איזה מפתח Resend ישמש לחנות של הבקשה הנוכחית:
+ * מפתח החנות אם הוגדר, אחרת RESEND_API_KEY של השרת, אחרת null.
+ */
+export async function resolveResendKey(): Promise<ResolvedResendKey> {
+  const { maybeCurrentTenant } = await import("@/integrations/supabase/tenant.server");
+  const tenant = maybeCurrentTenant();
+  const storeKey = tenant ? await loadStoreResendKey(tenant.id) : null;
+  if (storeKey) return { key: storeKey, source: "store" };
+  const serverKey = process.env["RESEND_API_KEY"]?.trim();
+  return serverKey ? { key: serverKey, source: "server" } : null;
+}
+
+/** אחרי שמירה / מחיקה של מפתח בפאנל — שהשינוי ייכנס לתוקף מיד */
+export function forgetStoreResendKey(tenantId: string): void {
+  storeKeyCache.delete(tenantId);
+}
+
+/** פורמט מפתח Resend (כמו ב-CHECK במסד) */
+export const RESEND_KEY_FORMAT = /^re_[A-Za-z0-9_-]{8,200}$/;
+
+export type ResendKeyCheck =
+  /** המפתח תקין; domains = הדומיינים בחשבון (null למפתח "Sending access" בלבד) */
+  | { ok: true; domains: { name: string; status: string }[] | null }
+  /** Resend דחה את המפתח — לא שומרים */
+  | { ok: false; message: string }
+  /** לא ניתן היה לאמת (רשת / תקלה ב-Resend) — שומרים עם אזהרה */
+  | { ok: null; message: string };
+
+/**
+ * בדיקת מפתח מול Resend לפני שמירה (GET /domains — לא שולח מייל).
+ * מפתח עם הרשאת "Sending access" בלבד מקבל 401 עם restricted_api_key —
+ * זה מפתח תקין לשליחה, פשוט בלי גישה לרשימת הדומיינים.
+ */
+export async function verifyResendKey(key: string): Promise<ResendKeyCheck> {
+  try {
+    const response = await fetch("https://api.resend.com/domains", {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(8000),
+    });
+    const body = await response.text();
+    if (response.ok) {
+      let domains: { name: string; status: string }[] = [];
+      try {
+        const parsed = JSON.parse(body) as { data?: { name?: string; status?: string }[] };
+        domains = (parsed.data ?? []).map((domain) => ({
+          name: String(domain.name ?? ""),
+          status: String(domain.status ?? ""),
+        }));
+      } catch {
+        domains = [];
+      }
+      return { ok: true, domains };
+    }
+    if (body.includes("restricted_api_key")) return { ok: true, domains: null };
+    if (response.status === 400 || response.status === 401 || response.status === 403) {
+      return {
+        ok: false,
+        message: "Resend דחה את המפתח — ודאו שהעתקתם אותו במלואו ושהוא לא נמחק בחשבון Resend",
+      };
+    }
+    return {
+      ok: null,
+      message: `לא ניתן היה לאמת את המפתח מול Resend (HTTP ${response.status}) — הוא נשמר בכל זאת`,
+    };
+  } catch {
+    return {
+      ok: null,
+      message: "לא ניתן היה להתחבר ל-Resend כדי לאמת את המפתח — הוא נשמר בכל זאת",
+    };
+  }
+}
+
+async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
+  const resolved = await resolveResendKey();
+  if (!resolved) {
+    // חשוב לרשום ללוג: בלי המפתח שום מייל לא יוצא, וזה נכשל "בשקט"
+    console.error("[email] no Resend API key (store or server) — email skipped:", input.subject);
+    return {
+      sent: false,
+      reason: "לא הוגדר מפתח Resend — לא לחנות (בפאנל הפלטפורמה) ולא בשרת (RESEND_API_KEY)",
+    };
+  }
+  const apiKey = resolved.key;
   if (!input.from) {
     console.error("[email] sender address missing — email skipped:", input.subject);
     return { sent: false, reason: "לא הוגדרה כתובת מייל שולחת בהגדרות מייל בפאנל הניהול" };

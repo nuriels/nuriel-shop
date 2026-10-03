@@ -50,7 +50,32 @@ export type SiteSettings = {
   brand_color: string | null;
   /** סכום המוצרים בסל שממנו המשלוח חינם (מד בסל); null = כבוי */
   free_shipping_threshold: number | null;
+  /** רוחב מדבקת המשלוח במ"מ (מדפסת תרמית, למשל Zebra) — 30 עד 200 */
+  label_width_mm: number;
+  /** גובה מדבקת המשלוח במ"מ — 20 עד 300 */
+  label_height_mm: number;
 };
+
+/** מידות ברירת המחדל של מדבקת משלוח (כמו במסד) */
+export const DEFAULT_LABEL_SIZE = { width: 70, height: 50 } as const;
+export const LABEL_SIZE_LIMITS = {
+  width: { min: 30, max: 200 },
+  height: { min: 20, max: 300 },
+} as const;
+
+const inRange = (value: number, limits: { min: number; max: number }) =>
+  Number.isFinite(value) && value >= limits.min && value <= limits.max;
+
+/** בדיקת מידות המדבקה לפני שמירה (כמו ה-CHECK במסד); null = תקין */
+export function labelSizeProblem(width: number, height: number): string | null {
+  if (!inRange(width, LABEL_SIZE_LIMITS.width)) {
+    return `רוחב המדבקה: ${LABEL_SIZE_LIMITS.width.min} עד ${LABEL_SIZE_LIMITS.width.max} מ"מ`;
+  }
+  if (!inRange(height, LABEL_SIZE_LIMITS.height)) {
+    return `גובה המדבקה: ${LABEL_SIZE_LIMITS.height.min} עד ${LABEL_SIZE_LIMITS.height.max} מ"מ`;
+  }
+  return null;
+}
 
 export type EmailSettings = {
   sender_email: string;
@@ -58,7 +83,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -66,7 +91,15 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     .select(SITE_SETTINGS_COLUMNS)
     .eq("id", true)
     .maybeSingle();
-  if (data) return data as SiteSettings;
+  if (data) {
+    const row = data as SiteSettings;
+    // NUMERIC מגיע לפעמים כמחרוזת — מנרמלים למספר
+    return {
+      ...row,
+      label_width_mm: Number(row.label_width_mm) || DEFAULT_LABEL_SIZE.width,
+      label_height_mm: Number(row.label_height_mm) || DEFAULT_LABEL_SIZE.height,
+    };
+  }
   return {
     site_title: DEFAULT_STORE_NAME,
     logo_path: null,
@@ -90,6 +123,21 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     is_sabbath_mode: false,
     brand_color: null,
     free_shipping_threshold: null,
+    label_width_mm: DEFAULT_LABEL_SIZE.width,
+    label_height_mm: DEFAULT_LABEL_SIZE.height,
+  };
+}
+
+/** מידות המדבקה של החנות — למסך ההזמנות (בלי לטעון את כל ההגדרות) */
+export async function loadLabelSize(): Promise<{ width: number; height: number }> {
+  const { data } = await supabase
+    .from("site_settings")
+    .select("label_width_mm, label_height_mm")
+    .eq("id", true)
+    .maybeSingle();
+  return {
+    width: Number(data?.label_width_mm) || DEFAULT_LABEL_SIZE.width,
+    height: Number(data?.label_height_mm) || DEFAULT_LABEL_SIZE.height,
   };
 }
 

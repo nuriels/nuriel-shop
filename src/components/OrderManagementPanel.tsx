@@ -2,16 +2,22 @@ import { staffLabel } from "@/lib/staff";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  Bike,
   CheckCircle2,
   ClipboardList,
   Clock,
   Inbox,
   Loader2,
+  MailCheck,
   PackageCheck,
+  PackageOpen,
   Pencil,
   RefreshCw,
+  Tag,
   Trash2,
+  TriangleAlert,
   Truck,
+  X,
   XCircle,
   ClipboardCheck,
   Undo2,
@@ -21,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +49,7 @@ import { OrderEditDialog } from "@/components/OrderEditDialog";
 import { CreateOrderDialog } from "@/components/CreateOrderDialog";
 import { OrderDocumentButton } from "@/components/OrderDocumentButton";
 import { OrderContactBlock } from "@/components/OrderContactBlock";
+import { CourierDialog } from "@/components/delivery/CourierDialog";
 import { GroupSidebarLayout, type SideGroup } from "@/components/GroupSidebarLayout";
 import { SortToggle, type SortDirection } from "@/components/OrdersByYear";
 import { formatIls } from "@/lib/catalog";
@@ -51,15 +59,26 @@ import {
   ORDER_SELECT_COLUMNS,
   ORDER_STATUS_BADGE,
   ORDER_STATUS_LABEL,
+  canAssignCourier,
+  canMarkShipped,
   formatOrderDate,
   orderGroupOf,
   type OrderGroup,
   type OrderRow,
   type OrderStatus,
 } from "@/lib/orders";
+import type { ProfileContact } from "@/lib/order-details";
 import { PickingPanel } from "@/components/PickingPanel";
 import { managerApprovePicking, returnToPicking } from "@/lib/picking";
 import { sendPickedEmail } from "@/lib/picking.functions";
+import { markOrdersShipped, type MarkShippedResult } from "@/lib/delivery.functions";
+import {
+  loadLabelProfiles,
+  loadLabelStore,
+  markOrderDelivered,
+  type LabelStore,
+} from "@/lib/delivery";
+import { downloadBlob, labelDataFromOrder, renderLabelsPdf } from "@/lib/shipping-label";
 
 /** בניהול: אחרי "מאושרות" — ליקוט הזמנות, ואז ליקוטים שבוצעו (ממתינים לאישור מנהל) */
 type PanelGroup = OrderGroup | "all" | "picking" | "picked";
@@ -70,6 +89,7 @@ const GROUP_ICON: Record<PanelGroup, typeof Clock> = {
   approved: CheckCircle2,
   picking: PackageCheck,
   picked: ClipboardCheck,
+  courier: Bike,
   completed: Truck,
   cancelled: XCircle,
 };
@@ -77,10 +97,38 @@ const GROUP_ICON: Record<PanelGroup, typeof Clock> = {
 /** הצעד הבא בזרימה — כפתור אחד במקום לפתוח את חלון העריכה */
 const NEXT_STEP: Partial<Record<OrderGroup, { to: OrderStatus; label: string }>> = {
   awaiting: { to: "picking", label: "אישור הזמנה" },
-  approved: { to: "shipped", label: "סימון כבוצעה" },
 };
 
 type PersonOption = { user_id: string; label: string };
+
+/** סיכום תוצאת "סימון כנשלחו" להודעה אחת */
+function shippedSummary(result: MarkShippedResult): { text: string; warning: string | null } {
+  const parts = [
+    result.updated.length === 1
+      ? `${result.updated[0]?.order_number} סומנה כנשלחה`
+      : `${result.updated.length} הזמנות סומנו כנשלחו`,
+  ];
+  if (result.emails.background) {
+    parts.push("המיילים ללקוחות נשלחים ברקע");
+  } else if (result.emails.sent > 0) {
+    parts.push(result.emails.sent === 1 ? "נשלח מייל ללקוח" : `נשלחו ${result.emails.sent} מיילים`);
+  }
+  const problems = [
+    result.emails.warning,
+    result.emails.failed > 0
+      ? `${result.emails.failed} מיילים נכשלו${result.emails.firstError ? `: ${result.emails.firstError}` : ""}`
+      : null,
+    result.emails.noAddress > 0 ? `${result.emails.noAddress} הזמנות בלי כתובת מייל` : null,
+    result.skipped.length > 0
+      ? `דילגנו על ${result.skipped.length}: ${result.skipped
+          .slice(0, 3)
+          .map((s) => `${s.order_number} (${s.reason})`)
+          .join(", ")}${result.skipped.length > 3 ? "…" : ""}`
+      : null,
+    result.missing > 0 ? `${result.missing} הזמנות לא נמצאו` : null,
+  ].filter((part): part is string => Boolean(part));
+  return { text: parts.join(" · "), warning: problems.length ? problems.join(" · ") : null };
+}
 
 /** ניהול הזמנות משותף לסוכן (מוגבל ע"י RLS ללקוחות שלו) ולאדמין (הכל) */
 export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"; meId?: string }) {
@@ -98,8 +146,20 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
   const [pendingDelete, setPendingDelete] = useState<OrderRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // בחירה מרובה + פעולות מרוכזות
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkShipOpen, setBulkShipOpen] = useState(false);
+  const [notifyCustomers, setNotifyCustomers] = useState(true);
+  const [bulkBusy, setBulkBusy] = useState<"ship" | "labels" | "courier" | null>(null);
+
+  // שליח + מדבקות
+  const [courierOrders, setCourierOrders] = useState<OrderRow[]>([]);
+  const [labelStore, setLabelStore] = useState<LabelStore | null>(null);
+  const [profiles, setProfiles] = useState<Map<string, ProfileContact>>(new Map());
+
   const deleteOrderFn = useServerFn(deleteOrder);
   const sendPickedEmailFn = useServerFn(sendPickedEmail);
+  const markShippedFn = useServerFn(markOrdersShipped);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -157,6 +217,18 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
     void load();
   }, [load]);
 
+  // שם החנות, טלפון ומידות המדבקה — למדבקות ולהודעות לשליח
+  useEffect(() => {
+    void loadLabelStore()
+      .then(setLabelStore)
+      .catch(() => setLabelStore(null));
+  }, []);
+
+  // מעבר קבוצה / שינוי סינון מנקה את הבחירה — פעולה מרוכזת רק על מה שרואים
+  useEffect(() => {
+    setSelected(new Set());
+  }, [group, kindFilter, customerFilter, agentFilter]);
+
   const confirmDelete = async () => {
     if (!pendingDelete) return;
     setDeleting(true);
@@ -192,6 +264,7 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
       picked: 0,
       awaiting: 0,
       approved: 0,
+      courier: 0,
       completed: 0,
       cancelled: 0,
     };
@@ -205,6 +278,9 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
   const filtered = inFilters.filter((o) => group === "all" || panelGroupOf(o.status) === group);
   const pickedCount = inFilters.filter((o) => o.status === "picked").length;
   const pickingCount = inFilters.filter((o) => o.status === "picking").length;
+  const failedDeliveries = inFilters.filter(
+    (o) => o.status === "awaiting_courier" && (o.delivery_attempts ?? 0) > 0,
+  ).length;
 
   const sideGroups: SideGroup<PanelGroup>[] = [
     { id: "all", label: "כל ההזמנות", count: groupCounts.all, icon: GROUP_ICON.all },
@@ -215,7 +291,8 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
         count:
           isAdminScope && g.id === "approved" ? groupCounts[g.id] - pickedCount : groupCounts[g.id],
         icon: GROUP_ICON[g.id],
-        attention: g.id === "awaiting",
+        // משלוח שנכשל דורש טיפול — הקבוצה מודגשת
+        attention: g.id === "awaiting" || (g.id === "courier" && failedDeliveries > 0),
         divider: g.id === "awaiting" || g.id === "cancelled",
       };
       if (!isAdminScope || g.id !== "approved") return [base];
@@ -246,6 +323,9 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
         }
       : ORDER_GROUPS.find((g) => g.id === group);
 
+  const patchStatus = (ids: string[], status: OrderStatus) =>
+    setOrders((current) => current.map((o) => (ids.includes(o.id) ? { ...o, status } : o)));
+
   const setStatus = async (order: OrderRow, next: OrderStatus, undoable = true) => {
     const previous = order.status;
     setChangingId(order.id);
@@ -255,7 +335,7 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
       toast.error(error.message);
       return;
     }
-    setOrders((current) => current.map((o) => (o.id === order.id ? { ...o, status: next } : o)));
+    patchStatus([order.id], next);
     if (!undoable) return;
     toast.success(`${order.order_number}: ${ORDER_STATUS_LABEL[next]}`, {
       action: {
@@ -269,9 +349,7 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
     setChangingId(order.id);
     try {
       const { shortages } = await managerApprovePicking(order.id);
-      setOrders((current) =>
-        current.map((o) => (o.id === order.id ? { ...o, status: "shipped" } : o)),
-      );
+      patchStatus([order.id], "shipped");
       toast.success(`${order.order_number}: אושרה ונשלחה`);
       const mail = await sendPickedEmailFn({ data: { orderId: order.id, shortages } }).catch(
         (error: unknown) => ({
@@ -291,12 +369,120 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
     setChangingId(order.id);
     try {
       await returnToPicking(order.id);
-      setOrders((current) =>
-        current.map((o) => (o.id === order.id ? { ...o, status: "picking" } : o)),
-      );
+      patchStatus([order.id], "picking");
       toast.success(`${order.order_number} חזרה לליקוט`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "ההחזרה נכשלה");
+    } finally {
+      setChangingId(null);
+    }
+  };
+
+  /** "נשלחה" + מייל "יצאה למשלוח" (הזמנה אחת או מרוכז) */
+  const shipOrders = async (targets: OrderRow[], notify: boolean) => {
+    const eligible = targets.filter(canMarkShipped);
+    if (eligible.length === 0) {
+      toast.error("אין בבחירה הזמנות שאפשר לסמן כנשלחו (לא הצעות מחיר ולא הזמנות שהסתיימו)");
+      return;
+    }
+    try {
+      const result = await markShippedFn({
+        data: { orderIds: eligible.map((o) => o.id), notify },
+      });
+      patchStatus(
+        result.updated.map((o) => o.id),
+        "shipped",
+      );
+      const summary = shippedSummary(result);
+      toast.success(summary.text);
+      if (summary.warning) toast.warning(summary.warning, { duration: 10_000 });
+      setSelected(new Set());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "העדכון נכשל");
+    }
+  };
+
+  const shipOne = async (order: OrderRow) => {
+    setChangingId(order.id);
+    await shipOrders([order], true);
+    setChangingId(null);
+  };
+
+  /** פרופילים להזמנות ישנות (כתובת מהתיק) — נטענים לפני מדבקה / שליח */
+  const ensureProfiles = async (targets: OrderRow[]) => {
+    const missing = targets.filter((o) => o.customer_id && !profiles.has(o.customer_id));
+    if (missing.length === 0) return profiles;
+    const loaded = await loadLabelProfiles(missing);
+    const merged = new Map([...profiles, ...loaded]);
+    setProfiles(merged);
+    return merged;
+  };
+
+  const openCourier = async (targets: OrderRow[]) => {
+    const eligible = targets.filter(canAssignCourier);
+    const skipped = targets.length - eligible.length;
+    if (eligible.length === 0) {
+      toast.error("אין בבחירה הזמנות שאפשר למסור לשליח (לא הצעות מחיר, מבוטלות או שנמסרו)");
+      return;
+    }
+    if (skipped > 0) toast.info(`דילגנו על ${skipped} הזמנות שלא נמסרות לשליח`);
+    setBulkBusy("courier");
+    try {
+      await ensureProfiles(eligible);
+      setCourierOrders(eligible);
+    } finally {
+      setBulkBusy(null);
+    }
+  };
+
+  /** מדבקות משלוח — PDF עם עמוד למדבקה, בגודל שהוגדר בהגדרות החנות */
+  const printLabels = async (targets: OrderRow[]) => {
+    const eligible = targets.filter((o) => o.kind === "order" && o.status !== "cancelled");
+    if (eligible.length === 0) {
+      toast.error("אין בבחירה הזמנות למשלוח (הצעות מחיר והזמנות מבוטלות לא מקבלות מדבקה)");
+      return;
+    }
+    setBulkBusy("labels");
+    try {
+      const store = labelStore ?? (await loadLabelStore());
+      const profileMap = await ensureProfiles(eligible);
+      const labels = eligible.map((order) =>
+        labelDataFromOrder(
+          order,
+          order.customer_id ? (profileMap.get(order.customer_id) ?? null) : null,
+          { name: store.name, phone: store.phone },
+        ),
+      );
+      const blob = await renderLabelsPdf(labels, store.size);
+      const name =
+        eligible.length === 1
+          ? `label-${eligible[0]?.order_number}.pdf`
+          : `labels-${new Date().toISOString().slice(0, 10)}-${eligible.length}.pdf`;
+      downloadBlob(blob, name);
+      toast.success(
+        `${eligible.length === 1 ? "המדבקה מוכנה" : `${eligible.length} מדבקות מוכנות`} (\u2066${store.size.width}×${store.size.height}\u2069 מ"מ)`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "הפקת המדבקות נכשלה");
+    } finally {
+      setBulkBusy(null);
+    }
+  };
+
+  const deliver = async (order: OrderRow) => {
+    const previous = order.status;
+    setChangingId(order.id);
+    try {
+      await markOrderDelivered(order.id);
+      patchStatus([order.id], "delivered");
+      toast.success(`${order.order_number}: נמסרה ללקוח`, {
+        action: {
+          label: "ביטול",
+          onClick: () => void setStatus({ ...order, status: "delivered" }, previous, false),
+        },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "העדכון נכשל");
     } finally {
       setChangingId(null);
     }
@@ -306,6 +492,18 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
     const delta = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     return sortDirection === "desc" ? -delta : delta;
   });
+  const selectedOrders = sorted.filter((o) => selected.has(o.id));
+  const allSelected = sorted.length > 0 && selectedOrders.length === sorted.length;
+  const someSelected = selectedOrders.length > 0 && !allSelected;
+  const shippableSelected = selectedOrders.filter(canMarkShipped);
+
+  const toggle = (orderId: string, on: boolean) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (on) next.add(orderId);
+      else next.delete(orderId);
+      return next;
+    });
 
   return (
     <section className="space-y-5">
@@ -384,6 +582,21 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
               )}
             </div>
 
+            {sorted.length > 0 && (
+              <label className="flex w-fit cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+                <Checkbox
+                  checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                  onCheckedChange={(checked) =>
+                    setSelected(checked === true ? new Set(sorted.map((o) => o.id)) : new Set())
+                  }
+                  aria-label="בחירת כל ההזמנות ברשימה"
+                />
+                {selectedOrders.length > 0
+                  ? `נבחרו ${selectedOrders.length} מתוך ${sorted.length}`
+                  : `בחירת כל ${sorted.length} ההזמנות ברשימה`}
+              </label>
+            )}
+
             {filtered.length === 0 && !loading ? (
               <Card className="border-dashed">
                 <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
@@ -391,159 +604,330 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
                   <p className="text-sm text-muted-foreground">
                     {group === "awaiting"
                       ? "אין הזמנות שממתינות לאישור"
-                      : "אין הזמנות בקבוצה הזו שתואמות את הסינון"}
+                      : group === "courier"
+                        ? "אין הזמנות שממתינות לשליח"
+                        : "אין הזמנות בקבוצה הזו שתואמות את הסינון"}
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {sorted.map((order) => (
-                  <Card key={order.id} className="shadow-card">
-                    <CardContent className="space-y-3 pt-6">
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-                        <div className="min-w-0">
-                          <p dir="ltr" className="truncate text-left font-bold text-foreground">
-                            {order.order_number}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {formatOrderDate(order.created_at)} ·{" "}
-                            {order.customer_id
-                              ? (customerLabel.get(order.customer_id) ??
-                                order.customer_name ??
-                                "לקוח")
-                              : (order.customer_name ?? "אורח")}
-                            {scope === "admin" &&
-                              order.agent_id &&
-                              ` · סוכן: ${agentLabel.get(order.agent_id) ?? "-"}`}
-                          </p>
+                {sorted.map((order) => {
+                  const isSelected = selected.has(order.id);
+                  const attempts = order.delivery_attempts ?? 0;
+                  const busy = changingId === order.id;
+                  return (
+                    <Card
+                      key={order.id}
+                      className={`shadow-card transition-colors ${isSelected ? "border-primary ring-1 ring-primary" : ""}`}
+                    >
+                      <CardContent className="space-y-3 pt-6">
+                        {/* כותרת: תיבת בחירה, מספר הזמנה (לא נחתך) ותגיות — שיורדות שורה כשצר */}
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            className="mt-1 size-5"
+                            checked={isSelected}
+                            onCheckedChange={(checked) => toggle(order.id, checked === true)}
+                            aria-label={`בחירת הזמנה ${order.order_number}`}
+                          />
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                              <p
+                                dir="ltr"
+                                className="numeric whitespace-nowrap font-bold text-foreground"
+                              >
+                                {order.order_number}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {order.kind === "quote" && (
+                                  <Badge variant="outline">הצעת מחיר</Badge>
+                                )}
+                                <Badge variant={ORDER_STATUS_BADGE[order.status]}>
+                                  {ORDER_STATUS_LABEL[order.status]}
+                                </Badge>
+                                {order.status === "awaiting_courier" && attempts > 0 && (
+                                  <Badge
+                                    variant="outline"
+                                    className="gap-1 border-amber-400 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                                  >
+                                    <TriangleAlert className="size-3" aria-hidden="true" />
+                                    משלוח נכשל — ניסיון {attempts}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {formatOrderDate(order.created_at)} ·{" "}
+                              {order.customer_id
+                                ? (customerLabel.get(order.customer_id) ??
+                                  order.customer_name ??
+                                  "לקוח")
+                                : (order.customer_name ?? "אורח")}
+                              {scope === "admin" &&
+                                order.agent_id &&
+                                ` · סוכן: ${agentLabel.get(order.agent_id) ?? "-"}`}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-                          {order.kind === "quote" && <Badge variant="outline">הצעת מחיר</Badge>}
-                          <Badge variant={ORDER_STATUS_BADGE[order.status]}>
-                            {ORDER_STATUS_LABEL[order.status]}
-                          </Badge>
-                        </div>
-                      </div>
 
-                      <OrderContactBlock order={order} />
+                        {order.status === "awaiting_courier" &&
+                          attempts > 0 &&
+                          (order.last_delivery_failure_note || order.last_delivery_failure_at) && (
+                            <p className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                              <span className="font-bold">דיווח השליח:</span>{" "}
+                              {order.last_delivery_failure_note || "לא נמסר (בלי פירוט)"}
+                              {order.last_delivery_failure_at &&
+                                ` · ${formatOrderDate(order.last_delivery_failure_at)}`}
+                            </p>
+                          )}
 
-                      <ul className="space-y-1 text-sm">
-                        {order.order_items.map((item) => (
-                          <li key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                            <span className="truncate">
-                              {item.product_name ?? "מוצר"} × {item.quantity}
-                              {item.product_barcode && (
-                                <span
-                                  dir="ltr"
-                                  className="numeric mr-2 text-xs text-muted-foreground"
-                                >
-                                  {item.product_barcode}
+                        <OrderContactBlock order={order} />
+
+                        <ul className="space-y-1 text-sm">
+                          {order.order_items.map((item) => (
+                            <li key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                              <span className="truncate">
+                                {item.product_name ?? "מוצר"} × {item.quantity}
+                                {item.product_barcode && (
+                                  <span
+                                    dir="ltr"
+                                    className="numeric mr-2 text-xs text-muted-foreground"
+                                  >
+                                    {item.product_barcode}
+                                  </span>
+                                )}
+                              </span>
+                              {order.kind === "order" && (
+                                <span className="numeric shrink-0">
+                                  {formatIls(Number(item.unit_price) * item.quantity)}
                                 </span>
                               )}
-                            </span>
-                            {order.kind === "order" && (
-                              <span className="numeric shrink-0">
-                                {formatIls(Number(item.unit_price) * item.quantity)}
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
+                            </li>
+                          ))}
+                        </ul>
 
-                      <div className="flex items-center justify-between border-t border-border pt-3">
-                        <span className="text-sm text-muted-foreground">
-                          {order.order_items.length} פריטים
-                        </span>
-                        {order.kind === "quote" ? (
-                          <span className="text-sm text-muted-foreground">ללא מחירים</span>
-                        ) : (
-                          <span className="numeric font-bold text-accent">
-                            {formatIls(order.total)}
+                        <div className="flex items-center justify-between border-t border-border pt-3">
+                          <span className="text-sm text-muted-foreground">
+                            {order.order_items.length} פריטים
                           </span>
-                        )}
-                      </div>
+                          {order.kind === "quote" ? (
+                            <span className="text-sm text-muted-foreground">ללא מחירים</span>
+                          ) : (
+                            <span className="numeric font-bold text-accent">
+                              {formatIls(order.total)}
+                            </span>
+                          )}
+                        </div>
 
-                      {(() => {
-                        // בקשת הצעת מחיר עדיין בלי מחירים — קודם מכינים הצעה בחלון העריכה
-                        if (order.kind === "quote" && orderGroupOf(order.status) === "awaiting") {
+                        {(() => {
+                          // בקשת הצעת מחיר עדיין בלי מחירים — קודם מכינים הצעה בחלון העריכה
+                          if (order.kind === "quote" && orderGroupOf(order.status) === "awaiting") {
+                            return (
+                              <Button
+                                className="w-full"
+                                variant="secondary"
+                                onClick={() => setEditing(order)}
+                              >
+                                <Pencil className="size-4" />
+                                הכנת הצעת מחיר
+                              </Button>
+                            );
+                          }
+                          if (order.status === "picked" && isAdminScope) {
+                            return (
+                              <div className="grid grid-cols-2 gap-2">
+                                <Button disabled={busy} onClick={() => void approvePicked(order)}>
+                                  {busy ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : (
+                                    <Truck className="size-4" />
+                                  )}
+                                  אישור ושליחה ללקוח
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  disabled={busy}
+                                  onClick={() => void returnPicked(order)}
+                                >
+                                  <Undo2 className="size-4" />
+                                  החזרה לליקוט
+                                </Button>
+                              </div>
+                            );
+                          }
+                          // מאושרות (בליקוט / לוקטה): שליחה רגילה או מסירה לשליח עם קישור
+                          if (orderGroupOf(order.status) === "approved" && order.kind === "order") {
+                            return (
+                              <div className="grid grid-cols-2 gap-2">
+                                <Button disabled={busy} onClick={() => void shipOne(order)}>
+                                  {busy ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : (
+                                    <MailCheck className="size-4" />
+                                  )}
+                                  נשלחה + מייל ללקוח
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  disabled={busy || bulkBusy === "courier"}
+                                  onClick={() => void openCourier([order])}
+                                >
+                                  <Bike className="size-4" />
+                                  מסירה לשליח
+                                </Button>
+                              </div>
+                            );
+                          }
+                          if (order.status === "awaiting_courier") {
+                            return (
+                              <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                  variant="secondary"
+                                  disabled={busy || bulkBusy === "courier"}
+                                  onClick={() => void openCourier([order])}
+                                >
+                                  <Bike className="size-4" />
+                                  קישור לשליח
+                                </Button>
+                                <Button disabled={busy} onClick={() => void deliver(order)}>
+                                  {busy ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : (
+                                    <PackageOpen className="size-4" />
+                                  )}
+                                  סימון כנמסרה
+                                </Button>
+                              </div>
+                            );
+                          }
+                          if (order.status === "shipped") {
+                            return (
+                              <Button
+                                className="w-full"
+                                variant="outline"
+                                disabled={busy}
+                                onClick={() => void deliver(order)}
+                              >
+                                <PackageOpen className="size-4" />
+                                סימון כנמסרה ללקוח
+                              </Button>
+                            );
+                          }
+                          const step = NEXT_STEP[orderGroupOf(order.status)];
+                          if (!step) return null;
                           return (
                             <Button
                               className="w-full"
-                              variant="secondary"
-                              onClick={() => setEditing(order)}
+                              disabled={busy}
+                              onClick={() => void setStatus(order, step.to)}
                             >
-                              <Pencil className="size-4" />
-                              הכנת הצעת מחיר
+                              {busy ? (
+                                <Loader2 className="size-4 animate-spin" />
+                              ) : (
+                                <PackageCheck className="size-4" />
+                              )}
+                              {step.label}
                             </Button>
                           );
-                        }
-                        if (order.status === "picked" && isAdminScope) {
-                          return (
-                            <div className="grid grid-cols-2 gap-2">
-                              <Button
-                                disabled={changingId === order.id}
-                                onClick={() => void approvePicked(order)}
-                              >
-                                {changingId === order.id ? (
-                                  <Loader2 className="size-4 animate-spin" />
-                                ) : (
-                                  <Truck className="size-4" />
-                                )}
-                                אישור ושליחה ללקוח
-                              </Button>
-                              <Button
-                                variant="outline"
-                                disabled={changingId === order.id}
-                                onClick={() => void returnPicked(order)}
-                              >
-                                <Undo2 className="size-4" />
-                                החזרה לליקוט
-                              </Button>
-                            </div>
-                          );
-                        }
-                        const step = NEXT_STEP[orderGroupOf(order.status)];
-                        if (!step) return null;
-                        return (
-                          <Button
-                            className="w-full"
-                            disabled={changingId === order.id}
-                            onClick={() => void setStatus(order, step.to)}
-                          >
-                            {changingId === order.id ? (
-                              <Loader2 className="size-4 animate-spin" />
-                            ) : step.to === "picking" ? (
-                              <PackageCheck className="size-4" />
-                            ) : (
-                              <Truck className="size-4" />
-                            )}
-                            {step.label}
+                        })()}
+                        <div
+                          // כפתורים לפי הרוחב הפנוי — יורדים שורה במקום להידחס
+                          className="grid grid-cols-[repeat(auto-fit,minmax(6.75rem,1fr))] gap-2"
+                        >
+                          <Button variant="outline" onClick={() => setEditing(order)}>
+                            <Pencil className="size-4" />
+                            צפייה ועריכה
                           </Button>
-                        );
-                      })()}
-                      <div
-                        className={`grid grid-cols-2 gap-2 ${scope === "admin" ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}
-                      >
-                        <Button variant="outline" onClick={() => setEditing(order)}>
-                          <Pencil className="size-4" />
-                          צפייה ועריכה
-                        </Button>
-                        <OrderDocumentButton orderId={order.id} label="PDF" />
-                        <OrderDocumentButton orderId={order.id} kind="picking" label="בון ליקוט" />
-                        {scope === "admin" && (
+                          <OrderDocumentButton orderId={order.id} label="PDF" />
+                          <OrderDocumentButton
+                            orderId={order.id}
+                            kind="picking"
+                            label="בון ליקוט"
+                          />
                           <Button
                             variant="outline"
-                            onClick={() => setPendingDelete(order)}
-                            className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            disabled={
+                              order.kind !== "order" ||
+                              order.status === "cancelled" ||
+                              bulkBusy === "labels"
+                            }
+                            onClick={() => void printLabels([order])}
                           >
-                            <Trash2 className="size-4" />
-                            מחיקה
+                            <Tag className="size-4" />
+                            מדבקה
                           </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                          {scope === "admin" && (
+                            <Button
+                              variant="outline"
+                              onClick={() => setPendingDelete(order)}
+                              className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            >
+                              <Trash2 className="size-4" />
+                              מחיקה
+                            </Button>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+
+            {selectedOrders.length > 0 && (
+              <div
+                role="toolbar"
+                aria-label="פעולות על ההזמנות שנבחרו"
+                className="sticky bottom-4 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-background/95 p-3 shadow-lift backdrop-blur"
+              >
+                <span className="me-1 text-sm font-bold">נבחרו {selectedOrders.length}</span>
+                <Button
+                  size="sm"
+                  disabled={bulkBusy !== null || shippableSelected.length === 0}
+                  onClick={() => setBulkShipOpen(true)}
+                >
+                  {bulkBusy === "ship" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <MailCheck className="size-4" />
+                  )}
+                  שינוי סטטוס לנשלח + מייל
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={bulkBusy !== null}
+                  onClick={() => void openCourier(selectedOrders)}
+                >
+                  {bulkBusy === "courier" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Bike className="size-4" />
+                  )}
+                  מסירה לשליח
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={bulkBusy !== null}
+                  onClick={() => void printLabels(selectedOrders)}
+                >
+                  {bulkBusy === "labels" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Tag className="size-4" />
+                  )}
+                  מדבקות משלוח (PDF)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ms-auto"
+                  onClick={() => setSelected(new Set())}
+                >
+                  <X className="size-4" />
+                  ביטול בחירה
+                </Button>
               </div>
             )}
           </>
@@ -558,6 +942,69 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
           void load();
         }}
       />
+
+      <CourierDialog
+        orders={courierOrders}
+        open={courierOrders.length > 0}
+        onOpenChange={(open) => {
+          if (!open) setCourierOrders([]);
+        }}
+        labelStore={labelStore}
+        profiles={profiles}
+        onChanged={() => {
+          patchStatus(
+            courierOrders.map((o) => o.id),
+            "awaiting_courier",
+          );
+          setSelected(new Set());
+        }}
+      />
+
+      <AlertDialog open={bulkShipOpen} onOpenChange={setBulkShipOpen}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader className="text-right">
+            <AlertDialogTitle>סימון כנשלחו</AlertDialogTitle>
+            <AlertDialogDescription className="text-right">
+              {shippableSelected.length === 1
+                ? `הזמנה ${shippableSelected[0]?.order_number} תסומן כ"נשלחה".`
+                : `${shippableSelected.length} הזמנות יסומנו כ"נשלחה".`}
+              {selectedOrders.length > shippableSelected.length &&
+                ` ${selectedOrders.length - shippableSelected.length} הזמנות אחרות שנבחרו (הצעות מחיר, מבוטלות, או שכבר נשלחו / נמסרו) לא ישתנו.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-3 text-sm">
+            <Checkbox
+              className="mt-0.5"
+              checked={notifyCustomers}
+              onCheckedChange={(checked) => setNotifyCustomers(checked === true)}
+            />
+            <span>
+              <span className="font-medium">שליחת מייל "ההזמנה יצאה למשלוח" לכל לקוח</span>
+              <span className="block text-xs text-muted-foreground">
+                עם רשימת הפריטים וכתובת המשלוח, מכתובת השולח של החנות. המייל נשמר גם ביומן המיילים
+                בתיק הלקוח.
+              </span>
+            </span>
+          </label>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkBusy === "ship"}>ביטול</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkBusy === "ship"}
+              onClick={(event) => {
+                event.preventDefault();
+                setBulkBusy("ship");
+                void shipOrders(shippableSelected, notifyCustomers).finally(() => {
+                  setBulkBusy(null);
+                  setBulkShipOpen(false);
+                });
+              }}
+            >
+              {bulkBusy === "ship" ? <Loader2 className="size-4 animate-spin" /> : null}
+              סימון כנשלחו
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={pendingDelete !== null}

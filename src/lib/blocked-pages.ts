@@ -15,8 +15,12 @@ export const FORBIDDEN_PAGE: BlockedPage = {
   note: "אם הגעתם לכאן בטעות — חזרו לדף הבית.",
 };
 
-/** נתיבים שזמינים גם בחנות מוקפאת: פאנל הניהול של החנות, התחברות, ועמוד הנעילה */
-export const SUSPENDED_ALLOWED_PATHS = /^\/(admin|admin-handoff|login|reset-password|locked)(\/|$)/;
+/**
+ * נתיבים שזמינים גם בחנות מוקפאת: פאנל הניהול של החנות, התחברות, עמוד הנעילה,
+ * ועמוד השליח (משלוחים שכבר יצאו לדרך מסתיימים גם כשהחנות מוקפאת)
+ */
+export const SUSPENDED_ALLOWED_PATHS =
+  /^\/(admin|admin-handoff|courier|login|reset-password|locked)(\/|$)/;
 
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);

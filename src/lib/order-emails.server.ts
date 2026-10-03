@@ -8,11 +8,16 @@
  */
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { sendEmail, renderEmailHtml, escapeHtml } from "@/lib/email.server";
+import { sendEmail, renderEmailHtml, escapeHtml, emailActionButton } from "@/lib/email.server";
 import { loadOrderDocument } from "@/lib/documents.server";
 import { calculateVat } from "@/lib/vat";
 import { formatUnitIls } from "@/lib/catalog";
-import { billingOf, deliveryOf } from "@/lib/order-details";
+import {
+  ORDER_CONTACT_COLUMNS,
+  billingOf,
+  deliveryOf,
+  type OrderContactFields,
+} from "@/lib/order-details";
 
 type SendResult = { sent: boolean; reason?: string };
 
@@ -174,4 +179,127 @@ export async function sendOrderEmailsInternal(
     : { sent: false, reason: "אין כתובת מייל ללקוח" };
 
   return { staff, customer };
+}
+
+/**
+ * מייל "ההזמנה יצאה למשלוח" ללקוח (או לאורח, לאימייל שמילא בקופה) — אחרי
+ * סימון כ"נשלחה", גם בפעולה מרוכזת על כמה הזמנות. בלי PDF (המסמך כבר
+ * נשלח עם אישור ההזמנה): פריטים, כתובת המשלוח וקישור ל"ההזמנות שלי".
+ *
+ * senderEmail — בשליחה מרוכזת נקרא פעם אחת מבחוץ; אחרת נטען כאן.
+ */
+export async function sendShippedEmailInternal(
+  orderId: string,
+  sentBy: string | null,
+  senderEmail?: string,
+): Promise<SendResult> {
+  const { data: orderData, error } = await supabaseAdmin
+    .from("orders")
+    .select(
+      `id, order_number, customer_id, kind, status, ${ORDER_CONTACT_COLUMNS}, order_items (product_name, quantity, is_deposit, is_gift)`,
+    )
+    .eq("id", orderId)
+    .maybeSingle();
+  if (error || !orderData) return { sent: false, reason: "ההזמנה לא נמצאה" };
+  const order = orderData as unknown as OrderContactFields & {
+    id: string;
+    order_number: string;
+    customer_id: string | null;
+    kind: string;
+    status: string;
+    order_items: {
+      product_name: string | null;
+      quantity: number;
+      is_deposit: boolean;
+      is_gift: boolean | null;
+    }[];
+  };
+  if (order.kind !== "order") return { sent: false, reason: "בקשה להצעת מחיר — אין משלוח" };
+
+  const [{ data: customerRole }, { data: customerProfile }] = await Promise.all([
+    order.customer_id
+      ? supabaseAdmin
+          .from("user_roles")
+          .select("email")
+          .eq("user_id", order.customer_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    order.customer_id
+      ? supabaseAdmin
+          .from("customer_profiles")
+          .select("business_name, contact_name, phone, business_address, city, zip_code, tax_id")
+          .eq("user_id", order.customer_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const billing = billingOf(order, customerProfile, customerRole?.email ?? null);
+  const delivery = deliveryOf(order, customerProfile);
+  const to = billing.email;
+  if (!to) return { sent: false, reason: "אין כתובת מייל ללקוח" };
+
+  let from = senderEmail;
+  if (from === undefined) {
+    const { data: emailSettings } = await supabaseAdmin
+      .from("email_settings")
+      .select("sender_email")
+      .eq("id", true)
+      .maybeSingle();
+    from = emailSettings?.sender_email?.trim() || "";
+  }
+
+  // קישור לאזור האישי — רק ללקוח רשום (לאורח אין חשבון)
+  let accountUrl: string | null = null;
+  if (order.customer_id) {
+    try {
+      const { tenantSiteOrigin } = await import("@/integrations/supabase/tenant.server");
+      accountUrl = `${tenantSiteOrigin()}/account?tab=orders`;
+    } catch {
+      accountUrl = null;
+    }
+  }
+
+  const items = order.order_items.filter((item) => !item.is_deposit);
+  const itemsHtml = items
+    .map(
+      (item) =>
+        `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(item.product_name ?? "מוצר")}${item.is_gift ? " 🎁" : ""}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap;">${item.quantity} יח׳</td></tr>`,
+    )
+    .join("");
+
+  const deliveryHtml = delivery.address
+    ? `<div style="margin-top:12px;padding:10px 12px;border:1px solid #e2e8e2;border-radius:8px;background:#f7faf7;">
+        <p style="margin:0 0 4px;font-weight:bold;">📦 כתובת המשלוח</p>
+        <p style="margin:0;">${escapeHtml(delivery.name)}${delivery.phone ? ` · <span dir="ltr">${escapeHtml(delivery.phone)}</span>` : ""}<br/>${escapeHtml(delivery.address)}</p>
+      </div>`
+    : "";
+
+  const greetingName = escapeHtml(
+    delivery.isAlternate ? billing.name : delivery.name || billing.name,
+  );
+  const body = `
+    <p>שלום ${greetingName},</p>
+    <p>ההזמנה שלכם <strong dir="ltr">${escapeHtml(order.order_number)}</strong> יצאה למשלוח 🚚</p>
+    <p>השליח ייצור קשר לפני ההגעה, אם יהיה צורך.</p>
+    ${deliveryHtml}
+    ${
+      itemsHtml
+        ? `<table style="width:100%;border-collapse:collapse;margin-top:12px;">
+            <thead><tr><th style="text-align:right;padding:6px 8px;">מוצר</th><th style="text-align:right;padding:6px 8px;">כמות</th></tr></thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>`
+        : ""
+    }
+    ${accountUrl ? emailActionButton("למעקב אחרי ההזמנה", accountUrl) : ""}
+  `;
+
+  return sendEmail({
+    from,
+    to: [to],
+    subject: `הזמנה ${order.order_number} יצאה למשלוח`,
+    html: await renderEmailHtml("ההזמנה יצאה למשלוח", body),
+    ...(order.customer_id
+      ? { logFor: { userId: order.customer_id, kind: "order" as const, sentBy } }
+      : {}),
+  });
 }

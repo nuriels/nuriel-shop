@@ -227,6 +227,62 @@ export const deleteStore = createServerFn({ method: "POST" })
     };
   });
 
+/** פורמט מפתח Resend (כמו ב-CHECK במסד) — עותק קל, כדי לא למשוך קוד שרת לדפדפן */
+const RESEND_KEY_FORMAT = /^re_[A-Za-z0-9_-]{8,200}$/;
+
+export type StoreResendKeyResult = {
+  /** 4 התווים האחרונים של המפתח השמור (null = נמחק — החנות חוזרת למפתח הכללי) */
+  hint: string | null;
+  /** הדומיינים בחשבון Resend (null = מפתח "Sending access" או שלא נבדק) */
+  domains: { name: string; status: string }[] | null;
+  /** המפתח נשמר אבל לא ניתן היה לאמת אותו מול Resend */
+  warning: string | null;
+};
+
+/**
+ * מפתח Resend לחנות — מודבק פעם אחת בפאנל הפלטפורמה, והשרת שולח איתו את
+ * כל המיילים של החנות (אישורי הזמנה, "יצאה למשלוח", איפוס סיסמה...).
+ * לפני השמירה המפתח נבדק מול Resend; מפתח שנדחה לא נשמר.
+ * מפתח ריק = מחיקה (החנות חוזרת ל-RESEND_API_KEY של השרת).
+ * המפתח עצמו לא חוזר לדפדפן — רק 4 התווים האחרונים.
+ */
+export const setStoreResendKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { tenantId: string; key: string }) => {
+    const tenantId = String(input?.tenantId ?? "").trim();
+    const key = String(input?.key ?? "").trim();
+    if (!/^[0-9a-f-]{36}$/.test(tenantId)) throw new Error("חנות לא תקינה");
+    if (key !== "" && !RESEND_KEY_FORMAT.test(key)) {
+      throw new Error("מפתח Resend מתחיל ב-re_ ומכיל אותיות באנגלית, ספרות, _ ו-- בלבד");
+    }
+    return { tenantId, key };
+  })
+  .handler(async ({ data, context }): Promise<StoreResendKeyResult> => {
+    const { data: isPlatformAdmin } = await context.supabase.rpc("is_platform_admin", {});
+    if (isPlatformAdmin !== true) {
+      throw new Error("רק מנהל הפלטפורמה יכול להגדיר מפתח מייל לחנות");
+    }
+
+    const { verifyResendKey, forgetStoreResendKey } = await import("@/lib/email.server");
+    let domains: StoreResendKeyResult["domains"] = null;
+    let warning: string | null = null;
+    if (data.key !== "") {
+      const check = await verifyResendKey(data.key);
+      if (check.ok === false) throw new Error(check.message);
+      if (check.ok === null) warning = check.message;
+      else domains = check.domains;
+    }
+
+    // השמירה — במסד, עם החיבור של המשתמש (בודק שוב שהוא מנהל פלטפורמה)
+    const { data: hint, error } = await context.supabase.rpc("platform_set_tenant_resend_key", {
+      _tenant: data.tenantId,
+      _key: data.key === "" ? null : data.key,
+    });
+    if (error) throw new Error(error.message);
+    forgetStoreResendKey(data.tenantId);
+    return { hint: hint ?? null, domains, warning };
+  });
+
 export { DEFAULT_STORE_NAME } from "@/lib/branding";
 /** הכותרת הקבועה של פאנל ניהול הפלטפורמה */
 export const PLATFORM_SITE_NAME = "מערכת ניהול אתר אינטרנט";

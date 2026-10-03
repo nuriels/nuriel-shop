@@ -101,7 +101,9 @@ export function EmailSettingsPanel() {
         </div>
         <div>
           <h2 className="text-xl font-bold text-foreground">הגדרות מייל</h2>
-          <p className="text-sm text-muted-foreground">שליחת הודעות, כתובת השולח והתראות על הזמנות חדשות</p>
+          <p className="text-sm text-muted-foreground">
+            שליחת הודעות, כתובת השולח והתראות על הזמנות חדשות
+          </p>
         </div>
       </div>
 
@@ -123,8 +125,9 @@ export function EmailSettingsPanel() {
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            יש להגדיר בשרת את משתנה הסביבה RESEND_API_KEY, ולוודא שהדומיין של הכתובת השולחת מאומת
-            בחשבון Resend — אחרת שליחת המיילים תיכשל בשקט ולא תעצור את קליטת ההזמנה.
+            מפתח ה-API של Resend מוגדר לחנות בפאנל הפלטפורמה (או כללי בשרת — RESEND_API_KEY). יש
+            לוודא שהדומיין של הכתובת השולחת מאומת בחשבון Resend — אחרת שליחת המיילים תיכשל בשקט ולא
+            תעצור את קליטת ההזמנה.
           </p>
           {diagnostics && (
             <ul className="space-y-1.5 rounded-lg border border-border bg-secondary p-3 text-xs">
@@ -135,8 +138,10 @@ export function EmailSettingsPanel() {
                   <XCircle className="size-4 shrink-0 text-destructive" />
                 )}
                 {diagnostics.hasApiKey
-                  ? `מפתח Resend מוגדר בשרת (${diagnostics.apiKeyHint})`
-                  : "מפתח Resend חסר בשרת — אף מייל לא יישלח. יש להגדיר RESEND_API_KEY ב-.env.production ולהפעיל מחדש."}
+                  ? diagnostics.apiKeySource === "store"
+                    ? `מפתח Resend של החנות מוגדר (${diagnostics.apiKeyHint})`
+                    : `מפתח Resend כללי של השרת (${diagnostics.apiKeyHint}) — אפשר להגדיר מפתח נפרד לחנות בפאנל הפלטפורמה`
+                  : 'מפתח Resend חסר — אף מייל לא יישלח. מנהל הפלטפורמה מגדיר אותו לחנות בפאנל ("מפתח מייל"), או כללי בשרת (RESEND_API_KEY).'}
               </li>
               <li className="flex items-center gap-2">
                 {diagnostics.senderEmail ? (

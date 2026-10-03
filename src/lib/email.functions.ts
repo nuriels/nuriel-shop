@@ -110,12 +110,17 @@ export const getEmailDiagnostics = createServerFn({ method: "POST" })
       .maybeSingle();
 
     const senderEmail = emailSettings?.sender_email?.trim() ?? "";
-    const apiKey = process.env["RESEND_API_KEY"]?.trim() ?? "";
+    // מפתח החנות (פאנל הפלטפורמה) קודם; אחרת RESEND_API_KEY של השרת
+    const { resolveResendKey } = await import("@/lib/email.server");
+    const resolved = await resolveResendKey();
+    const apiKey = resolved?.key ?? "";
 
     return {
       hasApiKey: apiKey !== "",
       // רק 4 תווים אחרונים, כדי לאמת שזה המפתח הנכון בלי לחשוף אותו
       apiKeyHint: apiKey === "" ? null : `••••${apiKey.slice(-4)}`,
+      /** store = מפתח החנות מפאנל הפלטפורמה; server = המפתח הכללי של השרת */
+      apiKeySource: resolved?.source ?? null,
       senderEmail,
       senderDomain: senderEmail.includes("@") ? senderEmail.split("@")[1] : null,
       // כתובת החנות לקישורים במיילים (tenants.domain / TENANT_BASE_DOMAIN / PUBLIC_SITE_URL)
