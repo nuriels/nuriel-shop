@@ -1,5 +1,14 @@
 import { Link } from "@tanstack/react-router";
-import { CheckCircle2, Clock, Gift, MailCheck, MapPin, UserRoundPlus } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  Gift,
+  KeyRound,
+  MailCheck,
+  MapPin,
+  Store,
+  UserRoundPlus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ORDER_HOURS } from "@/lib/order-hours";
@@ -16,6 +25,14 @@ export type PlacedOrder = {
   email: string;
   /** אורח — בלי חשבון (מוצעת פתיחת חשבון לפעם הבאה) */
   guest: boolean;
+  /** איך ההזמנה מגיעה: משלוח / איסוף עצמי / דיגיטלי בלבד (null = כמו קודם) */
+  shippingKind?: "delivery" | "pickup" | "digital" | null;
+  /** שם שיטת המשלוח שנבחרה */
+  shippingName?: string | null;
+  /** באיסוף עצמי — כתובת העסק */
+  pickupAddress?: string | null;
+  /** יש בהזמנה מוצרים דיגיטליים (הרישיון יגיע במייל) */
+  hasDigital?: boolean;
 };
 
 /** מסך האישור אחרי שליחת ההזמנה מהקופה */
@@ -47,7 +64,21 @@ export function CheckoutSuccess({ order }: { order: PlacedOrder }) {
               </span>
             </p>
           )}
-          {order.deliveryLine && (
+          {order.shippingKind === "pickup" ? (
+            <p className="flex items-start gap-2 rounded-lg border border-violet-300 bg-violet-50 p-3 text-violet-950 dark:bg-violet-950/30 dark:text-violet-100">
+              <Store className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>
+                {order.shippingName || "איסוף עצמי"}
+                {order.pickupAddress ? (
+                  <>
+                    {" "}
+                    מ: <strong>{order.pickupAddress}</strong>
+                  </>
+                ) : null}
+                . נעדכן כשההזמנה מוכנה לאיסוף.
+              </span>
+            </p>
+          ) : order.shippingKind === "digital" ? null : order.deliveryLine ? (
             <p
               className={
                 order.alternateDelivery
@@ -59,6 +90,16 @@ export function CheckoutSuccess({ order }: { order: PlacedOrder }) {
               <span>
                 {order.alternateDelivery ? "משלוח לכתובת אחרת: " : "כתובת למשלוח: "}
                 <strong>{order.deliveryLine}</strong>
+                {order.shippingName ? ` · ${order.shippingName}` : ""}
+              </span>
+            </p>
+          ) : null}
+          {order.hasDigital && (
+            <p className="flex items-start gap-2 rounded-lg border border-sky-300 bg-sky-50 p-3 text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
+              <KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>
+                מפתחות הרישיון למוצרים הדיגיטליים יישלחו אליך במייל נפרד
+                {order.guest ? "" : " ויופיעו גם באזור האישי, בפרטי ההזמנה"}.
               </span>
             </p>
           )}

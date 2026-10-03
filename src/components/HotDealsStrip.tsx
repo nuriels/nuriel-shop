@@ -4,6 +4,7 @@ import { Flame, Package, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductDetailDialog } from "@/components/ProductDetailDialog";
 import { QuantityDialog } from "@/components/QuantityDialog";
+import type { AddToCart } from "@/lib/cart";
 import {
   discountPercent,
   formatIls,
@@ -22,7 +23,7 @@ export function HotDealsStrip({
   items: CatalogItem[];
   canAdd: boolean;
   addLabel?: string;
-  onAddToCart?: (item: CatalogItem, quantity?: number) => void;
+  onAddToCart?: AddToCart;
 }) {
   const [details, setDetails] = useState<CatalogItem | null>(null);
   const [picking, setPicking] = useState<CatalogItem | null>(null);
@@ -118,7 +119,7 @@ export function HotDealsStrip({
             if (!open) setPicking(null);
           }}
           addLabel={addLabel}
-          onAdd={(it, units) => onAddToCart(it, units)}
+          onAdd={(it, units, variant) => onAddToCart(it, units, { variant })}
         />
       )}
 

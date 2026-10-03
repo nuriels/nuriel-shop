@@ -1,6 +1,11 @@
 /** לוגיקת הזמנות B2B – מספרי הזמנה, סטטוסים וסל קניות */
 
 import { ORDER_CONTACT_COLUMNS, type OrderContactFields } from "@/lib/order-details";
+import {
+  ORDER_SHIPPING_COLUMNS,
+  type OrderItemStatus,
+  type OrderShippingKind,
+} from "@/lib/shipping";
 
 export type CartItem = {
   productId: string;
@@ -19,7 +24,31 @@ export type CartItem = {
   packSize?: number | null;
   /** מינימום יחידות להזמנה (NULL = בלי) — נפרד מהמארזים */
   minOrderQuantity?: number | null;
+  /** הוריאציה שנבחרה (צבע / מידה...) — null למוצר בלי וריאציות */
+  variantId?: string | null;
+  /** "אדום · S" — לתצוגה בסל */
+  variantLabel?: string | null;
+  /** מוצר דיגיטלי — לא דורש משלוח */
+  isDigital?: boolean;
 };
+
+/**
+ * המזהה של שורה בסל: מוצר + וריאציה (שתי מידות של אותה חולצה = שתי שורות).
+ * כל פעולה על שורה (כמות, הסרה) לפי המפתח הזה.
+ */
+export function cartLineKey(item: Pick<CartItem, "productId" | "variantId">): string {
+  return item.variantId ? `${item.productId}:${item.variantId}` : item.productId;
+}
+
+/** "קברנה — אדום · 750" */
+export function cartLineName(item: Pick<CartItem, "name" | "variantLabel">): string {
+  return item.variantLabel ? `${item.name} — ${item.variantLabel}` : item.name;
+}
+
+/** יש בסל מוצר פיזי (צריך שיטת משלוח)? סל שכולו דיגיטלי — בלי משלוח */
+export function cartNeedsShipping(items: CartItem[]): boolean {
+  return items.some((item) => !item.isDigital);
+}
 
 /** קפיצת הכמות בסל: גודל המארז, או 1 */
 export function cartStep(item: CartItem): number {
@@ -214,6 +243,16 @@ export type OrderItemRow = {
   is_deposit: boolean;
   /** מתנה מהטבת עגלה (במחיר 0) */
   is_gift?: boolean;
+  /** מוצר דיגיטלי (רישיון / קוד) */
+  is_digital?: boolean;
+  /** ממתין לשליח / ממתין להזנת רישיון / נמסר במייל ... */
+  item_status?: OrderItemStatus | null;
+  /** מפתח הרישיון (מוצר דיגיטלי) — אחרי שהמנהל הזין ושלח */
+  digital_license_key?: string | null;
+  license_sent_at?: string | null;
+  license_sent_to?: string | null;
+  /** "אדום · S" — הוריאציה שנבחרה (כבר כלולה גם ב-product_name) */
+  variant_label?: string | null;
 };
 
 export type OrderRow = OrderContactFields & {
@@ -235,6 +274,14 @@ export type OrderRow = OrderContactFields & {
   last_delivery_failure_at: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
+  /** שיטת המשלוח שנבחרה בקופה (צילום) */
+  shipping_method_id?: string | null;
+  shipping_method_name?: string | null;
+  shipping_kind?: OrderShippingKind | null;
+  shipping_base_price?: number;
+  shipping_free_threshold?: number | null;
+  /** דמי המשלוח בפועל — כלולים ב-total */
+  shipping_price?: number;
   order_items: OrderItemRow[];
 };
 
@@ -242,8 +289,9 @@ export type OrderRow = OrderContactFields & {
 export const ORDER_SELECT_COLUMNS =
   "id, customer_id, agent_id, order_number, status, kind, total, note, vat_rate, prices_include_vat, created_at, " +
   "delivery_attempts, last_delivery_failure_note, last_delivery_failure_at, shipped_at, delivered_at, " +
-  `${ORDER_CONTACT_COLUMNS}, ` +
-  "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit, is_gift)";
+  `${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ` +
+  "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit, is_gift, " +
+  "is_digital, item_status, digital_license_key, license_sent_at, license_sent_to, variant_label)";
 
 /**
  * מספר ההזמנה נקבע במסד בלבד (טריגר `orders_assign_number`):

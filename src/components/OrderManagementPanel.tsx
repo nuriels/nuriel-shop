@@ -7,6 +7,8 @@ import {
   ClipboardList,
   Clock,
   Inbox,
+  KeyRound,
+  Store,
   Loader2,
   MailCheck,
   PackageCheck,
@@ -49,6 +51,8 @@ import { OrderEditDialog } from "@/components/OrderEditDialog";
 import { CreateOrderDialog } from "@/components/CreateOrderDialog";
 import { OrderDocumentButton } from "@/components/OrderDocumentButton";
 import { OrderContactBlock } from "@/components/OrderContactBlock";
+import { DigitalBadge, ItemStatusBadge, LicenseSender } from "@/components/OrderItemExtras";
+import { hasShippingLine, orderShippingLabel, shippingWasFree } from "@/lib/shipping";
 import { CourierDialog } from "@/components/delivery/CourierDialog";
 import { GroupSidebarLayout, type SideGroup } from "@/components/GroupSidebarLayout";
 import { SortToggle, type SortDirection } from "@/components/OrdersByYear";
@@ -683,27 +687,94 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
 
                         <OrderContactBlock order={order} />
 
-                        <ul className="space-y-1 text-sm">
+                        <ul className="space-y-1.5 text-sm">
                           {order.order_items.map((item) => (
-                            <li key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                              <span className="truncate">
-                                {item.product_name ?? "מוצר"} × {item.quantity}
-                                {item.product_barcode && (
-                                  <span
-                                    dir="ltr"
-                                    className="numeric mr-2 text-xs text-muted-foreground"
-                                  >
-                                    {item.product_barcode}
+                            <li key={item.id} className="space-y-0.5">
+                              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                                <span className="min-w-0">
+                                  <span className="break-words">
+                                    {item.product_name ?? "מוצר"} × {item.quantity}
+                                  </span>
+                                  {item.product_barcode && (
+                                    <span
+                                      dir="ltr"
+                                      className="numeric mr-2 text-xs text-muted-foreground"
+                                    >
+                                      {item.product_barcode}
+                                    </span>
+                                  )}
+                                </span>
+                                {order.kind === "order" && (
+                                  <span className="numeric shrink-0">
+                                    {formatIls(Number(item.unit_price) * item.quantity)}
                                   </span>
                                 )}
+                              </div>
+                              {!item.is_deposit && (item.is_digital || item.item_status) && (
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {item.is_digital && <DigitalBadge />}
+                                  <ItemStatusBadge
+                                    status={item.item_status}
+                                    shippingKind={order.shipping_kind}
+                                  />
+                                </div>
+                              )}
+                              {item.is_digital &&
+                                !item.is_deposit &&
+                                (isAdminScope ? (
+                                  <LicenseSender
+                                    itemId={item.id}
+                                    initialKey={item.digital_license_key}
+                                    sentAt={item.license_sent_at}
+                                    sentTo={item.license_sent_to}
+                                    disabled={
+                                      order.kind !== "order" || order.status === "cancelled"
+                                    }
+                                    onSent={() => void load()}
+                                  />
+                                ) : item.digital_license_key ? (
+                                  <p
+                                    dir="ltr"
+                                    className="truncate text-left font-mono text-xs text-muted-foreground"
+                                  >
+                                    {item.digital_license_key}
+                                  </p>
+                                ) : null)}
+                            </li>
+                          ))}
+                          {hasShippingLine(order) && (
+                            <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-t border-dashed border-border pt-1.5">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                {order.shipping_kind === "pickup" ? (
+                                  <Store
+                                    className="size-3.5 shrink-0 text-muted-foreground"
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <Truck
+                                    className="size-3.5 shrink-0 text-muted-foreground"
+                                    aria-hidden="true"
+                                  />
+                                )}
+                                <span className="truncate">
+                                  משלוח: {orderShippingLabel(order) ?? "דמי משלוח"}
+                                </span>
                               </span>
                               {order.kind === "order" && (
                                 <span className="numeric shrink-0">
-                                  {formatIls(Number(item.unit_price) * item.quantity)}
+                                  {shippingWasFree(order)
+                                    ? "חינם"
+                                    : formatIls(Number(order.shipping_price ?? 0))}
                                 </span>
                               )}
                             </li>
-                          ))}
+                          )}
+                          {order.shipping_kind === "digital" && (
+                            <li className="flex items-center gap-1.5 border-t border-dashed border-border pt-1.5 text-xs text-muted-foreground">
+                              <KeyRound className="size-3.5" aria-hidden="true" />
+                              הזמנה דיגיטלית — בלי משלוח
+                            </li>
+                          )}
                         </ul>
 
                         <div className="flex items-center justify-between border-t border-border pt-3">

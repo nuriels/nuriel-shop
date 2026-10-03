@@ -10,6 +10,19 @@ export type CartPromotionCondition = "min_subtotal" | "category_quantity";
 export type TenantSslStatus = "active" | "pending" | "error" | "blocked" | "external";
 /** יומן המשלוח של הזמנה (order_delivery_events.kind) */
 export type DeliveryEventKind = "courier_assigned" | "delivery_failed" | "delivered" | "shipped";
+/** סוג שיטת משלוח (shipping_methods.kind) */
+export type ShippingMethodKind = "delivery" | "pickup";
+/** סוג המשלוח על ההזמנה (orders.shipping_kind) — digital = סל דיגיטלי בלבד */
+export type OrderShippingKind = "delivery" | "pickup" | "digital";
+/** הסטטוס של שורה בהזמנה (order_items.item_status) */
+export type OrderItemStatus =
+  | "awaiting_courier"
+  | "awaiting_pickup"
+  | "shipped"
+  | "delivered"
+  | "awaiting_license"
+  | "delivered_email"
+  | "cancelled";
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
@@ -79,6 +92,87 @@ export type Database = {
           custom_domain_checked_at?: string | null;
           custom_domain_ssl_expires_at?: string | null;
           custom_domain_updated_at?: string | null;
+        };
+        Relationships: [];
+      };
+      shipping_methods: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          description: string;
+          kind: ShippingMethodKind;
+          price: number;
+          is_active: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          name: string;
+          description?: string;
+          kind?: ShippingMethodKind;
+          price?: number;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          name?: string;
+          description?: string;
+          kind?: ShippingMethodKind;
+          price?: number;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      product_variants: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          product_id: string;
+          options: Json;
+          sku: string | null;
+          price: number | null;
+          stock_quantity: number | null;
+          is_active: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          product_id: string;
+          options: Json;
+          sku?: string | null;
+          price?: number | null;
+          stock_quantity?: number | null;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          product_id?: string;
+          options?: Json;
+          sku?: string | null;
+          price?: number | null;
+          stock_quantity?: number | null;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -597,6 +691,8 @@ export type Database = {
           sort_order: number | null;
           is_hidden: boolean;
           out_of_stock_auto: boolean;
+          is_digital: boolean;
+          variant_attributes: Json;
         };
         Insert: {
           tenant_id?: string;
@@ -634,6 +730,8 @@ export type Database = {
           sort_order?: number | null;
           is_hidden?: boolean;
           out_of_stock_auto?: boolean;
+          is_digital?: boolean;
+          variant_attributes?: Json;
         };
         Update: {
           tenant_id?: string;
@@ -671,6 +769,8 @@ export type Database = {
           sort_order?: number | null;
           is_hidden?: boolean;
           out_of_stock_auto?: boolean;
+          is_digital?: boolean;
+          variant_attributes?: Json;
         };
         Relationships: [
           {
@@ -705,6 +805,14 @@ export type Database = {
           unit_price: number;
           product_pack_size: number | null;
           reserved_quantity: number;
+          is_digital: boolean;
+          item_status: OrderItemStatus | null;
+          digital_license_key: string | null;
+          license_sent_at: string | null;
+          license_sent_to: string | null;
+          variant_id: string | null;
+          variant_label: string | null;
+          reserved_from_variant: boolean;
         };
         Insert: {
           tenant_id?: string;
@@ -728,6 +836,14 @@ export type Database = {
           unit_price?: number;
           product_pack_size?: number | null;
           reserved_quantity?: number;
+          is_digital?: boolean;
+          item_status?: OrderItemStatus | null;
+          digital_license_key?: string | null;
+          license_sent_at?: string | null;
+          license_sent_to?: string | null;
+          variant_id?: string | null;
+          variant_label?: string | null;
+          reserved_from_variant?: boolean;
         };
         Update: {
           tenant_id?: string;
@@ -751,6 +867,14 @@ export type Database = {
           unit_price?: number;
           product_pack_size?: number | null;
           reserved_quantity?: number;
+          is_digital?: boolean;
+          item_status?: OrderItemStatus | null;
+          digital_license_key?: string | null;
+          license_sent_at?: string | null;
+          license_sent_to?: string | null;
+          variant_id?: string | null;
+          variant_label?: string | null;
+          reserved_from_variant?: boolean;
         };
         Relationships: [
           {
@@ -810,6 +934,12 @@ export type Database = {
           courier_assigned_at: string | null;
           shipped_at: string | null;
           delivered_at: string | null;
+          shipping_method_id: string | null;
+          shipping_method_name: string | null;
+          shipping_kind: OrderShippingKind | null;
+          shipping_base_price: number;
+          shipping_free_threshold: number | null;
+          shipping_price: number;
         };
         Insert: {
           tenant_id?: string;
@@ -851,6 +981,12 @@ export type Database = {
           courier_assigned_at?: string | null;
           shipped_at?: string | null;
           delivered_at?: string | null;
+          shipping_method_id?: string | null;
+          shipping_method_name?: string | null;
+          shipping_kind?: OrderShippingKind | null;
+          shipping_base_price?: number;
+          shipping_free_threshold?: number | null;
+          shipping_price?: number;
         };
         Update: {
           tenant_id?: string;
@@ -892,6 +1028,12 @@ export type Database = {
           courier_assigned_at?: string | null;
           shipped_at?: string | null;
           delivered_at?: string | null;
+          shipping_method_id?: string | null;
+          shipping_method_name?: string | null;
+          shipping_kind?: OrderShippingKind | null;
+          shipping_base_price?: number;
+          shipping_free_threshold?: number | null;
+          shipping_price?: number;
         };
         Relationships: [
           {
@@ -1609,7 +1751,14 @@ export type Database = {
           pack_size: number | null;
           min_order_quantity: number | null;
           is_custom_price: boolean;
+          is_digital: boolean;
+          variant_attributes: Json;
+          variants: Json;
         }[];
+      };
+      save_product_variants: {
+        Args: { _product_id: string; _attributes: Json; _variants: Json };
+        Returns: number;
       };
       customer_has_prices: { Args: { _user_id: string }; Returns: boolean };
       is_admin: { Args: { _user_id: string }; Returns: boolean };

@@ -12,6 +12,7 @@
 import type { CartPromotionCondition } from "@/integrations/supabase/types";
 import type { CatalogItem } from "@/lib/catalog";
 import { cartTotal, type CartItem } from "@/lib/orders";
+import { hasVariants } from "@/lib/variants";
 
 export type CartPromotion = {
   id: string;
@@ -180,6 +181,8 @@ export function pickOrderBump(input: {
   for (const bump of bumps) {
     const product = catalogById.get(bump.product_id);
     if (!product || product.price === null || product.is_out_of_stock) continue;
+    // מוצר עם וריאציות צריך בחירה (צבע / מידה) — לא מתאים לסימון אחד בקופה
+    if (hasVariants(product)) continue;
     if (cartIds.has(product.id)) continue;
     return { product, pitch: bump.pitch };
   }

@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Building2,
   CircleAlert,
+  KeyRound,
   Loader2,
   MapPin,
   MessageSquareText,
@@ -12,6 +13,7 @@ import {
   Plus,
   ShieldCheck,
   ShoppingCart,
+  Store,
   Truck,
   X,
 } from "lucide-react";
@@ -30,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthState } from "@/hooks/useAuthState";
 import { useCart } from "@/hooks/useCart";
@@ -38,7 +41,21 @@ import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { clearStoredCart, useCartSync } from "@/hooks/useCartSync";
 import { formatIls, minimumQuantity, minOrderMessage, type CatalogItem } from "@/lib/catalog";
 import { addToCartItems, syncCartWithCatalog } from "@/lib/cart";
-import { cartDepositTotal, cartMinimum, cartMinUnits, cartStep, cartTotal } from "@/lib/orders";
+import {
+  cartDepositTotal,
+  cartLineKey,
+  cartMinimum,
+  cartMinUnits,
+  cartNeedsShipping,
+  cartStep,
+  cartTotal,
+} from "@/lib/orders";
+import {
+  SHIPPING_METHOD_COLUMNS,
+  isFreeByThreshold,
+  shippingCost,
+  type ShippingMethod,
+} from "@/lib/shipping";
 import {
   cartSubtotal,
   evaluateCartPromotions,
@@ -130,6 +147,10 @@ function CheckoutPage() {
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
   const [bumpKeepId, setBumpKeepId] = useState<string | null>(null);
   const prefilledFor = useRef<string | null | undefined>(undefined);
+  // שיטות המשלוח הפעילות של החנות, והשיטה שנבחרה
+  const [methods, setMethods] = useState<ShippingMethod[]>([]);
+  const [methodsLoading, setMethodsLoading] = useState(true);
+  const [shippingMethodId, setShippingMethodId] = useState<string | null>(null);
 
   const isCustomer = role?.role === "customer";
   const isStaff = role !== null && !isCustomer;
@@ -167,6 +188,38 @@ function CheckoutPage() {
     if (authLoading) return;
     void loadCatalog();
   }, [authLoading, loadCatalog, session?.user?.id]);
+
+  // ---------- שיטות המשלוח ----------
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("shipping_methods")
+        .select(SHIPPING_METHOD_COLUMNS)
+        .eq("is_active", true)
+        .order("sort_order")
+        .order("created_at");
+      if (!alive) return;
+      if (error) toast.error(error.message);
+      const list = ((data ?? []) as ShippingMethod[]).map((method) => ({
+        ...method,
+        price: Number(method.price),
+      }));
+      setMethods(list);
+      // שיטה אחת בלבד — נבחרת לבד
+      setShippingMethodId((current) =>
+        current && list.some((method) => method.id === current)
+          ? current
+          : list.length === 1
+            ? (list[0]?.id ?? null)
+            : null,
+      );
+      setMethodsLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const catalogById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const subtree = useCallback((name: string) => subtreeNames(categoryTree, name), [categoryTree]);
@@ -215,8 +268,32 @@ function CheckoutPage() {
     })();
   }, [authLoading, isCustomer, role?.user_id, role?.email, session?.user.email]);
 
+  // ---------- משלוח: האם צריך, איזו שיטה, כמה עולה ----------
+  // סל שכולו דיגיטלי — בלי משלוח; חנות בלי שיטות פעילות — כמו קודם (כתובת חובה)
+  const needsShipping = cartNeedsShipping(cart);
+  const hasMethods = methods.length > 0;
+  const selectedMethod = methods.find((method) => method.id === shippingMethodId) ?? null;
+  const requireAddress = needsShipping && (!hasMethods || selectedMethod?.kind !== "pickup");
+  const productsSubtotal = cartSubtotal(cart);
+  const threshold = settings?.free_shipping_threshold ?? null;
+  const shippingAmount =
+    kind === "order" && needsShipping
+      ? shippingCost(selectedMethod, productsSubtotal, threshold)
+      : 0;
+  const pickupAddress = settings?.business_address?.trim() ?? "";
+  const deliverySummary = !needsShipping
+    ? { label: "מוצרים דיגיטליים", kind: "digital" as const, amount: 0, free: true }
+    : selectedMethod && kind === "order"
+      ? {
+          label: selectedMethod.name,
+          kind: selectedMethod.kind,
+          amount: shippingAmount,
+          free: isFreeByThreshold(selectedMethod, productsSubtotal, threshold),
+        }
+      : null;
+
   // ---------- הסכומים, מתנות, משלוח חינם, מוצר קופה ----------
-  const vat = calculateVat(cartTotal(cart), {
+  const vat = calculateVat(cartTotal(cart) + shippingAmount, {
     pricesIncludeVat: settings?.prices_include_vat ?? true,
     vatRate: Number(settings?.vat_rate ?? DEFAULT_VAT_RATE),
   });
@@ -255,25 +332,26 @@ function CheckoutPage() {
     }
   };
 
-  const changeQuantity = (productId: string, delta: number) => {
-    const line = cart.find((item) => item.productId === productId);
+  const changeQuantity = (lineKey: string, delta: number) => {
+    const line = cart.find((item) => cartLineKey(item) === lineKey);
     if (!line) return;
     const floor = cartMinimum(line);
     const next = line.quantity + delta * cartStep(line);
     if (next < floor && cartMinUnits(line) > 1) toast.info(minOrderMessage(floor));
     setCart((current) =>
       current.map((item) =>
-        item.productId === productId ? { ...item, quantity: Math.max(floor, next) } : item,
+        cartLineKey(item) === lineKey ? { ...item, quantity: Math.max(floor, next) } : item,
       ),
     );
   };
-  const removeItem = (productId: string) =>
-    setCart((current) => current.filter((item) => item.productId !== productId));
+  const removeItem = (lineKey: string) =>
+    setCart((current) => current.filter((item) => cartLineKey(item) !== lineKey));
 
   // ---------- הטופס ----------
   const errors: CheckoutErrors = attempted
-    ? validateCheckoutForm(form, { requireEmail: !signedIn })
+    ? validateCheckoutForm(form, { requireEmail: !signedIn, requireAddress })
     : {};
+  const shippingMissing = needsShipping && hasMethods && !selectedMethod;
   const patch = (next: Partial<CheckoutForm>) => setForm((current) => ({ ...current, ...next }));
   const text = (key: keyof CheckoutForm) => ({
     value: form[key] as string,
@@ -286,7 +364,13 @@ function CheckoutPage() {
     event.preventDefault();
     setAttempted(true);
     setSubmitError(null);
-    const found = validateCheckoutForm(form, { requireEmail: !signedIn });
+    if (shippingMissing) {
+      const element = document.getElementById("co-shipping");
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast.error("נא לבחור שיטת משלוח");
+      return;
+    }
+    const found = validateCheckoutForm(form, { requireEmail: !signedIn, requireAddress });
     const firstInvalid = FIELD_ORDER.find((key) => found[key]);
     if (firstInvalid) {
       const element = document.getElementById(FIELD_ID[firstInvalid]);
@@ -304,10 +388,24 @@ function CheckoutPage() {
 
     setBusy(true);
     const lines = orderLinesFromCart(cart, kind);
-    const details = checkoutPayload(form);
-    const delivery = form.shipToDifferent
+    const details = checkoutPayload(form, {
+      methodId: needsShipping ? (selectedMethod?.id ?? null) : null,
+      requireAddress,
+    });
+    const alternate = requireAddress && form.shipToDifferent;
+    const delivery = alternate
       ? formatAddress(form.shippingAddress, form.shippingCity, form.shippingZip)
       : formatAddress(form.billingAddress, form.billingCity, form.billingZip);
+    const shippingInfo = {
+      shippingKind: !needsShipping
+        ? ("digital" as const)
+        : selectedMethod
+          ? selectedMethod.kind
+          : ("delivery" as const),
+      shippingName: needsShipping ? (selectedMethod?.name ?? null) : null,
+      pickupAddress: selectedMethod?.kind === "pickup" ? pickupAddress : null,
+      hasDigital: cart.some((item) => item.isDigital),
+    };
     try {
       let result: PlacedOrder;
       if (isCustomer && role) {
@@ -354,9 +452,10 @@ function CheckoutPage() {
           isQuote: order.kind === "quote",
           gifts,
           deliveryLine: delivery,
-          alternateDelivery: form.shipToDifferent,
+          alternateDelivery: alternate,
           email: details.customer_email || session?.user.email || "",
           guest: false,
+          ...shippingInfo,
         };
       } else {
         // אורח: בלי חשבון — ההזמנה נוצרת בשרת (הגבלת קצב + בדיקות במסד)
@@ -366,9 +465,10 @@ function CheckoutPage() {
           isQuote: order.kind === "quote",
           gifts: order.gifts,
           deliveryLine: delivery,
-          alternateDelivery: form.shipToDifferent,
+          alternateDelivery: alternate,
           email: details.customer_email,
           guest: true,
+          ...shippingInfo,
         };
       }
       setCart([]);
@@ -557,18 +657,128 @@ function CheckoutPage() {
                   </CardContent>
                 </Card>
 
+                {/* ---------- משלוח ---------- */}
+                {(needsShipping ? hasMethods || methodsLoading : true) && (
+                  <Card className="shadow-card" id="co-shipping">
+                    <CardContent className="space-y-3 pt-6">
+                      <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
+                        <Truck className="size-5 text-accent" aria-hidden="true" />
+                        משלוח
+                      </h2>
+                      {!needsShipping ? (
+                        <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
+                          <KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                          הסל כולל רק מוצרים דיגיטליים — אין צורך במשלוח. מפתח הרישיון יישלח אליכם
+                          במייל.
+                        </p>
+                      ) : methodsLoading ? (
+                        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" /> טוען שיטות
+                          משלוח…
+                        </p>
+                      ) : (
+                        <>
+                          <RadioGroup
+                            dir="rtl"
+                            value={shippingMethodId ?? ""}
+                            onValueChange={(value) => setShippingMethodId(value)}
+                            className="gap-2"
+                            aria-label="שיטת משלוח"
+                          >
+                            {methods.map((method) => {
+                              const selected = method.id === shippingMethodId;
+                              const cost = shippingCost(method, productsSubtotal, threshold);
+                              const freeNow = isFreeByThreshold(
+                                method,
+                                productsSubtotal,
+                                threshold,
+                              );
+                              const Icon = method.kind === "pickup" ? Store : Truck;
+                              return (
+                                <label
+                                  key={method.id}
+                                  className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-3 transition-colors ${
+                                    selected
+                                      ? "border-primary bg-primary/5"
+                                      : "border-border hover:border-primary/40"
+                                  }`}
+                                >
+                                  <RadioGroupItem value={method.id} />
+                                  <Icon
+                                    className="size-5 shrink-0 text-muted-foreground"
+                                    aria-hidden="true"
+                                  />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block font-bold text-foreground">
+                                      {method.name}
+                                    </span>
+                                    <span className="block break-words text-xs text-muted-foreground">
+                                      {method.description ||
+                                        (method.kind === "pickup"
+                                          ? pickupAddress
+                                            ? `איסוף מ: ${pickupAddress}`
+                                            : "איסוף עצמי מהעסק — בלי צורך בכתובת"
+                                          : "משלוח עד הכתובת שלכם")}
+                                    </span>
+                                  </span>
+                                  {kind === "order" && (
+                                    <span className="numeric shrink-0 text-end text-sm font-bold">
+                                      {freeNow ? (
+                                        <>
+                                          <span className="block text-xs font-normal text-muted-foreground line-through">
+                                            {formatIls(method.price)}
+                                          </span>
+                                          <span className="text-green-700 dark:text-green-400">
+                                            חינם
+                                          </span>
+                                        </>
+                                      ) : cost > 0 ? (
+                                        formatIls(cost)
+                                      ) : (
+                                        <span className="text-green-700 dark:text-green-400">
+                                          חינם
+                                        </span>
+                                      )}
+                                    </span>
+                                  )}
+                                </label>
+                              );
+                            })}
+                          </RadioGroup>
+                          {attempted && shippingMissing && (
+                            <p role="alert" className="text-xs font-medium text-destructive">
+                              נא לבחור שיטת משלוח
+                            </p>
+                          )}
+                          {cart.some((item) => item.isDigital) && (
+                            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                              <KeyRound className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                              המוצרים הדיגיטליים בסל יישלחו במייל — המשלוח רק למוצרים הפיזיים.
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* ---------- כתובת ---------- */}
                 <Card className="shadow-card">
                   <CardContent className="space-y-4 pt-6">
                     <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
                       <MapPin className="size-5 text-accent" aria-hidden="true" />
                       כתובת
+                      {!requireAddress && (
+                        <span className="text-sm font-normal text-muted-foreground">
+                          (לא חובה{needsShipping ? " באיסוף עצמי" : " — אין משלוח"})
+                        </span>
+                      )}
                     </h2>
                     <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_9rem]">
                       <CheckoutField
                         id={FIELD_ID.billingCity}
                         label="עיר"
-                        required
+                        required={requireAddress}
                         error={errors.billingCity}
                       >
                         <Input
@@ -580,7 +790,7 @@ function CheckoutPage() {
                       <CheckoutField
                         id={FIELD_ID.billingAddress}
                         label="כתובת (רחוב ומספר)"
-                        required
+                        required={requireAddress}
                         error={errors.billingAddress}
                       >
                         <Input
@@ -592,7 +802,7 @@ function CheckoutPage() {
                       <CheckoutField
                         id={FIELD_ID.billingZip}
                         label="מיקוד"
-                        required
+                        required={requireAddress}
                         error={errors.billingZip}
                       >
                         <Input
@@ -606,8 +816,8 @@ function CheckoutPage() {
                       </CheckoutField>
                     </div>
 
-                    {/* ---------- "שלח לכתובת אחרת" ---------- */}
-                    {!form.shipToDifferent ? (
+                    {/* ---------- "שלח לכתובת אחרת" (רק במשלוח לכתובת) ---------- */}
+                    {!requireAddress ? null : !form.shipToDifferent ? (
                       <button
                         type="button"
                         id={FIELD_ID.shipToDifferent}
@@ -835,6 +1045,7 @@ function CheckoutPage() {
                   loading={catalogLoading}
                   onChangeQuantity={changeQuantity}
                   onRemove={removeItem}
+                  delivery={deliverySummary}
                 />
               </aside>
             </div>

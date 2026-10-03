@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Clock,
   FileText,
+  KeyRound,
   Minus,
   Package,
   Plus,
@@ -19,8 +20,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { formatIls, minOrderMessage, type CatalogItem } from "@/lib/catalog";
+import { formatIls, minOrderMessage } from "@/lib/catalog";
+import type { AddToCart } from "@/lib/cart";
+import { hasVariants } from "@/lib/variants";
 import {
+  cartLineKey,
+  cartNeedsShipping,
   cartMinimum,
   cartMinUnits,
   cartStep,
@@ -74,10 +79,11 @@ export function OrderCartDrawer({
   /** false = אורח (מוצג "אפשר להזמין בלי הרשמה") */
   signedIn: boolean;
   items: CartItem[];
-  onChangeQuantity: (productId: string, delta: number) => void;
-  onRemove: (productId: string) => void;
+  /** lineKey = מוצר + וריאציה (cartLineKey) */
+  onChangeQuantity: (lineKey: string, delta: number) => void;
+  onRemove: (lineKey: string) => void;
   /** הוספה מתוך הסל (המלצות); silent = בלי הודעה קופצת */
-  onAdd?: (item: CatalogItem, quantity?: number, options?: { silent?: boolean }) => void;
+  onAdd?: AddToCart;
   /** מתנות שמגיעות לסל עכשיו + ההטבה הקרובה להשגה (מחושב בעמוד) */
   promotions?: PromotionEvaluation;
 }) {
@@ -99,7 +105,8 @@ export function OrderCartDrawer({
             catalog: sales.catalog,
             catalogById: sales.catalogById,
             related: sales.related,
-          })
+            // מוצר עם וריאציות צריך בחירה בחלון המוצר — לא "+" מהסל
+          }).filter((item) => !hasVariants(item))
         : [],
     [sales, items],
   );
@@ -156,7 +163,7 @@ export function OrderCartDrawer({
           ) : (
             items.map((item) => (
               <div
-                key={item.productId}
+                key={cartLineKey(item)}
                 className="flex items-center gap-3 rounded-lg border border-border p-3"
               >
                 <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary/60 p-1">
@@ -177,6 +184,15 @@ export function OrderCartDrawer({
                   >
                     {item.name}
                   </p>
+                  {item.variantLabel && (
+                    <p className="text-xs font-semibold text-foreground/80">{item.variantLabel}</p>
+                  )}
+                  {item.isDigital && (
+                    <p className="flex items-center gap-1 text-[11px] font-medium text-sky-800 dark:text-sky-300">
+                      <KeyRound className="size-3" aria-hidden="true" />
+                      דיגיטלי — נשלח במייל
+                    </p>
+                  )}
                   {!isQuote && (
                     <p className="numeric text-xs text-muted-foreground">
                       {formatIls(item.price)} ליחידה
@@ -194,7 +210,7 @@ export function OrderCartDrawer({
                       variant="outline"
                       className="size-7"
                       aria-label={`הוספת כמות של ${item.name}`}
-                      onClick={() => onChangeQuantity(item.productId, 1)}
+                      onClick={() => onChangeQuantity(cartLineKey(item), 1)}
                     >
                       <Plus className="size-3.5" />
                     </Button>
@@ -207,7 +223,7 @@ export function OrderCartDrawer({
                       className="size-7"
                       aria-label={`הפחתת כמות של ${item.name}`}
                       disabled={item.quantity <= cartStep(item) && cartMinUnits(item) <= 1}
-                      onClick={() => onChangeQuantity(item.productId, -1)}
+                      onClick={() => onChangeQuantity(cartLineKey(item), -1)}
                     >
                       <Minus className="size-3.5" />
                     </Button>
@@ -236,7 +252,7 @@ export function OrderCartDrawer({
                     variant="ghost"
                     className="size-7 text-destructive hover:text-destructive"
                     aria-label={`הסרת ${item.name} מהסל`}
-                    onClick={() => onRemove(item.productId)}
+                    onClick={() => onRemove(cartLineKey(item))}
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
@@ -297,6 +313,11 @@ export function OrderCartDrawer({
               </div>
               {!vat.showBreakdown && (
                 <p className="text-xs text-muted-foreground">המחירים כוללים מע״מ</p>
+              )}
+              {cartNeedsShipping(items) && (
+                <p className="text-xs text-muted-foreground">
+                  דמי משלוח (אם יש) — לפי השיטה שתבחרו בקופה
+                </p>
               )}
             </div>
           )}

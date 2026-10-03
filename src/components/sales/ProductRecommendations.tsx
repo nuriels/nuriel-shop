@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { VatNote } from "@/components/VatNote";
 import { formatIls, type CatalogItem } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
+import { hasVariants } from "@/lib/variants";
 
 /**
  * "מוצרים נוספים שאולי תאהבו" — שורה נגללת (גם במגע) של כרטיסים קטנים.
@@ -84,15 +85,18 @@ export function ProductRecommendations({
                     <p className="text-[11px] leading-4 text-muted-foreground">מחיר לפי הצעה</p>
                   )}
                 </div>
-                {onAdd && (
+                {/* מוצר עם וריאציות — "+" פותח את המוצר לבחירה (בלי חלון — לא מוצג) */}
+                {onAdd && (!hasVariants(item) || onOpen) && (
                   <Button
                     type="button"
                     size="icon"
                     variant="secondary"
                     className="size-8 shrink-0"
-                    aria-label={`${addLabel}: ${item.name}`}
-                    title={addLabel}
-                    onClick={() => onAdd(item)}
+                    aria-label={
+                      hasVariants(item) ? `בחירת אפשרות: ${item.name}` : `${addLabel}: ${item.name}`
+                    }
+                    title={hasVariants(item) ? "בחירת אפשרות" : addLabel}
+                    onClick={() => (hasVariants(item) ? onOpen?.(item) : onAdd(item))}
                   >
                     <Plus className="size-4" />
                   </Button>

@@ -1,11 +1,23 @@
 import { useState } from "react";
-import { ChevronDown, Loader2, Minus, Package, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  KeyRound,
+  Loader2,
+  Minus,
+  Package,
+  Plus,
+  ShoppingBag,
+  Store,
+  Trash2,
+  Truck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatIls } from "@/lib/catalog";
 import {
   cartCount,
   cartDepositTotal,
+  cartLineKey,
   cartMinUnits,
   cartStep,
   cartTotal,
@@ -31,16 +43,29 @@ export function CheckoutSummary({
   loading,
   onChangeQuantity,
   onRemove,
+  delivery = null,
 }: {
   items: CartItem[];
   priced: boolean;
+  /** המע"מ על המוצרים + דמי המשלוח */
   vat: VatBreakdown;
   gifts: GiftLine[];
   shipping: FreeShippingProgress | null;
   /** הקטלוג עוד נטען — המחירים עשויים להתעדכן */
   loading: boolean;
-  onChangeQuantity: (productId: string, delta: number) => void;
-  onRemove: (productId: string) => void;
+  /** lineKey = מוצר + וריאציה (cartLineKey) */
+  onChangeQuantity: (lineKey: string, delta: number) => void;
+  onRemove: (lineKey: string) => void;
+  /**
+   * המשלוח שנבחר: שם, סוג ודמי המשלוח (כלולים ב-vat). null = עוד לא נבחר /
+   * אין שיטות; kind "digital" = סל דיגיטלי בלבד
+   */
+  delivery?: {
+    label: string;
+    kind: "delivery" | "pickup" | "digital";
+    amount: number;
+    free: boolean;
+  } | null;
 }) {
   const [openOnMobile, setOpenOnMobile] = useState(false);
   const count = cartCount(items);
@@ -88,7 +113,7 @@ export function CheckoutSummary({
 
           <ul className="max-h-[22rem] space-y-3 overflow-y-auto pe-1" aria-label="הפריטים בהזמנה">
             {items.map((item) => (
-              <li key={item.productId} className="flex items-start gap-3">
+              <li key={cartLineKey(item)} className="flex items-start gap-3">
                 <span className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-secondary/50 p-1">
                   {item.imageUrl ? (
                     <img
@@ -107,6 +132,15 @@ export function CheckoutSummary({
                   >
                     {item.name}
                   </p>
+                  {item.variantLabel && (
+                    <p className="text-xs font-semibold text-foreground/80">{item.variantLabel}</p>
+                  )}
+                  {item.isDigital && (
+                    <p className="flex items-center gap-1 text-[11px] font-medium text-sky-800 dark:text-sky-300">
+                      <KeyRound className="size-3" aria-hidden="true" />
+                      דיגיטלי — נשלח במייל
+                    </p>
+                  )}
                   {priced && (
                     <p className="numeric text-xs text-muted-foreground">
                       {formatIls(item.price)} ליחידה
@@ -119,7 +153,7 @@ export function CheckoutSummary({
                       variant="outline"
                       className="size-7"
                       aria-label={`הוספת כמות של ${item.name}`}
-                      onClick={() => onChangeQuantity(item.productId, 1)}
+                      onClick={() => onChangeQuantity(cartLineKey(item), 1)}
                     >
                       <Plus className="size-3.5" />
                     </Button>
@@ -133,7 +167,7 @@ export function CheckoutSummary({
                       className="size-7"
                       aria-label={`הפחתת כמות של ${item.name}`}
                       disabled={item.quantity <= cartStep(item) && cartMinUnits(item) <= 1}
-                      onClick={() => onChangeQuantity(item.productId, -1)}
+                      onClick={() => onChangeQuantity(cartLineKey(item), -1)}
                     >
                       <Minus className="size-3.5" />
                     </Button>
@@ -156,7 +190,7 @@ export function CheckoutSummary({
                     variant="ghost"
                     className="size-7 text-destructive hover:text-destructive"
                     aria-label={`הסרת ${item.name} מההזמנה`}
-                    onClick={() => onRemove(item.productId)}
+                    onClick={() => onRemove(cartLineKey(item))}
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
@@ -186,13 +220,44 @@ export function CheckoutSummary({
                   <dd className="numeric">{formatIls(cartTotal(items))}</dd>
                 </div>
               )}
+              {delivery && delivery.kind !== "digital" && (
+                <div
+                  className={cn(
+                    "flex items-center justify-between gap-2",
+                    delivery.free || delivery.amount === 0
+                      ? "text-green-700 dark:text-green-400"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  <dt className="flex min-w-0 items-center gap-1.5">
+                    {delivery.kind === "pickup" ? (
+                      <Store className="size-3.5 shrink-0" aria-hidden="true" />
+                    ) : (
+                      <Truck className="size-3.5 shrink-0" aria-hidden="true" />
+                    )}
+                    <span className="truncate">משלוח: {delivery.label}</span>
+                  </dt>
+                  <dd className="numeric shrink-0 font-semibold">
+                    {delivery.amount > 0 ? formatIls(delivery.amount) : "חינם"}
+                  </dd>
+                </div>
+              )}
+              {delivery?.kind === "digital" && (
+                <div className="flex items-center justify-between text-sky-800 dark:text-sky-300">
+                  <dt className="flex items-center gap-1.5">
+                    <KeyRound className="size-3.5" aria-hidden="true" />
+                    משלוח
+                  </dt>
+                  <dd className="font-semibold">לא נדרש (במייל)</dd>
+                </div>
+              )}
               {depositTotal > 0 && (
                 <div className="flex items-center justify-between text-muted-foreground">
                   <dt>פיקדון</dt>
                   <dd className="numeric">{formatIls(depositTotal)}</dd>
                 </div>
               )}
-              {shipping?.reached && (
+              {!delivery && shipping?.reached && (
                 <div className="flex items-center justify-between text-green-700">
                   <dt>משלוח</dt>
                   <dd className="font-semibold">חינם</dd>

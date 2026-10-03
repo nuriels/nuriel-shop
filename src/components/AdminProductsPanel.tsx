@@ -3,6 +3,7 @@ import { Boxes, Eye, FileClock, Loader2, Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { variantAttributesOf } from "@/lib/variants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -214,7 +215,21 @@ export function AdminProductsPanel({
         </p>
       )}
       <div className="flex flex-wrap gap-1 text-xs">
-        <Badge variant="secondary">מלאי: {product.stock_quantity}</Badge>
+        {product.is_digital ? (
+          <Badge className="border-0 bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200">
+            דיגיטלי
+          </Badge>
+        ) : (
+          <Badge variant="secondary">מלאי: {product.stock_quantity}</Badge>
+        )}
+        {variantAttributesOf(product).length > 0 && (
+          <Badge variant="outline">
+            וריאציות:{" "}
+            {variantAttributesOf(product)
+              .map((attribute) => attribute.name)
+              .join(" / ")}
+          </Badge>
+        )}
         {product.is_promo && product.sale_price == null && (
           <Badge variant="outline" className="border-destructive text-destructive">
             מבצע בלי מחיר

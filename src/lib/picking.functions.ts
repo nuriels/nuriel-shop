@@ -51,7 +51,8 @@ export const sendPickedEmail = createServerFn({ method: "POST" })
       .from("order_items")
       .select("quantity, product_name, is_deposit, product_id")
       .eq("order_id", data.orderId)
-      .eq("is_deposit", false);
+      .eq("is_deposit", false)
+      .eq("is_digital", false);
     const productIds = [
       ...new Set((items ?? []).map((i) => i.product_id).filter((id): id is string => !!id)),
     ];

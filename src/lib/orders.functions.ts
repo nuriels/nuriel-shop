@@ -1,5 +1,10 @@
 import { staffName } from "@/lib/staff";
-import { ORDER_CONTACT_COLUMNS, billingOf, deliveryOf } from "@/lib/order-details";
+import {
+  ORDER_CONTACT_COLUMNS,
+  billingOf,
+  deliveryOf,
+  type OrderContactFields,
+} from "@/lib/order-details";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -20,14 +25,29 @@ export const reorderOrder = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: source } = await supabaseAdmin
+    const { data: sourceData } = await supabaseAdmin
       .from("orders")
       .select(
-        `id, customer_id, agent_id, note, ${ORDER_CONTACT_COLUMNS}, order_items (product_id, quantity, is_deposit)`,
+        `id, customer_id, agent_id, note, shipping_method_id, shipping_kind, ${ORDER_CONTACT_COLUMNS}, order_items (product_id, variant_id, quantity, is_deposit, is_gift)`,
       )
       .eq("id", data.orderId)
       .maybeSingle();
-    if (!source) throw new Error("ההזמנה לא נמצאה");
+    if (!sourceData) throw new Error("ההזמנה לא נמצאה");
+    const source = sourceData as unknown as OrderContactFields & {
+      id: string;
+      customer_id: string | null;
+      agent_id: string | null;
+      note: string | null;
+      shipping_method_id: string | null;
+      shipping_kind: string | null;
+      order_items: {
+        product_id: string;
+        variant_id: string | null;
+        quantity: number;
+        is_deposit: boolean;
+        is_gift: boolean;
+      }[];
+    };
     const customerId = source.customer_id;
     if (!customerId) {
       throw new Error("הזמנת אורח אי אפשר לשכפל — אין לה חשבון לקוח. אפשר ליצור הזמנה ידנית.");
@@ -38,7 +58,8 @@ export const reorderOrder = createServerFn({ method: "POST" })
     const isOwner = context.userId === source.customer_id || context.userId === source.agent_id;
     if (!isOwner && caller?.role !== "admin") throw new Error("אין הרשאה");
 
-    const items = source.order_items ?? [];
+    // שורות פיקדון נוצרות במסד לפי המוצר, ומתנות — לפי ההטבות של היום
+    const items = (source.order_items ?? []).filter((item) => !item.is_deposit && !item.is_gift);
     if (items.length === 0) throw new Error("אין פריטים לשכפול");
 
     // מחירון פתוח: לקוח מאושר עם דרג — הדרג שלו; כל השאר — המחירון הרגיל (1).
@@ -71,39 +92,46 @@ export const reorderOrder = createServerFn({ method: "POST" })
       [1, 2, 3].includes(assignedTier)
         ? assignedTier
         : 1;
-    const hasPrices = true;
     const kind = "order" as "order" | "quote";
 
-    const { data: products } = await supabaseAdmin
-      .from("global_products")
-      .select(
-        "id, price_tier1, price_tier2, price_tier3, sale_price, sale_starts_at, sale_ends_at, is_out_of_stock, is_hidden, stock_quantity, deposit_price, deposit_units, pack_size",
-      )
-      .in(
-        "id",
-        items.map((item) => item.product_id),
-      );
+    const productIds = [...new Set(items.map((item) => item.product_id))];
+    const [{ data: products }, { data: variants }] = await Promise.all([
+      supabaseAdmin
+        .from("global_products")
+        .select(
+          "id, price_tier1, price_tier2, price_tier3, sale_price, sale_starts_at, sale_ends_at, is_out_of_stock, is_hidden, stock_quantity, pack_size, is_digital",
+        )
+        .in("id", productIds),
+      supabaseAdmin
+        .from("product_variants")
+        .select("id, product_id, price, stock_quantity, is_active")
+        .in("product_id", productIds),
+    ]);
+    const productById = new Map((products ?? []).map((product) => [product.id, product]));
+    const variantById = new Map((variants ?? []).map((variant) => [variant.id, variant]));
+    const productHasVariants = new Set(
+      (variants ?? []).filter((variant) => variant.is_active).map((variant) => variant.product_id),
+    );
 
     // מחירון אישי: מחירים שהמנהל קבע ללקוח גוברים על הדרג (רק כשהמחירון פעיל)
     const customPrices = new Map<string, number>();
-    if (hasPrices && profile?.price_list_type === "custom") {
+    if (profile?.price_list_type === "custom") {
       const { data: overrides } = await supabaseAdmin
         .from("user_custom_prices")
         .select("product_id, custom_price")
         .eq("user_id", customerId)
-        .in(
-          "product_id",
-          items.map((item) => item.product_id),
-        );
+        .in("product_id", productIds);
       for (const row of overrides ?? []) customPrices.set(row.product_id, Number(row.custom_price));
     }
 
     // המחיר המחייב נקבע שוב בטריגר במסד (snapshot_order_item_product) — כאן
     // אותו חישוב, כדי שהסכום שמוצג מיד יתאים
     const now = Date.now();
-    const priceOf = (productId: string): number => {
-      const product = products?.find((candidate) => candidate.id === productId);
-      if (!product || !hasPrices) return 0;
+    const priceOf = (productId: string, variantId: string | null): number => {
+      const variant = variantId ? variantById.get(variantId) : undefined;
+      if (variant && variant.price !== null) return Number(variant.price);
+      const product = productById.get(productId);
+      if (!product) return 0;
       const tierPrice =
         tier === 2
           ? Number(product.price_tier2)
@@ -117,13 +145,79 @@ export const reorderOrder = createServerFn({ method: "POST" })
         (product.sale_ends_at === null || new Date(product.sale_ends_at).getTime() >= now);
       return saleActive ? Math.min(Number(product.sale_price), base) : base;
     };
-    // שורת פיקדון מתומחרת בטריגר בשרת (snapshot_order_item_product) לפי
-    // deposit_price * deposit_units של המוצר — הערך כאן הוא רק ברירת מחדל
-    const depositPriceOf = (productId: string): number => {
-      const product = products?.find((candidate) => candidate.id === productId);
-      if (!product || !hasPrices || !product.deposit_price || !product.deposit_units) return 0;
-      return Number(product.deposit_price) * Number(product.deposit_units);
-    };
+
+    // מוצר / אפשרות שהוסתרו, אזלו או נמחקו מאז — לא נכנסים. מוצר שבינתיים
+    // קיבל וריאציות (והשורה הישנה בלי בחירה) — גם לא: צריך לבחור מחדש.
+    // מוצר שעבר ל"נמכר במארזים": הכמות מתעגלת כלפי מעלה; ומוגבלת למלאי הזמין
+    // (של הוריאציה, אם היא סופרת מלאי) — המלאי נשמר ברגע ההזמנה.
+    let adjustedCount = 0;
+    let skipped = 0;
+    const rows: {
+      order_id: string;
+      product_id: string;
+      variant_id: string | null;
+      quantity: number;
+      unit_price: number;
+    }[] = [];
+    // מלאי שכבר "נלקח" ע"י שורות קודמות באותה הזמנה (שתי וריאציות של מוצר)
+    const usedStock = new Map<string, number>();
+    const pendingRows: Omit<(typeof rows)[number], "order_id">[] = [];
+    for (const item of items) {
+      const product = productById.get(item.product_id);
+      const variant = item.variant_id ? variantById.get(item.variant_id) : undefined;
+      const unavailable =
+        !product ||
+        product.is_hidden ||
+        product.is_out_of_stock ||
+        (item.variant_id
+          ? !variant || !variant.is_active
+          : productHasVariants.has(item.product_id));
+      if (unavailable) {
+        skipped += 1;
+        continue;
+      }
+      const pack = product.pack_size && product.pack_size >= 2 ? product.pack_size : null;
+      let quantity = pack ? Math.max(pack, Math.ceil(item.quantity / pack) * pack) : item.quantity;
+      if (!product.is_digital) {
+        const fromVariant = variant && variant.stock_quantity !== null;
+        const stockKey = fromVariant ? `v:${variant.id}` : `p:${product.id}`;
+        const total = fromVariant ? Number(variant.stock_quantity) : (product.stock_quantity ?? 0);
+        const left = total - (usedStock.get(stockKey) ?? 0);
+        // מלאי 0 שלא מסומן "אזל" (מוצר בלי ספירה) = לא מגבילים; וריאציה שסופרת מלאי — כן
+        const limited = fromVariant || total > 0;
+        if (limited && quantity > left) {
+          quantity = pack ? Math.floor(Math.max(0, left) / pack) * pack : Math.max(0, left);
+          adjustedCount += 1;
+        }
+        usedStock.set(stockKey, (usedStock.get(stockKey) ?? 0) + quantity);
+      }
+      if (quantity <= 0) {
+        skipped += 1;
+        continue;
+      }
+      pendingRows.push({
+        product_id: item.product_id,
+        variant_id: item.variant_id,
+        quantity,
+        unit_price: priceOf(item.product_id, item.variant_id),
+      });
+    }
+    if (pendingRows.length === 0) {
+      throw new Error("אף אחד מהמוצרים בהזמנה המקורית אינו זמין כרגע");
+    }
+
+    // המשלוח: אותה שיטה (אם היא עדיין פעילה). סל שכולו דיגיטלי — בלי משלוח.
+    const allDigital = pendingRows.every((row) => productById.get(row.product_id)?.is_digital);
+    let shippingMethodId: string | null = null;
+    if (!allDigital && source.shipping_method_id) {
+      const { data: method } = await supabaseAdmin
+        .from("shipping_methods")
+        .select("id")
+        .eq("id", source.shipping_method_id)
+        .eq("is_active", true)
+        .maybeSingle();
+      shippingMethodId = method?.id ?? null;
+    }
 
     const { data: created, error: createError } = await supabaseAdmin
       .from("orders")
@@ -148,67 +242,14 @@ export const reorderOrder = createServerFn({ method: "POST" })
         shipping_city: source.shipping_city,
         shipping_address: source.shipping_address,
         shipping_zip: source.shipping_zip,
+        shipping_method_id: shippingMethodId,
+        shipping_kind: allDigital ? "digital" : null,
       })
       .select("id, order_number")
       .single();
     if (createError || !created) throw new Error(createError?.message ?? "יצירת ההזמנה נכשלה");
 
-    // מוצר שעבר בינתיים ל"נמכר במארזים": מעגלים את הכמות הישנה כלפי מעלה
-    // לכפולה שלמה (אחרת המסד ידחה אותה). בהזמנה (לא בקשה) גם מגבילים למלאי
-    // הזמין — המלאי נשמר ללקוח ברגע ההזמנה, והמסד דוחה כמות שאין.
-    let adjustedCount = 0;
-    const quantityFor = (productId: string): number => {
-      const product = products?.find((candidate) => candidate.id === productId);
-      const productRow = items.find((row) => row.product_id === productId && !row.is_deposit);
-      const base = productRow?.quantity ?? 0;
-      const pack = product?.pack_size && product.pack_size >= 2 ? product.pack_size : null;
-      let quantity = pack ? Math.max(pack, Math.ceil(base / pack) * pack) : base;
-      const stock = product?.stock_quantity ?? 0;
-      // מלאי 0 שלא מסומן "אזל" = מלאי שלא נספר — לא מגבילים (כמו במסד)
-      if (kind === "order" && stock > 0 && quantity > stock) {
-        quantity = pack ? Math.floor(stock / pack) * pack : stock;
-        adjustedCount += 1;
-      }
-      return quantity;
-    };
-
-    // מוצר שהוסתר / אזל / נמחק מאז ההזמנה המקורית — לא נכנס להזמנה החדשה
-    const unavailable = new Set(
-      items
-        .map((item) => item.product_id)
-        .filter((productId) => {
-          const product = products?.find((candidate) => candidate.id === productId);
-          return !product || product.is_hidden || (kind === "order" && product.is_out_of_stock);
-        }),
-    );
-    const quantities = new Map<string, number>();
-    for (const item of items) {
-      if (!item.is_deposit && !unavailable.has(item.product_id)) {
-        quantities.set(item.product_id, quantityFor(item.product_id));
-      }
-    }
-    const rows = items
-      .filter((item) => (quantities.get(item.product_id) ?? 0) > 0)
-      .map((item) => ({
-        order_id: created.id,
-        product_id: item.product_id,
-        quantity: quantities.get(item.product_id) ?? 0,
-        unit_price: item.is_deposit ? depositPriceOf(item.product_id) : priceOf(item.product_id),
-        is_deposit: item.is_deposit,
-      }));
-    const skipped = new Set(
-      items
-        .filter(
-          (item) => !item.is_deposit && !rows.some((row) => row.product_id === item.product_id),
-        )
-        .map((item) => item.product_id),
-    ).size;
-
-    if (rows.length === 0) {
-      await supabaseAdmin.from("orders").delete().eq("id", created.id);
-      throw new Error("אף אחד מהמוצרים בהזמנה המקורית אינו זמין כרגע");
-    }
-
+    for (const row of pendingRows) rows.push({ order_id: created.id, ...row });
     const { error: itemsError } = await supabaseAdmin.from("order_items").insert(rows);
     if (itemsError) {
       // בלי הזמנה ריקה: אם השורות נדחו, מוחקים את ההזמנה שנפתחה
@@ -244,7 +285,7 @@ export const downloadPickingSlip = createServerFn({ method: "POST" })
     const { data: order } = await supabaseAdmin
       .from("orders")
       .select(
-        `id, order_number, kind, created_at, note, customer_id, agent_id, ${ORDER_CONTACT_COLUMNS}, order_items (quantity, product_name, product_sku, product_barcode, product_shelf_location, product_pack_size, is_deposit)`,
+        `id, order_number, kind, created_at, note, customer_id, agent_id, ${ORDER_CONTACT_COLUMNS}, order_items (quantity, product_name, product_sku, product_barcode, product_shelf_location, product_pack_size, is_deposit, is_digital)`,
       )
       .eq("id", data.orderId)
       .maybeSingle();
@@ -292,9 +333,10 @@ export const downloadPickingSlip = createServerFn({ method: "POST" })
         ? [agentResult.data.agent_number, staffName(agentResult.data)].filter(Boolean).join(" · ")
         : null,
       note: order.note,
-      // שורת פיקדון אינה פריט נפרד לליקוט — היא כבר נכללת בפריט עצמו
+      // שורת פיקדון אינה פריט נפרד לליקוט — היא כבר נכללת בפריט עצמו; מוצר
+      // דיגיטלי נשלח במייל — לא במחסן
       items: (order.order_items ?? [])
-        .filter((item) => !item.is_deposit)
+        .filter((item) => !item.is_deposit && !item.is_digital)
         .map((item) => ({
           name: item.product_name ?? "מוצר",
           barcode: item.product_barcode,

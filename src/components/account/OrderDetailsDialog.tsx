@@ -1,11 +1,14 @@
 import {
   Gift,
+  KeyRound,
   Loader2,
   MapPin,
   Package,
   Receipt,
   RotateCcw,
   StickyNote,
+  Store,
+  Truck,
   UserRound,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +32,9 @@ import {
 import { billingOf, deliveryOf, type ProfileContact } from "@/lib/order-details";
 import { calculateVat } from "@/lib/vat";
 import { useBackToClose } from "@/hooks/useBackToClose";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
+import { DigitalBadge, ItemStatusBadge, LicenseKeyDisplay } from "@/components/OrderItemExtras";
+import { hasShippingLine, orderShippingLabel, shippingWasFree } from "@/lib/shipping";
 
 /**
  * פירוט הזמנה / קבלה ללקוח: מצב ההזמנה, הפריטים, הסכומים (כולל מע"מ),
@@ -85,11 +91,15 @@ function OrderDetails({
   onReorder: (orderId: string) => void;
   reordering: boolean;
 }) {
+  const { settings } = useSiteSettings();
   const isQuote = order.kind === "quote";
-  const itemsTotal = order.order_items.reduce(
-    (sum, item) => sum + Number(item.unit_price) * item.quantity,
-    0,
-  );
+  const shippingAmount = hasShippingLine(order) ? Number(order.shipping_price ?? 0) : 0;
+  // הסכום כולל את דמי המשלוח (כמו total במסד) — גם לחישוב המע"מ
+  const itemsTotal =
+    order.order_items.reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0) +
+    shippingAmount;
+  const shippingLabel = orderShippingLabel(order);
+  const pickupAddress = settings?.business_address?.trim() ?? "";
   const vat = calculateVat(itemsTotal, {
     pricesIncludeVat: order.prices_include_vat ?? true,
     vatRate: Number(order.vat_rate ?? 18),
@@ -151,12 +161,27 @@ function OrderDetails({
                   {item.quantity} יח׳
                   {!isQuote && !item.is_gift && ` × ${formatUnitIls(Number(item.unit_price))}`}
                 </p>
-                {item.is_gift && (
-                  <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-green-600 px-2 py-0.5 text-[11px] font-bold text-white">
-                    <Gift className="size-3" aria-hidden="true" />
-                    מתנה
-                  </span>
-                )}
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {item.is_gift && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-green-600 px-2 py-0.5 text-[11px] font-bold text-white">
+                      <Gift className="size-3" aria-hidden="true" />
+                      מתנה
+                    </span>
+                  )}
+                  {item.is_digital && <DigitalBadge />}
+                  {!isQuote && (
+                    <ItemStatusBadge status={item.item_status} shippingKind={order.shipping_kind} />
+                  )}
+                </div>
+                {item.is_digital &&
+                  !isQuote &&
+                  (item.digital_license_key ? (
+                    <LicenseKeyDisplay licenseKey={item.digital_license_key} />
+                  ) : order.status !== "cancelled" ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      מפתח הרישיון יישלח אליך במייל ויופיע כאן.
+                    </p>
+                  ) : null)}
               </div>
               {!isQuote && (
                 <span className="numeric shrink-0 text-sm font-bold">
@@ -165,6 +190,27 @@ function OrderDetails({
               )}
             </li>
           ))}
+          {hasShippingLine(order) && (
+            <li className="flex items-center gap-3 p-3">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-secondary/60">
+                {order.shipping_kind === "pickup" ? (
+                  <Store className="size-5 text-muted-foreground" aria-hidden="true" />
+                ) : (
+                  <Truck className="size-5 text-muted-foreground" aria-hidden="true" />
+                )}
+              </span>
+              <p className="min-w-0 flex-1 text-sm font-semibold text-foreground">
+                משלוח: {shippingLabel ?? "דמי משלוח"}
+              </p>
+              {!isQuote && (
+                <span className="numeric shrink-0 text-sm font-bold">
+                  {shippingWasFree(order) || shippingAmount === 0
+                    ? "חינם"
+                    : formatIls(shippingAmount)}
+                </span>
+              )}
+            </li>
+          )}
         </ul>
 
         {!isQuote && (
@@ -220,25 +266,48 @@ function OrderDetails({
           )}
           {billing.address && <p className="text-muted-foreground">{billing.address}</p>}
         </section>
-        <section
-          className={
-            delivery.isAlternate
-              ? "space-y-1 rounded-xl border-2 border-amber-400 bg-amber-50 p-3 text-sm text-amber-950"
-              : "space-y-1 rounded-xl border border-border p-3 text-sm"
-          }
-        >
-          <h3 className="mb-1 flex items-center gap-1.5 font-bold">
-            <MapPin className="size-4 text-accent" aria-hidden="true" />
-            {delivery.isAlternate ? "משלוח לכתובת אחרת" : "כתובת למשלוח"}
-          </h3>
-          {delivery.name && <p className="font-medium">{delivery.name}</p>}
-          {delivery.phone && (
-            <p dir="ltr" className="numeric text-right opacity-80">
-              {delivery.phone}
-            </p>
-          )}
-          <p className="opacity-80">{delivery.address || "—"}</p>
-        </section>
+        {order.shipping_kind === "pickup" ? (
+          <section className="space-y-1 rounded-xl border border-violet-300 bg-violet-50 p-3 text-sm text-violet-950 dark:bg-violet-950/30 dark:text-violet-100">
+            <h3 className="mb-1 flex items-center gap-1.5 font-bold">
+              <Store className="size-4" aria-hidden="true" />
+              איסוף עצמי
+            </h3>
+            {pickupAddress ? (
+              <p className="opacity-90">{pickupAddress}</p>
+            ) : (
+              <p className="opacity-80">נעדכן כשההזמנה מוכנה לאיסוף.</p>
+            )}
+          </section>
+        ) : order.shipping_kind === "digital" ? (
+          <section className="space-y-1 rounded-xl border border-sky-300 bg-sky-50 p-3 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
+            <h3 className="mb-1 flex items-center gap-1.5 font-bold">
+              <KeyRound className="size-4" aria-hidden="true" />
+              משלוח דיגיטלי
+            </h3>
+            <p className="opacity-90">הרישיונות נשלחים במייל ומופיעים כאן, ליד כל מוצר.</p>
+          </section>
+        ) : (
+          <section
+            className={
+              delivery.isAlternate
+                ? "space-y-1 rounded-xl border-2 border-amber-400 bg-amber-50 p-3 text-sm text-amber-950"
+                : "space-y-1 rounded-xl border border-border p-3 text-sm"
+            }
+          >
+            <h3 className="mb-1 flex items-center gap-1.5 font-bold">
+              <MapPin className="size-4 text-accent" aria-hidden="true" />
+              {delivery.isAlternate ? "משלוח לכתובת אחרת" : "כתובת למשלוח"}
+            </h3>
+            {delivery.name && <p className="font-medium">{delivery.name}</p>}
+            {delivery.phone && (
+              <p dir="ltr" className="numeric text-right opacity-80">
+                {delivery.phone}
+              </p>
+            )}
+            <p className="opacity-80">{delivery.address || "—"}</p>
+            {shippingLabel && <p className="text-xs opacity-70">{shippingLabel}</p>}
+          </section>
+        )}
       </div>
 
       {order.note && (

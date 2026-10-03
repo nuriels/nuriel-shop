@@ -39,12 +39,11 @@ function filterOf(order: OrderRow): Exclude<Filter, "all"> {
   return "active";
 }
 
-/** הסכום לתשלום של הזמנה (כולל מע"מ, לפי מצב המע"מ שצולם בהזמנה) */
+/** הסכום לתשלום של הזמנה (כולל מע"מ ודמי משלוח, לפי מצב המע"מ שצולם בהזמנה) */
 function orderGross(order: OrderRow): number {
-  const itemsTotal = order.order_items.reduce(
-    (sum, item) => sum + Number(item.unit_price) * item.quantity,
-    0,
-  );
+  const itemsTotal =
+    order.order_items.reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0) +
+    Number(order.shipping_price ?? 0);
   return calculateVat(itemsTotal, {
     pricesIncludeVat: order.prices_include_vat ?? true,
     vatRate: Number(order.vat_rate ?? 18),

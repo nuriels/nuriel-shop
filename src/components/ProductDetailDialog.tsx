@@ -3,7 +3,8 @@ import { VatNote } from "@/components/VatNote";
 import { ProductRecommendations } from "@/components/sales/ProductRecommendations";
 import { useStorefrontSales } from "@/components/sales/StorefrontSalesContext";
 import { recommendForProduct } from "@/lib/cart-promotions";
-import { Flame, Package, Plus } from "lucide-react";
+import { Flame, KeyRound, Package, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -16,6 +17,9 @@ import {
   type CatalogItem,
 } from "@/lib/catalog";
 import { MinOrderNote, PackNote, QuantityPicker } from "@/components/QuantityDialog";
+import { VariantPicker, useVariantSelection } from "@/components/VariantPicker";
+import type { AddToCart } from "@/lib/cart";
+import { hasVariants, variantPriceRange } from "@/lib/variants";
 import { cn } from "@/lib/utils";
 import { useBackToClose } from "@/hooks/useBackToClose";
 
@@ -36,7 +40,7 @@ export function ProductDetailDialog({
   onOpenChange: (open: boolean) => void;
   canAdd: boolean;
   addLabel?: string;
-  onAddToCart?: ((item: CatalogItem, quantity?: number) => void) | undefined;
+  onAddToCart?: AddToCart | undefined;
   /** מעבר למוצר אחר מתוך ההמלצות — החלון נשאר פתוח ומציג אותו */
   onShowProduct?: ((item: CatalogItem) => void) | undefined;
 }) {
@@ -50,6 +54,8 @@ export function ProductDetailDialog({
   );
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState<string | null>(null);
+  // וריאציות (צבע / מידה): חובה לבחור לפני ההוספה לסל
+  const choice = useVariantSelection(product);
 
   const gallery = useMemo(() => {
     if (!product) return [];
@@ -74,7 +80,12 @@ export function ProductDetailDialog({
 
   const categoryPath = tree.byName.get(product.category)?.path ?? [product.category];
   const shownImage = activeImage ?? gallery[0] ?? null;
-  const onSale = product.original_price !== null;
+  // וריאציה עם מחיר משלה — בלי מחיר מבצע מחוק (המבצע הוא על מחיר המוצר)
+  const variantOwnPrice = choice.variant?.own_price === true;
+  const onSale = product.original_price !== null && !variantOwnPrice;
+  const range = choice.hasVariants ? variantPriceRange(choice.variants) : null;
+  const fromPrice = !choice.variant && range !== null && range.min !== range.max ? range.min : null;
+  const shownPrice = fromPrice ?? choice.price;
   const saleUntil =
     onSale && product.sale_ends_at
       ? new Date(product.sale_ends_at).toLocaleDateString("he-IL", {
@@ -86,10 +97,19 @@ export function ProductDetailDialog({
     product.has_deposit && product.deposit_price !== null && product.deposit_units !== null
       ? product.deposit_price * product.deposit_units
       : null;
-  const variations = (product.colors ?? []).filter((v) => v.trim() !== "");
+  // תגיות "צבעים" ישנות — רק למוצר בלי וריאציות אמיתיות (אחרת הבחירה למטה)
+  const variations = choice.hasVariants
+    ? []
+    : (product.colors ?? []).filter((v) => v.trim() !== "");
   const addNow = () => {
     if (!onAddToCart || product.is_out_of_stock) return;
-    onAddToCart(product, quantity);
+    if (!choice.canAdd) {
+      toast.info(
+        choice.complete ? "האפשרות הזו אזלה מהמלאי — בחרו אחרת" : `בחרו ${choice.missing}`,
+      );
+      return;
+    }
+    onAddToCart(product, quantity, { variant: choice.variant });
     onOpenChange(false);
   };
 
@@ -158,10 +178,13 @@ export function ProductDetailDialog({
             </div>
 
             <div className="space-y-1">
-              {product.price !== null ? (
+              {shownPrice !== null ? (
                 <div className="flex flex-wrap items-baseline gap-2">
+                  {fromPrice !== null && (
+                    <span className="text-sm font-medium text-muted-foreground">החל מ-</span>
+                  )}
                   <span className="numeric text-3xl font-bold text-accent">
-                    {formatIls(product.price)}
+                    {formatIls(shownPrice)}
                   </span>
                   <VatNote className="text-sm sm:text-sm" />
                   {onSale && product.original_price !== null && (
@@ -169,7 +192,7 @@ export function ProductDetailDialog({
                       {formatIls(product.original_price)}
                     </span>
                   )}
-                  {product.is_custom_price && (
+                  {product.is_custom_price && !variantOwnPrice && (
                     <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
                       מחיר אישי עבורך
                     </span>
@@ -192,7 +215,15 @@ export function ProductDetailDialog({
                 className="mt-1 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-foreground"
               />
               <MinOrderNote item={product} />
+              {product.is_digital && (
+                <p className="mt-1 flex items-center gap-2 rounded-md bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+                  <KeyRound className="size-4 shrink-0" aria-hidden="true" />
+                  מוצר דיגיטלי — הרישיון נשלח אליך במייל, בלי משלוח
+                </p>
+              )}
             </div>
+
+            {choice.hasVariants && !product.is_out_of_stock && <VariantPicker state={choice} />}
 
             <DialogDescription asChild>
               <div className="text-sm leading-7 text-foreground/90">
@@ -220,7 +251,7 @@ export function ProductDetailDialog({
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <dt>מק"ט</dt>
               <dd dir="ltr" className="numeric text-right">
-                {product.sku}
+                {choice.variant?.sku ?? product.sku}
               </dd>
               {product.barcode && (
                 <>
@@ -240,16 +271,23 @@ export function ProductDetailDialog({
                   onChange={setQuantity}
                   disabled={product.is_out_of_stock}
                   onSubmit={addNow}
+                  price={choice.price}
                 />
                 <Button
                   type="button"
                   size="lg"
                   className="w-full"
-                  disabled={product.is_out_of_stock}
+                  disabled={product.is_out_of_stock || (choice.complete && !choice.canAdd)}
                   onClick={addNow}
                 >
                   <Plus className="size-4" />
-                  {product.is_out_of_stock ? "אזל מהמלאי" : addLabel}
+                  {product.is_out_of_stock
+                    ? "אזל מהמלאי"
+                    : choice.hasVariants && !choice.complete
+                      ? `בחרו ${choice.missing}`
+                      : choice.complete && !choice.canAdd
+                        ? "האפשרות אזלה"
+                        : addLabel}
                 </Button>
               </div>
             )}
@@ -262,7 +300,11 @@ export function ProductDetailDialog({
               items={recommendations}
               addLabel={addLabel}
               onOpen={onShowProduct}
-              onAdd={canAdd && onAddToCart ? (item) => onAddToCart(item) : undefined}
+              onAdd={
+                canAdd && onAddToCart
+                  ? (item) => (hasVariants(item) ? onShowProduct?.(item) : onAddToCart(item))
+                  : undefined
+              }
             />
           </div>
         )}

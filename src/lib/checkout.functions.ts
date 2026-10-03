@@ -27,6 +27,7 @@ const PAYLOAD_KEYS: (keyof CheckoutPayload)[] = [
   "shipping_zip",
   "note",
   "accepted_terms",
+  "shipping_method_id",
 ];
 const BOOLEAN_KEYS = new Set<keyof CheckoutPayload>(["ship_to_different", "accepted_terms"]);
 
@@ -39,6 +40,9 @@ function cleanPayload(input: unknown): CheckoutPayload {
     const value = source[key];
     if (BOOLEAN_KEYS.has(key)) {
       result[key] = value === true;
+    } else if (key === "shipping_method_id") {
+      // מזהה בלבד — השיטה עצמה (פעילה, של החנות) נבדקת במסד
+      result[key] = typeof value === "string" && UUID.test(value) ? value : "";
     } else {
       result[key] = typeof value === "string" ? value.slice(0, key === "note" ? 1000 : 254) : "";
     }
@@ -52,13 +56,16 @@ function cleanLines(input: unknown): OrderLineInput[] {
   return input.map((raw) => {
     const line = (raw ?? {}) as Record<string, unknown>;
     const productId = String(line["product_id"] ?? "");
+    const variantId = line["variant_id"] === undefined ? "" : String(line["variant_id"] ?? "");
     const quantity = Number(line["quantity"]);
     if (!UUID.test(productId)) throw new Error("מוצר לא תקין בסל");
+    if (variantId !== "" && !UUID.test(variantId)) throw new Error("אפשרות לא תקינה בסל");
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1_000_000) {
       throw new Error("כמות לא תקינה בסל");
     }
     return {
       product_id: productId,
+      ...(variantId !== "" ? { variant_id: variantId } : {}),
       quantity,
       // המחיר נקבע במסד בלבד — מה שנשלח מהדפדפן לא משנה
       unit_price: 0,

@@ -14,6 +14,7 @@ import {
   Menu,
   Package,
   Settings,
+  Truck,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -47,7 +48,10 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
   },
   {
     title: "מכירות",
-    items: [{ value: "promotions", label: "מתנות ומוצרי קופה", icon: Gift }],
+    items: [
+      { value: "promotions", label: "מתנות ומוצרי קופה", icon: Gift },
+      { value: "shipping", label: "משלוחים", icon: Truck },
+    ],
   },
   {
     title: "האתר",

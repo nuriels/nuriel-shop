@@ -73,10 +73,14 @@ const between = (value: string, min: number, max: number) => {
   return length >= min && length <= max;
 };
 
-/** אותן הודעות כמו במסד — כדי שהלקוח יראה את הבעיה ליד השדה, לפני השליחה */
+/**
+ * אותן הודעות כמו במסד — כדי שהלקוח יראה את הבעיה ליד השדה, לפני השליחה.
+ * requireAddress = false (איסוף עצמי / סל דיגיטלי): הכתובת רשות — ואם הוזנה,
+ * נבדקת — ואין "שלח לכתובת אחרת".
+ */
 export function validateCheckoutForm(
   form: CheckoutForm,
-  { requireEmail }: { requireEmail: boolean },
+  { requireEmail, requireAddress = true }: { requireEmail: boolean; requireAddress?: boolean },
 ): CheckoutErrors {
   const errors: CheckoutErrors = {};
   if (!between(form.customerName, 2, 120)) errors.customerName = "נא להזין שם מלא או שם חברה";
@@ -89,13 +93,18 @@ export function validateCheckoutForm(
   } else if (!isValidEmail(form.customerEmail)) {
     errors.customerEmail = "כתובת האימייל אינה תקינה";
   }
-  if (!between(form.billingCity, 2, 80)) errors.billingCity = "נא להזין עיר";
-  if (!between(form.billingAddress, 2, 200)) {
+  const optional = (value: string) => !requireAddress && value.trim() === "";
+  if (!optional(form.billingCity) && !between(form.billingCity, 2, 80)) {
+    errors.billingCity = "נא להזין עיר";
+  }
+  if (!optional(form.billingAddress) && !between(form.billingAddress, 2, 200)) {
     errors.billingAddress = "נא להזין כתובת (רחוב ומספר בית)";
   }
-  if (!isValidZip(form.billingZip)) errors.billingZip = "נא להזין מיקוד תקין (5 או 7 ספרות)";
+  if (!optional(form.billingZip) && !isValidZip(form.billingZip)) {
+    errors.billingZip = "נא להזין מיקוד תקין (5 או 7 ספרות)";
+  }
 
-  if (form.shipToDifferent) {
+  if (requireAddress && form.shipToDifferent) {
     if (!between(form.shippingName, 2, 120)) errors.shippingName = "נא להזין את שם מקבל המשלוח";
     if (form.shippingPhone.trim() !== "" && !isValidPhone(form.shippingPhone)) {
       errors.shippingPhone = "מספר הטלפון של מקבל המשלוח אינו תקין";
@@ -130,10 +139,18 @@ export type CheckoutPayload = {
   shipping_zip: string;
   note: string;
   accepted_terms: boolean;
+  /** שיטת המשלוח שנבחרה ("" = בלי — סל דיגיטלי בלבד) */
+  shipping_method_id: string;
 };
 
-export function checkoutPayload(form: CheckoutForm): CheckoutPayload {
-  const alternate = form.shipToDifferent;
+export function checkoutPayload(
+  form: CheckoutForm,
+  shipping: { methodId: string | null; requireAddress: boolean } = {
+    methodId: null,
+    requireAddress: true,
+  },
+): CheckoutPayload {
+  const alternate = shipping.requireAddress && form.shipToDifferent;
   return {
     customer_name: form.customerName.trim(),
     customer_tax_id: digitsOnly(form.customerTaxId),
@@ -150,30 +167,30 @@ export function checkoutPayload(form: CheckoutForm): CheckoutPayload {
     shipping_zip: alternate ? digitsOnly(form.shippingZip) : "",
     note: form.note.trim(),
     accepted_terms: form.acceptedTerms,
+    shipping_method_id: shipping.methodId ?? "",
   };
 }
 
 export type OrderLineInput = {
   product_id: string;
+  /** הוריאציה שנבחרה (צבע / מידה...) */
+  variant_id?: string;
   quantity: number;
   unit_price: number;
   is_deposit?: boolean;
 };
 
 /**
- * שורות ההזמנה מהסל. פריט עם פיקדון מקבל שורת פיקדון על אותו product_id —
- * המחירים (כולל הפיקדון) נקבעים מחדש במסד; מה שנשלח מכאן הוא רק ברירת מחדל.
+ * שורות ההזמנה מהסל: מוצר, וריאציה וכמות. המחירים, הפיקדון (שורה אחת לכל
+ * מוצר) והמתנות נקבעים במסד — מה שנשלח מכאן הוא רק ברירת מחדל לתצוגה.
  */
 export function orderLinesFromCart(items: CartItem[], kind: "order" | "quote"): OrderLineInput[] {
-  return items.flatMap((item) => {
-    const base = {
-      product_id: item.productId,
-      quantity: item.quantity,
-      unit_price: kind === "quote" ? 0 : item.price,
-    };
-    if (!item.hasDeposit) return [base];
-    return [base, { ...base, unit_price: 0, is_deposit: true }];
-  });
+  return items.map((item) => ({
+    product_id: item.productId,
+    ...(item.variantId ? { variant_id: item.variantId } : {}),
+    quantity: item.quantity,
+    unit_price: kind === "quote" ? 0 : item.price,
+  }));
 }
 
 /** פרטי "הפרטים שלי" באזור האישי (ברירת המחדל בקופה) */

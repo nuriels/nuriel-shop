@@ -1,5 +1,6 @@
 import { CatalogGrid } from "@/components/CatalogGrid";
 import type { CatalogItem } from "@/lib/catalog";
+import type { AddToCart } from "@/lib/cart";
 import type { CatalogSection } from "@/lib/catalog-sections";
 
 /**
@@ -18,7 +19,7 @@ export function CatalogSections({
   emptyText: string;
   canAdd: boolean;
   addLabel?: string | undefined;
-  onAddToCart?: ((item: CatalogItem, quantity?: number) => void) | undefined;
+  onAddToCart?: AddToCart | undefined;
   /** מעבר לתת-קטגוריה של השורה (כמו בחירה בכפתורי הסינון למעלה) */
   onOpenCategory?: (category: string) => void;
 }) {

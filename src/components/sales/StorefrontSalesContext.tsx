@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 import type { CartPromotion, OrderBump } from "@/lib/cart-promotions";
 import type { CatalogItem } from "@/lib/catalog";
+import type { AddToCart } from "@/lib/cart";
 
 /**
  * מה שרכיבי החנות צריכים כדי להמליץ על מוצרים ולהוסיף לסל, בלי להעביר
@@ -16,7 +17,7 @@ export type StorefrontSales = {
   subtree: (category: string) => Set<string>;
   canAdd: boolean;
   addLabel: string;
-  onAddToCart?: ((item: CatalogItem, quantity?: number) => void) | undefined;
+  onAddToCart?: AddToCart | undefined;
 };
 
 const StorefrontSalesContext = createContext<StorefrontSales | null>(null);

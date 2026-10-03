@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { OrderContactBlock } from "@/components/OrderContactBlock";
-import { Loader2, Package, Trash2 } from "lucide-react";
+import { Loader2, Package, Store, Trash2, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { formatIls } from "@/lib/catalog";
 import { ORDER_STATUSES, ORDER_STATUS_LABEL, type OrderRow, type OrderStatus } from "@/lib/orders";
 import { calculateVat } from "@/lib/vat";
+import { orderShippingLabel } from "@/lib/shipping";
 
 type Draft = {
   id: string;
@@ -32,6 +33,8 @@ type Draft = {
   quantity: number;
   unitPrice: number;
   removed: boolean;
+  /** שורת פיקדון / מתנה — לא נספרת לסף המשלוח החינם */
+  extra: boolean;
 };
 
 /**
@@ -50,12 +53,14 @@ export function OrderEditDialog({
   const [status, setStatus] = useState<OrderStatus>("pending");
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [convertToOrder, setConvertToOrder] = useState(false);
+  const [shipping, setShipping] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!order) return;
     setStatus(order.status);
     setConvertToOrder(false);
+    setShipping(String(Number(order.shipping_base_price ?? order.shipping_price ?? 0)));
     setDrafts(
       order.order_items.map((item) => ({
         id: item.id,
@@ -64,6 +69,7 @@ export function OrderEditDialog({
         quantity: item.quantity,
         unitPrice: Number(item.unit_price),
         removed: false,
+        extra: item.is_deposit || item.is_gift === true,
       })),
     );
   }, [order]);
@@ -71,9 +77,28 @@ export function OrderEditDialog({
   if (!order) return null;
 
   const isQuote = order.kind === "quote";
-  const activeTotal = drafts
+  const itemsTotal = drafts
     .filter((d) => !d.removed)
     .reduce((sum, d) => sum + d.quantity * d.unitPrice, 0);
+  // דמי המשלוח: מה שהוזן כאן. בלי שינוי — כמו במסד: חינם אם סכום המוצרים
+  // עדיין מעל סף המשלוח החינם שהיה בעת ההזמנה
+  const shippingInput = Math.max(0, Number(shipping) || 0);
+  const shippingChanged = shippingInput !== Number(order.shipping_base_price ?? 0);
+  const productsTotal = drafts
+    .filter((d) => !d.removed && !d.extra)
+    .reduce((sum, d) => sum + d.quantity * d.unitPrice, 0);
+  const threshold = order.shipping_free_threshold ?? null;
+  const shippingCharge =
+    isQuote && !convertToOrder
+      ? 0
+      : !shippingChanged && threshold !== null && productsTotal >= Number(threshold)
+        ? 0
+        : shippingInput;
+  const shippingName = orderShippingLabel(order);
+  const showShipping =
+    order.shipping_kind !== "digital" &&
+    (shippingName !== null || Number(order.shipping_price ?? 0) > 0 || order.kind === "order");
+  const activeTotal = itemsTotal + shippingCharge;
   const vat = calculateVat(activeTotal, {
     pricesIncludeVat: order.prices_include_vat ?? true,
     vatRate: Number(order.vat_rate ?? 18),
@@ -96,9 +121,15 @@ export function OrderEditDialog({
           .eq("id", item.id);
         if (error) throw error;
       }
-      const orderPatch: { status?: OrderStatus; kind?: "order" | "quote" } = {};
+      const orderPatch: {
+        status?: OrderStatus;
+        kind?: "order" | "quote";
+        shipping_price?: number;
+      } = {};
       if (status !== order.status) orderPatch.status = status;
       if (isQuote && convertToOrder) orderPatch.kind = "order";
+      // דמי משלוח שהשתנו ביד — זה המחיר מעכשיו (המסד מעדכן את הסכום הכולל)
+      if (showShipping && shippingChanged) orderPatch.shipping_price = shippingInput;
       if (Object.keys(orderPatch).length > 0) {
         const { error } = await supabase.from("orders").update(orderPatch).eq("id", order.id);
         if (error) throw error;
@@ -230,6 +261,37 @@ export function OrderEditDialog({
             </div>
           ))}
         </div>
+
+        {showShipping && (
+          <div className="grid items-end gap-2 rounded-lg border border-border/60 p-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+            <div className="min-w-0 space-y-0.5">
+              <Label htmlFor="edit-shipping" className="flex items-center gap-1.5">
+                {order.shipping_kind === "pickup" ? (
+                  <Store className="size-4 text-muted-foreground" aria-hidden="true" />
+                ) : (
+                  <Truck className="size-4 text-muted-foreground" aria-hidden="true" />
+                )}
+                דמי משלוח{shippingName ? ` — ${shippingName}` : ""}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {!shippingChanged && threshold !== null
+                  ? productsTotal >= Number(threshold)
+                    ? `חינם — המוצרים מעל ${formatIls(Number(threshold))}`
+                    : `חינם מעל ${formatIls(Number(threshold))} (כרגע ${formatIls(productsTotal)})`
+                  : "שינוי כאן קובע את דמי המשלוח של ההזמנה הזו"}
+              </p>
+            </div>
+            <Input
+              id="edit-shipping"
+              type="number"
+              min={0}
+              step="any"
+              className="h-9 text-center"
+              value={shipping}
+              onChange={(event) => setShipping(event.target.value)}
+            />
+          </div>
+        )}
 
         {isQuote && (
           <label className="flex items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent/5 p-3">

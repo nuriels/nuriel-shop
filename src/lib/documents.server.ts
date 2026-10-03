@@ -14,6 +14,12 @@ import { calculateVat, DEFAULT_VAT_RATE } from "@/lib/vat";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/orders";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import {
+  ORDER_SHIPPING_COLUMNS,
+  hasShippingLine,
+  orderShippingLabel,
+  type OrderShippingFields,
+} from "@/lib/shipping";
+import {
   ORDER_CONTACT_COLUMNS,
   billingOf,
   deliveryOf,
@@ -22,27 +28,29 @@ import {
 
 const BRANDING_BUCKET = "branding";
 
-type OrderRecord = OrderContactFields & {
-  id: string;
-  order_number: string;
-  /** null = הזמנת אורח (הפרטים בעמודות ההזמנה) */
-  customer_id: string | null;
-  agent_id: string | null;
-  status: OrderStatus;
-  kind: "order" | "quote";
-  total: number;
-  note: string | null;
-  vat_rate: number | null;
-  prices_include_vat: boolean | null;
-  created_at: string;
-  order_items: {
-    quantity: number;
-    unit_price: number;
-    product_name: string | null;
-    product_sku: string | null;
-    product_barcode: string | null;
-  }[];
-};
+type OrderRecord = OrderContactFields &
+  OrderShippingFields & {
+    id: string;
+    order_number: string;
+    /** null = הזמנת אורח (הפרטים בעמודות ההזמנה) */
+    customer_id: string | null;
+    agent_id: string | null;
+    status: OrderStatus;
+    kind: "order" | "quote";
+    total: number;
+    note: string | null;
+    vat_rate: number | null;
+    prices_include_vat: boolean | null;
+    created_at: string;
+    order_items: {
+      quantity: number;
+      unit_price: number;
+      product_name: string | null;
+      product_sku: string | null;
+      product_barcode: string | null;
+      is_digital?: boolean;
+    }[];
+  };
 
 export type LoadedOrderDocument = {
   order: OrderRecord;
@@ -77,7 +85,7 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
   const { data: orderData, error } = await supabaseAdmin
     .from("orders")
     .select(
-      `id, order_number, customer_id, agent_id, status, kind, total, note, vat_rate, prices_include_vat, created_at, ${ORDER_CONTACT_COLUMNS}, order_items (quantity, unit_price, product_name, product_sku, product_barcode)`,
+      `id, order_number, customer_id, agent_id, status, kind, total, note, vat_rate, prices_include_vat, created_at, ${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, order_items (quantity, unit_price, product_name, product_sku, product_barcode, is_digital)`,
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -123,12 +131,22 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
   }
 
   const items: DocumentItem[] = order.order_items.map((item) => ({
-    name: item.product_name ?? "מוצר",
+    name: `${item.product_name ?? "מוצר"}${item.is_digital ? " (דיגיטלי — נשלח במייל)" : ""}`,
     barcode: item.product_barcode,
     sku: item.product_sku,
     quantity: item.quantity,
     unitPrice: Number(item.unit_price),
   }));
+  // המשלוח — שורה במסמך (כלול בסכום ובמע"מ, כמו ב-total של ההזמנה)
+  if (hasShippingLine(order)) {
+    items.push({
+      name: `משלוח: ${orderShippingLabel(order) ?? "דמי משלוח"}`,
+      barcode: null,
+      sku: null,
+      quantity: 1,
+      unitPrice: Number(order.shipping_price ?? 0),
+    });
+  }
 
   const itemsTotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const isQuote = order.kind === "quote";

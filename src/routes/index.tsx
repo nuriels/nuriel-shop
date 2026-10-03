@@ -24,9 +24,10 @@ import { useCustomerProfile } from "@/hooks/useCustomerProfile";
 import { useCategoryTree } from "@/hooks/useCategories";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { isNewProduct, minOrderMessage, type CatalogItem } from "@/lib/catalog";
-import { addToCartItems, syncCartWithCatalog } from "@/lib/cart";
+import { addToCartItems, syncCartWithCatalog, type AddToCartOptions } from "@/lib/cart";
 import { countByCategory, subtreeNames, totalCounts } from "@/lib/category-tree";
-import { cartMinimum, cartMinUnits, cartStep } from "@/lib/orders";
+import { cartLineKey, cartMinimum, cartMinUnits, cartStep } from "@/lib/orders";
+import { attributeNames, hasVariants, variantAttributesOf, variantLabel } from "@/lib/variants";
 import { loadHomeBanners, type BannerSet } from "@/lib/banners";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { CatalogSections } from "@/components/CatalogSections";
@@ -227,24 +228,30 @@ function Index() {
   // לא כשהסל השמור או ההטבות נטענים (אחרת הודעה תקפוץ בכל כניסה לאתר)
   const cartEdited = useRef(false);
 
-  const addToCart = (item: CatalogItem, requested = 1, options?: { silent?: boolean }) => {
+  const addToCart = (item: CatalogItem, requested = 1, options?: AddToCartOptions) => {
+    const variant = options?.variant ?? null;
+    // מוצר עם וריאציות: בלי בחירה (צבע / מידה) — לא נכנס לסל
+    if (hasVariants(item) && !variant) {
+      toast.info(`בחרו ${attributeNames(variantAttributesOf(item))} עבור "${item.name}"`);
+      return;
+    }
     // מתחילים מהמינימום / ממארז שלם — לא מ-1
-    const { quantity } = addToCartItems(cart, item, requested);
+    const { quantity } = addToCartItems(cart, item, requested, variant);
     cartEdited.current = true;
-    setCart((current) => addToCartItems(current, item, requested).items);
+    setCart((current) => addToCartItems(current, item, requested, variant).items);
     if (options?.silent) return;
     const target = cartMode === "order" ? "סל" : "בקשה";
+    const label = variant ? variantLabel(variant.options, variantAttributesOf(item)) : "";
+    const name = label ? `${item.name} — ${label}` : item.name;
     toast.success(
-      quantity > 1
-        ? `${quantity} × "${item.name}" נוספו ל${target}`
-        : `"${item.name}" נוסף ל${target}`,
+      quantity > 1 ? `${quantity} × "${name}" נוספו ל${target}` : `"${name}" נוסף ל${target}`,
     );
   };
 
   // +/− בסל קופצים במארז שלם, ולא יורדים מתחת למארז אחד / מתחת למינימום
   // להזמנה (הסרה — בכפתור הפח)
-  const changeQuantity = (productId: string, delta: number) => {
-    const line = cart.find((c) => c.productId === productId);
+  const changeQuantity = (lineKey: string, delta: number) => {
+    const line = cart.find((c) => cartLineKey(c) === lineKey);
     if (!line) return;
     const step = cartStep(line);
     const floor = cartMinimum(line);
@@ -253,7 +260,7 @@ function Index() {
     cartEdited.current = true;
     setCart((current) =>
       current.map((c) =>
-        c.productId === productId ? { ...c, quantity: Math.max(floor, next) } : c,
+        cartLineKey(c) === lineKey ? { ...c, quantity: Math.max(floor, next) } : c,
       ),
     );
   };
@@ -270,7 +277,7 @@ function Index() {
     if (unavailable.length > 0) {
       toast.warning(
         unavailable.length === 1
-          ? `"${unavailable[0]?.name ?? ""}" הוסר מהסל — המוצר אינו זמין כרגע`
+          ? `"${unavailable[0]?.name ?? ""}${unavailable[0]?.variantLabel ? ` — ${unavailable[0].variantLabel}` : ""}" הוסר מהסל — המוצר / האפשרות אינם זמינים כרגע`
           : `${unavailable.length} מוצרים הוסרו מהסל כי אינם זמינים כרגע: ${unavailable.map((item) => item.name).join(", ")}`,
       );
     }
@@ -280,9 +287,9 @@ function Index() {
     // catalogById נגזר מ-products
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, cart, catalogLoading]);
-  const removeFromCart = (productId: string) => {
+  const removeFromCart = (lineKey: string) => {
     cartEdited.current = true;
-    setCart((current) => current.filter((c) => c.productId !== productId));
+    setCart((current) => current.filter((c) => cartLineKey(c) !== lineKey));
   };
 
   // ---------- הגדלת מכירות: המלצות, מוצרי קופה, מתנות בסל ----------

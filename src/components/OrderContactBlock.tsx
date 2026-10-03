@@ -1,12 +1,17 @@
-import { MapPin, Phone, Truck, UserRound } from "lucide-react";
+import { KeyRound, MapPin, Phone, Store, Truck, UserRound } from "lucide-react";
 import { billingOf, deliveryOf, type OrderContactFields } from "@/lib/order-details";
+import type { OrderShippingKind } from "@/lib/shipping";
 
 /**
  * פרטי המזמין והמשלוח בכרטיס הזמנה בניהול / אצל הסוכן — כפי שנקלטו בקופה.
  * "שלח לכתובת אחרת" מודגש בצבע, כדי שהמשלוח לא ייצא בטעות לכתובת החיוב.
  * הזמנה ישנה (מלפני הקופה) בלי פרטים — לא מוצג כלום (הפרטים בתיק הלקוח).
  */
-export function OrderContactBlock({ order }: { order: OrderContactFields }) {
+export function OrderContactBlock({
+  order,
+}: {
+  order: OrderContactFields & { shipping_kind?: OrderShippingKind | null };
+}) {
   const guest = order.customer_id === null;
   const hasDetails =
     guest || Boolean(order.customer_phone || order.billing_address) || order.ship_to_different;
@@ -43,7 +48,25 @@ export function OrderContactBlock({ order }: { order: OrderContactFields }) {
           </a>
         )}
       </div>
-      {delivery.isAlternate ? (
+      {order.shipping_kind === "pickup" ? (
+        <>
+          <p className="flex items-center gap-1 font-semibold text-violet-800 dark:text-violet-300">
+            <Store className="size-3.5 shrink-0" aria-hidden="true" />
+            איסוף עצמי — הלקוח אוסף מהעסק
+          </p>
+          {billing.address && (
+            <p className="flex items-start gap-1 text-muted-foreground">
+              <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              כתובת הלקוח: {billing.address}
+            </p>
+          )}
+        </>
+      ) : order.shipping_kind === "digital" ? (
+        <p className="flex items-center gap-1 font-semibold text-sky-800 dark:text-sky-300">
+          <KeyRound className="size-3.5 shrink-0" aria-hidden="true" />
+          דיגיטלי בלבד — נשלח במייל
+        </p>
+      ) : delivery.isAlternate ? (
         <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-2.5 py-2 text-amber-950">
           <p className="flex items-center gap-1 font-bold">
             <Truck className="size-3.5" aria-hidden="true" />

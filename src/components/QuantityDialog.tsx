@@ -19,6 +19,8 @@ import {
   type CatalogItem,
 } from "@/lib/catalog";
 import { toast } from "sonner";
+import { VariantPicker, useVariantSelection } from "@/components/VariantPicker";
+import type { CatalogVariant } from "@/lib/variants";
 
 /** פיקדון ליחידת כמות אחת (כפי שנספרת בסל) */
 function depositPerQuantityUnit(item: CatalogItem): number {
@@ -37,6 +39,7 @@ export function QuantityPicker({
   onChange,
   onSubmit,
   disabled = false,
+  price,
 }: {
   item: CatalogItem;
   /** הכמות ביחידות */
@@ -44,6 +47,8 @@ export function QuantityPicker({
   onChange: (units: number) => void;
   onSubmit?: () => void;
   disabled?: boolean;
+  /** מחיר ליחידה לחישוב הסכום (וריאציה עם מחיר משלה); ברירת מחדל — מחיר המוצר */
+  price?: number | null;
 }) {
   const step = packStep(item);
   // מינימום להזמנה (נפרד מהמארזים): לא יורדים ממנו; בלי מינימום — ממארז / יחידה אחת
@@ -58,7 +63,8 @@ export function QuantityPicker({
 
   const setPacks = (next: number) => onChange(Math.min(999, Math.max(minPacks, next)) * step);
   const belowMinimum = () => toast.info(minOrderMessage(minPacks * step));
-  const lineTotal = item.price !== null ? item.price * units : null;
+  const unitPrice = price === undefined ? item.price : price;
+  const lineTotal = unitPrice !== null ? unitPrice * units : null;
   const deposit = depositPerQuantityUnit(item) * units;
 
   return (
@@ -181,20 +187,25 @@ export function MinOrderNote({ item, className }: { item: CatalogItem; className
 
 /**
  * חלון "בחירת כמות" שנפתח מכל כפתור "הוספה לסל" — סיטונאות: תמיד בוחרים
- * כמות לפני ההוספה. מוצר במארזים מתחיל ממארז אחד.
+ * כמות לפני ההוספה. מוצר במארזים מתחיל ממארז אחד. מוצר עם וריאציות —
+ * בוחרים כאן גם את האפשרות (צבע / מידה), ובלי בחירה אי אפשר להוסיף.
  */
 export function QuantityDialog({
   item,
+  variant: preset = null,
   onOpenChange,
   addLabel = "הוספה לסל",
   onAdd,
 }: {
   item: CatalogItem | null;
+  /** אפשרות שכבר נבחרה (בכרטיס המוצר) */
+  variant?: CatalogVariant | null;
   onOpenChange: (open: boolean) => void;
   addLabel?: string;
-  onAdd: (item: CatalogItem, units: number) => void;
+  onAdd: (item: CatalogItem, units: number, variant: CatalogVariant | null) => void;
 }) {
   const [units, setUnits] = useState(1);
+  const choice = useVariantSelection(item, preset);
 
   useEffect(() => {
     if (item) setUnits(minimumQuantity(item));
@@ -203,7 +214,13 @@ export function QuantityDialog({
   if (!item) return null;
 
   const submit = () => {
-    onAdd(item, units);
+    if (!choice.canAdd) {
+      toast.info(
+        choice.complete ? "האפשרות הזו אזלה מהמלאי — בחרו אחרת" : `בחרו ${choice.missing}`,
+      );
+      return;
+    }
+    onAdd(item, units, choice.variant);
     onOpenChange(false);
   };
 
@@ -228,9 +245,9 @@ export function QuantityDialog({
                 {item.name}
               </DialogTitle>
               <DialogDescription className="numeric">
-                {item.price !== null ? (
+                {choice.price !== null ? (
                   <>
-                    {formatIls(item.price)} ליחידה <VatNote />
+                    {formatIls(choice.price)} ליחידה <VatNote />
                   </>
                 ) : (
                   "מחיר לפי הצעה"
@@ -246,11 +263,24 @@ export function QuantityDialog({
         />
         <MinOrderNote item={item} />
 
-        <QuantityPicker item={item} units={units} onChange={setUnits} onSubmit={submit} />
+        <VariantPicker state={choice} />
 
-        <Button size="lg" className="w-full" onClick={submit}>
+        <QuantityPicker
+          item={item}
+          units={units}
+          onChange={setUnits}
+          onSubmit={submit}
+          price={choice.price}
+        />
+
+        <Button
+          size="lg"
+          className="w-full"
+          onClick={submit}
+          disabled={choice.complete && !choice.canAdd}
+        >
           <Plus className="size-4" />
-          {addLabel}
+          {choice.hasVariants && !choice.complete ? `בחרו ${choice.missing}` : addLabel}
         </Button>
       </DialogContent>
     </Dialog>

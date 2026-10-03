@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EyeOff, Loader2, Package, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { EyeOff, KeyRound, Loader2, Package, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
@@ -50,6 +50,20 @@ import { uploadProductImage } from "@/lib/site";
 import { formatBytes } from "@/lib/image";
 import { useBackToClose } from "@/hooks/useBackToClose";
 import { ProductPicker } from "@/components/sales/ProductPicker";
+import { VariantsEditor } from "@/components/VariantsEditor";
+import {
+  VARIANT_ADMIN_COLUMNS,
+  attributesProblem,
+  draftFromStored,
+  syncDrafts,
+  variantAttributesOf,
+  variantDraftProblem,
+  variantLabel,
+  variantsPayload,
+  type StoredVariant,
+  type VariantAttribute,
+  type VariantDraft,
+} from "@/lib/variants";
 
 /** ISO -> "YYYY-MM-DDTHH:mm" (תאריכי מבצע ישנים נשמרים כמו שהם) */
 function toLocalInput(iso: string | null | undefined): string {
@@ -100,6 +114,11 @@ type FormState = {
   orderBumpText: string;
   /** "מוצרים נוספים שאולי תאהבו" — לפי הסדר (נשמר ב-product_relations) */
   relatedIds: string[];
+  /** מוצר דיגיטלי (רישיון / קוד): בלי מלאי פיזי, בלי משלוח ובלי ליקוט */
+  isDigital: boolean;
+  /** וריאציות: המאפיינים (צבע / מידה) והצירופים (נשמרים ב-product_variants) */
+  variantAttributes: VariantAttribute[];
+  variants: VariantDraft[];
 };
 
 export type ProductDraft = { id: string; title: string; data: Json; updated_at: string };
@@ -135,6 +154,9 @@ function emptyForm(defaultCategory: string): FormState {
     isOrderBump: false,
     orderBumpText: "",
     relatedIds: [],
+    isDigital: false,
+    variantAttributes: [],
+    variants: [],
   };
 }
 
@@ -170,7 +192,19 @@ function fromProduct(product: GlobalProduct): FormState {
     orderBumpText: product.order_bump_text ?? "",
     // נטענים בנפרד (product_relations) כשהחלון נפתח
     relatedIds: [],
+    isDigital: product.is_digital ?? false,
+    variantAttributes: variantAttributesOf(product),
+    // הצירופים נטענים בנפרד (product_variants) כשהחלון נפתח
+    variants: [],
   };
+}
+
+/** המאפיינים והצירופים כפי שנשמרים — להשוואה (נשמרים רק אם השתנו) */
+function variantsSnapshot(form: Pick<FormState, "variantAttributes" | "variants">): string {
+  return JSON.stringify({
+    attributes: form.variantAttributes,
+    variants: variantsPayload(form.variants),
+  });
 }
 
 function fromDraft(data: Json, defaultCategory: string): FormState {
@@ -265,6 +299,8 @@ export function AdminProductDialog({
   const baseline = useRef("");
   // המוצרים הקשורים כפי שנטענו מהמסד — כדי לשמור רק אם השתנו
   const loadedRelated = useRef<string[]>([]);
+  // הוריאציות כפי שנטענו מהמסד — כדי לשמור רק אם השתנו
+  const loadedVariants = useRef<string>(variantsSnapshot({ variantAttributes: [], variants: [] }));
 
   // ---------- טיוטה (מוצר חדש בלבד) ----------
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -294,11 +330,12 @@ export function AdminProductDialog({
     baseline.current = JSON.stringify(initial);
 
     loadedRelated.current = [];
+    loadedVariants.current = variantsSnapshot({ variantAttributes: [], variants: [] });
     if (product) {
       // הרשימה במסך יכולה להיות ישנה (הזמנות מורידות מלאי ברקע) — טוענים את המוצר מחדש,
-      // יחד עם המוצרים הקשורים שלו
+      // יחד עם המוצרים הקשורים והוריאציות שלו
       void (async () => {
-        const [{ data }, { data: relations }] = await Promise.all([
+        const [{ data }, { data: relations }, { data: storedVariants }] = await Promise.all([
           supabase
             .from("global_products")
             .select(PRODUCT_ADMIN_COLUMNS)
@@ -309,12 +346,23 @@ export function AdminProductDialog({
             .select("related_product_id")
             .eq("product_id", product.id)
             .order("sort_order"),
+          supabase
+            .from("product_variants")
+            .select(VARIANT_ADMIN_COLUMNS)
+            .eq("product_id", product.id)
+            .order("sort_order"),
         ]);
         if (!data) return;
         const fresh = data as GlobalProduct;
         const relatedIds = (relations ?? []).map((row) => row.related_product_id);
         loadedRelated.current = relatedIds;
-        const freshForm = { ...fromProduct(fresh), relatedIds };
+        const variantAttributes = variantAttributesOf(fresh);
+        const variants = syncDrafts(
+          ((storedVariants ?? []) as StoredVariant[]).map(draftFromStored),
+          variantAttributes,
+        );
+        loadedVariants.current = variantsSnapshot({ variantAttributes, variants });
+        const freshForm = { ...fromProduct(fresh), relatedIds, variantAttributes, variants };
         setLoaded(fresh);
         setForm((current) => {
           if (JSON.stringify(current) !== baseline.current) return current; // המנהל כבר התחיל להקליד
@@ -493,13 +541,28 @@ export function AdminProductDialog({
         return "מינימום יחידות להזמנה: מספר שלם, 2 ומעלה";
       }
     }
-    if (form.packEnabled) {
+    if (form.packEnabled && !form.isDigital) {
       const size = Number(form.packSize);
       if (form.packSize.trim() === "" || !Number.isInteger(size) || size < 2 || size > 1000) {
         return "נדרש מספר יחידות תקין במארז (2 ומעלה), למשל 6 או 24";
       }
     }
-    if (form.hasDeposit) {
+    // וריאציות: מאפיין בלי שם / בלי ערכים, או שורה עם מק"ט / מחיר / מלאי לא תקינים
+    if (form.variantAttributes.length > 0) {
+      const attributesError = attributesProblem(form.variantAttributes);
+      if (attributesError) return attributesError;
+      for (const variant of form.variants) {
+        const variantError = variantDraftProblem(
+          variant,
+          variantLabel(variant.options, form.variantAttributes),
+        );
+        if (variantError) return variantError;
+      }
+      if (!form.variants.some((variant) => variant.isActive)) {
+        return "כל הוריאציות כבויות — הפעילו לפחות אחת (או הסירו את המאפיינים)";
+      }
+    }
+    if (form.hasDeposit && !form.isDigital) {
       if (form.depositPrice.trim() === "" || Number(form.depositPrice) < 0) {
         return "נדרש מחיר פיקדון תקין ליחידה";
       }
@@ -539,14 +602,17 @@ export function AdminProductDialog({
       sale_starts_at: form.isPromo ? fromLocalInput(form.saleStartsAt) : null,
       sale_ends_at: form.isPromo ? fromLocalInput(form.saleEndsAt) : null,
       is_hidden: form.isHidden,
-      has_deposit: form.hasDeposit,
-      deposit_price: form.hasDeposit ? Number(form.depositPrice) : null,
-      deposit_units: form.hasDeposit
-        ? form.packEnabled
-          ? 1
-          : Math.floor(Number(form.depositUnits))
-        : null,
-      pack_size: form.packEnabled ? Math.floor(Number(form.packSize)) : null,
+      // מוצר דיגיטלי — בלי פיקדון ובלי מארזים (אין מה לשלוח)
+      has_deposit: form.hasDeposit && !form.isDigital,
+      deposit_price: form.hasDeposit && !form.isDigital ? Number(form.depositPrice) : null,
+      deposit_units:
+        form.hasDeposit && !form.isDigital
+          ? form.packEnabled
+            ? 1
+            : Math.floor(Number(form.depositUnits))
+          : null,
+      pack_size: form.packEnabled && !form.isDigital ? Math.floor(Number(form.packSize)) : null,
+      is_digital: form.isDigital,
       min_order_quantity: form.minEnabled ? Math.floor(Number(form.minQuantity)) : null,
       is_order_bump: form.isOrderBump,
       order_bump_text: form.orderBumpText.trim() || null,
@@ -606,6 +672,27 @@ export function AdminProductDialog({
         /barcode/i.test(saveError.message) && /duplicate|unique/i.test(saveError.message);
       toast.error(duplicateBarcode ? "הברקוד הזה כבר משויך למוצר אחר" : saveError.message);
       return;
+    }
+
+    // וריאציות: נשמרות אחרי המוצר (צריך את המזהה שלו), ורק אם השתנו
+    const nextVariants = variantsSnapshot(form);
+    if (savedId && nextVariants !== loadedVariants.current) {
+      const attributes = form.variantAttributes.filter(
+        (attribute) => attribute.name.trim() !== "" && attribute.values.length > 0,
+      );
+      const { error: variantsError } = await supabase.rpc("save_product_variants", {
+        _product_id: savedId,
+        _attributes: attributes.map((attribute) => ({
+          name: attribute.name.trim(),
+          values: attribute.values,
+        })) as unknown as Json,
+        _variants: (attributes.length > 0 ? variantsPayload(form.variants) : []) as unknown as Json,
+      });
+      if (variantsError) {
+        toast.warning(`המוצר נשמר, אבל הוריאציות לא: ${variantsError.message}`);
+      } else {
+        loadedVariants.current = nextVariants;
+      }
     }
 
     // מוצרים קשורים: נשמרים אחרי המוצר (צריך את המזהה שלו), ורק אם השתנו
@@ -971,51 +1058,72 @@ export function AdminProductDialog({
               )}
             </div>
 
-            <div className="space-y-3 rounded-lg border border-border p-3">
+            <div
+              className={`space-y-2 rounded-lg border p-3 ${
+                form.isDigital ? "border-sky-300 bg-sky-50/60 dark:bg-sky-950/30" : "border-border"
+              }`}
+            >
               <label className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium">נמכר במארזים (מינימום וכפולות)</span>
-                <Switch
-                  checked={form.packEnabled}
-                  onCheckedChange={(v) => patch({ packEnabled: v })}
-                />
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <KeyRound className="size-4 text-sky-700 dark:text-sky-300" aria-hidden="true" />
+                  מוצר דיגיטלי
+                </span>
+                <Switch checked={form.isDigital} onCheckedChange={(v) => patch({ isDigital: v })} />
               </label>
-              {form.packEnabled && (
-                <div className="grid items-end gap-3 sm:grid-cols-[10rem_1fr]">
-                  <div className="space-y-2">
-                    <Label htmlFor="p-pack-size">יחידות במארז</Label>
-                    <Input
-                      id="p-pack-size"
-                      type="number"
-                      inputMode="numeric"
-                      min={2}
-                      step="1"
-                      value={form.packSize}
-                      onChange={(e) => patch({ packSize: e.target.value })}
-                      placeholder="24"
-                    />
-                  </div>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    {Number(form.packSize) >= 2
-                      ? `הלקוח יזמין ${form.packSize}, ${Number(form.packSize) * 2}, ${Number(form.packSize) * 3} יחידות וכן הלאה.`
-                      : "כמה יחידות במארז אחד (למשל 24)."}
-                  </p>
-                </div>
-              )}
-              {form.packEnabled && Number(form.packSize) >= 2 && (
-                <PackPriceField
-                  id="p-pack-price"
-                  label="מחיר למארז (₪)"
-                  unit={form.priceTier1}
-                  packSize={Number(form.packSize)}
-                  onUnitChange={(unit) => patch({ priceTier1: unit })}
-                />
-              )}
-              {!form.packEnabled && (
-                <p className="text-xs text-muted-foreground">
-                  כבוי: המוצר נמכר ביחידה, בלי מינימום.
-                </p>
-              )}
+              <p className="text-xs leading-5 text-muted-foreground">
+                {form.isDigital
+                  ? "רישיון / קוד / מנוי: בלי מלאי פיזי, בלי פיקדון ובלי ליקוט במחסן. סל שכולו דיגיטלי עובר לתשלום בלי בחירת משלוח, ובהזמנה מזינים את מפתח הרישיון ושולחים ללקוח במייל."
+                  : "כבוי: מוצר פיזי רגיל — נשמר במלאי ונשלח / נאסף."}
+              </p>
             </div>
+
+            {!form.isDigital && (
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">נמכר במארזים (מינימום וכפולות)</span>
+                  <Switch
+                    checked={form.packEnabled}
+                    onCheckedChange={(v) => patch({ packEnabled: v })}
+                  />
+                </label>
+                {form.packEnabled && (
+                  <div className="grid items-end gap-3 sm:grid-cols-[10rem_1fr]">
+                    <div className="space-y-2">
+                      <Label htmlFor="p-pack-size">יחידות במארז</Label>
+                      <Input
+                        id="p-pack-size"
+                        type="number"
+                        inputMode="numeric"
+                        min={2}
+                        step="1"
+                        value={form.packSize}
+                        onChange={(e) => patch({ packSize: e.target.value })}
+                        placeholder="24"
+                      />
+                    </div>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      {Number(form.packSize) >= 2
+                        ? `הלקוח יזמין ${form.packSize}, ${Number(form.packSize) * 2}, ${Number(form.packSize) * 3} יחידות וכן הלאה.`
+                        : "כמה יחידות במארז אחד (למשל 24)."}
+                    </p>
+                  </div>
+                )}
+                {form.packEnabled && Number(form.packSize) >= 2 && (
+                  <PackPriceField
+                    id="p-pack-price"
+                    label="מחיר למארז (₪)"
+                    unit={form.priceTier1}
+                    packSize={Number(form.packSize)}
+                    onUnitChange={(unit) => patch({ priceTier1: unit })}
+                  />
+                )}
+                {!form.packEnabled && (
+                  <p className="text-xs text-muted-foreground">
+                    כבוי: המוצר נמכר ביחידה, בלי מינימום.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-3 rounded-lg border border-border p-3">
               <label className="flex items-center justify-between gap-2">
@@ -1054,22 +1162,32 @@ export function AdminProductDialog({
               )}
             </div>
 
-            <div className="space-y-2 sm:max-w-[14rem]">
-              <Label htmlFor="p-stock">כמות במלאי</Label>
-              <Input
-                id="p-stock"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                value={form.stockQuantity}
-                onChange={(e) => patch({ stockQuantity: e.target.value })}
-              />
-            </div>
-            <p className="-mt-2 text-xs leading-5 text-muted-foreground">
-              יורד אוטומטית כשלקוח שולח הזמנה (הכמות שמורה לו) וחוזר אם ההזמנה מבוטלת. ב-0 המוצר (או
-              כשנשאר פחות ממארז אחד) מסומן "אזל" ונשלחת התראה. 0 במוצר שלא סומן "אזל" = מלאי שעוד לא
-              נספר (בלי הגבלה).
-            </p>
+            {form.isDigital ? (
+              <p className="rounded-lg bg-secondary/60 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                מלאי: מוצר דיגיטלי לא נשמר במלאי הפיזי. כדי להפסיק למכור אותו — "סמן כאזל מהמלאי".
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2 sm:max-w-[14rem]">
+                  <Label htmlFor="p-stock">כמות במלאי</Label>
+                  <Input
+                    id="p-stock"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={form.stockQuantity}
+                    onChange={(e) => patch({ stockQuantity: e.target.value })}
+                  />
+                </div>
+                <p className="-mt-2 text-xs leading-5 text-muted-foreground">
+                  יורד אוטומטית כשלקוח שולח הזמנה (הכמות שמורה לו) וחוזר אם ההזמנה מבוטלת. ב-0 המוצר
+                  (או כשנשאר פחות ממארז אחד) מסומן "אזל" ונשלחת התראה. 0 במוצר שלא סומן "אזל" = מלאי
+                  שעוד לא נספר (בלי הגבלה).
+                  {form.variants.some((variant) => variant.stock.trim() !== "") &&
+                    " לוריאציה עם מלאי משלה — המלאי שלה (בטבלת הוריאציות)."}
+                </p>
+              </>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex items-center justify-between gap-2 rounded-lg border border-border p-3">
@@ -1101,55 +1219,65 @@ export function AdminProductDialog({
               </p>
             )}
 
-            <div className="space-y-3 rounded-lg border border-border p-3">
-              <label className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium">מוצר חייב בפיקדון</span>
-                <Switch
-                  checked={form.hasDeposit}
-                  onCheckedChange={(v) => patch({ hasDeposit: v })}
-                />
-              </label>
-              {form.hasDeposit && (
-                <>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="p-deposit-price">מחיר פיקדון ליחידה (₪)</Label>
-                      <Input
-                        id="p-deposit-price"
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={form.depositPrice}
-                        onChange={(e) => patch({ depositPrice: e.target.value })}
-                        placeholder="0.30"
-                      />
-                    </div>
-                    {!form.packEnabled && (
+            {!form.isDigital && (
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">מוצר חייב בפיקדון</span>
+                  <Switch
+                    checked={form.hasDeposit}
+                    onCheckedChange={(v) => patch({ hasDeposit: v })}
+                  />
+                </label>
+                {form.hasDeposit && (
+                  <>
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor="p-deposit-units">כמות יחידות במארז</Label>
+                        <Label htmlFor="p-deposit-price">מחיר פיקדון ליחידה (₪)</Label>
                         <Input
-                          id="p-deposit-units"
+                          id="p-deposit-price"
                           type="number"
-                          min={1}
-                          step="1"
-                          value={form.depositUnits}
-                          onChange={(e) => patch({ depositUnits: e.target.value })}
-                          placeholder="24"
+                          min={0}
+                          step="any"
+                          value={form.depositPrice}
+                          onChange={(e) => patch({ depositPrice: e.target.value })}
+                          placeholder="0.30"
                         />
                       </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {form.packEnabled
-                      ? "המוצר נמכר במארזים, ולכן הפיקדון מחושב לכל יחידה שנמכרת (48 פחיות = 48 פיקדונות). אם המחיר כבר כולל פיקדון — לא לסמן פיקדון."
-                      : form.depositPrice.trim() !== "" && form.depositUnits.trim() !== ""
-                        ? `פיקדון למארז: ${(Number(form.depositPrice) * Number(form.depositUnits)).toFixed(2)} ₪ ` +
-                          `(${form.depositUnits} × ${form.depositPrice} ₪) — יתווסף אוטומטית כשורה נוספת בהזמנה`
-                        : "מחיר הפיקדון הוא ליחידה בודדת; המערכת מכפילה בכמות היחידות במארז ומוסיפה שורת פיקדון אוטומטית להזמנה."}
-                  </p>
-                </>
-              )}
-            </div>
+                      {!form.packEnabled && (
+                        <div className="space-y-2">
+                          <Label htmlFor="p-deposit-units">כמות יחידות במארז</Label>
+                          <Input
+                            id="p-deposit-units"
+                            type="number"
+                            min={1}
+                            step="1"
+                            value={form.depositUnits}
+                            onChange={(e) => patch({ depositUnits: e.target.value })}
+                            placeholder="24"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {form.packEnabled
+                        ? "המוצר נמכר במארזים, ולכן הפיקדון מחושב לכל יחידה שנמכרת (48 פחיות = 48 פיקדונות). אם המחיר כבר כולל פיקדון — לא לסמן פיקדון."
+                        : form.depositPrice.trim() !== "" && form.depositUnits.trim() !== ""
+                          ? `פיקדון למארז: ${(Number(form.depositPrice) * Number(form.depositUnits)).toFixed(2)} ₪ ` +
+                            `(${form.depositUnits} × ${form.depositPrice} ₪) — יתווסף אוטומטית כשורה נוספת בהזמנה`
+                          : "מחיר הפיקדון הוא ליחידה בודדת; המערכת מכפילה בכמות היחידות במארז ומוסיפה שורת פיקדון אוטומטית להזמנה."}
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+
+            <VariantsEditor
+              attributes={form.variantAttributes}
+              variants={form.variants}
+              onChange={(variantAttributes, variants) => patch({ variantAttributes, variants })}
+              basePrice={form.priceTier1}
+              isDigital={form.isDigital}
+            />
 
             <ColorsInput
               id="p-colors"
