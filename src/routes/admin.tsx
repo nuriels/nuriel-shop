@@ -5,6 +5,7 @@ import { SabbathStaffBanner } from "@/components/StorefrontGate";
 import { GodModeBanner } from "@/components/GodModeBanner";
 import { SiteHeader } from "@/components/SiteHeader";
 import { OrderManagementPanel } from "@/components/OrderManagementPanel";
+import { AdminDashboard } from "@/components/AdminDashboard";
 import { AdminUsersPanel } from "@/components/AdminUsersPanel";
 import { AgentPerformancePanel } from "@/components/AgentPerformancePanel";
 import { AdminProductsPanel } from "@/components/AdminProductsPanel";
@@ -34,6 +35,8 @@ type Search = {
   pcat?: string | undefined;
   /** מחירי לקוחות מיוחדים: תיק הלקוח הפתוח */
   pcust?: string | undefined;
+  /** הזמנות: הזמנה לפתוח ישירות ("צפה בהזמנה" מלוח הבקרה) */
+  order?: string | undefined;
 };
 
 const pickString = (value: unknown): string | undefined =>
@@ -49,7 +52,9 @@ export const Route = createFileRoute("/admin")({
     const ptab = pickString(search["ptab"]);
     const pcat = pickString(search["pcat"]);
     const pcust = pickString(search["pcust"]);
+    const order = pickString(search["order"]);
     if (tab) result.tab = tab;
+    if (order && /^[0-9a-f-]{36}$/i.test(order)) result.order = order;
     if (pcust) result.pcust = pcust;
     if (ptab) result.ptab = ptab;
     if (pcat) result.pcat = pcat;
@@ -62,9 +67,10 @@ function AdminPage() {
   const { session, role, loading } = useAuthState();
   // הלשונית נשמרת בכתובת (?tab=orders): כל מעבר נרשם בהיסטוריה, כך ש"חזור"
   // בדפדפן מחזיר ללשונית הקודמת במקום לצאת מהפאנל
-  const { tab, ptab, pcat, pcust } = Route.useSearch();
+  const { tab, ptab, pcat, pcust, order } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const activeTab = tab ?? "orders";
+  // המסך הראשון של מנהל החנות — לוח הבקרה
+  const activeTab = tab ?? "dashboard";
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -108,8 +114,31 @@ function AdminPage() {
               onChange={(next) => void navigate({ search: (prev) => ({ ...prev, tab: next }) })}
             />
             <Tabs value={activeTab} dir="rtl" className="min-w-0">
+              <TabsContent value="dashboard">
+                <AdminDashboard
+                  onOpenOrder={(orderId) =>
+                    void navigate({
+                      search: (prev) => ({ ...prev, tab: "orders", order: orderId }),
+                    })
+                  }
+                  onOpenTab={(next) =>
+                    void navigate({ search: (prev) => ({ ...prev, tab: next }) })
+                  }
+                />
+              </TabsContent>
               <TabsContent value="orders">
-                <OrderManagementPanel scope="admin" meId={role?.user_id} />
+                <OrderManagementPanel
+                  scope="admin"
+                  meId={role?.user_id}
+                  openOrderId={order ?? null}
+                  onOrderOpened={() =>
+                    void navigate({
+                      search: (prev) => ({ ...prev, order: undefined }),
+                      replace: true,
+                      resetScroll: false,
+                    })
+                  }
+                />
               </TabsContent>
               <TabsContent value="transfers">
                 <TransfersPanel />

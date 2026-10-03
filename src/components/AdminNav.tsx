@@ -9,6 +9,7 @@ import {
   Gift,
   Globe,
   Inbox,
+  LayoutDashboard,
   LayoutTemplate,
   Mail,
   Menu,
@@ -27,6 +28,10 @@ type Section = { value: string; label: string; icon: LucideIcon };
 
 /** תפריט הניהול — מקובץ לפי תחום. הערכים = ?tab= בכתובת (לא לשנות — קישורים קיימים) */
 export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
+  {
+    title: "סקירה",
+    items: [{ value: "dashboard", label: "לוח בקרה", icon: LayoutDashboard }],
+  },
   {
     title: "הזמנות ולקוחות",
     items: [

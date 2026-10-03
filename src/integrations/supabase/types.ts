@@ -1756,6 +1756,7 @@ export type Database = {
           variants: Json;
         }[];
       };
+      admin_dashboard: { Args: never; Returns: Json };
       save_product_variants: {
         Args: { _product_id: string; _attributes: Json; _variants: Json };
         Returns: number;

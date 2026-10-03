@@ -135,7 +135,19 @@ function shippedSummary(result: MarkShippedResult): { text: string; warning: str
 }
 
 /** ניהול הזמנות משותף לסוכן (מוגבל ע"י RLS ללקוחות שלו) ולאדמין (הכל) */
-export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"; meId?: string }) {
+export function OrderManagementPanel({
+  scope,
+  meId,
+  openOrderId = null,
+  onOrderOpened,
+}: {
+  scope: "agent" | "admin";
+  meId?: string;
+  /** "צפה בהזמנה" מלוח הבקרה (?order=): פותח את חלון ההזמנה הזו אחרי הטעינה */
+  openOrderId?: string | null;
+  /** נקרא אחרי שההזמנה נפתחה (או לא נמצאה) — כדי לנקות את הכתובת */
+  onOrderOpened?: () => void;
+}) {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [customers, setCustomers] = useState<PersonOption[]>([]);
   const [agents, setAgents] = useState<PersonOption[]>([]);
@@ -285,6 +297,24 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
   const failedDeliveries = inFilters.filter(
     (o) => o.status === "awaiting_courier" && (o.delivery_attempts ?? 0) > 0,
   ).length;
+
+  // קישור ישיר להזמנה (מלוח הבקרה): עוברים לקבוצה שלה ופותחים את החלון
+  useEffect(() => {
+    if (!openOrderId || loading) return;
+    const target = orders.find((o) => o.id === openOrderId);
+    if (target) {
+      setKindFilter("all");
+      setCustomerFilter("all");
+      setAgentFilter("all");
+      setGroup(panelGroupOf(target.status));
+      setEditing(target);
+    } else {
+      toast.error("ההזמנה לא נמצאה — ייתכן שנמחקה");
+    }
+    onOrderOpened?.();
+    // panelGroupOf תלוי רק ב-scope
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openOrderId, loading, orders]);
 
   const sideGroups: SideGroup<PanelGroup>[] = [
     { id: "all", label: "כל ההזמנות", count: groupCounts.all, icon: GROUP_ICON.all },
