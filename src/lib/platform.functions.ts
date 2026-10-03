@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { TenantPlan, TenantStatus } from "@/integrations/supabase/types";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { PORTAL_STORE_SLUG } from "@/lib/portal";
 
 /**
  * באיזה דומיין אנחנו: פאנל ניהול הפלטפורמה (PLATFORM_ADMIN_HOST) או אתר של חנות.
@@ -238,11 +239,13 @@ export const PLATFORM_SITE_NAME = "מערכת ניהול אתר אינטרנט";
  * - brandColor: צבע המותג של החנות (null = עיצוב ברירת המחדל).
  * - sabbath: מצב שבת — הלקוחות רואים מסך "שבת שלום" במקום הקטלוג.
  * - isDefaultStore: החנות הראשית (הלוגו המובנה שייך רק לה).
+ * - isPortal: האתר של שער הפלטפורמה (nuriel-app2) — בעמוד הבית דף נחיתה
+ *   ופתיחת חנויות במקום קטלוג (חלק 12).
  */
 export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => {
   const { isPlatformRequest, maybeCurrentTenant } =
     await import("@/integrations/supabase/tenant.server");
-  const none = { brandColor: null, sabbath: false, isDefaultStore: false };
+  const none = { brandColor: null, sabbath: false, isDefaultStore: false, isPortal: false };
   if (isPlatformRequest()) return { siteName: PLATFORM_SITE_NAME, ...none };
   const tenant = maybeCurrentTenant();
   if (!tenant) return { siteName: DEFAULT_STORE_NAME, ...none };
@@ -259,5 +262,6 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     brandColor: data?.brand_color ?? null,
     sabbath: data?.is_sabbath_mode === true,
     isDefaultStore: tenant.is_default,
+    isPortal: tenant.slug === PORTAL_STORE_SLUG,
   };
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useLoaderData } from "@tanstack/react-router";
 import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +31,7 @@ import { attributeNames, hasVariants, variantAttributesOf, variantLabel } from "
 import { loadHomeBanners, type BannerSet } from "@/lib/banners";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { CatalogSections } from "@/components/CatalogSections";
+import { PlatformLanding } from "@/components/portal/PlatformLanding";
 import { groupBySubcategory } from "@/lib/catalog-sections";
 import { evaluateCartPromotions, type PromotionEvaluation } from "@/lib/cart-promotions";
 import { EMPTY_SALES, loadSalesData, type SalesData } from "@/lib/sales-data";
@@ -60,7 +61,19 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
+/**
+ * עמוד הבית: הקטלוג של החנות — חוץ מהאתר של שער הפלטפורמה (nuriel-app2),
+ * שבו מוצג דף הנחיתה של הפלטפורמה: כניסה בקוד למייל ופתיחת חנויות (חלק 12).
+ */
 function Index() {
+  const site = useLoaderData({ from: "__root__" });
+  if (site?.isPortal) {
+    return <PlatformLanding siteName={site.siteName || DEFAULT_STORE_NAME} />;
+  }
+  return <StoreCatalog />;
+}
+
+function StoreCatalog() {
   const { session, role, loading, refreshRole } = useAuthState();
   const { settings } = useSiteSettings();
   const { loading: profileLoading, refresh: refreshProfile } = useCustomerProfile(

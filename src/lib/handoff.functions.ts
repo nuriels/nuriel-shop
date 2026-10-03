@@ -12,6 +12,11 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  *  2. באתר החנות: הקוד נפדה פעם אחת בלבד, נבדק שהמשתמש עדיין מנהל-על,
  *     ונפתח לו חיבור רגיל (GoTrue magic link שנוצר ומאומת בשרת — בלי מייל).
  *     זה חיבור נפרד: החיבור בפאנל לא נפגע.
+ *
+ * אותו מנגנון משמש גם את שער הפלטפורמה (חלק 12, portal.functions.ts):
+ * בעלי חנות שאימתו את המייל בשער נכנסים לניהול החנות שלהם. קוד כזה מסומן
+ * kind = 'store_owner', ובפדיון נבדק שהמשתמש מנהל (admin) של החנות הזו
+ * ולא חסום — במקום בדיקת מנהל-על.
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -19,7 +24,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HANDOFF_TTL_MS = 2 * 60 * 1000;
 
 const EXPIRED =
-  'קישור הכניסה לא תקף, פג תוקפו או שכבר נוצל. חזרו לפאנל הפלטפורמה ולחצו שוב על "היכנס לניהול".';
+  "קישור הכניסה לא תקף — פג תוקפו (2 דקות) או שכבר נוצל. חזרו לדף שממנו הגעתם ולחצו שוב על הכניסה לניהול החנות.";
 
 async function sha256(value: string): Promise<string> {
   const { createHash } = await import("node:crypto");
@@ -96,17 +101,30 @@ export const redeemStoreAdminHandoff = createServerFn({ method: "POST" })
 
     // פדיון אטומי: רק פעם אחת, רק בחנות שהקוד נוצר עבורה, רק בתוקף
     const nowIso = new Date().toISOString();
+    const tenantId = currentTenantId();
     const { data: row } = await supabaseAdminUnscoped
       .from("platform_admin_handoffs")
       .update({ used_at: nowIso })
       .eq("token_hash", await sha256(data.code))
-      .eq("tenant_id", currentTenantId())
+      .eq("tenant_id", tenantId)
       .is("used_at", null)
       .gt("expires_at", nowIso)
-      .select("user_id")
+      .select("user_id, kind")
       .maybeSingle();
     if (!row) throw new Error(EXPIRED);
-    if (!(await isPlatformAdminUser(row.user_id))) throw new Error("אין לחשבון הרשאת מנהל-על");
+    if (row.kind === "store_owner") {
+      // בעל החנות מהשער: עדיין מנהל של החנות הזו, ולא חסום
+      const { data: role } = await supabaseAdminUnscoped
+        .from("user_roles")
+        .select("role, is_blocked")
+        .eq("user_id", row.user_id)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (role?.role !== "admin") throw new Error("החשבון אינו מנהל של החנות הזו");
+      if (role.is_blocked) throw new Error("החשבון שלכם בחנות הזו חסום");
+    } else if (!(await isPlatformAdminUser(row.user_id))) {
+      throw new Error("אין לחשבון הרשאת מנהל-על");
+    }
 
     const { data: userData } = await supabaseAdminUnscoped.auth.admin.getUserById(row.user_id);
     const email = userData.user?.email;
@@ -116,7 +134,7 @@ export const redeemStoreAdminHandoff = createServerFn({ method: "POST" })
     const { sessionForEmail } = await import("@/lib/session.server");
     try {
       const { accessToken, refreshToken } = await sessionForEmail(email, "handoff");
-      return { accessToken, refreshToken };
+      return { accessToken, refreshToken, kind: row.kind };
     } catch {
       throw new Error("החיבור לחנות נכשל. נסו שוב.");
     }

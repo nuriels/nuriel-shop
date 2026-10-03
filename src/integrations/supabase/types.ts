@@ -262,6 +262,8 @@ export type Database = {
           created_at: string;
           expires_at: string;
           used_at: string | null;
+          /** platform_admin = מנהל-על מהפאנל; store_owner = בעל החנות משער הפלטפורמה */
+          kind: "platform_admin" | "store_owner";
         };
         Insert: {
           token_hash: string;
@@ -270,6 +272,7 @@ export type Database = {
           created_at?: string;
           expires_at: string;
           used_at?: string | null;
+          kind?: "platform_admin" | "store_owner";
         };
         Update: {
           token_hash?: string;
@@ -278,6 +281,7 @@ export type Database = {
           created_at?: string;
           expires_at?: string;
           used_at?: string | null;
+          kind?: "platform_admin" | "store_owner";
         };
         Relationships: [];
       };
@@ -1618,6 +1622,13 @@ export type Database = {
       tenant_for_host: { Args: { _host: string }; Returns: string | null };
       is_platform_admin: { Args: { _user_id?: string }; Returns: boolean };
       platform_slug_problem: { Args: { _slug: string }; Returns: string | null };
+      tenant_slug_problem: { Args: { _slug: string }; Returns: string | null };
+      portal_account: { Args: { _email: string }; Returns: Json };
+      portal_create_store: {
+        Args: { _email: string; _name: string; _slug: string };
+        Returns: Database["public"]["Tables"]["tenants"]["Row"];
+      };
+      portal_store_state: { Args: { _email: string; _tenant: string }; Returns: Json };
       platform_list_tenants: {
         Args: Record<string, never>;
         Returns: {
