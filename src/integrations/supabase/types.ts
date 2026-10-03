@@ -4,6 +4,8 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type TenantPlan = "trial" | "basic" | "pro" | "enterprise";
 /** סטטוס חנות (tenants.status) — חנות מוקפאת נעולה ללקוחות */
 export type TenantStatus = "active" | "suspended";
+/** סוג התנאי של הטבת עגלה (cart_promotions.condition_type) */
+export type CartPromotionCondition = "min_subtotal" | "category_quantity";
 /** מצב תעודת SSL של חנות (tenant_ssl.status) — מדווח ע"י deploy/ssl/store-certs.sh */
 export type TenantSslStatus = "active" | "pending" | "error" | "blocked" | "external";
 
@@ -54,6 +56,84 @@ export type Database = {
           plan?: TenantPlan;
           status?: TenantStatus;
           status_changed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      cart_promotions: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          is_active: boolean;
+          condition_type: CartPromotionCondition;
+          min_subtotal: number | null;
+          category: string | null;
+          min_quantity: number | null;
+          gift_product_id: string;
+          gift_quantity: number;
+          starts_at: string | null;
+          ends_at: string | null;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          name: string;
+          is_active?: boolean;
+          condition_type: CartPromotionCondition;
+          min_subtotal?: number | null;
+          category?: string | null;
+          min_quantity?: number | null;
+          gift_product_id: string;
+          gift_quantity?: number;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          name?: string;
+          is_active?: boolean;
+          condition_type?: CartPromotionCondition;
+          min_subtotal?: number | null;
+          category?: string | null;
+          min_quantity?: number | null;
+          gift_product_id?: string;
+          gift_quantity?: number;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      product_relations: {
+        Row: {
+          tenant_id: string;
+          product_id: string;
+          related_product_id: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          tenant_id?: string;
+          product_id: string;
+          related_product_id: string;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          tenant_id?: string;
+          product_id?: string;
+          related_product_id?: string;
+          sort_order?: number;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -324,6 +404,8 @@ export type Database = {
           image_url: string | null;
           images: string[];
           is_out_of_stock: boolean;
+          is_order_bump: boolean;
+          order_bump_text: string | null;
           is_promo: boolean;
           name: string;
           price_tier1: number;
@@ -359,6 +441,8 @@ export type Database = {
           image_url?: string | null;
           images?: string[];
           is_out_of_stock?: boolean;
+          is_order_bump?: boolean;
+          order_bump_text?: string | null;
           is_promo?: boolean;
           name: string;
           price_tier1?: number;
@@ -394,6 +478,8 @@ export type Database = {
           image_url?: string | null;
           images?: string[];
           is_out_of_stock?: boolean;
+          is_order_bump?: boolean;
+          order_bump_text?: string | null;
           is_promo?: boolean;
           name?: string;
           price_tier1?: number;
@@ -429,6 +515,8 @@ export type Database = {
           created_at: string;
           id: string;
           is_deposit: boolean;
+          is_gift: boolean;
+          promotion_id: string | null;
           order_id: string;
           product_barcode: string | null;
           product_category: string | null;
@@ -450,6 +538,8 @@ export type Database = {
           created_at?: string;
           id?: string;
           is_deposit?: boolean;
+          is_gift?: boolean;
+          promotion_id?: string | null;
           order_id: string;
           product_barcode?: string | null;
           product_category?: string | null;
@@ -471,6 +561,8 @@ export type Database = {
           created_at?: string;
           id?: string;
           is_deposit?: boolean;
+          is_gift?: boolean;
+          promotion_id?: string | null;
           order_id?: string;
           product_barcode?: string | null;
           product_category?: string | null;
@@ -990,6 +1082,7 @@ export type Database = {
           business_email: string;
           business_name: string;
           business_phone: string;
+          free_shipping_threshold: number | null;
           business_tax_id: string;
           contact_content: string;
           email_signature: string;
@@ -1016,6 +1109,7 @@ export type Database = {
           business_email?: string;
           business_name?: string;
           business_phone?: string;
+          free_shipping_threshold?: number | null;
           business_tax_id?: string;
           contact_content?: string;
           email_signature?: string;
@@ -1042,6 +1136,7 @@ export type Database = {
           business_email?: string;
           business_name?: string;
           business_phone?: string;
+          free_shipping_threshold?: number | null;
           business_tax_id?: string;
           contact_content?: string;
           email_signature?: string;
@@ -1201,6 +1296,11 @@ export type Database = {
       platform_add_admin: { Args: { _email: string }; Returns: string };
       platform_remove_admin: { Args: { _user_id: string }; Returns: undefined };
       tenant_is_active: { Args: { _tenant: string }; Returns: boolean };
+      get_order_bumps: {
+        Args: Record<string, never>;
+        Returns: { product_id: string; pitch: string | null }[];
+      };
+      apply_order_gifts: { Args: { _order_id: string }; Returns: number };
       picking_manager_approve: { Args: { _order_id: string }; Returns: Record<string, unknown> };
       picking_return: { Args: { _order_id: string }; Returns: undefined };
       stock_lookup: { Args: { _query: string }; Returns: Record<string, unknown>[] };

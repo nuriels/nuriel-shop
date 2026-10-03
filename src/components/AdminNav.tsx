@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   FolderTree,
+  Gift,
   Inbox,
   LayoutTemplate,
   Mail,
@@ -42,6 +43,10 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
       { value: "transfers", label: "העברה בין איתורים", icon: ArrowLeftRight },
       { value: "pending", label: "ממתינים לאישור", icon: Inbox },
     ],
+  },
+  {
+    title: "מכירות",
+    items: [{ value: "promotions", label: "מתנות ומוצרי קופה", icon: Gift }],
   },
   {
     title: "האתר",
@@ -144,7 +149,7 @@ export function AdminNav({ value, onChange }: { value: string; onChange: (next: 
       <aside className="hidden md:block">
         <nav
           aria-label="תפריט ניהול"
-          className="sticky top-4 rounded-xl border border-border bg-card p-2 py-3 shadow-card"
+          className="sticky top-[calc(var(--site-header-h,0px)+1rem)] rounded-xl border border-border bg-card p-2 py-3 shadow-card"
         >
           <NavList value={value} onChange={onChange} />
         </nav>

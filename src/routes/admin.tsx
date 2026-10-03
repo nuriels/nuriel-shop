@@ -10,6 +10,7 @@ import { AdminProductsPanel } from "@/components/AdminProductsPanel";
 import { CategoryManagementPanel } from "@/components/CategoryManagerDialog";
 import { PendingProductsPanel } from "@/components/PendingProductsPanel";
 import { SiteSettingsPanel } from "@/components/SiteSettingsPanel";
+import { CartPromotionsPanel } from "@/components/sales/CartPromotionsPanel";
 import { HomeBannersPanel } from "@/components/HomeBannersPanel";
 import { StockCountPanel } from "@/components/StockCountPanel";
 import { EmailSettingsPanel } from "@/components/EmailSettingsPanel";
@@ -152,6 +153,9 @@ function AdminPage() {
               </TabsContent>
               <TabsContent value="home">
                 <HomeBannersPanel />
+              </TabsContent>
+              <TabsContent value="promotions">
+                <CartPromotionsPanel />
               </TabsContent>
               <TabsContent value="site">
                 <SiteSettingsPanel />

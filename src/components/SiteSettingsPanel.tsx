@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { Loader2, Wand2 } from "lucide-react";
+import { Loader2, Save, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,19 +20,28 @@ import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { BrandColorField } from "@/components/BrandColorField";
 import { SabbathModeCard } from "@/components/SabbathModeCard";
 
+/** האם שני מצבי הגדרות זהים (כל השדות פשוטים: טקסט / מספר / בוליאני / null) */
+function sameSettings(a: SiteSettings, b: SiteSettings): boolean {
+  return (Object.keys(a) as (keyof SiteSettings)[]).every((key) => a[key] === b[key]);
+}
+
 /** ניהול תוכן האתר, מיתוג ופרטי העסק (משפיע על עמודי אודות/תנאים/פרטיות) */
 export function SiteSettingsPanel() {
-  const { settings, refresh } = useSiteSettings();
+  const { settings } = useSiteSettings();
   const router = useRouter();
   const [form, setForm] = useState<SiteSettings | null>(settings);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // הטופס מתמלא פעם אחת כשההגדרות נטענות. רענון מאוחר של ההגדרות (למשל אחרי
+  // הפעלת מצב שבת) לא דורס שינויים שהמנהל הקליד ועוד לא שמר.
   useEffect(() => {
-    if (settings) setForm(settings);
+    if (settings) setForm((current) => current ?? settings);
   }, [settings]);
 
   if (!form) return <p className="text-sm text-muted-foreground">טוען הגדרות...</p>;
+
+  const dirty = settings !== null && !sameSettings(form, settings);
 
   const patch = (next: Partial<SiteSettings>) =>
     setForm((current) => (current ? { ...current, ...next } : current));
@@ -70,7 +79,8 @@ export function SiteSettingsPanel() {
     setBusy(true);
     try {
       await saveSiteSettings(form);
-      await refreshSiteSettings();
+      // מה שנשמר בפועל (למשל צבע מנורמל) — מכאן והלאה זה הבסיס להשוואה
+      setForm(await refreshSiteSettings());
       // צבע המותג ושם החנות נטענים ב-root (גם ל-SSR) — מרעננים כדי שיחולו מיד
       await router.invalidate();
       toast.success("ההגדרות נשמרו");
@@ -83,11 +93,29 @@ export function SiteSettingsPanel() {
 
   return (
     <section className="space-y-5">
-      <div>
-        <h2 className="text-xl font-bold text-foreground">הגדרות אתר ותוכן</h2>
-        <p className="text-sm text-muted-foreground">
-          מצב שבת, מיתוג וצבע החנות, פרטי העסק, תצוגת מע״מ, עמודי אודות ומסמכים משפטיים
-        </p>
+      {/* כותרת + שמירה: נצמדת מתחת לכותרת האתר בזמן גלילה, כך שהשמירה תמיד בהישג יד */}
+      <div className="sticky top-[var(--site-header-h,0px)] z-20 -mx-1 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border-b border-border bg-background/95 px-1 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="min-w-0">
+          <h2 className="text-xl font-bold text-foreground">הגדרות אתר ותוכן</h2>
+          <p className="text-sm text-muted-foreground">
+            מצב שבת, מיתוג וצבע החנות, פרטי העסק, תצוגת מע״מ, עמודי אודות ומסמכים משפטיים
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {dirty && (
+            <span
+              className="flex items-center gap-1.5 text-xs font-medium text-amber-700"
+              role="status"
+            >
+              <span className="size-2 rounded-full bg-amber-500" aria-hidden="true" />
+              שינויים שלא נשמרו
+            </span>
+          )}
+          <Button disabled={busy || !dirty} onClick={save}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            {busy ? "שומר..." : "שמירת ההגדרות"}
+          </Button>
+        </div>
       </div>
 
       <SabbathModeCard
@@ -335,6 +363,39 @@ export function SiteSettingsPanel() {
       </Card>
 
       <Card className="shadow-card">
+        <CardHeader>
+          <CardTitle className="text-base">משלוח חינם</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="space-y-2 sm:max-w-56">
+            <Label htmlFor="s-free-shipping">משלוח חינם בהזמנה מעל (₪)</Label>
+            <Input
+              id="s-free-shipping"
+              type="number"
+              min={1}
+              step="1"
+              dir="ltr"
+              className="numeric"
+              placeholder="ללא"
+              value={form.free_shipping_threshold ?? ""}
+              onChange={(e) => {
+                const value = e.target.value.trim();
+                patch({
+                  free_shipping_threshold:
+                    value === "" || !(Number(value) > 0) ? null : Number(value),
+                });
+              }}
+            />
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            בסל של הלקוח יוצג מד: "חסרים לך עוד X ₪ למשלוח חינם!", ובהגעה לסכום — הודעת הצלחה. הסכום
+            נמדד לפי סכום המוצרים בסל{form.prices_include_vat ? "" : " (לפני מע״מ)"}, בלי פיקדון.
+            ריק = בלי מד משלוח.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-card">
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-base">תנאי שימוש ומדיניות פרטיות</CardTitle>
           <Button type="button" size="sm" variant="outline" onClick={fillDefaults}>
@@ -369,10 +430,6 @@ export function SiteSettingsPanel() {
           </div>
         </CardContent>
       </Card>
-
-      <Button size="lg" className="w-full" disabled={busy} onClick={save}>
-        {busy ? "שומר..." : "שמירת ההגדרות"}
-      </Button>
     </section>
   );
 }

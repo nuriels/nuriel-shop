@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { VatNote } from "@/components/VatNote";
+import { ProductRecommendations } from "@/components/sales/ProductRecommendations";
+import { useStorefrontSales } from "@/components/sales/StorefrontSalesContext";
+import { recommendForProduct } from "@/lib/cart-promotions";
 import { Flame, Package, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,14 +30,24 @@ export function ProductDetailDialog({
   canAdd,
   addLabel = "הוספה לסל",
   onAddToCart,
+  onShowProduct,
 }: {
   product: CatalogItem | null;
   onOpenChange: (open: boolean) => void;
   canAdd: boolean;
   addLabel?: string;
   onAddToCart?: ((item: CatalogItem, quantity?: number) => void) | undefined;
+  /** מעבר למוצר אחר מתוך ההמלצות — החלון נשאר פתוח ומציג אותו */
+  onShowProduct?: ((item: CatalogItem) => void) | undefined;
 }) {
   const tree = useCategoryTree();
+  const sales = useStorefrontSales();
+  const contentRef = useRef<HTMLDivElement>(null);
+  // "מוצרים נוספים שאולי תאהבו": מה שהמנהל קישר, ואם לא — מאותה קטגוריה
+  const recommendations = useMemo(
+    () => (sales && product ? recommendForProduct(product, sales) : []),
+    [sales, product],
+  );
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState<string | null>(null);
 
@@ -46,10 +59,11 @@ export function ProductDetailDialog({
     return [...new Set(all)];
   }, [product]);
 
-  // מוצר חדש נפתח — מתחילים ממארז/יחידה אחת ומהתמונה הראשית
+  // מוצר חדש נפתח — מתחילים ממארז/יחידה אחת, מהתמונה הראשית ומראש החלון
   useEffect(() => {
     setQuantity(product ? minimumQuantity(product) : 1);
     setActiveImage(null);
+    contentRef.current?.scrollTo({ top: 0 });
     // מאפסים רק כשנפתח מוצר אחר — לא כשאותו מוצר נטען מחדש מהקטלוג
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id]);
@@ -82,6 +96,7 @@ export function ProductDetailDialog({
   return (
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent
+        ref={contentRef}
         dir="rtl"
         className="max-h-[92vh] gap-0 overflow-y-auto p-0 text-right sm:max-w-3xl"
       >
@@ -240,6 +255,17 @@ export function ProductDetailDialog({
             )}
           </div>
         </div>
+
+        {recommendations.length > 0 && (
+          <div className="border-t border-border bg-secondary/30 px-5 py-4 sm:px-6">
+            <ProductRecommendations
+              items={recommendations}
+              addLabel={addLabel}
+              onOpen={onShowProduct}
+              onAdd={canAdd && onAddToCart ? (item) => onAddToCart(item) : undefined}
+            />
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

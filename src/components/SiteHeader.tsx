@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Link, useLoaderData, useRouter } from "@tanstack/react-router";
 import {
   ChevronRight,
@@ -43,12 +44,26 @@ export function SiteHeader({
   // הלוגו המובנה שייך לחנות הראשית; חנות בלי לוגו מקבלת את האות הראשונה של שמה
   const logoSrc = logoUrl ?? (site?.isDefaultStore ? logo.url : null);
 
+  // הגובה האמיתי של הכותרת (משתנה כשהיא נשברת לשתי שורות בטלפון) — כדי שאלמנטים
+  // "דביקים" מתחתיה (תפריט הניהול, פס השמירה בהגדרות) ייעצרו בדיוק מתחתיה
+  const headerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty("--site-header-h", `${el.offsetHeight}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const navLinkClass =
     "inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-primary-foreground/75 transition-colors hover:bg-white/10 hover:text-primary-foreground";
   const navActiveClass = "bg-white/12 text-primary-foreground";
 
   return (
-    <header className="surface-cellar sticky top-0 z-30 shadow-soft">
+    <header ref={headerRef} className="surface-cellar sticky top-0 z-30 shadow-soft">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
         {canGoBack && (
           // חזרה למסך הקודם באתר (לשונית / קטגוריה / חלון) — בלי רענון ובלי לאבד מה שנעשה
@@ -141,6 +156,7 @@ export function SiteHeader({
             <Button
               size="sm"
               onClick={onOpenCart}
+              aria-label={cartCount ? `הסל שלי (${cartCount} פריטים)` : "הסל שלי"}
               className="relative bg-accent text-accent-foreground hover:bg-accent/90"
             >
               <ShoppingCart className="size-4" />

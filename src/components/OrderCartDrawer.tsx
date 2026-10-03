@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   CheckCircle2,
   Clock,
   FileText,
+  Gift,
   Minus,
   Package,
   Plus,
@@ -21,7 +22,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { formatIls, minOrderMessage } from "@/lib/catalog";
+import { formatIls, minimumQuantity, minOrderMessage, type CatalogItem } from "@/lib/catalog";
 import {
   cartMinimum,
   cartMinUnits,
@@ -39,6 +40,18 @@ import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useBackToClose } from "@/hooks/useBackToClose";
 import { ORDER_HOURS } from "@/lib/order-hours";
 import {
+  cartSubtotal,
+  freeShippingProgress,
+  pickOrderBump,
+  recommendForCart,
+  type PromotionEvaluation,
+} from "@/lib/cart-promotions";
+import { useStorefrontSales } from "@/components/sales/StorefrontSalesContext";
+import { ProductRecommendations } from "@/components/sales/ProductRecommendations";
+import { FreeShippingBar } from "@/components/sales/FreeShippingBar";
+import { CartGiftLines, PromotionHintLine } from "@/components/sales/CartGifts";
+import { OrderBumpOffer } from "@/components/sales/OrderBumpOffer";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogContent,
@@ -51,10 +64,15 @@ import {
 /** מצב הסל: הזמנה עם מחירים, בקשת הצעת מחיר, או אורח שעדיין לא התחבר */
 export type CartMode = "order" | "quote" | "guest";
 
+const NO_PROMOTIONS: PromotionEvaluation = { gifts: [], hints: [] };
+
 /**
  * סל ההזמנה.
  * לקוח עם קבוצת מחיר רואה מחירים ושולח הזמנה; לקוח בלי קבוצת מחיר רואה
  * את אותם פריטים בלי מחירים ושולח "בקשה להצעת מחיר"; אורח מתבקש להתחבר.
+ *
+ * בהזמנה עם מחירים הסל גם "חכם": מד משלוח חינם, מתנות שנוספות ויורדות לבד
+ * לפי הטבות החנות, מוצר קופה ממש לפני השליחה, והמלצות על מוצרים משלימים.
  */
 export function OrderCartDrawer({
   open,
@@ -65,6 +83,8 @@ export function OrderCartDrawer({
   onChangeQuantity,
   onRemove,
   onClear,
+  onAdd,
+  promotions = NO_PROMOTIONS,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -74,14 +94,65 @@ export function OrderCartDrawer({
   onChangeQuantity: (productId: string, delta: number) => void;
   onRemove: (productId: string) => void;
   onClear: () => void;
+  /** הוספה מתוך הסל (מוצר קופה / המלצה); silent = בלי הודעה קופצת */
+  onAdd?: (item: CatalogItem, quantity?: number, options?: { silent?: boolean }) => void;
+  /** מתנות שמגיעות לסל עכשיו + ההטבה הקרובה להשגה (מחושב בעמוד) */
+  promotions?: PromotionEvaluation;
 }) {
   const router = useRouter();
   const { settings } = useSiteSettings();
+  const sales = useStorefrontSales();
   const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState<{ orderNumber: string; isQuote: boolean } | null>(null);
+  const [sent, setSent] = useState<{
+    orderNumber: string;
+    isQuote: boolean;
+    gifts: string[];
+  } | null>(null);
+  // מוצר שנוסף דרך הצעת הקופה בפתיחה הזו של הסל — נשאר מוצג (מסומן) כדי שאפשר להתחרט
+  const [bumpKeepId, setBumpKeepId] = useState<string | null>(null);
   const sendEmails = useServerFn(sendOrderEmails);
 
   useBackToClose(open, () => onOpenChange(false));
+
+  const priced = mode === "order";
+  const cartIds = useMemo(() => new Set(items.map((item) => item.productId)), [items]);
+  const shipping = priced
+    ? freeShippingProgress(cartSubtotal(items), settings?.free_shipping_threshold)
+    : null;
+  const bump =
+    priced && sales && onAdd && items.length > 0
+      ? pickOrderBump({
+          bumps: sales.bumps,
+          catalogById: sales.catalogById,
+          cartIds,
+          keepId: bumpKeepId,
+        })
+      : null;
+  const recommendations = useMemo(
+    () =>
+      sales && items.length > 0
+        ? recommendForCart(items, {
+            catalog: sales.catalog,
+            catalogById: sales.catalogById,
+            related: sales.related,
+            // מוצר הקופה כבר מוצע למטה — לא כפול
+            exclude: new Set(bump ? [bump.product.id] : []),
+          })
+        : [],
+    [sales, items, bump],
+  );
+  const gifts = priced ? promotions.gifts : [];
+  const nextHint = priced && items.length > 0 ? promotions.hints[0] : undefined;
+
+  const toggleBump = (next: boolean) => {
+    if (!bump || !onAdd) return;
+    if (next) {
+      onAdd(bump.product, minimumQuantity(bump.product), { silent: true });
+      setBumpKeepId(bump.product.id);
+    } else {
+      onRemove(bump.product.id);
+    }
+  };
 
   const isQuote = mode !== "order";
   const count = cartCount(items);
@@ -132,8 +203,22 @@ export function OrderCartDrawer({
       return;
     }
 
+    // המתנות שהמסד צירף בפועל (הוא בודק שוב את תנאי ההטבה מול המחירים שלו)
+    let giftNames: string[] = [];
+    if (kind === "order") {
+      const { data: giftRows } = await supabase
+        .from("order_items")
+        .select("product_name, quantity")
+        .eq("order_id", order.id)
+        .eq("is_gift", true);
+      giftNames = (giftRows ?? []).map((row) =>
+        row.quantity > 1 ? `${row.product_name} × ${row.quantity}` : (row.product_name ?? ""),
+      );
+    }
+
     // חלון אישור (לא הודעה חולפת): מספר ההזמנה + שעות הטיפול + מה קורה עכשיו
-    setSent({ orderNumber: order.order_number, isQuote: kind === "quote" });
+    setSent({ orderNumber: order.order_number, isQuote: kind === "quote", gifts: giftNames });
+    setBumpKeepId(null);
     onClear();
     await clearStoredCart(customerId);
     onOpenChange(false);
@@ -159,6 +244,12 @@ export function OrderCartDrawer({
                 : "בחרו את המוצרים שמעניינים אתכם ונחזור אליכם עם הצעת מחיר לעסק."}
             </SheetDescription>
           </SheetHeader>
+
+          {shipping && items.length > 0 && (
+            <div className="px-4 pt-3">
+              <FreeShippingBar progress={shipping} />
+            </div>
+          )}
 
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {items.length === 0 ? (
@@ -256,9 +347,38 @@ export function OrderCartDrawer({
                 </div>
               ))
             )}
+
+            <CartGiftLines gifts={gifts} />
+            {nextHint && <PromotionHintLine hint={nextHint} />}
+
+            {mode !== "guest" && items.length > 0 && (
+              <p className="flex items-start gap-2 rounded-lg border border-accent/30 bg-accent/10 p-3 text-xs leading-5 text-foreground">
+                <Clock className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
+                <span>{ORDER_HOURS.cart}</span>
+              </p>
+            )}
+
+            {recommendations.length > 0 && (
+              <div className="pt-2">
+                <ProductRecommendations
+                  compact
+                  title="כדאי להוסיף"
+                  items={recommendations}
+                  addLabel={isQuote ? "הוספה לבקשה" : "הוספה לסל"}
+                  onAdd={onAdd ? (item) => onAdd(item) : undefined}
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-3 border-t border-border p-4">
+            {bump && (
+              <OrderBumpOffer
+                offer={bump}
+                checked={cartIds.has(bump.product.id)}
+                onToggle={toggleBump}
+              />
+            )}
             {mode === "order" && (
               <div className="space-y-1.5 text-sm">
                 {vat.showBreakdown && (
@@ -311,10 +431,6 @@ export function OrderCartDrawer({
               </div>
             ) : (
               <>
-                <p className="flex items-start gap-2 rounded-lg border border-accent/30 bg-accent/10 p-3 text-xs leading-5 text-foreground">
-                  <Clock className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
-                  <span>{ORDER_HOURS.cart}</span>
-                </p>
                 <Button
                   size="lg"
                   className="w-full"
@@ -346,6 +462,14 @@ export function OrderCartDrawer({
                     {sent?.orderNumber}
                   </span>
                 </p>
+                {sent && sent.gifts.length > 0 && (
+                  <div className="flex items-start gap-2 rounded-lg border border-green-600/30 bg-green-50 p-3 text-green-900">
+                    <Gift className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                    <span>
+                      צירפנו להזמנה במתנה: <strong>{sent.gifts.join(", ")}</strong>
+                    </span>
+                  </div>
+                )}
                 <p className="flex items-start gap-2 rounded-lg bg-secondary/70 p-3">
                   <Clock className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
                   <span>{ORDER_HOURS.sentHours}</span>

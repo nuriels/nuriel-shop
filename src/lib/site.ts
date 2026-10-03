@@ -48,6 +48,8 @@ export type SiteSettings = {
   is_sabbath_mode: boolean;
   /** צבע המותג (#rrggbb); null = עיצוב ברירת המחדל — ראו brand-theme.ts */
   brand_color: string | null;
+  /** סכום המוצרים בסל שממנו המשלוח חינם (מד בסל); null = כבוי */
+  free_shipping_threshold: number | null;
 };
 
 export type EmailSettings = {
@@ -56,7 +58,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -87,6 +89,7 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     price_tiers_enabled: false,
     is_sabbath_mode: false,
     brand_color: null,
+    free_shipping_threshold: null,
   };
 }
 

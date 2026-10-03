@@ -130,6 +130,7 @@ export function HotDealsStrip({
         canAdd={canAdd}
         addLabel={addLabel}
         onAddToCart={onAddToCart}
+        onShowProduct={setDetails}
       />
     </section>
   );

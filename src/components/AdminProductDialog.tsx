@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EyeOff, Loader2, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { EyeOff, Loader2, Package, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
@@ -49,6 +49,7 @@ import {
 import { uploadProductImage } from "@/lib/site";
 import { formatBytes } from "@/lib/image";
 import { useBackToClose } from "@/hooks/useBackToClose";
+import { ProductPicker } from "@/components/sales/ProductPicker";
 
 /** ISO -> "YYYY-MM-DDTHH:mm" (תאריכי מבצע ישנים נשמרים כמו שהם) */
 function toLocalInput(iso: string | null | undefined): string {
@@ -94,6 +95,11 @@ type FormState = {
   /** מינימום יחידות להזמנה — נפרד מהמארזים: רק סף תחתון, בלי כפולות */
   minEnabled: boolean;
   minQuantity: string;
+  /** מוצר קופה: מוצע בסל ממש לפני שליחת ההזמנה */
+  isOrderBump: boolean;
+  orderBumpText: string;
+  /** "מוצרים נוספים שאולי תאהבו" — לפי הסדר (נשמר ב-product_relations) */
+  relatedIds: string[];
 };
 
 export type ProductDraft = { id: string; title: string; data: Json; updated_at: string };
@@ -126,6 +132,9 @@ function emptyForm(defaultCategory: string): FormState {
     packSize: "",
     minEnabled: false,
     minQuantity: "",
+    isOrderBump: false,
+    orderBumpText: "",
+    relatedIds: [],
   };
 }
 
@@ -157,6 +166,10 @@ function fromProduct(product: GlobalProduct): FormState {
     packSize: product.pack_size != null ? String(product.pack_size) : "",
     minEnabled: product.min_order_quantity != null,
     minQuantity: product.min_order_quantity != null ? String(product.min_order_quantity) : "",
+    isOrderBump: product.is_order_bump ?? false,
+    orderBumpText: product.order_bump_text ?? "",
+    // נטענים בנפרד (product_relations) כשהחלון נפתח
+    relatedIds: [],
   };
 }
 
@@ -185,6 +198,27 @@ function hasContent(form: FormState): boolean {
 }
 
 const DRAFT_DELAY_MS = 900;
+
+/** מחליף את רשימת המוצרים הקשורים של מוצר (הסדר נשמר); מחזיר הודעת שגיאה או null */
+async function saveRelatedProducts(
+  productId: string,
+  relatedIds: string[],
+): Promise<string | null> {
+  const { error: deleteError } = await supabase
+    .from("product_relations")
+    .delete()
+    .eq("product_id", productId);
+  if (deleteError) return deleteError.message;
+  if (relatedIds.length === 0) return null;
+  const { error } = await supabase.from("product_relations").insert(
+    relatedIds.map((relatedId, index) => ({
+      product_id: productId,
+      related_product_id: relatedId,
+      sort_order: index,
+    })),
+  );
+  return error ? error.message : null;
+}
 
 /**
  * יצירה/עריכה של מוצר בקטלוג — אדמין בלבד.
@@ -229,6 +263,8 @@ export function AdminProductDialog({
   const [deleting, setDeleting] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const baseline = useRef("");
+  // המוצרים הקשורים כפי שנטענו מהמסד — כדי לשמור רק אם השתנו
+  const loadedRelated = useRef<string[]>([]);
 
   // ---------- טיוטה (מוצר חדש בלבד) ----------
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -257,17 +293,28 @@ export function AdminProductDialog({
     setLoaded(product ?? null);
     baseline.current = JSON.stringify(initial);
 
+    loadedRelated.current = [];
     if (product) {
-      // הרשימה במסך יכולה להיות ישנה (הזמנות מורידות מלאי ברקע) — טוענים את המוצר מחדש
+      // הרשימה במסך יכולה להיות ישנה (הזמנות מורידות מלאי ברקע) — טוענים את המוצר מחדש,
+      // יחד עם המוצרים הקשורים שלו
       void (async () => {
-        const { data } = await supabase
-          .from("global_products")
-          .select(PRODUCT_ADMIN_COLUMNS)
-          .eq("id", product.id)
-          .maybeSingle();
+        const [{ data }, { data: relations }] = await Promise.all([
+          supabase
+            .from("global_products")
+            .select(PRODUCT_ADMIN_COLUMNS)
+            .eq("id", product.id)
+            .maybeSingle(),
+          supabase
+            .from("product_relations")
+            .select("related_product_id")
+            .eq("product_id", product.id)
+            .order("sort_order"),
+        ]);
         if (!data) return;
         const fresh = data as GlobalProduct;
-        const freshForm = fromProduct(fresh);
+        const relatedIds = (relations ?? []).map((row) => row.related_product_id);
+        loadedRelated.current = relatedIds;
+        const freshForm = { ...fromProduct(fresh), relatedIds };
         setLoaded(fresh);
         setForm((current) => {
           if (JSON.stringify(current) !== baseline.current) return current; // המנהל כבר התחיל להקליד
@@ -408,6 +455,8 @@ export function AdminProductDialog({
 
   const validate = (): string | null => {
     if (form.name.trim() === "") return "נדרש שם מוצר";
+    if (form.orderBumpText.trim().length > 160)
+      return "המשפט של מוצר הקופה ארוך מדי (עד 160 תווים)";
     if (form.category.trim() === "") return "נדרשת קטגוריה";
     const prices =
       tiersEnabled && !form.uniformPrice
@@ -499,6 +548,8 @@ export function AdminProductDialog({
         : null,
       pack_size: form.packEnabled ? Math.floor(Number(form.packSize)) : null,
       min_order_quantity: form.minEnabled ? Math.floor(Number(form.minQuantity)) : null,
+      is_order_bump: form.isOrderBump,
+      order_bump_text: form.orderBumpText.trim() || null,
     };
     // דרגים 2/3: כשהם פעילים — נשמרים מהטופס. כשהם רדומים — מוצר קיים שומר
     // את הערכים שכבר יש לו (לא נמחקים), ומוצר חדש מקבל את אותו מחיר בכולם.
@@ -512,6 +563,7 @@ export function AdminProductDialog({
         : { price_tier2: price, price_tier3: price, uniform_price: true };
 
     let saveError: { message: string } | null = null;
+    let savedId: string | null = isEdit ? product.id : null;
     if (isEdit) {
       const update: TablesUpdate<"global_products"> = { ...common, ...tierFields };
       // מלאי ו"אזל" נשלחים רק אם המנהל שינה אותם — אחרת הזמנה שנכנסה בזמן
@@ -537,11 +589,13 @@ export function AdminProductDialog({
         clearTimeout(draftTimer.current);
         draftTimer.current = null;
       }
-      ({ error: saveError } = await supabase
+      const { data: created, error: insertError } = await supabase
         .from("global_products")
         .insert(insert)
         .select(PRODUCT_ADMIN_COLUMNS)
-        .single());
+        .single();
+      saveError = insertError;
+      savedId = created ? (created as GlobalProduct).id : null;
       if (saveError) productSaved.current = false;
     }
 
@@ -552,6 +606,13 @@ export function AdminProductDialog({
         /barcode/i.test(saveError.message) && /duplicate|unique/i.test(saveError.message);
       toast.error(duplicateBarcode ? "הברקוד הזה כבר משויך למוצר אחר" : saveError.message);
       return;
+    }
+
+    // מוצרים קשורים: נשמרים אחרי המוצר (צריך את המזהה שלו), ורק אם השתנו
+    if (savedId && JSON.stringify(form.relatedIds) !== JSON.stringify(loadedRelated.current)) {
+      const relationsError = await saveRelatedProducts(savedId, form.relatedIds);
+      if (relationsError) toast.warning(`המוצר נשמר, אבל המוצרים הקשורים לא: ${relationsError}`);
+      else loadedRelated.current = form.relatedIds;
     }
 
     if (!isEdit) {
@@ -1095,6 +1156,53 @@ export function AdminProductDialog({
               value={form.colors}
               onChange={(colors) => patch({ colors })}
             />
+
+            <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50/50 p-3">
+              <label className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Sparkles className="size-4 text-amber-600" />
+                  מוצר קופה (Order Bump)
+                </span>
+                <Switch
+                  checked={form.isOrderBump}
+                  onCheckedChange={(v) => patch({ isOrderBump: v })}
+                />
+              </label>
+              <p className="text-xs leading-5 text-muted-foreground">
+                יוצע ללקוחות בסל, ממש לפני שליחת ההזמנה, בתיבת סימון אחת שמוסיפה אותו לסל. מתאים
+                במיוחד למוצר משלים במחיר נמוך.
+              </p>
+              {form.isOrderBump && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="p-bump-text">משפט שיווקי בהצעה (לא חובה)</Label>
+                  <Input
+                    id="p-bump-text"
+                    maxLength={160}
+                    value={form.orderBumpText}
+                    onChange={(e) => patch({ orderBumpText: e.target.value })}
+                    placeholder="למשל: רוב הלקוחות מוסיפים גם את זה להזמנה"
+                  />
+                  <p className="numeric text-left text-[11px] text-muted-foreground" dir="ltr">
+                    {form.orderBumpText.trim().length}/160
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <Label htmlFor="p-related">מוצרים קשורים — "מוצרים נוספים שאולי תאהבו"</Label>
+              <p className="text-xs leading-5 text-muted-foreground">
+                יוצגו בחלון המוצר ובסל, לפי הסדר כאן. אם לא תבחרו — יוצגו אוטומטית מוצרים מאותה
+                קטגוריה.
+              </p>
+              <ProductPicker
+                id="p-related"
+                value={form.relatedIds}
+                onChange={(relatedIds) => patch({ relatedIds })}
+                excludeIds={product ? [product.id] : []}
+                max={12}
+              />
+            </div>
 
             <Button type="submit" className="w-full" size="lg" disabled={busy}>
               {busy && <Loader2 className="size-4 animate-spin" />}

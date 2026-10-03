@@ -207,6 +207,7 @@ export function CatalogGrid({
         canAdd={canAdd}
         addLabel={addLabel}
         onAddToCart={onAddToCart}
+        onShowProduct={setDetails}
       />
     </>
   );

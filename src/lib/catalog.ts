@@ -47,10 +47,14 @@ export type GlobalProduct = {
   out_of_stock_auto?: boolean;
   /** סדר בתוך הקטגוריה (גרירה בניהול). NULL = לא סודר — מהחדש לישן */
   sort_order?: number | null;
+  /** מוצר קופה: מוצע בסל ממש לפני שליחת ההזמנה */
+  is_order_bump?: boolean;
+  /** משפט שיווקי קצר להצעה בקופה */
+  order_bump_text?: string | null;
 };
 
 export const PRODUCT_ADMIN_COLUMNS =
-  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto" as const;
+  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto, is_order_bump, order_bump_text" as const;
 
 /** לסוכן שבונה הזמנה ללקוח: כל דרגי המחיר, בלי מחיר עלות (ניהולי בלבד) */
 export const STAFF_CATALOG_COLUMNS =

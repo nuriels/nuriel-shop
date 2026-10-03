@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { RefreshCw, Search } from "lucide-react";
@@ -29,6 +29,12 @@ import { loadHomeBanners, type BannerSet } from "@/lib/banners";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { CatalogSections } from "@/components/CatalogSections";
 import { groupBySubcategory } from "@/lib/catalog-sections";
+import { evaluateCartPromotions, type PromotionEvaluation } from "@/lib/cart-promotions";
+import { EMPTY_SALES, loadSalesData, type SalesData } from "@/lib/sales-data";
+import {
+  StorefrontSalesProvider,
+  type StorefrontSales,
+} from "@/components/sales/StorefrontSalesContext";
 
 type CatalogSearch = {
   /** הקטגוריה שנבחרה — בלי: מסך ריבועי הקטגוריות */
@@ -82,6 +88,8 @@ function Index() {
       resetScroll: false,
     });
   const [banners, setBanners] = useState<BannerSet>({ top: [], bottom: [] });
+  // הטבות עגלה, מוצרים קשורים ומוצרי קופה — נטענים יחד עם הקטלוג
+  const [sales, setSales] = useState<SalesData>(EMPTY_SALES);
 
   useEffect(() => {
     // באנרים הם תוספת — תקלה בטעינה שלהם לא עוצרת את הקטלוג
@@ -105,9 +113,14 @@ function Index() {
     setCatalogLoading(false);
   }, []);
 
+  const loadSales = useCallback(async () => {
+    setSales(await loadSalesData());
+  }, []);
+
   useEffect(() => {
     void loadCatalog();
-  }, [loadCatalog, session?.user?.id]);
+    void loadSales();
+  }, [loadCatalog, loadSales, session?.user?.id]);
 
   const signOut = async () => {
     setCart([]);
@@ -208,9 +221,14 @@ function Index() {
   const canUseCart = !session || isCustomer;
   const addLabel = cartMode === "order" ? "הוספה לסל" : "הוספה לבקשה";
 
-  const addToCart = (item: CatalogItem, requested = 1) => {
+  // הודעות "נוסף במתנה" / "המתנה הוסרה" מוצגות רק אחרי שינוי שהלקוח עשה בסל —
+  // לא כשהסל השמור או ההטבות נטענים (אחרת הודעה תקפוץ בכל כניסה לאתר)
+  const cartEdited = useRef(false);
+
+  const addToCart = (item: CatalogItem, requested = 1, options?: { silent?: boolean }) => {
     // מתחילים מהמינימום / ממארז שלם — לא מ-1
     const quantity = normalizeQuantity(item, requested);
+    cartEdited.current = true;
     setCart((current) => {
       const existing = current.find((c) => c.productId === item.id);
       if (existing) {
@@ -235,6 +253,7 @@ function Index() {
         },
       ];
     });
+    if (options?.silent) return;
     const target = cartMode === "order" ? "סל" : "בקשה";
     toast.success(
       quantity > 1
@@ -252,6 +271,7 @@ function Index() {
     const floor = cartMinimum(line);
     const next = line.quantity + delta * step;
     if (next < floor && cartMinUnits(line) > 1) toast.info(minOrderMessage(floor));
+    cartEdited.current = true;
     setCart((current) =>
       current.map((c) =>
         c.productId === productId ? { ...c, quantity: Math.max(floor, next) } : c,
@@ -301,8 +321,63 @@ function Index() {
       if (adjusted) toast.info("עדכנו כמויות בסל לפי גודל המארז / המינימום להזמנה של המוצרים");
     }
   }, [products, cart, catalogLoading]);
-  const removeFromCart = (productId: string) =>
+  const removeFromCart = (productId: string) => {
+    cartEdited.current = true;
     setCart((current) => current.filter((c) => c.productId !== productId));
+  };
+
+  // ---------- הגדלת מכירות: המלצות, מוצרי קופה, מתנות בסל ----------
+  const catalogById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  const subtree = useCallback((name: string) => subtreeNames(categoryTree, name), [categoryTree]);
+  const storefrontSales: StorefrontSales = useMemo(
+    () => ({
+      catalog: products,
+      catalogById,
+      related: sales.related,
+      bumps: sales.bumps,
+      promotions: sales.promotions,
+      subtree,
+      canAdd: canUseCart,
+      addLabel,
+      onAddToCart: canUseCart ? addToCart : undefined,
+    }),
+    // addToCart נבנה מחדש בכל רינדור, אבל תלוי רק במצב הסל (cartMode) — מספיק לרענן לפיו
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [products, catalogById, sales, subtree, canUseCart, addLabel, cartMode],
+  );
+
+  // מתנות: רק בהזמנה עם מחירים (לא בבקשת הצעת מחיר). מחושב מחדש בכל שינוי בסל —
+  // מתנה נוספת לבד כשהתנאי מתקיים, ויורדת לבד כשהסל יורד מתחת לתנאי.
+  const promotionsEval: PromotionEvaluation = useMemo(
+    () =>
+      cartMode === "order"
+        ? evaluateCartPromotions({
+            items: cart,
+            promotions: sales.promotions,
+            catalogById,
+            subtree,
+          })
+        : { gifts: [], hints: [] },
+    [cartMode, cart, sales.promotions, catalogById, subtree],
+  );
+
+  // הודעה כשמתנה נכנסת לסל או יוצאת ממנו — רק בעקבות שינוי של הלקוח בסל
+  const previousGifts = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    const current = new Map(promotionsEval.gifts.map((g) => [g.promotion.id, g.product.name]));
+    const previous = previousGifts.current;
+    previousGifts.current = current;
+    if (!cartEdited.current) return;
+    cartEdited.current = false;
+    for (const [id, name] of current) {
+      if (!previous.has(id)) toast.success(`🎁 "${name}" נוסף לסל במתנה!`);
+    }
+    for (const [id, name] of previous) {
+      if (!current.has(id) && cart.length > 0) {
+        toast.info(`המתנה "${name}" הוסרה מהסל — הסל כבר לא עומד בתנאי ההטבה`);
+      }
+    }
+  }, [promotionsEval, cart.length]);
 
   // מצב תחזוקה: חוסם אורחים ולקוחות, מנהלים וסוכנים ממשיכים לעבוד
   const isStaff = role?.role === "admin" || role?.role === "agent";
@@ -357,197 +432,205 @@ function Index() {
   const cartItemCount = cart.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <SiteHeader
-        role={role}
-        email={session?.user.email ?? null}
-        onSignOut={signOut}
-        cartCount={cartItemCount}
-        {...(canUseCart ? { onOpenCart: () => setCartOpen(true) } : {})}
-      />
+    <StorefrontSalesProvider value={storefrontSales}>
+      <div className="flex min-h-screen flex-col bg-background">
+        <SiteHeader
+          role={role}
+          email={session?.user.email ?? null}
+          onSignOut={signOut}
+          cartCount={cartItemCount}
+          {...(canUseCart ? { onOpenCart: () => setCartOpen(true) } : {})}
+        />
 
-      {!loading && !session && (
-        <section className="surface-cellar border-b border-white/10">
-          <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 sm:py-14 lg:grid-cols-[1.3fr_1fr] lg:items-end">
-            <div className="max-w-xl">
-              <h1 className="font-display text-3xl leading-tight text-primary-foreground sm:text-4xl">
-                {settings?.site_title?.trim() || DEFAULT_STORE_NAME}
-              </h1>
-              <p className="mt-3 text-base leading-7 text-primary-foreground/75">
-                עיינו בקטלוג המלא, ופתחו חשבון עסקי כדי לראות מחירים ולהזמין.
-              </p>
-              <div className="mt-6 flex flex-wrap gap-3">
+        {!loading && !session && (
+          <section className="surface-cellar border-b border-white/10">
+            <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 sm:py-14 lg:grid-cols-[1.3fr_1fr] lg:items-end">
+              <div className="max-w-xl">
+                <h1 className="font-display text-3xl leading-tight text-primary-foreground sm:text-4xl">
+                  {settings?.site_title?.trim() || DEFAULT_STORE_NAME}
+                </h1>
+                <p className="mt-3 text-base leading-7 text-primary-foreground/75">
+                  עיינו בקטלוג המלא, ופתחו חשבון עסקי כדי לראות מחירים ולהזמין.
+                </p>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Button
+                    size="lg"
+                    asChild
+                    className="bg-accent text-accent-foreground hover:bg-accent/90"
+                  >
+                    <Link to="/register">פתיחת חשבון עסקי</Link>
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    asChild
+                    className="border-white/25 bg-transparent text-primary-foreground hover:bg-white/10 hover:text-primary-foreground"
+                  >
+                    <Link to="/login">התחברות</Link>
+                  </Button>
+                </div>
+              </div>
+
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-white/10 pt-6 lg:border-r lg:border-t-0 lg:pr-8 lg:pt-0">
+                <div>
+                  <dt className="text-sm text-primary-foreground/60">מוצרים בקטלוג</dt>
+                  <dd className="numeric font-display text-2xl text-accent">{products.length}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-primary-foreground/60">מבצעים פעילים</dt>
+                  <dd className="numeric font-display text-2xl text-accent">{promoItems.length}</dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-sm text-primary-foreground/60">שירות לקוחות</dt>
+                  <dd dir="ltr" className="numeric text-right text-lg text-primary-foreground">
+                    {settings?.support_phone?.trim() || settings?.business_phone?.trim() || "—"}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </section>
+        )}
+
+        <main className="mx-auto w-full max-w-6xl flex-1 space-y-8 px-3 py-8 sm:px-4">
+          {settings?.maintenance_mode && isStaff && (
+            <div className="rounded-lg border border-accent/50 bg-accent/10 p-4 text-sm font-medium text-foreground">
+              מצב תחזוקה פעיל — האתר חסום ללקוחות ולאורחים. אתם רואים אותו כרגיל כדי לעדכן מלאי
+              ומחירים.
+            </div>
+          )}
+          {isCustomer && !role?.is_approved && (
+            <div className="rounded-lg border border-accent/40 bg-accent/5 p-4 text-sm text-foreground">
+              החשבון שלך ממתין לאישור מנהל. אפשר להמשיך ולעיין בקטלוג ולשלוח בקשה להצעת מחיר —
+              המחירים יוצגו מיד לאחר אישור החשבון.
+            </div>
+          )}
+
+          {isCustomer && role?.is_approved && !hasPrices && products.length > 0 && (
+            <div className="rounded-lg border border-border bg-card p-4 text-sm text-foreground shadow-card">
+              עדיין לא הוקצתה לחשבון שלך קבוצת מחיר, ולכן המחירים אינם מוצגים. אפשר לבנות רשימה
+              ולשלוח בקשה להצעת מחיר — נציג יחזור אליכם.
+            </div>
+          )}
+
+          <HomeBanner slides={banners.top} label="באנר עליון" />
+
+          <HotDealsStrip
+            items={promoItems}
+            canAdd={canUseCart}
+            addLabel={addLabel}
+            onAddToCart={addToCart}
+          />
+
+          <section className="space-y-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl text-foreground">קטלוג מוצרים</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {catalogLoading
+                    ? "טוען מוצרים..."
+                    : showLanding
+                      ? `${landingCategories.length} קטגוריות`
+                      : `${filtered.length} מוצרים`}{" "}
+                  · התמונות להמחשה בלבד
+                </p>
+              </div>
+              <div className="flex w-full items-center gap-2 sm:w-auto">
                 <Button
-                  size="lg"
-                  asChild
-                  className="bg-accent text-accent-foreground hover:bg-accent/90"
-                >
-                  <Link to="/register">פתיחת חשבון עסקי</Link>
-                </Button>
-                <Button
-                  size="lg"
                   variant="outline"
-                  asChild
-                  className="border-white/25 bg-transparent text-primary-foreground hover:bg-white/10 hover:text-primary-foreground"
+                  disabled={catalogLoading}
+                  onClick={() => void loadCatalog()}
+                  aria-label="רענון הקטלוג"
                 >
-                  <Link to="/login">התחברות</Link>
+                  <RefreshCw className={`size-4 ${catalogLoading ? "animate-spin" : ""}`} />
+                  <span className="hidden sm:inline">רענון</span>
                 </Button>
+                <div className="relative w-full sm:w-72">
+                  <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={term}
+                    onChange={(e) => setTerm(e.target.value)}
+                    placeholder={category ? `חיפוש בתוך ${category}` : "חיפוש לפי שם, מקט או ברקוד"}
+                    aria-label="חיפוש בקטלוג"
+                    className="bg-card pr-9"
+                  />
+                </div>
               </div>
             </div>
 
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-white/10 pt-6 lg:border-r lg:border-t-0 lg:pr-8 lg:pt-0">
-              <div>
-                <dt className="text-sm text-primary-foreground/60">מוצרים בקטלוג</dt>
-                <dd className="numeric font-display text-2xl text-accent">{products.length}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-primary-foreground/60">מבצעים פעילים</dt>
-                <dd className="numeric font-display text-2xl text-accent">{promoItems.length}</dd>
-              </div>
-              <div className="col-span-2">
-                <dt className="text-sm text-primary-foreground/60">שירות לקוחות</dt>
-                <dd dir="ltr" className="numeric text-right text-lg text-primary-foreground">
-                  {settings?.support_phone?.trim() || settings?.business_phone?.trim() || "—"}
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </section>
-      )}
-
-      <main className="mx-auto w-full max-w-6xl flex-1 space-y-8 px-3 py-8 sm:px-4">
-        {settings?.maintenance_mode && isStaff && (
-          <div className="rounded-lg border border-accent/50 bg-accent/10 p-4 text-sm font-medium text-foreground">
-            מצב תחזוקה פעיל — האתר חסום ללקוחות ולאורחים. אתם רואים אותו כרגיל כדי לעדכן מלאי
-            ומחירים.
-          </div>
-        )}
-        {isCustomer && !role?.is_approved && (
-          <div className="rounded-lg border border-accent/40 bg-accent/5 p-4 text-sm text-foreground">
-            החשבון שלך ממתין לאישור מנהל. אפשר להמשיך ולעיין בקטלוג ולשלוח בקשה להצעת מחיר — המחירים
-            יוצגו מיד לאחר אישור החשבון.
-          </div>
-        )}
-
-        {isCustomer && role?.is_approved && !hasPrices && products.length > 0 && (
-          <div className="rounded-lg border border-border bg-card p-4 text-sm text-foreground shadow-card">
-            עדיין לא הוקצתה לחשבון שלך קבוצת מחיר, ולכן המחירים אינם מוצגים. אפשר לבנות רשימה ולשלוח
-            בקשה להצעת מחיר — נציג יחזור אליכם.
-          </div>
-        )}
-
-        <HomeBanner slides={banners.top} label="באנר עליון" />
-
-        <HotDealsStrip
-          items={promoItems}
-          canAdd={canUseCart}
-          addLabel={addLabel}
-          onAddToCart={addToCart}
-        />
-
-        <section className="space-y-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="min-w-0">
-              <h2 className="font-display text-2xl text-foreground">קטלוג מוצרים</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {catalogLoading
-                  ? "טוען מוצרים..."
-                  : showLanding
-                    ? `${landingCategories.length} קטגוריות`
-                    : `${filtered.length} מוצרים`}{" "}
-                · התמונות להמחשה בלבד
-              </p>
-            </div>
-            <div className="flex w-full items-center gap-2 sm:w-auto">
-              <Button
-                variant="outline"
-                disabled={catalogLoading}
-                onClick={() => void loadCatalog()}
-                aria-label="רענון הקטלוג"
-              >
-                <RefreshCw className={`size-4 ${catalogLoading ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">רענון</span>
-              </Button>
-              <div className="relative w-full sm:w-72">
-                <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={term}
-                  onChange={(e) => setTerm(e.target.value)}
-                  placeholder={category ? `חיפוש בתוך ${category}` : "חיפוש לפי שם, מקט או ברקוד"}
-                  aria-label="חיפוש בקטלוג"
-                  className="bg-card pr-9"
+            <CategoryBrowser
+              tree={categoryTree}
+              value={category}
+              onChange={setCategory}
+              counts={categoryCounts}
+              totalCount={products.length}
+              hideEmpty={role?.role !== "admin" && role?.role !== "agent"}
+            >
+              {showLanding ? (
+                <CategoryLanding
+                  categories={landingCategories}
+                  counts={categoryCounts}
+                  onSelect={setCategory}
+                  usingFallback={usingFallbackCategories}
                 />
-              </div>
-            </div>
-          </div>
+              ) : (
+                <>
+                  <Tabs
+                    value={view}
+                    onValueChange={(next) => setView(next as typeof view)}
+                    dir="rtl"
+                  >
+                    <TabsList className="flex-wrap">
+                      <TabsTrigger value="all">
+                        {category ? "הכל" : "כל המוצרים"} ({tabCounts.all})
+                      </TabsTrigger>
+                      <TabsTrigger value="new">חדש באתר ({tabCounts.new})</TabsTrigger>
+                      <TabsTrigger value="promo">מבצעים חמים ({tabCounts.promo})</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
 
-          <CategoryBrowser
-            tree={categoryTree}
-            value={category}
-            onChange={setCategory}
-            counts={categoryCounts}
-            totalCount={products.length}
-            hideEmpty={role?.role !== "admin" && role?.role !== "agent"}
-          >
-            {showLanding ? (
-              <CategoryLanding
-                categories={landingCategories}
-                counts={categoryCounts}
-                onSelect={setCategory}
-                usingFallback={usingFallbackCategories}
-              />
-            ) : (
-              <>
-                <Tabs value={view} onValueChange={(next) => setView(next as typeof view)} dir="rtl">
-                  <TabsList className="flex-wrap">
-                    <TabsTrigger value="all">
-                      {category ? "הכל" : "כל המוצרים"} ({tabCounts.all})
-                    </TabsTrigger>
-                    <TabsTrigger value="new">חדש באתר ({tabCounts.new})</TabsTrigger>
-                    <TabsTrigger value="promo">מבצעים חמים ({tabCounts.promo})</TabsTrigger>
-                  </TabsList>
-                </Tabs>
+                  <CatalogSections
+                    sections={groupBySubcategory(categoryTree, category, visible)}
+                    onOpenCategory={setCategory}
+                    canAdd={canUseCart}
+                    addLabel={addLabel}
+                    onAddToCart={addToCart}
+                    emptyText={
+                      query !== ""
+                        ? "לא נמצאו מוצרים תואמים"
+                        : view === "new"
+                          ? "לא נוספו מוצרים חדשים בחודש האחרון"
+                          : view === "promo"
+                            ? "אין כרגע מבצעים פעילים"
+                            : category
+                              ? "אין עדיין מוצרים בקטגוריה הזו"
+                              : "אין עדיין מוצרים בקטלוג"
+                    }
+                  />
+                </>
+              )}
+            </CategoryBrowser>
+          </section>
 
-                <CatalogSections
-                  sections={groupBySubcategory(categoryTree, category, visible)}
-                  onOpenCategory={setCategory}
-                  canAdd={canUseCart}
-                  addLabel={addLabel}
-                  onAddToCart={addToCart}
-                  emptyText={
-                    query !== ""
-                      ? "לא נמצאו מוצרים תואמים"
-                      : view === "new"
-                        ? "לא נוספו מוצרים חדשים בחודש האחרון"
-                        : view === "promo"
-                          ? "אין כרגע מבצעים פעילים"
-                          : category
-                            ? "אין עדיין מוצרים בקטגוריה הזו"
-                            : "אין עדיין מוצרים בקטלוג"
-                  }
-                />
-              </>
-            )}
-          </CategoryBrowser>
-        </section>
+          <HomeBanner slides={banners.bottom} label="באנר תחתון" />
+        </main>
 
-        <HomeBanner slides={banners.bottom} label="באנר תחתון" />
-      </main>
+        {canUseCart && (
+          <OrderCartDrawer
+            open={cartOpen}
+            onOpenChange={setCartOpen}
+            mode={cartMode}
+            customerId={role?.user_id ?? null}
+            items={cart}
+            onChangeQuantity={changeQuantity}
+            onRemove={removeFromCart}
+            onClear={() => setCart([])}
+            onAdd={addToCart}
+            promotions={promotionsEval}
+          />
+        )}
 
-      {canUseCart && (
-        <OrderCartDrawer
-          open={cartOpen}
-          onOpenChange={setCartOpen}
-          mode={cartMode}
-          customerId={role?.user_id ?? null}
-          items={cart}
-          onChangeQuantity={changeQuantity}
-          onRemove={removeFromCart}
-          onClear={() => setCart([])}
-        />
-      )}
-
-      <AppFooter />
-    </div>
+        <AppFooter />
+      </div>
+    </StorefrontSalesProvider>
   );
 }
