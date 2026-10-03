@@ -37,7 +37,7 @@ export function FreeShippingBar({ progress }: { progress: FreeShippingProgress }
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent}
-        className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
+        className="mt-2 h-2 overflow-hidden rounded-full bg-primary/15"
       >
         <div
           className={cn(
