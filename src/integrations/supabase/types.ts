@@ -436,6 +436,8 @@ export type Database = {
           id: boolean;
           notify_admin_user_ids: string[];
           sender_email: string;
+          sender_local_part: string;
+          reply_to_email: string;
           updated_at: string;
         };
         Insert: {
@@ -443,6 +445,8 @@ export type Database = {
           id?: boolean;
           notify_admin_user_ids?: string[];
           sender_email?: string;
+          sender_local_part?: string;
+          reply_to_email?: string;
           updated_at?: string;
         };
         Update: {
@@ -450,6 +454,8 @@ export type Database = {
           id?: boolean;
           notify_admin_user_ids?: string[];
           sender_email?: string;
+          sender_local_part?: string;
+          reply_to_email?: string;
           updated_at?: string;
         };
         Relationships: [];

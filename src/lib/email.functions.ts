@@ -126,7 +126,8 @@ export const getEmailDiagnostics = createServerFn({ method: "POST" })
     const caller = await loadCaller(context.userId);
     if (caller?.role !== "admin") throw new Error("אין הרשאה");
 
-    const { resendApiKey, storeSender } = await import("@/lib/email.server");
+    const { resendApiKey, storeSender, defaultSenderLocalPart } =
+      await import("@/lib/email.server");
     const apiKey = resendApiKey() ?? "";
     const sender = await storeSender();
 
@@ -138,7 +139,11 @@ export const getEmailDiagnostics = createServerFn({ method: "POST" })
       from: sender.from,
       senderName: sender.name,
       senderAddress: sender.address,
-      senderDomain: sender.address.split("@")[1] ?? null,
+      /** החלק שלפני ה-@ שבשימוש בפועל, וברירת המחדל (orders) */
+      senderLocalPart: sender.localPart,
+      defaultLocalPart: defaultSenderLocalPart(),
+      /** הדומיין היחיד שממנו מותר לשלוח (nuri1.fit) */
+      senderDomain: sender.domain,
       /** לאן מגיעות תשובות של לקוחות */
       replyTo: sender.replyTo,
       // כתובת החנות לקישורים במיילים (tenants.domain / TENANT_BASE_DOMAIN / PUBLIC_SITE_URL)

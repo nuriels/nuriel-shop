@@ -2,14 +2,17 @@
 //
 // תשתית אחת לכל החנויות:
 //  - מפתח API גלובלי אחד — משתנה הסביבה RESEND_API_KEY בשרת (לא ב-git).
-//  - כתובת השולח: דומיין המערכת המאומת ב-Resend, עם שם החנות כשם השולח —
-//    "אלקטרו כהן <orders@nuri1.fit>". הכתובת: EMAIL_FROM_ADDRESS, ואם לא
-//    הוגדרה — orders@<TENANT_BASE_DOMAIN> (ברירת מחדל orders@nuri1.fit).
+//  - כתובת השולח: תמיד על דומיין המערכת המאומת ב-Resend (המפתח לא מאפשר
+//    דומיין אחר), עם שם החנות כשם השולח — "אלקטרו כהן <electro@nuri1.fit>".
+//    החנות בוחרת רק את החלק שלפני ה-@ (email_settings.sender_local_part,
+//    ברירת מחדל orders). הדומיין: מ-EMAIL_FROM_ADDRESS, ואם לא הוגדרה —
+//    TENANT_BASE_DOMAIN (ברירת מחדל nuri1.fit).
 //  - תשובות של לקוחות (Reply-To) מגיעות לחנות עצמה: הכתובת למענה מהגדרות
 //    המייל של החנות, או אימייל העסק מהגדרות האתר.
 // אם המפתח חסר, השליחה מדולגת (לא חוסמת הזמנה) ונרשמת בלוג.
 
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { DEFAULT_SENDER_LOCAL_PART, senderLocalPartProblem } from "@/lib/email-sender";
 
 export type EmailAttachment = {
   filename: string;
@@ -49,12 +52,22 @@ export function isValidEmail(value: string | null | undefined): value is string 
   return typeof value === "string" && EMAIL_FORMAT.test(value.trim());
 }
 
-/** כתובת השולח של המערכת (דומיין הפלטפורמה, מאומת ב-Resend) */
+/** כתובת השולח ברירת המחדל של המערכת (דומיין הפלטפורמה, מאומת ב-Resend) */
 export function systemSenderAddress(): string {
-  const explicit = process.env["EMAIL_FROM_ADDRESS"]?.trim();
+  const explicit = process.env["EMAIL_FROM_ADDRESS"]?.trim().toLowerCase();
   if (explicit && isValidEmail(explicit)) return explicit;
   const base = process.env["TENANT_BASE_DOMAIN"]?.trim().toLowerCase();
-  return `orders@${base || "nuri1.fit"}`;
+  return `${DEFAULT_SENDER_LOCAL_PART}@${base || "nuri1.fit"}`;
+}
+
+/** הדומיין היחיד שממנו מותר לשלוח (nuri1.fit) */
+export function systemSenderDomain(): string {
+  return systemSenderAddress().split("@")[1] ?? "nuri1.fit";
+}
+
+/** החלק שלפני ה-@ בכתובת ברירת המחדל (orders) */
+export function defaultSenderLocalPart(): string {
+  return systemSenderAddress().split("@")[0] || DEFAULT_SENDER_LOCAL_PART;
 }
 
 /** כתובת ה-API של Resend (ניתן להחלפה בסביבת בדיקות בלבד — RESEND_API_URL) */
@@ -82,18 +95,25 @@ export type StoreSender = {
   from: string;
   name: string;
   address: string;
+  /** החלק שלפני ה-@ שבשימוש בפועל */
+  localPart: string;
+  /** דומיין המערכת — קבוע */
+  domain: string;
   /** לאן יגיעו תשובות של לקוחות (null = בלי Reply-To) */
   replyTo: string | null;
 };
 
 /**
  * השולח של החנות הנוכחית: שם החנות (שם העסק בהגדרות האתר, או שם החנות
- * בפלטפורמה) + כתובת המערכת. Reply-To — הכתובת למענה שהחנות הגדירה, או
- * אימייל העסק; כתובת על דומיין המערכת עצמו לא משמשת למענה (אף אחד לא קורא אותה).
+ * בפלטפורמה) + הכתובת שהחנות בחרה על דומיין המערכת ("electro@nuri1.fit";
+ * ברירת מחדל orders@nuri1.fit). הדומיין תמיד של המערכת — גם אם במסד יש ערך
+ * לא תקין, נופלים לברירת המחדל ולא שולחים מדומיין אחר.
+ * Reply-To — הכתובת למענה שהחנות הגדירה, או אימייל העסק; כתובת על דומיין
+ * המערכת עצמו לא משמשת למענה (אף אחד לא קורא אותה).
  */
 export async function storeSender(): Promise<StoreSender> {
-  const address = systemSenderAddress();
-  const systemDomain = address.split("@")[1]?.toLowerCase() ?? "";
+  const systemDomain = systemSenderDomain();
+  let localPart = defaultSenderLocalPart();
   let name = "";
   let replyTo: string | null = null;
   try {
@@ -107,11 +127,17 @@ export async function storeSender(): Promise<StoreSender> {
           .select("business_name, site_title, business_email")
           .eq("id", true)
           .maybeSingle(),
-        supabaseAdmin.from("email_settings").select("sender_email").eq("id", true).maybeSingle(),
+        supabaseAdmin
+          .from("email_settings")
+          .select("sender_local_part, reply_to_email")
+          .eq("id", true)
+          .maybeSingle(),
       ]);
       name = site?.business_name?.trim() || site?.site_title?.trim() || tenant.name || "";
+      const chosen = emailSettings?.sender_local_part?.trim().toLowerCase() ?? "";
+      if (chosen !== "" && senderLocalPartProblem(chosen) === null) localPart = chosen;
       replyTo =
-        [emailSettings?.sender_email, site?.business_email]
+        [emailSettings?.reply_to_email, site?.business_email]
           .map((value) => value?.trim().toLowerCase() ?? "")
           .find((value) => isValidEmail(value) && value.split("@")[1] !== systemDomain) ?? null;
     }
@@ -119,7 +145,15 @@ export async function storeSender(): Promise<StoreSender> {
     console.error("[email] failed to load the store sender", error);
   }
   const display = cleanDisplayName(name) || DEFAULT_STORE_NAME;
-  return { from: `"${display}" <${address}>`, name: display, address, replyTo };
+  const address = `${localPart}@${systemDomain}`;
+  return {
+    from: `"${display}" <${address}>`,
+    name: display,
+    address,
+    localPart,
+    domain: systemDomain,
+    replyTo,
+  };
 }
 
 export async function sendEmail(input: SendEmailInput): Promise<SendResult> {

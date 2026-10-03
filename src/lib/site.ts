@@ -2,6 +2,7 @@ import { getTenantId, supabase } from "@/integrations/supabase/client";
 import { compressLogoImage, compressProductImage } from "@/lib/image";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { normalizeBrandColor } from "@/lib/brand-theme";
+import { DEFAULT_SENDER_LOCAL_PART } from "@/lib/email-sender";
 
 export const BRANDING_BUCKET = "branding";
 export const PRODUCT_IMAGES_BUCKET = "product-images";
@@ -79,10 +80,12 @@ export function labelSizeProblem(width: number, height: number): string | null {
 
 export type EmailSettings = {
   /**
-   * הכתובת למענה (Reply-To) של מיילי החנות. המיילים עצמם יוצאים מכתובת
-   * המערכת עם שם החנות ("שם החנות <orders@nuri1.fit>") — ראו email.server.ts.
+   * החלק שלפני ה-@ בכתובת השולח — "electro" → electro@nuri1.fit. הדומיין קבוע
+   * (דומיין המערכת המאומת ב-Resend) ומצורף בשרת. ברירת מחדל: orders.
    */
-  sender_email: string;
+  sender_local_part: string;
+  /** כתובת למענה (Reply-To) — כל דומיין; ריק = אימייל העסק מהגדרות האתר */
+  reply_to_email: string;
   notify_admin_user_ids: string[];
 };
 
@@ -167,12 +170,13 @@ export async function saveSabbathMode(on: boolean): Promise<void> {
 export async function loadEmailSettings(): Promise<EmailSettings> {
   const { data } = await supabase
     .from("email_settings")
-    .select("sender_email, notify_admin_user_ids")
+    .select("sender_local_part, reply_to_email, notify_admin_user_ids")
     .eq("id", true)
     .maybeSingle();
   return (
     (data as EmailSettings | null) ?? {
-      sender_email: "",
+      sender_local_part: DEFAULT_SENDER_LOCAL_PART,
+      reply_to_email: "",
       notify_admin_user_ids: [],
     }
   );

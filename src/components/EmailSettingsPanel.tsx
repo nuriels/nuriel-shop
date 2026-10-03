@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCircle2, Mail, XCircle } from "lucide-react";
+import { AtSign, CheckCircle2, Mail, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { loadEmailSettings, saveEmailSettings, type EmailSettings } from "@/lib/site";
 import { getEmailDiagnostics } from "@/lib/email.functions";
+import {
+  DEFAULT_SENDER_LOCAL_PART,
+  parseSenderInput,
+  senderLocalPartProblem,
+} from "@/lib/email-sender";
 import { SendMessagePanel } from "@/components/SendMessagePanel";
 import { EmailTestCard } from "@/components/EmailTestCard";
 
@@ -17,20 +22,26 @@ type AdminOption = { user_id: string; email: string };
 type Diagnostics = Awaited<ReturnType<typeof getEmailDiagnostics>>;
 
 const EMAIL_FORMAT = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
+/** דומיין המערכת — עד שהאבחון נטען (בשרת הוא נקבע מ-EMAIL_FROM_ADDRESS) */
+const FALLBACK_DOMAIN = "nuri1.fit";
 
 /**
  * הגדרות מייל של החנות.
- * המיילים יוצאים מתשתית אחת לכל החנויות (מפתח Resend גלובלי בשרת), מהכתובת
- * של המערכת עם שם החנות — "שם החנות <orders@nuri1.fit>". כאן החנות קובעת לאן
- * יגיעו תשובות של לקוחות (Reply-To), מי מקבל התראה על הזמנה חדשה, ובודקת
- * שהשליחה עובדת.
+ * המיילים יוצאים מתשתית אחת לכל החנויות (מפתח Resend גלובלי בשרת), שמאומת
+ * רק על דומיין המערכת — לכן כתובת השולח תמיד @nuri1.fit. החנות בוחרת את החלק
+ * שלפני ה-@ (ברירת מחדל orders), לאן יגיעו תשובות (Reply-To), מי מקבל התראה
+ * על הזמנה חדשה, ובודקת שהשליחה עובדת.
  */
 export function EmailSettingsPanel() {
   const [settings, setSettings] = useState<EmailSettings | null>(null);
   const [admins, setAdmins] = useState<AdminOption[]>([]);
   const [busy, setBusy] = useState(false);
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
+  const [senderInputProblem, setSenderInputProblem] = useState<string | null>(null);
   const loadDiagnostics = useServerFn(getEmailDiagnostics);
+
+  const domain = diagnostics?.senderDomain || FALLBACK_DOMAIN;
+  const defaultLocal = diagnostics?.defaultLocalPart || DEFAULT_SENDER_LOCAL_PART;
 
   useEffect(() => {
     void (async () => {
@@ -38,20 +49,12 @@ export function EmailSettingsPanel() {
         loadEmailSettings(),
         supabase.from("user_roles").select("user_id, email, role"),
       ]);
-      let diag: Diagnostics | null = null;
+      setSettings(emailSettings);
       try {
-        diag = await loadDiagnostics({ data: {} });
-        setDiagnostics(diag);
+        setDiagnostics(await loadDiagnostics({ data: {} }));
       } catch {
         // אבחון הוא תוספת בלבד — כשל בו לא מונע את עריכת ההגדרות
       }
-      // כתובת על דומיין המערכת (ברירת המחדל הישנה) אינה כתובת למענה — מוצגת ריקה
-      const replyTo = emailSettings.sender_email.trim().toLowerCase();
-      const systemDomain = diag?.senderDomain?.toLowerCase() ?? "";
-      setSettings({
-        ...emailSettings,
-        sender_email: systemDomain !== "" && replyTo.endsWith(`@${systemDomain}`) ? "" : replyTo,
-      });
       setAdmins(
         (rolesResult.data ?? [])
           .filter((r) => r.role === "admin")
@@ -72,6 +75,10 @@ export function EmailSettingsPanel() {
     );
   }
 
+  const localPart = settings.sender_local_part;
+  const localProblem = senderInputProblem ?? senderLocalPartProblem(localPart);
+  const previewAddress = `${localProblem ? defaultLocal : localPart}@${domain}`;
+
   const toggleAdmin = (userId: string, checked: boolean) =>
     setSettings((current) =>
       current
@@ -84,19 +91,37 @@ export function EmailSettingsPanel() {
         : current,
     );
 
+  const onSenderInput = (raw: string) => {
+    const parsed = parseSenderInput(raw, domain);
+    setSenderInputProblem(parsed.problem);
+    setSettings((current) => (current ? { ...current, sender_local_part: parsed.local } : current));
+  };
+
   const save = async () => {
-    const replyTo = settings.sender_email.trim().toLowerCase();
+    if (localProblem) {
+      toast.error(`כתובת השולח: ${localProblem}`);
+      return;
+    }
+    const replyTo = settings.reply_to_email.trim().toLowerCase();
     if (replyTo !== "" && !EMAIL_FORMAT.test(replyTo)) {
       toast.error("הכתובת למענה אינה תקינה");
       return;
     }
     setBusy(true);
     try {
-      await saveEmailSettings({ ...settings, sender_email: replyTo });
+      await saveEmailSettings({
+        ...settings,
+        sender_local_part: localPart,
+        reply_to_email: replyTo,
+      });
+      setSettings({ ...settings, reply_to_email: replyTo });
       setDiagnostics(await loadDiagnostics({ data: {} }).catch(() => diagnostics));
-      toast.success("הגדרות המייל נשמרו");
+      toast.success(`הגדרות המייל נשמרו — המיילים יישלחו מ-${localPart}@${domain}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "השמירה נכשלה");
+      const message = error instanceof Error ? error.message : "השמירה נכשלה";
+      toast.error(
+        /sender_local_part/.test(message) ? "כתובת השולח אינה תקינה או שמורה למערכת" : message,
+      );
     } finally {
       setBusy(false);
     }
@@ -111,24 +136,95 @@ export function EmailSettingsPanel() {
         <div>
           <h2 className="text-xl font-bold text-foreground">הגדרות מייל</h2>
           <p className="text-sm text-muted-foreground">
-            שליחת הודעות, בדיקת שליחה, כתובת למענה והתראות על הזמנות חדשות
+            כתובת השולח, בדיקת שליחה, שליחת הודעות והתראות על הזמנות חדשות
           </p>
         </div>
       </div>
 
-      <SendMessagePanel />
-
-      <EmailTestCard
-        sender={
-          diagnostics ? { name: diagnostics.senderName, address: diagnostics.senderAddress } : null
-        }
-      />
-
       <Card className="shadow-card">
         <CardHeader>
-          <CardTitle className="text-base">שולח המיילים של החנות</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <AtSign className="size-4" aria-hidden="true" />
+            כתובת השולח של החנות
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="e-sender-local">המיילים ללקוחות ולצוות יישלחו מהכתובת</Label>
+            <div dir="ltr" className="flex max-w-md">
+              <Input
+                id="e-sender-local"
+                dir="ltr"
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={80}
+                placeholder={defaultLocal}
+                aria-invalid={localProblem !== null}
+                className="rounded-r-none text-left"
+                value={localPart}
+                onChange={(e) => onSenderInput(e.target.value)}
+              />
+              <span className="inline-flex shrink-0 items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
+                @{domain}
+              </span>
+            </div>
+            {localProblem ? (
+              <p className="text-sm font-medium text-destructive">{localProblem}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                בתיבת הדואר של הלקוח:{" "}
+                <span className="font-semibold text-foreground">
+                  {diagnostics?.senderName ?? "שם החנות"}
+                </span>{" "}
+                <span dir="ltr" className="font-semibold text-foreground">
+                  &lt;{previewAddress}&gt;
+                </span>
+              </p>
+            )}
+            <p className="text-xs leading-5 text-muted-foreground">
+              אפשר לבחור רק את החלק שלפני ה-@ (למשל השם של החנות באנגלית). הדומיין קבוע —{" "}
+              <span dir="ltr">@{domain}</span> — כי רק ממנו מותר לשלוח במערכת. ברירת מחדל:{" "}
+              <span dir="ltr">
+                {defaultLocal}@{domain}
+              </span>
+              .
+            </p>
+            {localPart !== defaultLocal && (
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto p-0"
+                onClick={() => onSenderInput(defaultLocal)}
+              >
+                חזרה לברירת המחדל ({defaultLocal}@{domain})
+              </Button>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="e-reply-to">כתובת למענה (Reply-To) — לכאן יגיעו תשובות של לקוחות</Label>
+            <Input
+              id="e-reply-to"
+              type="email"
+              dir="ltr"
+              className="max-w-md"
+              placeholder="office@yourbusiness.co.il"
+              value={settings.reply_to_email}
+              onChange={(e) => setSettings({ ...settings, reply_to_email: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">
+              כל כתובת (גם Gmail). ריק = אימייל העסק מ"הגדרות אתר"
+              {diagnostics?.replyTo ? (
+                <>
+                  {" "}
+                  (כרגע: <span dir="ltr">{diagnostics.replyTo}</span>)
+                </>
+              ) : null}
+              .
+            </p>
+          </div>
+
           {diagnostics && (
             <ul className="space-y-1.5 rounded-lg border border-border bg-secondary p-3 text-xs">
               <li className="flex items-center gap-2">
@@ -143,7 +239,7 @@ export function EmailSettingsPanel() {
               </li>
               <li className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <CheckCircle2 className="size-4 shrink-0 text-accent" />
-                <span>המיילים ללקוחות ולצוות יוצאים מ:</span>
+                <span>שולח שמור כרגע:</span>
                 <span className="font-semibold text-foreground">{diagnostics.senderName}</span>
                 <span dir="ltr" className="text-foreground">
                   &lt;{diagnostics.senderAddress}&gt;
@@ -161,33 +257,20 @@ export function EmailSettingsPanel() {
               </li>
             </ul>
           )}
-          <p className="text-xs leading-5 text-muted-foreground">
-            שם השולח הוא שם העסק מ"הגדרות אתר". כתובת השולח היא של המערכת (מאומתת), כך שאין צורך
-            לאמת דומיין לכל חנות.
-          </p>
-          <div className="space-y-2">
-            <Label htmlFor="e-reply-to">כתובת למענה (Reply-To) — לכאן יגיעו תשובות של לקוחות</Label>
-            <Input
-              id="e-reply-to"
-              type="email"
-              dir="ltr"
-              placeholder="office@yourbusiness.co.il"
-              value={settings.sender_email}
-              onChange={(e) => setSettings({ ...settings, sender_email: e.target.value })}
-            />
-            <p className="text-xs text-muted-foreground">
-              ריק = אימייל העסק מ"הגדרות אתר"
-              {diagnostics?.replyTo ? (
-                <>
-                  {" "}
-                  (כרגע: <span dir="ltr">{diagnostics.replyTo}</span>)
-                </>
-              ) : null}
-              .
-            </p>
-          </div>
+
+          <Button disabled={busy || localProblem !== null} onClick={save}>
+            {busy ? "שומר..." : "שמירת הגדרות המייל"}
+          </Button>
         </CardContent>
       </Card>
+
+      <EmailTestCard
+        sender={
+          diagnostics ? { name: diagnostics.senderName, address: diagnostics.senderAddress } : null
+        }
+      />
+
+      <SendMessagePanel />
 
       <Card className="shadow-card">
         <CardHeader>
@@ -215,7 +298,7 @@ export function EmailSettingsPanel() {
         </CardContent>
       </Card>
 
-      <Button size="lg" className="w-full" disabled={busy} onClick={save}>
+      <Button size="lg" className="w-full" disabled={busy || localProblem !== null} onClick={save}>
         {busy ? "שומר..." : "שמירת הגדרות המייל"}
       </Button>
     </section>
