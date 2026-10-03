@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { KeyRound, Loader2, Lock, LockOpen, LogIn, Trash2, UserPlus } from "lucide-react";
+import { Loader2, Lock, LockOpen, LogIn, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, TenantPlan, TenantStatus } from "@/integrations/supabase/types";
@@ -17,7 +17,6 @@ import {
 } from "@/components/platform/StoreCredentials";
 import { DeleteStoreDialog } from "@/components/platform/DeleteStoreDialog";
 import { SslCell } from "@/components/platform/SslCell";
-import { StoreEmailKeyDialog, type StoreEmailKey } from "@/components/platform/StoreEmailKeyDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,9 +58,8 @@ export type Store = Database["public"]["Functions"]["platform_list_tenants"]["Re
 
 /**
  * לוח הבקרה של החנויות: מנוי (שינוי במקום), סטטוס עם הקפאה / שחרור,
- * תעודת SSL (תוקף + חידוש), מפתח המייל (Resend) של החנות, פרטי הבעלים,
- * נתוני שימוש ומחיקה. כל פעולה רצה בפונקציה במסד שבודקת בעצמה שהקורא
- * הוא מנהל-על.
+ * תעודת SSL (תוקף + חידוש), פרטי הבעלים, נתוני שימוש ומחיקה. כל פעולה
+ * רצה בפונקציה במסד שבודקת בעצמה שהקורא הוא מנהל-על.
  */
 export function StoresTable({
   stores,
@@ -79,32 +77,7 @@ export function StoresTable({
   const [adminFor, setAdminFor] = useState<Store | null>(null);
   const [toDelete, setToDelete] = useState<Store | null>(null);
   const [enteringId, setEnteringId] = useState<string | null>(null);
-  const [emailKeys, setEmailKeys] = useState<Map<string, StoreEmailKey>>(new Map());
-  const [emailKeyFor, setEmailKeyFor] = useState<Store | null>(null);
   const createHandoff = useServerFn(createStoreAdminHandoff);
-
-  // לכל חנות: האם יש מפתח Resend משלה (ו-4 התווים האחרונים) — לא המפתח עצמו
-  useEffect(() => {
-    let cancelled = false;
-    void supabase.rpc("platform_tenant_email_keys").then(({ data, error }) => {
-      if (cancelled) return;
-      if (error) {
-        console.error("[platform] email keys", error.message);
-        return;
-      }
-      setEmailKeys(
-        new Map(
-          (data ?? []).map((row) => [
-            row.tenant_id,
-            { has_key: row.has_key, key_hint: row.key_hint, updated_at: row.updated_at },
-          ]),
-        ),
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [stores.length]);
 
   /**
    * "היכנס לניהול" (God Mode): קוד כניסה חד-פעמי לחנות, ופתיחת פאנל הניהול
@@ -172,7 +145,6 @@ export function StoresTable({
             <TableHead>מנוי</TableHead>
             <TableHead>סטטוס</TableHead>
             <TableHead>תעודת SSL</TableHead>
-            <TableHead>מייל (Resend)</TableHead>
             <TableHead>נתונים</TableHead>
             <TableHead>נוצרה</TableHead>
             <TableHead className="text-left">פעולות</TableHead>
@@ -249,39 +221,6 @@ export function StoresTable({
                       onChanged({ id: store.id, ssl_renew_requested_at: requestedAt })
                     }
                   />
-                </TableCell>
-
-                <TableCell>
-                  {(() => {
-                    const emailKey = emailKeys.get(store.id);
-                    return (
-                      <div className="flex flex-col items-start gap-1">
-                        {emailKey?.has_key ? (
-                          <Badge
-                            variant="outline"
-                            className="whitespace-nowrap border-green-600 text-green-700"
-                            title="לחנות מפתח Resend משלה"
-                          >
-                            מפתח{" "}
-                            <span dir="ltr" className="font-mono">
-                              {emailKey.key_hint}
-                            </span>
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">המפתח הכללי</span>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => setEmailKeyFor(store)}
-                        >
-                          <KeyRound className="size-3.5" />
-                          {emailKey?.has_key ? "החלפה" : "הגדרת מפתח"}
-                        </Button>
-                      </div>
-                    );
-                  })()}
                 </TableCell>
 
                 <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
@@ -385,17 +324,6 @@ export function StoresTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <StoreEmailKeyDialog
-        // מפתח לפי חנות — כל פתיחה מתחילה בשדה ריק
-        key={`email-key-${emailKeyFor?.id ?? "closed"}`}
-        store={emailKeyFor}
-        current={emailKeyFor ? (emailKeys.get(emailKeyFor.id) ?? null) : null}
-        onClose={() => setEmailKeyFor(null)}
-        onSaved={(tenantId, state) =>
-          setEmailKeys((current) => new Map(current).set(tenantId, state))
-        }
-      />
 
       <DeleteStoreDialog
         // מפתח לפי חנות — כל פתיחה מתחילה בשדה ריק

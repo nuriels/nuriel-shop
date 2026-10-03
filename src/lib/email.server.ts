@@ -1,7 +1,15 @@
 // שליחת מיילים דרך Resend (REST API — ללא תלות חבילה נוספת).
-// המפתח: של החנות (tenant_secrets — מוגדר פעם אחת בפאנל הפלטפורמה), ואם
-// לחנות אין מפתח — המפתח הכללי של השרת (משתנה הסביבה RESEND_API_KEY).
-// אם אין מפתח או כתובת שולח, השליחה מדולגת בשקט (לא חוסמת הזמנה).
+//
+// תשתית אחת לכל החנויות:
+//  - מפתח API גלובלי אחד — משתנה הסביבה RESEND_API_KEY בשרת (לא ב-git).
+//  - כתובת השולח: דומיין המערכת המאומת ב-Resend, עם שם החנות כשם השולח —
+//    "אלקטרו כהן <orders@nuri1.fit>". הכתובת: EMAIL_FROM_ADDRESS, ואם לא
+//    הוגדרה — orders@<TENANT_BASE_DOMAIN> (ברירת מחדל orders@nuri1.fit).
+//  - תשובות של לקוחות (Reply-To) מגיעות לחנות עצמה: הכתובת למענה מהגדרות
+//    המייל של החנות, או אימייל העסק מהגדרות האתר.
+// אם המפתח חסר, השליחה מדולגת (לא חוסמת הזמנה) ונרשמת בלוג.
+
+import { DEFAULT_STORE_NAME } from "@/lib/branding";
 
 export type EmailAttachment = {
   filename: string;
@@ -28,13 +36,91 @@ type SendEmailInput = {
   to: string[];
   subject: string;
   html: string;
-  from: string;
   attachments?: EmailAttachment[];
   /** אם מצורף — המייל (כולל הצלחה/כישלון) נשמר ביומן המיילים של הלקוח */
   logFor?: EmailLogTarget;
 };
 
 type SendResult = { sent: boolean; reason?: string };
+
+const EMAIL_FORMAT = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
+
+export function isValidEmail(value: string | null | undefined): value is string {
+  return typeof value === "string" && EMAIL_FORMAT.test(value.trim());
+}
+
+/** כתובת השולח של המערכת (דומיין הפלטפורמה, מאומת ב-Resend) */
+export function systemSenderAddress(): string {
+  const explicit = process.env["EMAIL_FROM_ADDRESS"]?.trim();
+  if (explicit && isValidEmail(explicit)) return explicit;
+  const base = process.env["TENANT_BASE_DOMAIN"]?.trim().toLowerCase();
+  return `orders@${base || "nuri1.fit"}`;
+}
+
+/** כתובת ה-API של Resend (ניתן להחלפה בסביבת בדיקות בלבד — RESEND_API_URL) */
+function resendApiUrl(): string {
+  const custom = process.env["RESEND_API_URL"]?.trim().replace(/\/$/, "");
+  return custom && /^https?:\/\//.test(custom) ? custom : "https://api.resend.com";
+}
+
+/** מפתח ה-API הגלובלי של Resend (null = לא הוגדר בשרת) */
+export function resendApiKey(): string | null {
+  return process.env["RESEND_API_KEY"]?.trim() || null;
+}
+
+/** שם תצוגה בטוח לשורת "מאת": בלי מרכאות / סוגריים משולשים / שבירת שורה */
+function cleanDisplayName(name: string): string {
+  return name
+    .replace(/["<>\\\r\n]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 70);
+}
+
+export type StoreSender = {
+  /** "שם החנות <orders@nuri1.fit>" — מוכן לשדה from */
+  from: string;
+  name: string;
+  address: string;
+  /** לאן יגיעו תשובות של לקוחות (null = בלי Reply-To) */
+  replyTo: string | null;
+};
+
+/**
+ * השולח של החנות הנוכחית: שם החנות (שם העסק בהגדרות האתר, או שם החנות
+ * בפלטפורמה) + כתובת המערכת. Reply-To — הכתובת למענה שהחנות הגדירה, או
+ * אימייל העסק; כתובת על דומיין המערכת עצמו לא משמשת למענה (אף אחד לא קורא אותה).
+ */
+export async function storeSender(): Promise<StoreSender> {
+  const address = systemSenderAddress();
+  const systemDomain = address.split("@")[1]?.toLowerCase() ?? "";
+  let name = "";
+  let replyTo: string | null = null;
+  try {
+    const { maybeCurrentTenant } = await import("@/integrations/supabase/tenant.server");
+    const tenant = maybeCurrentTenant();
+    if (tenant) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const [{ data: site }, { data: emailSettings }] = await Promise.all([
+        supabaseAdmin
+          .from("site_settings")
+          .select("business_name, site_title, business_email")
+          .eq("id", true)
+          .maybeSingle(),
+        supabaseAdmin.from("email_settings").select("sender_email").eq("id", true).maybeSingle(),
+      ]);
+      name = site?.business_name?.trim() || site?.site_title?.trim() || tenant.name || "";
+      replyTo =
+        [emailSettings?.sender_email, site?.business_email]
+          .map((value) => value?.trim().toLowerCase() ?? "")
+          .find((value) => isValidEmail(value) && value.split("@")[1] !== systemDomain) ?? null;
+    }
+  } catch (error) {
+    console.error("[email] failed to load the store sender", error);
+  }
+  const display = cleanDisplayName(name) || DEFAULT_STORE_NAME;
+  return { from: `"${display}" <${address}>`, name: display, address, replyTo };
+}
 
 export async function sendEmail(input: SendEmailInput): Promise<SendResult> {
   const result = await deliverEmail(input);
@@ -61,138 +147,30 @@ export async function sendEmail(input: SendEmailInput): Promise<SendResult> {
   return result;
 }
 
-export type ResendKeySource = "store" | "server";
-
-export type ResolvedResendKey = { key: string; source: ResendKeySource } | null;
-
-const storeKeyCache = new Map<string, { key: string | null; expires: number }>();
-// שינוי מפתח בפאנל הפלטפורמה מנקה את המטמון מיד (forgetStoreResendKey);
-// ה-TTL הוא רק רשת ביטחון
-const STORE_KEY_TTL_MS = 60_000;
-
-/** מפתח החנות מ-tenant_secrets (שרת בלבד), עם מטמון קצר */
-async function loadStoreResendKey(tenantId: string): Promise<string | null> {
-  const hit = storeKeyCache.get(tenantId);
-  if (hit && hit.expires > Date.now()) return hit.key;
-  try {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
-      .from("tenant_secrets")
-      .select("resend_api_key")
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    const key = data?.resend_api_key?.trim() || null;
-    storeKeyCache.set(tenantId, { key, expires: Date.now() + STORE_KEY_TTL_MS });
-    return key;
-  } catch (error) {
-    // תקלה בקריאה — נופלים למפתח הכללי, לא מפילים את השליחה
-    console.error("[email] failed to load the store's Resend key", error);
-    return null;
-  }
-}
-
-/**
- * איזה מפתח Resend ישמש לחנות של הבקשה הנוכחית:
- * מפתח החנות אם הוגדר, אחרת RESEND_API_KEY של השרת, אחרת null.
- */
-export async function resolveResendKey(): Promise<ResolvedResendKey> {
-  const { maybeCurrentTenant } = await import("@/integrations/supabase/tenant.server");
-  const tenant = maybeCurrentTenant();
-  const storeKey = tenant ? await loadStoreResendKey(tenant.id) : null;
-  if (storeKey) return { key: storeKey, source: "store" };
-  const serverKey = process.env["RESEND_API_KEY"]?.trim();
-  return serverKey ? { key: serverKey, source: "server" } : null;
-}
-
-/** אחרי שמירה / מחיקה של מפתח בפאנל — שהשינוי ייכנס לתוקף מיד */
-export function forgetStoreResendKey(tenantId: string): void {
-  storeKeyCache.delete(tenantId);
-}
-
-/** פורמט מפתח Resend (כמו ב-CHECK במסד) */
-export const RESEND_KEY_FORMAT = /^re_[A-Za-z0-9_-]{8,200}$/;
-
-export type ResendKeyCheck =
-  /** המפתח תקין; domains = הדומיינים בחשבון (null למפתח "Sending access" בלבד) */
-  | { ok: true; domains: { name: string; status: string }[] | null }
-  /** Resend דחה את המפתח — לא שומרים */
-  | { ok: false; message: string }
-  /** לא ניתן היה לאמת (רשת / תקלה ב-Resend) — שומרים עם אזהרה */
-  | { ok: null; message: string };
-
-/**
- * בדיקת מפתח מול Resend לפני שמירה (GET /domains — לא שולח מייל).
- * מפתח עם הרשאת "Sending access" בלבד מקבל 401 עם restricted_api_key —
- * זה מפתח תקין לשליחה, פשוט בלי גישה לרשימת הדומיינים.
- */
-export async function verifyResendKey(key: string): Promise<ResendKeyCheck> {
-  try {
-    const response = await fetch("https://api.resend.com/domains", {
-      headers: { Authorization: `Bearer ${key}` },
-      signal: AbortSignal.timeout(8000),
-    });
-    const body = await response.text();
-    if (response.ok) {
-      let domains: { name: string; status: string }[] = [];
-      try {
-        const parsed = JSON.parse(body) as { data?: { name?: string; status?: string }[] };
-        domains = (parsed.data ?? []).map((domain) => ({
-          name: String(domain.name ?? ""),
-          status: String(domain.status ?? ""),
-        }));
-      } catch {
-        domains = [];
-      }
-      return { ok: true, domains };
-    }
-    if (body.includes("restricted_api_key")) return { ok: true, domains: null };
-    if (response.status === 400 || response.status === 401 || response.status === 403) {
-      return {
-        ok: false,
-        message: "Resend דחה את המפתח — ודאו שהעתקתם אותו במלואו ושהוא לא נמחק בחשבון Resend",
-      };
-    }
-    return {
-      ok: null,
-      message: `לא ניתן היה לאמת את המפתח מול Resend (HTTP ${response.status}) — הוא נשמר בכל זאת`,
-    };
-  } catch {
-    return {
-      ok: null,
-      message: "לא ניתן היה להתחבר ל-Resend כדי לאמת את המפתח — הוא נשמר בכל זאת",
-    };
-  }
-}
-
 async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
-  const resolved = await resolveResendKey();
-  if (!resolved) {
+  const apiKey = resendApiKey();
+  if (!apiKey) {
     // חשוב לרשום ללוג: בלי המפתח שום מייל לא יוצא, וזה נכשל "בשקט"
-    console.error("[email] no Resend API key (store or server) — email skipped:", input.subject);
-    return {
-      sent: false,
-      reason: "לא הוגדר מפתח Resend — לא לחנות (בפאנל הפלטפורמה) ולא בשרת (RESEND_API_KEY)",
-    };
+    console.error("[email] RESEND_API_KEY missing — email skipped:", input.subject);
+    return { sent: false, reason: "מפתח Resend (RESEND_API_KEY) לא הוגדר בשרת" };
   }
-  const apiKey = resolved.key;
-  if (!input.from) {
-    console.error("[email] sender address missing — email skipped:", input.subject);
-    return { sent: false, reason: "לא הוגדרה כתובת מייל שולחת בהגדרות מייל בפאנל הניהול" };
-  }
-  if (input.to.length === 0) return { sent: false, reason: "אין נמענים" };
+  const to = input.to.map((address) => address.trim()).filter(isValidEmail);
+  if (to.length === 0) return { sent: false, reason: "אין נמענים תקינים" };
 
+  const sender = await storeSender();
   try {
-    const response = await fetch("https://api.resend.com/emails", {
+    const response = await fetch(`${resendApiUrl()}/emails`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: input.from,
-        to: input.to,
+        from: sender.from,
+        to,
         subject: input.subject,
         html: input.html,
+        ...(sender.replyTo ? { reply_to: sender.replyTo } : {}),
         ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       }),
     });
@@ -200,7 +178,7 @@ async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
       const body = await response.text();
       console.error("[email] Resend error", response.status, body);
       // מחזירים את גוף השגיאה של Resend: בדרך כלל "domain is not verified"
-      // או "from address not allowed", וזו בדיוק המידע שהמנהל צריך.
+      // או "API key is invalid", וזו בדיוק המידע שהמנהל צריך.
       return { sent: false, reason: `שגיאת שליחה (${response.status}): ${body.slice(0, 300)}` };
     }
     return { sent: true };
@@ -316,7 +294,7 @@ export async function renderEmailHtml(
 
   const header = logoUrl
     ? `<img src="${logoUrl}" alt="${escapeHtml(businessName)}" style="max-height:56px;max-width:220px;display:block;margin:0 auto 4px;" />`
-    : `<div style="font-size:20px;font-weight:bold;color:#12211F;text-align:center;">${escapeHtml(businessName)}</div>`;
+    : `<div style="font-size:20px;font-weight:bold;color:#ffffff;text-align:center;">${escapeHtml(businessName)}</div>`;
 
   return `<!DOCTYPE html>
 <html dir="rtl" lang="he">

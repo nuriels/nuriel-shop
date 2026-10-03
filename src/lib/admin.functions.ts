@@ -622,20 +622,14 @@ export const notifyCustomerAssigned = createServerFn({ method: "POST" })
       .maybeSingle();
     if (!profile?.agent_id) return { sent: false };
 
-    const [{ data: recipient }, { data: customerRole }, { data: emailSettings }] =
-      await Promise.all([
-        supabaseAdmin
-          .from("user_roles")
-          .select("email, role")
-          .eq("user_id", profile.agent_id)
-          .maybeSingle(),
-        supabaseAdmin
-          .from("user_roles")
-          .select("email")
-          .eq("user_id", data.customerId)
-          .maybeSingle(),
-        supabaseAdmin.from("email_settings").select("sender_email").eq("id", true).maybeSingle(),
-      ]);
+    const [{ data: recipient }, { data: customerRole }] = await Promise.all([
+      supabaseAdmin
+        .from("user_roles")
+        .select("email, role")
+        .eq("user_id", profile.agent_id)
+        .maybeSingle(),
+      supabaseAdmin.from("user_roles").select("email").eq("user_id", data.customerId).maybeSingle(),
+    ]);
     if (!recipient?.email) return { sent: false };
 
     const { tenantSiteOrigin } = await import("@/integrations/supabase/tenant.server");
@@ -644,7 +638,6 @@ export const notifyCustomerAssigned = createServerFn({ method: "POST" })
     const customerLabel = profile.business_name?.trim() || customerRole?.email || "לקוח";
 
     const result = await sendEmail({
-      from: emailSettings?.sender_email?.trim() || "",
       to: [recipient.email],
       subject: "לקוח חדש שויך אליך",
       html: await renderEmailHtml(

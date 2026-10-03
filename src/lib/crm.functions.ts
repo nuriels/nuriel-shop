@@ -227,14 +227,7 @@ export const sendManualMessage = createServerFn({ method: "POST" })
       textToEmailHtml(data.body) +
       (data.ctaUrl !== "" ? emailActionButton(data.ctaLabel, data.ctaUrl) : "");
 
-    const { data: emailSettings } = await supabaseAdmin
-      .from("email_settings")
-      .select("sender_email")
-      .eq("id", true)
-      .maybeSingle();
-
     const result = await sendEmail({
-      from: emailSettings?.sender_email?.trim() || "",
       to: [recipient],
       subject: data.subject,
       html: await renderEmailHtml(data.subject, bodyHtml),

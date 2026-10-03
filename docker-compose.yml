@@ -35,8 +35,13 @@ services:
       SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?}
       # סוד! עוקף RLS — רק בצד השרת, לעולם לא ב-VITE_*
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?}
-      # --- מיילים (Resend) — ריק = ההזמנות נקלטות אבל מיילים לא נשלחים ---
+      # --- מיילים (Resend) — מפתח אחד לכל החנויות. ריק = ההזמנות נקלטות אבל מיילים לא נשלחים ---
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # כתובת השולח (דומיין מאומת ב-Resend). השם = שם החנות: "שם החנות <orders@nuri1.fit>".
+      # ריק = orders@<TENANT_BASE_DOMAIN>
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-}
+      # סוד לחתימת קודי הכניסה למייל (HMAC). ריק = נגזר ממפתח ה-service role
+      LOGIN_CODE_SECRET: ${LOGIN_CODE_SECRET:-}
       # כתובת חנות ברירת המחדל — לקישורים במיילים (איפוס סיסמה, הזמנות)
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
       # דומיין בסיס לחנויות בתת-דומיין: shop2.<TENANT_BASE_DOMAIN>

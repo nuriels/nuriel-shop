@@ -69,12 +69,6 @@ export async function sendPasswordResetLinkInternal(
   });
   if (insertError) return { sent: false, reason: insertError.message };
 
-  const { data: emailSettings } = await supabaseAdmin
-    .from("email_settings")
-    .select("sender_email")
-    .eq("id", true)
-    .maybeSingle();
-
   const origin = await resolveSiteOrigin();
   const link = `${origin}/reset-password?token=${encodeURIComponent(token)}`;
   const expiresLabel = expiresAt.toLocaleString("he-IL", {
@@ -89,7 +83,11 @@ export async function sendPasswordResetLinkInternal(
     : isLoginLink
       ? "קישור כניסה למערכת ההזמנות"
       : "איפוס סיסמה";
-  const title = isWelcome ? "ברוכים הבאים — קביעת סיסמה" : isLoginLink ? "קישור כניסה" : "איפוס סיסמה";
+  const title = isWelcome
+    ? "ברוכים הבאים — קביעת סיסמה"
+    : isLoginLink
+      ? "קישור כניסה"
+      : "איפוס סיסמה";
   const intro = isWelcome
     ? `נפתח עבורכם חשבון במערכת ההזמנות. שם המשתמש שלכם: <strong dir="ltr">${escapeHtml(user.username ?? user.email)}</strong>.`
     : isLoginLink
@@ -103,7 +101,6 @@ export async function sendPasswordResetLinkInternal(
       : "אם לא ביקשתם לאפס סיסמה, אפשר להתעלם מהודעה זו — הסיסמה הקיימת נשארת בתוקף.";
 
   return sendEmail({
-    from: emailSettings?.sender_email?.trim() || "",
     to: [user.email],
     subject,
     logFor: { userId, kind: "password_reset", sentBy: createdBy },
@@ -139,16 +136,9 @@ export async function sendTempPasswordEmail(
     .maybeSingle();
   if (!user) return { sent: false, reason: "המשתמש לא נמצא" };
 
-  const { data: emailSettings } = await supabaseAdmin
-    .from("email_settings")
-    .select("sender_email")
-    .eq("id", true)
-    .maybeSingle();
-
   const origin = await resolveSiteOrigin();
 
   return sendEmail({
-    from: emailSettings?.sender_email?.trim() || "",
     to: [user.email],
     subject: "פרטי הכניסה שלך למערכת ההזמנות",
     // הסיסמה הזמנית עצמה לא נשמרת ביומן — רק העובדה שנשלח מייל כניסה

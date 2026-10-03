@@ -43,15 +43,6 @@ export const sendPickedEmail = createServerFn({ method: "POST" })
     if (!allowed) return { sent: false, reason: "אין הרשאה" };
     if (order.status !== "shipped") return { sent: false, reason: "ההזמנה עוד לא אושרה" };
 
-    const { data: emailSettings } = await supabaseAdmin
-      .from("email_settings")
-      .select("sender_email")
-      .eq("id", true)
-      .maybeSingle();
-    const senderEmail =
-      (emailSettings as { sender_email?: string } | null)?.sender_email?.trim() || "";
-    if (!senderEmail) return { sent: false, reason: "לא הוגדרה כתובת שולח בהגדרות המייל" };
-
     const doc = await loadOrderDocument(data.orderId);
     if (!doc.customerEmail) return { sent: false, reason: "ללקוח אין כתובת מייל" };
 
@@ -100,7 +91,6 @@ export const sendPickedEmail = createServerFn({ method: "POST" })
       <p style="margin-top:16px;">מסמך הסיכום המעודכן מצורף כקובץ PDF.</p>`;
 
     return sendEmail({
-      from: senderEmail,
       to: [doc.customerEmail],
       subject: `הזמנה ${order.order_number} בדרך אליכם`,
       html: await renderEmailHtml("ההזמנה לוקטה והציוד בדרך", body),

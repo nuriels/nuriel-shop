@@ -94,12 +94,6 @@ export async function sendInviteEmail(
   link: string,
   expiresAt: string,
 ): Promise<{ sent: boolean; reason?: string }> {
-  const { data: emailSettings } = await supabaseAdmin
-    .from("email_settings")
-    .select("sender_email")
-    .eq("id", true)
-    .maybeSingle();
-
   const until = new Date(expiresAt).toLocaleDateString("he-IL", {
     timeZone: "Asia/Jerusalem",
     day: "numeric",
@@ -107,7 +101,6 @@ export async function sendInviteEmail(
   });
 
   return sendEmail({
-    from: emailSettings?.sender_email?.trim() || "",
     to: [email],
     subject: "הזמנה לפתיחת חשבון במערכת ההזמנות",
     html: await renderEmailHtml(

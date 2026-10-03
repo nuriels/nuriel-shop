@@ -52,20 +52,16 @@ export async function sendAgreementEmail(
   );
   if (error) return { sent: false, reason: error.message };
 
-  const [{ data: emailSettings }, { data: settings }] = await Promise.all([
-    supabaseAdmin.from("email_settings").select("sender_email").eq("id", true).maybeSingle(),
-    supabaseAdmin
-      .from("site_settings")
-      .select("business_name, site_title")
-      .eq("id", true)
-      .maybeSingle(),
-  ]);
+  const { data: settings } = await supabaseAdmin
+    .from("site_settings")
+    .select("business_name, site_title")
+    .eq("id", true)
+    .maybeSingle();
   const company = settings?.business_name?.trim() || settings?.site_title || DEFAULT_STORE_NAME;
   const origin = await resolveSiteOrigin();
   const link = `${origin}/agreement?token=${encodeURIComponent(token)}`;
 
   return sendEmail({
-    from: emailSettings?.sender_email?.trim() || "",
     to: [user.email],
     subject: `טופס הצטרפות ותנאי שירות — ${company}`,
     logFor: { userId, kind: "agreement" },
@@ -91,7 +87,7 @@ export async function notifyAgreementSigned(userId: string, signerName: string):
   const [{ data: emailSettings }, { data: profile }, { data: user }] = await Promise.all([
     supabaseAdmin
       .from("email_settings")
-      .select("sender_email, notify_admin_user_ids")
+      .select("notify_admin_user_ids")
       .eq("id", true)
       .maybeSingle(),
     supabaseAdmin
@@ -113,7 +109,6 @@ export async function notifyAgreementSigned(userId: string, signerName: string):
   if (recipients.size === 0) return;
 
   await sendEmail({
-    from: emailSettings?.sender_email?.trim() || "",
     to: [...recipients],
     subject: "תנאי שירות נחתמו",
     html: await renderEmailHtml(

@@ -19,7 +19,10 @@
 #   PROJECT, SB_DIR, API_URL, SITE_URL, TENANT_BASE_DOMAIN, APP_PORT,
 #   KONG_HTTP_PORT, KONG_HTTPS_PORT, ADMIN_EMAIL, PLATFORM_ADMIN_EMAIL,
 #   PLATFORM_ADMIN_HOST, DEFAULT_TENANT_SLUG,
-#   DEFAULT_TENANT_NAME, RESEND_API_KEY, GOOGLE_CLIENT_ID + GOOGLE_SECRET
+#   DEFAULT_TENANT_NAME, RESEND_API_KEY, EMAIL_FROM_ADDRESS, GOOGLE_CLIENT_ID + GOOGLE_SECRET
+#
+# מפתח Resend (פעם אחת — נשמר ב-.env של השרת ונשמר בהרצות הבאות; לעולם לא ב-git):
+#   read -rsp 'RESEND_API_KEY: ' RESEND_API_KEY && echo && export RESEND_API_KEY && bash deploy/setup-selfhost.sh
 #
 # מה הסקריפט עושה:
 #   1. מושך את קבצי ה-Docker הרשמיים של Supabase (גרסת Kong נעוצה, כמו בסטאקים הקיימים)
@@ -104,8 +107,10 @@ COMPOSE_PROJECT_NAME=${PROJECT}-app
 SUPABASE_URL=${API_URL}
 SUPABASE_PUBLISHABLE_KEY=${anon}
 SUPABASE_SERVICE_ROLE_KEY=${service}
-# מיילים (Resend) — ריק = ההזמנות נקלטות אבל מיילים לא נשלחים
+# מיילים (Resend) — מפתח אחד לכל החנויות. ריק = ההזמנות נקלטות אבל מיילים לא נשלחים
 RESEND_API_KEY=${resend_key}
+# השולח: "שם החנות <כתובת>" — הכתובת על דומיין מאומת ב-Resend
+EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-orders@${TENANT_BASE_DOMAIN}}
 # כתובת חנות ברירת המחדל — לקישורים במיילים
 PUBLIC_SITE_URL=${SITE_URL}
 # חנויות בתת-דומיין: <slug>.${TENANT_BASE_DOMAIN}
@@ -126,7 +131,7 @@ EOF
   if [[ -n "$resend_key" ]]; then
     echo "  ✓ $APP_DIR/.env + docker-compose.override.yml (RESEND_API_KEY מולא)"
   else
-    echo "  ✓ $APP_DIR/.env + docker-compose.override.yml (RESEND_API_KEY ריק — מיילים לא יישלחו עד שימולא)"
+    echo "  ⚠ $APP_DIR/.env + docker-compose.override.yml (RESEND_API_KEY ריק — מיילים לא יישלחו עד שימולא)"
   fi
 }
 

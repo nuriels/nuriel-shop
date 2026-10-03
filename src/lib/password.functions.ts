@@ -193,17 +193,10 @@ export const completePasswordReset = createServerFn({ method: "POST" })
       .eq("user_id", tokenRow.user_id)
       .maybeSingle();
 
-    const { data: emailSettings } = await supabaseAdmin
-      .from("email_settings")
-      .select("sender_email")
-      .eq("id", true)
-      .maybeSingle();
-
     if (user?.email) {
       // לבקשת בעל המערכת נשלחת גם הסיסמה עצמה לשמירה. שימו לב: סיסמה
       // שנשלחת במייל נשארת בתיבה לצמיתות וקריאה לכל מי שנכנס אליה.
       await sendEmail({
-        from: emailSettings?.sender_email?.trim() || "",
         to: [user.email],
         subject: "הסיסמה שלך שונתה",
         logFor: { userId: tokenRow.user_id, kind: "password_changed" },

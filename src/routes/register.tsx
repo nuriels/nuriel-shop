@@ -14,6 +14,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { registerCustomer } from "@/lib/admin.functions";
 import { checkCustomerInvite } from "@/lib/invite.functions";
 import { GoogleSignInButton, OrDivider } from "@/components/GoogleSignInButton";
+import { Mail } from "lucide-react";
 
 type InviteState =
   | { status: "none" }
@@ -142,6 +143,13 @@ function RegisterPage() {
                 </Link>
               </p>
               <GoogleSignInButton label="הרשמה עם Google" />
+              {/* הרשמה מהירה בלי סיסמה: קוד חד-פעמי למייל, ואז השלמת פרטי העסק */}
+              <Button variant="outline" className="mt-2 w-full" asChild>
+                <Link to="/login" search={{ mode: "code" }}>
+                  <Mail className="size-4" />
+                  הרשמה מהירה עם קוד למייל
+                </Link>
+              </Button>
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 אחרי הכניסה ממלאים את פרטי העסק, והחשבון ממתין לאישור שלנו
               </p>

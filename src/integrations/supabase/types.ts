@@ -172,24 +172,39 @@ export type Database = {
         Update: { user_id?: string; created_at?: string };
         Relationships: [];
       };
-      tenant_secrets: {
+      login_codes: {
         Row: {
+          id: string;
           tenant_id: string;
-          resend_api_key: string | null;
-          updated_at: string;
-          updated_by: string | null;
+          email: string;
+          code_hash: string;
+          attempts: number;
+          created_at: string;
+          expires_at: string;
+          consumed_at: string | null;
+          ip: string | null;
         };
         Insert: {
-          tenant_id?: string;
-          resend_api_key?: string | null;
-          updated_at?: string;
-          updated_by?: string | null;
+          id?: string;
+          tenant_id: string;
+          email: string;
+          code_hash: string;
+          attempts?: number;
+          created_at?: string;
+          expires_at: string;
+          consumed_at?: string | null;
+          ip?: string | null;
         };
         Update: {
+          id?: string;
           tenant_id?: string;
-          resend_api_key?: string | null;
-          updated_at?: string;
-          updated_by?: string | null;
+          email?: string;
+          code_hash?: string;
+          attempts?: number;
+          created_at?: string;
+          expires_at?: string;
+          consumed_at?: string | null;
+          ip?: string | null;
         };
         Relationships: [];
       };
@@ -1637,19 +1652,6 @@ export type Database = {
       };
       stock_reserved_open: { Args: never; Returns: { product_id: string; reserved: number }[] };
       resolve_login_email: { Args: { _identifier: string }; Returns: string | null };
-      platform_tenant_email_keys: {
-        Args: never;
-        Returns: {
-          tenant_id: string;
-          has_key: boolean;
-          key_hint: string | null;
-          updated_at: string;
-        }[];
-      };
-      platform_set_tenant_resend_key: {
-        Args: { _tenant: string; _key: string | null };
-        Returns: string | null;
-      };
       assign_order_courier: {
         Args: {
           _order_ids: string[];
@@ -1665,6 +1667,11 @@ export type Database = {
           delivery_attempts: number;
         }[];
       };
+      issue_login_code: {
+        Args: { _email: string; _code_hash: string; _ip?: string | null };
+        Returns: string;
+      };
+      consume_login_code: { Args: { _email: string; _code_hash: string }; Returns: Json };
       courier_delivery: { Args: { _token: string }; Returns: Json };
       courier_report: {
         Args: { _token: string; _delivered: boolean; _note?: string | null };

@@ -6,7 +6,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  *
  * צוות (מחובר):
  *   markOrdersShipped — סימון מרוכז כ"נשלחה" + מייל "יצאה למשלוח" לכל לקוח,
- *   עם מפתח ה-Resend של החנות.
+ *   מהשולח של החנות ("שם החנות <orders@nuri1.fit>").
  *   (מסירה לשליח וקישורי שליח — ישירות מהדפדפן ב-RPC assign_order_courier,
  *   שרץ עם הרשאות המשתמש: RLS + is_staff.)
  *
@@ -119,30 +119,19 @@ export const markOrdersShipped = createServerFn({ method: "POST" })
     };
 
     if (data.notify && updated.length > 0) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { resolveResendKey } = await import("@/lib/email.server");
+      const { resendApiKey } = await import("@/lib/email.server");
       const { sendShippedEmailInternal } = await import("@/lib/order-emails.server");
 
-      const { data: emailSettings } = await supabaseAdmin
-        .from("email_settings")
-        .select("sender_email")
-        .eq("id", true)
-        .maybeSingle();
-      const sender = emailSettings?.sender_email?.trim() || "";
-      const key = await resolveResendKey();
-
-      if (!key) {
+      if (!resendApiKey()) {
         emails.warning =
-          "הסטטוס עודכן, אבל מיילים לא נשלחו: לא הוגדר מפתח Resend לחנות (בפאנל הפלטפורמה) או לשרת";
-      } else if (!sender) {
-        emails.warning = "הסטטוס עודכן, אבל מיילים לא נשלחו: לא הוגדרה כתובת שולחת בהגדרות המייל";
+          "הסטטוס עודכן, אבל מיילים לא נשלחו: מפתח Resend (RESEND_API_KEY) לא הוגדר בשרת";
       } else {
         const ids = updated.map((order) => order.id);
         const sendAll = async () => {
           for (const [index, orderId] of ids.entries()) {
             if (index > 0) await sleep(EMAIL_SPACING_MS);
             try {
-              const result = await sendShippedEmailInternal(orderId, context.userId, sender);
+              const result = await sendShippedEmailInternal(orderId, context.userId);
               if (result.sent) emails.sent += 1;
               else if (result.reason === "אין כתובת מייל ללקוח") emails.noAddress += 1;
               else {

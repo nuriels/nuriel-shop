@@ -113,34 +113,11 @@ export const redeemStoreAdminHandoff = createServerFn({ method: "POST" })
     if (!email) throw new Error("לחשבון אין כתובת אימייל");
 
     // חיבור חדש לאותו משתמש: קישור כניסה שנוצר ומאומת כאן בשרת (לא נשלח מייל)
-    const { data: link, error: linkError } = await supabaseAdminUnscoped.auth.admin.generateLink({
-      type: "magiclink",
-      email,
-    });
-    const tokenHash = link?.properties?.hashed_token;
-    if (linkError || !tokenHash) {
-      console.error("[handoff] generateLink failed", linkError?.message);
-      throw new Error("יצירת החיבור לחנות נכשלה. נסו שוב.");
-    }
-
-    const SUPABASE_URL = process.env["SUPABASE_URL"];
-    const SUPABASE_PUBLISHABLE_KEY = process.env["SUPABASE_PUBLISHABLE_KEY"];
-    if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) throw new Error("תקלת הגדרות בשרת");
-    const { createClient } = await import("@supabase/supabase-js");
-    const client = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: verified, error: verifyError } = await client.auth.verifyOtp({
-      token_hash: tokenHash,
-      type: "magiclink",
-    });
-    if (verifyError || !verified.session) {
-      console.error("[handoff] verifyOtp failed", verifyError?.message);
+    const { sessionForEmail } = await import("@/lib/session.server");
+    try {
+      const { accessToken, refreshToken } = await sessionForEmail(email, "handoff");
+      return { accessToken, refreshToken };
+    } catch {
       throw new Error("החיבור לחנות נכשל. נסו שוב.");
     }
-
-    return {
-      accessToken: verified.session.access_token,
-      refreshToken: verified.session.refresh_token,
-    };
   });

@@ -44,7 +44,7 @@ export async function sendOrderEmailsInternal(
 
   const { data: emailSettings } = await supabaseAdmin
     .from("email_settings")
-    .select("sender_email, notify_admin_user_ids")
+    .select("notify_admin_user_ids")
     .eq("id", true)
     .maybeSingle();
   if (emailSettings?.notify_admin_user_ids?.length) {
@@ -55,7 +55,6 @@ export async function sendOrderEmailsInternal(
     for (const admin of admins ?? []) if (admin.email) recipientEmails.add(admin.email);
   }
 
-  const senderEmail = emailSettings?.sender_email?.trim() || "";
   const isQuote = order.kind === "quote";
   const documentLabel = isQuote ? "בקשה להצעת מחיר" : "הזמנה";
 
@@ -150,7 +149,6 @@ export async function sendOrderEmailsInternal(
   const staff: SendResult =
     recipientEmails.size > 0
       ? await sendEmail({
-          from: senderEmail,
           to: [...recipientEmails],
           subject: `${documentLabel} חדשה ${order.order_number}${isGuest ? " (אורח)" : ""}`,
           html: await renderEmailHtml(`${documentLabel} חדשה התקבלה`, staffHtml),
@@ -160,7 +158,6 @@ export async function sendOrderEmailsInternal(
 
   const customer: SendResult = customerEmail
     ? await sendEmail({
-        from: senderEmail,
         to: [customerEmail],
         subject: `${documentLabel} ${order.order_number} התקבלה`,
         html: await renderEmailHtml(`${documentLabel} התקבלה`, customerHtml),
@@ -186,12 +183,10 @@ export async function sendOrderEmailsInternal(
  * סימון כ"נשלחה", גם בפעולה מרוכזת על כמה הזמנות. בלי PDF (המסמך כבר
  * נשלח עם אישור ההזמנה): פריטים, כתובת המשלוח וקישור ל"ההזמנות שלי".
  *
- * senderEmail — בשליחה מרוכזת נקרא פעם אחת מבחוץ; אחרת נטען כאן.
  */
 export async function sendShippedEmailInternal(
   orderId: string,
   sentBy: string | null,
-  senderEmail?: string,
 ): Promise<SendResult> {
   const { data: orderData, error } = await supabaseAdmin
     .from("orders")
@@ -237,16 +232,6 @@ export async function sendShippedEmailInternal(
   const delivery = deliveryOf(order, customerProfile);
   const to = billing.email;
   if (!to) return { sent: false, reason: "אין כתובת מייל ללקוח" };
-
-  let from = senderEmail;
-  if (from === undefined) {
-    const { data: emailSettings } = await supabaseAdmin
-      .from("email_settings")
-      .select("sender_email")
-      .eq("id", true)
-      .maybeSingle();
-    from = emailSettings?.sender_email?.trim() || "";
-  }
 
   // קישור לאזור האישי — רק ללקוח רשום (לאורח אין חשבון)
   let accountUrl: string | null = null;
@@ -294,7 +279,6 @@ export async function sendShippedEmailInternal(
   `;
 
   return sendEmail({
-    from,
     to: [to],
     subject: `הזמנה ${order.order_number} יצאה למשלוח`,
     html: await renderEmailHtml("ההזמנה יצאה למשלוח", body),

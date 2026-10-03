@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,13 +17,18 @@ import { requestPasswordReset } from "@/lib/password.functions";
 /**
  * "שכחתי סיסמה": שולח למייל קישור חד-פעמי לקביעת סיסמה חדשה (3 שעות).
  * ההודעה למשתמש זהה גם אם החשבון לא קיים, כדי לא לחשוף מי רשום במערכת.
+ * חלופה מהירה: כניסה מיידית עם קוד חד-פעמי למייל (onUseCode) — ואחר כך אפשר
+ * לקבוע סיסמה חדשה בהגדרות החשבון.
  */
 export function ForgotPasswordDialog({
   open,
   onOpenChange,
+  onUseCode,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** מעבר ללשונית "קוד למייל" בדף ההתחברות, עם הכתובת שהוזנה (אם היא אימייל) */
+  onUseCode?: (email: string | null) => void;
 }) {
   const [identifier, setIdentifier] = useState("");
   const [busy, setBusy] = useState(false);
@@ -54,6 +60,26 @@ export function ForgotPasswordDialog({
     }
   };
 
+  const useCode = () => {
+    const value = identifier.trim().toLowerCase();
+    onUseCode?.(value.includes("@") ? value : null);
+    setIdentifier("");
+    setSent(false);
+  };
+
+  const codeOption = onUseCode ? (
+    <div className="space-y-2 border-t border-border pt-4">
+      <p className="text-sm text-muted-foreground">
+        רוצים להיכנס עכשיו? אפשר להתחבר מיד עם קוד חד-פעמי שנשלח למייל, ולקבוע סיסמה חדשה אחר כך
+        בהגדרות החשבון.
+      </p>
+      <Button type="button" variant="outline" className="w-full" onClick={useCode}>
+        <Mail className="size-4" />
+        כניסה עם קוד למייל
+      </Button>
+    </div>
+  ) : null;
+
   return (
     <Dialog open={open} onOpenChange={close}>
       <DialogContent dir="rtl" className="text-right sm:max-w-md">
@@ -73,25 +99,29 @@ export function ForgotPasswordDialog({
             <Button className="w-full" size="lg" onClick={() => close(false)}>
               סגירה
             </Button>
+            {codeOption}
           </div>
         ) : (
-          <form onSubmit={submit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="reset-identifier">אימייל או שם משתמש</Label>
-              <Input
-                id="reset-identifier"
-                dir="ltr"
-                required
-                maxLength={255}
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="name@example.com"
-              />
-            </div>
-            <Button type="submit" size="lg" className="w-full" disabled={busy}>
-              {busy ? "שולח..." : "שליחת קישור לאיפוס"}
-            </Button>
-          </form>
+          <div className="space-y-4">
+            <form onSubmit={submit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="reset-identifier">אימייל או שם משתמש</Label>
+                <Input
+                  id="reset-identifier"
+                  dir="ltr"
+                  required
+                  maxLength={255}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="name@example.com"
+                />
+              </div>
+              <Button type="submit" size="lg" className="w-full" disabled={busy}>
+                {busy ? "שולח..." : "שליחת קישור לאיפוס"}
+              </Button>
+            </form>
+            {codeOption}
+          </div>
         )}
       </DialogContent>
     </Dialog>

@@ -78,6 +78,10 @@ export function labelSizeProblem(width: number, height: number): string | null {
 }
 
 export type EmailSettings = {
+  /**
+   * הכתובת למענה (Reply-To) של מיילי החנות. המיילים עצמם יוצאים מכתובת
+   * המערכת עם שם החנות ("שם החנות <orders@nuri1.fit>") — ראו email.server.ts.
+   */
   sender_email: string;
   notify_admin_user_ids: string[];
 };
@@ -168,7 +172,7 @@ export async function loadEmailSettings(): Promise<EmailSettings> {
     .maybeSingle();
   return (
     (data as EmailSettings | null) ?? {
-      sender_email: "orders@nuri1.fit",
+      sender_email: "",
       notify_admin_user_ids: [],
     }
   );
