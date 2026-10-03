@@ -13,13 +13,10 @@ type Caller = { role: string | null };
 /** מנהל רואה כל לקוח; סוכן רק את הלקוחות המשויכים אליו */
 async function assertCanViewCustomer(callerId: string, customerId: string): Promise<Caller> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: caller } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", callerId)
-    .maybeSingle();
-  if (caller?.role === "admin") return { role: "admin" };
-  if (caller?.role === "agent") {
+  const { loadCaller } = await import("@/lib/caller.server");
+  const caller = await loadCaller(callerId);
+  if (caller.role === "admin") return { role: "admin" };
+  if (caller.role === "agent") {
     const { data: profile } = await supabaseAdmin
       .from("customer_profiles")
       .select("agent_id")
@@ -221,11 +218,8 @@ export const sendManualMessage = createServerFn({ method: "POST" })
       recipient = user.email;
     } else {
       // כתובת חופשית אינה מקושרת לאף לקוח, ולכן שמורה למנהל בלבד
-      const { data: caller } = await supabaseAdmin
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", context.userId)
-        .maybeSingle();
+      const { loadCaller } = await import("@/lib/caller.server");
+      const caller = await loadCaller(context.userId);
       if (caller?.role !== "admin") throw new Error("שליחה לכתובת חופשית מותרת למנהל בלבד");
     }
 

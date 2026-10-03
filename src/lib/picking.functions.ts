@@ -34,11 +34,8 @@ export const sendPickedEmail = createServerFn({ method: "POST" })
       .eq("id", data.orderId)
       .maybeSingle();
     if (!order) return { sent: false, reason: "ההזמנה לא נמצאה" };
-    const { data: caller } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const caller = await loadCaller(context.userId);
     const allowed =
       caller?.role === "admin" ||
       order.picker_id === context.userId ||

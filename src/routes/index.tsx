@@ -19,12 +19,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { useAuthState } from "@/hooks/useAuthState";
 import { useCartSync } from "@/hooks/useCartSync";
+import { useCart } from "@/hooks/useCart";
 import { useCustomerProfile } from "@/hooks/useCustomerProfile";
 import { useCategoryTree } from "@/hooks/useCategories";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { isNewProduct, minOrderMessage, normalizeQuantity, type CatalogItem } from "@/lib/catalog";
+import { isNewProduct, minOrderMessage, type CatalogItem } from "@/lib/catalog";
+import { addToCartItems, syncCartWithCatalog } from "@/lib/cart";
 import { countByCategory, subtreeNames, totalCounts } from "@/lib/category-tree";
-import { cartMinimum, cartMinUnits, cartStep, type CartItem } from "@/lib/orders";
+import { cartMinimum, cartMinUnits, cartStep } from "@/lib/orders";
 import { loadHomeBanners, type BannerSet } from "@/lib/banners";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { CatalogSections } from "@/components/CatalogSections";
@@ -60,11 +62,9 @@ export const Route = createFileRoute("/")({
 function Index() {
   const { session, role, loading, refreshRole } = useAuthState();
   const { settings } = useSiteSettings();
-  const {
-    profile,
-    loading: profileLoading,
-    refresh: refreshProfile,
-  } = useCustomerProfile(role?.role === "customer" ? role.user_id : null);
+  const { loading: profileLoading, refresh: refreshProfile } = useCustomerProfile(
+    role?.role === "customer" ? role.user_id : null,
+  );
   const [products, setProducts] = useState<CatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const search = Route.useSearch();
@@ -79,7 +79,8 @@ function Index() {
     [navigate],
   );
   const [term, setTerm] = useState("");
-  const [cart, setCart] = useState<CartItem[]>([]);
+  // הסל משותף לכל העמודים (קטלוג → קופה) ונשמר בדפדפן — גם לאורח
+  const { cart, setCart, ready: cartReady } = useCart();
   const [cartOpen, setCartOpen] = useState(false);
   const view: "all" | "new" | "promo" = search.view ?? "all";
   const setView = (next: "all" | "new" | "promo") =>
@@ -132,7 +133,7 @@ function Index() {
     userId: role?.role === "customer" ? role.user_id : null,
     cart,
     setCart,
-    enabled: role?.role === "customer",
+    enabled: role?.role === "customer" && cartReady,
   });
 
   const categoryTree = useCategoryTree();
@@ -211,13 +212,14 @@ function Index() {
   }, [filtered, view]);
 
   /**
-   * מצב הסל נגזר מהמשתמש: לקוח מאושר עם קבוצת מחיר (get_catalog מחזיר לו
-   * מחיר) מבצע הזמנה; לקוח בלי קבוצת מחיר מבקש הצעת מחיר; מי שלא מחובר
-   * יכול לבנות סל אבל יתבקש להתחבר לפני השליחה.
+   * מחירון פתוח לכולם: אורחים, לקוחות שממתינים לאישור ולקוחות בלי קבוצת
+   * מחיר רואים את המחירון הרגיל ומזמינים דרך הקופה (בלי הרשמה). רק כשלמוצרים
+   * אין מחיר בכלל — הסל הוא "בקשה להצעת מחיר".
    */
   const hasPrices = products.some((product) => product.price !== null);
+  const catalogById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const isCustomer = role?.role === "customer";
-  const cartMode: CartMode = !session ? "guest" : isCustomer && hasPrices ? "order" : "quote";
+  const cartMode: CartMode = hasPrices ? "order" : "quote";
   const canUseCart = !session || isCustomer;
   const addLabel = cartMode === "order" ? "הוספה לסל" : "הוספה לבקשה";
 
@@ -227,32 +229,9 @@ function Index() {
 
   const addToCart = (item: CatalogItem, requested = 1, options?: { silent?: boolean }) => {
     // מתחילים מהמינימום / ממארז שלם — לא מ-1
-    const quantity = normalizeQuantity(item, requested);
+    const { quantity } = addToCartItems(cart, item, requested);
     cartEdited.current = true;
-    setCart((current) => {
-      const existing = current.find((c) => c.productId === item.id);
-      if (existing) {
-        return current.map((c) =>
-          c.productId === item.id ? { ...c, quantity: c.quantity + quantity } : c,
-        );
-      }
-      return [
-        ...current,
-        {
-          productId: item.id,
-          name: item.name,
-          category: item.category,
-          imageUrl: item.image_url,
-          price: item.price ?? 0,
-          quantity,
-          hasDeposit: item.has_deposit,
-          depositPrice: item.deposit_price,
-          depositUnits: item.deposit_units,
-          packSize: item.pack_size,
-          minOrderQuantity: item.min_order_quantity ?? null,
-        },
-      ];
-    });
+    setCart((current) => addToCartItems(current, item, requested).items);
     if (options?.silent) return;
     const target = cartMode === "order" ? "סל" : "בקשה";
     toast.success(
@@ -279,47 +258,27 @@ function Index() {
     );
   };
 
-  // סל שנשמר בעבר (או לפני שמוצר סומן "נמכר במארזים") — מעדכנים את גודל
-  // המארז מהקטלוג ומעגלים כלפי מעלה לכפולה שלמה, עם הודעה ללקוח
+  // סל שנשמר בעבר (או לפני התחברות / לפני שמוצר סומן "נמכר במארזים"):
+  // מסונכרן מול הקטלוג — מוצר שאינו זמין יוצא עם הודעה, הכמות מתעגלת למארז /
+  // למינימום, והמחיר מתעדכן למחירון של מי שמחובר עכשיו
   useEffect(() => {
     if (catalogLoading || products.length === 0 || cart.length === 0) return;
-    const byId = new Map(products.map((p) => [p.id, p]));
-    // מוצר שהוסתר / נמחק / אזל מאז שנוסף לסל — יוצא מהסל עם הודעה ללקוח,
-    // במקום שההזמנה תידחה בשליחה
-    const unavailable = cart.filter((item) => {
-      const product = byId.get(item.productId);
-      return !product || product.is_out_of_stock;
-    });
+    const synced = syncCartWithCatalog(cart, catalogById);
+    if (synced.items === cart) return;
+    setCart(synced.items);
+    const { unavailable } = synced;
     if (unavailable.length > 0) {
-      setCart(cart.filter((item) => !unavailable.includes(item)));
       toast.warning(
         unavailable.length === 1
           ? `"${unavailable[0]?.name ?? ""}" הוסר מהסל — המוצר אינו זמין כרגע`
           : `${unavailable.length} מוצרים הוסרו מהסל כי אינם זמינים כרגע: ${unavailable.map((item) => item.name).join(", ")}`,
       );
-      return;
     }
-    let adjusted = false;
-    const next = cart.map((item) => {
-      const product = byId.get(item.productId);
-      if (!product) return item;
-      const packSize = product.pack_size ?? null;
-      const minOrderQuantity = product.min_order_quantity ?? null;
-      const quantity = normalizeQuantity(product, item.quantity);
-      if (
-        packSize === (item.packSize ?? null) &&
-        minOrderQuantity === (item.minOrderQuantity ?? null) &&
-        quantity === item.quantity
-      ) {
-        return item;
-      }
-      if (quantity !== item.quantity) adjusted = true;
-      return { ...item, packSize, minOrderQuantity, quantity };
-    });
-    if (next.some((item, index) => item !== cart[index])) {
-      setCart(next);
-      if (adjusted) toast.info("עדכנו כמויות בסל לפי גודל המארז / המינימום להזמנה של המוצרים");
+    if (synced.adjusted) {
+      toast.info("עדכנו כמויות בסל לפי גודל המארז / המינימום להזמנה של המוצרים");
     }
+    // catalogById נגזר מ-products
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, cart, catalogLoading]);
   const removeFromCart = (productId: string) => {
     cartEdited.current = true;
@@ -327,7 +286,6 @@ function Index() {
   };
 
   // ---------- הגדלת מכירות: המלצות, מוצרי קופה, מתנות בסל ----------
-  const catalogById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const subtree = useCallback((name: string) => subtreeNames(categoryTree, name), [categoryTree]);
   const storefrontSales: StorefrontSales = useMemo(
     () => ({
@@ -392,14 +350,12 @@ function Index() {
   }
 
   /**
-   * חסימת כניסה ראשונה: עד שהלקוח משלים פרטי עסק (ומחליף סיסמה זמנית)
-   * אין גישה לקטלוג. אורחים וצוות לא מושפעים.
+   * לקוח שנכנס עם סיסמה זמנית (חשבון שפתח מנהל) קובע קודם סיסמה קבועה.
+   * פרטי העסק כבר לא חוסמים את הקטלוג — הם נאספים בקופה (וממולאים מהאזור
+   * האישי). אורחים וצוות לא מושפעים.
    */
   const needsOnboarding =
-    role?.role === "customer" &&
-    !role.is_blocked &&
-    !profileLoading &&
-    (role.must_change_password || profile === null || !profile.profile_completed);
+    role?.role === "customer" && !role.is_blocked && !profileLoading && role.must_change_password;
 
   if (needsOnboarding && role) {
     return (
@@ -450,7 +406,8 @@ function Index() {
                   {settings?.site_title?.trim() || DEFAULT_STORE_NAME}
                 </h1>
                 <p className="mt-3 text-base leading-7 text-primary-foreground/75">
-                  עיינו בקטלוג המלא, ופתחו חשבון עסקי כדי לראות מחירים ולהזמין.
+                  כל המחירים גלויים — מוסיפים לסל ומזמינים בקופה, גם בלי הרשמה. לקוחות רשומים נהנים
+                  ממילוי פרטים אוטומטי ומהיסטוריית הזמנות באזור האישי.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
                   <Button
@@ -458,7 +415,7 @@ function Index() {
                     asChild
                     className="bg-accent text-accent-foreground hover:bg-accent/90"
                   >
-                    <Link to="/register">פתיחת חשבון עסקי</Link>
+                    <a href="#catalog">להזמנה מהקטלוג</a>
                   </Button>
                   <Button
                     size="lg"
@@ -500,15 +457,8 @@ function Index() {
           )}
           {isCustomer && !role?.is_approved && (
             <div className="rounded-lg border border-accent/40 bg-accent/5 p-4 text-sm text-foreground">
-              החשבון שלך ממתין לאישור מנהל. אפשר להמשיך ולעיין בקטלוג ולשלוח בקשה להצעת מחיר —
-              המחירים יוצגו מיד לאחר אישור החשבון.
-            </div>
-          )}
-
-          {isCustomer && role?.is_approved && !hasPrices && products.length > 0 && (
-            <div className="rounded-lg border border-border bg-card p-4 text-sm text-foreground shadow-card">
-              עדיין לא הוקצתה לחשבון שלך קבוצת מחיר, ולכן המחירים אינם מוצגים. אפשר לבנות רשימה
-              ולשלוח בקשה להצעת מחיר — נציג יחזור אליכם.
+              החשבון שלך ממתין לאישור מנהל. בינתיים אפשר להזמין כרגיל לפי המחירון הרגיל — אחרי
+              האישור יוצגו לך תנאי המחיר של העסק שלך.
             </div>
           )}
 
@@ -521,7 +471,7 @@ function Index() {
             onAddToCart={addToCart}
           />
 
-          <section className="space-y-4">
+          <section id="catalog" className="scroll-mt-4 space-y-4">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0">
                 <h2 className="font-display text-2xl text-foreground">קטלוג מוצרים</h2>
@@ -619,11 +569,10 @@ function Index() {
             open={cartOpen}
             onOpenChange={setCartOpen}
             mode={cartMode}
-            customerId={role?.user_id ?? null}
+            signedIn={session !== null}
             items={cart}
             onChangeQuantity={changeQuantity}
             onRemove={removeFromCart}
-            onClear={() => setCart([])}
             onAdd={addToCart}
             promotions={promotionsEval}
           />

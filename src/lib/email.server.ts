@@ -40,6 +40,8 @@ export async function sendEmail(input: SendEmailInput): Promise<SendResult> {
   if (input.logFor) {
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { memberIdOrNull } = await import("@/lib/caller.server");
+      const sentBy = await memberIdOrNull(input.logFor.sentBy);
       await supabaseAdmin.from("customer_emails").insert({
         user_id: input.logFor.userId,
         to_email: input.to.join(", "),
@@ -48,7 +50,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendResult> {
         html: input.html,
         sent: result.sent,
         error: result.sent ? null : (result.reason ?? null),
-        sent_by: input.logFor.sentBy ?? null,
+        sent_by: sentBy,
       });
     } catch (error) {
       // כשל ברישום ליומן לא צריך להפיל שליחה שכבר הצליחה

@@ -41,6 +41,7 @@ import {
 import { OrderEditDialog } from "@/components/OrderEditDialog";
 import { CreateOrderDialog } from "@/components/CreateOrderDialog";
 import { OrderDocumentButton } from "@/components/OrderDocumentButton";
+import { OrderContactBlock } from "@/components/OrderContactBlock";
 import { GroupSidebarLayout, type SideGroup } from "@/components/GroupSidebarLayout";
 import { SortToggle, type SortDirection } from "@/components/OrdersByYear";
 import { formatIls } from "@/lib/catalog";
@@ -180,7 +181,8 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
   // המספרים בסרגל מתחשבים בשאר המסננים (סוג, לקוח, סוכן)
   const matchesFilters = (o: OrderRow) =>
     (kindFilter === "all" || o.kind === kindFilter) &&
-    (customerFilter === "all" || o.customer_id === customerFilter) &&
+    (customerFilter === "all" ||
+      (customerFilter === "guests" ? o.customer_id === null : o.customer_id === customerFilter)) &&
     (agentFilter === "all" || o.agent_id === agentFilter);
   const inFilters = orders.filter(matchesFilters);
   const groupCounts = (() => {
@@ -354,6 +356,9 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
                   </SelectTrigger>
                   <SelectContent dir="rtl">
                     <SelectItem value="all">כל הלקוחות</SelectItem>
+                    {scope === "admin" && (
+                      <SelectItem value="guests">הזמנות אורחים (בלי חשבון)</SelectItem>
+                    )}
                     {customers.map((c) => (
                       <SelectItem key={c.user_id} value={c.user_id}>
                         {c.label}
@@ -402,7 +407,11 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
                           </p>
                           <p className="truncate text-xs text-muted-foreground">
                             {formatOrderDate(order.created_at)} ·{" "}
-                            {customerLabel.get(order.customer_id) ?? "לקוח"}
+                            {order.customer_id
+                              ? (customerLabel.get(order.customer_id) ??
+                                order.customer_name ??
+                                "לקוח")
+                              : (order.customer_name ?? "אורח")}
                             {scope === "admin" &&
                               order.agent_id &&
                               ` · סוכן: ${agentLabel.get(order.agent_id) ?? "-"}`}
@@ -415,6 +424,8 @@ export function OrderManagementPanel({ scope, meId }: { scope: "agent" | "admin"
                           </Badge>
                         </div>
                       </div>
+
+                      <OrderContactBlock order={order} />
 
                       <ul className="space-y-1 text-sm">
                         {order.order_items.map((item) => (

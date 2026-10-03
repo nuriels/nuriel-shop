@@ -32,6 +32,13 @@ export type DocumentCustomer = {
   email: string;
 };
 
+/** כתובת משלוח חלופית ("שלח לכתובת אחרת" בקופה) */
+export type DocumentShipping = {
+  name: string;
+  phone: string;
+  address: string;
+};
+
 export type DocumentItem = {
   name: string;
   barcode: string | null;
@@ -47,6 +54,8 @@ export type DocumentData = {
   statusLabel: string;
   business: DocumentBusiness;
   customer: DocumentCustomer;
+  /** null = המשלוח לכתובת של הלקוח */
+  shipping?: DocumentShipping | null;
   agentNumber: string | null;
   /** שם הסוכן בעברית, כפי שהלקוח רואה אותו */
   agentName: string | null;
@@ -201,8 +210,8 @@ export async function buildOrderDocumentPdf(
   // ---------- פרטי הלקוח ----------
   const customerLines: [string, string][] = (
     [
-      ["שם העסק", data.customer.businessName],
-      ["ח.פ / עוסק מורשה", data.customer.taxId],
+      ["שם / שם העסק", data.customer.businessName],
+      ["ת.ז / ח.פ", data.customer.taxId],
       ["כתובת", data.customer.address],
       ["איש קשר", data.customer.contactName],
       ["טלפון", data.customer.phone],
@@ -228,6 +237,31 @@ export async function buildOrderDocumentPdf(
     write(`${label}: ${value}`, x, y + 12.5 + row * 5.6, { size: 9, color: INK });
   });
   y += blockHeight + 8;
+
+  // ---------- משלוח לכתובת אחרת ----------
+  if (data.shipping) {
+    const shippingLines = (
+      [
+        ["שם המקבל", data.shipping.name],
+        ["טלפון", data.shipping.phone],
+        ["כתובת למשלוח", data.shipping.address],
+      ] as [string, string][]
+    ).filter((entry) => entry[1].trim() !== "");
+    const shippingRows = Math.ceil(shippingLines.length / 2);
+    const shippingHeight = shippingRows * 5.6 + 12;
+    doc.setFillColor("#FFF6E5");
+    doc.setDrawColor(BRASS);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(LEFT, y, CONTENT_WIDTH, shippingHeight, 2, 2, "FD");
+    write("משלוח לכתובת אחרת", RIGHT - 4, y + 6.5, { size: 10, bold: true, color: BRASS });
+    shippingLines.forEach(([label, value], index) => {
+      const column = index % 2;
+      const row = Math.floor(index / 2);
+      const x = RIGHT - 4 - column * (columnWidth + 4);
+      write(`${label}: ${value}`, x, y + 12.5 + row * 5.6, { size: 9, color: INK });
+    });
+    y += shippingHeight + 8;
+  }
 
   // ---------- טבלת הפריטים ----------
   // רוחבי עמודות מימין לשמאל: מספר שורה, פריט, ברקוד, כמות, מחיר, סה"כ

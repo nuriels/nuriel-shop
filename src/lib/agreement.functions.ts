@@ -21,11 +21,8 @@ export const sendAgreementLink = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { sendAgreementEmail } = await import("@/lib/agreement.server");
 
-    const { data: caller } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const caller = await loadCaller(context.userId);
     const isSelf = context.userId === data.userId;
     if (!isSelf && caller?.role !== "admin" && caller?.role !== "agent")
       throw new Error("אין הרשאה");

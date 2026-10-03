@@ -15,13 +15,9 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 type ScanLine = { barcode: string; quantity: number; suggestedName?: string };
 
 async function assertStaff(userId: string): Promise<"admin" | "agent"> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: caller } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (caller?.role !== "admin" && caller?.role !== "agent") throw new Error("אין הרשאה");
+  const { loadCaller } = await import("@/lib/caller.server");
+  const caller = await loadCaller(userId);
+  if (caller.role !== "admin" && caller.role !== "agent") throw new Error("אין הרשאה");
   return caller.role;
 }
 
@@ -127,6 +123,7 @@ export const applyScanSession = createServerFn({ method: "POST" })
     const missing = data.lines.filter((line) => !knownBarcodes.has(line.barcode));
 
     let createdRequests = 0;
+    const { memberIdOrNull } = await import("@/lib/caller.server");
     for (const line of missing) {
       const { data: existing } = await supabaseAdmin
         .from("pending_products")
@@ -150,7 +147,7 @@ export const applyScanSession = createServerFn({ method: "POST" })
           barcode: line.barcode,
           suggested_name: line.suggestedName,
           scanned_count: Math.max(1, line.quantity),
-          created_by: context.userId,
+          created_by: await memberIdOrNull(context.userId),
         });
         if (error) throw new Error(error.message);
         createdRequests += 1;

@@ -1,5 +1,7 @@
 /** לוגיקת הזמנות B2B – מספרי הזמנה, סטטוסים וסל קניות */
 
+import { ORDER_CONTACT_COLUMNS, type OrderContactFields } from "@/lib/order-details";
+
 export type CartItem = {
   productId: string;
   name: string;
@@ -150,11 +152,14 @@ export type OrderItemRow = {
   product_image_url: string | null;
   /** שורת פיקדון אוטומטית (על אותו product_id), לא פריט לליקוט בנפרד */
   is_deposit: boolean;
+  /** מתנה מהטבת עגלה (במחיר 0) */
+  is_gift?: boolean;
 };
 
-export type OrderRow = {
+export type OrderRow = OrderContactFields & {
   id: string;
-  customer_id: string;
+  /** null = הזמנת אורח (בלי חשבון) — הפרטים בעמודות customer_* / billing_* */
+  customer_id: string | null;
   agent_id: string | null;
   order_number: string;
   status: OrderStatus;
@@ -170,7 +175,8 @@ export type OrderRow = {
 /** העמודות שנטענות בכל מסכי ההזמנות (לקוח, סוכן ומנהל) */
 export const ORDER_SELECT_COLUMNS =
   "id, customer_id, agent_id, order_number, status, kind, total, note, vat_rate, prices_include_vat, created_at, " +
-  "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit)";
+  `${ORDER_CONTACT_COLUMNS}, ` +
+  "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit, is_gift)";
 
 /**
  * מספר ההזמנה נקבע במסד בלבד (טריגר `orders_assign_number`):

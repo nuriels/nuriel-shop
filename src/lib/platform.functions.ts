@@ -10,10 +10,13 @@ import { DEFAULT_STORE_NAME } from "@/lib/branding";
 export const getHostMode = createServerFn({ method: "GET" }).handler(async () => {
   const { isPlatformRequest, isSuspendedStoreRequest, tenantBaseDomain } =
     await import("@/integrations/supabase/tenant.server");
+  const adminHost = process.env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase() || null;
   return {
     platform: isPlatformRequest(),
     suspended: isSuspendedStoreRequest(),
     baseDomain: tenantBaseDomain(),
+    /** פאנל הפלטפורמה — לקישור "חזרה לפאנל" של מנהל-על שנמצא בחנות */
+    platformUrl: adminHost ? `https://${adminHost}/platform` : null,
   };
 });
 

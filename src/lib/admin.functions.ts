@@ -102,11 +102,8 @@ export const createStaffUser = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: caller } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const caller = await loadCaller(context.userId);
 
     const callerRole = caller?.role;
     if (callerRole !== "admin" && callerRole !== "agent") throw new Error("אין הרשאה");
@@ -230,11 +227,8 @@ export const deleteUserAccount = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: caller } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const caller = await loadCaller(context.userId);
     if (caller?.role !== "admin") throw new Error("אין הרשאה");
     if (data.userId === context.userId)
       throw new Error("אי אפשר למחוק את המשתמש שאיתו את/ה מחובר/ת");
@@ -346,11 +340,8 @@ export const updateUserDetails = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: caller } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const caller = await loadCaller(context.userId);
     const isAdmin = caller?.role === "admin";
     const isAgent = caller?.role === "agent";
     if (!isAdmin && !isAgent) throw new Error("אין הרשאה");
@@ -593,11 +584,8 @@ export const deleteOrder = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: caller } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const caller = await loadCaller(context.userId);
     if (caller?.role !== "admin") throw new Error("אין הרשאה למחוק הזמנות");
 
     const { error } = await supabaseAdmin.from("orders").delete().eq("id", data.orderId);
@@ -623,11 +611,8 @@ export const notifyCustomerAssigned = createServerFn({ method: "POST" })
     const { sendEmail, renderEmailHtml, escapeHtml, emailActionButton } =
       await import("@/lib/email.server");
 
-    const { data: caller } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const caller = await loadCaller(context.userId);
     if (caller?.role !== "admin" && caller?.role !== "agent") throw new Error("אין הרשאה");
 
     const { data: profile } = await supabaseAdmin

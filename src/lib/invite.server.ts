@@ -32,7 +32,8 @@ export async function createInvite(input: {
   email: string | null;
   priceTier: 1 | 2 | 3 | null;
   agentId: string | null;
-  createdBy: string;
+  /** null = נוצר ע"י מנהל-על שאינו רשום בחנות */
+  createdBy: string | null;
 }): Promise<{ link: string; expiresAt: string }> {
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();

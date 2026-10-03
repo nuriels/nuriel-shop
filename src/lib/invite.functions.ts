@@ -28,11 +28,8 @@ export const createCustomerInvite = createServerFn({ method: "POST" })
     const { allowAction } = await import("@/lib/rate-limit.server");
     const { createInvite, sendInviteEmail } = await import("@/lib/invite.server");
 
-    const { data: caller } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const caller = await loadCaller(context.userId);
     if (caller?.role !== "admin" && caller?.role !== "agent") throw new Error("אין הרשאה");
 
     if (!allowAction(`invite:${context.userId}`, 40, 60 * 60 * 1000)) {
@@ -71,7 +68,7 @@ export const createCustomerInvite = createServerFn({ method: "POST" })
       email: data.email,
       priceTier: data.priceTier,
       agentId,
-      createdBy: context.userId,
+      createdBy: caller.memberId,
     });
 
     if (!data.email) return { link, expiresAt, emailed: false, reason: null as string | null };

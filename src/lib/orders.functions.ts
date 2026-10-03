@@ -1,4 +1,5 @@
 import { staffName } from "@/lib/staff";
+import { ORDER_CONTACT_COLUMNS, billingOf, deliveryOf } from "@/lib/order-details";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -21,33 +22,37 @@ export const reorderOrder = createServerFn({ method: "POST" })
 
     const { data: source } = await supabaseAdmin
       .from("orders")
-      .select("id, customer_id, agent_id, order_items (product_id, quantity, is_deposit)")
+      .select(
+        `id, customer_id, agent_id, note, ${ORDER_CONTACT_COLUMNS}, order_items (product_id, quantity, is_deposit)`,
+      )
       .eq("id", data.orderId)
       .maybeSingle();
     if (!source) throw new Error("ההזמנה לא נמצאה");
+    const customerId = source.customer_id;
+    if (!customerId) {
+      throw new Error("הזמנת אורח אי אפשר לשכפל — אין לה חשבון לקוח. אפשר ליצור הזמנה ידנית.");
+    }
 
-    const { data: caller } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const caller = await loadCaller(context.userId);
     const isOwner = context.userId === source.customer_id || context.userId === source.agent_id;
     if (!isOwner && caller?.role !== "admin") throw new Error("אין הרשאה");
 
     const items = source.order_items ?? [];
     if (items.length === 0) throw new Error("אין פריטים לשכפול");
 
-    // האם ללקוח יש מחירים בכלל (מאושר + לא חסום + קבוצת מחיר משויכת)
+    // מחירון פתוח: לקוח מאושר עם דרג — הדרג שלו; כל השאר — המחירון הרגיל (1).
+    // אותו חישוב כמו buyer_price_tier במסד.
     const [{ data: profile }, { data: customerRole }, { data: settings }] = await Promise.all([
       supabaseAdmin
         .from("customer_profiles")
         .select("price_tier, price_list_type")
-        .eq("user_id", source.customer_id)
+        .eq("user_id", customerId)
         .maybeSingle(),
       supabaseAdmin
         .from("user_roles")
         .select("is_approved, is_blocked")
-        .eq("user_id", source.customer_id)
+        .eq("user_id", customerId)
         .maybeSingle(),
       supabaseAdmin
         .from("site_settings")
@@ -56,10 +61,18 @@ export const reorderOrder = createServerFn({ method: "POST" })
         .maybeSingle(),
     ]);
 
-    const tier = profile?.price_tier ?? null;
-    const hasPrices =
-      tier !== null && customerRole?.is_approved === true && customerRole?.is_blocked === false;
-    const kind = hasPrices ? "order" : "quote";
+    if (customerRole?.is_blocked) {
+      throw new Error("החשבון חסום — לא ניתן לשלוח הזמנות. לבירור פנו אלינו.");
+    }
+    const assignedTier = profile?.price_tier ?? null;
+    const tier =
+      customerRole?.is_approved === true &&
+      assignedTier !== null &&
+      [1, 2, 3].includes(assignedTier)
+        ? assignedTier
+        : 1;
+    const hasPrices = true;
+    const kind = "order" as "order" | "quote";
 
     const { data: products } = await supabaseAdmin
       .from("global_products")
@@ -77,7 +90,7 @@ export const reorderOrder = createServerFn({ method: "POST" })
       const { data: overrides } = await supabaseAdmin
         .from("user_custom_prices")
         .select("product_id, custom_price")
-        .eq("user_id", source.customer_id)
+        .eq("user_id", customerId)
         .in(
           "product_id",
           items.map((item) => item.product_id),
@@ -115,12 +128,26 @@ export const reorderOrder = createServerFn({ method: "POST" })
     const { data: created, error: createError } = await supabaseAdmin
       .from("orders")
       .insert({
-        customer_id: source.customer_id,
+        customer_id: customerId,
         status: "pending",
         kind,
         total: 0,
         vat_rate: Number(settings?.vat_rate ?? 18),
         prices_include_vat: settings?.prices_include_vat ?? true,
+        // אותם פרטי חיוב ומשלוח כמו בהזמנה המקורית (אם נקלטו בקופה)
+        customer_name: source.customer_name,
+        customer_tax_id: source.customer_tax_id,
+        customer_phone: source.customer_phone,
+        customer_email: source.customer_email,
+        billing_city: source.billing_city,
+        billing_address: source.billing_address,
+        billing_zip: source.billing_zip,
+        ship_to_different: source.ship_to_different,
+        shipping_name: source.shipping_name,
+        shipping_phone: source.shipping_phone,
+        shipping_city: source.shipping_city,
+        shipping_address: source.shipping_address,
+        shipping_zip: source.shipping_zip,
       })
       .select("id, order_number")
       .single();
@@ -210,29 +237,29 @@ export const downloadPickingSlip = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { buildPickingSlipPdf } = await import("@/lib/pdf/picking-slip.server");
 
-    const { data: caller } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const caller = await loadCaller(context.userId);
     if (caller?.role !== "admin" && caller?.role !== "agent") throw new Error("אין הרשאה");
 
     const { data: order } = await supabaseAdmin
       .from("orders")
       .select(
-        "id, order_number, kind, created_at, note, customer_id, agent_id, order_items (quantity, product_name, product_sku, product_barcode, product_shelf_location, product_pack_size, is_deposit)",
+        `id, order_number, kind, created_at, note, customer_id, agent_id, ${ORDER_CONTACT_COLUMNS}, order_items (quantity, product_name, product_sku, product_barcode, product_shelf_location, product_pack_size, is_deposit)`,
       )
       .eq("id", data.orderId)
       .maybeSingle();
     if (!order) throw new Error("ההזמנה לא נמצאה");
     if (caller.role === "agent" && order.agent_id !== context.userId) throw new Error("אין הרשאה");
 
+    const customerId = order.customer_id;
     const [{ data: profile }, agentResult, { data: settings }] = await Promise.all([
-      supabaseAdmin
-        .from("customer_profiles")
-        .select("business_name, contact_name, phone")
-        .eq("user_id", order.customer_id)
-        .maybeSingle(),
+      customerId
+        ? supabaseAdmin
+            .from("customer_profiles")
+            .select("business_name, contact_name, phone, business_address, city, zip_code")
+            .eq("user_id", customerId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
       order.agent_id
         ? supabaseAdmin
             .from("user_roles")
@@ -247,6 +274,7 @@ export const downloadPickingSlip = createServerFn({ method: "POST" })
         .maybeSingle(),
     ]);
     const { loadLogoDataUrl } = await import("@/lib/documents.server");
+    const delivery = deliveryOf(order, profile);
 
     const pdf = await buildPickingSlipPdf({
       orderNumber: order.order_number,
@@ -254,9 +282,12 @@ export const downloadPickingSlip = createServerFn({ method: "POST" })
       kindLabel: order.kind === "quote" ? "בקשת הצעת מחיר" : "הזמנה",
       sellerName: settings?.business_name?.trim() || settings?.site_title?.trim() || "",
       logoDataUrl: await loadLogoDataUrl(settings?.logo_path ?? null),
-      customerBusinessName: profile?.business_name ?? "",
-      contactName: profile?.contact_name ?? "",
-      phone: profile?.phone ?? "",
+      // לאן לשלוח בפועל — הכתובת החלופית מהקופה אם נבחרה
+      customerBusinessName: billingOf(order, profile).name,
+      contactName: delivery.name,
+      phone: delivery.phone,
+      deliveryAddress: delivery.address,
+      alternateDelivery: delivery.isAlternate,
       agentNumber: agentResult.data
         ? [agentResult.data.agent_number, staffName(agentResult.data)].filter(Boolean).join(" · ")
         : null,

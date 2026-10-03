@@ -18,6 +18,7 @@ import { SUSPENDED_ALLOWED_PATHS } from "@/lib/blocked-pages";
 import { DEFAULT_STORE_NAME, getSiteSeo } from "@/lib/platform.functions";
 import { brandThemeCss, normalizeBrandColor } from "@/lib/brand-theme";
 import { StorefrontGate } from "@/components/StorefrontGate";
+import { CartProvider } from "@/hooks/useCart";
 
 function NotFoundComponent() {
   return (
@@ -162,14 +163,17 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* מצב שבת: לקוחות ואורחים רואים "שבת שלום" במקום עמודי החנות */}
-      <StorefrontGate
-        sabbath={site?.sabbath === true}
-        storeName={site?.siteName || DEFAULT_STORE_NAME}
-      >
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
-      </StorefrontGate>
+      {/* הסל משותף לכל העמודים (קטלוג → קופה) ונשמר בדפדפן */}
+      <CartProvider>
+        {/* מצב שבת: לקוחות ואורחים רואים "שבת שלום" במקום עמודי החנות */}
+        <StorefrontGate
+          sabbath={site?.sabbath === true}
+          storeName={site?.siteName || DEFAULT_STORE_NAME}
+        >
+          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+          <Outlet />
+        </StorefrontGate>
+      </CartProvider>
       <AccessibilityWidget />
       <Toaster position="top-center" />
     </QueryClientProvider>

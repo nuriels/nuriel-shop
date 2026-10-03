@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Store,
+  UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -119,11 +120,16 @@ export function SiteHeader({
               ליקוט
             </Link>
           )}
-          {/* לשונית מהירה להזמנות — גלויה תמיד למשתמש מחובר, גם במובייל */}
+          {/* האזור האישי (הזמנות + הפרטים שלי) — גלוי תמיד ללקוח מחובר, גם במובייל */}
           {role?.role === "customer" && (
-            <Link to="/orders" className={navLinkClass} activeProps={{ className: navActiveClass }}>
-              <ClipboardList className="size-4" />
-              הזמנות
+            <Link
+              to="/account"
+              className={navLinkClass}
+              activeProps={{ className: navActiveClass }}
+            >
+              <UserRound className="size-4" />
+              <span className="hidden sm:inline">האזור האישי</span>
+              <span className="sm:hidden">החשבון</span>
             </Link>
           )}
           {(role?.role === "agent" || role?.role === "admin") && (

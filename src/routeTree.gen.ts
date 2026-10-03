@@ -11,9 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AdminHandoffRouteImport } from './routes/admin-handoff'
 import { Route as AgentRouteImport } from './routes/agent'
 import { Route as AgreementRouteImport } from './routes/agreement'
+import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as ForbiddenRouteImport } from './routes/forbidden'
 import { Route as LockedRouteImport } from './routes/locked'
 import { Route as LoginRouteImport } from './routes/login'
@@ -36,9 +39,19 @@ const AboutRoute = AboutRouteImport.update({
   path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminHandoffRoute = AdminHandoffRouteImport.update({
+  id: '/admin-handoff',
+  path: '/admin-handoff',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgentRoute = AgentRouteImport.update({
@@ -49,6 +62,11 @@ const AgentRoute = AgentRouteImport.update({
 const AgreementRoute = AgreementRouteImport.update({
   id: '/agreement',
   path: '/agreement',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutRoute = CheckoutRouteImport.update({
+  id: '/checkout',
+  path: '/checkout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForbiddenRoute = ForbiddenRouteImport.update({
@@ -110,9 +128,12 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
+  '/admin-handoff': typeof AdminHandoffRoute
   '/agent': typeof AgentRoute
   '/agreement': typeof AgreementRoute
+  '/checkout': typeof CheckoutRoute
   '/forbidden': typeof ForbiddenRoute
   '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
@@ -128,9 +149,12 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
+  '/admin-handoff': typeof AdminHandoffRoute
   '/agent': typeof AgentRoute
   '/agreement': typeof AgreementRoute
+  '/checkout': typeof CheckoutRoute
   '/forbidden': typeof ForbiddenRoute
   '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
@@ -147,9 +171,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
+  '/admin-handoff': typeof AdminHandoffRoute
   '/agent': typeof AgentRoute
   '/agreement': typeof AgreementRoute
+  '/checkout': typeof CheckoutRoute
   '/forbidden': typeof ForbiddenRoute
   '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
@@ -167,9 +194,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/about'
+    | '/account'
     | '/admin'
+    | '/admin-handoff'
     | '/agent'
     | '/agreement'
+    | '/checkout'
     | '/forbidden'
     | '/locked'
     | '/login'
@@ -185,9 +215,12 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/about'
+    | '/account'
     | '/admin'
+    | '/admin-handoff'
     | '/agent'
     | '/agreement'
+    | '/checkout'
     | '/forbidden'
     | '/locked'
     | '/login'
@@ -203,9 +236,12 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/about'
+    | '/account'
     | '/admin'
+    | '/admin-handoff'
     | '/agent'
     | '/agreement'
+    | '/checkout'
     | '/forbidden'
     | '/locked'
     | '/login'
@@ -222,9 +258,12 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  AccountRoute: typeof AccountRoute
   AdminRoute: typeof AdminRoute
+  AdminHandoffRoute: typeof AdminHandoffRoute
   AgentRoute: typeof AgentRoute
   AgreementRoute: typeof AgreementRoute
+  CheckoutRoute: typeof CheckoutRoute
   ForbiddenRoute: typeof ForbiddenRoute
   LockedRoute: typeof LockedRoute
   LoginRoute: typeof LoginRoute
@@ -254,11 +293,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin': {
       id: '/admin'
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin-handoff': {
+      id: '/admin-handoff'
+      path: '/admin-handoff'
+      fullPath: '/admin-handoff'
+      preLoaderRoute: typeof AdminHandoffRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agent': {
@@ -273,6 +326,13 @@ declare module '@tanstack/react-router' {
       path: '/agreement'
       fullPath: '/agreement'
       preLoaderRoute: typeof AgreementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkout': {
+      id: '/checkout'
+      path: '/checkout'
+      fullPath: '/checkout'
+      preLoaderRoute: typeof CheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forbidden': {
@@ -358,9 +418,12 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  AccountRoute: AccountRoute,
   AdminRoute: AdminRoute,
+  AdminHandoffRoute: AdminHandoffRoute,
   AgentRoute: AgentRoute,
   AgreementRoute: AgreementRoute,
+  CheckoutRoute: CheckoutRoute,
   ForbiddenRoute: ForbiddenRoute,
   LockedRoute: LockedRoute,
   LoginRoute: LoginRoute,

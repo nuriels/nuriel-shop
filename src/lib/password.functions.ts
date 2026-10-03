@@ -62,17 +62,15 @@ export const sendPasswordResetLink = createServerFn({ method: "POST" })
   .inputValidator((input: { userId: string; purpose?: "reset" | "login_link" }) => {
     const userId = String(input?.userId ?? "").trim();
     if (!userId) throw new Error("חסר מזהה משתמש");
-    const purpose: "reset" | "login_link" = input?.purpose === "login_link" ? "login_link" : "reset";
+    const purpose: "reset" | "login_link" =
+      input?.purpose === "login_link" ? "login_link" : "reset";
     return { userId, purpose };
   })
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: caller } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const caller = await loadCaller(context.userId);
     if (caller?.role !== "admin" && caller?.role !== "agent") throw new Error("אין הרשאה");
 
     if (caller.role === "agent") {

@@ -137,6 +137,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      platform_admin_handoffs: {
+        Row: {
+          token_hash: string;
+          user_id: string;
+          tenant_id: string;
+          created_at: string;
+          expires_at: string;
+          used_at: string | null;
+        };
+        Insert: {
+          token_hash: string;
+          user_id: string;
+          tenant_id: string;
+          created_at?: string;
+          expires_at: string;
+          used_at?: string | null;
+        };
+        Update: {
+          token_hash?: string;
+          user_id?: string;
+          tenant_id?: string;
+          created_at?: string;
+          expires_at?: string;
+          used_at?: string | null;
+        };
+        Relationships: [];
+      };
       platform_admins: {
         Row: { user_id: string; created_at: string };
         Insert: { user_id: string; created_at?: string };
@@ -225,6 +252,8 @@ export type Database = {
           age_confirmed: boolean;
           business_address: string | null;
           business_name: string;
+          city: string | null;
+          zip_code: string | null;
           contact_name: string | null;
           created_at: string;
           phone: string | null;
@@ -241,6 +270,8 @@ export type Database = {
           age_confirmed?: boolean;
           business_address: string | null;
           business_name: string;
+          city?: string | null;
+          zip_code?: string | null;
           contact_name: string | null;
           created_at?: string;
           phone: string | null;
@@ -257,6 +288,8 @@ export type Database = {
           age_confirmed?: boolean;
           business_address?: string | null;
           business_name?: string;
+          city?: string | null;
+          zip_code?: string | null;
           contact_name?: string | null;
           created_at?: string;
           phone?: string | null;
@@ -601,7 +634,7 @@ export type Database = {
           tenant_id: string;
           agent_id: string | null;
           created_at: string;
-          customer_id: string;
+          customer_id: string | null;
           id: string;
           kind: string;
           note: string | null;
@@ -617,12 +650,26 @@ export type Database = {
           total: number;
           updated_at: string;
           vat_rate: number;
+          customer_name: string | null;
+          customer_tax_id: string | null;
+          customer_phone: string | null;
+          customer_email: string | null;
+          billing_city: string | null;
+          billing_address: string | null;
+          billing_zip: string | null;
+          ship_to_different: boolean;
+          shipping_name: string | null;
+          shipping_phone: string | null;
+          shipping_city: string | null;
+          shipping_address: string | null;
+          shipping_zip: string | null;
+          terms_accepted_at: string | null;
         };
         Insert: {
           tenant_id?: string;
           agent_id?: string | null;
           created_at?: string;
-          customer_id: string;
+          customer_id?: string | null;
           id?: string;
           kind?: string;
           note?: string | null;
@@ -638,12 +685,26 @@ export type Database = {
           total?: number;
           updated_at?: string;
           vat_rate?: number;
+          customer_name?: string | null;
+          customer_tax_id?: string | null;
+          customer_phone?: string | null;
+          customer_email?: string | null;
+          billing_city?: string | null;
+          billing_address?: string | null;
+          billing_zip?: string | null;
+          ship_to_different?: boolean;
+          shipping_name?: string | null;
+          shipping_phone?: string | null;
+          shipping_city?: string | null;
+          shipping_address?: string | null;
+          shipping_zip?: string | null;
+          terms_accepted_at?: string | null;
         };
         Update: {
           tenant_id?: string;
           agent_id?: string | null;
           created_at?: string;
-          customer_id?: string;
+          customer_id?: string | null;
           id?: string;
           kind?: string;
           note?: string | null;
@@ -659,6 +720,20 @@ export type Database = {
           total?: number;
           updated_at?: string;
           vat_rate?: number;
+          customer_name?: string | null;
+          customer_tax_id?: string | null;
+          customer_phone?: string | null;
+          customer_email?: string | null;
+          billing_city?: string | null;
+          billing_address?: string | null;
+          billing_zip?: string | null;
+          ship_to_different?: boolean;
+          shipping_name?: string | null;
+          shipping_phone?: string | null;
+          shipping_city?: string | null;
+          shipping_address?: string | null;
+          shipping_zip?: string | null;
+          terms_accepted_at?: string | null;
         };
         Relationships: [
           {
@@ -1410,8 +1485,27 @@ export type Database = {
           _kind: string;
           _prices_include_vat: boolean;
           _vat_rate: number;
+          _details?: Json | null;
         };
         Returns: { id: string; kind: string; order_number: string }[];
+      };
+      place_guest_order: {
+        Args: { _kind: string; _items: Json; _details: Json };
+        Returns: { id: string; kind: string; order_number: string; total: number }[];
+      };
+      my_store_role: {
+        Args: never;
+        Returns: {
+          user_id: string;
+          email: string;
+          username: string;
+          role: string;
+          is_approved: boolean;
+          is_blocked: boolean;
+          must_change_password: boolean;
+          is_platform_admin: boolean;
+          is_member: boolean;
+        }[];
       };
       replace_home_banners: { Args: { _slides: Json }; Returns: number };
       price_tiers_enabled: { Args: never; Returns: boolean };

@@ -27,8 +27,13 @@ export type PickingSlipData = {
   sellerName: string;
   /** שם העסק של הלקוח שההזמנה עבורו */
   customerBusinessName: string;
+  /** מי מקבל את המשלוח */
   contactName: string;
   phone: string;
+  /** הכתובת למשלוח בפועל */
+  deliveryAddress?: string;
+  /** true = כתובת חלופית שהלקוח בחר בקופה */
+  alternateDelivery?: boolean;
   agentNumber: string | null;
   note: string | null;
   items: PickingItem[];
@@ -155,9 +160,10 @@ export async function buildPickingSlipPdf(
   const customerLines: [string, string][] = (
     [
       ["לקוח", data.customerBusinessName],
-      ["איש קשר", data.contactName],
+      [data.alternateDelivery ? "מקבל המשלוח" : "איש קשר", data.contactName],
       ["טלפון", data.phone],
       ["סוכן", data.agentNumber ?? ""],
+      [data.alternateDelivery ? "משלוח לכתובת אחרת" : "כתובת למשלוח", data.deliveryAddress ?? ""],
     ] as [string, string][]
   ).filter((entry) => entry[1].trim() !== "");
 

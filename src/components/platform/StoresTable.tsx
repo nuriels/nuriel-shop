@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { Lock, LockOpen, Trash2, UserPlus } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { Loader2, Lock, LockOpen, LogIn, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, TenantPlan, TenantStatus } from "@/integrations/supabase/types";
@@ -9,6 +10,7 @@ import {
   TENANT_PLANS,
   createStoreAdmin,
 } from "@/lib/platform.functions";
+import { createStoreAdminHandoff } from "@/lib/handoff.functions";
 import {
   StoreCredentials,
   type StoreAdminCredentials,
@@ -74,6 +76,32 @@ export function StoresTable({
   const [toSuspend, setToSuspend] = useState<Store | null>(null);
   const [adminFor, setAdminFor] = useState<Store | null>(null);
   const [toDelete, setToDelete] = useState<Store | null>(null);
+  const [enteringId, setEnteringId] = useState<string | null>(null);
+  const createHandoff = useServerFn(createStoreAdminHandoff);
+
+  /**
+   * "היכנס לניהול" (God Mode): קוד כניסה חד-פעמי לחנות, ופתיחת פאנל הניהול
+   * שלה בלשונית חדשה — כמנהל מלא, בלי להירשם בצוות של החנות.
+   */
+  const enterStore = async (store: Store) => {
+    // הלשונית נפתחת מיד, בתוך הלחיצה — אחרת חוסם החלונות הקופצים עוצר אותה
+    const tab = window.open("about:blank", "_blank");
+    setEnteringId(store.id);
+    try {
+      const { url } = await createHandoff({ data: { tenantId: store.id } });
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = url;
+      } else {
+        window.location.assign(url);
+      }
+    } catch (error) {
+      tab?.close();
+      toast.error(error instanceof Error ? error.message : "הכניסה לניהול החנות נכשלה");
+    } finally {
+      setEnteringId(null);
+    }
+  };
 
   const setPlan = async (store: Store, plan: TenantPlan) => {
     setBusyId(store.id);
@@ -206,7 +234,20 @@ export function StoresTable({
                 </TableCell>
 
                 <TableCell>
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      size="sm"
+                      disabled={enteringId === store.id}
+                      title={`פתיחת פאנל הניהול של "${store.name}" כמנהל-על`}
+                      onClick={() => void enterStore(store)}
+                    >
+                      {enteringId === store.id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <LogIn className="size-4" />
+                      )}
+                      היכנס לניהול
+                    </Button>
                     {store.admins === 0 && (
                       <Button
                         size="sm"

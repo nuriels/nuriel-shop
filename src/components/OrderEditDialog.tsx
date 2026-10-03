@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { OrderContactBlock } from "@/components/OrderContactBlock";
 import { Loader2, Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -126,6 +127,15 @@ export function OrderEditDialog({
               : "שינוי סטטוס, כמויות, מחירים או מחיקת פריטים"}
           </DialogDescription>
         </DialogHeader>
+
+        {/* פרטי המזמין והמשלוח מהקופה (כתובת חלופית — מודגשת) */}
+        <OrderContactBlock order={order} />
+        {order.note && (
+          <p className="rounded-lg bg-secondary/60 p-2.5 text-sm">
+            <strong>הערות הלקוח: </strong>
+            {order.note}
+          </p>
+        )}
 
         <div className="space-y-2">
           <Label>סטטוס הזמנה</Label>

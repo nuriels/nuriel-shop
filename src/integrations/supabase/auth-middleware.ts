@@ -109,10 +109,9 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
       .eq("user_id", data.claims.sub)
       .maybeSingle();
     if (roleRow && roleRow.tenant_id !== tenantId) {
-      // חריג יחיד: מנהל-על בדומיין של פאנל הפלטפורמה
-      const { isPlatformRequest } = await import("./tenant.server");
+      // חריג יחיד: מנהל-על (God Mode) — מנהל את כל החנויות ואת פאנל הפלטפורמה
       const { isPlatformAdminUser } = await import("./client.server");
-      if (!(isPlatformRequest() && (await isPlatformAdminUser(data.claims.sub)))) {
+      if (!(await isPlatformAdminUser(data.claims.sub))) {
         throw new Error("Unauthorized: account belongs to another store");
       }
     }

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { CartItem } from "@/lib/orders";
 
@@ -17,7 +17,7 @@ export function useCartSync({
 }: {
   userId: string | null;
   cart: CartItem[];
-  setCart: (items: CartItem[]) => void;
+  setCart: Dispatch<SetStateAction<CartItem[]>>;
   enabled: boolean;
 }) {
   const loadedFor = useRef<string | null>(null);
@@ -34,7 +34,11 @@ export function useCartSync({
         .eq("user_id", userId)
         .maybeSingle();
       const items = data?.items;
-      if (Array.isArray(items) && items.length > 0) setCart(items as unknown as CartItem[]);
+      // סל שנאסף בדפדפן (למשל כאורח, לפני ההתחברות) גובר — הוא הכוונה העדכנית;
+      // הסל מהשרת נטען רק כשהסל המקומי ריק (מכשיר אחר / אחרי רענון)
+      if (Array.isArray(items) && items.length > 0) {
+        setCart((current) => (current.length > 0 ? current : (items as unknown as CartItem[])));
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, userId]);

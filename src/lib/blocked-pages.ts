@@ -16,7 +16,7 @@ export const FORBIDDEN_PAGE: BlockedPage = {
 };
 
 /** נתיבים שזמינים גם בחנות מוקפאת: פאנל הניהול של החנות, התחברות, ועמוד הנעילה */
-export const SUSPENDED_ALLOWED_PATHS = /^\/(admin|login|reset-password|locked)(\/|$)/;
+export const SUSPENDED_ALLOWED_PATHS = /^\/(admin|admin-handoff|login|reset-password|locked)(\/|$)/;
 
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);

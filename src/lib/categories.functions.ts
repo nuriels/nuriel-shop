@@ -20,11 +20,8 @@ export const renameCategory = createServerFn({ method: "POST" })
   }))
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: role } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const role = await loadCaller(context.userId);
     if (role?.role !== "admin") throw new Error("אין הרשאה");
     const { data: updated, error } = await supabaseAdmin.rpc("rename_category", {
       _old: data.oldName,
@@ -45,11 +42,8 @@ export const deleteCategory = createServerFn({ method: "POST" })
   .inputValidator((input: { name: string }) => ({ name: validName(input?.name, "שם הקטגוריה") }))
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: role } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const { loadCaller } = await import("@/lib/caller.server");
+    const role = await loadCaller(context.userId);
     if (role?.role !== "admin") throw new Error("אין הרשאה");
     const { count } = await supabaseAdmin
       .from("global_products")

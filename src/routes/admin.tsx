@@ -2,6 +2,7 @@ import { createFileRoute, Link, useLoaderData, useRouteContext } from "@tanstack
 import { supabase } from "@/integrations/supabase/client";
 import { AppFooter } from "@/components/AppFooter";
 import { SabbathStaffBanner } from "@/components/StorefrontGate";
+import { GodModeBanner } from "@/components/GodModeBanner";
 import { SiteHeader } from "@/components/SiteHeader";
 import { OrderManagementPanel } from "@/components/OrderManagementPanel";
 import { AdminUsersPanel } from "@/components/AdminUsersPanel";
@@ -74,6 +75,7 @@ function AdminPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <GodModeBanner role={role} />
       {isAdmin && site?.sabbath && <SabbathStaffBanner isAdmin />}
       <SiteHeader role={role} email={session?.user.email ?? null} onSignOut={signOut} />
       <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 px-3 py-6 sm:px-4">

@@ -13,13 +13,20 @@ import {
 import { calculateVat, DEFAULT_VAT_RATE } from "@/lib/vat";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/orders";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import {
+  ORDER_CONTACT_COLUMNS,
+  billingOf,
+  deliveryOf,
+  type OrderContactFields,
+} from "@/lib/order-details";
 
 const BRANDING_BUCKET = "branding";
 
-type OrderRecord = {
+type OrderRecord = OrderContactFields & {
   id: string;
   order_number: string;
-  customer_id: string;
+  /** null = הזמנת אורח (הפרטים בעמודות ההזמנה) */
+  customer_id: string | null;
   agent_id: string | null;
   status: OrderStatus;
   kind: "order" | "quote";
@@ -41,6 +48,8 @@ export type LoadedOrderDocument = {
   order: OrderRecord;
   customerEmail: string | null;
   customerName: string;
+  /** הזמנת אורח — אין חשבון (ואין יומן מיילים בתיק לקוח) */
+  isGuest: boolean;
   agentEmail: string | null;
   /** השם המלא בעברית של הסוכן — null אם לא הוזן (אז ללקוח מוצג רק מספר הסוכן) */
   agentName: string | null;
@@ -68,25 +77,26 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
   const { data: orderData, error } = await supabaseAdmin
     .from("orders")
     .select(
-      "id, order_number, customer_id, agent_id, status, kind, total, note, vat_rate, prices_include_vat, created_at, order_items (quantity, unit_price, product_name, product_sku, product_barcode)",
+      `id, order_number, customer_id, agent_id, status, kind, total, note, vat_rate, prices_include_vat, created_at, ${ORDER_CONTACT_COLUMNS}, order_items (quantity, unit_price, product_name, product_sku, product_barcode)`,
     )
     .eq("id", orderId)
     .maybeSingle();
   if (error || !orderData) throw new Error("ההזמנה לא נמצאה");
   const order = orderData as unknown as OrderRecord;
 
+  const customerId = order.customer_id;
   const [{ data: customerRole }, { data: customerProfile }, { data: settings }] = await Promise.all(
     [
-      supabaseAdmin
-        .from("user_roles")
-        .select("email")
-        .eq("user_id", order.customer_id)
-        .maybeSingle(),
-      supabaseAdmin
-        .from("customer_profiles")
-        .select("business_name, business_address, tax_id, contact_name, phone")
-        .eq("user_id", order.customer_id)
-        .maybeSingle(),
+      customerId
+        ? supabaseAdmin.from("user_roles").select("email").eq("user_id", customerId).maybeSingle()
+        : Promise.resolve({ data: null }),
+      customerId
+        ? supabaseAdmin
+            .from("customer_profiles")
+            .select("business_name, business_address, city, zip_code, tax_id, contact_name, phone")
+            .eq("user_id", customerId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
       supabaseAdmin
         .from("site_settings")
         .select(
@@ -123,6 +133,10 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
   const itemsTotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const isQuote = order.kind === "quote";
 
+  // פרטי החיוב מהקופה (על ההזמנה), ובהזמנה ישנה — מהפרופיל
+  const billing = billingOf(order, customerProfile, customerRole?.email ?? null);
+  const delivery = deliveryOf(order, customerProfile);
+
   const documentData: DocumentData = {
     kind: isQuote ? "quote" : "order",
     orderNumber: order.order_number,
@@ -138,13 +152,17 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
       logoDataUrl: await loadLogoDataUrl(settings?.logo_path ?? null),
     },
     customer: {
-      businessName: customerProfile?.business_name ?? "",
-      taxId: customerProfile?.tax_id ?? "",
-      address: customerProfile?.business_address ?? "",
+      businessName: billing.name,
+      taxId: billing.taxId,
+      address: billing.address,
       contactName: customerProfile?.contact_name ?? "",
-      phone: customerProfile?.phone ?? "",
-      email: customerRole?.email ?? "",
+      phone: billing.phone,
+      email: billing.email,
     },
+    // "שלח לכתובת אחרת" — בלוק נפרד ובולט, כדי שהמשלוח לא ייצא לכתובת החיוב
+    shipping: delivery.isAlternate
+      ? { name: delivery.name, phone: delivery.phone, address: delivery.address }
+      : null,
     agentNumber,
     agentName,
     items,
@@ -163,8 +181,9 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
 
   return {
     order,
-    customerEmail: customerRole?.email ?? null,
-    customerName: customerProfile?.contact_name ?? customerProfile?.business_name ?? "",
+    customerEmail: billing.email || null,
+    customerName: customerProfile?.contact_name?.trim() || billing.name,
+    isGuest: customerId === null,
     agentEmail,
     agentName,
     pdf,
