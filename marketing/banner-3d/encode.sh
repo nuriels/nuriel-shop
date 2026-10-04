@@ -13,5 +13,5 @@ enc() { # name frames gif_width gif_fps colors
     -loop 0 "out/$name.gif"
 }
 enc yayin-kyad-hamelech-desktop-1920x600 build/frames/desktop 960 15 200
-enc yayin-kyad-hamelech-mobile-800x800 build/frames/mobile 600 15 200
+enc yayin-kyad-hamelech-mobile-800x800 build/frames/mobile 540 15 192
 ls -la out
