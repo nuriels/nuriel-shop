@@ -20,8 +20,6 @@ import {
   BILLING_KIND_LABELS,
   PAYMENT_METHOD_LABELS,
   PLAN_LABELS,
-  PLAN_MARKETING,
-  PLAN_MONTHLY_PRICE,
   TRIAL_DAYS,
   endingSoon,
   formatDate,
@@ -29,6 +27,8 @@ import {
   remainingLabel,
   type PlanType,
 } from "@/lib/subscription";
+import { usePlanCatalog } from "@/hooks/usePlanCatalog";
+import type { PlanCard as PlanCardInfo } from "@/lib/plan-catalog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -318,6 +318,8 @@ function PricingTables({
   current: PaidPlan | null;
   onChoose: (plan: PaidPlan) => void;
 }) {
+  // החבילות והמחירים — מהעורך של מנהל הפלטפורמה (חלק 14)
+  const { catalog } = usePlanCatalog();
   return (
     <section className="space-y-5" aria-labelledby="pricing-title">
       <div className="text-center">
@@ -330,38 +332,50 @@ function PricingTables({
       </div>
 
       {/* הדגשה: אופן התשלום */}
-      <div className="mx-auto flex max-w-3xl items-center justify-center gap-3 rounded-2xl border-2 border-accent bg-accent/10 px-5 py-4 text-center">
-        <ShieldCheck className="size-6 shrink-0 text-accent" aria-hidden="true" />
-        <p className="text-base font-bold text-foreground sm:text-lg">
-          התשלום הינו מראש לשנה, או בפריסה ל-12 תשלומים חודשיים שווים.
-        </p>
-      </div>
+      {catalog.paymentNote && (
+        <div className="mx-auto flex max-w-3xl items-center justify-center gap-3 rounded-2xl border-2 border-accent bg-accent/10 px-5 py-4 text-center">
+          <ShieldCheck className="size-6 shrink-0 text-accent" aria-hidden="true" />
+          <p className="text-base font-bold text-foreground sm:text-lg">{catalog.paymentNote}</p>
+        </div>
+      )}
 
       <div className="mx-auto grid max-w-5xl gap-5 md:grid-cols-2">
-        <PlanCard plan="basic" current={current === "basic"} onChoose={onChoose} />
-        <PlanCard plan="premium" current={current === "premium"} onChoose={onChoose} featured />
+        <PlanCard
+          plan="basic"
+          info={catalog.plans.basic}
+          current={current === "basic"}
+          onChoose={onChoose}
+        />
+        <PlanCard
+          plan="premium"
+          info={catalog.plans.premium}
+          current={current === "premium"}
+          onChoose={onChoose}
+          featured
+        />
       </div>
 
-      <p className="text-center text-xs text-muted-foreground">
-        * המחירים אינם כוללים מע״מ (עוסק פטור)
-      </p>
+      {catalog.vatNote && (
+        <p className="text-center text-xs text-muted-foreground">{catalog.vatNote}</p>
+      )}
     </section>
   );
 }
 
 function PlanCard({
   plan,
+  info,
   current,
   featured = false,
   onChoose,
 }: {
   plan: PaidPlan;
+  info: PlanCardInfo;
   current: boolean;
   featured?: boolean;
   onChoose: (plan: PaidPlan) => void;
 }) {
-  const info = PLAN_MARKETING[plan];
-  const monthly = PLAN_MONTHLY_PRICE[plan];
+  const monthly = info.monthlyPrice;
   return (
     <div
       className={cn(
@@ -371,10 +385,15 @@ function PlanCard({
           : "border-border bg-card",
       )}
     >
-      {featured && (
-        <span className="absolute -top-3.5 right-1/2 inline-flex translate-x-1/2 items-center gap-1.5 rounded-full bg-accent px-4 py-1 text-xs font-bold text-accent-foreground shadow">
+      {info.badge && (
+        <span
+          className={cn(
+            "absolute -top-3.5 right-1/2 inline-flex translate-x-1/2 items-center gap-1.5 rounded-full px-4 py-1 text-xs font-bold shadow",
+            featured ? "bg-accent text-accent-foreground" : "bg-primary text-primary-foreground",
+          )}
+        >
           <Sparkles className="size-3.5" aria-hidden="true" />
-          הכי משתלם
+          {info.badge}
         </span>
       )}
       <div className="flex items-center gap-2">

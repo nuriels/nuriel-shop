@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ChevronDown,
   KeyRound,
@@ -8,6 +8,7 @@ import {
   Plus,
   ShoppingBag,
   Store,
+  TicketPercent,
   Trash2,
   Truck,
 } from "lucide-react";
@@ -44,6 +45,8 @@ export function CheckoutSummary({
   onChangeQuantity,
   onRemove,
   delivery = null,
+  discount = null,
+  couponSlot = null,
 }: {
   items: CartItem[];
   priced: boolean;
@@ -66,6 +69,10 @@ export function CheckoutSummary({
     amount: number;
     free: boolean;
   } | null;
+  /** הנחת קופון (חלק 14) — כבר מופחתת ב-vat */
+  discount?: { code: string; amount: number } | null;
+  /** שדה הקופון — מוצג מעל הסכומים */
+  couponSlot?: ReactNode;
 }) {
   const [openOnMobile, setOpenOnMobile] = useState(false);
   const count = cartCount(items);
@@ -201,8 +208,14 @@ export function CheckoutSummary({
 
           <CartGiftLines gifts={gifts} />
 
+          {priced && couponSlot && <div className="border-t border-border pt-3">{couponSlot}</div>}
+
           {priced ? (
             <dl className="space-y-1.5 border-t border-border pt-3 text-sm">
+              {/* מחירים לפני מע"מ: ההנחה קודם — הסכום והמע"מ שאחריה כבר אחרי ההנחה */}
+              {vat.showBreakdown && discount && discount.amount > 0 && (
+                <DiscountLine discount={discount} />
+              )}
               {vat.showBreakdown ? (
                 <>
                   <div className="flex items-center justify-between text-muted-foreground">
@@ -215,10 +228,13 @@ export function CheckoutSummary({
                   </div>
                 </>
               ) : (
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <dt>סה״כ מוצרים</dt>
-                  <dd className="numeric">{formatIls(cartTotal(items))}</dd>
-                </div>
+                <>
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <dt>סה״כ מוצרים</dt>
+                    <dd className="numeric">{formatIls(cartTotal(items))}</dd>
+                  </div>
+                  {discount && discount.amount > 0 && <DiscountLine discount={discount} />}
+                </>
               )}
               {delivery && delivery.kind !== "digital" && (
                 <div
@@ -285,5 +301,19 @@ export function CheckoutSummary({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function DiscountLine({ discount }: { discount: { code: string; amount: number } }) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-green-700 dark:text-green-400">
+      <dt className="flex min-w-0 items-center gap-1.5">
+        <TicketPercent className="size-3.5 shrink-0" aria-hidden="true" />
+        <span className="truncate">
+          הנחת קופון <span dir="ltr">{discount.code}</span>
+        </span>
+      </dt>
+      <dd className="numeric shrink-0 font-semibold">-{formatIls(discount.amount)}</dd>
+    </div>
   );
 }

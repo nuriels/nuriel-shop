@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { formatIls } from "@/lib/catalog";
 import { ORDER_STATUSES, ORDER_STATUS_LABEL, type OrderRow, type OrderStatus } from "@/lib/orders";
 import { calculateVat } from "@/lib/vat";
+import { orderCouponDiscount, orderDiscountLabel } from "@/lib/coupons";
 import { orderShippingLabel } from "@/lib/shipping";
 
 type Draft = {
@@ -98,7 +99,9 @@ export function OrderEditDialog({
   const showShipping =
     order.shipping_kind !== "digital" &&
     (shippingName !== null || Number(order.shipping_price ?? 0) > 0 || order.kind === "order");
-  const activeTotal = itemsTotal + shippingCharge;
+  // הנחת קופון (חלק 14) — לפי התנאים שצולמו בהזמנה, על המוצרים אחרי העריכה
+  const discount = isQuote && !convertToOrder ? 0 : orderCouponDiscount(order, productsTotal);
+  const activeTotal = itemsTotal + shippingCharge - discount;
   const vat = calculateVat(activeTotal, {
     pricesIncludeVat: order.prices_include_vat ?? true,
     vatRate: Number(order.vat_rate ?? 18),
@@ -306,6 +309,12 @@ export function OrderEditDialog({
         )}
 
         <div className="space-y-1.5 border-t border-border pt-4 text-sm">
+          {discount > 0 && (
+            <div className="flex items-center justify-between text-green-700 dark:text-green-400">
+              <span>{orderDiscountLabel(order)}</span>
+              <span className="numeric">-{formatIls(discount)}</span>
+            </div>
+          )}
           {vat.showBreakdown && (
             <>
               <div className="flex items-center justify-between text-muted-foreground">

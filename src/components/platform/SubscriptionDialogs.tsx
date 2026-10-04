@@ -11,7 +11,6 @@ import {
   BILLING_KIND_LABELS,
   PAYMENT_METHOD_LABELS,
   PLAN_LABELS,
-  PLAN_MONTHLY_PRICE,
   formatDate,
   formatShekels,
   planBadge,
@@ -22,6 +21,7 @@ import {
   type SubscriptionState,
 } from "@/lib/subscription";
 import type { Store } from "@/components/platform/StoresTable";
+import { usePlanCatalog } from "@/hooks/usePlanCatalog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -212,10 +212,13 @@ export function RecordPaymentDialog({
   onDone: (store: Store, state: SubscriptionState) => void;
 }) {
   const record = useServerFn(platformRecordPayment);
+  // המחיר החודשי — מ"חבילות ומחירים" (חלק 14)
+  const { catalog } = usePlanCatalog();
+  const monthlyPrice = (option: "basic" | "premium") => catalog.plans[option].monthlyPrice;
   const [plan, setPlan] = useState<"basic" | "premium">("premium");
   const [months, setMonths] = useState("12");
   const [method, setMethod] = useState<PaymentMethod>("annual");
-  const [amount, setAmount] = useState(String(PLAN_MONTHLY_PRICE.premium * 12));
+  const [amount, setAmount] = useState(String(monthlyPrice("premium") * 12));
   const [amountEdited, setAmountEdited] = useState(false);
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
@@ -229,18 +232,22 @@ export function RecordPaymentDialog({
     setPlan(initialPlan);
     setMonths("12");
     setMethod("annual");
-    setAmount(String(PLAN_MONTHLY_PRICE[initialPlan] * 12));
+    setAmount(String(monthlyPrice(initialPlan) * 12));
     setAmountEdited(false);
     setReference("");
     setNote("");
+    // רק בפתיחה לחנות אחרת — לא כשהקטלוג נטען (הסכום מתעדכן באפקט הבא)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store]);
 
   // הסכום מחושב לבד (מחיר חודשי × חודשים) עד שמשנים אותו ידנית
   useEffect(() => {
     if (amountEdited) return;
     const m = Number(months);
-    if (Number.isFinite(m) && m > 0) setAmount(String(PLAN_MONTHLY_PRICE[plan] * m));
-  }, [plan, months, amountEdited]);
+    if (Number.isFinite(m) && m > 0) {
+      setAmount(String(Math.round(catalog.plans[plan].monthlyPrice * m * 100) / 100));
+    }
+  }, [plan, months, amountEdited, catalog]);
 
   const state = store ? storeSubscription(store) : null;
   const renewing = state?.plan === plan && state.active && state.endsAt !== null;
@@ -313,7 +320,7 @@ export function RecordPaymentDialog({
                   {PLAN_LABELS[option]}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {formatShekels(PLAN_MONTHLY_PRICE[option])} לחודש
+                  {formatShekels(monthlyPrice(option))} לחודש
                 </span>
               </button>
             ))}

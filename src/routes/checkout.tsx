@@ -78,12 +78,59 @@ import {
 import { formatAddress } from "@/lib/order-details";
 import { placeGuestOrder, updateMyDetails } from "@/lib/checkout.functions";
 import { sendOrderEmails } from "@/lib/email.functions";
+import { checkCoupon, restoreAbandonedCart, saveAbandonedCart } from "@/lib/marketing.functions";
+import { couponDiscount, normalizeCouponCode, type AppliedCoupon } from "@/lib/coupons";
+import { trackPurchase } from "@/lib/marketing";
+import { CouponBox } from "@/components/checkout/CouponBox";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { useSubscription } from "@/hooks/useSubscription";
+import type { CatalogVariant } from "@/lib/variants";
+import { randomUuid } from "@/lib/uuid";
+
+type CheckoutSearch = {
+  /** קישור "להשלמת ההזמנה" ממייל תזכורת על עגלה נטושה (חלק 14) */
+  restore?: string | undefined;
+  /** קוד קופון שמוחל אוטומטית (למשל מקישור בקמפיין) */
+  coupon?: string | undefined;
+};
 
 export const Route = createFileRoute("/checkout")({
   ssr: false,
   head: () => ({ meta: [{ title: "קופה" }, { name: "robots", content: "noindex" }] }),
+  validateSearch: (search: Record<string, unknown>): CheckoutSearch => {
+    const result: CheckoutSearch = {};
+    const restore = search["restore"];
+    const coupon = search["coupon"];
+    if (typeof restore === "string" && /^[0-9a-f-]{36}$/i.test(restore)) result.restore = restore;
+    if (typeof coupon === "string" && /^[A-Za-z0-9_-]{3,32}$/.test(coupon)) result.coupon = coupon;
+    return result;
+  },
   component: CheckoutPage,
 });
+
+/** מזהה העגלה בדפדפן — לעגלות נטושות (מתחלף אחרי כל הזמנה) */
+const CART_SESSION_KEY = "checkout-cart-session";
+const EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function readCartSession(): string {
+  try {
+    const stored = window.localStorage.getItem(CART_SESSION_KEY);
+    if (stored && /^[0-9a-f-]{36}$/i.test(stored)) return stored;
+    const fresh = randomUuid();
+    window.localStorage.setItem(CART_SESSION_KEY, fresh);
+    return fresh;
+  } catch {
+    return randomUuid();
+  }
+}
+
+function writeCartSession(value: string): void {
+  try {
+    window.localStorage.setItem(CART_SESSION_KEY, value);
+  } catch {
+    // אחסון חסום — מזהה חדש בכל טעינה, לא נורא
+  }
+}
 
 /** סדר השדות בטופס — אליו גוללים כשיש שגיאה */
 const FIELD_ORDER: (keyof CheckoutForm)[] = [
@@ -135,6 +182,13 @@ function CheckoutPage() {
   const placeGuest = useServerFn(placeGuestOrder);
   const saveDetails = useServerFn(updateMyDetails);
   const sendEmails = useServerFn(sendOrderEmails);
+  const checkCouponFn = useServerFn(checkCoupon);
+  const saveCartFn = useServerFn(saveAbandonedCart);
+  const restoreCartFn = useServerFn(restoreAbandonedCart);
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  // התחברות עם Google — רק בחבילות שכוללות אותה (בבסיסית: מוסתר)
+  const googleLogin = useSubscription().can("googleLogin");
 
   const [products, setProducts] = useState<CatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -151,6 +205,14 @@ function CheckoutPage() {
   const [methods, setMethods] = useState<ShippingMethod[]>([]);
   const [methodsLoading, setMethodsLoading] = useState(true);
   const [shippingMethodId, setShippingMethodId] = useState<string | null>(null);
+  // קופון (חלק 14)
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  // עגלה נטושה: מזהה העגלה בדפדפן, ומה כבר נשמר (לא שולחים שוב אותו דבר)
+  const cartSession = useRef<string | null>(null);
+  const lastSavedCart = useRef("");
+  const restoreHandled = useRef(false);
 
   const isCustomer = role?.role === "customer";
   const isStaff = role !== null && !isCustomer;
@@ -293,7 +355,9 @@ function CheckoutPage() {
       : null;
 
   // ---------- הסכומים, מתנות, משלוח חינם, מוצר קופה ----------
-  const vat = calculateVat(cartTotal(cart) + shippingAmount, {
+  // הנחת קופון — על סכום המוצרים (בלי משלוח / פיקדון / מתנות), כמו במסד
+  const discount = kind === "order" && coupon ? couponDiscount(coupon, productsSubtotal) : 0;
+  const vat = calculateVat(cartTotal(cart) + shippingAmount - discount, {
     pricesIncludeVat: settings?.prices_include_vat ?? true,
     vatRate: Number(settings?.vat_rate ?? DEFAULT_VAT_RATE),
   });
@@ -347,6 +411,148 @@ function CheckoutPage() {
   const removeItem = (lineKey: string) =>
     setCart((current) => current.filter((item) => cartLineKey(item) !== lineKey));
 
+  // ---------- קופון ----------
+  const applyCoupon = useCallback(
+    async (raw: string, quiet = false) => {
+      const code = normalizeCouponCode(raw);
+      if (code.length < 3) return;
+      setCouponBusy(true);
+      setCouponError(null);
+      try {
+        const result = await checkCouponFn({ data: { code, subtotal: cartSubtotal(cart) } });
+        setCoupon({
+          code: result.code,
+          discountType: result.discountType,
+          discountValue: result.discountValue,
+          minOrderTotal: result.minOrderTotal,
+          description: result.description,
+        });
+        if (!quiet) toast.success(`הקופון ${result.code} הוחל — ${result.label}`);
+      } catch (thrown) {
+        const message = thrown instanceof Error ? thrown.message : "בדיקת הקופון נכשלה";
+        // קופון עם מינימום — שומרים אותו ומציגים כמה חסר (ההנחה תחול כשיגיעו)
+        setCouponError(message);
+        if (quiet) toast.error(message);
+      } finally {
+        setCouponBusy(false);
+      }
+    },
+    [cart, checkCouponFn],
+  );
+
+  // ?coupon=CODE בכתובת — מוחל לבד (פעם אחת, כשיש סל)
+  const autoCoupon = useRef(false);
+  useEffect(() => {
+    if (autoCoupon.current || !search.coupon || !cartReady || cart.length === 0 || placed) return;
+    autoCoupon.current = true;
+    void applyCoupon(search.coupon, true);
+  }, [search.coupon, cartReady, cart.length, placed, applyCoupon]);
+
+  // ---------- קישור שחזור ממייל התזכורת: הסל, הפרטים והקופון חוזרים ----------
+  useEffect(() => {
+    if (restoreHandled.current || !search.restore || catalogLoading || !cartReady) return;
+    restoreHandled.current = true;
+    void (async () => {
+      try {
+        const restored = await restoreCartFn({ data: { token: search.restore! } });
+        let next = cart;
+        let missing = 0;
+        for (const line of restored.items) {
+          const product = catalogById.get(line.product_id);
+          if (!product || product.is_out_of_stock) {
+            missing += 1;
+            continue;
+          }
+          const variant: CatalogVariant | null = line.variant_id
+            ? ((product.variants ?? []).find((v) => v.id === line.variant_id) ?? null)
+            : null;
+          if (line.variant_id && !variant) {
+            missing += 1;
+            continue;
+          }
+          const exists = next.some(
+            (item) =>
+              item.productId === product.id && (item.variantId ?? null) === (variant?.id ?? null),
+          );
+          if (!exists) next = addToCartItems(next, product, line.quantity, variant).items;
+        }
+        setCart(next);
+        setForm((current) => ({
+          ...current,
+          customerEmail: current.customerEmail || restored.email,
+          customerName: current.customerName || restored.name,
+          customerPhone: current.customerPhone || restored.phone,
+        }));
+        if (/^[0-9a-f-]{36}$/i.test(restored.sessionKey)) {
+          cartSession.current = restored.sessionKey;
+          writeCartSession(restored.sessionKey);
+        }
+        toast.success(
+          missing > 0
+            ? `הסל שוחזר — ${missing} מוצרים כבר לא זמינים והוסרו`
+            : "הסל שלכם שוחזר — אפשר להשלים את ההזמנה",
+        );
+        if (restored.coupon) void applyCoupon(restored.coupon, true);
+      } catch (thrown) {
+        toast.error(thrown instanceof Error ? thrown.message : "לא הצלחנו לשחזר את הסל");
+      } finally {
+        void navigate({ search: {}, replace: true });
+      }
+    })();
+  }, [
+    search.restore,
+    catalogLoading,
+    cartReady,
+    cart,
+    catalogById,
+    restoreCartFn,
+    setCart,
+    applyCoupon,
+    navigate,
+  ]);
+
+  // ---------- עגלה נטושה: נשמרת ברגע שיש אימייל (עם השהיה קצרה) ----------
+  useEffect(() => {
+    if (placed || isStaff || !cartReady || cart.length === 0) return;
+    const email = form.customerEmail.trim().toLowerCase();
+    if (!EMAIL_FORMAT.test(email)) return;
+    cartSession.current ??= readCartSession();
+    const items = cart.map((item) => ({
+      product_id: item.productId,
+      variant_id: item.variantId ?? null,
+      quantity: item.quantity,
+    }));
+    const signature = JSON.stringify([
+      email,
+      form.customerName.trim(),
+      form.customerPhone.trim(),
+      items,
+    ]);
+    if (signature === lastSavedCart.current) return;
+    const timer = window.setTimeout(() => {
+      lastSavedCart.current = signature;
+      void saveCartFn({
+        data: {
+          session: cartSession.current!,
+          email,
+          name: form.customerName.trim(),
+          phone: form.customerPhone.trim(),
+          items,
+        },
+      }).catch(() => undefined);
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [
+    form.customerEmail,
+    form.customerName,
+    form.customerPhone,
+    cart,
+    cartReady,
+    placed,
+    isStaff,
+    saveCartFn,
+  ]);
+
   // ---------- הטופס ----------
   const errors: CheckoutErrors = attempted
     ? validateCheckoutForm(form, { requireEmail: !signedIn, requireAddress })
@@ -388,10 +594,14 @@ function CheckoutPage() {
 
     setBusy(true);
     const lines = orderLinesFromCart(cart, kind);
-    const details = checkoutPayload(form, {
-      methodId: needsShipping ? (selectedMethod?.id ?? null) : null,
-      requireAddress,
-    });
+    const details = checkoutPayload(
+      form,
+      {
+        methodId: needsShipping ? (selectedMethod?.id ?? null) : null,
+        requireAddress,
+      },
+      kind === "order" && coupon ? coupon.code : null,
+    );
     const alternate = requireAddress && form.shipToDifferent;
     const delivery = alternate
       ? formatAddress(form.shippingAddress, form.shippingCity, form.shippingZip)
@@ -471,6 +681,14 @@ function CheckoutPage() {
           ...shippingInfo,
         };
       }
+      // Pixel / GA: רכישה (רק הזמנה עם מחירים)
+      if (!result.isQuote) trackPurchase(result.orderNumber, grandTotal);
+      // עגלה חדשה מעכשיו — ההזמנה סגרה את העגלה הנטושה (במסד, לפי האימייל)
+      const fresh = randomUuid();
+      cartSession.current = fresh;
+      writeCartSession(fresh);
+      lastSavedCart.current = "";
+      setCoupon(null);
       setCart([]);
       setPlaced(result);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -582,6 +800,16 @@ function CheckoutPage() {
                   </>
                 )}
               </p>
+              {/* התחברות מהירה עם Google — רק בחבילות שכוללות אותה (בבסיסית: מוסתר) */}
+              {!signedIn && googleLogin && (
+                <div className="max-w-xs pt-1">
+                  <GoogleSignInButton
+                    label="התחברות מהירה עם Google"
+                    returnPath="/checkout"
+                    className="h-10 w-full gap-2 bg-card"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start">
@@ -1046,6 +1274,22 @@ function CheckoutPage() {
                   onChangeQuantity={changeQuantity}
                   onRemove={removeItem}
                   delivery={deliverySummary}
+                  discount={coupon && discount > 0 ? { code: coupon.code, amount: discount } : null}
+                  couponSlot={
+                    kind === "order" ? (
+                      <CouponBox
+                        applied={coupon}
+                        discount={discount}
+                        busy={couponBusy}
+                        error={couponError}
+                        onApply={(code) => void applyCoupon(code)}
+                        onRemove={() => {
+                          setCoupon(null);
+                          setCouponError(null);
+                        }}
+                      />
+                    ) : null
+                  }
                 />
               </aside>
             </div>

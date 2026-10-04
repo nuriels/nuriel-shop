@@ -141,6 +141,8 @@ export type CheckoutPayload = {
   accepted_terms: boolean;
   /** שיטת המשלוח שנבחרה ("" = בלי — סל דיגיטלי בלבד) */
   shipping_method_id: string;
+  /** קוד קופון (חלק 14) — "" = בלי. נבדק ונקבע במסד */
+  coupon_code: string;
 };
 
 export function checkoutPayload(
@@ -149,6 +151,7 @@ export function checkoutPayload(
     methodId: null,
     requireAddress: true,
   },
+  couponCode: string | null = null,
 ): CheckoutPayload {
   const alternate = shipping.requireAddress && form.shipToDifferent;
   return {
@@ -168,6 +171,7 @@ export function checkoutPayload(
     note: form.note.trim(),
     accepted_terms: form.acceptedTerms,
     shipping_method_id: shipping.methodId ?? "",
+    coupon_code: couponCode ?? "",
   };
 }
 

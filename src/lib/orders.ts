@@ -6,6 +6,7 @@ import {
   type OrderItemStatus,
   type OrderShippingKind,
 } from "@/lib/shipping";
+import { ORDER_COUPON_COLUMNS } from "@/lib/coupons";
 
 export type CartItem = {
   productId: string;
@@ -282,6 +283,12 @@ export type OrderRow = OrderContactFields & {
   shipping_free_threshold?: number | null;
   /** דמי המשלוח בפועל — כלולים ב-total */
   shipping_price?: number;
+  /** קופון (חלק 14): הקוד, צילום התנאים וההנחה שהופחתה — כבר מופחתת ב-total */
+  coupon_code?: string | null;
+  coupon_discount_type?: string | null;
+  coupon_discount_value?: number | null;
+  coupon_min_order?: number | null;
+  discount_amount?: number;
   order_items: OrderItemRow[];
 };
 
@@ -289,7 +296,7 @@ export type OrderRow = OrderContactFields & {
 export const ORDER_SELECT_COLUMNS =
   "id, customer_id, agent_id, order_number, status, kind, total, note, vat_rate, prices_include_vat, created_at, " +
   "delivery_attempts, last_delivery_failure_note, last_delivery_failure_at, shipped_at, delivered_at, " +
-  `${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ` +
+  `${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ${ORDER_COUPON_COLUMNS}, ` +
   "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit, is_gift, " +
   "is_digital, item_status, digital_license_key, license_sent_at, license_sent_to, variant_label)";
 

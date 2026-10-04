@@ -16,6 +16,7 @@ import {
   Pencil,
   RefreshCw,
   Tag,
+  TicketPercent,
   Trash2,
   TriangleAlert,
   Truck,
@@ -53,6 +54,7 @@ import { OrderDocumentButton } from "@/components/OrderDocumentButton";
 import { OrderContactBlock } from "@/components/OrderContactBlock";
 import { DigitalBadge, ItemStatusBadge, LicenseSender } from "@/components/OrderItemExtras";
 import { hasShippingLine, orderShippingLabel, shippingWasFree } from "@/lib/shipping";
+import { orderDiscount, orderDiscountLabel } from "@/lib/coupons";
 import { CourierDialog } from "@/components/delivery/CourierDialog";
 import { GroupSidebarLayout, type SideGroup } from "@/components/GroupSidebarLayout";
 import { SortToggle, type SortDirection } from "@/components/OrdersByYear";
@@ -803,6 +805,17 @@ export function OrderManagementPanel({
                             <li className="flex items-center gap-1.5 border-t border-dashed border-border pt-1.5 text-xs text-muted-foreground">
                               <KeyRound className="size-3.5" aria-hidden="true" />
                               הזמנה דיגיטלית — בלי משלוח
+                            </li>
+                          )}
+                          {order.kind === "order" && orderDiscount(order) > 0 && (
+                            <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-t border-dashed border-border pt-1.5 text-green-700 dark:text-green-400">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <TicketPercent className="size-3.5 shrink-0" aria-hidden="true" />
+                                <span className="truncate">{orderDiscountLabel(order)}</span>
+                              </span>
+                              <span className="numeric shrink-0">
+                                -{formatIls(orderDiscount(order))}
+                              </span>
                             </li>
                           )}
                         </ul>

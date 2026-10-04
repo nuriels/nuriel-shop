@@ -28,6 +28,7 @@ const PAYLOAD_KEYS: (keyof CheckoutPayload)[] = [
   "note",
   "accepted_terms",
   "shipping_method_id",
+  "coupon_code",
 ];
 const BOOLEAN_KEYS = new Set<keyof CheckoutPayload>(["ship_to_different", "accepted_terms"]);
 
@@ -43,6 +44,16 @@ function cleanPayload(input: unknown): CheckoutPayload {
     } else if (key === "shipping_method_id") {
       // מזהה בלבד — השיטה עצמה (פעילה, של החנות) נבדקת במסד
       result[key] = typeof value === "string" && UUID.test(value) ? value : "";
+    } else if (key === "coupon_code") {
+      // קוד הקופון — רק התווים המותרים; התנאים וההנחה נקבעים במסד
+      result[key] =
+        typeof value === "string"
+          ? value
+              .trim()
+              .toUpperCase()
+              .replace(/[^A-Z0-9_-]/g, "")
+              .slice(0, 32)
+          : "";
     } else {
       result[key] = typeof value === "string" ? value.slice(0, key === "note" ? 1000 : 254) : "";
     }

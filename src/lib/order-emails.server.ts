@@ -26,6 +26,7 @@ import {
   type OrderShippingFields,
 } from "@/lib/shipping";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { orderDiscount, orderDiscountLabel } from "@/lib/coupons";
 
 type SendResult = { sent: boolean; reason?: string };
 
@@ -67,9 +68,12 @@ export async function sendOrderEmailsInternal(
   const documentLabel = isQuote ? "בקשה להצעת מחיר" : "הזמנה";
 
   const shippingAmount = hasShippingLine(order) ? Number(order.shipping_price ?? 0) : 0;
+  // הנחת קופון (חלק 14) — כבר מופחתת ב-total של ההזמנה במסד
+  const discount = order.kind === "quote" ? 0 : orderDiscount(order);
   const itemsTotal =
     order.order_items.reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0) +
-    shippingAmount;
+    shippingAmount -
+    discount;
   const vat = isQuote
     ? null
     : calculateVat(itemsTotal, {
@@ -119,6 +123,23 @@ export async function sendOrderEmailsInternal(
         .join("")}</tr>`
     : "";
 
+  // שורת ההנחה בטבלה (כלולה בסכום)
+  const discountRowHtml =
+    discount > 0
+      ? `<tr>${[
+          escapeHtml(orderDiscountLabel(order)),
+          "—",
+          "1",
+          `-${money(discount)}`,
+          `-${money(discount)}`,
+        ]
+          .map(
+            (cell) =>
+              `<td style="padding:6px 8px;border-bottom:1px solid #eee;background:#f0fdf4;color:#15803d;">${cell}</td>`,
+          )
+          .join("")}</tr>`
+      : "";
+
   const headers = ["מוצר", "ברקוד", "כמות", ...(isQuote ? [] : ["מחיר יחידה", 'סה"כ'])]
     .map((header) => `<th style="text-align:right;padding:6px 8px;">${header}</th>`)
     .join("");
@@ -166,7 +187,7 @@ export async function sendOrderEmailsInternal(
     ${order.note ? `<p><strong>הערות להזמנה:</strong> ${escapeHtml(order.note)}</p>` : ""}
     <table style="width:100%;border-collapse:collapse;margin-top:12px;">
       <thead><tr>${headers}</tr></thead>
-      <tbody>${itemsHtml}${shippingRowHtml}</tbody>
+      <tbody>${itemsHtml}${shippingRowHtml}${discountRowHtml}</tbody>
     </table>
     ${totalsHtml}
     <p style="margin-top:12px;color:#6b7280;font-size:13px;">המסמך המלא מצורף כקובץ PDF.</p>
@@ -187,6 +208,7 @@ export async function sendOrderEmailsInternal(
     <p>${agentName ? `${escapeHtml(agentName)}, הסוכן המטפל שלכם, ייצור` : "נציג ייצור"} איתכם קשר בהקדם לתיאום המשך הטיפול.</p>
     ${shippingMethodHtml}
     ${deliveryHtml}
+    ${discount > 0 ? `<p><strong>${escapeHtml(orderDiscountLabel(order))}:</strong> <span style="color:#15803d;">-${money(discount)}</span></p>` : ""}
     ${totalsHtml}
     <p style="margin-top:12px;color:#6b7280;font-size:13px;">אישור ההזמנה המלא מצורף כקובץ PDF.</p>
   `;
@@ -221,6 +243,16 @@ export async function sendOrderEmailsInternal(
           : {}),
       })
     : { sent: false, reason: "אין כתובת מייל ללקוח" };
+
+  // מלאי נמוך (חלק 14): אחרי כל הזמנה — מייל למנהל על מוצרים שירדו ל-3 ומטה
+  if (!isQuote) {
+    try {
+      const { sendLowStockAlerts } = await import("@/lib/stock-alerts.server");
+      await sendLowStockAlerts(orderId);
+    } catch (error) {
+      console.error("[stock-alerts] failed", order.order_number, error);
+    }
+  }
 
   return { staff, customer };
 }

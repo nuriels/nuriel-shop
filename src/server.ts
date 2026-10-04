@@ -23,9 +23,11 @@ import {
 (globalThis as typeof globalThis & { __requestTenantId?: () => string | null }).__requestTenantId =
   () => maybeCurrentTenant()?.id ?? null;
 
-// קבצים סטטיים (assets, robots.txt, favicon...) לא צריכים זיהוי חנות —
-// כך גם ה-healthcheck לא תלוי במסד.
+// קבצים סטטיים (assets, favicon...) לא צריכים זיהוי חנות — כך גם ה-healthcheck
+// לא תלוי במסד. חוץ מ-robots.txt / sitemap.xml / zap.xml (חלק 14): הם נוצרים
+// לכל חנות מהמסד (src/lib/feeds.server.ts).
 const STATIC_PATH = /^\/assets\/|\.[a-z0-9]{2,5}$/i;
+const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml", "/zap.xml"]);
 
 const STORE_NOT_FOUND_HTML = `<!doctype html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8" /><title>החנות לא נמצאה</title>
@@ -114,7 +116,8 @@ export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const host = requestHost(request);
-      if (STATIC_PATH.test(new URL(request.url).pathname)) {
+      const pathname = new URL(request.url).pathname;
+      if (STATIC_PATH.test(pathname) && !FEED_PATHS.has(pathname)) {
         return await runWithTenant(host, null, () => handle(request, env, ctx));
       }
       const tenant = await resolveTenant(host);
@@ -124,7 +127,10 @@ export default {
           headers: { "content-type": "text/html; charset=utf-8" },
         });
       }
-      const pathname = new URL(request.url).pathname;
+      if (FEED_PATHS.has(pathname)) {
+        const { renderFeed } = await import("./lib/feeds.server");
+        return await runWithTenant(host, tenant, () => renderFeed(pathname, request));
+      }
       return await runWithTenant(
         host,
         tenant,

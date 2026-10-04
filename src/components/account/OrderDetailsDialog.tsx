@@ -8,6 +8,7 @@ import {
   RotateCcw,
   StickyNote,
   Store,
+  TicketPercent,
   Truck,
   UserRound,
 } from "lucide-react";
@@ -35,6 +36,7 @@ import { useBackToClose } from "@/hooks/useBackToClose";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { DigitalBadge, ItemStatusBadge, LicenseKeyDisplay } from "@/components/OrderItemExtras";
 import { hasShippingLine, orderShippingLabel, shippingWasFree } from "@/lib/shipping";
+import { orderDiscount, orderDiscountLabel } from "@/lib/coupons";
 
 /**
  * פירוט הזמנה / קבלה ללקוח: מצב ההזמנה, הפריטים, הסכומים (כולל מע"מ),
@@ -94,10 +96,13 @@ function OrderDetails({
   const { settings } = useSiteSettings();
   const isQuote = order.kind === "quote";
   const shippingAmount = hasShippingLine(order) ? Number(order.shipping_price ?? 0) : 0;
+  // הנחת קופון (חלק 14) — מופחתת, כמו ב-total במסד
+  const discount = isQuote ? 0 : orderDiscount(order);
   // הסכום כולל את דמי המשלוח (כמו total במסד) — גם לחישוב המע"מ
   const itemsTotal =
     order.order_items.reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0) +
-    shippingAmount;
+    shippingAmount -
+    discount;
   const shippingLabel = orderShippingLabel(order);
   const pickupAddress = settings?.business_address?.trim() ?? "";
   const vat = calculateVat(itemsTotal, {
@@ -209,6 +214,15 @@ function OrderDetails({
                     : formatIls(shippingAmount)}
                 </span>
               )}
+            </li>
+          )}
+          {discount > 0 && (
+            <li className="flex items-center gap-3 p-3 text-green-700 dark:text-green-400">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-green-50 dark:bg-green-950/40">
+                <TicketPercent className="size-5" aria-hidden="true" />
+              </span>
+              <p className="min-w-0 flex-1 text-sm font-semibold">{orderDiscountLabel(order)}</p>
+              <span className="numeric shrink-0 text-sm font-bold">-{formatIls(discount)}</span>
             </li>
           )}
         </ul>

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { LifeBuoy, Lock, Store } from "lucide-react";
+import { Gem, LifeBuoy, Lock, Store } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthState } from "@/hooks/useAuthState";
 import { FORBIDDEN_PAGE } from "@/lib/blocked-pages";
@@ -9,14 +9,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 /**
- * המסגרת של פאנל הפלטפורמה: כותרת עם ניווט (חנויות / תמיכה), החשבון המחובר,
+ * המסגרת של פאנל הפלטפורמה: כותרת עם ניווט (חנויות / תמיכה / חבילות), החשבון המחובר,
  * ובדיקה שהמשתמש מנהל-על. התוכן (children) מוצג רק למנהל-על.
  */
 export function PlatformShell({
   active,
   children,
 }: {
-  active: "stores" | "support";
+  active: "stores" | "support" | "plans";
   children: (props: { userId: string }) => ReactNode;
 }) {
   const { session, loading } = useAuthState();
@@ -57,6 +57,13 @@ export function PlatformShell({
                   badge={supportOpen}
                 >
                   תמיכה
+                </NavLink>
+                <NavLink
+                  to="/platform/plans"
+                  active={active === "plans"}
+                  icon={<Gem className="size-4" />}
+                >
+                  חבילות ומחירים
                 </NavLink>
               </nav>
             )}
@@ -113,7 +120,7 @@ function NavLink({
   badge = 0,
   children,
 }: {
-  to: "/platform" | "/platform/support";
+  to: "/platform" | "/platform/support" | "/platform/plans";
   active: boolean;
   icon: ReactNode;
   badge?: number;

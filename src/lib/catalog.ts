@@ -57,10 +57,15 @@ export type GlobalProduct = {
   is_digital?: boolean;
   /** מאפייני הוריאציות [{name, values}] — הצירופים בטבלת product_variants */
   variant_attributes?: unknown;
+  /** SEO (חלק 14): כותרת ותיאור לגוגל לעמוד המוצר; null = שם המוצר / התיאור */
+  seo_title?: string | null;
+  seo_description?: string | null;
+  /** להציג בפיד של זאפ השוואת מחירים (/zap.xml) */
+  show_in_zap?: boolean;
 };
 
 export const PRODUCT_ADMIN_COLUMNS =
-  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto, is_order_bump, order_bump_text, is_digital, variant_attributes" as const;
+  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto, is_order_bump, order_bump_text, is_digital, variant_attributes, seo_title, seo_description, show_in_zap" as const;
 
 /** לסוכן שבונה הזמנה ללקוח: כל דרגי המחיר, בלי מחיר עלות (ניהולי בלבד) */
 export const STAFF_CATALOG_COLUMNS =

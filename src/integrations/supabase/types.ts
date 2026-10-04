@@ -96,6 +96,164 @@ export type Database = {
         };
         Relationships: [];
       };
+      coupons: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          code: string;
+          discount_type: "percent" | "fixed";
+          discount_value: number;
+          is_active: boolean;
+          description: string | null;
+          min_order_total: number | null;
+          max_uses: number | null;
+          starts_at: string | null;
+          expires_at: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          code: string;
+          discount_type: "percent" | "fixed";
+          discount_value: number;
+          is_active?: boolean;
+          description?: string | null;
+          min_order_total?: number | null;
+          max_uses?: number | null;
+          starts_at?: string | null;
+          expires_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          code?: string;
+          discount_type?: "percent" | "fixed";
+          discount_value?: number;
+          is_active?: boolean;
+          description?: string | null;
+          min_order_total?: number | null;
+          max_uses?: number | null;
+          starts_at?: string | null;
+          expires_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      abandoned_carts: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          session_key: string;
+          restore_token: string;
+          email: string;
+          customer_name: string | null;
+          phone: string | null;
+          items: Json;
+          item_count: number;
+          total: number;
+          status: "open" | "recovered" | "dismissed";
+          recovered_order_id: string | null;
+          reminder_count: number;
+          last_reminder_at: string | null;
+          last_reminder_coupon: string | null;
+          restored_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          session_key: string;
+          restore_token?: string;
+          email: string;
+          customer_name?: string | null;
+          phone?: string | null;
+          items: Json;
+          item_count?: number;
+          total?: number;
+          status?: "open" | "recovered" | "dismissed";
+          recovered_order_id?: string | null;
+          reminder_count?: number;
+          last_reminder_at?: string | null;
+          last_reminder_coupon?: string | null;
+          restored_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: "open" | "recovered" | "dismissed";
+          reminder_count?: number;
+          last_reminder_at?: string | null;
+          last_reminder_coupon?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      platform_plans: {
+        Row: {
+          plan_type: "basic" | "premium";
+          title: string;
+          tagline: string;
+          monthly_price: number;
+          features: string[];
+          badge: string | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          plan_type: "basic" | "premium";
+          title: string;
+          tagline?: string;
+          monthly_price: number;
+          features?: string[];
+          badge?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          plan_type?: "basic" | "premium";
+          title?: string;
+          tagline?: string;
+          monthly_price?: number;
+          features?: string[];
+          badge?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      platform_pricing_settings: {
+        Row: {
+          id: boolean;
+          payment_note: string;
+          vat_note: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: boolean;
+          payment_note?: string;
+          vat_note?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: boolean;
+          payment_note?: string;
+          vat_note?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
       shipping_methods: {
         Row: {
           id: string;
@@ -148,6 +306,7 @@ export type Database = {
           sort_order: number;
           created_at: string;
           updated_at: string;
+          low_stock_alerted: boolean;
         };
         Insert: {
           id?: string;
@@ -161,6 +320,7 @@ export type Database = {
           sort_order?: number;
           created_at?: string;
           updated_at?: string;
+          low_stock_alerted?: boolean;
         };
         Update: {
           id?: string;
@@ -174,6 +334,7 @@ export type Database = {
           sort_order?: number;
           created_at?: string;
           updated_at?: string;
+          low_stock_alerted?: boolean;
         };
         Relationships: [];
       };
@@ -877,6 +1038,10 @@ export type Database = {
           out_of_stock_auto: boolean;
           is_digital: boolean;
           variant_attributes: Json;
+          seo_title: string | null;
+          seo_description: string | null;
+          show_in_zap: boolean;
+          low_stock_alerted: boolean;
         };
         Insert: {
           tenant_id?: string;
@@ -916,6 +1081,10 @@ export type Database = {
           out_of_stock_auto?: boolean;
           is_digital?: boolean;
           variant_attributes?: Json;
+          seo_title?: string | null;
+          seo_description?: string | null;
+          show_in_zap?: boolean;
+          low_stock_alerted?: boolean;
         };
         Update: {
           tenant_id?: string;
@@ -955,6 +1124,10 @@ export type Database = {
           out_of_stock_auto?: boolean;
           is_digital?: boolean;
           variant_attributes?: Json;
+          seo_title?: string | null;
+          seo_description?: string | null;
+          show_in_zap?: boolean;
+          low_stock_alerted?: boolean;
         };
         Relationships: [
           {
@@ -1124,6 +1297,12 @@ export type Database = {
           shipping_base_price: number;
           shipping_free_threshold: number | null;
           shipping_price: number;
+          coupon_id: string | null;
+          coupon_code: string | null;
+          coupon_discount_type: string | null;
+          coupon_discount_value: number | null;
+          coupon_min_order: number | null;
+          discount_amount: number;
         };
         Insert: {
           tenant_id?: string;
@@ -1171,6 +1350,12 @@ export type Database = {
           shipping_base_price?: number;
           shipping_free_threshold?: number | null;
           shipping_price?: number;
+          coupon_id?: string | null;
+          coupon_code?: string | null;
+          coupon_discount_type?: string | null;
+          coupon_discount_value?: number | null;
+          coupon_min_order?: number | null;
+          discount_amount?: number;
         };
         Update: {
           tenant_id?: string;
@@ -1218,6 +1403,12 @@ export type Database = {
           shipping_base_price?: number;
           shipping_free_threshold?: number | null;
           shipping_price?: number;
+          coupon_id?: string | null;
+          coupon_code?: string | null;
+          coupon_discount_type?: string | null;
+          coupon_discount_value?: number | null;
+          coupon_min_order?: number | null;
+          discount_amount?: number;
         };
         Relationships: [
           {
@@ -1660,6 +1851,14 @@ export type Database = {
           vat_rate: number;
           label_width_mm: number;
           label_height_mm: number;
+          seo_title: string;
+          seo_description: string;
+          promo_popup_enabled: boolean;
+          promo_popup_text: string;
+          promo_popup_coupon: string | null;
+          facebook_pixel_id: string | null;
+          google_analytics_id: string | null;
+          zap_delivery_days: number;
         };
         Insert: {
           tenant_id?: string;
@@ -1689,6 +1888,14 @@ export type Database = {
           vat_rate?: number;
           label_width_mm?: number;
           label_height_mm?: number;
+          seo_title?: string;
+          seo_description?: string;
+          promo_popup_enabled?: boolean;
+          promo_popup_text?: string;
+          promo_popup_coupon?: string | null;
+          facebook_pixel_id?: string | null;
+          google_analytics_id?: string | null;
+          zap_delivery_days?: number;
         };
         Update: {
           tenant_id?: string;
@@ -1718,6 +1925,14 @@ export type Database = {
           vat_rate?: number;
           label_width_mm?: number;
           label_height_mm?: number;
+          seo_title?: string;
+          seo_description?: string;
+          promo_popup_enabled?: boolean;
+          promo_popup_text?: string;
+          promo_popup_coupon?: string | null;
+          facebook_pixel_id?: string | null;
+          google_analytics_id?: string | null;
+          zap_delivery_days?: number;
         };
         Relationships: [];
       };
@@ -2029,6 +2244,64 @@ export type Database = {
           _details?: Json | null;
         };
         Returns: { id: string; kind: string; order_number: string }[];
+      };
+      storefront_feed_products: {
+        Args: never;
+        Returns: {
+          id: string;
+          sku: string;
+          name: string;
+          category: string;
+          description: string | null;
+          image_url: string | null;
+          barcode: string | null;
+          price: number;
+          regular_price: number;
+          in_stock: boolean;
+          is_digital: boolean;
+          show_in_zap: boolean;
+          seo_title: string | null;
+          seo_description: string | null;
+          updated_at: string;
+        }[];
+      };
+      import_products: {
+        Args: { _rows: Json };
+        Returns: Json;
+      };
+      check_coupon: {
+        Args: { _code: string; _subtotal?: number | null };
+        Returns: Json;
+      };
+      coupon_usage: {
+        Args: never;
+        Returns: { coupon_id: string; uses: number; discount_total: number }[];
+      };
+      order_coupon_verify: {
+        Args: { _order: string };
+        Returns: undefined;
+      };
+      save_abandoned_cart: {
+        Args: { _session: string; _email: string; _name: string; _phone: string; _items: Json };
+        Returns: string | null;
+      };
+      abandoned_cart_restore: {
+        Args: { _token: string };
+        Returns: Json;
+      };
+      claim_low_stock_alerts: {
+        Args: { _order: string; _threshold?: number };
+        Returns: {
+          alert_product_id: string;
+          alert_name: string;
+          alert_variant: string | null;
+          alert_sku: string | null;
+          alert_stock: number;
+        }[];
+      };
+      platform_save_pricing: {
+        Args: { _plans: Json; _notes: Json | null };
+        Returns: undefined;
       };
       place_guest_order: {
         Args: { _kind: string; _items: Json; _details: Json };

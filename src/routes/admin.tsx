@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { createFileRoute, Link, useLoaderData, useRouteContext } from "@tanstack/react-router";
 import { AlertTriangle, Crown, Hourglass } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,9 @@ import { CategoryManagementPanel } from "@/components/CategoryManagerDialog";
 import { PendingProductsPanel } from "@/components/PendingProductsPanel";
 import { SiteSettingsPanel } from "@/components/SiteSettingsPanel";
 import { CartPromotionsPanel } from "@/components/sales/CartPromotionsPanel";
+import { CouponsPanel } from "@/components/marketing/CouponsPanel";
+import { AbandonedCartsPanel } from "@/components/marketing/AbandonedCartsPanel";
+import { MarketingPanel } from "@/components/marketing/MarketingPanel";
 import { HomeBannersPanel } from "@/components/HomeBannersPanel";
 import { StockCountPanel } from "@/components/StockCountPanel";
 import { EmailSettingsPanel } from "@/components/EmailSettingsPanel";
@@ -32,21 +35,28 @@ import { Button } from "@/components/ui/button";
 import { useAuthState } from "@/hooks/useAuthState";
 import { useSubscription } from "@/hooks/useSubscription";
 import { PLAN_LABELS, endingSoon, remainingLabel } from "@/lib/subscription";
+import { usePlanCatalog } from "@/hooks/usePlanCatalog";
+import type { PlanCatalog } from "@/lib/plan-catalog";
 
 /** פניות מוכנות מראש (?compose=) — "לבחירת חבילה" ב"המנוי שלי" פותח פנייה לצוות */
-const COMPOSE_PRESETS: Record<string, SupportCompose> = {
-  premium: {
-    subject: "בקשה למעבר לחבילת פרימיום",
-    message:
-      "שלום, נשמח לעבור לחבילת הפרימיום (700 ₪ לחודש). נבקש לתאם את אופן התשלום — מראש לשנה או ב-12 תשלומים.",
-  },
-  basic: {
-    subject: "בקשה להצטרפות לחבילה הבסיסית",
-    message:
-      "שלום, נשמח להצטרף לחבילה הבסיסית (450 ₪ לחודש). נבקש לתאם את אופן התשלום — מראש לשנה או ב-12 תשלומים.",
-  },
-  billing: { subject: "שאלה לגבי המנוי" },
-};
+const COMPOSE_KEYS = ["premium", "basic", "billing"] as const;
+
+/** הנוסח עם המחיר העדכני מהעורך של מנהל הפלטפורמה (חלק 14) */
+function composePresets(catalog: PlanCatalog): Record<string, SupportCompose> {
+  const price = (plan: "basic" | "premium") =>
+    catalog.plans[plan].monthlyPrice.toLocaleString("he-IL");
+  return {
+    premium: {
+      subject: `בקשה למעבר ל${catalog.plans.premium.title}`,
+      message: `שלום, נשמח לעבור ל${catalog.plans.premium.title} (${price("premium")} ₪ לחודש). נבקש לתאם את אופן התשלום — מראש לשנה או ב-12 תשלומים.`,
+    },
+    basic: {
+      subject: `בקשה להצטרפות ל${catalog.plans.basic.title}`,
+      message: `שלום, נשמח להצטרף ל${catalog.plans.basic.title} (${price("basic")} ₪ לחודש). נבקש לתאם את אופן התשלום — מראש לשנה או ב-12 תשלומים.`,
+    },
+    billing: { subject: "שאלה לגבי המנוי" },
+  };
+}
 
 type Search = {
   /** לשונית ראשית בפאנל */
@@ -84,7 +94,7 @@ export const Route = createFileRoute("/admin")({
     if (tab) result.tab = tab;
     if (order && /^[0-9a-f-]{36}$/i.test(order)) result.order = order;
     if (ticket && /^[0-9a-f-]{36}$/i.test(ticket)) result.ticket = ticket;
-    if (compose && compose in COMPOSE_PRESETS) result.compose = compose;
+    if (compose && (COMPOSE_KEYS as readonly string[]).includes(compose)) result.compose = compose;
     if (pcust) result.pcust = pcust;
     if (ptab) result.ptab = ptab;
     if (pcat) result.pcat = pcat;
@@ -109,6 +119,8 @@ function AdminPage() {
   const { hostMode } = useRouteContext({ from: "__root__" });
   const site = useLoaderData({ from: "__root__" });
   const { subscription, can } = useSubscription();
+  const { catalog } = usePlanCatalog();
+  const presets = useMemo(() => composePresets(catalog), [catalog]);
   // המנוי פג: הפאנל נעול חוץ מ"המנוי שלי" ו"תמיכה ועזרה". מנהל-על (God Mode)
   // ממשיך לנהל — הוא זה שמאריך / מתעד תשלום.
   const godMode = role?.is_platform_admin === true && role.is_member === false;
@@ -298,11 +310,20 @@ function AdminPage() {
               <TabsContent value="promotions">
                 <CartPromotionsPanel />
               </TabsContent>
+              <TabsContent value="coupons">
+                <CouponsPanel />
+              </TabsContent>
+              <TabsContent value="abandoned">
+                <AbandonedCartsPanel />
+              </TabsContent>
               <TabsContent value="shipping">
                 <ShippingMethodsPanel />
               </TabsContent>
               <TabsContent value="site">
                 <SiteSettingsPanel />
+              </TabsContent>
+              <TabsContent value="marketing">
+                <MarketingPanel />
               </TabsContent>
               <TabsContent value="email">
                 <EmailSettingsPanel />
@@ -327,7 +348,7 @@ function AdminPage() {
                 <SupportPanel
                   ticketId={ticket ?? null}
                   onTicketChange={setTicket}
-                  compose={compose ? (COMPOSE_PRESETS[compose] ?? null) : null}
+                  compose={compose ? (presets[compose] ?? null) : null}
                   onComposeHandled={clearCompose}
                 />
               </TabsContent>

@@ -135,3 +135,71 @@ export const platformBillingHistory = createServerFn({ method: "POST" })
       history: parseBillingHistory(root["history"]),
     };
   });
+
+export type SavePricingInput = {
+  plans: {
+    plan: "basic" | "premium";
+    title: string;
+    tagline: string;
+    monthlyPrice: number;
+    features: string[];
+    badge: string | null;
+  }[];
+  paymentNote: string;
+  vatNote: string;
+};
+
+/**
+ * עורך החבילות (חלק 14): שם, משפט, מחיר חודשי, פיצ'רים ותווית לכל חבילה,
+ * והערות התשלום / מע"מ מתחת לטבלת המחירים — מנהל-על בלבד (נבדק במסד).
+ */
+export const platformSavePricing = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: SavePricingInput) => {
+    if (!Array.isArray(input?.plans) || input.plans.length === 0 || input.plans.length > 2) {
+      throw new Error("נתוני החבילות לא תקינים");
+    }
+    const plans = input.plans.map((plan) => {
+      if (plan?.plan !== "basic" && plan?.plan !== "premium") throw new Error("חבילה לא מוכרת");
+      const price = Math.round(Number(plan.monthlyPrice) * 100) / 100;
+      if (!Number.isFinite(price) || price < 0 || price > 100_000) {
+        throw new Error("מחיר חודשי לא תקין");
+      }
+      return {
+        plan_type: plan.plan,
+        title: String(plan.title ?? "")
+          .trim()
+          .slice(0, 60),
+        tagline: String(plan.tagline ?? "")
+          .trim()
+          .slice(0, 160),
+        monthly_price: price.toFixed(2),
+        features: (Array.isArray(plan.features) ? plan.features : [])
+          .map((feature) => String(feature ?? "").trim())
+          .filter(Boolean)
+          .slice(0, 20),
+        badge: String(plan.badge ?? "")
+          .trim()
+          .slice(0, 40),
+      };
+    });
+    return {
+      plans,
+      notes: {
+        payment_note: String(input?.paymentNote ?? "")
+          .trim()
+          .slice(0, 200),
+        vat_note: String(input?.vatNote ?? "")
+          .trim()
+          .slice(0, 200),
+      },
+    };
+  })
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc("platform_save_pricing", {
+      _plans: data.plans,
+      _notes: data.notes,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });

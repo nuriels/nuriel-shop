@@ -43,7 +43,8 @@ function filterOf(order: OrderRow): Exclude<Filter, "all"> {
 function orderGross(order: OrderRow): number {
   const itemsTotal =
     order.order_items.reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0) +
-    Number(order.shipping_price ?? 0);
+    Number(order.shipping_price ?? 0) -
+    (order.kind === "quote" ? 0 : Number(order.discount_amount ?? 0));
   return calculateVat(itemsTotal, {
     pricesIncludeVat: order.prices_include_vat ?? true,
     vatRate: Number(order.vat_rate ?? 18),

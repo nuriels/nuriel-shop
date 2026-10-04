@@ -79,7 +79,9 @@ const LEFT = MARGIN;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
 function formatMoney(value: number): string {
-  return `₪${value.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // שורת הנחה (קופון) — סכום שלילי: "-₪4.80"
+  const sign = value < 0 ? "-" : "";
+  return `${sign}₪${Math.abs(value).toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatDate(iso: string): string {
@@ -335,7 +337,12 @@ export async function buildOrderDocumentPdf(
     write(item.barcode ?? "—", columnRight[2]! - 2, baseline, { size: 9, color: MUTED });
     write(String(item.quantity), columnRight[3]! - 2, baseline, { size: 9 });
     if (showPrices) {
-      write(formatUnitIls(item.unitPrice), columnRight[4]! - 2, baseline, { size: 9 });
+      write(
+        item.unitPrice < 0 ? formatMoney(item.unitPrice) : formatUnitIls(item.unitPrice),
+        columnRight[4]! - 2,
+        baseline,
+        { size: 9 },
+      );
       write(formatMoney(item.unitPrice * item.quantity), columnRight[5]! - 2, baseline, {
         size: 9,
         bold: true,

@@ -244,6 +244,9 @@ export const PLATFORM_SITE_NAME = "מערכת ניהול אתר אינטרנט";
  *   ופתיחת חנויות במקום קטלוג (חלק 12).
  * - subscription: מנוי החנות (חלק 13) — חבילה, תפוגה ופיצ'רים. משמש לנעילת
  *   פיצ'רים במסכים (האכיפה עצמה גם במסד). null בדומיין הפלטפורמה.
+ * - seoTitle / seoDescription: כותרת ותיאור לגוגל ולשיתוף (חלק 14; ריק = שם העסק).
+ * - tracking: מזהי Facebook Pixel / Google Analytics — נכנסים ל-<head>.
+ * - promo: פופ-אפ המבצעים בכניסה לאתר (null = כבוי).
  */
 export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => {
   const { isPlatformRequest, maybeCurrentTenant } =
@@ -254,6 +257,10 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     isDefaultStore: false,
     isPortal: false,
     subscription: null,
+    seoTitle: "",
+    seoDescription: "",
+    tracking: null,
+    promo: null,
   };
   if (isPlatformRequest()) return { siteName: PLATFORM_SITE_NAME, ...none };
   const tenant = maybeCurrentTenant();
@@ -262,16 +269,29 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin
     .from("site_settings")
-    .select("business_name, brand_color, is_sabbath_mode")
+    .select(
+      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, facebook_pixel_id, google_analytics_id, promo_popup_enabled, promo_popup_text, promo_popup_coupon",
+    )
     .eq("id", true)
     .maybeSingle();
   const storeName = data?.business_name?.trim();
+  const isPortal = tenant.slug === PORTAL_STORE_SLUG;
+  const pixelId = data?.facebook_pixel_id ?? null;
+  const gaId = data?.google_analytics_id ?? null;
+  const promoText = data?.promo_popup_text?.trim() ?? "";
   return {
     siteName: storeName || DEFAULT_STORE_NAME,
     brandColor: data?.brand_color ?? null,
     sabbath: data?.is_sabbath_mode === true,
     isDefaultStore: tenant.is_default,
-    isPortal: tenant.slug === PORTAL_STORE_SLUG,
+    isPortal,
     subscription: tenant.subscription,
+    seoTitle: data?.seo_title?.trim() ?? "",
+    seoDescription: data?.seo_description?.trim() ?? "",
+    tracking: pixelId || gaId ? { pixelId, gaId } : null,
+    promo:
+      data?.promo_popup_enabled && promoText !== "" && !isPortal
+        ? { text: promoText, coupon: data.promo_popup_coupon ?? null }
+        : null,
   };
 });

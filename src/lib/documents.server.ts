@@ -25,11 +25,18 @@ import {
   deliveryOf,
   type OrderContactFields,
 } from "@/lib/order-details";
+import {
+  ORDER_COUPON_COLUMNS,
+  orderDiscount,
+  orderDiscountLabel,
+  type OrderCouponFields,
+} from "@/lib/coupons";
 
 const BRANDING_BUCKET = "branding";
 
 type OrderRecord = OrderContactFields &
-  OrderShippingFields & {
+  OrderShippingFields &
+  OrderCouponFields & {
     id: string;
     order_number: string;
     /** null = הזמנת אורח (הפרטים בעמודות ההזמנה) */
@@ -85,7 +92,7 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
   const { data: orderData, error } = await supabaseAdmin
     .from("orders")
     .select(
-      `id, order_number, customer_id, agent_id, status, kind, total, note, vat_rate, prices_include_vat, created_at, ${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, order_items (quantity, unit_price, product_name, product_sku, product_barcode, is_digital)`,
+      `id, order_number, customer_id, agent_id, status, kind, total, note, vat_rate, prices_include_vat, created_at, ${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ${ORDER_COUPON_COLUMNS}, order_items (quantity, unit_price, product_name, product_sku, product_barcode, is_digital)`,
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -145,6 +152,17 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
       sku: null,
       quantity: 1,
       unitPrice: Number(order.shipping_price ?? 0),
+    });
+  }
+  // הנחת קופון — שורה שלילית (כלולה בסכום ובמע"מ, כמו ב-total של ההזמנה)
+  const discount = order.kind === "quote" ? 0 : orderDiscount(order);
+  if (discount > 0) {
+    items.push({
+      name: orderDiscountLabel(order),
+      barcode: null,
+      sku: null,
+      quantity: 1,
+      unitPrice: -discount,
     });
   }
 

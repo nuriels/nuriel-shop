@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EyeOff, KeyRound, Loader2, Package, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  EyeOff,
+  KeyRound,
+  Loader2,
+  Package,
+  Pencil,
+  Plus,
+  Scale,
+  Search,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
@@ -28,6 +39,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SeoCounter } from "@/components/marketing/SeoCounter";
+import {
+  SEO_DESCRIPTION_MAX,
+  SEO_DESCRIPTION_RECOMMENDED,
+  SEO_TITLE_MAX,
+  SEO_TITLE_RECOMMENDED,
+} from "@/lib/marketing";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -121,6 +140,11 @@ type FormState = {
   /** וריאציות: המאפיינים (צבע / מידה) והצירופים (נשמרים ב-product_variants) */
   variantAttributes: VariantAttribute[];
   variants: VariantDraft[];
+  /** SEO (חלק 14): כותרת ותיאור לגוגל — ריק = שם המוצר / התיאור */
+  seoTitle: string;
+  seoDescription: string;
+  /** להציג בזאפ השוואת מחירים */
+  showInZap: boolean;
 };
 
 export type ProductDraft = { id: string; title: string; data: Json; updated_at: string };
@@ -159,6 +183,9 @@ function emptyForm(defaultCategory: string): FormState {
     isDigital: false,
     variantAttributes: [],
     variants: [],
+    seoTitle: "",
+    seoDescription: "",
+    showInZap: true,
   };
 }
 
@@ -198,6 +225,9 @@ function fromProduct(product: GlobalProduct): FormState {
     variantAttributes: variantAttributesOf(product),
     // הצירופים נטענים בנפרד (product_variants) כשהחלון נפתח
     variants: [],
+    seoTitle: product.seo_title ?? "",
+    seoDescription: product.seo_description ?? "",
+    showInZap: product.show_in_zap ?? true,
   };
 }
 
@@ -620,6 +650,9 @@ export function AdminProductDialog({
       min_order_quantity: form.minEnabled ? Math.floor(Number(form.minQuantity)) : null,
       is_order_bump: form.isOrderBump,
       order_bump_text: form.orderBumpText.trim() || null,
+      seo_title: form.seoTitle.trim() || null,
+      seo_description: form.seoDescription.trim() || null,
+      show_in_zap: form.showInZap,
     };
     // דרגים 2/3: כשהם פעילים — נשמרים מהטופס. כשהם רדומים — מוצר קיים שומר
     // את הערכים שכבר יש לו (לא נמחקים), ומוצר חדש מקבל את אותו מחיר בכולם.
@@ -1231,6 +1264,26 @@ export function AdminProductDialog({
               </p>
             )}
 
+            {/* זאפ השוואת מחירים (חלק 14) — מוצר שמסומן נכנס לפיד /zap.xml */}
+            <label className="flex items-start gap-3 rounded-lg border border-border p-3">
+              <Checkbox
+                id="p-zap"
+                checked={form.showInZap}
+                onCheckedChange={(v) => patch({ showInZap: v === true })}
+                className="mt-0.5"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Scale className="size-4 text-muted-foreground" aria-hidden="true" />
+                  הצג בזאפ השוואת מחירים
+                </span>
+                <span className="block text-xs leading-5 text-muted-foreground">
+                  המוצר ייכלל בפיד של החנות לזאפ (רק כשהוא במלאי ועם מחיר). החיבור עצמו — ב"שיווק
+                  ואינטגרציות".
+                </span>
+              </span>
+            </label>
+
             {!form.isDigital && (
               <div className="space-y-3 rounded-lg border border-border p-3">
                 <label className="flex items-center justify-between gap-2">
@@ -1344,6 +1397,56 @@ export function AdminProductDialog({
                 </div>
               )}
             </div>
+
+            {/* SEO (חלק 14): מה שגוגל ושיתוף בווטסאפ מציגים לעמוד המוצר */}
+            <details className="group rounded-lg border border-border p-3">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium">
+                <span className="flex items-center gap-2">
+                  <Search className="size-4 text-muted-foreground" aria-hidden="true" />
+                  קידום בגוגל (SEO)
+                  {(form.seoTitle.trim() || form.seoDescription.trim()) && (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                      מוגדר
+                    </span>
+                  )}
+                </span>
+                <span className="text-xs text-muted-foreground group-open:hidden">לא חובה</span>
+              </summary>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs leading-5 text-muted-foreground">
+                  לכל מוצר יש עמוד משלו בגוגל. אם תשאירו ריק — הכותרת תהיה שם המוצר + שם החנות,
+                  והתיאור — תחילת תיאור המוצר.
+                </p>
+                <div className="space-y-1.5">
+                  <Label htmlFor="p-seo-title">כותרת לגוגל</Label>
+                  <Input
+                    id="p-seo-title"
+                    value={form.seoTitle}
+                    maxLength={SEO_TITLE_MAX}
+                    placeholder={
+                      form.name ? `${form.name} | שם החנות` : "למשל: חולצת כותנה לבנה במחיר מיוחד"
+                    }
+                    onChange={(e) => patch({ seoTitle: e.target.value })}
+                  />
+                  <SeoCounter value={form.seoTitle} recommended={SEO_TITLE_RECOMMENDED} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="p-seo-description">תיאור לגוגל</Label>
+                  <Textarea
+                    id="p-seo-description"
+                    rows={3}
+                    value={form.seoDescription}
+                    maxLength={SEO_DESCRIPTION_MAX}
+                    placeholder="משפט או שניים שמסבירים למה לקנות את המוצר אצלכם"
+                    onChange={(e) => patch({ seoDescription: e.target.value })}
+                  />
+                  <SeoCounter
+                    value={form.seoDescription}
+                    recommended={SEO_DESCRIPTION_RECOMMENDED}
+                  />
+                </div>
+              </div>
+            </details>
 
             <div className="space-y-2 rounded-lg border border-border p-3">
               <Label htmlFor="p-related">מוצרים קשורים — "מוצרים נוספים שאולי תאהבו"</Label>

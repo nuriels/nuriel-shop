@@ -18,7 +18,9 @@ import { SUSPENDED_ALLOWED_PATHS } from "@/lib/blocked-pages";
 import { DEFAULT_STORE_NAME, getSiteSeo } from "@/lib/platform.functions";
 import { brandThemeCss, normalizeBrandColor } from "@/lib/brand-theme";
 import { StorefrontGate } from "@/components/StorefrontGate";
+import { MarketingLayer } from "@/components/marketing/MarketingLayer";
 import { CartProvider } from "@/hooks/useCart";
+import { NO_MARKETING_PATHS, trackingHeadScripts } from "@/lib/marketing";
 
 function NotFoundComponent() {
   return (
@@ -99,31 +101,38 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   // בלי הבהוב), ומתרעננים ברענון העמוד או אחרי שמירת ההגדרות (router.invalidate)
   loader: () => getSiteSeo(),
   staleTime: Infinity,
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
     // חנות בלי שם עסק מוגדר → "החנות שלי"; דומיין הניהול → שם קבוע (מהשרת)
     const siteName = loaderData?.siteName || DEFAULT_STORE_NAME;
+    // SEO (חלק 14): הכותרת והתיאור מ"שיווק ואינטגרציות" — ואם ריקים, שם העסק
+    const title = loaderData?.seoTitle || siteName;
+    const description = loaderData?.seoDescription || siteName;
     // צבע המותג של החנות → משתני העיצוב (כותרת, פוטר, כפתורים ראשיים)
     const brandColor = normalizeBrandColor(loaderData?.brandColor);
     const brandCss = brandThemeCss(brandColor);
+    // Facebook Pixel / Google Analytics — רק בעמודי החנות (לא בפאנלים ובחשבון)
+    const path = matches[matches.length - 1]?.pathname ?? "/";
+    const tracking = NO_MARKETING_PATHS.test(path) ? [] : trackingHeadScripts(loaderData?.tracking);
     return {
       styles: brandCss ? [{ children: brandCss }] : [],
       meta: [
         { charSet: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
         // מה שמוצג בשיתוף קישור (ווטסאפ / רשתות) ובתוצאות חיפוש
-        { title: siteName },
-        { name: "description", content: siteName },
-        { property: "og:title", content: siteName },
-        { property: "og:description", content: siteName },
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
         { property: "og:site_name", content: siteName },
         { property: "og:type", content: "website" },
         { property: "og:locale", content: "he_IL" },
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: siteName },
-        { name: "twitter:description", content: siteName },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
         // צבע שורת הדפדפן בטלפון
         ...(brandColor ? [{ name: "theme-color", content: brandColor }] : []),
       ],
+      scripts: tracking,
       links: [
         { rel: "stylesheet", href: appCss },
         { rel: "icon", type: "image/png", href: "/favicon.png" },
@@ -173,6 +182,12 @@ function RootComponent() {
           {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
           <Outlet />
         </StorefrontGate>
+        {/* פופ-אפ המבצעים ומעקב מעברי עמוד (Pixel) — חלק 14 */}
+        <MarketingLayer
+          promo={site?.promo ?? null}
+          tracking={site?.tracking ?? null}
+          sabbath={site?.sabbath === true}
+        />
       </CartProvider>
       <AccessibilityWidget />
       <Toaster position="top-center" />

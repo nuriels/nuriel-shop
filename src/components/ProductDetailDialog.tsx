@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { VatNote } from "@/components/VatNote";
 import { ProductRecommendations } from "@/components/sales/ProductRecommendations";
 import { useStorefrontSales } from "@/components/sales/StorefrontSalesContext";
 import { recommendForProduct } from "@/lib/cart-promotions";
-import { Flame, KeyRound, Package, Plus } from "lucide-react";
+import { Flame, KeyRound, Link2, Package, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,31 @@ import type { AddToCart } from "@/lib/cart";
 import { hasVariants, variantPriceRange } from "@/lib/variants";
 import { cn } from "@/lib/utils";
 import { useBackToClose } from "@/hooks/useBackToClose";
+
+/** הכתובת הקבועה של עמוד המוצר (SEO, שיתוף, זאפ) */
+function productPath(productId: string): string {
+  return `/product/${productId}`;
+}
+
+/** שיתוף / העתקת הקישור לעמוד המוצר */
+async function shareProduct(product: CatalogItem): Promise<void> {
+  const url = `${window.location.origin}${productPath(product.id)}`;
+  const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+  if (typeof nav.share === "function" && window.matchMedia("(pointer: coarse)").matches) {
+    try {
+      await nav.share({ title: product.name, url });
+      return;
+    } catch {
+      // המשתמש ביטל את השיתוף — מעתיקים כרגיל
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast.success("הקישור למוצר הועתק");
+  } catch {
+    toast.info(url);
+  }
+}
 
 /**
  * חלון פרטי מוצר: תמונה גדולה (וגלריה אם יש כמה), השם המלא, התיאור המלא,
@@ -44,12 +69,65 @@ export function ProductDetailDialog({
   /** מעבר למוצר אחר מתוך ההמלצות — החלון נשאר פתוח ומציג אותו */
   onShowProduct?: ((item: CatalogItem) => void) | undefined;
 }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // מוצר חדש נפתח — מתחילים מראש החלון
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [product?.id]);
+
+  useBackToClose(product !== null, () => onOpenChange(false));
+
+  if (!product) return null;
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent
+        ref={contentRef}
+        dir="rtl"
+        className="max-h-[92vh] gap-0 overflow-y-auto p-0 text-right sm:max-w-3xl"
+      >
+        <ProductDetailView
+          product={product}
+          mode="dialog"
+          canAdd={canAdd}
+          addLabel={addLabel}
+          onAddToCart={onAddToCart}
+          onShowProduct={onShowProduct}
+          onAdded={() => onOpenChange(false)}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * תוכן פרטי המוצר — בחלון (בקטלוג) או כעמוד מלא (/product/<id>, חלק 14).
+ * בחלון הכותרת והתיאור הם של ה-Dialog (נגישות); בעמוד — h1 רגיל.
+ */
+export function ProductDetailView({
+  product,
+  mode,
+  canAdd,
+  addLabel = "הוספה לסל",
+  onAddToCart,
+  onShowProduct,
+  onAdded,
+}: {
+  product: CatalogItem;
+  mode: "dialog" | "page";
+  canAdd: boolean;
+  addLabel?: string;
+  onAddToCart?: AddToCart | undefined;
+  onShowProduct?: ((item: CatalogItem) => void) | undefined;
+  /** אחרי הוספה לסל (בחלון — נסגר) */
+  onAdded?: (() => void) | undefined;
+}) {
   const tree = useCategoryTree();
   const sales = useStorefrontSales();
-  const contentRef = useRef<HTMLDivElement>(null);
   // "מוצרים נוספים שאולי תאהבו": מה שהמנהל קישר, ואם לא — מאותה קטגוריה
   const recommendations = useMemo(
-    () => (sales && product ? recommendForProduct(product, sales) : []),
+    () => (sales ? recommendForProduct(product, sales) : []),
     [sales, product],
   );
   const [quantity, setQuantity] = useState(1);
@@ -58,25 +136,19 @@ export function ProductDetailDialog({
   const choice = useVariantSelection(product);
 
   const gallery = useMemo(() => {
-    if (!product) return [];
     const all = [product.image_url, ...(product.images ?? [])].filter(
       (url): url is string => typeof url === "string" && url !== "",
     );
     return [...new Set(all)];
   }, [product]);
 
-  // מוצר חדש נפתח — מתחילים ממארז/יחידה אחת, מהתמונה הראשית ומראש החלון
+  // מוצר חדש נפתח — מתחילים ממארז/יחידה אחת ומהתמונה הראשית
   useEffect(() => {
-    setQuantity(product ? minimumQuantity(product) : 1);
+    setQuantity(minimumQuantity(product));
     setActiveImage(null);
-    contentRef.current?.scrollTo({ top: 0 });
     // מאפסים רק כשנפתח מוצר אחר — לא כשאותו מוצר נטען מחדש מהקטלוג
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.id]);
-
-  useBackToClose(product !== null, () => onOpenChange(false));
-
-  if (!product) return null;
+  }, [product.id]);
 
   const categoryPath = tree.byName.get(product.category)?.path ?? [product.category];
   const shownImage = activeImage ?? gallery[0] ?? null;
@@ -110,205 +182,244 @@ export function ProductDetailDialog({
       return;
     }
     onAddToCart(product, quantity, { variant: choice.variant });
-    onOpenChange(false);
+    onAdded?.();
   };
 
+  const isPage = mode === "page";
+  const title = isPage ? (
+    <h1 className="font-display break-words text-2xl font-bold leading-tight text-foreground sm:text-3xl">
+      {product.name}
+    </h1>
+  ) : (
+    <DialogTitle className="font-display break-words text-2xl font-bold leading-tight text-foreground">
+      {product.name}
+    </DialogTitle>
+  );
+  const descriptionBody: ReactNode = (
+    <div className="text-sm leading-7 text-foreground/90">
+      {product.description?.trim() ? (
+        <p className="whitespace-pre-line break-words">{product.description}</p>
+      ) : (
+        <p className="text-muted-foreground">אין תיאור למוצר הזה.</p>
+      )}
+    </div>
+  );
+
   return (
-    <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent
-        ref={contentRef}
-        dir="rtl"
-        className="max-h-[92vh] gap-0 overflow-y-auto p-0 text-right sm:max-w-3xl"
+    <>
+      <div
+        className={cn(
+          "grid md:grid-cols-2",
+          isPage && "overflow-hidden rounded-2xl border bg-card shadow-sm",
+        )}
       >
-        <div className="grid md:grid-cols-2">
-          {/* ---------- תמונה + גלריה ---------- */}
-          <div className="bg-secondary/60 p-4 md:rounded-s-lg">
-            <div className="relative flex h-64 items-center justify-center sm:h-80">
-              {shownImage ? (
-                <img
-                  src={shownImage}
-                  alt={product.name}
-                  className="h-full w-full object-contain mix-blend-multiply"
-                />
-              ) : (
-                <Package className="size-16 text-muted-foreground" />
-              )}
-              {product.is_out_of_stock && (
-                <span className="absolute inset-x-0 bottom-2 mx-auto w-fit rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground">
-                  אזל מהמלאי
-                </span>
-              )}
-            </div>
-            {gallery.length > 1 && (
-              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                {gallery.map((url) => (
-                  <button
-                    key={url}
-                    type="button"
-                    onClick={() => setActiveImage(url)}
-                    aria-label="הצגת תמונה"
-                    className={cn(
-                      "size-14 shrink-0 overflow-hidden rounded-md border-2 bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      url === shownImage ? "border-accent" : "border-transparent",
-                    )}
-                  >
-                    <img src={url} alt="" className="h-full w-full object-contain" />
-                  </button>
-                ))}
-              </div>
+        {/* ---------- תמונה + גלריה ---------- */}
+        <div className="bg-secondary/60 p-4 md:rounded-s-lg">
+          <div
+            className={cn(
+              "relative flex items-center justify-center",
+              isPage ? "h-72 sm:h-96" : "h-64 sm:h-80",
             )}
-            <p className="mt-2 text-center text-xs text-muted-foreground">התמונה להמחשה בלבד</p>
-          </div>
-
-          {/* ---------- פרטים ---------- */}
-          <div className="flex flex-col gap-4 p-5 sm:p-6">
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground">{categoryPath.join(" › ")}</p>
-              <DialogTitle className="font-display break-words text-2xl font-bold leading-tight text-foreground">
-                {product.name}
-              </DialogTitle>
-              {(product.is_promo || onSale) && (
-                <Badge className="gap-1 border-0 bg-accent text-accent-foreground">
-                  <Flame className="size-3" />
-                  {onSale && product.original_price !== null
-                    ? `מבצע -${discountPercent(product.price ?? 0, product.original_price)}%`
-                    : "מבצע"}
-                </Badge>
-              )}
-            </div>
-
-            <div className="space-y-1">
-              {shownPrice !== null ? (
-                <div className="flex flex-wrap items-baseline gap-2">
-                  {fromPrice !== null && (
-                    <span className="text-sm font-medium text-muted-foreground">החל מ-</span>
-                  )}
-                  <span className="numeric text-3xl font-bold text-accent">
-                    {formatIls(shownPrice)}
-                  </span>
-                  <VatNote className="text-sm sm:text-sm" />
-                  {onSale && product.original_price !== null && (
-                    <span className="numeric text-base text-muted-foreground line-through">
-                      {formatIls(product.original_price)}
-                    </span>
-                  )}
-                  {product.is_custom_price && !variantOwnPrice && (
-                    <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                      מחיר אישי עבורך
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <p className="text-base font-medium text-muted-foreground">מחיר לפי הצעה</p>
-              )}
-              {saleUntil && (
-                <p className="text-sm text-muted-foreground">המבצע בתוקף עד {saleUntil}</p>
-              )}
-              {depositPerCase !== null && (
-                <p className="text-sm text-muted-foreground">
-                  + פיקדון {formatIls(depositPerCase)}
-                  {packStep(product) > 1 ? " ליחידה" : " למארז"}
-                </p>
-              )}
-              <PackNote
-                item={product}
-                className="mt-1 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-foreground"
+          >
+            {shownImage ? (
+              <img
+                src={shownImage}
+                alt={product.name}
+                className="h-full w-full object-contain mix-blend-multiply"
               />
-              <MinOrderNote item={product} />
-              {product.is_digital && (
-                <p className="mt-1 flex items-center gap-2 rounded-md bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
-                  <KeyRound className="size-4 shrink-0" aria-hidden="true" />
-                  מוצר דיגיטלי — הרישיון נשלח אליך במייל, בלי משלוח
-                </p>
-              )}
-            </div>
-
-            {choice.hasVariants && !product.is_out_of_stock && <VariantPicker state={choice} />}
-
-            <DialogDescription asChild>
-              <div className="text-sm leading-7 text-foreground/90">
-                {product.description?.trim() ? (
-                  <p className="whitespace-pre-line break-words">{product.description}</p>
-                ) : (
-                  <p className="text-muted-foreground">אין תיאור למוצר הזה.</p>
-                )}
-              </div>
-            </DialogDescription>
-
-            {variations.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-xs font-semibold text-muted-foreground">וריאציות</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {variations.map((variation) => (
-                    <Badge key={variation} variant="outline">
-                      {variation}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+            ) : (
+              <Package className="size-16 text-muted-foreground" />
             )}
-
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <dt>מק"ט</dt>
-              <dd dir="ltr" className="numeric text-right">
-                {choice.variant?.sku ?? product.sku}
-              </dd>
-              {product.barcode && (
-                <>
-                  <dt>ברקוד</dt>
-                  <dd dir="ltr" className="numeric text-right">
-                    {product.barcode}
-                  </dd>
-                </>
-              )}
-            </dl>
-
-            {canAdd && onAddToCart && (
-              <div className="sticky bottom-0 -mx-5 mt-auto space-y-3 border-t border-border bg-background px-5 py-3 sm:-mx-6 sm:px-6 md:static md:mx-0 md:bg-transparent md:px-0 md:pb-0 md:pt-4">
-                <QuantityPicker
-                  item={product}
-                  units={quantity}
-                  onChange={setQuantity}
-                  disabled={product.is_out_of_stock}
-                  onSubmit={addNow}
-                  price={choice.price}
-                />
-                <Button
-                  type="button"
-                  size="lg"
-                  className="w-full"
-                  disabled={product.is_out_of_stock || (choice.complete && !choice.canAdd)}
-                  onClick={addNow}
-                >
-                  <Plus className="size-4" />
-                  {product.is_out_of_stock
-                    ? "אזל מהמלאי"
-                    : choice.hasVariants && !choice.complete
-                      ? `בחרו ${choice.missing}`
-                      : choice.complete && !choice.canAdd
-                        ? "האפשרות אזלה"
-                        : addLabel}
-                </Button>
-              </div>
+            {product.is_out_of_stock && (
+              <span className="absolute inset-x-0 bottom-2 mx-auto w-fit rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground">
+                אזל מהמלאי
+              </span>
             )}
           </div>
+          {gallery.length > 1 && (
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              {gallery.map((url) => (
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => setActiveImage(url)}
+                  aria-label="הצגת תמונה"
+                  className={cn(
+                    "size-14 shrink-0 overflow-hidden rounded-md border-2 bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    url === shownImage ? "border-accent" : "border-transparent",
+                  )}
+                >
+                  <img src={url} alt="" className="h-full w-full object-contain" />
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-center text-xs text-muted-foreground">התמונה להמחשה בלבד</p>
         </div>
 
-        {recommendations.length > 0 && (
-          <div className="border-t border-border bg-secondary/30 px-5 py-4 sm:px-6">
-            <ProductRecommendations
-              items={recommendations}
-              addLabel={addLabel}
-              onOpen={onShowProduct}
-              onAdd={
-                canAdd && onAddToCart
-                  ? (item) => (hasVariants(item) ? onShowProduct?.(item) : onAddToCart(item))
-                  : undefined
-              }
-            />
+        {/* ---------- פרטים ---------- */}
+        <div className="flex flex-col gap-4 p-5 sm:p-6">
+          <div className="space-y-1.5">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs text-muted-foreground">{categoryPath.join(" › ")}</p>
+              <button
+                type="button"
+                onClick={() => void shareProduct(product)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Link2 className="size-3.5" aria-hidden="true" />
+                שיתוף
+              </button>
+            </div>
+            {title}
+            {(product.is_promo || onSale) && (
+              <Badge className="gap-1 border-0 bg-accent text-accent-foreground">
+                <Flame className="size-3" />
+                {onSale && product.original_price !== null
+                  ? `מבצע -${discountPercent(product.price ?? 0, product.original_price)}%`
+                  : "מבצע"}
+              </Badge>
+            )}
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+
+          <div className="space-y-1">
+            {shownPrice !== null ? (
+              <div className="flex flex-wrap items-baseline gap-2">
+                {fromPrice !== null && (
+                  <span className="text-sm font-medium text-muted-foreground">החל מ-</span>
+                )}
+                <span className="numeric text-3xl font-bold text-accent">
+                  {formatIls(shownPrice)}
+                </span>
+                <VatNote className="text-sm sm:text-sm" />
+                {onSale && product.original_price !== null && (
+                  <span className="numeric text-base text-muted-foreground line-through">
+                    {formatIls(product.original_price)}
+                  </span>
+                )}
+                {product.is_custom_price && !variantOwnPrice && (
+                  <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                    מחיר אישי עבורך
+                  </span>
+                )}
+              </div>
+            ) : (
+              <p className="text-base font-medium text-muted-foreground">מחיר לפי הצעה</p>
+            )}
+            {saleUntil && (
+              <p className="text-sm text-muted-foreground">המבצע בתוקף עד {saleUntil}</p>
+            )}
+            {depositPerCase !== null && (
+              <p className="text-sm text-muted-foreground">
+                + פיקדון {formatIls(depositPerCase)}
+                {packStep(product) > 1 ? " ליחידה" : " למארז"}
+              </p>
+            )}
+            <PackNote
+              item={product}
+              className="mt-1 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-foreground"
+            />
+            <MinOrderNote item={product} />
+            {product.is_digital && (
+              <p className="mt-1 flex items-center gap-2 rounded-md bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+                <KeyRound className="size-4 shrink-0" aria-hidden="true" />
+                מוצר דיגיטלי — הרישיון נשלח אליך במייל, בלי משלוח
+              </p>
+            )}
+          </div>
+
+          {choice.hasVariants && !product.is_out_of_stock && <VariantPicker state={choice} />}
+
+          {isPage ? (
+            descriptionBody
+          ) : (
+            <DialogDescription asChild>{descriptionBody}</DialogDescription>
+          )}
+
+          {variations.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-muted-foreground">וריאציות</p>
+              <div className="flex flex-wrap gap-1.5">
+                {variations.map((variation) => (
+                  <Badge key={variation} variant="outline">
+                    {variation}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <dt>מק"ט</dt>
+            <dd dir="ltr" className="numeric text-right">
+              {choice.variant?.sku ?? product.sku}
+            </dd>
+            {product.barcode && (
+              <>
+                <dt>ברקוד</dt>
+                <dd dir="ltr" className="numeric text-right">
+                  {product.barcode}
+                </dd>
+              </>
+            )}
+          </dl>
+
+          {canAdd && onAddToCart && (
+            <div
+              className={cn(
+                "mt-auto space-y-3 border-t border-border pt-4",
+                !isPage &&
+                  "sticky bottom-0 -mx-5 bg-background px-5 py-3 sm:-mx-6 sm:px-6 md:static md:mx-0 md:bg-transparent md:px-0 md:pb-0 md:pt-4",
+              )}
+            >
+              <QuantityPicker
+                item={product}
+                units={quantity}
+                onChange={setQuantity}
+                disabled={product.is_out_of_stock}
+                onSubmit={addNow}
+                price={choice.price}
+              />
+              <Button
+                type="button"
+                size="lg"
+                className="w-full"
+                disabled={product.is_out_of_stock || (choice.complete && !choice.canAdd)}
+                onClick={addNow}
+              >
+                <Plus className="size-4" />
+                {product.is_out_of_stock
+                  ? "אזל מהמלאי"
+                  : choice.hasVariants && !choice.complete
+                    ? `בחרו ${choice.missing}`
+                    : choice.complete && !choice.canAdd
+                      ? "האפשרות אזלה"
+                      : addLabel}
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {recommendations.length > 0 && (
+        <div
+          className={cn(
+            "border-t border-border bg-secondary/30 px-5 py-4 sm:px-6",
+            isPage && "mt-6 rounded-2xl border",
+          )}
+        >
+          <ProductRecommendations
+            items={recommendations}
+            addLabel={addLabel}
+            onOpen={onShowProduct}
+            onAdd={
+              canAdd && onAddToCart
+                ? (item) => (hasVariants(item) ? onShowProduct?.(item) : onAddToCart(item))
+                : undefined
+            }
+          />
+        </div>
+      )}
+    </>
   );
 }

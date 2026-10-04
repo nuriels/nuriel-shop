@@ -22,6 +22,7 @@ import { CategoryBrowser } from "@/components/CategoryBrowser";
 import { CategoryManagerDialog } from "@/components/CategoryManagerDialog";
 import { AdminProductDialog, type ProductDraft } from "@/components/AdminProductDialog";
 import { ScanIntakeDialog } from "@/components/ScanIntakeDialog";
+import { ProductImportDialog } from "@/components/products/ProductImportDialog";
 import { ProductGrid } from "@/components/ProductGrid";
 import { usePriceTiersEnabled } from "@/hooks/usePriceTiers";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -310,6 +311,12 @@ export function AdminProductsPanel({
             </>
           )}
           <ScanIntakeDialog onApplied={load} />
+          {/* ייבוא קטלוג מקובץ CSV (חלק 14) */}
+          <ProductImportDialog
+            onImported={load}
+            productCount={products.length}
+            maxProducts={maxProducts}
+          />
           {maxProducts !== null && !loading && products.length >= maxProducts ? (
             <span className="flex flex-col items-end gap-1">
               <Button
