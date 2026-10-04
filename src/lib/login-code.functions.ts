@@ -76,7 +76,8 @@ export const requestLoginCode = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     const sender = await storeSender();
-    const spaced = `${code.slice(0, 3)} ${code.slice(3)}`;
+    // בלי רווח באמצע: מי שמעתיק את הקוד מהמייל ומדביק — מקבל 6 ספרות נקיות
+    // (ההפרדה הוויזואלית — letter-spacing בלבד)
     const result = await sendEmail({
       to: [data.email],
       subject: `קוד הכניסה שלך: ${code}`,
@@ -86,7 +87,7 @@ export const requestLoginCode = createServerFn({ method: "POST" })
         <p>שלום,</p>
         <p>זה קוד הכניסה שלך ל<strong>${escapeHtml(sender.name)}</strong>:</p>
         <p style="margin:18px 0;text-align:center;">
-          <span dir="ltr" style="display:inline-block;font-size:30px;font-weight:bold;letter-spacing:6px;background:#f3f5f3;border:1px solid #e2e8e2;border-radius:10px;padding:12px 22px;color:#12211F;">${spaced}</span>
+          <span dir="ltr" style="display:inline-block;font-size:30px;font-weight:bold;letter-spacing:8px;background:#f3f5f3;border:1px solid #e2e8e2;border-radius:10px;padding:12px 22px;color:#12211F;">${code}</span>
         </p>
         <p>הקוד תקף ל-${CODE_TTL_MINUTES} דקות ולשימוש חד-פעמי. אין לך עדיין חשבון? הקוד יפתח לך חשבון חדש.</p>
         <p style="color:#6b7280;font-size:13px;">לא ביקשתם קוד? אפשר להתעלם מההודעה — בלי הקוד אי אפשר להיכנס לחשבון. לעולם אל תמסרו את הקוד לאחרים.</p>

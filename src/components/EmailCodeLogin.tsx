@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { OtpCodeInput } from "@/components/OtpCodeInput";
 import { requestLoginCode, verifyLoginCode } from "@/lib/login-code.functions";
 
 export type CodeLoginTokens = { accessToken: string; refreshToken: string; isNew: boolean };
@@ -156,29 +156,17 @@ export function EmailCodeLogin({
         <Label htmlFor="login-code" className="block text-center">
           הקוד מהמייל
         </Label>
-        <div dir="ltr" className="flex justify-center">
-          <InputOTP
-            id="login-code"
-            maxLength={6}
-            inputMode="numeric"
-            pattern="^[0-9]*$"
-            autoComplete="one-time-code"
-            autoFocus
-            value={code}
-            disabled={busy === "verify"}
-            onChange={(value) => {
-              setCode(value);
-              setError(null);
-            }}
-            onComplete={(value: string) => void verify(value)}
-          >
-            <InputOTPGroup>
-              {[0, 1, 2, 3, 4, 5].map((index) => (
-                <InputOTPSlot key={index} index={index} className="size-12 text-xl font-bold" />
-              ))}
-            </InputOTPGroup>
-          </InputOTP>
-        </div>
+        {/* הדבקה מהירה: רווחים / טקסט מסביב מסוננים, וכפתור "הדבקת הקוד מהלוח" */}
+        <OtpCodeInput
+          id="login-code"
+          value={code}
+          disabled={busy === "verify"}
+          onChange={(value) => {
+            setCode(value);
+            setError(null);
+          }}
+          onComplete={(value) => void verify(value)}
+        />
       </div>
 
       {error && (

@@ -35,14 +35,23 @@ function GoogleMark() {
  * משתמש קיים עם אותו אימייל מתחבר לחשבון שלו; חדש מקבל חשבון לקוח **ממתין לאישור מנהל** (כמו כל הרשמה) ומשלים
  * פרטים במסך "השלמת פרטים". חשבון כפול לאותו אימייל נחסם במסד.
  */
-export function GoogleSignInButton({ label = "המשך עם Google" }: { label?: string }) {
+export function GoogleSignInButton({
+  label = "המשך עם Google",
+  returnPath = `/login?${GOOGLE_RETURN_FLAG}=1`,
+  className,
+}: {
+  label?: string;
+  /** לאן חוזרים מ-Google (באותו אתר) — ברירת מחדל: מסך ההתחברות */
+  returnPath?: string;
+  className?: string;
+}) {
   const [busy, setBusy] = useState(false);
   const start = async () => {
     setBusy(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/login?${GOOGLE_RETURN_FLAG}=1`,
+        redirectTo: `${window.location.origin}${returnPath}`,
         queryParams: { prompt: "select_account" },
       },
     });
@@ -57,7 +66,7 @@ export function GoogleSignInButton({ label = "המשך עם Google" }: { label?:
       type="button"
       variant="outline"
       size="lg"
-      className="w-full gap-2 bg-card"
+      className={className ?? "w-full gap-2 bg-card"}
       disabled={busy}
       onClick={() => void start()}
     >

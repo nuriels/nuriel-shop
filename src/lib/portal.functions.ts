@@ -16,6 +16,10 @@ import {
  * שער הפלטפורמה (חלק 12) — פונקציות השרת. פועלות רק באתר של החנות
  * nuriel-app2 (PORTAL_STORE_SLUG), ולא בפאנל הפלטפורמה.
  *
+ * 0. portalFromGoogle — כניסה עם Google (בלי לשלוח מייל): הדפדפן חוזר
+ *    מ-Google עם חיבור של Supabase באתר השער; השרת לוקח ממנו את המייל
+ *    המאומת ומחזיר אסימון שער — ואז הדפדפן מתנתק מהחיבור הזה (לא נשאר
+ *    "מחובר" כלקוח של nuriel-app2).
  * 1. requestPortalCode / verifyPortalCode — קוד בן 6 ספרות למייל, אותו
  *    מנגנון של חלק 8 (issue_login_code / consume_login_code: HMAC בלבד במסד,
  *    10 דקות, 5 ניסיונות). ה-HMAC כאן שונה מזה של מסך ההתחברות הרגיל, כך
@@ -182,7 +186,8 @@ export const requestPortalCode = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     const sender = await storeSender();
-    const spaced = `${code.slice(0, 3)} ${code.slice(3)}`;
+    // בלי רווח באמצע: מי שמעתיק את הקוד מהמייל ומדביק — מקבל 6 ספרות נקיות
+    // (ההפרדה הוויזואלית — letter-spacing בלבד)
     const result = await sendEmail({
       to: [data.email],
       subject: `קוד הכניסה שלך: ${code}`,
@@ -192,7 +197,7 @@ export const requestPortalCode = createServerFn({ method: "POST" })
         <p>שלום,</p>
         <p>זה הקוד שלך לכניסה ל<strong>${escapeHtml(sender.name)}</strong> — לניהול החנויות שלך או לפתיחת חנות חדשה:</p>
         <p style="margin:18px 0;text-align:center;">
-          <span dir="ltr" style="display:inline-block;font-size:30px;font-weight:bold;letter-spacing:6px;background:#f3f5f3;border:1px solid #e2e8e2;border-radius:10px;padding:12px 22px;color:#12211F;">${spaced}</span>
+          <span dir="ltr" style="display:inline-block;font-size:30px;font-weight:bold;letter-spacing:8px;background:#f3f5f3;border:1px solid #e2e8e2;border-radius:10px;padding:12px 22px;color:#12211F;">${code}</span>
         </p>
         <p>הקוד תקף ל-${CODE_TTL_MINUTES} דקות ולשימוש חד-פעמי.</p>
         <p style="color:#6b7280;font-size:13px;">לא ביקשתם קוד? אפשר להתעלם מההודעה. לעולם אל תמסרו את הקוד לאחרים.</p>
@@ -272,6 +277,53 @@ export const verifyPortalCode = createServerFn({ method: "POST" })
       stores: account.stores.length,
     });
     return { token: signPortalToken(data.email, tenant.id), email: data.email, account };
+  });
+
+/**
+ * כניסה לשער עם Google: החיבור שנפתח מול Google (באתר השער) מוכיח שהמייל
+ * שלך — מחזירים אסימון שער + החנויות, בלי שום מייל. חשבון חדש מ-Google
+ * (שעוד אין לו חנות) יכול מיד לפתוח חנות.
+ * לא דרך requireSupabaseAuth: היא דוחה משתמש של חנות אחרת — ובשער זה בדיוק
+ * המקרה (בעל חנות שנכנס כדי להגיע לחנות שלו). את האסימון מאמת שרת
+ * ההתחברות (GoTrue) עצמו.
+ */
+export const portalFromGoogle = createServerFn({ method: "POST" })
+  .inputValidator((input: { accessToken: string }) => {
+    const accessToken = String(input?.accessToken ?? "").trim();
+    if (accessToken.split(".").length !== 3 || accessToken.length > 8192) {
+      throw new Error("ההתחברות עם Google לא הושלמה. נסו שוב.");
+    }
+    return { accessToken };
+  })
+  .handler(async ({ data }) => {
+    const tenant = await requirePortal();
+    const { allowAction, requestIp } = await import("@/lib/rate-limit.server");
+    const ip = await requestIp();
+    if (!allowAction(`portal-google:${ip}`, 30, 15 * 60 * 1000)) {
+      throw new Error("יותר מדי ניסיונות. נסו שוב בעוד כמה דקות.");
+    }
+
+    const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
+    const { data: verified, error } = await supabaseAdminUnscoped.auth.getUser(data.accessToken);
+    const user = verified?.user;
+    if (error || !user?.email) {
+      logPortal("warn", "google session rejected", { ip, message: error?.message });
+      throw new Error("ההתחברות עם Google לא אומתה. נסו שוב.");
+    }
+    // מייל שלא אומת לא מוכיח בעלות (בחשבון Google הוא תמיד מאומת)
+    if (!user.email_confirmed_at) {
+      throw new Error("כתובת המייל בחשבון לא אומתה — התחברו עם קוד למייל");
+    }
+    const email = normalizeEmail(user.email);
+
+    const { signPortalToken } = await import("@/lib/portal-token.server");
+    const account = await loadAccount(email);
+    logPortal("info", "verified with google", {
+      ip,
+      email: maskEmail(email),
+      stores: account.stores.length,
+    });
+    return { token: signPortalToken(email, tenant.id), email, account };
   });
 
 /** החנויות של המייל המאומת (חזרה לשער / רענון העמוד) */

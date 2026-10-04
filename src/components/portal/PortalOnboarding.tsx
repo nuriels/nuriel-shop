@@ -18,6 +18,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { GoogleSignInButton, OrDivider } from "@/components/GoogleSignInButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { OtpCodeInput } from "@/components/OtpCodeInput";
 import {
   checkPortalSlug,
   createPortalStore,
@@ -37,6 +39,7 @@ import {
   getPortalStoreStatus,
   requestPortalCode,
   verifyPortalCode,
+  portalFromGoogle,
 } from "@/lib/portal.functions";
 import {
   cleanSlugInput,
@@ -60,6 +63,9 @@ import {
 type Step = "email" | "code" | "loading" | "stores" | "create" | "preparing";
 
 type PortalSession = { token: string; email: string };
+
+/** הדגל בכתובת החזרה מ-Google — השער יודע להשלים את הכניסה */
+const PORTAL_GOOGLE_FLAG = "portal_google";
 
 const SESSION_KEY = "nuriel-portal-session";
 /** כמה זמן מחכים לתעודת ה-SSL לפני שמציעים "להיכנס בכל זאת" */
@@ -185,16 +191,54 @@ export function PortalOnboarding({
   const onVerified = (next: PortalSession, nextAccount: PortalAccount) => {
     saveSession(next);
     setSession(next);
+    setEmail(next.email);
     setAccount(nextAccount);
     setStep(nextAccount.stores.length > 0 || !nextAccount.canCreate ? "stores" : "create");
   };
+
+  // חזרה מ-Google (?portal_google=1): Google אימת את המייל — מקבלים אסימון
+  // שער מהשרת (בלי שום מייל), ומתנתקים מהחיבור שנפתח באתר הזה (השער לא
+  // משאיר אתכם "מחוברים" כלקוח של nuriel-app2)
+  const googleFn = useServerFn(portalFromGoogle);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get(PORTAL_GOOGLE_FLAG) !== "1") return;
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const oauthError = params.get("error") ?? hash.get("error");
+    window.history.replaceState(window.history.state, "", "/");
+    onOpenChange(true);
+    if (oauthError) {
+      setNotice(
+        oauthError === "access_denied"
+          ? "ההתחברות עם Google בוטלה."
+          : "לא הצלחנו להשלים את ההתחברות עם Google. נסו שוב, או קבלו קוד למייל.",
+      );
+      return;
+    }
+    setStep("loading");
+    void (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) throw new Error("ההתחברות עם Google לא הושלמה. נסו שוב.");
+        const result = await googleFn({ data: { accessToken: data.session.access_token } });
+        onVerified({ token: result.token, email: result.email }, result.account);
+        toast.success("התחברת עם Google");
+      } catch (thrown) {
+        setNotice(errorText(thrown, "ההתחברות עם Google נכשלה. נסו שוב, או קבלו קוד למייל."));
+        setStep("email");
+      } finally {
+        await supabase.auth.signOut({ scope: "local" });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- פעם אחת, בחזרה מ-Google
+  }, []);
 
   const busyStep = step === "preparing" || leaving;
 
   const titles: Record<Step, { title: string; description: string }> = {
     email: {
       title: "כניסה או פתיחת חנות",
-      description: "הזינו את האימייל שלכם — נשלח אליו קוד כניסה חד-פעמי. בלי סיסמאות.",
+      description: "הכי מהיר — עם חשבון Google. אפשר גם עם קוד חד-פעמי למייל. בלי סיסמאות.",
     },
     code: { title: "בדקו את המייל", description: "הזינו את הקוד בן 6 הספרות ששלחנו אליכם." },
     loading: { title: "רק רגע…", description: "טוענים את החנויות שלכם." },
@@ -436,14 +480,28 @@ function CodeStep({
         }}
         className="space-y-4"
       >
+        {/* כניסה עם Google — בלי לשלוח מייל (חוסך את מכסת המיילים) */}
+        <div className="space-y-2.5 rounded-xl border border-border bg-secondary/40 p-3.5">
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              יש לך כבר חנות? כניסה מהירה עם Google
+            </p>
+            <p className="text-xs leading-5 text-muted-foreground">
+              בלי לחכות לקוד במייל — בלחיצה אחת. מתאים גם לפתיחת חנות חדשה.
+            </p>
+          </div>
+          <GoogleSignInButton label="התחברות עם Google" returnPath={`/?${PORTAL_GOOGLE_FLAG}=1`} />
+        </div>
+
+        <OrDivider />
+
         <div className="space-y-2">
-          <Label htmlFor="portal-email">אימייל</Label>
+          <Label htmlFor="portal-email">כניסה עם קוד למייל</Label>
           <Input
             id="portal-email"
             type="email"
             dir="ltr"
             required
-            autoFocus
             autoComplete="email"
             maxLength={254}
             value={email}
@@ -452,7 +510,8 @@ function CodeStep({
             className="h-12 text-base"
           />
           <p className="text-xs leading-5 text-muted-foreground">
-            יש לכם כבר חנות? תראו אותה מיד אחרי הקוד. אין עדיין? נפתח אחת יחד, בחינם.
+            נשלח קוד חד-פעמי בן 6 ספרות. יש לכם חנות? תראו אותה מיד אחרי הקוד. אין עדיין? נפתח אחת
+            יחד, בחינם.
           </p>
         </div>
         {error && (
@@ -460,7 +519,13 @@ function CodeStep({
             {error}
           </p>
         )}
-        <Button type="submit" className="w-full" size="lg" disabled={busy !== null}>
+        <Button
+          type="submit"
+          variant="secondary"
+          className="w-full"
+          size="lg"
+          disabled={busy !== null}
+        >
           {busy === "send" ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
@@ -497,29 +562,17 @@ function CodeStep({
         <Label htmlFor="portal-code" className="block text-center">
           הקוד מהמייל
         </Label>
-        <div dir="ltr" className="flex justify-center">
-          <InputOTP
-            id="portal-code"
-            maxLength={6}
-            inputMode="numeric"
-            pattern="^[0-9]*$"
-            autoComplete="one-time-code"
-            autoFocus
-            value={code}
-            disabled={busy === "verify"}
-            onChange={(value) => {
-              setCode(value);
-              setError(null);
-            }}
-            onComplete={(value: string) => void verify(value)}
-          >
-            <InputOTPGroup>
-              {[0, 1, 2, 3, 4, 5].map((index) => (
-                <InputOTPSlot key={index} index={index} className="size-12 text-xl font-bold" />
-              ))}
-            </InputOTPGroup>
-          </InputOTP>
-        </div>
+        {/* הדבקה מהירה: רווחים / טקסט מסביב מסוננים, וכפתור "הדבקת הקוד מהלוח" */}
+        <OtpCodeInput
+          id="portal-code"
+          value={code}
+          disabled={busy === "verify"}
+          onChange={(value) => {
+            setCode(value);
+            setError(null);
+          }}
+          onComplete={(value) => void verify(value)}
+        />
       </div>
 
       {error && (
