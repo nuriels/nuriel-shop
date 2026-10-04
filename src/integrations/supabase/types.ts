@@ -197,6 +197,93 @@ export type Database = {
         };
         Relationships: [];
       };
+      platform_addons: {
+        Row: {
+          addon_name: "google_sso" | "custom_domain" | "digital_products" | "zapier";
+          title: string;
+          description: string;
+          billing: "monthly" | "one_time";
+          price: number;
+          feature: string;
+          included_in_premium: boolean;
+          available: boolean;
+          sort_order: number;
+          updated_at: string;
+        };
+        Insert: {
+          addon_name: "google_sso" | "custom_domain" | "digital_products" | "zapier";
+          title: string;
+          description?: string;
+          billing: "monthly" | "one_time";
+          price: number;
+          feature: string;
+          included_in_premium?: boolean;
+          available?: boolean;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Update: {
+          addon_name?: "google_sso" | "custom_domain" | "digital_products" | "zapier";
+          title?: string;
+          description?: string;
+          billing?: "monthly" | "one_time";
+          price?: number;
+          feature?: string;
+          included_in_premium?: boolean;
+          available?: boolean;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      tenant_addons: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          addon_name: "google_sso" | "custom_domain" | "digital_products" | "zapier";
+          status: "active" | "canceled";
+          expires_at: string | null;
+          amount: number;
+          source: "purchase" | "grant";
+          purchased_by: string | null;
+          purchased_at: string;
+          canceled_at: string | null;
+          ended_reason: "expired" | "canceled" | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          addon_name: "google_sso" | "custom_domain" | "digital_products" | "zapier";
+          status?: "active" | "canceled";
+          expires_at?: string | null;
+          amount?: number;
+          source?: "purchase" | "grant";
+          purchased_by?: string | null;
+          purchased_at?: string;
+          canceled_at?: string | null;
+          ended_reason?: "expired" | "canceled" | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          addon_name?: "google_sso" | "custom_domain" | "digital_products" | "zapier";
+          status?: "active" | "canceled";
+          expires_at?: string | null;
+          amount?: number;
+          source?: "purchase" | "grant";
+          purchased_by?: string | null;
+          purchased_at?: string;
+          canceled_at?: string | null;
+          ended_reason?: "expired" | "canceled" | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       platform_plans: {
         Row: {
           plan_type: "basic" | "premium";
@@ -458,7 +545,7 @@ export type Database = {
         Row: {
           id: string;
           tenant_id: string;
-          kind: "payment" | "trial_extension" | "plan_change";
+          kind: "payment" | "trial_extension" | "plan_change" | "addon";
           plan_type: "trial" | "basic" | "premium";
           amount: number;
           currency: string;
@@ -472,11 +559,14 @@ export type Database = {
           recorded_by: string | null;
           recorded_by_email: string | null;
           created_at: string;
+          addon_name: string | null;
+          payment_status: "paid" | "due";
+          paid_at: string | null;
         };
         Insert: {
           id?: string;
           tenant_id: string;
-          kind?: "payment" | "trial_extension" | "plan_change";
+          kind?: "payment" | "trial_extension" | "plan_change" | "addon";
           plan_type: "trial" | "basic" | "premium";
           amount?: number;
           currency?: string;
@@ -490,11 +580,14 @@ export type Database = {
           recorded_by?: string | null;
           recorded_by_email?: string | null;
           created_at?: string;
+          addon_name?: string | null;
+          payment_status?: "paid" | "due";
+          paid_at?: string | null;
         };
         Update: {
           id?: string;
           tenant_id?: string;
-          kind?: "payment" | "trial_extension" | "plan_change";
+          kind?: "payment" | "trial_extension" | "plan_change" | "addon";
           plan_type?: "trial" | "basic" | "premium";
           amount?: number;
           currency?: string;
@@ -508,6 +601,9 @@ export type Database = {
           recorded_by?: string | null;
           recorded_by_email?: string | null;
           created_at?: string;
+          addon_name?: string | null;
+          payment_status?: "paid" | "due";
+          paid_at?: string | null;
         };
         Relationships: [];
       };
@@ -2089,6 +2185,20 @@ export type Database = {
       tenant_subscription_active: { Args: { _tenant: string }; Returns: boolean };
       tenant_has_feature: { Args: { _tenant: string; _feature: string }; Returns: boolean };
       store_billing: { Args: never; Returns: Json };
+      tenant_active_addons: { Args: { _tenant: string }; Returns: string[] };
+      tenant_addon_active: { Args: { _tenant: string; _addon: string }; Returns: boolean };
+      tenant_features: { Args: { _tenant: string }; Returns: Json };
+      addon_quote_for: { Args: { _tenant: string; _addon: string }; Returns: Json };
+      addon_quote: { Args: { _addon: string }; Returns: Json };
+      addons_store: { Args: never; Returns: Json };
+      addon_purchase: { Args: { _addon: string; _expected?: number | null }; Returns: Json };
+      platform_grant_addon: { Args: { _tenant: string; _addon: string }; Returns: Json };
+      platform_cancel_addon: { Args: { _id: string }; Returns: Json };
+      platform_mark_billing_paid: {
+        Args: { _id: string; _reference?: string | null };
+        Returns: undefined;
+      };
+      addon_purchase_notify_targets: { Args: { _tenant: string }; Returns: Json };
       platform_extend_trial: { Args: { _tenant: string; _days: number }; Returns: Json };
       platform_record_payment: {
         Args: {

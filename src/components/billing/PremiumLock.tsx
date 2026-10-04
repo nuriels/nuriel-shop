@@ -1,11 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import { Crown, Lock } from "lucide-react";
-import { PREMIUM_ONLY_MESSAGE } from "@/lib/subscription";
+import { Crown, Lock, Puzzle } from "lucide-react";
+import { ADDON_DEFAULTS, addonPriceLabel } from "@/lib/addons";
+import { PREMIUM_ONLY_MESSAGE, type AddonName } from "@/lib/subscription";
 import { cn } from "@/lib/utils";
 
 /**
  * נעילת פיצ'ר של פרימיום בחבילה הבסיסית (חלק 13): אייקון מנעול + "זמין
  * בחבילת פרימיום", וקישור ל"המנוי שלי". האכיפה עצמה גם במסד.
+ * חלק 15: פיצ'ר שיש לו תוסף — גם קישור ל"שדרוגים ותוספים" עם המחיר.
  */
 
 /** תג קטן ליד כותרת / מתג */
@@ -29,11 +31,14 @@ export function PremiumLockCard({
   description,
   className,
   compact = false,
+  addon,
 }: {
   title: string;
   description?: string;
   className?: string;
   compact?: boolean;
+  /** התוסף שפותח את הפיצ'ר בחבילה הבסיסית (חלק 15) */
+  addon?: AddonName;
 }) {
   return (
     <div
@@ -58,14 +63,26 @@ export function PremiumLockCard({
             <PremiumBadge />
           </p>
           {description && <p className="text-sm leading-6 text-muted-foreground">{description}</p>}
-          <Link
-            to="/admin"
-            search={{ tab: "billing" }}
-            className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-amber-800 underline-offset-4 hover:underline dark:text-amber-200"
-          >
-            <Crown className="size-4" aria-hidden="true" />
-            לשדרוג לפרימיום
-          </Link>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Link
+              to="/admin"
+              search={{ tab: "billing" }}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-800 underline-offset-4 hover:underline dark:text-amber-200"
+            >
+              <Crown className="size-4" aria-hidden="true" />
+              לשדרוג לפרימיום
+            </Link>
+            {addon && (
+              <Link
+                to="/admin"
+                search={{ tab: "addons" }}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline-offset-4 hover:underline"
+              >
+                <Puzzle className="size-4" aria-hidden="true" />
+                או כתוסף — {addonPriceLabel(ADDON_DEFAULTS[addon])}
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </div>

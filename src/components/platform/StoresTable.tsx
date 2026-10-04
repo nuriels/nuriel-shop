@@ -238,7 +238,7 @@ export function StoresTable({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => setHistoryFor(store)}>
                           <Receipt className="size-4" />
-                          היסטוריית תשלומים
+                          היסטוריה ותוספים
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

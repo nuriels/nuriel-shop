@@ -38,6 +38,8 @@ export type PlanFeatures = {
   digital: boolean;
   googleLogin: boolean;
   vipSupport: boolean;
+  /** פיד זאפ (/zap.xml) — רק עם התוסף "חיבור לזאפ", גם בפרימיום (חלק 15) */
+  zapFeed: boolean;
 };
 
 const ALL_FEATURES: PlanFeatures = {
@@ -47,6 +49,7 @@ const ALL_FEATURES: PlanFeatures = {
   digital: true,
   googleLogin: true,
   vipSupport: true,
+  zapFeed: false,
 };
 
 /** הפיצ'רים של כל חבילה — זהה ל-plan_features במסד */
@@ -60,10 +63,45 @@ export const PLAN_FEATURES: Record<PlanType, PlanFeatures> = {
     digital: false,
     googleLogin: false,
     vipSupport: false,
+    zapFeed: false,
   },
 };
 
 export type FeatureKey = Exclude<keyof PlanFeatures, "maxProducts">;
+
+/** התוספים (חלק 15) — שם התוסף במסד (tenant_addons.addon_name) */
+export type AddonName = "google_sso" | "custom_domain" | "digital_products" | "zapier";
+
+export const ADDON_NAMES: AddonName[] = [
+  "google_sso",
+  "custom_domain",
+  "digital_products",
+  "zapier",
+];
+
+/** הפיצ'ר שכל תוסף פותח — זהה ל-platform_addons.feature במסד */
+export const ADDON_FEATURE: Record<AddonName, FeatureKey> = {
+  google_sso: "googleLogin",
+  custom_domain: "customDomain",
+  digital_products: "digital",
+  zapier: "zapFeed",
+};
+
+export function asAddonName(value: unknown): AddonName | null {
+  return typeof value === "string" && (ADDON_NAMES as string[]).includes(value)
+    ? (value as AddonName)
+    : null;
+}
+
+/**
+ * הפיצ'רים בפועל = החבילה + התוספים הפעילים:
+ * if (plan === 'premium' OR has_addon(...)) — זהה ל-tenant_features במסד
+ */
+export function featuresWithAddons(plan: PlanType, addons: readonly AddonName[]): PlanFeatures {
+  const features = { ...PLAN_FEATURES[plan] };
+  for (const addon of addons) features[ADDON_FEATURE[addon]] = true;
+  return features;
+}
 
 /** ההודעה ליד פיצ'ר נעול */
 export const PREMIUM_ONLY_MESSAGE = "זמין בחבילת פרימיום";
@@ -116,6 +154,31 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 // מצב המנוי
 // ------------------------------------------------------------
 
+/** שורת תוסף מהמסד (tenant_addons) */
+export type AddonRow = {
+  addon_name: string | null;
+  status: string | null;
+  expires_at: string | null;
+};
+
+/** התוספים הפעילים: status active ו-expires_at ריק או בעתיד (כמו tenant_active_addons) */
+export function activeAddonsFrom(
+  rows: readonly AddonRow[] | null | undefined,
+  now: number = Date.now(),
+): AddonName[] {
+  const names = new Set<AddonName>();
+  for (const row of rows ?? []) {
+    const name = asAddonName(row.addon_name);
+    if (!name || row.status !== "active") continue;
+    if (row.expires_at !== null) {
+      const end = Date.parse(row.expires_at);
+      if (!Number.isFinite(end) || end <= now) continue;
+    }
+    names.add(name);
+  }
+  return [...names].sort();
+}
+
 /** השורה מהמסד (tenant_subscriptions) */
 export type SubscriptionRow = {
   plan_type: string | null;
@@ -134,6 +197,9 @@ export type SubscriptionState = {
   active: boolean;
   /** ימים שנותרו (מעוגל למעלה); null = ללא תפוגה */
   daysLeft: number | null;
+  /** התוספים הפעילים של החנות (חלק 15) */
+  addons: AddonName[];
+  /** הפיצ'רים בפועל — החבילה + התוספים */
   features: PlanFeatures;
 };
 
@@ -156,7 +222,9 @@ export function subscriptionStateFrom(
   row: SubscriptionRow | null,
   isDefault: boolean,
   now: number = Date.now(),
+  addonRows: readonly AddonRow[] = [],
 ): SubscriptionState {
+  const addons = activeAddonsFrom(addonRows, now);
   const plan = asPlan(row?.plan_type);
   const status = asStatus(row?.status);
   const trialEndsAt = row?.trial_ends_at ?? null;
@@ -176,7 +244,8 @@ export function subscriptionStateFrom(
       endsAt === null || !Number.isFinite(endMs)
         ? null
         : Math.max(0, Math.ceil((endMs - now) / DAY_MS)),
-    features: PLAN_FEATURES[plan],
+    addons,
+    features: featuresWithAddons(plan, addons),
   };
 }
 
@@ -195,6 +264,10 @@ const numOrNull = (value: unknown): number | null => {
 export function parseSubscriptionState(raw: unknown): SubscriptionState {
   const root = obj(raw);
   const plan = asPlan(root["plan"]);
+  const addons = (Array.isArray(root["addons"]) ? root["addons"] : [])
+    .map((entry) => asAddonName(obj(entry)["addon"]))
+    .filter((name): name is AddonName => name !== null)
+    .sort();
   return {
     plan,
     status: asStatus(root["status"]),
@@ -203,13 +276,14 @@ export function parseSubscriptionState(raw: unknown): SubscriptionState {
     endsAt: strOrNull(root["ends_at"]),
     active: root["active"] !== false,
     daysLeft: numOrNull(root["days_left"]),
-    features: PLAN_FEATURES[plan],
+    addons,
+    features: featuresWithAddons(plan, addons),
   };
 }
 
 export type BillingEntry = {
   id: string;
-  kind: "payment" | "trial_extension" | "plan_change";
+  kind: "payment" | "trial_extension" | "plan_change" | "addon";
   plan: PlanType;
   amount: number;
   months: number | null;
@@ -221,6 +295,10 @@ export type BillingEntry = {
   note: string | null;
   createdAt: string;
   recordedBy: string | null;
+  /** חיוב תוסף (חלק 15) */
+  addonName: AddonName | null;
+  /** paid / due — רכישת תוסף באתר ממתינה לגבייה */
+  paymentStatus: "paid" | "due";
 };
 
 export function parseBillingHistory(raw: unknown): BillingEntry[] {
@@ -231,7 +309,8 @@ export function parseBillingHistory(raw: unknown): BillingEntry[] {
     const method = row["payment_method"];
     return {
       id: String(row["id"] ?? ""),
-      kind: kind === "trial_extension" || kind === "plan_change" ? kind : "payment",
+      kind:
+        kind === "trial_extension" || kind === "plan_change" || kind === "addon" ? kind : "payment",
       plan: asPlan(row["plan_type"]),
       amount: numOrNull(row["amount"]) ?? 0,
       months: numOrNull(row["months"]),
@@ -249,6 +328,8 @@ export function parseBillingHistory(raw: unknown): BillingEntry[] {
       note: strOrNull(row["note"]),
       createdAt: String(row["created_at"] ?? ""),
       recordedBy: strOrNull(row["recorded_by_email"]),
+      addonName: asAddonName(row["addon_name"]),
+      paymentStatus: row["payment_status"] === "due" ? "due" : "paid",
     };
   });
 }
@@ -257,6 +338,7 @@ export const BILLING_KIND_LABELS: Record<BillingEntry["kind"], string> = {
   payment: "תשלום",
   trial_extension: "הארכה",
   plan_change: "שינוי חבילה",
+  addon: "רכישת תוסף",
 };
 
 // ------------------------------------------------------------

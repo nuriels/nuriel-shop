@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import {
   BarChart3,
   Check,
@@ -8,7 +8,9 @@ import {
   FileCode2,
   Gift,
   Loader2,
+  Lock,
   Megaphone,
+  Puzzle,
   Save,
   Scale,
   Search,
@@ -30,6 +32,8 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { SeoCounter } from "@/components/marketing/SeoCounter";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
+import { useSubscription } from "@/hooks/useSubscription";
+import { ZAP_COMING_SOON } from "@/lib/addons";
 import {
   EMPTY_MARKETING,
   MARKETING_COLUMNS,
@@ -94,6 +98,8 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 export function MarketingPanel() {
   const router = useRouter();
   const { settings } = useSiteSettings();
+  // חלק 15: הפיד לזאפ נפתח רק עם התוסף "חיבור לזאפ" (גם בפרימיום)
+  const zapUnlocked = useSubscription().can("zapFeed");
   const [saved, setSaved] = useState<MarketingSettings | null>(null);
   const [form, setForm] = useState<MarketingSettings>(EMPTY_MARKETING);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -102,7 +108,8 @@ export function MarketingPanel() {
 
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const feedUrl = zapFeedUrl(origin);
-  const storeName = settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME;
+  const storeName =
+    settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME;
 
   const load = useCallback(async () => {
     const [{ data, error }, { data: couponRows }, { count }] = await Promise.all([
@@ -126,7 +133,10 @@ export function MarketingPanel() {
     setSaved(next);
     setForm(next);
     setCoupons(
-      ((couponRows ?? []) as Coupon[]).map((c) => ({ ...c, discount_value: Number(c.discount_value) })),
+      ((couponRows ?? []) as Coupon[]).map((c) => ({
+        ...c,
+        discount_value: Number(c.discount_value),
+      })),
     );
     setZapCount(count ?? 0);
   }, []);
@@ -135,7 +145,8 @@ export function MarketingPanel() {
     void load();
   }, [load]);
 
-  const patch = (next: Partial<MarketingSettings>) => setForm((current) => ({ ...current, ...next }));
+  const patch = (next: Partial<MarketingSettings>) =>
+    setForm((current) => ({ ...current, ...next }));
   const dirty = saved !== null && !same(form, saved);
 
   const pixel = normalizePixelId(form.facebook_pixel_id);
@@ -211,7 +222,9 @@ export function MarketingPanel() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {dirty && <span className="text-xs font-medium text-amber-700">יש שינויים שלא נשמרו</span>}
+          {dirty && (
+            <span className="text-xs font-medium text-amber-700">יש שינויים שלא נשמרו</span>
+          )}
           <Button onClick={() => void save()} disabled={busy || !dirty}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
             שמירה
@@ -227,8 +240,8 @@ export function MarketingPanel() {
             קידום בגוגל (SEO)
           </CardTitle>
           <CardDescription>
-            הכותרת והתיאור של החנות בתוצאות החיפוש ובשיתוף קישור בווטסאפ / פייסבוק. לכל מוצר
-            יש עמוד משלו עם SEO נפרד (בעריכת המוצר).
+            הכותרת והתיאור של החנות בתוצאות החיפוש ובשיתוף קישור בווטסאפ / פייסבוק. לכל מוצר יש עמוד
+            משלו עם SEO נפרד (בעריכת המוצר).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -271,7 +284,13 @@ export function MarketingPanel() {
               <FileCode2 className="size-3.5" aria-hidden="true" />
               מפת האתר לגוגל (מתעדכנת לבד):
             </span>
-            <a href={`${origin}/sitemap.xml`} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline" dir="ltr">
+            <a
+              href={`${origin}/sitemap.xml`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary hover:underline"
+              dir="ltr"
+            >
               {origin}/sitemap.xml
             </a>
             <span>· אפשר להגיש אותה ב-Google Search Console</span>
@@ -287,8 +306,8 @@ export function MarketingPanel() {
             פופ-אפ מבצעים בכניסה לאתר
           </CardTitle>
           <CardDescription>
-            חלון שיווקי שקופץ ללקוח בכניסה לחנות — פעם אחת לכל נוסח (נוסח חדש יוצג שוב לכולם).
-            לא מוצג בקופה ובפאנל הניהול.
+            חלון שיווקי שקופץ ללקוח בכניסה לחנות — פעם אחת לכל נוסח (נוסח חדש יוצג שוב לכולם). לא
+            מוצג בקופה ובפאנל הניהול.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -317,7 +336,9 @@ export function MarketingPanel() {
             <Label>קוד קופון בפופ-אפ (לא חובה)</Label>
             <Select
               value={popupCoupon}
-              onValueChange={(value) => patch({ promo_popup_coupon: value === NO_COUPON ? null : value })}
+              onValueChange={(value) =>
+                patch({ promo_popup_coupon: value === NO_COUPON ? null : value })
+              }
               dir="rtl"
             >
               <SelectTrigger>
@@ -328,7 +349,9 @@ export function MarketingPanel() {
                 {couponOptions.map((c) => (
                   <SelectItem key={c.code} value={c.code}>
                     {c.code}
-                    {c.discount_type ? ` — ${couponLabel(c.discount_type, c.discount_value)}` : " (לא פעיל)"}
+                    {c.discount_type
+                      ? ` — ${couponLabel(c.discount_type, c.discount_value)}`
+                      : " (לא פעיל)"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -348,8 +371,8 @@ export function MarketingPanel() {
             מעקב ופרסום
           </CardTitle>
           <CardDescription>
-            הקוד הרשמי נטען אוטומטית בכל עמודי החנות (לא בפאנל הניהול). נמדדים צפיות בעמודים,
-            הוספה לסל ורכישה — לקמפיינים בפייסבוק / אינסטגרם ובגוגל.
+            הקוד הרשמי נטען אוטומטית בכל עמודי החנות (לא בפאנל הניהול). נמדדים צפיות בעמודים, הוספה
+            לסל ורכישה — לקמפיינים בפייסבוק / אינסטגרם ובגוגל.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
@@ -364,7 +387,9 @@ export function MarketingPanel() {
               aria-invalid={pixelProblem ? true : undefined}
               onChange={(e) => patch({ facebook_pixel_id: e.target.value || null })}
             />
-            <p className={cn("text-xs", pixelProblem ? "text-destructive" : "text-muted-foreground")}>
+            <p
+              className={cn("text-xs", pixelProblem ? "text-destructive" : "text-muted-foreground")}
+            >
               {pixelProblem ?? "מ-Meta Events Manager ← מקורות נתונים ← מזהה ה-Pixel (ספרות בלבד)"}
             </p>
           </div>
@@ -421,24 +446,50 @@ export function MarketingPanel() {
               </span>
               <div className="min-w-0 flex-1 space-y-2">
                 <p className="font-semibold">מסרו לתמיכה של זאפ את הקישור לקובץ המוצרים</p>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <code
-                    dir="ltr"
-                    className="min-w-0 flex-1 truncate rounded-lg border bg-secondary/60 px-3 py-2 text-sm"
-                  >
-                    {feedUrl}
-                  </code>
-                  <CopyButton value={feedUrl} label="העתק קישור למסירה לתמיכה של זאפ" />
-                </div>
-                <a
-                  href={feedUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                >
-                  <ExternalLink className="size-3.5" aria-hidden="true" />
-                  צפייה בקובץ
-                </a>
+                {zapUnlocked ? (
+                  <>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <code
+                        dir="ltr"
+                        className="min-w-0 flex-1 truncate rounded-lg border bg-secondary/60 px-3 py-2 text-sm"
+                      >
+                        {feedUrl}
+                      </code>
+                      <CopyButton value={feedUrl} label="העתק קישור למסירה לתמיכה של זאפ" />
+                    </div>
+                    <a
+                      href={feedUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      <ExternalLink className="size-3.5" aria-hidden="true" />
+                      צפייה בקובץ
+                    </a>
+                  </>
+                ) : (
+                  <div className="space-y-2 rounded-lg border border-dashed border-orange-300 bg-orange-50/60 p-3 text-sm dark:border-orange-800 dark:bg-orange-950/30">
+                    <p className="flex flex-wrap items-center gap-2 font-semibold">
+                      <Lock className="size-4 text-orange-700" aria-hidden="true" />
+                      הקישור לקובץ ייפתח עם התוסף "חיבור לזאפ"
+                      <span className="rounded-full bg-orange-600 px-2 py-0.5 text-[11px] font-bold text-white">
+                        {ZAP_COMING_SOON}
+                      </span>
+                    </p>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      זאפ מאשר חנויות רק לאחר חיבור סליקת אשראי פעילה. בינתיים אפשר כבר להירשם בזאפ
+                      ולבחור אילו מוצרים יופיעו — הקובץ מוכן ומחכה.
+                    </p>
+                    <Link
+                      to="/admin"
+                      search={{ tab: "addons" }}
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline-offset-4 hover:underline"
+                    >
+                      <Puzzle className="size-4" aria-hidden="true" />
+                      לשדרוגים ותוספים
+                    </Link>
+                  </div>
+                )}
               </div>
             </li>
             <li className="flex gap-3">

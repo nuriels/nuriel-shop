@@ -1,12 +1,18 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarPlus, Crown, Loader2, Package, Receipt, Wallet } from "lucide-react";
+import { CalendarPlus, Crown, Loader2, Package, Puzzle, Receipt, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
   platformBillingHistory,
   platformExtendTrial,
   platformRecordPayment,
 } from "@/lib/billing.functions";
+import {
+  platformCancelAddon,
+  platformGrantAddon,
+  platformMarkBillingPaid,
+} from "@/lib/addons.functions";
+import { ADDON_DEFAULTS, type PlatformAddonRow } from "@/lib/addons";
 import {
   BILLING_KIND_LABELS,
   PAYMENT_METHOD_LABELS,
@@ -16,6 +22,8 @@ import {
   planBadge,
   remainingLabel,
   subscriptionStateFrom,
+  ADDON_NAMES,
+  type AddonName,
   type BillingEntry,
   type PaymentMethod,
   type SubscriptionState,
@@ -433,23 +441,61 @@ export function BillingHistoryDialog({
   onClose: () => void;
 }) {
   const load = useServerFn(platformBillingHistory);
+  const grant = useServerFn(platformGrantAddon);
+  const cancel = useServerFn(platformCancelAddon);
+  const markPaid = useServerFn(platformMarkBillingPaid);
   const [history, setHistory] = useState<BillingEntry[] | null>(null);
+  const [addons, setAddons] = useState<PlatformAddonRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [grantAddon, setGrantAddon] = useState<AddonName | "">("");
+
+  const reload = useCallback(async () => {
+    if (!store) return;
+    try {
+      const result = await load({ data: { tenantId: store.id } });
+      setHistory(result.history);
+      setAddons(result.addons);
+    } catch (thrown) {
+      setError(thrown instanceof Error ? thrown.message : "טעינת ההיסטוריה נכשלה");
+    }
+  }, [store, load]);
 
   useEffect(() => {
     if (!store) return;
     setHistory(null);
+    setAddons([]);
     setError(null);
-    load({ data: { tenantId: store.id } })
-      .then((result) => setHistory(result.history))
-      .catch((thrown: unknown) =>
-        setError(thrown instanceof Error ? thrown.message : "טעינת ההיסטוריה נכשלה"),
-      );
-  }, [store, load]);
+    setGrantAddon("");
+    void reload();
+  }, [store, reload]);
+
+  // פעולה אחת בכל פעם; אחריה — טעינה מחדש (גם ההיסטוריה משתנה)
+  const act = async (key: string, run: () => Promise<unknown>, success: string) => {
+    setBusy(key);
+    try {
+      await run();
+      toast.success(success);
+      await reload();
+    } catch (thrown) {
+      toast.error(thrown instanceof Error ? thrown.message : "הפעולה נכשלה");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const total = (history ?? [])
-    .filter((entry) => entry.kind === "payment")
+    .filter(
+      (entry) =>
+        entry.kind === "payment" || (entry.kind === "addon" && entry.paymentStatus === "paid"),
+    )
     .reduce((sum, entry) => sum + entry.amount, 0);
+  const due = (history ?? [])
+    .filter((entry) => entry.paymentStatus === "due")
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const activeNames = new Set(addons.filter((addon) => addon.active).map((addon) => addon.addon));
+  const grantable = ADDON_NAMES.filter((name) => !activeNames.has(name));
+  const monthlyActive = addons.filter((addon) => addon.active && addon.billing === "monthly");
 
   return (
     <Dialog open={store !== null} onOpenChange={(open) => !open && onClose()}>
@@ -460,7 +506,9 @@ export function BillingHistoryDialog({
             היסטוריית מנוי — {store?.name}
           </DialogTitle>
           <DialogDescription>
-            {history ? `סה״כ תשלומים שתועדו: ${formatShekels(total)}` : "טוען…"}
+            {history
+              ? `סה״כ שולם: ${formatShekels(total)}${due > 0 ? ` · ממתין לגבייה: ${formatShekels(due)}` : ""}`
+              : "טוען…"}
           </DialogDescription>
         </DialogHeader>
         {error ? (
@@ -469,40 +517,198 @@ export function BillingHistoryDialog({
           <div className="flex justify-center py-8">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
-        ) : history.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">עוד לא תועדו תשלומים.</p>
         ) : (
-          <ul className="divide-y rounded-lg border">
-            {history.map((entry) => (
-              <li
-                key={entry.id}
-                className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="font-semibold">
-                    {BILLING_KIND_LABELS[entry.kind]} · {PLAN_LABELS[entry.plan]}
-                    {entry.kind === "trial_extension" && entry.days ? ` · +${entry.days} ימים` : ""}
-                    {entry.kind === "payment" && entry.months ? ` · ${entry.months} חודשים` : ""}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(entry.createdAt)}
-                    {entry.method ? ` · ${PAYMENT_METHOD_LABELS[entry.method]}` : ""}
-                    {entry.periodEnd ? ` · עד ${formatDate(entry.periodEnd)}` : ""}
-                    {entry.reference ? ` · אסמכתא ${entry.reference}` : ""}
-                  </p>
-                  {entry.note && <p className="text-xs text-muted-foreground">{entry.note}</p>}
-                  {entry.recordedBy && (
-                    <p className="text-[11px] text-muted-foreground" dir="ltr">
-                      {entry.recordedBy}
-                    </p>
-                  )}
+          <div className="space-y-5">
+            <section className="space-y-2">
+              <h3 className="flex items-center gap-2 text-sm font-bold">
+                <Puzzle className="size-4 text-primary" aria-hidden="true" />
+                תוספים
+              </h3>
+              {addons.length === 0 ? (
+                <p className="text-xs text-muted-foreground">לחנות אין תוספים.</p>
+              ) : (
+                <ul className="divide-y rounded-lg border">
+                  {addons.map((addon) => (
+                    <li
+                      key={addon.id}
+                      className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold">{addon.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {addon.source === "grant"
+                            ? "הופעל ע״י הנהלה"
+                            : `נרכש ב-${formatShekels(addon.amount)}`}
+                          {" · "}
+                          {formatDate(addon.purchasedAt)}
+                          {addon.active
+                            ? addon.expiresAt
+                              ? ` · פעיל עד ${formatDate(addon.expiresAt)}`
+                              : " · פעיל ללא תפוגה"
+                            : addon.endedReason === "canceled"
+                              ? " · בוטל"
+                              : " · הסתיים"}
+                        </p>
+                      </div>
+                      {addon.active && store && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive"
+                          disabled={busy !== null}
+                          onClick={() => {
+                            if (
+                              !window.confirm(`לבטל את "${addon.title}"? הפיצ'ר ייסגר מיד בחנות.`)
+                            )
+                              return;
+                            void act(
+                              `cancel-${addon.id}`,
+                              () => cancel({ data: { tenantId: store.id, addonId: addon.id } }),
+                              "התוסף בוטל",
+                            );
+                          }}
+                        >
+                          {busy === `cancel-${addon.id}` && (
+                            <Loader2 className="size-4 animate-spin" />
+                          )}
+                          ביטול
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {monthlyActive.length > 0 && (
+                <p className="rounded-md bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+                  בתיעוד תשלום / הארכה, התוספים החודשיים הפעילים מתחדשים אוטומטית לאותו תאריך — כללו
+                  בסכום גם{" "}
+                  {formatShekels(monthlyActive.reduce((sum, addon) => sum + addon.price, 0))} לחודש
+                  עבורם.
+                </p>
+              )}
+              {store && grantable.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    value={grantAddon}
+                    onValueChange={(value) => setGrantAddon(value as AddonName)}
+                  >
+                    <SelectTrigger className="h-9 w-64" aria-label="תוסף להפעלה">
+                      <SelectValue placeholder="הפעלת תוסף ללא תשלום…" />
+                    </SelectTrigger>
+                    <SelectContent dir="rtl">
+                      {grantable.map((name) => (
+                        <SelectItem key={name} value={name}>
+                          {ADDON_DEFAULTS[name].title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={grantAddon === "" || busy !== null}
+                    onClick={() => {
+                      if (grantAddon === "") return;
+                      const name = grantAddon;
+                      void act(
+                        "grant",
+                        () => grant({ data: { tenantId: store.id, addon: name } }),
+                        "התוסף הופעל",
+                      ).then(() => setGrantAddon(""));
+                    }}
+                  >
+                    {busy === "grant" && <Loader2 className="size-4 animate-spin" />}
+                    הפעלה
+                  </Button>
                 </div>
-                <span className="shrink-0 font-bold">
-                  {entry.kind === "payment" ? formatShekels(entry.amount) : "—"}
-                </span>
-              </li>
-            ))}
-          </ul>
+              )}
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="flex items-center gap-2 text-sm font-bold">
+                <Wallet className="size-4 text-primary" aria-hidden="true" />
+                תשלומים ופעולות
+              </h3>
+              {history.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  עוד לא תועדו תשלומים.
+                </p>
+              ) : (
+                <ul className="divide-y rounded-lg border">
+                  {history.map((entry) => (
+                    <li
+                      key={entry.id}
+                      className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold">
+                          {BILLING_KIND_LABELS[entry.kind]} · {PLAN_LABELS[entry.plan]}
+                          {entry.kind === "trial_extension" && entry.days
+                            ? ` · +${entry.days} ימים`
+                            : ""}
+                          {entry.kind === "payment" && entry.months
+                            ? ` · ${entry.months} חודשים`
+                            : ""}
+                          {entry.addonName ? ` · ${ADDON_DEFAULTS[entry.addonName].title}` : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(entry.createdAt)}
+                          {entry.method ? ` · ${PAYMENT_METHOD_LABELS[entry.method]}` : ""}
+                          {entry.periodEnd ? ` · עד ${formatDate(entry.periodEnd)}` : ""}
+                          {entry.reference ? ` · אסמכתא ${entry.reference}` : ""}
+                        </p>
+                        {entry.note && (
+                          <p className="text-xs text-muted-foreground">{entry.note}</p>
+                        )}
+                        {entry.recordedBy && (
+                          <p className="text-[11px] text-muted-foreground" dir="ltr">
+                            {entry.recordedBy}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        <span className="font-bold">
+                          {entry.kind === "payment" || entry.kind === "addon"
+                            ? formatShekels(entry.amount)
+                            : "—"}
+                        </span>
+                        {entry.paymentStatus === "due" && (
+                          <>
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                              ממתין לתשלום
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7"
+                              disabled={busy !== null}
+                              onClick={() => {
+                                const reference =
+                                  window.prompt("אסמכתא לתשלום (לא חובה):", "") ?? null;
+                                if (reference === null) return;
+                                void act(
+                                  `paid-${entry.id}`,
+                                  () => markPaid({ data: { billingId: entry.id, reference } }),
+                                  "סומן כשולם",
+                                );
+                              }}
+                            >
+                              {busy === `paid-${entry.id}` && (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              )}
+                              סמן כשולם
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
         )}
       </DialogContent>
     </Dialog>

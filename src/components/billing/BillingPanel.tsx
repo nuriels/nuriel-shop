@@ -10,12 +10,14 @@ import {
   LifeBuoy,
   Loader2,
   Package,
+  Puzzle,
   Receipt,
   RefreshCw,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { getStoreBilling, type StoreBilling } from "@/lib/billing.functions";
+import { ADDON_DEFAULTS } from "@/lib/addons";
 import {
   BILLING_KIND_LABELS,
   PAYMENT_METHOD_LABELS,
@@ -119,6 +121,8 @@ export function BillingPanel({
         current={sub?.active && sub.plan !== "trial" ? sub.plan : null}
         onChoose={onChoosePlan}
       />
+
+      {data && data.addons.length > 0 && <MyAddons billing={data} />}
 
       {data && data.history.length > 0 && <BillingHistory billing={data} />}
     </div>
@@ -486,6 +490,54 @@ function PlanCard({
 }
 
 // ------------------------------------------------------------
+// התוספים שלי (חלק 15)
+// ------------------------------------------------------------
+
+function MyAddons({ billing }: { billing: StoreBilling }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Puzzle className="size-5 text-muted-foreground" aria-hidden="true" />
+          התוספים שלי
+        </CardTitle>
+        <CardDescription>
+          תוספים חודשיים מתחדשים יחד עם המנוי. לרכישת תוספים — "שדרוגים ותוספים" בתפריט.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y">
+          {billing.addons.map((addon) => (
+            <li
+              key={addon.id}
+              className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"
+            >
+              <span className="font-medium">{addon.title}</span>
+              <span
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                  addon.active
+                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {addon.active
+                  ? addon.expiresAt
+                    ? `פעיל עד ${formatDate(addon.expiresAt)}`
+                    : "פעיל"
+                  : addon.endedReason === "canceled"
+                    ? "בוטל"
+                    : "הסתיים"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ------------------------------------------------------------
 // היסטוריית תשלומים
 // ------------------------------------------------------------
 
@@ -497,7 +549,7 @@ function BillingHistory({ billing }: { billing: StoreBilling }) {
           <Receipt className="size-5 text-muted-foreground" aria-hidden="true" />
           היסטוריית תשלומים
         </CardTitle>
-        <CardDescription>תשלומים שתועדו, הארכות ושינויי חבילה.</CardDescription>
+        <CardDescription>תשלומים שתועדו, הארכות, שינויי חבילה ורכישות תוספים.</CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <Table>
@@ -518,6 +570,11 @@ function BillingHistory({ billing }: { billing: StoreBilling }) {
                 <TableCell>
                   {BILLING_KIND_LABELS[entry.kind]}
                   {entry.kind === "trial_extension" && entry.days ? ` (${entry.days} ימים)` : ""}
+                  {entry.addonName && (
+                    <span className="block text-xs text-muted-foreground">
+                      {ADDON_DEFAULTS[entry.addonName].title}
+                    </span>
+                  )}
                   {entry.reference && (
                     <span className="block text-xs text-muted-foreground">
                       אסמכתא: {entry.reference}
@@ -531,7 +588,14 @@ function BillingHistory({ billing }: { billing: StoreBilling }) {
                     : "—"}
                 </TableCell>
                 <TableCell className="whitespace-nowrap font-semibold">
-                  {entry.kind === "payment" ? formatShekels(entry.amount) : "—"}
+                  {entry.kind === "payment" || entry.kind === "addon"
+                    ? formatShekels(entry.amount)
+                    : "—"}
+                  {entry.paymentStatus === "due" && (
+                    <span className="mt-0.5 block w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                      ממתין לתשלום
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="text-xs">
                   {entry.method ? PAYMENT_METHOD_LABELS[entry.method] : "—"}

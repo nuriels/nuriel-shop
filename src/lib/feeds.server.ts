@@ -2,7 +2,8 @@
  * קבצים "חיים" לכל חנות (חלק 14) — נוצרים מהמסד בכל בקשה (עם מטמון קצר):
  *  - /robots.txt  — מה גוגל סורק, וקישור למפת האתר
  *  - /sitemap.xml — דף הבית, עמודי מידע, קטגוריות ועמוד לכל מוצר
- *  - /zap.xml     — פיד המוצרים לזאפ השוואת מחירים (רק "הצג בזאפ", במלאי, עם מחיר)
+ *  - /zap.xml     — פיד המוצרים לזאפ השוואת מחירים (רק "הצג בזאפ", במלאי, עם מחיר).
+ *                   חלק 15: נעול (403) עד שהחנות רוכשת את התוסף "חיבור לזאפ".
  *
  * נקרא מ-src/server.ts (לפני האפליקציה), בתוך runWithTenant — supabaseAdmin
  * כבר מוגבל לחנות של הבקשה. הכתובות בקבצים — מהדומיין שממנו הגיעה הבקשה
@@ -307,6 +308,11 @@ async function zapStore(origin: string): Promise<ZapStore> {
 // הנתב
 // ------------------------------------------------------------
 
+/** התוסף "חיבור לזאפ" פעיל בחנות (מצב המנוי של הבקשה — כולל התוספים) */
+export function zapFeedUnlocked(): boolean {
+  return maybeCurrentTenant()?.subscription.features.zapFeed === true;
+}
+
 export async function renderFeed(pathname: string, request: Request): Promise<Response> {
   const origin = requestOrigin(request);
   // דומיין פאנל הפלטפורמה / חנות נעולה — לא לסריקה
@@ -323,6 +329,15 @@ export async function renderFeed(pathname: string, request: Request): Promise<Re
         renderSitemap(await sitemapEntries(origin)),
         "application/xml; charset=utf-8",
         3600,
+      );
+    }
+    // חלק 15: הפיד נפתח רק עם התוסף "חיבור לזאפ" (גם בפרימיום)
+    if (!zapFeedUnlocked()) {
+      return textResponse(
+        "Zap feed is not enabled for this store (add-on required)\n",
+        "text/plain; charset=utf-8",
+        0,
+        403,
       );
     }
     const [store, products] = await Promise.all([zapStore(origin), loadFeedProducts()]);

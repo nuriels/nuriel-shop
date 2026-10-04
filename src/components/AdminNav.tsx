@@ -18,6 +18,7 @@ import {
   Megaphone,
   Menu,
   Package,
+  Puzzle,
   Settings,
   ShoppingCart,
   TicketPercent,
@@ -79,6 +80,7 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
   {
     title: "חשבון",
     items: [
+      { value: "addons", label: "שדרוגים ותוספים", icon: Puzzle },
       { value: "billing", label: "המנוי שלי", icon: Gem },
       { value: "support", label: "תמיכה ועזרה", icon: LifeBuoy },
     ],

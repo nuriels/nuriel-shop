@@ -4,6 +4,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   subscriptionStateFrom,
+  type AddonRow,
   type SubscriptionRow,
   type SubscriptionState,
 } from "@/lib/subscription";
@@ -22,7 +23,7 @@ export type Tenant = {
   custom_domain_status: string | null;
   /** ה-DNS אומת — הדומיין המותאם מנותב לחנות */
   custom_domain_verified: boolean;
-  /** המנוי (חלק 13): חבילה, תפוגה ופיצ'רים — מחושב בזמן הזיהוי */
+  /** המנוי (חלק 13): חבילה, תפוגה ופיצ'רים (+ תוספים, חלק 15) — מחושב בזמן הזיהוי */
   subscription: SubscriptionState;
 };
 
@@ -78,7 +79,7 @@ export async function resolveTenant(host: string): Promise<Tenant | null> {
   let tenant: Tenant | null = null;
   if (id) {
     const rowRes = await fetch(
-      `${url}/rest/v1/tenants?id=eq.${encodeURIComponent(id)}&select=id,slug,name,domain,is_default,status,custom_domain,custom_domain_status,custom_domain_verified_at,tenant_subscriptions(plan_type,status,trial_ends_at,current_period_end)`,
+      `${url}/rest/v1/tenants?id=eq.${encodeURIComponent(id)}&select=id,slug,name,domain,is_default,status,custom_domain,custom_domain_status,custom_domain_verified_at,tenant_subscriptions(plan_type,status,trial_ends_at,current_period_end),tenant_addons(addon_name,status,expires_at)`,
       { headers },
     );
     if (!rowRes.ok) throw new Error(`tenant lookup failed (HTTP ${rowRes.status})`);
@@ -87,6 +88,7 @@ export async function resolveTenant(host: string): Promise<Tenant | null> {
         custom_domain_verified_at?: string | null;
         // יחס אחד-לאחד: אובייקט (או מערך בגרסאות ישנות של PostgREST)
         tenant_subscriptions?: SubscriptionRow | SubscriptionRow[] | null;
+        tenant_addons?: AddonRow[] | null;
       })[]
     )[0];
     const subscriptionRow = Array.isArray(row?.tenant_subscriptions)
@@ -103,12 +105,27 @@ export async function resolveTenant(host: string): Promise<Tenant | null> {
           custom_domain: row.custom_domain ?? null,
           custom_domain_status: row.custom_domain_status ?? null,
           custom_domain_verified: Boolean(row.custom_domain_verified_at),
-          subscription: subscriptionStateFrom(subscriptionRow, row.is_default),
+          subscription: subscriptionStateFrom(
+            subscriptionRow,
+            row.is_default,
+            Date.now(),
+            row.tenant_addons ?? [],
+          ),
         }
       : null;
   }
   cache.set(host, { tenant, expires: Date.now() + CACHE_TTL_MS });
   return tenant;
+}
+
+/**
+ * ניקוי המטמון של חנות (למשל אחרי רכישת תוסף — חלק 15), כדי שהפיצ'ר ייפתח
+ * מיד בבקשה הבאה ולא רק אחרי 15 שניות
+ */
+export function invalidateTenantCache(tenantId: string): void {
+  for (const [host, entry] of cache) {
+    if (entry.tenant?.id === tenantId) cache.delete(host);
+  }
 }
 
 export function runWithTenant<T>(host: string, tenant: Tenant | null, fn: () => T): T {

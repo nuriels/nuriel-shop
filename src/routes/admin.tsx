@@ -25,6 +25,7 @@ import { CustomDomainPanel } from "@/components/CustomDomainPanel";
 import { ShippingMethodsPanel } from "@/components/ShippingMethodsPanel";
 import { CustomPricesPanel } from "@/components/CustomPricesPanel";
 import { BillingPanel } from "@/components/billing/BillingPanel";
+import { AddonsStorePanel } from "@/components/billing/AddonsStorePanel";
 import { PremiumLockCard } from "@/components/billing/PremiumLock";
 import { SupportPanel, type SupportCompose } from "@/components/support/SupportPanel";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -334,9 +335,13 @@ function AdminPage() {
                 ) : (
                   <PremiumLockCard
                     title="חיבור דומיין אישי משלך"
-                    description="כתובת משלכם (למשל www.my-shop.co.il) עם תעודת אבטחה אוטומטית — זמין בחבילת פרימיום. בינתיים החנות זמינה בסאב-דומיין היוקרתי שלה."
+                    description="כתובת משלכם (למשל www.my-shop.co.il) עם תעודת אבטחה אוטומטית — זמין בחבילת פרימיום, או כתוסף לחבילה הבסיסית. בינתיים החנות זמינה בסאב-דומיין היוקרתי שלה."
+                    addon="custom_domain"
                   />
                 )}
+              </TabsContent>
+              <TabsContent value="addons">
+                <AddonsStorePanel />
               </TabsContent>
               <TabsContent value="billing">
                 <BillingPanel
