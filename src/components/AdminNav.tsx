@@ -6,11 +6,14 @@ import {
   ClipboardCheck,
   ClipboardList,
   FolderTree,
+  Gem,
   Gift,
   Globe,
   Inbox,
   LayoutDashboard,
   LayoutTemplate,
+  LifeBuoy,
+  Lock,
   Mail,
   Menu,
   Package,
@@ -67,7 +70,17 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
       { value: "domain", label: "דומיין משלכם", icon: Globe },
     ],
   },
+  {
+    title: "חשבון",
+    items: [
+      { value: "billing", label: "המנוי שלי", icon: Gem },
+      { value: "support", label: "תמיכה ועזרה", icon: LifeBuoy },
+    ],
+  },
 ];
+
+/** הלשוניות שפתוחות גם כשהמנוי של החנות פג (חלק 13) */
+export const EXPIRED_ALLOWED_TABS = ["billing", "support"];
 
 export function adminSectionLabel(value: string): string {
   for (const group of ADMIN_SECTIONS) {
@@ -99,8 +112,36 @@ function usePendingCount(): number {
   return count;
 }
 
-function NavList({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+/** כמה פניות תמיכה עם תשובה שלא נקראה — מוצג ליד "תמיכה ועזרה" */
+function useSupportUnread(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      const { data } = await supabase.rpc("support_unread_count");
+      if (alive) setCount(Number(data ?? 0) || 0);
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 60_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+  return count;
+}
+
+function NavList({
+  value,
+  onChange,
+  locked,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  locked: boolean;
+}) {
   const pending = usePendingCount();
+  const supportUnread = useSupportUnread();
   return (
     <div className="space-y-4">
       {ADMIN_SECTIONS.map((group) => (
@@ -109,21 +150,31 @@ function NavList({ value, onChange }: { value: string; onChange: (next: string) 
           <ul className="space-y-0.5">
             {group.items.map(({ value: item, label, icon: Icon }) => {
               const active = item === value;
-              const badge = item === "pending" && pending > 0 ? pending : null;
+              // המנוי פג: רק "המנוי שלי" ו"תמיכה ועזרה" פתוחים
+              const disabled = locked && !EXPIRED_ALLOWED_TABS.includes(item);
+              const badge =
+                item === "pending" && pending > 0
+                  ? pending
+                  : item === "support" && supportUnread > 0
+                    ? supportUnread
+                    : null;
               return (
                 <li key={item}>
                   <button
                     type="button"
                     onClick={() => onChange(item)}
+                    disabled={disabled}
                     aria-current={active ? "page" : undefined}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-start text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    title={disabled ? "המנוי הסתיים — חדשו את המנוי כדי לחזור לניהול" : undefined}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-start text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45 ${
                       active
                         ? "bg-primary font-semibold text-primary-foreground shadow-sm"
-                        : "text-foreground hover:bg-secondary"
+                        : "text-foreground hover:bg-secondary disabled:hover:bg-transparent"
                     }`}
                   >
                     <Icon className="size-4 shrink-0" aria-hidden="true" />
                     <span className="min-w-0 flex-1 truncate">{label}</span>
+                    {disabled && <Lock className="size-3.5 shrink-0" aria-hidden="true" />}
                     {badge !== null && (
                       <span
                         className={`numeric rounded-full px-1.5 text-xs font-bold ${
@@ -148,7 +199,16 @@ function NavList({ value, onChange }: { value: string; onChange: (next: string) 
  * תפריט הניהול: בצד ימין במחשב (נשאר במקום בגלילה), ובטלפון — כפתור שפותח
  * מגירה מימין. "חזור" בטלפון סוגר את המגירה.
  */
-export function AdminNav({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+export function AdminNav({
+  value,
+  onChange,
+  locked = false,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  /** המנוי פג — כל הלשוניות נעולות חוץ מ"המנוי שלי" ו"תמיכה ועזרה" */
+  locked?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   useBackToClose(open, () => setOpen(false));
   const pick = (next: string) => {
@@ -162,7 +222,7 @@ export function AdminNav({ value, onChange }: { value: string; onChange: (next: 
           aria-label="תפריט ניהול"
           className="sticky top-[calc(var(--site-header-h,0px)+1rem)] rounded-xl border border-border bg-card p-2 py-3 shadow-card"
         >
-          <NavList value={value} onChange={onChange} />
+          <NavList value={value} onChange={onChange} locked={locked} />
         </nav>
       </aside>
 
@@ -186,7 +246,7 @@ export function AdminNav({ value, onChange }: { value: string; onChange: (next: 
               <SheetTitle>תפריט ניהול</SheetTitle>
             </SheetHeader>
             <nav aria-label="תפריט ניהול">
-              <NavList value={value} onChange={pick} />
+              <NavList value={value} onChange={pick} locked={locked} />
             </nav>
           </SheetContent>
         </Sheet>

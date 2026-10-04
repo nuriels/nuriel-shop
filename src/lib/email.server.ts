@@ -42,6 +42,11 @@ type SendEmailInput = {
   attachments?: EmailAttachment[];
   /** אם מצורף — המייל (כולל הצלחה/כישלון) נשמר ביומן המיילים של הלקוח */
   logFor?: EmailLogTarget;
+  /**
+   * מייל של הפלטפורמה עצמה (לא של חנות — למשל התראות תמיכה, חלק 13): שם
+   * השולח וכתובת המענה במקום של החנות. הכתובת עצמה תמיד על דומיין המערכת.
+   */
+  platformSender?: { name: string; replyTo?: string | null };
 };
 
 type SendResult = { sent: boolean; reason?: string };
@@ -156,6 +161,20 @@ export async function storeSender(): Promise<StoreSender> {
   };
 }
 
+/** שולח של הפלטפורמה: "<שם>" <הכתובת של המערכת> */
+function platformSenderFor(name: string, replyTo: string | null): StoreSender {
+  const address = systemSenderAddress();
+  const display = cleanDisplayName(name) || DEFAULT_STORE_NAME;
+  return {
+    from: `"${display}" <${address}>`,
+    name: display,
+    address,
+    localPart: address.split("@")[0] ?? DEFAULT_SENDER_LOCAL_PART,
+    domain: systemSenderDomain(),
+    replyTo: replyTo && isValidEmail(replyTo) ? replyTo.trim().toLowerCase() : null,
+  };
+}
+
 export async function sendEmail(input: SendEmailInput): Promise<SendResult> {
   const result = await deliverEmail(input);
   if (input.logFor) {
@@ -191,7 +210,9 @@ async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
   const to = input.to.map((address) => address.trim()).filter(isValidEmail);
   if (to.length === 0) return { sent: false, reason: "אין נמענים תקינים" };
 
-  const sender = await storeSender();
+  const sender = input.platformSender
+    ? platformSenderFor(input.platformSender.name, input.platformSender.replyTo ?? null)
+    : await storeSender();
   try {
     const response = await fetch(`${resendApiUrl()}/emails`, {
       method: "POST",

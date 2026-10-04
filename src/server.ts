@@ -3,6 +3,7 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import {
+  EXPIRED_PAGE,
   FORBIDDEN_PAGE,
   renderBlockedPageHtml,
   SUSPENDED_ALLOWED_PATHS,
@@ -15,6 +16,7 @@ import {
   requestHost,
   resolveTenant,
   runWithTenant,
+  storeLockReason,
 } from "./integrations/supabase/tenant.server";
 
 // SSR: לקוח ה-Supabase המשותף (client.ts) שולח את החנות של הבקשה הנוכחית
@@ -47,15 +49,15 @@ function storeGate(pathname: string): Response | null {
   if (/^\/platform(\/|$)/.test(pathname)) {
     return blocked(renderBlockedPageHtml(FORBIDDEN_PAGE, [{ href: "/", label: "לדף הבית" }]));
   }
-  // חנות מוקפאת: הלקוחות רואים נעילה; פאנל הניהול של החנות, ההתחברות
-  // ופונקציות השרת (שהפאנל צריך) ממשיכים לעבוד
-  if (
-    maybeCurrentTenant()?.status === "suspended" &&
-    !SUSPENDED_ALLOWED_PATHS.test(pathname) &&
-    !pathname.startsWith("/_serverFn")
-  ) {
+  // חנות מוקפאת / שהמנוי שלה פג (חלק 13): הלקוחות רואים נעילה; פאנל הניהול
+  // של החנות, ההתחברות ופונקציות השרת (שהפאנל צריך) ממשיכים לעבוד — ובפאנל
+  // עצמו, כשהמנוי פג, פתוחים רק "המנוי שלי" ו"תמיכה ועזרה"
+  const lock = storeLockReason();
+  if (lock && !SUSPENDED_ALLOWED_PATHS.test(pathname) && !pathname.startsWith("/_serverFn")) {
     return blocked(
-      renderBlockedPageHtml(SUSPENDED_PAGE, [{ href: "/admin", label: "כניסה לפאנל הניהול" }]),
+      renderBlockedPageHtml(lock === "expired" ? EXPIRED_PAGE : SUSPENDED_PAGE, [
+        { href: lock === "expired" ? "/admin?tab=billing" : "/admin", label: "כניסה לפאנל הניהול" },
+      ]),
     );
   }
   return null;

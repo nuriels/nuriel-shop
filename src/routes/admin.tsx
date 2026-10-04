@@ -1,4 +1,6 @@
+import { useCallback } from "react";
 import { createFileRoute, Link, useLoaderData, useRouteContext } from "@tanstack/react-router";
+import { AlertTriangle, Crown, Hourglass } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppFooter } from "@/components/AppFooter";
 import { SabbathStaffBanner } from "@/components/StorefrontGate";
@@ -19,12 +21,32 @@ import { EmailSettingsPanel } from "@/components/EmailSettingsPanel";
 import { CustomDomainPanel } from "@/components/CustomDomainPanel";
 import { ShippingMethodsPanel } from "@/components/ShippingMethodsPanel";
 import { CustomPricesPanel } from "@/components/CustomPricesPanel";
+import { BillingPanel } from "@/components/billing/BillingPanel";
+import { PremiumLockCard } from "@/components/billing/PremiumLock";
+import { SupportPanel, type SupportCompose } from "@/components/support/SupportPanel";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { AdminNav } from "@/components/AdminNav";
+import { AdminNav, EXPIRED_ALLOWED_TABS } from "@/components/AdminNav";
 import { TransfersPanel } from "@/components/TransfersPanel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthState } from "@/hooks/useAuthState";
+import { useSubscription } from "@/hooks/useSubscription";
+import { PLAN_LABELS, endingSoon, remainingLabel } from "@/lib/subscription";
+
+/** פניות מוכנות מראש (?compose=) — "לבחירת חבילה" ב"המנוי שלי" פותח פנייה לצוות */
+const COMPOSE_PRESETS: Record<string, SupportCompose> = {
+  premium: {
+    subject: "בקשה למעבר לחבילת פרימיום",
+    message:
+      "שלום, נשמח לעבור לחבילת הפרימיום (700 ₪ לחודש). נבקש לתאם את אופן התשלום — מראש לשנה או ב-12 תשלומים.",
+  },
+  basic: {
+    subject: "בקשה להצטרפות לחבילה הבסיסית",
+    message:
+      "שלום, נשמח להצטרף לחבילה הבסיסית (450 ₪ לחודש). נבקש לתאם את אופן התשלום — מראש לשנה או ב-12 תשלומים.",
+  },
+  billing: { subject: "שאלה לגבי המנוי" },
+};
 
 type Search = {
   /** לשונית ראשית בפאנל */
@@ -37,6 +59,10 @@ type Search = {
   pcust?: string | undefined;
   /** הזמנות: הזמנה לפתוח ישירות ("צפה בהזמנה" מלוח הבקרה) */
   order?: string | undefined;
+  /** תמיכה: הפנייה הפתוחה בצ'אט */
+  ticket?: string | undefined;
+  /** תמיכה: פנייה חדשה מוכנה מראש (premium / basic / billing) */
+  compose?: string | undefined;
 };
 
 const pickString = (value: unknown): string | undefined =>
@@ -53,8 +79,12 @@ export const Route = createFileRoute("/admin")({
     const pcat = pickString(search["pcat"]);
     const pcust = pickString(search["pcust"]);
     const order = pickString(search["order"]);
+    const ticket = pickString(search["ticket"]);
+    const compose = pickString(search["compose"]);
     if (tab) result.tab = tab;
     if (order && /^[0-9a-f-]{36}$/i.test(order)) result.order = order;
+    if (ticket && /^[0-9a-f-]{36}$/i.test(ticket)) result.ticket = ticket;
+    if (compose && compose in COMPOSE_PRESETS) result.compose = compose;
     if (pcust) result.pcust = pcust;
     if (ptab) result.ptab = ptab;
     if (pcat) result.pcat = pcat;
@@ -67,10 +97,8 @@ function AdminPage() {
   const { session, role, loading } = useAuthState();
   // הלשונית נשמרת בכתובת (?tab=orders): כל מעבר נרשם בהיסטוריה, כך ש"חזור"
   // בדפדפן מחזיר ללשונית הקודמת במקום לצאת מהפאנל
-  const { tab, ptab, pcat, pcust, order } = Route.useSearch();
+  const { tab, ptab, pcat, pcust, order, ticket, compose } = Route.useSearch();
   const navigate = Route.useNavigate();
-  // המסך הראשון של מנהל החנות — לוח הבקרה
-  const activeTab = tab ?? "dashboard";
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -80,6 +108,46 @@ function AdminPage() {
   // חנות שהוקפאה ע"י מנהל הפלטפורמה: הלקוחות רואים נעילה, והמנהל רואה כאן הסבר
   const { hostMode } = useRouteContext({ from: "__root__" });
   const site = useLoaderData({ from: "__root__" });
+  const { subscription, can } = useSubscription();
+  // המנוי פג: הפאנל נעול חוץ מ"המנוי שלי" ו"תמיכה ועזרה". מנהל-על (God Mode)
+  // ממשיך לנהל — הוא זה שמאריך / מתעד תשלום.
+  const godMode = role?.is_platform_admin === true && role.is_member === false;
+  const expired = hostMode.lock === "expired";
+  const locked = expired && !godMode;
+  // המסך הראשון של מנהל החנות — לוח הבקרה (ובחנות שהמנוי שלה פג — "המנוי שלי")
+  const requestedTab = tab ?? (locked ? "billing" : "dashboard");
+  const activeTab =
+    locked && !EXPIRED_ALLOWED_TABS.includes(requestedTab) ? "billing" : requestedTab;
+
+  const goTab = useCallback(
+    (next: string, extra: { compose?: string; ticket?: string } = {}) =>
+      void navigate({
+        search: (prev) => ({
+          ...prev,
+          tab: next,
+          ticket: extra.ticket,
+          compose: extra.compose,
+        }),
+      }),
+    [navigate],
+  );
+  const setTicket = useCallback(
+    (next: string | null) =>
+      void navigate({
+        search: (prev) => ({ ...prev, tab: "support", ticket: next ?? undefined }),
+        resetScroll: false,
+      }),
+    [navigate],
+  );
+  const clearCompose = useCallback(
+    () =>
+      void navigate({
+        search: (prev) => ({ ...prev, compose: undefined }),
+        replace: true,
+        resetScroll: false,
+      }),
+    [navigate],
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -87,7 +155,7 @@ function AdminPage() {
       {isAdmin && site?.sabbath && <SabbathStaffBanner isAdmin />}
       <SiteHeader role={role} email={session?.user.email ?? null} onSignOut={signOut} />
       <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 px-3 py-6 sm:px-4">
-        {hostMode.suspended && (
+        {hostMode.lock === "suspended" && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
             <p className="font-semibold text-destructive">האתר נעול זמנית ללקוחות</p>
             <p className="text-muted-foreground">
@@ -96,6 +164,49 @@ function AdminPage() {
             </p>
           </div>
         )}
+        {/* בלשונית "המנוי שלי" ההסבר כבר בראש העמוד — לא מציגים פעמיים */}
+        {isAdmin && expired && activeTab !== "billing" && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
+            <AlertTriangle className="size-5 shrink-0 text-destructive" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-destructive">
+                {subscription?.plan === "trial" ? "תקופת הניסיון הסתיימה" : "המנוי של החנות הסתיים"}
+              </p>
+              <p className="text-muted-foreground">
+                {godMode
+                  ? 'מנהל-על: הפאנל פתוח לך. בעל החנות רואה רק את "המנוי שלי" ו"תמיכה ועזרה" עד לחידוש.'
+                  : 'האתר סגור ללקוחות ופאנל הניהול נעול. בחרו חבילה ב"המנוי שלי" — והחנות חוזרת לפעילות מיד אחרי התשלום.'}
+              </p>
+            </div>
+            {activeTab !== "billing" && (
+              <Button size="sm" variant="destructive" onClick={() => goTab("billing")}>
+                <Crown className="size-4" />
+                למנוי שלי
+              </Button>
+            )}
+          </div>
+        )}
+        {isAdmin &&
+          subscription &&
+          !expired &&
+          (subscription.plan === "trial" || endingSoon(subscription)) &&
+          activeTab !== "billing" && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+              <Hourglass className="size-4 shrink-0" aria-hidden="true" />
+              <p className="min-w-0 flex-1">
+                {subscription.plan === "trial"
+                  ? `תקופת ניסיון — ${remainingLabel(subscription)}. כל הפיצ'רים של פרימיום פתוחים לכם.`
+                  : `המנוי (${PLAN_LABELS[subscription.plan]}) — ${remainingLabel(subscription)}.`}
+              </p>
+              <button
+                type="button"
+                onClick={() => goTab("billing")}
+                className="font-semibold underline-offset-4 hover:underline"
+              >
+                לבחירת חבילה
+              </button>
+            </div>
+          )}
         {loading ? null : !isAdmin ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
@@ -109,10 +220,7 @@ function AdminPage() {
           // תפריט בצד ימין (במחשב) / מגירה (בטלפון). הלשונית נשארת בכתובת (?tab=),
           // כך ש"חזור" וקישורים ישירים ממשיכים לעבוד כמו קודם
           <div className="space-y-4 md:grid md:grid-cols-[15rem_minmax(0,1fr)] md:items-start md:gap-6 md:space-y-0">
-            <AdminNav
-              value={activeTab}
-              onChange={(next) => void navigate({ search: (prev) => ({ ...prev, tab: next }) })}
-            />
+            <AdminNav value={activeTab} onChange={(next) => goTab(next)} locked={locked} />
             <Tabs value={activeTab} dir="rtl" className="min-w-0">
               <TabsContent value="dashboard">
                 <AdminDashboard
@@ -200,7 +308,28 @@ function AdminPage() {
                 <EmailSettingsPanel />
               </TabsContent>
               <TabsContent value="domain">
-                <CustomDomainPanel />
+                {can("customDomain") ? (
+                  <CustomDomainPanel />
+                ) : (
+                  <PremiumLockCard
+                    title="חיבור דומיין אישי משלך"
+                    description="כתובת משלכם (למשל www.my-shop.co.il) עם תעודת אבטחה אוטומטית — זמין בחבילת פרימיום. בינתיים החנות זמינה בסאב-דומיין היוקרתי שלה."
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="billing">
+                <BillingPanel
+                  onChoosePlan={(plan) => goTab("support", { compose: plan })}
+                  onContactSupport={() => goTab("support", { compose: "billing" })}
+                />
+              </TabsContent>
+              <TabsContent value="support">
+                <SupportPanel
+                  ticketId={ticket ?? null}
+                  onTicketChange={setTicket}
+                  compose={compose ? (COMPOSE_PRESETS[compose] ?? null) : null}
+                  onComposeHandled={clearCompose}
+                />
               </TabsContent>
             </Tabs>
           </div>

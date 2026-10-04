@@ -1,15 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Hourglass, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import type { TenantPlan, TenantStatus } from "@/integrations/supabase/types";
+import type { TenantStatus } from "@/integrations/supabase/types";
 import {
-  PLAN_LABELS,
   STATUS_LABELS,
-  TENANT_PLANS,
   TENANT_STATUSES,
   checkStoreSlug,
   createStore,
 } from "@/lib/platform.functions";
+import { TRIAL_DAYS } from "@/lib/subscription";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -47,7 +46,6 @@ export function CreateStoreForm({
   const [slug, setSlug] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [taxId, setTaxId] = useState("");
-  const [plan, setPlan] = useState<TenantPlan>("trial");
   const [status, setStatus] = useState<TenantStatus>("active");
   const [slugState, setSlugState] = useState<SlugState>({ status: "idle" });
   const [busy, setBusy] = useState(false);
@@ -91,7 +89,7 @@ export function CreateStoreForm({
     setBusy(true);
     try {
       const store = await createStore({
-        data: { name, slug, ownerEmail, taxId, plan, status },
+        data: { name, slug, ownerEmail, taxId, status },
       });
       if (store.adminError) toast.warning(`החנות הוקמה, אבל המנהל לא נוצר: ${store.adminError}`);
       else toast.success(`החנות "${store.name}" הוקמה`);
@@ -99,7 +97,6 @@ export function CreateStoreForm({
       setSlug("");
       setOwnerEmail("");
       setTaxId("");
-      setPlan("trial");
       setStatus("active");
       onCreated(store);
     } catch (error) {
@@ -198,19 +195,12 @@ export function CreateStoreForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label>סוג מנוי</Label>
-            <Select value={plan} onValueChange={(v) => setPlan(v as TenantPlan)}>
-              <SelectTrigger dir="rtl">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent dir="rtl">
-                {TENANT_PLANS.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {PLAN_LABELS[p]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>מנוי</Label>
+            {/* כל חנות חדשה מתחילה בניסיון; חבילה בתשלום — "תעד תשלום" בטבלה */}
+            <p className="flex h-11 items-center gap-2 rounded-md border border-dashed border-border bg-secondary/40 px-3 text-sm text-muted-foreground">
+              <Hourglass className="size-4 shrink-0 text-accent" aria-hidden="true" />
+              ניסיון ל-{TRIAL_DAYS} יום (אוטומטי)
+            </p>
           </div>
 
           <div className="space-y-1.5">

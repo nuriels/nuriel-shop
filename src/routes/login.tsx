@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GOOGLE_RETURN_FLAG, GoogleSignInButton, OrDivider } from "@/components/GoogleSignInButton";
+import { useSubscription } from "@/hooks/useSubscription";
 
 type LoginMode = "password" | "code";
 type LoginSearch = { mode?: LoginMode; email?: string };
@@ -35,6 +36,7 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
+  const googleLogin = useSubscription().can("googleLogin");
   const router = useRouter();
   const search = Route.useSearch();
   const [mode, setMode] = useState<LoginMode>(search.mode ?? "password");
@@ -200,8 +202,13 @@ function LoginPage() {
                 </TabsContent>
               </Tabs>
 
-              <OrDivider />
-              <GoogleSignInButton />
+              {/* התחברות עם Google — בחבילת פרימיום / ניסיון (חלק 13) */}
+              {googleLogin && (
+                <>
+                  <OrDivider />
+                  <GoogleSignInButton />
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

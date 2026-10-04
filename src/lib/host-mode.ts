@@ -2,7 +2,10 @@ import { getHostMode } from "@/lib/platform.functions";
 
 export type HostMode = {
   platform: boolean;
+  /** האתר נעול ללקוחות — מוקפא או שהמנוי פג (הסיבה ב-lock) */
   suspended: boolean;
+  /** suspended: הוקפא ע"י מנהל הפלטפורמה | expired: המנוי הסתיים (חלק 13) */
+  lock: "suspended" | "expired" | null;
   baseDomain: string | null;
   /** כתובת פאנל הפלטפורמה (מנהל-על) */
   platformUrl: string | null;

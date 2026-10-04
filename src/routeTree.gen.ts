@@ -31,6 +31,7 @@ import { Route as AdminDashboardRouteImport } from './routes/admin_.dashboard'
 import { Route as AdminOrdersRouteImport } from './routes/admin_.orders'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
 import { Route as CourierTokenRouteImport } from './routes/courier.$token'
+import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
 import { Route as AdminSettingsDomainRouteImport } from './routes/admin_.settings_.domain'
 
 const IndexRoute = IndexRouteImport.update({
@@ -143,6 +144,11 @@ const CourierTokenRoute = CourierTokenRouteImport.update({
   path: '/courier/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlatformSupportRoute = PlatformSupportRouteImport.update({
+  id: '/platform_/support',
+  path: '/platform/support',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminSettingsDomainRoute = AdminSettingsDomainRouteImport.update({
   id: '/admin_/settings_/domain',
   path: '/admin/settings/domain',
@@ -172,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/platform/support': typeof PlatformSupportRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
 }
 export interface FileRoutesByTo {
@@ -197,6 +204,7 @@ export interface FileRoutesByTo {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/platform/support': typeof PlatformSupportRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
 }
 export interface FileRoutesById {
@@ -223,6 +231,7 @@ export interface FileRoutesById {
   '/admin_/orders': typeof AdminOrdersRoute
   '/admin_/settings': typeof AdminSettingsRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/platform_/support': typeof PlatformSupportRoute
   '/admin_/settings_/domain': typeof AdminSettingsDomainRoute
 }
 export interface FileRouteTypes {
@@ -250,6 +259,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/settings'
     | '/courier/$token'
+    | '/platform/support'
     | '/admin/settings/domain'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -275,6 +285,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/settings'
     | '/courier/$token'
+    | '/platform/support'
     | '/admin/settings/domain'
   id:
     | '__root__'
@@ -300,6 +311,7 @@ export interface FileRouteTypes {
     | '/admin_/orders'
     | '/admin_/settings'
     | '/courier/$token'
+    | '/platform_/support'
     | '/admin_/settings_/domain'
   fileRoutesById: FileRoutesById
 }
@@ -326,6 +338,7 @@ export interface RootRouteChildren {
   AdminOrdersRoute: typeof AdminOrdersRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   CourierTokenRoute: typeof CourierTokenRoute
+  PlatformSupportRoute: typeof PlatformSupportRoute
   AdminSettingsDomainRoute: typeof AdminSettingsDomainRoute
 }
 
@@ -485,6 +498,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CourierTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/platform_/support': {
+      id: '/platform_/support'
+      path: '/platform/support'
+      fullPath: '/platform/support'
+      preLoaderRoute: typeof PlatformSupportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/settings_/domain': {
       id: '/admin_/settings_/domain'
       path: '/admin/settings/domain'
@@ -518,6 +538,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminOrdersRoute: AdminOrdersRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   CourierTokenRoute: CourierTokenRoute,
+  PlatformSupportRoute: PlatformSupportRoute,
   AdminSettingsDomainRoute: AdminSettingsDomainRoute,
 }
 export const routeTree = rootRouteImport

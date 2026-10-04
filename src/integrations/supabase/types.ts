@@ -1,7 +1,8 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 /** סוג מנוי של חנות (tenants.plan) */
-export type TenantPlan = "trial" | "basic" | "pro" | "enterprise";
+/** שיקוף של tenant_subscriptions.plan_type (חלק 13) */
+export type TenantPlan = "trial" | "basic" | "premium";
 /** סטטוס חנות (tenants.status) — חנות מוקפאת נעולה ללקוחות */
 export type TenantStatus = "active" | "suspended";
 /** סוג התנאי של הטבת עגלה (cart_promotions.condition_type) */
@@ -250,6 +251,185 @@ export type Database = {
           product_id?: string;
           related_product_id?: string;
           sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      tenant_subscriptions: {
+        Row: {
+          tenant_id: string;
+          plan_type: "trial" | "basic" | "premium";
+          status: "trialing" | "active" | "canceled";
+          trial_ends_at: string | null;
+          current_period_end: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          tenant_id: string;
+          plan_type?: "trial" | "basic" | "premium";
+          status?: "trialing" | "active" | "canceled";
+          trial_ends_at?: string | null;
+          current_period_end?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          tenant_id?: string;
+          plan_type?: "trial" | "basic" | "premium";
+          status?: "trialing" | "active" | "canceled";
+          trial_ends_at?: string | null;
+          current_period_end?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tenant_subscriptions_tenant_id_fkey";
+            columns: ["tenant_id"];
+            isOneToOne: true;
+            referencedRelation: "tenants";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      billing_history: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          kind: "payment" | "trial_extension" | "plan_change";
+          plan_type: "trial" | "basic" | "premium";
+          amount: number;
+          currency: string;
+          months: number | null;
+          days: number | null;
+          payment_method: "annual" | "installments" | "monthly" | "other" | null;
+          period_start: string | null;
+          period_end: string | null;
+          reference: string | null;
+          note: string | null;
+          recorded_by: string | null;
+          recorded_by_email: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          kind?: "payment" | "trial_extension" | "plan_change";
+          plan_type: "trial" | "basic" | "premium";
+          amount?: number;
+          currency?: string;
+          months?: number | null;
+          days?: number | null;
+          payment_method?: "annual" | "installments" | "monthly" | "other" | null;
+          period_start?: string | null;
+          period_end?: string | null;
+          reference?: string | null;
+          note?: string | null;
+          recorded_by?: string | null;
+          recorded_by_email?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          kind?: "payment" | "trial_extension" | "plan_change";
+          plan_type?: "trial" | "basic" | "premium";
+          amount?: number;
+          currency?: string;
+          months?: number | null;
+          days?: number | null;
+          payment_method?: "annual" | "installments" | "monthly" | "other" | null;
+          period_start?: string | null;
+          period_end?: string | null;
+          reference?: string | null;
+          note?: string | null;
+          recorded_by?: string | null;
+          recorded_by_email?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      support_tickets: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          subject: string;
+          status: "open" | "answered" | "closed";
+          opened_by: string | null;
+          opened_by_email: string | null;
+          created_at: string;
+          updated_at: string;
+          last_message_at: string;
+          last_sender_type: "tenant" | "admin" | null;
+          tenant_read_at: string | null;
+          admin_read_at: string | null;
+          admin_notified_at: string | null;
+          tenant_notified_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          subject: string;
+          status?: "open" | "answered" | "closed";
+          opened_by?: string | null;
+          opened_by_email?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          last_message_at?: string;
+          last_sender_type?: "tenant" | "admin" | null;
+          tenant_read_at?: string | null;
+          admin_read_at?: string | null;
+          admin_notified_at?: string | null;
+          tenant_notified_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          subject?: string;
+          status?: "open" | "answered" | "closed";
+          opened_by?: string | null;
+          opened_by_email?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          last_message_at?: string;
+          last_sender_type?: "tenant" | "admin" | null;
+          tenant_read_at?: string | null;
+          admin_read_at?: string | null;
+          admin_notified_at?: string | null;
+          tenant_notified_at?: string | null;
+        };
+        Relationships: [];
+      };
+      support_messages: {
+        Row: {
+          id: string;
+          ticket_id: string;
+          tenant_id: string;
+          sender_type: "tenant" | "admin";
+          sender_id: string | null;
+          sender_name: string | null;
+          message: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          ticket_id: string;
+          tenant_id?: string;
+          sender_type: "tenant" | "admin";
+          sender_id?: string | null;
+          sender_name?: string | null;
+          message: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          ticket_id?: string;
+          tenant_id?: string;
+          sender_type?: "tenant" | "admin";
+          sender_id?: string | null;
+          sender_name?: string | null;
+          message?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -1654,6 +1834,14 @@ export type Database = {
           ssl_error: string | null;
           ssl_checked_at: string | null;
           ssl_renew_requested_at: string | null;
+          /** המנוי (חלק 13) */
+          sub_plan: "trial" | "basic" | "premium";
+          sub_status: "trialing" | "active" | "canceled";
+          sub_trial_ends_at: string | null;
+          sub_period_end: string | null;
+          sub_ends_at: string | null;
+          sub_active: boolean;
+          open_tickets: number;
         }[];
       };
       platform_delete_tenant: {
@@ -1681,6 +1869,34 @@ export type Database = {
         Args: { _tenant: string; _plan: TenantPlan };
         Returns: Database["public"]["Tables"]["tenants"]["Row"];
       };
+      plan_features: { Args: { _plan: string }; Returns: Json };
+      tenant_subscription_state: { Args: { _tenant: string }; Returns: Json };
+      tenant_subscription_active: { Args: { _tenant: string }; Returns: boolean };
+      tenant_has_feature: { Args: { _tenant: string; _feature: string }; Returns: boolean };
+      store_billing: { Args: never; Returns: Json };
+      platform_extend_trial: { Args: { _tenant: string; _days: number }; Returns: Json };
+      platform_record_payment: {
+        Args: {
+          _tenant: string;
+          _plan: string;
+          _amount: number;
+          _months?: number;
+          _method?: string;
+          _reference?: string | null;
+          _note?: string | null;
+        };
+        Returns: Json;
+      };
+      platform_billing_history: { Args: { _tenant: string }; Returns: Json };
+      support_my_tickets: { Args: never; Returns: Json };
+      support_unread_count: { Args: never; Returns: number };
+      support_open_ticket: { Args: { _subject: string; _message: string }; Returns: Json };
+      support_post_message: { Args: { _ticket: string; _message: string }; Returns: Json };
+      support_thread: { Args: { _ticket: string }; Returns: Json };
+      support_set_status: { Args: { _ticket: string; _status: string }; Returns: Json };
+      platform_support_tickets: { Args: { _filter?: string }; Returns: Json };
+      platform_support_counts: { Args: never; Returns: Json };
+      support_notify_targets: { Args: { _ticket: string }; Returns: Json };
       platform_list_admins: {
         Args: Record<string, never>;
         Returns: { user_id: string; email: string; created_at: string }[];

@@ -9,12 +9,14 @@ import { PORTAL_STORE_SLUG } from "@/lib/portal";
  * נקרא מ-beforeLoad של ה-root route (גם ב-SSR וגם בניווט בדפדפן).
  */
 export const getHostMode = createServerFn({ method: "GET" }).handler(async () => {
-  const { isPlatformRequest, isSuspendedStoreRequest, tenantBaseDomain } =
+  const { isPlatformRequest, storeLockReason, tenantBaseDomain } =
     await import("@/integrations/supabase/tenant.server");
   const adminHost = process.env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase() || null;
+  const lock = storeLockReason();
   return {
     platform: isPlatformRequest(),
-    suspended: isSuspendedStoreRequest(),
+    suspended: lock !== null,
+    lock,
     baseDomain: tenantBaseDomain(),
     /** פאנל הפלטפורמה — לקישור "חזרה לפאנל" של מנהל-על שנמצא בחנות */
     platformUrl: adminHost ? `https://${adminHost}/platform` : null,
@@ -46,14 +48,14 @@ export const checkStoreSlug = createServerFn({ method: "POST" })
     return { slug: data.slug, available: problem === null, message: problem };
   });
 
-export const TENANT_PLANS = ["trial", "basic", "pro", "enterprise"] as const;
+/** החבילות (חלק 13 — מקור האמת: tenant_subscriptions; כאן לתצוגה) */
+export const TENANT_PLANS = ["trial", "basic", "premium"] as const;
 export const TENANT_STATUSES = ["active", "suspended"] as const;
 
 export const PLAN_LABELS: Record<TenantPlan, string> = {
-  trial: "ניסיון (Trial)",
+  trial: "ניסיון",
   basic: "בסיסי",
-  pro: "מקצועי",
-  enterprise: "ארגוני",
+  premium: "פרימיום",
 };
 export const STATUS_LABELS: Record<TenantStatus, string> = {
   active: "פעילה",
@@ -78,7 +80,6 @@ export type CreateStoreInput = {
   slug: string;
   ownerEmail: string;
   taxId?: string;
-  plan?: TenantPlan;
   status?: TenantStatus;
 };
 
@@ -89,6 +90,8 @@ export type CreateStoreInput = {
  *    החנות נוצרות בטריגר במסד.
  * 2. חשבון למנהל החנות (האימייל שבטופס) עם סיסמה זמנית — מוחזרת פעם אחת.
  *    אם רק השלב הזה נכשל, החנות נשארת ואפשר ליצור מנהל מהטבלה.
+ * כל חנות חדשה מתחילה ב-14 ימי ניסיון (טריגר במסד); חבילה בתשלום נקבעת
+ * ב"תעד תשלום" בטבלת החנויות.
  */
 export const createStore = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -97,7 +100,6 @@ export const createStore = createServerFn({ method: "POST" })
     const slug = normalizeSlug(input?.slug);
     const ownerEmail = normalizeEmail(input?.ownerEmail);
     const taxId = normalizeTaxId(input?.taxId);
-    const plan = input?.plan ?? "trial";
     const status = input?.status ?? "active";
     if (name.length < 1 || name.length > 120) throw new Error("שם החנות חייב להכיל 1 עד 120 תווים");
     if (!SLUG_FORMAT.test(slug)) {
@@ -107,9 +109,8 @@ export const createStore = createServerFn({ method: "POST" })
     if (taxId !== "" && !/^[0-9]{5,12}$/.test(taxId)) {
       throw new Error("ח.פ / עוסק מורשה: ספרות בלבד (5 עד 12)");
     }
-    if (!TENANT_PLANS.includes(plan)) throw new Error("סוג מנוי לא מוכר");
     if (!TENANT_STATUSES.includes(status)) throw new Error("סטטוס לא מוכר");
-    return { name, slug, ownerEmail, taxId, plan, status };
+    return { name, slug, ownerEmail, taxId, status };
   })
   .handler(async ({ data, context }) => {
     // ההרשאה נבדקת במסד עם החיבור של המשתמש עצמו (לא service role)
@@ -128,7 +129,7 @@ export const createStore = createServerFn({ method: "POST" })
       _name: data.name,
       _owner_email: data.ownerEmail,
       _tax_id: data.taxId || null,
-      _plan: data.plan,
+      _plan: "trial",
       _status: data.status,
     });
     if (error || !tenant) throw new Error(error?.message ?? "הקמת החנות נכשלה");
@@ -241,11 +242,19 @@ export const PLATFORM_SITE_NAME = "מערכת ניהול אתר אינטרנט";
  * - isDefaultStore: החנות הראשית (הלוגו המובנה שייך רק לה).
  * - isPortal: האתר של שער הפלטפורמה (nuriel-app2) — בעמוד הבית דף נחיתה
  *   ופתיחת חנויות במקום קטלוג (חלק 12).
+ * - subscription: מנוי החנות (חלק 13) — חבילה, תפוגה ופיצ'רים. משמש לנעילת
+ *   פיצ'רים במסכים (האכיפה עצמה גם במסד). null בדומיין הפלטפורמה.
  */
 export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => {
   const { isPlatformRequest, maybeCurrentTenant } =
     await import("@/integrations/supabase/tenant.server");
-  const none = { brandColor: null, sabbath: false, isDefaultStore: false, isPortal: false };
+  const none = {
+    brandColor: null,
+    sabbath: false,
+    isDefaultStore: false,
+    isPortal: false,
+    subscription: null,
+  };
   if (isPlatformRequest()) return { siteName: PLATFORM_SITE_NAME, ...none };
   const tenant = maybeCurrentTenant();
   if (!tenant) return { siteName: DEFAULT_STORE_NAME, ...none };
@@ -263,5 +272,6 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     sabbath: data?.is_sabbath_mode === true,
     isDefaultStore: tenant.is_default,
     isPortal: tenant.slug === PORTAL_STORE_SLUG,
+    subscription: tenant.subscription,
   };
 });

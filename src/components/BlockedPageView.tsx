@@ -8,7 +8,8 @@ export function BlockedPageView({
   action,
 }: {
   page: BlockedPage;
-  action: { to: "/" | "/admin"; label: string };
+  /** search — למשל { tab: "billing" }: חנות שהמנוי שלה פג נכנסת ישר ל"המנוי שלי" */
+  action: { to: "/" | "/admin"; label: string; search?: { tab: string } };
 }) {
   return (
     <div className="grid min-h-screen place-items-center bg-muted/40 px-4">
@@ -22,6 +23,7 @@ export function BlockedPageView({
         <p className="mt-2 text-sm text-muted-foreground">{page.note}</p>
         <Link
           to={action.to}
+          search={action.search ?? true}
           className="mt-6 inline-flex rounded-lg bg-primary px-5 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90"
         >
           {action.label}

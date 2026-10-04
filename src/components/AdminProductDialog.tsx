@@ -38,6 +38,8 @@ import {
 } from "@/components/ui/select";
 import { useCategories, useCategoryTree } from "@/hooks/useCategories";
 import { usePriceTiersEnabled } from "@/hooks/usePriceTiers";
+import { useSubscription } from "@/hooks/useSubscription";
+import { PremiumBadge, PremiumLockCard } from "@/components/billing/PremiumLock";
 import { formatPath } from "@/lib/category-tree";
 import {
   formatIls,
@@ -283,6 +285,8 @@ export function AdminProductDialog({
 }) {
   const isEdit = product !== undefined;
   const tiersEnabled = usePriceTiersEnabled();
+  // חבילה בסיסית (חלק 13): מוצר דיגיטלי ווריאציות נעולים — מה שכבר קיים נשמר
+  const { can } = useSubscription();
   const categories = useCategories();
   const categoryTree = useCategoryTree();
   const [open, setOpen] = useState(false);
@@ -1064,16 +1068,24 @@ export function AdminProductDialog({
               }`}
             >
               <label className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2 text-sm font-medium">
+                <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
                   <KeyRound className="size-4 text-sky-700 dark:text-sky-300" aria-hidden="true" />
                   מוצר דיגיטלי
+                  {/* בחבילה הבסיסית: אי אפשר להפוך מוצר לדיגיטלי (מוצר שכבר דיגיטלי — אפשר לכבות) */}
+                  {!can("digital") && !form.isDigital && <PremiumBadge />}
                 </span>
-                <Switch checked={form.isDigital} onCheckedChange={(v) => patch({ isDigital: v })} />
+                <Switch
+                  checked={form.isDigital}
+                  disabled={!can("digital") && !form.isDigital}
+                  onCheckedChange={(v) => patch({ isDigital: v })}
+                />
               </label>
               <p className="text-xs leading-5 text-muted-foreground">
                 {form.isDigital
                   ? "רישיון / קוד / מנוי: בלי מלאי פיזי, בלי פיקדון ובלי ליקוט במחסן. סל שכולו דיגיטלי עובר לתשלום בלי בחירת משלוח, ובהזמנה מזינים את מפתח הרישיון ושולחים ללקוח במייל."
-                  : "כבוי: מוצר פיזי רגיל — נשמר במלאי ונשלח / נאסף."}
+                  : can("digital")
+                    ? "כבוי: מוצר פיזי רגיל — נשמר במלאי ונשלח / נאסף."
+                    : "מכירת רישיונות, קודים ומנויים דיגיטליים — זמין בחבילת פרימיום."}
               </p>
             </div>
 
@@ -1271,19 +1283,35 @@ export function AdminProductDialog({
               </div>
             )}
 
-            <VariantsEditor
-              attributes={form.variantAttributes}
-              variants={form.variants}
-              onChange={(variantAttributes, variants) => patch({ variantAttributes, variants })}
-              basePrice={form.priceTier1}
-              isDigital={form.isDigital}
-            />
+            {can("variants") ? (
+              <VariantsEditor
+                attributes={form.variantAttributes}
+                variants={form.variants}
+                onChange={(variantAttributes, variants) => patch({ variantAttributes, variants })}
+                basePrice={form.priceTier1}
+                isDigital={form.isDigital}
+              />
+            ) : (
+              <PremiumLockCard
+                compact
+                title="וריאציות (צבעים / מידות)"
+                description={
+                  form.variantAttributes.length > 0
+                    ? "למוצר הזה כבר יש וריאציות — הן ממשיכות להימכר כרגיל. עריכה שלהן זמינה בחבילת פרימיום."
+                    : "מוצר אחד בכמה צבעים ומידות, עם מק״ט, מחיר ומלאי לכל צירוף — זמין בחבילת פרימיום."
+                }
+              />
+            )}
 
-            <ColorsInput
-              id="p-colors"
-              value={form.colors}
-              onChange={(colors) => patch({ colors })}
-            />
+            {/* אפשרויות פשוטות (נפח / טעם / סוג) — גם הן וריאציות: בחבילה הבסיסית
+                נשמרות כמו שהן, בלי עריכה (הנעילה בכרטיס שלמעלה) */}
+            {can("variants") && (
+              <ColorsInput
+                id="p-colors"
+                value={form.colors}
+                onChange={(colors) => patch({ colors })}
+              />
+            )}
 
             <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50/50 p-3">
               <label className="flex items-center justify-between gap-2">

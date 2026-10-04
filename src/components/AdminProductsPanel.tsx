@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Eye, FileClock, Loader2, Package, Trash2 } from "lucide-react";
+import { Boxes, Eye, FileClock, Loader2, Lock, Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,8 @@ import { AdminProductDialog, type ProductDraft } from "@/components/AdminProduct
 import { ScanIntakeDialog } from "@/components/ScanIntakeDialog";
 import { ProductGrid } from "@/components/ProductGrid";
 import { usePriceTiersEnabled } from "@/hooks/usePriceTiers";
+import { useSubscription } from "@/hooks/useSubscription";
+import { PremiumBadge } from "@/components/billing/PremiumLock";
 import {
   formatIls,
   formatSaleCountdown,
@@ -57,6 +59,8 @@ export function AdminProductsPanel({
   onCategoryChange?: (next: string | null) => void;
 } = {}) {
   const tiersEnabled = usePriceTiersEnabled();
+  // חבילה בסיסית (חלק 13): עד 1,000 מוצרים — בהגעה למגבלה אין "מוצר חדש"
+  const { maxProducts } = useSubscription();
   const [products, setProducts] = useState<GlobalProduct[]>([]);
   const [drafts, setDrafts] = useState<ProductDraft[]>([]);
   const [localCategory, setLocalCategory] = useState<string | null>(null);
@@ -269,6 +273,16 @@ export function AdminProductsPanel({
                 ? "טוען מוצרים..."
                 : `${visibleProducts.length} בקטלוג · ${hiddenProducts.length} מוסתרים · ${drafts.length} טיוטות`}
             </p>
+            {maxProducts !== null && !loading && (
+              <p
+                className={`text-xs font-medium ${
+                  products.length >= maxProducts ? "text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {products.length.toLocaleString("he-IL")} / {maxProducts.toLocaleString("he-IL")}{" "}
+                מוצרים בחבילה הבסיסית
+              </p>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -296,7 +310,22 @@ export function AdminProductsPanel({
             </>
           )}
           <ScanIntakeDialog onApplied={load} />
-          <AdminProductDialog onSaved={load} onDraftsChanged={loadDrafts} />
+          {maxProducts !== null && !loading && products.length >= maxProducts ? (
+            <span className="flex flex-col items-end gap-1">
+              <Button
+                type="button"
+                size="sm"
+                disabled
+                title={`בחבילה הבסיסית אפשר עד ${maxProducts.toLocaleString("he-IL")} מוצרים`}
+              >
+                <Lock className="size-4" />
+                מוצר חדש
+              </Button>
+              <PremiumBadge />
+            </span>
+          ) : (
+            <AdminProductDialog onSaved={load} onDraftsChanged={loadDrafts} />
+          )}
         </div>
       </div>
 

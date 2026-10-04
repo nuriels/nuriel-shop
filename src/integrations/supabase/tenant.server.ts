@@ -2,6 +2,11 @@
 // server.ts מריץ כל בקשה בתוך runWithTenant, וכל קוד שרת (כולל
 // supabaseAdmin) קורא ממנו את החנות הנוכחית בלי להעביר אותה כפרמטר.
 import { AsyncLocalStorage } from "node:async_hooks";
+import {
+  subscriptionStateFrom,
+  type SubscriptionRow,
+  type SubscriptionState,
+} from "@/lib/subscription";
 
 export type Tenant = {
   id: string;
@@ -17,6 +22,8 @@ export type Tenant = {
   custom_domain_status: string | null;
   /** ה-DNS אומת — הדומיין המותאם מנותב לחנות */
   custom_domain_verified: boolean;
+  /** המנוי (חלק 13): חבילה, תפוגה ופיצ'רים — מחושב בזמן הזיהוי */
+  subscription: SubscriptionState;
 };
 
 type TenantContext = { host: string; tenant: Tenant | null };
@@ -71,15 +78,20 @@ export async function resolveTenant(host: string): Promise<Tenant | null> {
   let tenant: Tenant | null = null;
   if (id) {
     const rowRes = await fetch(
-      `${url}/rest/v1/tenants?id=eq.${encodeURIComponent(id)}&select=id,slug,name,domain,is_default,status,custom_domain,custom_domain_status,custom_domain_verified_at`,
+      `${url}/rest/v1/tenants?id=eq.${encodeURIComponent(id)}&select=id,slug,name,domain,is_default,status,custom_domain,custom_domain_status,custom_domain_verified_at,tenant_subscriptions(plan_type,status,trial_ends_at,current_period_end)`,
       { headers },
     );
     if (!rowRes.ok) throw new Error(`tenant lookup failed (HTTP ${rowRes.status})`);
     const row = (
-      (await rowRes.json()) as (Omit<Tenant, "custom_domain_verified"> & {
+      (await rowRes.json()) as (Omit<Tenant, "custom_domain_verified" | "subscription"> & {
         custom_domain_verified_at?: string | null;
+        // יחס אחד-לאחד: אובייקט (או מערך בגרסאות ישנות של PostgREST)
+        tenant_subscriptions?: SubscriptionRow | SubscriptionRow[] | null;
       })[]
     )[0];
+    const subscriptionRow = Array.isArray(row?.tenant_subscriptions)
+      ? (row.tenant_subscriptions[0] ?? null)
+      : (row?.tenant_subscriptions ?? null);
     tenant = row
       ? {
           id: row.id,
@@ -91,6 +103,7 @@ export async function resolveTenant(host: string): Promise<Tenant | null> {
           custom_domain: row.custom_domain ?? null,
           custom_domain_status: row.custom_domain_status ?? null,
           custom_domain_verified: Boolean(row.custom_domain_verified_at),
+          subscription: subscriptionStateFrom(subscriptionRow, row.is_default),
         }
       : null;
   }
@@ -169,9 +182,31 @@ export function isUnknownStoreHost(host: string, tenant: Tenant): boolean {
   return true;
 }
 
-/** חנות הבקשה מוקפאת (ולא דומיין הפלטפורמה)? */
+export type StoreLockReason = "suspended" | "expired";
+
+/**
+ * למה האתר של החנות נעול ללקוחות (ולא דומיין הפלטפורמה):
+ *  - suspended: הוקפאה ע"י מנהל הפלטפורמה
+ *  - expired: תקופת הניסיון / המנוי הסתיימה (חלק 13)
+ * null = פתוחה. המנוי נבדק מחדש בכל זיהוי (מטמון של 15 שניות).
+ */
+export function storeLockReason(): StoreLockReason | null {
+  if (isPlatformRequest()) return null;
+  const tenant = maybeCurrentTenant();
+  if (!tenant) return null;
+  if (tenant.status === "suspended") return "suspended";
+  if (tenant.subscription.active === false) {
+    // התפוגה עצמה יכולה לקרות בתוך חלון המטמון — בודקים שוב מול השעון
+    return "expired";
+  }
+  const endsAt = tenant.subscription.endsAt;
+  if (!tenant.is_default && endsAt && Date.parse(endsAt) <= Date.now()) return "expired";
+  return null;
+}
+
+/** האתר של החנות נעול ללקוחות (מוקפאת או שהמנוי פג)? */
 export function isSuspendedStoreRequest(): boolean {
-  return !isPlatformRequest() && maybeCurrentTenant()?.status === "suspended";
+  return storeLockReason() !== null;
 }
 
 /**

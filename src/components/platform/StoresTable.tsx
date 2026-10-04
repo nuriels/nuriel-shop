@@ -1,16 +1,32 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Loader2, Lock, LockOpen, LogIn, Trash2, UserPlus } from "lucide-react";
+import {
+  CalendarPlus,
+  ChevronDown,
+  LifeBuoy,
+  Loader2,
+  Lock,
+  LockOpen,
+  LogIn,
+  Receipt,
+  Trash2,
+  UserPlus,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database, TenantPlan, TenantStatus } from "@/integrations/supabase/types";
-import {
-  PLAN_LABELS,
-  STATUS_LABELS,
-  TENANT_PLANS,
-  createStoreAdmin,
-} from "@/lib/platform.functions";
+import type { Database, TenantStatus } from "@/integrations/supabase/types";
+import { STATUS_LABELS, createStoreAdmin } from "@/lib/platform.functions";
 import { createStoreAdminHandoff } from "@/lib/handoff.functions";
+import type { SubscriptionState } from "@/lib/subscription";
+import {
+  BillingHistoryDialog,
+  ExtendTrialDialog,
+  RecordPaymentDialog,
+  SubscriptionCell,
+  storeSubscription,
+} from "@/components/platform/SubscriptionDialogs";
 import {
   StoreCredentials,
   type StoreAdminCredentials,
@@ -36,15 +52,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -57,9 +73,10 @@ import {
 export type Store = Database["public"]["Functions"]["platform_list_tenants"]["Returns"][number];
 
 /**
- * לוח הבקרה של החנויות: מנוי (שינוי במקום), סטטוס עם הקפאה / שחרור,
- * תעודת SSL (תוקף + חידוש), פרטי הבעלים, נתוני שימוש ומחיקה. כל פעולה
- * רצה בפונקציה במסד שבודקת בעצמה שהקורא הוא מנהל-על.
+ * לוח הבקרה של החנויות: מנוי (תג ניסיון / בסיסי / פרימיום, הארכת ניסיון,
+ * תיעוד תשלום והיסטוריה — חלק 13), סטטוס עם הקפאה / שחרור, תעודת SSL
+ * (תוקף + חידוש), פרטי הבעלים, נתוני שימוש ומחיקה. כל פעולה רצה בפונקציה
+ * במסד שבודקת בעצמה שהקורא הוא מנהל-על.
  */
 export function StoresTable({
   stores,
@@ -77,7 +94,23 @@ export function StoresTable({
   const [adminFor, setAdminFor] = useState<Store | null>(null);
   const [toDelete, setToDelete] = useState<Store | null>(null);
   const [enteringId, setEnteringId] = useState<string | null>(null);
+  const [extendFor, setExtendFor] = useState<Store | null>(null);
+  const [payFor, setPayFor] = useState<Store | null>(null);
+  const [historyFor, setHistoryFor] = useState<Store | null>(null);
   const createHandoff = useServerFn(createStoreAdminHandoff);
+
+  /** המנוי השתנה (הארכה / תשלום) — מעדכנים את השורה בלי לטעון הכל מחדש */
+  const onSubscriptionChanged = (store: Store, state: SubscriptionState) =>
+    onChanged({
+      id: store.id,
+      plan: state.plan,
+      sub_plan: state.plan,
+      sub_status: state.status,
+      sub_trial_ends_at: state.trialEndsAt,
+      sub_period_end: state.currentPeriodEnd,
+      sub_ends_at: state.endsAt,
+      sub_active: state.active,
+    });
 
   /**
    * "היכנס לניהול" (God Mode): קוד כניסה חד-פעמי לחנות, ופתיחת פאנל הניהול
@@ -101,21 +134,6 @@ export function StoresTable({
     } finally {
       setEnteringId(null);
     }
-  };
-
-  const setPlan = async (store: Store, plan: TenantPlan) => {
-    setBusyId(store.id);
-    const { data, error } = await supabase.rpc("platform_set_tenant_plan", {
-      _tenant: store.id,
-      _plan: plan,
-    });
-    setBusyId(null);
-    if (error || !data) {
-      toast.error(error?.message ?? "עדכון המנוי נכשל");
-      return;
-    }
-    onChanged({ id: store.id, plan: data.plan });
-    toast.success(`המנוי של "${store.name}" עודכן ל${PLAN_LABELS[data.plan]}`);
   };
 
   const setStatus = async (store: Store, status: TenantStatus) => {
@@ -155,11 +173,25 @@ export function StoresTable({
             const url = storeUrl(store);
             const busy = busyId === store.id;
             const suspended = store.status === "suspended";
+            const subscription = storeSubscription(store);
             return (
-              <TableRow key={store.id} className={suspended ? "bg-destructive/5" : undefined}>
+              <TableRow
+                key={store.id}
+                className={suspended || !subscription.active ? "bg-destructive/5" : undefined}
+              >
                 <TableCell>
                   <div className="font-medium">
                     {store.name} {store.is_default && <Badge variant="secondary">ראשית</Badge>}
+                    {store.open_tickets > 0 && (
+                      <Link
+                        to="/platform/support"
+                        className="ms-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 hover:bg-amber-200"
+                        title="פניות תמיכה שממתינות למענה"
+                      >
+                        <LifeBuoy className="size-3" aria-hidden="true" />
+                        {store.open_tickets}
+                      </Link>
+                    )}
                   </div>
                   <div dir="ltr" className="text-left text-xs text-muted-foreground">
                     {url ? (
@@ -182,22 +214,35 @@ export function StoresTable({
                 </TableCell>
 
                 <TableCell>
-                  <Select
-                    value={store.plan}
-                    disabled={busy}
-                    onValueChange={(v) => void setPlan(store, v as TenantPlan)}
-                  >
-                    <SelectTrigger dir="rtl" className="h-8 w-36">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent dir="rtl">
-                      {TENANT_PLANS.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          {PLAN_LABELS[p]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-col items-start gap-1.5">
+                    <SubscriptionCell store={store} />
+                    <DropdownMenu dir="rtl">
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs">
+                          ניהול מנוי
+                          <ChevronDown className="size-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem
+                          disabled={subscription.endsAt === null}
+                          onSelect={() => setExtendFor(store)}
+                        >
+                          <CalendarPlus className="size-4" />
+                          {subscription.plan === "trial" ? "הארך ניסיון" : "הארכת תקופה"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setPayFor(store)}>
+                          <Wallet className="size-4" />
+                          תעד תשלום
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setHistoryFor(store)}>
+                          <Receipt className="size-4" />
+                          היסטוריית תשלומים
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </TableCell>
 
                 <TableCell>
@@ -324,6 +369,18 @@ export function StoresTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ExtendTrialDialog
+        store={extendFor}
+        onClose={() => setExtendFor(null)}
+        onDone={onSubscriptionChanged}
+      />
+      <RecordPaymentDialog
+        store={payFor}
+        onClose={() => setPayFor(null)}
+        onDone={onSubscriptionChanged}
+      />
+      <BillingHistoryDialog store={historyFor} onClose={() => setHistoryFor(null)} />
 
       <DeleteStoreDialog
         // מפתח לפי חנות — כל פתיחה מתחילה בשדה ריק

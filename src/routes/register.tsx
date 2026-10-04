@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useServerFn } from "@tanstack/react-start";
+import { useSubscription } from "@/hooks/useSubscription";
 import { registerCustomer } from "@/lib/admin.functions";
 import { checkCustomerInvite } from "@/lib/invite.functions";
 import { GoogleSignInButton, OrDivider } from "@/components/GoogleSignInButton";
@@ -32,6 +33,7 @@ export const Route = createFileRoute("/register")({
 });
 
 function RegisterPage() {
+  const googleLogin = useSubscription().can("googleLogin");
   const router = useRouter();
   const { settings } = useSiteSettings();
   const register = useServerFn(registerCustomer);
@@ -142,7 +144,8 @@ function RegisterPage() {
                   התחברות
                 </Link>
               </p>
-              <GoogleSignInButton label="הרשמה עם Google" />
+              {/* הרשמה עם Google — בחבילת פרימיום / ניסיון (חלק 13) */}
+              {googleLogin && <GoogleSignInButton label="הרשמה עם Google" />}
               {/* הרשמה מהירה בלי סיסמה: קוד חד-פעמי למייל, ואז השלמת פרטי העסק */}
               <Button variant="outline" className="mt-2 w-full" asChild>
                 <Link to="/login" search={{ mode: "code" }}>
