@@ -49,6 +49,56 @@ export async function hypCredentialsFor(
   return { terminal: row.terminal, apiPassword: row.api_password, apiKey: row.api_key };
 }
 
+export type ConnectionCheck = {
+  ok: boolean;
+  /** מה לכתוב למנהל */
+  message: string;
+  /** CCode ש-Hyp החזיר בסירוב (null = לא הגענו ל-Hyp / לא רלוונטי) */
+  code: string | null;
+  terminal: string | null;
+};
+
+/**
+ * "בדיקת חיבור (בלי חיוב)": בקשת חתימה אחת ל-Hyp (APISign / SIGN) עם פרטי
+ * המסוף השמורים. אם Hyp חותם — מספר המסוף, סיסמת ה-API ומפתח ה-API נכונים
+ * והשרת מצליח לדבר עם Hyp. לא נפתח דף תשלום ולא נוצרת עסקה, ולכן גם אין חיוב.
+ */
+export async function checkTerminalConnection(
+  scope: PaymentScope,
+  tenantId: string | null,
+): Promise<ConnectionCheck> {
+  const creds = await hypCredentialsFor(scope, tenantId);
+  if (!creds) {
+    return {
+      ok: false,
+      code: null,
+      terminal: null,
+      message: "עוד לא נשמרו כל שלושת הפרטים (מספר מסוף, סיסמת API ומפתח API).",
+    };
+  }
+  try {
+    await createPaymentLink(creds, {
+      // מזהה חד-פעמי שלא שייך לשום תשלום — הקישור לא נשלח לאף אחד
+      order: crypto.randomUUID().replace(/-/g, ""),
+      amount: 1,
+      description: "בדיקת חיבור",
+    });
+    return {
+      ok: true,
+      code: null,
+      terminal: creds.terminal,
+      message: `החיבור תקין — Hyp אישר את מסוף ${creds.terminal}, את סיסמת ה-API ואת מפתח ה-API.`,
+    };
+  } catch (thrown) {
+    return {
+      ok: false,
+      code: thrown instanceof HypError ? thrown.code : null,
+      terminal: creds.terminal,
+      message: thrown instanceof HypError ? thrown.message : "הבדיקה נכשלה. נסו שוב בעוד רגע.",
+    };
+  }
+}
+
 type Raw = Record<string, unknown>;
 const str = (value: unknown): string | null =>
   typeof value === "string" && value.trim() !== "" ? value : null;

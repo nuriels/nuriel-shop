@@ -12,6 +12,7 @@ import {
   Save,
   ShieldQuestion,
   Unplug,
+  Wifi,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -95,6 +96,7 @@ export function PaymentTerminalForm({
   onSave,
   onDisconnect,
   onTest,
+  onCheckConnection,
   returnOrigin,
 }: {
   idPrefix: string;
@@ -105,6 +107,8 @@ export function PaymentTerminalForm({
   onDisconnect: () => Promise<void>;
   /** מעבר לדף התשלום של Hyp לחיוב בדיקה של ₪1 */
   onTest: () => Promise<void>;
+  /** בדיקת חיבור בלי חיוב: האם Hyp מקבל את הפרטים השמורים */
+  onCheckConnection: () => Promise<{ ok: boolean; message: string }>;
   /** הדומיין להצגת כתובת החזרה שמגדירים במסוף */
   returnOrigin: string;
 }) {
@@ -113,7 +117,8 @@ export function PaymentTerminalForm({
   const [apiKey, setApiKey] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [maxPayments, setMaxPayments] = useState(maxPaymentsOptions[0] ?? 1);
-  const [busy, setBusy] = useState<"save" | "disconnect" | "test" | null>(null);
+  const [busy, setBusy] = useState<"save" | "disconnect" | "test" | "check" | null>(null);
+  const [check, setCheck] = useState<{ ok: boolean; message: string } | null>(null);
   const [testOpen, setTestOpen] = useState(false);
 
   useEffect(() => {
@@ -134,6 +139,21 @@ export function PaymentTerminalForm({
       await onSave({ terminal, password, apiKey, enabled, maxPayments });
       setPassword("");
       setApiKey("");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runCheck = async () => {
+    setBusy("check");
+    setCheck(null);
+    try {
+      setCheck(await onCheckConnection());
+    } catch (thrown) {
+      setCheck({
+        ok: false,
+        message: thrown instanceof Error ? thrown.message : "הבדיקה נכשלה",
+      });
     } finally {
       setBusy(null);
     }
@@ -175,6 +195,12 @@ export function PaymentTerminalForm({
           <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           Hyp דורש גם את המפתח וגם את הסיסמה: המפתח מזהה את האתר, והסיסמה מאשרת אותו — כמו שם משתמש
           וסיסמה. בלי שניהם חברת הסליקה לא תיצור את דף התשלום.
+        </p>
+        <p className="flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-xs leading-5 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          שם המשתמש והסיסמה שאיתם נכנסים לאפליקציה / לממשק של Hyp אינם פרטי ה-API — אל תזינו אותם
+          כאן. בקשו מהתמיכה של Hyp / MAX את "מפתח API (KEY)" ואת "סיסמת API (PassP)" לחיבור דף תשלום
+          לאתר.
         </p>
       </div>
 
@@ -349,6 +375,44 @@ export function PaymentTerminalForm({
             </Button>
           </div>
           <LastTestLine test={settings?.lastTest ?? null} />
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-sky-200 pt-3 dark:border-sky-900">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy !== null}
+              onClick={() => void runCheck()}
+            >
+              {busy === "check" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Wifi className="size-4" />
+              )}
+              בדיקת חיבור מול Hyp (בלי חיוב)
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              בודק שמספר המסוף, הסיסמה והמפתח נכונים — בלי לפתוח דף תשלום ובלי לחייב.
+            </span>
+          </div>
+          {check && (
+            <p
+              role="status"
+              className={cn(
+                "flex items-start gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold",
+                check.ok
+                  ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
+                  : "bg-destructive/10 text-destructive",
+              )}
+            >
+              {check.ok ? (
+                <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              ) : (
+                <CircleX className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              )}
+              {check.message}
+            </p>
+          )}
         </div>
       )}
 

@@ -174,6 +174,34 @@ export const startPaymentTest = createServerFn({ method: "POST" })
     return { url: await intentPaymentLink(data.scope, tenantId, start) };
   });
 
+/**
+ * "בדיקת חיבור (בלי חיוב)": האם Hyp מקבל את פרטי המסוף השמורים. ההרשאה —
+ * קריאת הגדרות הסליקה במסד (מנהל החנות / מנהל-על) לפני שהשרת פונה ל-Hyp.
+ */
+export const checkPaymentConnection = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { scope: "store" | "platform" }) => {
+    if (input?.scope !== "store" && input?.scope !== "platform") throw new Error("בדיקה לא מוכרת");
+    return { scope: input.scope };
+  })
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc(
+      data.scope === "store" ? "store_payment_settings" : "platform_payment_settings",
+    );
+    if (error) throw new Error(error.message);
+    const { allowAction } = await import("@/lib/rate-limit.server");
+    if (!allowAction(`hyp-check:${context.userId}`, 20, 10 * 60 * 1000)) {
+      throw new Error("יותר מדי בדיקות — נסו שוב בעוד כמה דקות.");
+    }
+    let tenantId: string | null = null;
+    if (data.scope === "store") {
+      const { currentTenantId } = await import("@/integrations/supabase/tenant.server");
+      tenantId = currentTenantId();
+    }
+    const { checkTerminalConnection } = await import("@/server/services/payments");
+    return checkTerminalConnection(data.scope, tenantId);
+  });
+
 // ------------------------------------------------------------
 // פרטי העוסק של בעל החנות
 // ------------------------------------------------------------

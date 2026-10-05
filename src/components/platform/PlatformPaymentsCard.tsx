@@ -6,6 +6,7 @@ import {
   getPlatformPaymentSettings,
   savePlatformPaymentSettings,
   startPaymentTest,
+  checkPaymentConnection,
 } from "@/lib/payments.functions";
 import {
   MAX_SIGNUP_URL,
@@ -28,6 +29,7 @@ export function PlatformPaymentsCard() {
   const load = useServerFn(getPlatformPaymentSettings);
   const save = useServerFn(savePlatformPaymentSettings);
   const test = useServerFn(startPaymentTest);
+  const checkConnection = useServerFn(checkPaymentConnection);
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [outcome, setOutcome] = useState<PaymentOutcome | undefined>(undefined);
 
@@ -120,6 +122,7 @@ export function PlatformPaymentsCard() {
               toast.error(thrown instanceof Error ? thrown.message : "השמירה נכשלה");
             }
           }}
+          onCheckConnection={() => checkConnection({ data: { scope: "platform" } })}
           onTest={async () => {
             try {
               const { url } = await test({ data: { scope: "platform" } });

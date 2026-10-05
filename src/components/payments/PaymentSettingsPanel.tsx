@@ -7,6 +7,7 @@ import {
   getStorePaymentSettings,
   saveStorePaymentSettings,
   startPaymentTest,
+  checkPaymentConnection,
 } from "@/lib/payments.functions";
 import {
   LEGAL_INVOICE_NOTICE,
@@ -40,6 +41,7 @@ export function PaymentSettingsPanel({
   const load = useServerFn(getStorePaymentSettings);
   const save = useServerFn(saveStorePaymentSettings);
   const test = useServerFn(startPaymentTest);
+  const checkConnection = useServerFn(checkPaymentConnection);
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -172,6 +174,7 @@ export function PaymentSettingsPanel({
                   toast.error(thrown instanceof Error ? thrown.message : "השמירה נכשלה");
                 }
               }}
+              onCheckConnection={() => checkConnection({ data: { scope: "store" } })}
               onTest={async () => {
                 try {
                   const { url } = await test({ data: { scope: "store" } });
