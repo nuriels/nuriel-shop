@@ -340,7 +340,7 @@ function AdminPage() {
                 <PaymentSettingsPanel />
               </TabsContent>
               <TabsContent value="payments">
-                <PaymentSettingsPanel />
+                <PaymentSettingsPanel testOutcome={payment} onOutcomeSeen={clearPayment} />
               </TabsContent>
               <TabsContent value="marketing">
                 <MarketingPanel />

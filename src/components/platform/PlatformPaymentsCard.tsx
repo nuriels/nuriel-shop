@@ -2,8 +2,19 @@ import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { CreditCard, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { getPlatformPaymentSettings, savePlatformPaymentSettings } from "@/lib/payments.functions";
-import { MAX_SIGNUP_URL, type PaymentSettings } from "@/lib/payments";
+import {
+  getPlatformPaymentSettings,
+  savePlatformPaymentSettings,
+  startPaymentTest,
+} from "@/lib/payments.functions";
+import {
+  MAX_SIGNUP_URL,
+  PAYMENT_TEST_OUTCOME_TEXT,
+  paymentOutcomeOf,
+  type PaymentOutcome,
+  type PaymentSettings,
+} from "@/lib/payments";
+import { PaymentOutcomeBanner } from "@/components/billing/AddonsStorePanel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PaymentTerminalForm } from "@/components/payments/PaymentTerminalForm";
 import { cn } from "@/lib/utils";
@@ -16,7 +27,19 @@ import { cn } from "@/lib/utils";
 export function PlatformPaymentsCard() {
   const load = useServerFn(getPlatformPaymentSettings);
   const save = useServerFn(savePlatformPaymentSettings);
+  const test = useServerFn(startPaymentTest);
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
+  const [outcome, setOutcome] = useState<PaymentOutcome | undefined>(undefined);
+
+  // חזרה מ"בדיקת סליקה" (?payment=success / failed / unverified) — מציגים פעם אחת
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const found = paymentOutcomeOf(url.searchParams.get("payment"));
+    if (!found) return;
+    setOutcome(found);
+    url.searchParams.delete("payment");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -34,7 +57,16 @@ export function PlatformPaymentsCard() {
   const origin = typeof window === "undefined" ? "" : window.location.origin;
 
   return (
-    <Card>
+    <Card id="platform-payments">
+      {outcome && (
+        <div className="px-6 pt-6">
+          <PaymentOutcomeBanner
+            outcome={outcome}
+            onDismiss={() => setOutcome(undefined)}
+            text={PAYMENT_TEST_OUTCOME_TEXT[outcome]}
+          />
+        </div>
+      )}
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
           <CreditCard className="size-5 text-primary" aria-hidden="true" />
@@ -86,6 +118,15 @@ export function PlatformPaymentsCard() {
               toast.success("מסוף הפלטפורמה נשמר — תשלום מאובטח פעיל");
             } catch (thrown) {
               toast.error(thrown instanceof Error ? thrown.message : "השמירה נכשלה");
+            }
+          }}
+          onTest={async () => {
+            try {
+              const { url } = await test({ data: { scope: "platform" } });
+              window.location.assign(url);
+            } catch (thrown) {
+              toast.error(thrown instanceof Error ? thrown.message : "פתיחת דף התשלום נכשלה");
+              throw thrown;
             }
           }}
           onDisconnect={async () => {

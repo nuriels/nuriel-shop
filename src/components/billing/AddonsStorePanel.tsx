@@ -750,9 +750,12 @@ function PurchaseDialog({
 export function PaymentOutcomeBanner({
   outcome,
   onDismiss,
+  text,
 }: {
   outcome: PaymentOutcome;
   onDismiss?: (() => void) | undefined;
+  /** טקסט אחר במקום ברירת המחדל (למשל אחרי "בדיקת סליקה") */
+  text?: string;
 }) {
   const tone =
     outcome === "success"
@@ -770,7 +773,7 @@ export function PaymentOutcomeBanner({
       ) : (
         <CreditCard className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
       )}
-      <p className="min-w-0 flex-1 font-semibold">{PAYMENT_OUTCOME_TEXT[outcome]}</p>
+      <p className="min-w-0 flex-1 font-semibold">{text ?? PAYMENT_OUTCOME_TEXT[outcome]}</p>
       {onDismiss && (
         <button
           type="button"

@@ -125,10 +125,22 @@ export async function startOrderPayment(
 
 /** התשובה של addon_checkout_start / plan_checkout_start → קישור תשלום */
 export async function platformPaymentLink(start: unknown): Promise<string> {
+  return intentPaymentLink("platform", null, start);
+}
+
+/**
+ * קישור תשלום לכוונה שכבר נוצרה במסד (תוסף / מנוי / חיוב בדיקה) — במסוף של
+ * הפלטפורמה או של החנות (tenantId)
+ */
+export async function intentPaymentLink(
+  scope: PaymentScope,
+  tenantId: string | null,
+  start: unknown,
+): Promise<string> {
   const row = (start ?? {}) as Raw;
   const profile = (row["profile"] ?? {}) as Raw;
   const token = String(row["token"] ?? "");
-  const creds = await hypCredentialsFor("platform", null);
+  const creds = await hypCredentialsFor(scope, tenantId);
   if (!creds) {
     await supabaseAdminUnscoped.rpc("payment_intent_fail", { _token: token, _error: "אין מסוף" });
     throw new Error("התשלום באשראי עדיין לא זמין — נסו שוב מאוחר יותר.");
@@ -162,8 +174,10 @@ export async function platformPaymentLink(start: unknown): Promise<string> {
 type Intent = {
   token: string;
   scope: PaymentScope;
-  kind: "order" | "addon" | "plan";
-  tenant_id: string;
+  /** test = חיוב בדיקה של ₪1 ("בדיקת סליקה") */
+  kind: "order" | "addon" | "plan" | "test";
+  /** null רק בבדיקה של מסוף הפלטפורמה */
+  tenant_id: string | null;
   order_id: string | null;
   amount: number;
   status: "pending" | "paid" | "failed" | "expired";
@@ -179,8 +193,30 @@ async function lookupIntent(token: string): Promise<Intent | null> {
   return data as unknown as Intent;
 }
 
+/** הכתובת של פאנל הפלטפורמה (PLATFORM_ADMIN_HOST) */
+function platformOrigin(fallback: string): string {
+  const host = process.env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase();
+  return host ? `https://${host}` : fallback;
+}
+
 /** לאן להחזיר: הדומיין שממנו יצא התשלום — רק אם הוא באמת של אותה חנות */
-async function returnOrigin(intent: Intent, tenant: Tenant | null): Promise<string> {
+async function returnOrigin(
+  intent: Intent,
+  tenant: Tenant | null,
+  fallback: string,
+): Promise<string> {
+  // בדיקה של מסוף הפלטפורמה — חוזרים רק לדומיין של פאנל הפלטפורמה
+  if (!intent.tenant_id) {
+    const adminHost = process.env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase();
+    try {
+      if (intent.return_origin && new URL(intent.return_origin).hostname === adminHost) {
+        return intent.return_origin;
+      }
+    } catch {
+      // כתובת לא תקינה
+    }
+    return platformOrigin(fallback);
+  }
   if (intent.return_origin) {
     try {
       const host = new URL(intent.return_origin).hostname.toLowerCase();
@@ -203,6 +239,12 @@ function destination(
   if (!intent) return `${origin}/payment/result?status=unknown`;
   if (intent.kind === "order") {
     return `${origin}/payment/result?token=${intent.token}${outcome === "success" ? "" : `&status=${outcome}`}`;
+  }
+  // חיוב בדיקה — חזרה למסך הגדרות הסליקה, עם התוצאה
+  if (intent.kind === "test") {
+    return intent.scope === "platform"
+      ? `${origin}/platform?payment=${outcome}`
+      : `${origin}/admin?tab=payments&payment=${outcome}`;
   }
   const tab = intent.kind === "plan" ? "billing" : "addons";
   return `${origin}/admin?tab=${tab}&payment=${outcome}`;
@@ -230,8 +272,8 @@ export async function handleHypReturn(request: Request, fallbackOrigin: string):
     console.warn("[payments] return without a known intent");
     return redirect(destination(fallbackOrigin, null, "failed"));
   }
-  const tenant = await loadTenantById(intent.tenant_id);
-  const origin = await returnOrigin(intent, tenant);
+  const tenant = intent.tenant_id ? await loadTenantById(intent.tenant_id) : null;
+  const origin = await returnOrigin(intent, tenant, fallbackOrigin);
 
   // רענון של דף החזרה אחרי שכבר שולם
   if (intent.status === "paid") return redirect(destination(origin, intent, "success"));
@@ -274,7 +316,7 @@ export async function handleHypReturn(request: Request, fallbackOrigin: string):
 
 /** אחרי תשלום חדש: מיילי ההזמנה + התראת מלאי, או רענון המנוי / התוספים */
 async function afterPaid(intent: Intent, tenant: Tenant | null): Promise<void> {
-  invalidateTenantCache(intent.tenant_id);
+  if (intent.tenant_id) invalidateTenantCache(intent.tenant_id);
   if (intent.kind !== "order" || !intent.order_id || !tenant) return;
   const host = new URL(originForTenant(tenant)).hostname;
   const orderId = intent.order_id;

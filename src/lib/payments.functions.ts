@@ -145,6 +145,36 @@ export const savePlatformPaymentSettings = createServerFn({ method: "POST" })
   });
 
 // ------------------------------------------------------------
+// בדיקת סליקה — חיוב של ₪1 בכרטיס של המנהל
+// ------------------------------------------------------------
+
+/**
+ * "בדיקת סליקה": קישור לתשלום של ₪1 במסוף של החנות (store) או של הפלטפורמה
+ * (platform) — כדי לוודא שפרטי המסוף נכונים ושהכסף עובר. ההרשאה (מנהל החנות /
+ * מנהל-על) והסכום (₪1 בדיוק) — במסד.
+ */
+export const startPaymentTest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { scope: "store" | "platform" }) => {
+    if (input?.scope !== "store" && input?.scope !== "platform") throw new Error("בדיקה לא מוכרת");
+    return { scope: input.scope };
+  })
+  .handler(async ({ data, context }): Promise<{ url: string }> => {
+    const { data: start, error } = await context.supabase.rpc("payment_test_start", {
+      _scope: data.scope,
+      _origin: await currentOrigin(),
+    });
+    if (error) throw new Error(error.message);
+    const { intentPaymentLink } = await import("@/server/services/payments");
+    let tenantId: string | null = null;
+    if (data.scope === "store") {
+      const { currentTenantId } = await import("@/integrations/supabase/tenant.server");
+      tenantId = currentTenantId();
+    }
+    return { url: await intentPaymentLink(data.scope, tenantId, start) };
+  });
+
+// ------------------------------------------------------------
 // פרטי העוסק של בעל החנות
 // ------------------------------------------------------------
 

@@ -29,6 +29,16 @@ export function isAddonOrPlanToken(value: string): boolean {
 // הגדרות המסוף
 // ------------------------------------------------------------
 
+/** תוצאת "בדיקת סליקה" (חיוב של ₪1) האחרונה */
+export type PaymentTestResult = {
+  status: "pending" | "paid" | "failed" | "expired";
+  transactionId: string | null;
+  cardLast4: string | null;
+  error: string | null;
+  createdAt: string;
+  completedAt: string | null;
+};
+
 export type PaymentSettings = {
   terminal: string | null;
   /** חנות: סליקה פעילה בקופה; פלטפורמה: מוכנה (מסוף + סיסמה + מפתח) */
@@ -39,6 +49,8 @@ export type PaymentSettings = {
   /** 4 התווים האחרונים של מפתח ה-API (הסודות עצמם לא חוזרים מהשרת) */
   keyHint: string | null;
   updatedAt: string | null;
+  /** בדיקת הסליקה האחרונה (null = עוד לא בוצעה) */
+  lastTest: PaymentTestResult | null;
 };
 
 type Raw = Record<string, unknown>;
@@ -62,6 +74,23 @@ export function parsePaymentSettings(raw: unknown): PaymentSettings {
     hasKey: row["has_key"] === true,
     keyHint: strOrNull(row["key_hint"]),
     updatedAt: strOrNull(row["updated_at"]),
+    lastTest: parsePaymentTest(row["last_test"]),
+  };
+}
+
+export function parsePaymentTest(raw: unknown): PaymentTestResult | null {
+  const row = obj(raw);
+  const status = row["status"];
+  if (status !== "pending" && status !== "paid" && status !== "failed" && status !== "expired") {
+    return null;
+  }
+  return {
+    status,
+    transactionId: strOrNull(row["transaction_id"]),
+    cardLast4: strOrNull(row["card_last4"]),
+    error: strOrNull(row["error"]),
+    createdAt: String(row["created_at"] ?? ""),
+    completedAt: strOrNull(row["completed_at"]),
   };
 }
 
@@ -201,6 +230,15 @@ export type PaymentOutcome = "success" | "failed" | "unverified";
 export function paymentOutcomeOf(value: unknown): PaymentOutcome | undefined {
   return value === "success" || value === "failed" || value === "unverified" ? value : undefined;
 }
+
+/** אחרי חזרה מ"בדיקת סליקה" (חיוב של ₪1) */
+export const PAYMENT_TEST_OUTCOME_TEXT: Record<PaymentOutcome, string> = {
+  success: "בדיקת הסליקה עברה בהצלחה! ₪1 חויב ואומת מול חברת האשראי — המסוף מחובר ועובד תקין.",
+  failed:
+    "החיוב של ₪1 לא עבר (הכרטיס נדחה או שהתשלום בוטל). בדקו את הכרטיס או את הגדרות המסוף ונסו שוב.",
+  unverified:
+    "חזרתם מדף התשלום, אבל האימות מול Hyp נכשל — כנראה שסיסמת ה-API או מפתח ה-API אינם נכונים. בדקו אותם ונסו שוב.",
+};
 
 export const PAYMENT_OUTCOME_TEXT: Record<PaymentOutcome, string> = {
   success: "התשלום התקבל בהצלחה — תודה! הרכישה הופעלה.",

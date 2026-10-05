@@ -289,8 +289,8 @@ export type Database = {
           id: string;
           token: string;
           scope: "platform" | "store";
-          kind: "order" | "addon" | "plan";
-          tenant_id: string;
+          kind: "order" | "addon" | "plan" | "test";
+          tenant_id: string | null;
           order_id: string | null;
           addon_name: string | null;
           plan_type: string | null;
@@ -313,8 +313,8 @@ export type Database = {
           id?: string;
           token?: string;
           scope: "platform" | "store";
-          kind: "order" | "addon" | "plan";
-          tenant_id: string;
+          kind: "order" | "addon" | "plan" | "test";
+          tenant_id?: string | null;
           order_id?: string | null;
           addon_name?: string | null;
           plan_type?: string | null;
@@ -337,8 +337,8 @@ export type Database = {
           id?: string;
           token?: string;
           scope?: "platform" | "store";
-          kind?: "order" | "addon" | "plan";
-          tenant_id?: string;
+          kind?: "order" | "addon" | "plan" | "test";
+          tenant_id?: string | null;
           order_id?: string | null;
           addon_name?: string | null;
           plan_type?: string | null;
@@ -2439,6 +2439,8 @@ export type Database = {
       };
       payment_intent_fail: { Args: { _token: string; _error?: string | null }; Returns: undefined };
       expire_unpaid_orders: { Args: never; Returns: number };
+      payment_last_test: { Args: { _scope: string; _tenant: string | null }; Returns: Json };
+      payment_test_start: { Args: { _scope: string; _origin?: string | null }; Returns: Json };
       tenant_active_addons: { Args: { _tenant: string }; Returns: string[] };
       tenant_addon_active: { Args: { _tenant: string; _addon: string }; Returns: boolean };
       tenant_features: { Args: { _tenant: string }; Returns: Json };

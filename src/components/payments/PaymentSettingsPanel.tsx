@@ -3,13 +3,20 @@ import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, CreditCard, ExternalLink, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { refreshSiteSettings } from "@/hooks/useSiteSettings";
-import { getStorePaymentSettings, saveStorePaymentSettings } from "@/lib/payments.functions";
+import {
+  getStorePaymentSettings,
+  saveStorePaymentSettings,
+  startPaymentTest,
+} from "@/lib/payments.functions";
 import {
   LEGAL_INVOICE_NOTICE,
   MAX_SIGNUP_GUIDE,
   MAX_SIGNUP_URL,
+  PAYMENT_TEST_OUTCOME_TEXT,
+  type PaymentOutcome,
   type PaymentSettings,
 } from "@/lib/payments";
+import { PaymentOutcomeBanner } from "@/components/billing/AddonsStorePanel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PaymentTerminalForm } from "@/components/payments/PaymentTerminalForm";
@@ -19,10 +26,20 @@ import { cn } from "@/lib/utils";
  * "אמצעי תשלום וסליקה" בהגדרות החנות (חלק 16): מדריך קצר לפתיחת מסוף
  * ב-MAX, פרטי המסוף של Hyp, הפעלת הסליקה בקופה — והבהרה משפטית שהמערכת
  * מפיקה אישורי הזמנה בלבד (לא חשבוניות מס).
+ * "בדיקת סליקה" — חיוב של ₪1 בכרטיס של המנהל, וחזרה לכאן עם התוצאה
+ * (?payment= — testOutcome).
  */
-export function PaymentSettingsPanel() {
+export function PaymentSettingsPanel({
+  testOutcome,
+  onOutcomeSeen,
+}: {
+  /** חזרה מחיוב הבדיקה ב-Hyp */
+  testOutcome?: PaymentOutcome | undefined;
+  onOutcomeSeen?: () => void;
+} = {}) {
   const load = useServerFn(getStorePaymentSettings);
   const save = useServerFn(saveStorePaymentSettings);
+  const test = useServerFn(startPaymentTest);
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,6 +61,13 @@ export function PaymentSettingsPanel() {
 
   return (
     <section id="payments" className="scroll-mt-24 space-y-4">
+      {testOutcome && (
+        <PaymentOutcomeBanner
+          outcome={testOutcome}
+          onDismiss={onOutcomeSeen}
+          text={PAYMENT_TEST_OUTCOME_TEXT[testOutcome]}
+        />
+      )}
       <Card className="overflow-hidden">
         <CardHeader className="bg-gradient-to-l from-sky-50 to-transparent dark:from-sky-950/30">
           <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
@@ -100,9 +124,10 @@ export function PaymentSettingsPanel() {
             <li className="flex gap-3">
               <StepNumber n={3} />
               <div className="min-w-0 flex-1 space-y-1">
-                <p className="font-semibold">מדליקים "סליקה פעילה בקופה" — וזהו</p>
+                <p className="font-semibold">בדיקת סליקה של ₪1 — ואז מדליקים "סליקה פעילה בקופה"</p>
                 <p className="text-sm text-muted-foreground">
-                  מעכשיו הלקוח לוחץ "לתשלום מאובטח" ועובר לדף התשלום. עם אישור התשלום ההזמנה מסומנת
+                  אחרי השמירה לחצו "חיוב בדיקה של ₪1" ושלמו בכרטיס שלכם — כך תדעו שהכול עובד. אחרי
+                  ההפעלה הלקוח לוחץ "לתשלום מאובטח" ועובר לדף התשלום. עם אישור התשלום ההזמנה מסומנת
                   "שולמה", נשלח אישור הזמנה ותקבלו התראה על מלאי נמוך. הזמנה שלא שולמה תוך 30 דקות
                   מתבטלת והמוצרים חוזרים למלאי.
                 </p>
@@ -145,6 +170,15 @@ export function PaymentSettingsPanel() {
                   );
                 } catch (thrown) {
                   toast.error(thrown instanceof Error ? thrown.message : "השמירה נכשלה");
+                }
+              }}
+              onTest={async () => {
+                try {
+                  const { url } = await test({ data: { scope: "store" } });
+                  window.location.assign(url);
+                } catch (thrown) {
+                  toast.error(thrown instanceof Error ? thrown.message : "פתיחת דף התשלום נכשלה");
+                  throw thrown;
                 }
               }}
               onDisconnect={async () => {
