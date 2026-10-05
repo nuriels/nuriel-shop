@@ -1,7 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Clock, Mail, Monitor, Phone, ShieldCheck } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Clock, Mail, MessageSquare, Monitor, Phone, ShieldCheck } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { RichContent } from "@/components/legal/RichContent";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { APP_VERSION } from "@/lib/branding";
@@ -9,7 +11,7 @@ import { ORDER_HOURS } from "@/lib/order-hours";
 
 export const Route = createFileRoute("/about")({
   ssr: false,
-  head: () => ({ meta: [{ title: "אודות ויצירת קשר" }] }),
+  head: () => ({ meta: [{ title: "אודות" }] }),
   component: AboutPage,
 });
 
@@ -28,10 +30,13 @@ function AboutPage() {
               <Monitor className="size-5 text-primary" aria-hidden="true" />
               על העסק
             </h2>
-            <p className="whitespace-pre-line leading-7 text-foreground">
-              {settings?.about_content?.trim() ||
-                `${settings?.site_title ?? "העסק"} — פורטל הזמנות סיטונאי ללקוחות עסקיים.`}
-            </p>
+            {settings?.about_content?.trim() ? (
+              <RichContent content={settings.about_content} className="leading-7" />
+            ) : (
+              <p className="leading-7 text-foreground">
+                {`${settings?.site_title ?? "העסק"} — פורטל הזמנות סיטונאי ללקוחות עסקיים.`}
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -42,6 +47,14 @@ function AboutPage() {
               שעות קבלת הזמנות וטיפול
             </h2>
             <p className="leading-7 text-foreground">{ORDER_HOURS.about}</p>
+            {settings?.business_hours?.trim() && (
+              <div className="rounded-lg bg-muted/50 px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">שעות פעילות</p>
+                <p className="whitespace-pre-line text-sm leading-6 text-foreground">
+                  {settings.business_hours}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -83,6 +96,12 @@ function AboutPage() {
             {settings?.business_address && (
               <p className="text-foreground">{settings.business_address}</p>
             )}
+            <Button asChild variant="outline" size="sm">
+              <Link to="/contact">
+                <MessageSquare className="size-4" />
+                לטופס צור קשר
+              </Link>
+            </Button>
           </CardContent>
         </Card>
 

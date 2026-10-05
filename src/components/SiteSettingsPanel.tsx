@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useRouter } from "@tanstack/react-router";
-import { Loader2, Save, Wand2 } from "lucide-react";
+import { Link, useRouter } from "@tanstack/react-router";
+import { ExternalLink, Loader2, Save, Scale } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,17 +14,25 @@ import {
   saveSiteSettings,
   uploadSiteLogo,
   resolveSiteLogoUrl,
+  SITE_FORM_EXCLUDED_KEYS,
   type SiteSettings,
 } from "@/lib/site";
-import { defaultPrivacyPolicy, defaultTermsOfService } from "@/lib/legal";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { BrandColorField } from "@/components/BrandColorField";
 import { SabbathModeCard } from "@/components/SabbathModeCard";
 import { LabelSizeCard } from "@/components/delivery/LabelSizeCard";
 
-/** האם שני מצבי הגדרות זהים (כל השדות פשוטים: טקסט / מספר / בוליאני / null) */
+const NOT_IN_FORM = new Set<keyof SiteSettings>(SITE_FORM_EXCLUDED_KEYS);
+
+/**
+ * האם שני מצבי הגדרות זהים (כל השדות פשוטים: טקסט / מספר / בוליאני / null).
+ * שדות שנשמרים במקום אחר (סליקה, עמודים משפטיים) לא נחשבים — שמירה שם לא
+ * הופכת את הטופס הזה ל"לא שמור".
+ */
 function sameSettings(a: SiteSettings, b: SiteSettings): boolean {
-  return (Object.keys(a) as (keyof SiteSettings)[]).every((key) => a[key] === b[key]);
+  return (Object.keys(a) as (keyof SiteSettings)[]).every(
+    (key) => NOT_IN_FORM.has(key) || a[key] === b[key],
+  );
 }
 
 /** ניהול תוכן האתר, מיתוג ופרטי העסק (משפיע על עמודי אודות/תנאים/פרטיות) */
@@ -61,22 +69,6 @@ export function SiteSettingsPanel() {
     }
   };
 
-  const fillDefaults = () => {
-    const info = {
-      businessName: form.business_name,
-      taxId: form.business_tax_id,
-      address: form.business_address,
-      phone: form.business_phone,
-      email: form.business_email,
-      sellsAlcohol: form.sells_alcohol,
-    };
-    patch({
-      terms_content: defaultTermsOfService(info),
-      privacy_content: defaultPrivacyPolicy(info),
-    });
-    toast.message('טיוטת ברירת מחדל מולאה — מומלץ להעביר לבדיקת עו"ד לפני פרסום');
-  };
-
   const save = async () => {
     const labelProblem = labelSizeProblem(form.label_width_mm, form.label_height_mm);
     if (labelProblem) {
@@ -105,8 +97,7 @@ export function SiteSettingsPanel() {
         <div className="min-w-0">
           <h2 className="text-xl font-bold text-foreground">הגדרות אתר ותוכן</h2>
           <p className="text-sm text-muted-foreground">
-            מצב שבת, מיתוג וצבע החנות, פרטי העסק, תצוגת מע״מ, מדבקות משלוח, עמודי אודות ומסמכים
-            משפטיים
+            מצב שבת, מיתוג וצבע החנות, פרטי העסק ושעות הפעילות, תצוגת מע״מ, מדבקות משלוח ועמוד אודות
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -175,7 +166,7 @@ export function SiteSettingsPanel() {
 
       <Card className="shadow-card">
         <CardHeader>
-          <CardTitle className="text-base">עמוד אודות ויצירת קשר</CardTitle>
+          <CardTitle className="text-base">עמודי אודות וצור קשר</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -188,13 +179,17 @@ export function SiteSettingsPanel() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="s-contact">תוכן עמוד "יצירת קשר"</Label>
+            <Label htmlFor="s-contact">טקסט נוסף בעמוד "צור קשר" (לא חובה)</Label>
             <Textarea
               id="s-contact"
               rows={4}
               value={form.contact_content}
               onChange={(e) => patch({ contact_content: e.target.value })}
+              placeholder="למשל: הגעה בתיאום מראש, חניה ללקוחות מאחורי הבניין"
             />
+            <p className="text-xs text-muted-foreground">
+              מוצג בעמוד /contact מתחת לכתובת, לטלפון ולשעות הפעילות.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -262,6 +257,20 @@ export function SiteSettingsPanel() {
                 onChange={(e) => patch({ business_email: e.target.value })}
               />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="s-hours">שעות פעילות</Label>
+            <Textarea
+              id="s-hours"
+              rows={3}
+              maxLength={500}
+              value={form.business_hours}
+              onChange={(e) => patch({ business_hours: e.target.value })}
+              placeholder={"א'-ה' 09:00-17:00\nו' וערבי חג 09:00-13:00"}
+            />
+            <p className="text-xs text-muted-foreground">
+              שורה לכל טווח — מוצג בעמוד "צור קשר" ובעמוד "אודות".
+            </p>
           </div>
           <label className="flex items-center justify-between gap-2 rounded-lg border border-border p-3">
             <span className="text-sm font-medium">
@@ -412,38 +421,23 @@ export function SiteSettingsPanel() {
       />
 
       <Card className="shadow-card">
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle className="text-base">תנאי שימוש ומדיניות פרטיות</CardTitle>
-          <Button type="button" size="sm" variant="outline" onClick={fillDefaults}>
-            <Wand2 className="size-4" />
-            מלא טיוטת ברירת מחדל
-          </Button>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Scale className="size-4 text-primary" aria-hidden="true" />
+            תקנון, מדיניות פרטיות ומדיניות ביטולים
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="rounded-lg bg-secondary p-3 text-xs text-muted-foreground">
-            הטיוטה האוטומטית היא נקודת פתיחה כללית בהתאם לדין הישראלי ואינה תחליף לייעוץ משפטי.
-            מומלץ להעביר לבדיקת עו"ד לפני פרסום לציבור.
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            העמודים המשפטיים עברו ללשונית נפרדת עם עורך טקסט מעוצב (כותרות, הדגשות, רשימות וקישורים)
+            ונוסחי ברירת מחדל מוכנים.
           </p>
-          <div className="space-y-2">
-            <Label htmlFor="s-terms">תנאי שימוש</Label>
-            <Textarea
-              id="s-terms"
-              dir="rtl"
-              rows={10}
-              value={form.terms_content}
-              onChange={(e) => patch({ terms_content: e.target.value })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s-privacy">מדיניות פרטיות</Label>
-            <Textarea
-              id="s-privacy"
-              dir="rtl"
-              rows={10}
-              value={form.privacy_content}
-              onChange={(e) => patch({ privacy_content: e.target.value })}
-            />
-          </div>
+          <Button asChild variant="outline">
+            <Link to="/admin" search={{ tab: "legal" }}>
+              <ExternalLink className="size-4" />
+              לעריכת העמודים המשפטיים
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </section>

@@ -197,6 +197,90 @@ export type Database = {
         };
         Relationships: [];
       };
+      contact_messages: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          full_name: string;
+          phone: string;
+          email: string;
+          message: string;
+          order_number: string | null;
+          order_id: string | null;
+          attachment_path: string | null;
+          attachment_name: string | null;
+          attachment_type: string | null;
+          attachment_size: number | null;
+          status: "new" | "handled";
+          admin_note: string | null;
+          handled_at: string | null;
+          handled_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          full_name: string;
+          phone: string;
+          email: string;
+          message: string;
+          order_number?: string | null;
+          order_id?: string | null;
+          attachment_path?: string | null;
+          attachment_name?: string | null;
+          attachment_type?: string | null;
+          attachment_size?: number | null;
+          status?: "new" | "handled";
+          admin_note?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          status?: "new" | "handled";
+          admin_note?: string | null;
+        };
+        Relationships: [];
+      };
+      cancellation_requests: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          first_name: string;
+          last_name: string;
+          phone: string;
+          email: string;
+          message: string | null;
+          order_number: string;
+          order_id: string | null;
+          order_contact_match: boolean;
+          status: "new" | "in_progress" | "completed" | "rejected";
+          admin_note: string | null;
+          handled_at: string | null;
+          handled_by: string | null;
+          confirmation_sent_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          first_name: string;
+          last_name: string;
+          phone: string;
+          email: string;
+          message?: string | null;
+          order_number: string;
+          order_id?: string | null;
+          order_contact_match?: boolean;
+          status?: "new" | "in_progress" | "completed" | "rejected";
+          admin_note?: string | null;
+          confirmation_sent_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          status?: "new" | "in_progress" | "completed" | "rejected";
+          admin_note?: string | null;
+        };
+        Relationships: [];
+      };
       platform_settings: {
         Row: {
           id: boolean;
@@ -2143,6 +2227,8 @@ export type Database = {
           zap_delivery_days: number;
           hyp_terminal_number: string | null;
           card_payments_enabled: boolean;
+          cancellation_policy_content: string;
+          business_hours: string;
           hyp_max_payments: number;
         };
         Insert: {
@@ -2183,6 +2269,8 @@ export type Database = {
           zap_delivery_days?: number;
           hyp_terminal_number?: string | null;
           card_payments_enabled?: boolean;
+          cancellation_policy_content?: string;
+          business_hours?: string;
           hyp_max_payments?: number;
         };
         Update: {
@@ -2223,6 +2311,8 @@ export type Database = {
           zap_delivery_days?: number;
           hyp_terminal_number?: string | null;
           card_payments_enabled?: boolean;
+          cancellation_policy_content?: string;
+          business_hours?: string;
           hyp_max_payments?: number;
         };
         Relationships: [];
@@ -2416,6 +2506,38 @@ export type Database = {
       };
       order_payment_intent: { Args: { _order: string; _origin?: string | null }; Returns: Json };
       billing_profile_json: { Args: { _tenant: string }; Returns: Json };
+      normalize_phone: { Args: { _phone: string }; Returns: string | null };
+      normalize_order_number: { Args: { _value: string }; Returns: string | null };
+      order_by_number: { Args: { _tenant: string; _order_number: string }; Returns: string | null };
+      contact_message_submit: {
+        Args: {
+          _id: string;
+          _full_name: string;
+          _phone: string;
+          _email: string;
+          _message: string;
+          _order_number?: string | null;
+          _attachment_path?: string | null;
+          _attachment_name?: string | null;
+          _attachment_type?: string | null;
+          _attachment_size?: number | null;
+        };
+        Returns: Json;
+      };
+      cancellation_request_submit: {
+        Args: {
+          _first_name: string;
+          _last_name: string;
+          _phone: string;
+          _email: string;
+          _message: string | null;
+          _order_number: string;
+        };
+        Returns: Json;
+      };
+      cancellation_request_confirmed: { Args: { _id: string }; Returns: undefined };
+      store_legal_identity: { Args: never; Returns: Json };
+      site_inbox_counts: { Args: never; Returns: Json };
       addon_checkout_start: {
         Args: { _addon: string; _expected?: number | null; _origin?: string | null };
         Returns: Json;

@@ -9,7 +9,7 @@ import { SabbathScreen } from "@/components/SabbathScreen";
  * כל השאר (הקטלוג, ההזמנות, ההסכם) מוחלף במסך "שבת שלום".
  */
 const OPEN_ON_SABBATH =
-  /^\/(admin|admin-handoff|agent|warehouse|courier|login|register|reset-password|locked|forbidden|platform|about|terms|privacy)(\/|$)/;
+  /^\/(admin|admin-handoff|agent|warehouse|courier|login|register|reset-password|locked|forbidden|platform|about|terms|privacy|sitemap)(\/|$)/;
 
 /**
  * שער החנות: כשמצב שבת דולק, לקוחות ואורחים רואים מסך "שבת שלום" על כל

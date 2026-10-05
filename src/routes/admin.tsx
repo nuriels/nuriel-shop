@@ -27,6 +27,8 @@ import { CustomPricesPanel } from "@/components/CustomPricesPanel";
 import { BillingPanel } from "@/components/billing/BillingPanel";
 import { AddonsStorePanel } from "@/components/billing/AddonsStorePanel";
 import { PaymentSettingsPanel } from "@/components/payments/PaymentSettingsPanel";
+import { LegalPagesPanel } from "@/components/legal/LegalPagesPanel";
+import { SiteInboxPanel, type InboxView } from "@/components/inbox/SiteInboxPanel";
 import { paymentOutcomeOf, type PaymentOutcome } from "@/lib/payments";
 import { PremiumLockCard } from "@/components/billing/PremiumLock";
 import { SupportPanel, type SupportCompose } from "@/components/support/SupportPanel";
@@ -78,6 +80,8 @@ type Search = {
   compose?: string | undefined;
   /** חזרה מדף התשלום של Hyp (חלק 16): success / failed / unverified */
   payment?: PaymentOutcome | undefined;
+  /** פניות מהאתר (חלק 16א): contact / cancellations */
+  inbox?: InboxView | undefined;
 };
 
 const pickString = (value: unknown): string | undefined =>
@@ -97,7 +101,9 @@ export const Route = createFileRoute("/admin")({
     const ticket = pickString(search["ticket"]);
     const compose = pickString(search["compose"]);
     const payment = paymentOutcomeOf(search["payment"]);
+    const inbox = search["inbox"];
     if (tab) result.tab = tab;
+    if (inbox === "contact" || inbox === "cancellations") result.inbox = inbox;
     if (payment) result.payment = payment;
     if (order && /^[0-9a-f-]{36}$/i.test(order)) result.order = order;
     if (ticket && /^[0-9a-f-]{36}$/i.test(ticket)) result.ticket = ticket;
@@ -114,7 +120,7 @@ function AdminPage() {
   const { session, role, loading } = useAuthState();
   // הלשונית נשמרת בכתובת (?tab=orders): כל מעבר נרשם בהיסטוריה, כך ש"חזור"
   // בדפדפן מחזיר ללשונית הקודמת במקום לצאת מהפאנל
-  const { tab, ptab, pcat, pcust, order, ticket, compose, payment } = Route.useSearch();
+  const { tab, ptab, pcat, pcust, order, ticket, compose, payment, inbox } = Route.useSearch();
   const navigate = Route.useNavigate();
 
   const signOut = async () => {
@@ -276,6 +282,27 @@ function AdminPage() {
                   }
                 />
               </TabsContent>
+              <TabsContent value="inbox">
+                <SiteInboxPanel
+                  view={inbox ?? "contact"}
+                  onViewChange={(next) =>
+                    void navigate({
+                      search: (prev) => ({ ...prev, inbox: next }),
+                      resetScroll: false,
+                    })
+                  }
+                  onOpenOrder={(orderId) =>
+                    void navigate({
+                      search: (prev) => ({
+                        ...prev,
+                        tab: "orders",
+                        order: orderId,
+                        inbox: undefined,
+                      }),
+                    })
+                  }
+                />
+              </TabsContent>
               <TabsContent value="transfers">
                 <TransfersPanel />
               </TabsContent>
@@ -338,6 +365,9 @@ function AdminPage() {
               <TabsContent value="site" className="space-y-6">
                 <SiteSettingsPanel />
                 <PaymentSettingsPanel />
+              </TabsContent>
+              <TabsContent value="legal">
+                <LegalPagesPanel />
               </TabsContent>
               <TabsContent value="payments">
                 <PaymentSettingsPanel testOutcome={payment} onOutcomeSeen={clearPayment} />

@@ -14,7 +14,7 @@ import {
 
 /** פופ-אפ: לא בקופה (לא מפריעים באמצע תשלום) ולא בעמודי הצוות / החשבון */
 // הקופה ודף תוצאת התשלום (חלק 16) — בלי פופ-אפ מבצעים
-const NO_POPUP_PATHS = /^\/(checkout|payment)(\/|$)/;
+const NO_POPUP_PATHS = /^\/(checkout|payment|cancellations|contact)(\/|$)/;
 const POPUP_DELAY_MS = 1200;
 
 function readSeen(key: string): boolean {

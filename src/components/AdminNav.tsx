@@ -18,8 +18,10 @@ import {
   Mail,
   Megaphone,
   Menu,
+  MessageSquare,
   Package,
   Puzzle,
+  Scale,
   Settings,
   ShoppingCart,
   TicketPercent,
@@ -29,6 +31,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBackToClose } from "@/hooks/useBackToClose";
+import { loadInboxCounts } from "@/lib/site-inbox";
+import { SITE_INBOX_CHANGED } from "@/components/inbox/SiteInboxPanel";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
@@ -44,6 +48,7 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
     title: "הזמנות ולקוחות",
     items: [
       { value: "orders", label: "הזמנות", icon: ClipboardList },
+      { value: "inbox", label: "פניות וביטולי עסקה", icon: MessageSquare },
       { value: "users", label: "משתמשים", icon: Users },
       { value: "custom-prices", label: "מחירי לקוחות מיוחדים", icon: BadgePercent },
       { value: "performance", label: "ביצועי סוכנים ועובדים", icon: BarChart3 },
@@ -74,6 +79,7 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
     items: [
       { value: "home", label: "עיצוב מסך הבית", icon: LayoutTemplate },
       { value: "site", label: "הגדרות אתר", icon: Settings },
+      { value: "legal", label: "עמודים משפטיים", icon: Scale },
       { value: "marketing", label: "שיווק ואינטגרציות", icon: Megaphone },
       { value: "email", label: "הגדרות מייל", icon: Mail },
       { value: "domain", label: "דומיין משלכם", icon: Globe },
@@ -141,6 +147,28 @@ function useSupportUnread(): number {
   return count;
 }
 
+/** פניות חדשות מהאתר + הודעות ביטול פתוחות — מוצג ליד "פניות וביטולי עסקה" */
+function useInboxCount(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      const counts = await loadInboxCounts();
+      if (alive) setCount(counts.contact + counts.cancellations);
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 60_000);
+    const onChange = () => void load();
+    window.addEventListener(SITE_INBOX_CHANGED, onChange);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      window.removeEventListener(SITE_INBOX_CHANGED, onChange);
+    };
+  }, []);
+  return count;
+}
+
 function NavList({
   value,
   onChange,
@@ -152,6 +180,7 @@ function NavList({
 }) {
   const pending = usePendingCount();
   const supportUnread = useSupportUnread();
+  const inboxCount = useInboxCount();
   return (
     <div className="space-y-4">
       {ADMIN_SECTIONS.map((group) => (
@@ -167,7 +196,9 @@ function NavList({
                   ? pending
                   : item === "support" && supportUnread > 0
                     ? supportUnread
-                    : null;
+                    : item === "inbox" && inboxCount > 0
+                      ? inboxCount
+                      : null;
               return (
                 <li key={item}>
                   <button

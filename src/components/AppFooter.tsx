@@ -36,15 +36,27 @@ export function AppFooter() {
           )}
         </div>
 
-        <nav className="flex flex-col gap-1.5">
+        <nav aria-label="קישורים בתחתית האתר" className="grid grid-cols-2 gap-x-8 gap-y-1.5">
           <Link to="/about" className="hover:text-accent">
-            אודות ויצירת קשר
+            אודות
           </Link>
           <Link to="/terms" className="hover:text-accent">
-            תנאי שימוש
+            תקנון האתר
+          </Link>
+          <Link to="/contact" className="hover:text-accent">
+            צור קשר
           </Link>
           <Link to="/privacy" className="hover:text-accent">
             מדיניות פרטיות
+          </Link>
+          <Link to="/sitemap" className="hover:text-accent">
+            מפת האתר
+          </Link>
+          <Link
+            to="/cancellations"
+            className="font-semibold text-primary-foreground hover:text-accent"
+          >
+            ביטול עסקה
           </Link>
         </nav>
       </div>

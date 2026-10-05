@@ -44,6 +44,8 @@ type CatalogSearch = {
   /** הקטגוריה שנבחרה — בלי: מסך ריבועי הקטגוריות */
   category?: string | undefined;
   view?: "new" | "promo" | undefined;
+  /** ?cart=open — פותח את סל הקניות (קישור "עגלת קניות" ממפת האתר) */
+  cart?: "open" | undefined;
 };
 
 export const Route = createFileRoute("/")({
@@ -56,6 +58,7 @@ export const Route = createFileRoute("/")({
       result.category = search["category"];
     }
     if (search["view"] === "new" || search["view"] === "promo") result.view = search["view"];
+    if (search["cart"] === "open") result.cart = "open";
     return result;
   },
   component: Index,
@@ -236,6 +239,17 @@ function StoreCatalog() {
   const cartMode: CartMode = hasPrices ? "order" : "quote";
   const canUseCart = !session || isCustomer;
   const addLabel = cartMode === "order" ? "הוספה לסל" : "הוספה לבקשה";
+
+  // ?cart=open — פותחים את הסל פעם אחת ומנקים את הכתובת
+  useEffect(() => {
+    if (search.cart !== "open" || loading) return;
+    if (canUseCart) setCartOpen(true);
+    void navigate({
+      search: (prev) => ({ ...prev, cart: undefined }),
+      replace: true,
+      resetScroll: false,
+    });
+  }, [search.cart, loading, canUseCart, navigate]);
 
   // הודעות "נוסף במתנה" / "המתנה הוסרה" מוצגות רק אחרי שינוי שהלקוח עשה בסל —
   // לא כשהסל השמור או ההטבות נטענים (אחרת הודעה תקפוץ בכל כניסה לאתר)

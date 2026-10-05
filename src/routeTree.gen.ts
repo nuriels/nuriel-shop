@@ -16,7 +16,10 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminHandoffRouteImport } from './routes/admin-handoff'
 import { Route as AgentRouteImport } from './routes/agent'
 import { Route as AgreementRouteImport } from './routes/agreement'
+import { Route as CancelOrderRouteImport } from './routes/cancel-order'
+import { Route as CancellationsRouteImport } from './routes/cancellations'
 import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ForbiddenRouteImport } from './routes/forbidden'
 import { Route as LockedRouteImport } from './routes/locked'
 import { Route as LoginRouteImport } from './routes/login'
@@ -25,6 +28,7 @@ import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SitemapRouteImport } from './routes/sitemap'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as WarehouseRouteImport } from './routes/warehouse'
 import { Route as AdminDashboardRouteImport } from './routes/admin_.dashboard'
@@ -72,9 +76,24 @@ const AgreementRoute = AgreementRouteImport.update({
   path: '/agreement',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CancelOrderRoute = CancelOrderRouteImport.update({
+  id: '/cancel-order',
+  path: '/cancel-order',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CancellationsRoute = CancellationsRouteImport.update({
+  id: '/cancellations',
+  path: '/cancellations',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CheckoutRoute = CheckoutRouteImport.update({
   id: '/checkout',
   path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForbiddenRoute = ForbiddenRouteImport.update({
@@ -115,6 +134,11 @@ const RegisterRoute = RegisterRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapRoute = SitemapRouteImport.update({
+  id: '/sitemap',
+  path: '/sitemap',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TermsRoute = TermsRouteImport.update({
@@ -181,7 +205,10 @@ export interface FileRoutesByFullPath {
   '/admin-handoff': typeof AdminHandoffRoute
   '/agent': typeof AgentRoute
   '/agreement': typeof AgreementRoute
+  '/cancel-order': typeof CancelOrderRoute
+  '/cancellations': typeof CancellationsRoute
   '/checkout': typeof CheckoutRoute
+  '/contact': typeof ContactRoute
   '/forbidden': typeof ForbiddenRoute
   '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
@@ -190,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sitemap': typeof SitemapRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
   '/admin/dashboard': typeof AdminDashboardRoute
@@ -210,7 +238,10 @@ export interface FileRoutesByTo {
   '/admin-handoff': typeof AdminHandoffRoute
   '/agent': typeof AgentRoute
   '/agreement': typeof AgreementRoute
+  '/cancel-order': typeof CancelOrderRoute
+  '/cancellations': typeof CancellationsRoute
   '/checkout': typeof CheckoutRoute
+  '/contact': typeof ContactRoute
   '/forbidden': typeof ForbiddenRoute
   '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
@@ -219,6 +250,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sitemap': typeof SitemapRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
   '/admin/dashboard': typeof AdminDashboardRoute
@@ -240,7 +272,10 @@ export interface FileRoutesById {
   '/admin-handoff': typeof AdminHandoffRoute
   '/agent': typeof AgentRoute
   '/agreement': typeof AgreementRoute
+  '/cancel-order': typeof CancelOrderRoute
+  '/cancellations': typeof CancellationsRoute
   '/checkout': typeof CheckoutRoute
+  '/contact': typeof ContactRoute
   '/forbidden': typeof ForbiddenRoute
   '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
@@ -249,6 +284,7 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sitemap': typeof SitemapRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
   '/admin_/dashboard': typeof AdminDashboardRoute
@@ -271,7 +307,10 @@ export interface FileRouteTypes {
     | '/admin-handoff'
     | '/agent'
     | '/agreement'
+    | '/cancel-order'
+    | '/cancellations'
     | '/checkout'
+    | '/contact'
     | '/forbidden'
     | '/locked'
     | '/login'
@@ -280,6 +319,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/register'
     | '/reset-password'
+    | '/sitemap'
     | '/terms'
     | '/warehouse'
     | '/admin/dashboard'
@@ -300,7 +340,10 @@ export interface FileRouteTypes {
     | '/admin-handoff'
     | '/agent'
     | '/agreement'
+    | '/cancel-order'
+    | '/cancellations'
     | '/checkout'
+    | '/contact'
     | '/forbidden'
     | '/locked'
     | '/login'
@@ -309,6 +352,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/register'
     | '/reset-password'
+    | '/sitemap'
     | '/terms'
     | '/warehouse'
     | '/admin/dashboard'
@@ -329,7 +373,10 @@ export interface FileRouteTypes {
     | '/admin-handoff'
     | '/agent'
     | '/agreement'
+    | '/cancel-order'
+    | '/cancellations'
     | '/checkout'
+    | '/contact'
     | '/forbidden'
     | '/locked'
     | '/login'
@@ -338,6 +385,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/register'
     | '/reset-password'
+    | '/sitemap'
     | '/terms'
     | '/warehouse'
     | '/admin_/dashboard'
@@ -359,7 +407,10 @@ export interface RootRouteChildren {
   AdminHandoffRoute: typeof AdminHandoffRoute
   AgentRoute: typeof AgentRoute
   AgreementRoute: typeof AgreementRoute
+  CancelOrderRoute: typeof CancelOrderRoute
+  CancellationsRoute: typeof CancellationsRoute
   CheckoutRoute: typeof CheckoutRoute
+  ContactRoute: typeof ContactRoute
   ForbiddenRoute: typeof ForbiddenRoute
   LockedRoute: typeof LockedRoute
   LoginRoute: typeof LoginRoute
@@ -368,6 +419,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SitemapRoute: typeof SitemapRoute
   TermsRoute: typeof TermsRoute
   WarehouseRoute: typeof WarehouseRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
@@ -432,11 +484,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgreementRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/cancel-order': {
+      id: '/cancel-order'
+      path: '/cancel-order'
+      fullPath: '/cancel-order'
+      preLoaderRoute: typeof CancelOrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cancellations': {
+      id: '/cancellations'
+      path: '/cancellations'
+      fullPath: '/cancellations'
+      preLoaderRoute: typeof CancellationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/checkout': {
       id: '/checkout'
       path: '/checkout'
       fullPath: '/checkout'
       preLoaderRoute: typeof CheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forbidden': {
@@ -493,6 +566,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap': {
+      id: '/sitemap'
+      path: '/sitemap'
+      fullPath: '/sitemap'
+      preLoaderRoute: typeof SitemapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -583,7 +663,10 @@ const rootRouteChildren: RootRouteChildren = {
   AdminHandoffRoute: AdminHandoffRoute,
   AgentRoute: AgentRoute,
   AgreementRoute: AgreementRoute,
+  CancelOrderRoute: CancelOrderRoute,
+  CancellationsRoute: CancellationsRoute,
   CheckoutRoute: CheckoutRoute,
+  ContactRoute: ContactRoute,
   ForbiddenRoute: ForbiddenRoute,
   LockedRoute: LockedRoute,
   LoginRoute: LoginRoute,
@@ -592,6 +675,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SitemapRoute: SitemapRoute,
   TermsRoute: TermsRoute,
   WarehouseRoute: WarehouseRoute,
   AdminDashboardRoute: AdminDashboardRoute,

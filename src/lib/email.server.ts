@@ -47,6 +47,11 @@ type SendEmailInput = {
    * השולח וכתובת המענה במקום של החנות. הכתובת עצמה תמיד על דומיין המערכת.
    */
   platformSender?: { name: string; replyTo?: string | null };
+  /**
+   * כתובת למענה למייל הזה בלבד (למשל התראה למנהל על פנייה מהאתר — "השב"
+   * עונה ישירות ללקוח). גוברת על כתובת המענה של החנות.
+   */
+  replyTo?: string | null;
 };
 
 type SendResult = { sent: boolean; reason?: string };
@@ -213,6 +218,10 @@ async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
   const sender = input.platformSender
     ? platformSenderFor(input.platformSender.name, input.platformSender.replyTo ?? null)
     : await storeSender();
+  const replyTo =
+    input.replyTo && isValidEmail(input.replyTo)
+      ? input.replyTo.trim().toLowerCase()
+      : sender.replyTo;
   try {
     const response = await fetch(`${resendApiUrl()}/emails`, {
       method: "POST",
@@ -225,7 +234,7 @@ async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
         to,
         subject: input.subject,
         html: input.html,
-        ...(sender.replyTo ? { reply_to: sender.replyTo } : {}),
+        ...(replyTo ? { reply_to: replyTo } : {}),
         ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       }),
     });

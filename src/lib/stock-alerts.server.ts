@@ -21,7 +21,11 @@ type Alert = {
   alert_stock: number;
 };
 
-async function alertRecipients(): Promise<string[]> {
+/**
+ * מנהלי החנות שמקבלים התראות: מי שנבחר בהגדרות המייל (כמו מיילי ההזמנות),
+ * ואם לא נבחר אף אחד — כל מנהלי החנות. משמש גם להתראות על פניות מהאתר.
+ */
+export async function storeAdminRecipients(): Promise<string[]> {
   const emails = new Set<string>();
   const { data: emailSettings } = await supabaseAdmin
     .from("email_settings")
@@ -53,7 +57,7 @@ export async function sendLowStockAlerts(
   const alerts = (data ?? []) as Alert[];
   if (alerts.length === 0) return { sent: false, count: 0 };
 
-  const to = await alertRecipients();
+  const to = await storeAdminRecipients();
   if (to.length === 0) return { sent: false, count: alerts.length };
 
   let productsUrl: string | null = null;

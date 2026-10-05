@@ -167,8 +167,11 @@ async function sitemapEntries(origin: string): Promise<SitemapEntry[]> {
   const entries: SitemapEntry[] = [
     { loc: `${origin}/`, lastmod: newest, priority: "1.0" },
     { loc: `${origin}/about`, priority: "0.5" },
+    { loc: `${origin}/contact`, priority: "0.5" },
+    { loc: `${origin}/sitemap`, priority: "0.3" },
     { loc: `${origin}/terms`, priority: "0.2" },
     { loc: `${origin}/privacy`, priority: "0.2" },
+    { loc: `${origin}/cancellations`, priority: "0.2" },
   ];
 
   // קטגוריות שיש בהן מוצרים (כולל קטגוריות-אב שלהן)

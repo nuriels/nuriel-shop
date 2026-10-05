@@ -312,3 +312,63 @@ html.a11y-focus :focus-visible {
     animation: sabbath-pulse 3.2s ease-in-out infinite;
   }
 }
+
+/* ============================================================
+   טקסט עשיר — העמודים המשפטיים (חלק 16א) ועורך הטקסט בפאנל
+   ============================================================ */
+@layer components {
+  .rich-content {
+    line-height: 1.85;
+    overflow-wrap: anywhere;
+  }
+  .rich-content > * + * {
+    margin-top: 0.75em;
+  }
+  .rich-content h2 {
+    font-size: 1.25rem;
+    margin-top: 1.4em;
+  }
+  .rich-content h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-top: 1.2em;
+  }
+  .rich-content h4 {
+    font-weight: 700;
+    margin-top: 1em;
+  }
+  .rich-content ul {
+    list-style: disc;
+    padding-inline-start: 1.5rem;
+  }
+  .rich-content ol {
+    list-style: decimal;
+    padding-inline-start: 1.5rem;
+  }
+  .rich-content li + li {
+    margin-top: 0.25em;
+  }
+  .rich-content a {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .rich-content blockquote {
+    border-inline-start: 3px solid var(--color-border);
+    padding-inline-start: 0.9rem;
+    color: var(--color-muted-foreground);
+  }
+  .rich-content hr {
+    border-top-width: 1px;
+    margin-block: 1.25em;
+  }
+  /* העורך: מציין מקום כשהתוכן ריק */
+  .rich-editor:empty::before {
+    content: attr(data-placeholder);
+    color: var(--color-muted-foreground);
+    pointer-events: none;
+  }
+  .rich-editor:focus {
+    outline: none;
+  }
+}

@@ -60,7 +60,29 @@ export type SiteSettings = {
    * נכנסות לטיפול. נשמר רק דרך "אמצעי תשלום וסליקה" (לא מטופס ההגדרות).
    */
   card_payments_enabled: boolean;
+  /**
+   * מדיניות ביטול עסקה (חלק 16א) — HTML מהעורך, מוצג בראש /cancellations.
+   * התקנון, הפרטיות והביטולים נשמרים רק מלשונית "עמודים משפטיים".
+   */
+  cancellation_policy_content: string;
+  /** שעות הפעילות (טקסט חופשי, שורה לכל טווח) — מוצגות בעמוד "צור קשר" */
+  business_hours: string;
 };
+
+/** העמודים המשפטיים — נשמרים בנפרד (saveLegalTexts), לא מטופס הגדרות האתר */
+export type LegalTexts = Pick<
+  SiteSettings,
+  "terms_content" | "privacy_content" | "cancellation_policy_content"
+>;
+
+/** השדות שלא נשמרים מטופס הגדרות האתר (ולכן גם לא נחשבים "שינוי שלא נשמר" שם) */
+export const SITE_FORM_EXCLUDED_KEYS = [
+  "price_tiers_enabled",
+  "card_payments_enabled",
+  "terms_content",
+  "privacy_content",
+  "cancellation_policy_content",
+] as const satisfies readonly (keyof SiteSettings)[];
 
 /** מידות ברירת המחדל של מדבקת משלוח (כמו במסד) */
 export const DEFAULT_LABEL_SIZE = { width: 70, height: 50 } as const;
@@ -95,7 +117,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, card_payments_enabled" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, card_payments_enabled, cancellation_policy_content, business_hours" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -138,6 +160,8 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     label_width_mm: DEFAULT_LABEL_SIZE.width,
     label_height_mm: DEFAULT_LABEL_SIZE.height,
     card_payments_enabled: false,
+    cancellation_policy_content: "",
+    business_hours: "",
   };
 }
 
@@ -156,12 +180,41 @@ export async function loadLabelSize(): Promise<{ width: number; height: number }
 
 export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
   // מתג הדרגים לא נשמר מטופס ההגדרות — משנים אותו רק במסד, בכוונה.
-  // הסליקה — רק דרך store_save_payment_settings (חלק 16)
-  const { price_tiers_enabled, card_payments_enabled, ...editable } = settings;
+  // הסליקה — רק דרך store_save_payment_settings (חלק 16).
+  // העמודים המשפטיים — רק מלשונית "עמודים משפטיים" (saveLegalTexts, חלק 16א),
+  // כדי ששמירת הגדרות האתר לא תדרוס נוסח שנשמר שם בינתיים.
+  const editable: Partial<SiteSettings> = { ...settings };
+  for (const key of SITE_FORM_EXCLUDED_KEYS) delete editable[key];
   const { error } = await supabase
     .from("site_settings")
-    .update({ ...editable, brand_color: normalizeBrandColor(editable.brand_color) })
+    .update({
+      ...editable,
+      brand_color: normalizeBrandColor(settings.brand_color),
+      business_hours: settings.business_hours.trim(),
+    })
     .eq("id", true);
+  if (error) throw error;
+}
+
+/**
+ * שמירת התקנון / הפרטיות / מדיניות הביטולים (HTML מהעורך). התוכן מנוקה
+ * לפני השמירה (רשימת תגיות סגורה), ושוב בכל הצגה באתר.
+ */
+export async function saveLegalTexts(texts: Partial<LegalTexts>): Promise<void> {
+  const { sanitizeRichHtml, richTextIsEmpty } = await import("@/lib/rich-text");
+  const clean = (html: string | undefined) => {
+    if (html === undefined) return undefined;
+    const safe = sanitizeRichHtml(html).trim();
+    return richTextIsEmpty(safe) ? "" : safe;
+  };
+  const update: Partial<LegalTexts> = {};
+  const terms = clean(texts.terms_content);
+  const privacy = clean(texts.privacy_content);
+  const cancellation = clean(texts.cancellation_policy_content);
+  if (terms !== undefined) update.terms_content = terms;
+  if (privacy !== undefined) update.privacy_content = privacy;
+  if (cancellation !== undefined) update.cancellation_policy_content = cancellation;
+  const { error } = await supabase.from("site_settings").update(update).eq("id", true);
   if (error) throw error;
 }
 
