@@ -16,6 +16,10 @@ export type ProductSeo = {
   title: string;
   description: string;
   image: string | null;
+  /** חלק 21: כל התמונות של המוצר (הראשית ראשונה) — ל-JSON-LD */
+  images: string[];
+  /** סיום מבצע פעיל (priceValidUntil) */
+  saleEndsAt: string | null;
   price: number;
   regularPrice: number;
   inStock: boolean;
@@ -25,6 +29,8 @@ export type ProductSeo = {
   storeName: string;
   /** הכתובת הקנונית של העמוד (הדומיין הראשי של החנות) */
   url: string | null;
+  /** הכתובת הראשית של החנות (לפירורי הלחם) */
+  origin: string | null;
 };
 
 export const getProductSeo = createServerFn({ method: "GET" })
@@ -41,12 +47,18 @@ export const getProductSeo = createServerFn({ method: "GET" })
     if (isPlatformRequest() || !maybeCurrentTenant()) return null;
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [{ data: rows, error }, { data: settings }] = await Promise.all([
+    const [{ data: rows, error }, { data: settings }, { data: extra }] = await Promise.all([
       supabaseAdmin.rpc("storefront_feed_products").eq("id", data.id).limit(1),
       supabaseAdmin
         .from("site_settings")
         .select("business_name, site_title")
         .eq("id", true)
+        .maybeSingle(),
+      // תמונות נוספות ותוקף המבצע — לסכמת המוצר (המוצר עצמו כבר נבדק ב-RPC)
+      supabaseAdmin
+        .from("global_products")
+        .select("images, sale_ends_at")
+        .eq("id", data.id)
         .maybeSingle(),
     ]);
     if (error) {
@@ -58,12 +70,23 @@ export const getProductSeo = createServerFn({ method: "GET" })
 
     const { DEFAULT_STORE_NAME } = await import("@/lib/branding");
     let url: string | null = null;
+    let origin: string | null = null;
     try {
       const { tenantSiteOrigin } = await import("@/integrations/supabase/tenant.server");
-      url = `${tenantSiteOrigin()}/product/${product.id}`;
+      origin = tenantSiteOrigin();
+      url = `${origin}/product/${product.id}`;
     } catch {
       url = null;
     }
+    const httpUrl = (value: string | null | undefined): value is string =>
+      typeof value === "string" && /^https?:\/\//i.test(value);
+    const mainImage = httpUrl(product.image_url) ? product.image_url : null;
+    const images = [
+      ...new Set([...(mainImage ? [mainImage] : []), ...(extra?.images ?? []).filter(httpUrl)]),
+    ].slice(0, 10);
+    // המחיר בפיד כבר כולל מבצע בתוקף — אז גם תוקף המבצע רלוונטי
+    const onSale = Number(product.price) < Number(product.regular_price);
+    const saleEndsAt = onSale ? (extra?.sale_ends_at ?? null) : null;
     const storeName =
       settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME;
     const description =
@@ -75,8 +98,9 @@ export const getProductSeo = createServerFn({ method: "GET" })
       name: product.name,
       title: product.seo_title?.trim() || `${product.name} | ${storeName}`,
       description,
-      image:
-        product.image_url && /^https?:\/\//i.test(product.image_url) ? product.image_url : null,
+      image: mainImage,
+      images,
+      saleEndsAt,
       price: Number(product.price),
       regularPrice: Number(product.regular_price),
       inStock: product.in_stock === true,
@@ -85,5 +109,6 @@ export const getProductSeo = createServerFn({ method: "GET" })
       category: product.category,
       storeName,
       url,
+      origin,
     };
   });

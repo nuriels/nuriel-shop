@@ -261,6 +261,7 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     seoDescription: "",
     tracking: null,
     promo: null,
+    schema: null,
   };
   if (isPlatformRequest()) return { siteName: PLATFORM_SITE_NAME, ...none };
   const tenant = maybeCurrentTenant();
@@ -270,7 +271,7 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
   const { data } = await supabaseAdmin
     .from("site_settings")
     .select(
-      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, facebook_pixel_id, google_analytics_id, promo_popup_enabled, promo_popup_text, promo_popup_coupon",
+      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, facebook_pixel_id, google_analytics_id, promo_popup_enabled, promo_popup_text, promo_popup_coupon, logo_path, business_phone, support_phone, business_email, business_address, business_hours",
     )
     .eq("id", true)
     .maybeSingle();
@@ -279,6 +280,22 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
   const pixelId = data?.facebook_pixel_id ?? null;
   const gaId = data?.google_analytics_id ?? null;
   const promoText = data?.promo_popup_text?.trim() ?? "";
+  // חלק 21: הכתובת הראשית של החנות (לכתובת הקנונית, og:url ו-JSON-LD), הלוגו
+  // (לתמונת השיתוף) ואמצעי הקשר — לסכמת העסק של גוגל. site_settings ציבורי.
+  let origin: string | null = null;
+  try {
+    const { tenantSiteOrigin } = await import("@/integrations/supabase/tenant.server");
+    origin = tenantSiteOrigin();
+  } catch {
+    origin = null;
+  }
+  const logoPath = data?.logo_path?.trim() ?? "";
+  const supabaseUrl = process.env["SUPABASE_URL"]?.replace(/\/$/, "") ?? "";
+  const logoUrl = /^https?:\/\//i.test(logoPath)
+    ? logoPath
+    : logoPath && supabaseUrl
+      ? `${supabaseUrl}/storage/v1/object/public/branding/${logoPath}`
+      : null;
   return {
     siteName: storeName || DEFAULT_STORE_NAME,
     brandColor: data?.brand_color ?? null,
@@ -292,6 +309,17 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     promo:
       data?.promo_popup_enabled && promoText !== "" && !isPortal
         ? { text: promoText, coupon: data.promo_popup_coupon ?? null }
+        : null,
+    schema:
+      origin && !isPortal
+        ? {
+            url: origin,
+            logoUrl,
+            phone: data?.support_phone?.trim() || data?.business_phone?.trim() || null,
+            email: data?.business_email?.trim() || null,
+            address: data?.business_address?.trim() || null,
+            hours: data?.business_hours?.trim() || null,
+          }
         : null,
   };
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { getSiteSeo } from "@/lib/platform.functions";
 import { createFileRoute, Link, useLoaderData } from "@tanstack/react-router";
 import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -27,6 +28,13 @@ import { useCategoryTree } from "@/hooks/useCategories";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { inStockFirst, isNewProduct, minOrderMessage, type CatalogItem } from "@/lib/catalog";
 import { featuredBlock, homepageCategories } from "@/lib/homepage";
+import {
+  breadcrumbJsonLd,
+  categoryMeta,
+  categoryUrl,
+  jsonLdText,
+  storeJsonLd,
+} from "@/lib/structured-data";
 import { addToCartItems, syncCartWithCatalog, type AddToCartOptions } from "@/lib/cart";
 import { inCategories, productCountsByCategory, subtreeNames } from "@/lib/category-tree";
 import { cartLineKey, cartMinimum, cartMinUnits, cartStep } from "@/lib/orders";
@@ -52,7 +60,13 @@ type CatalogSearch = {
 };
 
 export const Route = createFileRoute("/")({
-  ssr: false,
+  // חלק 21: "data-only" (במקום false) — פרטי החנות לתגיות (כותרת, קנונית,
+  // JSON-LD) נטענים בשרת ונשמרים במצב שהדפדפן ממשיך ממנו, כך שהתגיות זהות בשרת
+  // ובדפדפן (בלי אי-התאמה בהידרציה). הקטלוג עצמו עדיין נטען ומוצג בדפדפן בלבד.
+  ssr: "data-only",
+  // פעם אחת לטעינת עמוד — מעבר בין קטגוריות לא טוען שוב (התגיות לפי ?category=)
+  loader: () => getSiteSeo(),
+  staleTime: Infinity,
   // הקטגוריה והתצוגה בכתובת: כל בחירה נרשמת בהיסטוריה, ו"חזור" בדפדפן מחזיר
   // מתצוגת המוצרים לריבועי הקטגוריות (או לקטגוריה הקודמת) — בלי רענון
   validateSearch: (search: Record<string, unknown>): CatalogSearch => {
@@ -63,6 +77,64 @@ export const Route = createFileRoute("/")({
     if (search["view"] === "new" || search["view"] === "promo") result.view = search["view"];
     if (search["cart"] === "open") result.cart = "open";
     return result;
+  },
+  // חלק 21: תגיות לפי העמוד — נוצרות בשרת (גם כשהתוכן עצמו נטען בדפדפן), כך
+  // שגוגל, ווטסאפ ופייסבוק רואים אותן מיד. מסך הבית: כתובת קנונית + JSON-LD
+  // של האתר והעסק; עמוד קטגוריה: כותרת ותיאור משלו + פירורי לחם.
+  head: ({ match, loaderData: site }) => {
+    const schema = site?.schema ?? null;
+    if (!site || site.isPortal || !schema) return {};
+    const siteName = site.siteName || DEFAULT_STORE_NAME;
+    const category = (match.search as CatalogSearch).category;
+    if (category) {
+      const meta = categoryMeta(siteName, category);
+      const url = categoryUrl(schema.url, category);
+      return {
+        meta: [
+          { title: meta.title },
+          { name: "description", content: meta.description },
+          { property: "og:title", content: meta.title },
+          { property: "og:description", content: meta.description },
+          { property: "og:url", content: url },
+          { name: "twitter:title", content: meta.title },
+          { name: "twitter:description", content: meta.description },
+        ],
+        links: [{ rel: "canonical", href: url }],
+        scripts: [
+          {
+            type: "application/ld+json",
+            children: jsonLdText(
+              breadcrumbJsonLd([
+                { name: siteName, url: `${schema.url}/` },
+                { name: category, url: null },
+              ]),
+            ),
+          },
+        ],
+      };
+    }
+    // מסך הבית (גם ?view= / ?cart=) — הכתובת הקנונית היא דף הבית
+    return {
+      meta: [{ property: "og:url", content: `${schema.url}/` }],
+      links: [{ rel: "canonical", href: `${schema.url}/` }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: jsonLdText(
+            storeJsonLd({
+              name: siteName,
+              url: schema.url,
+              description: site.seoDescription || null,
+              logoUrl: schema.logoUrl,
+              phone: schema.phone,
+              email: schema.email,
+              address: schema.address,
+              hours: schema.hours,
+            }),
+          ),
+        },
+      ],
+    };
   },
   component: Index,
 });

@@ -25,31 +25,42 @@ import { fetchAllRows } from "@/lib/fetch-all";
 import { trackAddToCart } from "@/lib/marketing";
 import { EMPTY_SALES, loadSalesData, type SalesData } from "@/lib/sales-data";
 import { getProductSeo, type ProductSeo } from "@/lib/seo.functions";
-import { attributeNames, hasVariants, variantAttributesOf, variantLabel } from "@/lib/variants";
+import { breadcrumbJsonLd, categoryUrl, jsonLdText, productJsonLd } from "@/lib/structured-data";
 
-/** schema.org/Product — מחיר, זמינות ותמונה בתוצאות החיפוש של גוגל */
-function productJsonLd(seo: ProductSeo): string {
-  const data: Record<string, unknown> = {
-    "@context": "https://schema.org/",
-    "@type": "Product",
+/**
+ * חלק 21: JSON-LD לעמוד מוצר — Product + Offer (מחיר, זמינות במלאי, תמונות)
+ * ופירורי לחם (בית ← קטגוריה ← מוצר), לתוצאות עשירות בחיפוש של גוגל
+ */
+function productStructuredData(seo: ProductSeo): { type: string; children: string }[] {
+  const product = productJsonLd({
     name: seo.name,
     description: seo.description,
     sku: seo.sku,
     category: seo.category,
-    brand: { "@type": "Brand", name: seo.storeName },
-    ...(seo.image ? { image: [seo.image] } : {}),
-    ...(seo.barcode && /^\d{13}$/.test(seo.barcode) ? { gtin13: seo.barcode } : {}),
-    offers: {
-      "@type": "Offer",
-      priceCurrency: "ILS",
-      price: seo.price.toFixed(2),
-      availability: seo.inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-      ...(seo.url ? { url: seo.url } : {}),
-    },
-  };
-  // "</script>" בתוך הטקסט לא יסגור את התגית
-  return JSON.stringify(data).replace(/</g, "\\u003c");
+    storeName: seo.storeName,
+    url: seo.url,
+    images: seo.images,
+    price: seo.price,
+    inStock: seo.inStock,
+    barcode: seo.barcode,
+    saleEndsAt: seo.saleEndsAt,
+  });
+  const scripts = [{ type: "application/ld+json", children: jsonLdText(product) }];
+  if (seo.origin) {
+    scripts.push({
+      type: "application/ld+json",
+      children: jsonLdText(
+        breadcrumbJsonLd([
+          { name: seo.storeName, url: `${seo.origin}/` },
+          { name: seo.category, url: categoryUrl(seo.origin, seo.category) },
+          { name: seo.name, url: null },
+        ]),
+      ),
+    });
+  }
+  return scripts;
 }
+import { attributeNames, hasVariants, variantAttributesOf, variantLabel } from "@/lib/variants";
 
 /**
  * עמוד מוצר (חלק 14): /product/<id> — כתובת קבועה לכל מוצר, לגוגל (מפת
@@ -76,6 +87,7 @@ export const Route = createFileRoute("/product/$productId")({
         ...(seo.image
           ? [
               { property: "og:image", content: seo.image },
+              { property: "og:image:alt", content: seo.name },
               { name: "twitter:image", content: seo.image },
             ]
           : []),
@@ -85,7 +97,7 @@ export const Route = createFileRoute("/product/$productId")({
         { property: "product:price:currency", content: "ILS" },
       ],
       links: seo.url ? [{ rel: "canonical", href: seo.url }] : [],
-      scripts: [{ type: "application/ld+json", children: productJsonLd(seo) }],
+      scripts: productStructuredData(seo),
     };
   },
   component: ProductPage,

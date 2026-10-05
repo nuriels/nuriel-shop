@@ -129,6 +129,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: description },
+        // חלק 21: תמונת השיתוף — הלוגו של החנות (בעמוד מוצר: תמונת המוצר)
+        ...(loaderData?.schema?.logoUrl
+          ? [
+              { property: "og:image", content: loaderData.schema.logoUrl },
+              { name: "twitter:image", content: loaderData.schema.logoUrl },
+            ]
+          : []),
         // צבע שורת הדפדפן בטלפון
         ...(brandColor ? [{ name: "theme-color", content: brandColor }] : []),
       ],

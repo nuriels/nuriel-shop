@@ -1,7 +1,8 @@
 /**
  * קבצים "חיים" לכל חנות (חלק 14) — נוצרים מהמסד בכל בקשה (עם מטמון קצר):
  *  - /robots.txt  — מה גוגל סורק, וקישור למפת האתר
- *  - /sitemap.xml — דף הבית, עמודי מידע, קטגוריות ועמוד לכל מוצר
+ *  - /sitemap.xml — דף הבית, עמודי החובה (אודות, צור קשר, תקנון, פרטיות,
+ *                   ביטולים), קטגוריות ועמוד לכל מוצר — עם תמונת המוצר (חלק 21)
  *  - /zap.xml     — פיד המוצרים לזאפ השוואת מחירים (רק "הצג בזאפ", במלאי, עם מחיר).
  *                   חלק 15: נעול (403) עד שהחנות רוכשת את התוסף "חיבור לזאפ".
  *
@@ -110,6 +111,7 @@ const PRIVATE_PATHS = [
   "/warehouse",
   "/courier/",
   "/checkout",
+  "/payment",
   "/account",
   "/orders",
   "/agreement",
@@ -137,18 +139,31 @@ export function renderRobots(origin: string, open: boolean): string {
 // sitemap.xml
 // ------------------------------------------------------------
 
-type SitemapEntry = { loc: string; lastmod?: string | null; priority?: string };
+type SitemapEntry = {
+  loc: string;
+  lastmod?: string | null;
+  priority?: string;
+  /** חלק 21: תמונות העמוד (Image sitemap) — גוגל תמונות מוצא את תמונות המוצרים */
+  images?: string[];
+};
 
 export function renderSitemap(entries: SitemapEntry[]): string {
+  const withImages = entries.some((entry) => (entry.images ?? []).length > 0);
   const urls = entries
     .map((entry) => {
       const parts = [`<loc>${xmlEscape(entry.loc)}</loc>`];
       if (entry.lastmod) parts.push(`<lastmod>${entry.lastmod.slice(0, 10)}</lastmod>`);
       if (entry.priority) parts.push(`<priority>${entry.priority}</priority>`);
+      for (const image of entry.images ?? []) {
+        parts.push(`<image:image><image:loc>${xmlEscape(image)}</image:loc></image:image>`);
+      }
       return `  <url>${parts.join("")}</url>`;
     })
     .join("\n");
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+  const namespaces = withImages
+    ? ' xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"'
+    : ' xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"';
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset${namespaces}>\n${urls}\n</urlset>\n`;
 }
 
 async function sitemapEntries(origin: string): Promise<SitemapEntry[]> {
@@ -190,10 +205,12 @@ async function sitemapEntries(origin: string): Promise<SitemapEntry[]> {
   }
 
   for (const product of products) {
+    const image = absoluteUrl(origin, product.image_url);
     entries.push({
       loc: `${origin}/product/${product.id}`,
       lastmod: product.updated_at,
       priority: "0.8",
+      ...(image ? { images: [image] } : {}),
     });
   }
   return entries.slice(0, 50_000);
