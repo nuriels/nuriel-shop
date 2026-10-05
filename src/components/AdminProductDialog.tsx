@@ -10,6 +10,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -59,7 +60,7 @@ import { useCategories, useCategoryTree } from "@/hooks/useCategories";
 import { usePriceTiersEnabled } from "@/hooks/usePriceTiers";
 import { useSubscription } from "@/hooks/useSubscription";
 import { PremiumBadge, PremiumLockCard } from "@/components/billing/PremiumLock";
-import { formatPath } from "@/lib/category-tree";
+import { formatPath, type CategoryTree } from "@/lib/category-tree";
 import {
   formatIls,
   generateSku,
@@ -111,6 +112,10 @@ type FormState = {
   saleEndsAt: string;
   uniformPrice: boolean;
   imageUrl: string;
+  /** חלק 18: תמונות נוספות (גלריה) אחרי התמונה הראשית — למשל מייבוא CSV */
+  extraImages: string[];
+  /** חלק 18: קטגוריות נוספות (product_categories) — שמות, בלי הקטגוריה הראשית */
+  extraCategories: string[];
   colors: string[];
   priceTier1: string;
   priceTier2: string;
@@ -161,6 +166,8 @@ function emptyForm(defaultCategory: string): FormState {
     saleEndsAt: "",
     uniformPrice: false,
     imageUrl: "",
+    extraImages: [],
+    extraCategories: [],
     colors: [],
     priceTier1: "",
     priceTier2: "",
@@ -201,6 +208,9 @@ function fromProduct(product: GlobalProduct): FormState {
     saleEndsAt: toLocalInput(product.sale_ends_at),
     uniformPrice: product.uniform_price ?? false,
     imageUrl: product.image_url ?? "",
+    extraImages: (product.images ?? []).filter((url) => url && url !== product.image_url),
+    // נטענות בנפרד (product_categories) כשהחלון נפתח
+    extraCategories: (product.categories ?? []).filter((name) => name !== product.category),
     colors: product.colors ?? [],
     priceTier1: String(product.price_tier1),
     priceTier2: String(product.price_tier2),
@@ -266,6 +276,52 @@ function hasContent(form: FormState): boolean {
 const DRAFT_DELAY_MS = 900;
 
 /** מחליף את רשימת המוצרים הקשורים של מוצר (הסדר נשמר); מחזיר הודעת שגיאה או null */
+/** כמה קטגוריות נוספות למוצר (יחד עם הראשית — עד 10, כמו בייבוא) */
+const MAX_EXTRA_CATEGORIES = 9;
+
+/**
+ * הקטגוריות הנוספות של המוצר (חלק 18): מוסיף / מסיר שורות ב-product_categories.
+ * הקטגוריה הראשית מקושרת לבד (טריגר במסד) ולא נמחקת מכאן.
+ */
+async function saveExtraCategories(
+  productId: string,
+  primary: string,
+  extras: string[],
+  tree: CategoryTree,
+): Promise<string | null> {
+  const idOf = (name: string) => tree.byName.get(name)?.id;
+  const primaryId = idOf(primary);
+  const desired = new Set(
+    extras
+      .filter((name) => name !== primary)
+      .map(idOf)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const { data, error } = await supabase
+    .from("product_categories")
+    .select("category_id")
+    .eq("product_id", productId);
+  if (error) return error.message;
+  const current = new Set((data ?? []).map((row) => row.category_id));
+  const toDelete = [...current].filter((id) => id !== primaryId && !desired.has(id));
+  const toInsert = [...desired].filter((id) => !current.has(id));
+  if (toDelete.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("product_categories")
+      .delete()
+      .eq("product_id", productId)
+      .in("category_id", toDelete);
+    if (deleteError) return deleteError.message;
+  }
+  if (toInsert.length > 0) {
+    const { error: insertError } = await supabase
+      .from("product_categories")
+      .insert(toInsert.map((categoryId) => ({ product_id: productId, category_id: categoryId })));
+    if (insertError) return insertError.message;
+  }
+  return null;
+}
+
 async function saveRelatedProducts(
   productId: string,
   relatedIds: string[],
@@ -335,6 +391,8 @@ export function AdminProductDialog({
   const loadedRelated = useRef<string[]>([]);
   // הוריאציות כפי שנטענו מהמסד — כדי לשמור רק אם השתנו
   const loadedVariants = useRef<string>(variantsSnapshot({ variantAttributes: [], variants: [] }));
+  // הקטגוריות הנוספות כפי שנטענו מהמסד — כדי לשמור רק אם השתנו
+  const loadedExtraCategories = useRef<string>("[]");
 
   // ---------- טיוטה (מוצר חדש בלבד) ----------
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -365,27 +423,30 @@ export function AdminProductDialog({
 
     loadedRelated.current = [];
     loadedVariants.current = variantsSnapshot({ variantAttributes: [], variants: [] });
+    loadedExtraCategories.current = JSON.stringify(initial.extraCategories);
     if (product) {
       // הרשימה במסך יכולה להיות ישנה (הזמנות מורידות מלאי ברקע) — טוענים את המוצר מחדש,
       // יחד עם המוצרים הקשורים והוריאציות שלו
       void (async () => {
-        const [{ data }, { data: relations }, { data: storedVariants }] = await Promise.all([
-          supabase
-            .from("global_products")
-            .select(PRODUCT_ADMIN_COLUMNS)
-            .eq("id", product.id)
-            .maybeSingle(),
-          supabase
-            .from("product_relations")
-            .select("related_product_id")
-            .eq("product_id", product.id)
-            .order("sort_order"),
-          supabase
-            .from("product_variants")
-            .select(VARIANT_ADMIN_COLUMNS)
-            .eq("product_id", product.id)
-            .order("sort_order"),
-        ]);
+        const [{ data }, { data: relations }, { data: storedVariants }, { data: links }] =
+          await Promise.all([
+            supabase
+              .from("global_products")
+              .select(PRODUCT_ADMIN_COLUMNS)
+              .eq("id", product.id)
+              .maybeSingle(),
+            supabase
+              .from("product_relations")
+              .select("related_product_id")
+              .eq("product_id", product.id)
+              .order("sort_order"),
+            supabase
+              .from("product_variants")
+              .select(VARIANT_ADMIN_COLUMNS)
+              .eq("product_id", product.id)
+              .order("sort_order"),
+            supabase.from("product_categories").select("category_id").eq("product_id", product.id),
+          ]);
         if (!data) return;
         const fresh = data as GlobalProduct;
         const relatedIds = (relations ?? []).map((row) => row.related_product_id);
@@ -396,7 +457,20 @@ export function AdminProductDialog({
           variantAttributes,
         );
         loadedVariants.current = variantsSnapshot({ variantAttributes, variants });
-        const freshForm = { ...fromProduct(fresh), relatedIds, variantAttributes, variants };
+        const nameById = new Map(
+          categoryTree.flat.filter((node) => node.id).map((node) => [node.id!, node.name]),
+        );
+        const extraCategories = (links ?? [])
+          .map((row) => nameById.get(row.category_id))
+          .filter((name): name is string => Boolean(name) && name !== fresh.category);
+        loadedExtraCategories.current = JSON.stringify(extraCategories);
+        const freshForm = {
+          ...fromProduct(fresh),
+          relatedIds,
+          variantAttributes,
+          variants,
+          extraCategories,
+        };
         setLoaded(fresh);
         setForm((current) => {
           if (JSON.stringify(current) !== baseline.current) return current; // המנהל כבר התחיל להקליד
@@ -618,6 +692,9 @@ export function AdminProductDialog({
     setBusy(true);
     const price = Number(form.priceTier1);
     const stock = Math.max(0, Math.floor(Number(form.stockQuantity) || 0));
+    const gallery = [
+      ...new Set([form.imageUrl.trim(), ...form.extraImages].filter((url) => url !== "")),
+    ];
     const common = {
       name: form.name.trim(),
       category: form.category,
@@ -625,8 +702,9 @@ export function AdminProductDialog({
       // ברירת מחדל "A0A" אם לא הוזן איתור, כדי שבון הליקוט תמיד יציג משהו
       shelf_location: form.shelfLocation.trim() || "A0A",
       description: form.description.trim() || null,
-      image_url: form.imageUrl.trim() || null,
-      images: form.imageUrl.trim() ? [form.imageUrl.trim()] : [],
+      // התמונה הראשית + הגלריה (תמונות נוספות מייבוא נשמרות; בלי ראשית — הבאה עולה)
+      image_url: gallery[0] ?? null,
+      images: gallery,
       colors: form.colors,
       price_tier1: price,
       cost_price: form.costPrice.trim() === "" ? null : Number(form.costPrice),
@@ -729,6 +807,26 @@ export function AdminProductDialog({
         toast.warning(`המוצר נשמר, אבל הוריאציות לא: ${variantsError.message}`);
       } else {
         loadedVariants.current = nextVariants;
+      }
+    }
+
+    // קטגוריות נוספות: אחרי המוצר (הקטגוריה הראשית כבר מקושרת), ורק אם השתנו
+    const extraCategories = form.extraCategories.filter((name) => name !== form.category);
+    if (
+      savedId &&
+      (JSON.stringify(extraCategories) !== loadedExtraCategories.current ||
+        (loaded !== null && loaded.category !== form.category && extraCategories.length > 0))
+    ) {
+      const categoriesError = await saveExtraCategories(
+        savedId,
+        form.category,
+        extraCategories,
+        categoryTree,
+      );
+      if (categoriesError) {
+        toast.warning(`המוצר נשמר, אבל הקטגוריות הנוספות לא: ${categoriesError}`);
+      } else {
+        loadedExtraCategories.current = JSON.stringify(extraCategories);
       }
     }
 
@@ -870,6 +968,33 @@ export function AdminProductDialog({
                 {imageNote ??
                   'התמונה נדחסת אוטומטית לטעינה מהירה, ומוצגת ללקוחות בכיתוב "להמחשה בלבד".'}
               </p>
+              {form.extraImages.length > 0 && (
+                <div className="space-y-1.5" data-extra-images>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    תמונות נוספות בגלריה ({form.extraImages.length})
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {form.extraImages.map((url, index) => (
+                      <div
+                        key={url}
+                        className="relative size-14 overflow-hidden rounded-lg border bg-secondary"
+                      >
+                        <img src={url} alt="" className="size-full object-cover" loading="lazy" />
+                        <button
+                          type="button"
+                          className="absolute end-0.5 top-0.5 rounded-full bg-background/90 p-0.5 text-foreground shadow hover:bg-destructive hover:text-destructive-foreground"
+                          aria-label={`הסרת תמונה נוספת ${index + 1}`}
+                          onClick={() =>
+                            patch({ extraImages: form.extraImages.filter((item) => item !== url) })
+                          }
+                        >
+                          <X className="size-3" aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -885,7 +1010,15 @@ export function AdminProductDialog({
             <div className="space-y-2">
               <Label>קטגוריה</Label>
               <div className="flex gap-2">
-                <Select value={form.category} onValueChange={(v) => patch({ category: v })}>
+                <Select
+                  value={form.category}
+                  onValueChange={(v) =>
+                    patch({
+                      category: v,
+                      extraCategories: form.extraCategories.filter((name) => name !== v),
+                    })
+                  }
+                >
                   <SelectTrigger dir="rtl">
                     <SelectValue placeholder="בחרו קטגוריה" />
                   </SelectTrigger>
@@ -903,6 +1036,72 @@ export function AdminProductDialog({
                   </SelectContent>
                 </Select>
                 <CategoryManagerDialog trigger="plus" />
+              </div>
+              <div className="space-y-1.5" data-extra-categories>
+                <p className="text-xs text-muted-foreground">
+                  קטגוריות נוספות (לא חובה) — המוצר יופיע גם בהן באתר
+                </p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {form.extraCategories.map((name) => {
+                    const node = categoryTree.byName.get(name);
+                    return (
+                      <span
+                        key={name}
+                        className="inline-flex items-center gap-1 rounded-full border bg-secondary px-2.5 py-0.5 text-xs"
+                      >
+                        {node ? formatPath(node) : name}
+                        <button
+                          type="button"
+                          className="rounded-full text-muted-foreground hover:text-destructive"
+                          aria-label={`הסרת הקטגוריה ${name}`}
+                          onClick={() =>
+                            patch({
+                              extraCategories: form.extraCategories.filter((item) => item !== name),
+                            })
+                          }
+                        >
+                          <X className="size-3" aria-hidden="true" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                  {form.extraCategories.length < MAX_EXTRA_CATEGORIES && (
+                    <Select
+                      value=""
+                      onValueChange={(v) => {
+                        if (v && v !== form.category && !form.extraCategories.includes(v)) {
+                          patch({ extraCategories: [...form.extraCategories, v] });
+                        }
+                      }}
+                    >
+                      <SelectTrigger
+                        dir="rtl"
+                        className="h-8 w-auto min-w-[10rem] text-xs"
+                        aria-label="הוספת קטגוריה נוספת"
+                      >
+                        <SelectValue placeholder="+ הוספת קטגוריה נוספת" />
+                      </SelectTrigger>
+                      <SelectContent dir="rtl" className="max-h-80">
+                        {categoryTree.flat
+                          .filter(
+                            (node) =>
+                              node.name !== form.category &&
+                              !form.extraCategories.includes(node.name),
+                          )
+                          .map((node) => (
+                            <SelectItem
+                              key={node.name}
+                              value={node.name}
+                              className={node.depth === 1 ? "font-semibold" : undefined}
+                              style={{ paddingRight: `${2 + (node.depth - 1) * 1.25}rem` }}
+                            >
+                              {formatPath(node)}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
               </div>
             </div>
 

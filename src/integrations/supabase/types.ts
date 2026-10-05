@@ -1174,6 +1174,7 @@ export type Database = {
       };
       categories: {
         Row: {
+          id: string;
           tenant_id: string;
           created_at: string;
           image_url: string | null;
@@ -1183,6 +1184,7 @@ export type Database = {
           sort_order: number;
         };
         Insert: {
+          id?: string;
           tenant_id?: string;
           created_at?: string;
           image_url?: string | null;
@@ -1192,6 +1194,7 @@ export type Database = {
           sort_order?: number;
         };
         Update: {
+          id?: string;
           tenant_id?: string;
           created_at?: string;
           image_url?: string | null;
@@ -1199,6 +1202,27 @@ export type Database = {
           name?: string;
           parent_name?: string | null;
           sort_order?: number;
+        };
+        Relationships: [];
+      };
+      product_categories: {
+        Row: {
+          tenant_id: string;
+          product_id: string;
+          category_id: string;
+          created_at: string;
+        };
+        Insert: {
+          tenant_id?: string;
+          product_id: string;
+          category_id: string;
+          created_at?: string;
+        };
+        Update: {
+          tenant_id?: string;
+          product_id?: string;
+          category_id?: string;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -2803,9 +2827,11 @@ export type Database = {
           is_digital: boolean;
           variant_attributes: Json;
           variants: Json;
+          categories: string[];
         }[];
       };
       admin_dashboard: { Args: never; Returns: Json };
+      import_ensure_category_path: { Args: { _tenant: string; _path: Json }; Returns: Json };
       save_product_variants: {
         Args: { _product_id: string; _attributes: Json; _variants: Json };
         Returns: number;

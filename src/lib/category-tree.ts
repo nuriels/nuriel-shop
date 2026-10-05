@@ -2,13 +2,16 @@
  * עץ הקטגוריות — לוגיקה טהורה, בלי גישה לרשת.
  *
  * המפתח של קטגוריה הוא השם שלה (ייחודי בכל העץ). תת-קטגוריה מצביעה על
- * האב לפי שם. מוצר משויך לשם קטגוריה אחד — בכל רמה בעץ.
+ * האב לפי שם. למוצר יש קטגוריה ראשית אחת (global_products.category) — בכל
+ * רמה בעץ — ומחלק 18 גם קטגוריות נוספות (product_categories).
  */
 
 export const MAX_CATEGORY_DEPTH = 3;
 export const CATEGORY_NAME_MAX = 30;
 
 export type CategoryRow = {
+  /** מזהה הקטגוריה (חלק 18 — לקישור מוצר לכמה קטגוריות) */
+  id?: string;
   name: string;
   parent_name: string | null;
   sort_order: number;
@@ -106,7 +109,44 @@ export function totalCounts(tree: CategoryTree, direct: Map<string, number>): Ma
   return totals;
 }
 
-/** ספירה ישירה מתוך רשימת מוצרים שנטענה */
+/** מוצר עם קטגוריה ראשית ואולי קטגוריות נוספות (חלק 18) */
+export type MultiCategoryProduct = { category: string; categories?: string[] | null };
+
+/** כל הקטגוריות של המוצר — הראשית ראשונה, בלי כפילויות */
+export function productCategoryNames(product: MultiCategoryProduct): string[] {
+  const names = [product.category];
+  for (const name of product.categories ?? []) if (!names.includes(name)) names.push(name);
+  return names;
+}
+
+/** האם המוצר נמצא באחת הקטגוריות (ראשית או נוספת) */
+export function inCategories(product: MultiCategoryProduct, names: Set<string>): boolean {
+  if (names.has(product.category)) return true;
+  return (product.categories ?? []).some((name) => names.has(name));
+}
+
+/**
+ * ספירת מוצרים לכל קטגוריה, כולל כל מה שמתחתיה — לפי כל הקטגוריות של כל
+ * מוצר. מוצר נספר פעם אחת בכל קטגוריה (גם אם הוא בשתי תתי-קטגוריות שלה).
+ */
+export function productCountsByCategory(
+  tree: CategoryTree,
+  products: MultiCategoryProduct[],
+): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const product of products) {
+    const reached = new Set<string>();
+    for (const name of productCategoryNames(product)) {
+      const node = tree.byName.get(name);
+      if (!node) continue;
+      for (const ancestor of node.path) reached.add(ancestor);
+    }
+    for (const name of reached) totals.set(name, (totals.get(name) ?? 0) + 1);
+  }
+  return totals;
+}
+
+/** ספירה ישירה מתוך רשימת מוצרים שנטענה (קטגוריה ראשית בלבד) */
 export function countByCategory(products: { category: string }[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const product of products) {

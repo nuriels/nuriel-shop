@@ -34,7 +34,7 @@ import {
   PRODUCT_ADMIN_COLUMNS,
   type GlobalProduct,
 } from "@/lib/catalog";
-import { countByCategory, subtreeNames, totalCounts } from "@/lib/category-tree";
+import { inCategories, productCountsByCategory, subtreeNames } from "@/lib/category-tree";
 import { useCategoryTree } from "@/hooks/useCategories";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { compareProductOrder, groupBySubcategory } from "@/lib/catalog-sections";
@@ -63,6 +63,8 @@ export function AdminProductsPanel({
   // חבילה בסיסית (חלק 13): עד 1,000 מוצרים — בהגעה למגבלה אין "מוצר חדש"
   const { maxProducts } = useSubscription();
   const [products, setProducts] = useState<GlobalProduct[]>([]);
+  /** חלק 18: הקטגוריות הנוספות של כל מוצר (product_categories) — מזהי קטגוריות */
+  const [links, setLinks] = useState<Map<string, string[]>>(new Map());
   const [drafts, setDrafts] = useState<ProductDraft[]>([]);
   const [localCategory, setLocalCategory] = useState<string | null>(null);
   const category = onCategoryChange ? (categoryProp ?? null) : localCategory;
@@ -93,6 +95,19 @@ export function AdminProductsPanel({
     if (error) toast.error(error.message);
     setProducts(data as GlobalProduct[]);
     setLoading(false);
+    const { data: linkRows } = await fetchAllRows((from, to) =>
+      supabase
+        .from("product_categories")
+        .select("product_id, category_id")
+        .order("product_id")
+        .order("category_id")
+        .range(from, to),
+    );
+    const next = new Map<string, string[]>();
+    for (const row of (linkRows ?? []) as { product_id: string; category_id: string }[]) {
+      next.set(row.product_id, [...(next.get(row.product_id) ?? []), row.category_id]);
+    }
+    setLinks(next);
   }, []);
 
   const loadDrafts = useCallback(async () => {
@@ -112,12 +127,32 @@ export function AdminProductsPanel({
     void loadDrafts();
   }, [load, loadDrafts]);
 
-  const visibleProducts = useMemo(() => products.filter((p) => !p.is_hidden), [products]);
-  const hiddenProducts = useMemo(() => products.filter((p) => p.is_hidden), [products]);
-
   const categoryTree = useCategoryTree();
+  // שם הקטגוריה לפי המזהה — לקטגוריות הנוספות של כל מוצר
+  const productsWithCategories = useMemo(() => {
+    const nameById = new Map(
+      categoryTree.flat.filter((node) => node.id).map((node) => [node.id!, node.name]),
+    );
+    return products.map((p) => {
+      const ids = links.get(p.id);
+      if (!ids || ids.length === 0) return p;
+      const categories = ids
+        .map((id) => nameById.get(id))
+        .filter((name): name is string => Boolean(name));
+      return { ...p, categories };
+    });
+  }, [products, links, categoryTree]);
+  const visibleProducts = useMemo(
+    () => productsWithCategories.filter((p) => !p.is_hidden),
+    [productsWithCategories],
+  );
+  const hiddenProducts = useMemo(
+    () => productsWithCategories.filter((p) => p.is_hidden),
+    [productsWithCategories],
+  );
+
   const categoryCounts = useMemo(
-    () => totalCounts(categoryTree, countByCategory(visibleProducts)),
+    () => productCountsByCategory(categoryTree, visibleProducts),
     [categoryTree, visibleProducts],
   );
   const inCategory = useMemo(
@@ -134,11 +169,14 @@ export function AdminProductsPanel({
       (p.barcode ?? "").includes(query));
   const activePromoCount = visibleProducts.filter((p) => p.is_promo && isSaleActive(p)).length;
   const filtered = visibleProducts.filter(
-    (p) => (inCategory === null || inCategory.has(p.category)) && matches(p),
+    (p) => (inCategory === null || inCategories(p, inCategory)) && matches(p),
   );
   // שורות לפי תת-קטגוריה (כמו אצל הלקוח). גרירה לשינוי סדר — רק בקטגוריה
   // שנבחרה, בלי חיפוש ובלי סינון (אחרת הרשימה חלקית והסדר יתבלבל)
-  const sections = groupBySubcategory(categoryTree, tab === "catalog" ? category : null, filtered);
+  // (הגרירה — לפי הקטגוריה הראשית; מוצרים שהקטגוריה היא קטגוריה נוספת שלהם — בשורה נפרדת)
+  const sections = groupBySubcategory(categoryTree, tab === "catalog" ? category : null, filtered, {
+    primaryOnly: true,
+  });
   const canReorder = tab === "catalog" && category !== null && query === "" && !onlyPromo;
   const reorder = async (sectionCategory: string, ids: string[]) => {
     const { error } = await supabase.rpc("reorder_products", {

@@ -5,6 +5,13 @@
  * (import_products).
  *
  * עמודות מוכרות בעברית ובאנגלית, כולל ייצוא של WooCommerce ו-Shopify.
+ *
+ * חלק 18: עמודת התמונות יכולה להכיל כמה תמונות בפורמטים שונים —
+ * "image:https://a.jpg;alt:טקסט||image:https://b.jpg;alt:" / "url1, url2" /
+ * "url1|url2" — וכולן נלקחות (parseImageList). עמודת הקטגוריות יכולה להכיל
+ * כמה קטגוריות מופרדות בפסיק, וכל אחת יכולה להיות נתיב "אב > ילד"
+ * (parseCategoryList). השרת מוריד את התמונות ושומר אותן אצלנו, וקטגוריות
+ * שלא קיימות נוצרות במסד.
  */
 
 export type CsvTable = { headers: string[]; rows: string[][]; delimiter: string };
@@ -12,8 +19,23 @@ export type CsvTable = { headers: string[]; rows: string[][]; delimiter: string 
 /** מגבלות */
 export const CSV_MAX_BYTES = 5 * 1024 * 1024;
 export const CSV_MAX_ROWS = 5000;
-/** כמה שורות נשלחות למסד בכל קריאה */
-export const IMPORT_CHUNK = 250;
+/**
+ * חלק 18: הייבוא נשלח לשרת במנות קטנות — כל מנה: הורדת התמונות שלה (במקביל)
+ * ויצירת המוצרים. כך הדפדפן מציג התקדמות, ואפשר לעצור / להמשיך באמצע.
+ */
+export const BATCH_MAX_PRODUCTS = 10;
+/** עד כמה קישורי תמונות במנה אחת (גם השרת בודק) */
+export const BATCH_MAX_IMAGES = 24;
+/** עד כמה שורות מהקובץ במנה (כולל שורות ריקות / מדולגות) */
+export const BATCH_MAX_RAW_ROWS = 40;
+/** כמה שגיאות / אזהרות נשמרות בסיכום */
+export const IMPORT_MAX_LISTED = 300;
+/** חלק 18: עד כמה תמונות למוצר (כמו במסד) */
+export const MAX_IMAGES_PER_PRODUCT = 10;
+/** עד כמה קטגוריות למוצר */
+export const MAX_CATEGORIES_PER_PRODUCT = 10;
+/** אורך שם קטגוריה במסד */
+export const CATEGORY_NAME_MAX = 30;
 
 const DELIMITERS = [",", ";", "\t"] as const;
 
@@ -247,12 +269,18 @@ export type ImportRow = {
   row: number;
   name: string;
   price: string;
+  /** הקטגוריה הראשית (הרמה העמוקה בנתיב הראשון) — לתצוגה המקדימה */
   category: string;
+  /** חלק 18: כל הקטגוריות — כל אחת נתיב מהשורש ("מחשבים" > "ניידים") */
+  categories: string[][];
   description: string;
   sku: string;
   barcode: string;
   stock: string;
+  /** התמונה הראשית (הראשונה ברשימה) */
   image_url: string;
+  /** חלק 18: כל קישורי התמונות מהקובץ, לפי הסדר (השרת מוריד ומחליף בקישורים שלנו) */
+  images: string[];
   sale_price: string;
   sale_ends_at: string;
   cost_price: string;
@@ -293,23 +321,89 @@ export function normalizeDate(value: string): string {
   return "";
 }
 
-/** "Cat A > Sub, Cat B" → "Sub" (הקטגוריה הראשונה, הרמה העמוקה) */
-function normalizeCategory(value: string): string {
-  const first = value.split(/[,|]/)[0] ?? "";
-  const parts = first
-    .split(/>|\//)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  return (parts[parts.length - 1] ?? "").replace(/\s+/g, " ").slice(0, 60);
+/** שם קטגוריה נקי: בלי מירכאות סביב, רווחים כפולים, עד 30 תווים (כמו במסד) */
+export function cleanCategoryName(value: string): string {
+  return value
+    .replace(/^[\s"'״׳]+|[\s"'״׳]+$/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, CATEGORY_NAME_MAX)
+    .trim();
 }
 
-/** תמונה ראשונה מתוך רשימה */
-function firstImage(value: string): string {
-  const url = value
-    .split(/[,\s|]+/)
-    .map((part) => part.trim())
-    .find((part) => /^https?:\/\//i.test(part));
-  return url ?? value.trim();
+/**
+ * עמודת הקטגוריות → רשימת נתיבים.
+ *   "מחשבים ניידים,ציוד נלווה כבלים"  → [["מחשבים ניידים"], ["ציוד נלווה כבלים"]]
+ *   "מחשבים > ניידים, כבלים"           → [["מחשבים", "ניידים"], ["כבלים"]]
+ *   "Cat A|Cat B" / שורות נפרדות      → [["Cat A"], ["Cat B"]]
+ * מפרידי היררכיה: ">", "»", " / " (לוכסן עם רווחים; "כבלים/מתאמים" נשאר שם אחד).
+ * כפילויות (אותה קטגוריה סופית) — פעם אחת. עד 10.
+ */
+export function parseCategoryList(value: string): string[][] {
+  const paths: string[][] = [];
+  const seen = new Set<string>();
+  for (const part of value.split(/[,|;\n]+/)) {
+    const path = part
+      .split(/\s*(?:>|»|\s\/\s)\s*/)
+      .map(cleanCategoryName)
+      .filter(Boolean);
+    const leaf = path[path.length - 1];
+    if (!leaf || seen.has(leaf)) continue;
+    seen.add(leaf);
+    paths.push(path);
+    if (paths.length >= MAX_CATEGORIES_PER_PRODUCT) break;
+  }
+  return paths;
+}
+
+/** הקטגוריה הראשית: הרמה העמוקה בנתיב הראשון ("" = בלי קטגוריה) */
+function primaryCategory(paths: string[][]): string {
+  const first = paths[0];
+  return first ? (first[first.length - 1] ?? "") : "";
+}
+
+/** קישור אחד: http(s) בלבד; "//cdn..." → https; &amp; → & */
+function cleanImageUrl(raw: string): string | null {
+  let url = raw.trim().replace(/&amp;/gi, "&");
+  if (url.startsWith("//")) url = `https:${url}`;
+  if (!/^https?:\/\/[^\s/]+/i.test(url) || url.length > 1000) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * עמודת התמונות → רשימת קישורים נקיים (לפי הסדר, בלי כפילויות, עד 10).
+ * נתמך:
+ *   "image:https://a.jpeg;alt:טקסט||image:https://b.jpeg;alt:"   (|| בין תמונות)
+ *   "https://a.jpg, https://b.jpg" (WooCommerce) / "https://a.jpg|https://b.jpg"
+ *   "https://a.jpg" (Shopify)
+ * פסיק בתוך קישור (Cloudinary: "w_200,h_300") נשמר — מפרידים רק לפני http.
+ */
+export function parseImageList(value: string): string[] {
+  const text = value.trim();
+  if (text === "") return [];
+  const segments = text.includes("||")
+    ? text.split("||")
+    : text.includes("|")
+      ? text.split("|")
+      : text.split(/,(?=\s*(?:https?:)?\/\/)|\s+(?=(?:https?:)?\/\/)|\n+/i);
+  const urls: string[] = [];
+  for (const segment of segments) {
+    // "image:URL;alt:..." — הקישור עד ה-";" (או רווח) הראשון. &amp; — לפני
+    // החיפוש, כדי שה-";" שלו לא יקטע את הקישור
+    const match = /([a-z][\w+.-]*:)?\/\/[^\s;"'<>]+/i.exec(segment.replace(/&amp;/gi, "&"));
+    if (!match) continue;
+    // "ftp://..." / "file://..." — לא תמונה מהרשת
+    if (match[1] && !/^https?:$/i.test(match[1])) continue;
+    const url = cleanImageUrl(match[0].replace(/[),.]+$/, ""));
+    if (url && !urls.includes(url)) urls.push(url);
+    if (urls.length >= MAX_IMAGES_PER_PRODUCT) break;
+  }
+  return urls;
 }
 
 /** HTML (ייצוא מחנות אחרת) → טקסט עם שורות */
@@ -347,10 +441,15 @@ export type PreparedImport = {
   missing: ImportField[];
 };
 
-/** מהטבלה לשורות מוכנות לייבוא */
+/**
+ * מהטבלה לשורות מוכנות לייבוא. firstRowNumber — מספר השורה בקובץ של השורה
+ * הראשונה בטבלה (ברירת מחדל 2: שורה 1 = הכותרות). בייבוא במנות (חלק 18)
+ * כל מנה נשלחת עם מספר השורה שלה, כדי שההודעות יפנו לשורה הנכונה בקובץ.
+ */
 export function prepareImport(
   table: CsvTable,
   mapping = detectMapping(table.headers),
+  firstRowNumber = 2,
 ): PreparedImport {
   const missing = IMPORT_FIELDS.filter((f) => f.required && mapping[f.key] === undefined).map(
     (f) => f.key,
@@ -365,7 +464,7 @@ export function prepareImport(
   };
 
   table.rows.forEach((cells, index) => {
-    const rowNumber = index + 2; // שורה 1 = הכותרות
+    const rowNumber = index + firstRowNumber; // שורה 1 = הכותרות
     if (cells.every((value) => value.trim() === "")) return; // שורה ריקה
     const name = get(cells, "name").replace(/\s+/g, " ");
     const type = get(cells, "type").toLowerCase();
@@ -390,16 +489,20 @@ export function prepareImport(
         : ["0", "-1", "false", "draft", "archived", "private", "טיוטה", "לא"].includes(publishedRaw)
           ? "true"
           : "";
+    const categories = parseCategoryList(get(cells, "category"));
+    const images = parseImageList(get(cells, "image_url"));
     rows.push({
       row: rowNumber,
       name: name.slice(0, 200),
       price: normalizeNumber(get(cells, "price")),
-      category: normalizeCategory(get(cells, "category")),
+      category: primaryCategory(categories),
+      categories,
       description: description.slice(0, 5000),
       sku: get(cells, "sku"),
       barcode: get(cells, "barcode").replace(/\s+/g, ""),
       stock: normalizeInteger(get(cells, "stock")),
-      image_url: firstImage(get(cells, "image_url")),
+      image_url: images[0] ?? "",
+      images,
       sale_price: normalizeNumber(get(cells, "sale_price")),
       sale_ends_at: normalizeDate(get(cells, "sale_ends_at")),
       cost_price: normalizeNumber(get(cells, "cost_price")),
@@ -412,6 +515,109 @@ export function prepareImport(
   return { rows, skipped, mapping, missing };
 }
 
+export type ImportIssue = { row: number; name: string; message: string };
+
+/** סיכום ייבוא — של מנה אחת (מהשרת) או של כל הקובץ (מצטבר בדפדפן) */
+export type ImportSummary = {
+  /** שורות מוצרים שנשלחו */
+  total: number;
+  created: number;
+  failed: number;
+  duplicates: number;
+  skuReplaced: number;
+  limitReached: boolean;
+  newCategories: string[];
+  errors: ImportIssue[];
+  warnings: ImportIssue[];
+  skipped: SkippedRow[];
+  /** חלק 18: תמונות שנשמרו אצלנו / שדולגו (במוצרים שנוצרו) */
+  images: { saved: number; failed: number };
+};
+
+export function emptyImportSummary(): ImportSummary {
+  return {
+    total: 0,
+    created: 0,
+    failed: 0,
+    duplicates: 0,
+    skuReplaced: 0,
+    limitReached: false,
+    newCategories: [],
+    errors: [],
+    warnings: [],
+    skipped: [],
+    images: { saved: 0, failed: 0 },
+  };
+}
+
+/** צירוף סיכום של מנה לסיכום הכולל (רשימות — עד IMPORT_MAX_LISTED) */
+export function mergeImportSummary(total: ImportSummary, batch: ImportSummary): ImportSummary {
+  const capped = <T>(list: T[], more: T[]) =>
+    list.length >= IMPORT_MAX_LISTED ? list : [...list, ...more].slice(0, IMPORT_MAX_LISTED);
+  return {
+    total: total.total + batch.total,
+    created: total.created + batch.created,
+    failed: total.failed + batch.failed,
+    duplicates: total.duplicates + batch.duplicates,
+    skuReplaced: total.skuReplaced + batch.skuReplaced,
+    limitReached: total.limitReached || batch.limitReached,
+    newCategories: [
+      ...total.newCategories,
+      ...batch.newCategories.filter((name) => !total.newCategories.includes(name)),
+    ],
+    errors: capped(total.errors, batch.errors),
+    warnings: capped(total.warnings, batch.warnings),
+    skipped: capped(total.skipped, batch.skipped),
+    images: {
+      saved: total.images.saved + batch.images.saved,
+      failed: total.images.failed + batch.images.failed,
+    },
+  };
+}
+
+/** מנה לשליחה: טווח שורות בטבלה [start, end) */
+export type ImportBatchPlan = { start: number; end: number; products: number; images: number };
+
+/**
+ * חלוקת הקובץ למנות: עד BATCH_MAX_PRODUCTS מוצרים, עד BATCH_MAX_IMAGES
+ * קישורי תמונות ועד BATCH_MAX_RAW_ROWS שורות בכל מנה (מוצר עם הרבה תמונות
+ * — במנה קטנה יותר). המנות רציפות, לפי סדר הקובץ.
+ */
+export function planImportBatches(
+  table: CsvTable,
+  mapping: ColumnMapping = detectMapping(table.headers),
+): ImportBatchPlan[] {
+  const batches: ImportBatchPlan[] = [];
+  const nameIndex = mapping.name;
+  const imageIndex = mapping.image_url;
+  let current: ImportBatchPlan = { start: 0, end: 0, products: 0, images: 0 };
+  table.rows.forEach((cells, index) => {
+    const isProduct =
+      nameIndex !== undefined &&
+      (cells[nameIndex] ?? "").trim() !== "" &&
+      (mapping.type === undefined ||
+        (cells[mapping.type] ?? "").trim().toLowerCase() !== "variation");
+    const images =
+      isProduct && imageIndex !== undefined ? parseImageList(cells[imageIndex] ?? "").length : 0;
+    const rawRows = index - current.start;
+    const full =
+      rawRows >= BATCH_MAX_RAW_ROWS ||
+      (isProduct &&
+        current.products > 0 &&
+        (current.products >= BATCH_MAX_PRODUCTS || current.images + images > BATCH_MAX_IMAGES));
+    if (full) {
+      batches.push({ ...current, end: index });
+      current = { start: index, end: index, products: 0, images: 0 };
+    }
+    if (isProduct) {
+      current.products += 1;
+      current.images += images;
+    }
+  });
+  if (table.rows.length > current.start) batches.push({ ...current, end: table.rows.length });
+  return batches;
+}
+
 export function fieldLabel(key: ImportField): string {
   return IMPORT_FIELDS.find((f) => f.key === key)?.label ?? key;
 }
@@ -419,8 +625,8 @@ export function fieldLabel(key: ImportField): string {
 /** קובץ לדוגמה להורדה (עם BOM — נפתח נכון באקסל בעברית) */
 export const SAMPLE_CSV = [
   'שם המוצר,מחיר,קטגוריה,תיאור,מק"ט,ברקוד,מלאי,תמונה,מחיר מבצע,סיום מבצע,הצג בזאפ',
-  'חולצת כותנה,79.90,ביגוד,"חולצה נוחה מכותנה 100%",,7290000000001,25,https://example.com/shirt.jpg,59.90,31/12/2026,כן',
-  "ספל קרמיקה,35,כלי בית,ספל 350 מ״ל,,7290000000002,40,,,,כן",
+  'חולצת כותנה,79.90,"ביגוד > חולצות,מבצעי החודש","חולצה נוחה מכותנה 100%",,7290000000001,25,"image:https://example.com/shirt-front.jpg;alt:חולצה מלפנים||image:https://example.com/shirt-back.jpg;alt:",59.90,31/12/2026,כן',
+  "ספל קרמיקה,35,כלי בית,ספל 350 מ״ל,,7290000000002,40,https://example.com/mug.jpg,,,כן",
 ].join("\r\n");
 
 /** פענוח קובץ שהועלה: UTF-8, ואם לא — Windows-1255 (אקסל בעברית שומר כך) */

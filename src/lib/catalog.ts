@@ -13,6 +13,8 @@ export type GlobalProduct = {
   sku: string;
   name: string;
   category: string;
+  /** חלק 18: כל הקטגוריות של המוצר (product_categories) — נטען בנפרד בניהול */
+  categories?: string[] | null;
   description: string | null;
   image_url: string | null;
   images?: string[] | null;
@@ -76,7 +78,10 @@ export type CatalogItem = {
   id: string;
   sku: string;
   name: string;
+  /** הקטגוריה הראשית */
   category: string;
+  /** חלק 18: כל הקטגוריות של המוצר (הראשית ראשונה) — product_categories */
+  categories?: string[] | null;
   description: string | null;
   image_url: string | null;
   images: string[] | null;

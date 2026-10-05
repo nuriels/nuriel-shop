@@ -25,7 +25,7 @@ import { useCategoryTree } from "@/hooks/useCategories";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { isNewProduct, minOrderMessage, type CatalogItem } from "@/lib/catalog";
 import { addToCartItems, syncCartWithCatalog, type AddToCartOptions } from "@/lib/cart";
-import { countByCategory, subtreeNames, totalCounts } from "@/lib/category-tree";
+import { inCategories, productCountsByCategory, subtreeNames } from "@/lib/category-tree";
 import { cartLineKey, cartMinimum, cartMinUnits, cartStep } from "@/lib/orders";
 import { attributeNames, hasVariants, variantAttributesOf, variantLabel } from "@/lib/variants";
 import { loadHomeBanners, type BannerSet } from "@/lib/banners";
@@ -154,8 +154,9 @@ function StoreCatalog() {
   });
 
   const categoryTree = useCategoryTree();
+  // מוצר בכמה קטגוריות (חלק 18) נספר בכל אחת מהן
   const categoryCounts = useMemo(
-    () => totalCounts(categoryTree, countByCategory(products)),
+    () => productCountsByCategory(categoryTree, products),
     [categoryTree, products],
   );
   // לחיצה על קטגוריית אב מציגה גם את כל המוצרים שבתת-הקטגוריות שלה
@@ -193,7 +194,7 @@ function StoreCatalog() {
     () =>
       products.filter(
         (p) =>
-          (inCategory === null || inCategory.has(p.category)) &&
+          (inCategory === null || inCategories(p, inCategory)) &&
           (query === "" ||
             p.name.toLowerCase().includes(query) ||
             p.sku.includes(query) ||
@@ -208,7 +209,7 @@ function StoreCatalog() {
 
   // מספרי הלשוניות מתייחסים לקטגוריה שנבחרה (בלי החיפוש), כדי שיתאימו למה שמוצג
   const inScope = useMemo(
-    () => (inCategory === null ? products : products.filter((p) => inCategory.has(p.category))),
+    () => (inCategory === null ? products : products.filter((p) => inCategories(p, inCategory))),
     [products, inCategory],
   );
   const tabCounts = useMemo(
