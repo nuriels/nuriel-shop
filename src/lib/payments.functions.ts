@@ -418,10 +418,35 @@ export const getPaymentResult = createServerFn({ method: "POST" })
       return { status: "unknown", orderNumber: null, amount: null, orderPaid: false };
     }
     const status = String(intent["status"]);
+    const orderNumber = typeof intent["order_number"] === "string" ? intent["order_number"] : null;
+    // חלק 22: איסוף עצמי — כתובת החנות ושעות הפעילות לבלוק "ההזמנה תמתין לך"
+    let pickup: PaymentResult["pickup"] = null;
+    if (orderNumber) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const [{ data: order }, { data: site }] = await Promise.all([
+        supabaseAdmin
+          .from("orders")
+          .select("shipping_kind")
+          .eq("order_number", orderNumber)
+          .maybeSingle(),
+        supabaseAdmin
+          .from("site_settings")
+          .select("business_address, business_hours")
+          .eq("id", true)
+          .maybeSingle(),
+      ]);
+      if (order?.shipping_kind === "pickup") {
+        pickup = {
+          address: site?.business_address?.trim() || null,
+          hours: site?.business_hours?.trim() || null,
+        };
+      }
+    }
     return {
       status: status === "paid" || status === "failed" || status === "expired" ? status : "pending",
-      orderNumber: typeof intent["order_number"] === "string" ? intent["order_number"] : null,
+      orderNumber,
       amount: Number(intent["amount"] ?? 0) || null,
       orderPaid: intent["order_payment_status"] === "paid",
+      pickup,
     };
   });

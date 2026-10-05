@@ -1,14 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import {
-  CheckCircle2,
-  Clock,
-  Gift,
-  KeyRound,
-  MailCheck,
-  MapPin,
-  Store,
-  UserRoundPlus,
-} from "lucide-react";
+import { CheckCircle2, Gift, KeyRound, MailCheck, MapPin, UserRoundPlus } from "lucide-react";
+import { PickupNotice } from "@/components/checkout/PickupNotice";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ORDER_HOURS } from "@/lib/order-hours";
@@ -31,6 +23,8 @@ export type PlacedOrder = {
   shippingName?: string | null;
   /** באיסוף עצמי — כתובת העסק */
   pickupAddress?: string | null;
+  /** באיסוף עצמי — שעות הפעילות של החנות (מהגדרות האתר) */
+  pickupHours?: string | null;
   /** יש בהזמנה מוצרים דיגיטליים (הרישיון יגיע במייל) */
   hasDigital?: boolean;
 };
@@ -65,19 +59,7 @@ export function CheckoutSuccess({ order }: { order: PlacedOrder }) {
             </p>
           )}
           {order.shippingKind === "pickup" ? (
-            <p className="flex items-start gap-2 rounded-lg border border-violet-300 bg-violet-50 p-3 text-violet-950 dark:bg-violet-950/30 dark:text-violet-100">
-              <Store className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <span>
-                {order.shippingName || "איסוף עצמי"}
-                {order.pickupAddress ? (
-                  <>
-                    {" "}
-                    מ: <strong>{order.pickupAddress}</strong>
-                  </>
-                ) : null}
-                . נעדכן כשההזמנה מוכנה לאיסוף.
-              </span>
-            </p>
+            <PickupNotice address={order.pickupAddress} hours={order.pickupHours} />
           ) : order.shippingKind === "digital" ? null : order.deliveryLine ? (
             <p
               className={
@@ -112,10 +94,6 @@ export function CheckoutSuccess({ order }: { order: PlacedOrder }) {
               </span>
             </p>
           )}
-          <p className="flex items-start gap-2 rounded-lg bg-secondary/70 p-3">
-            <Clock className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
-            <span>{ORDER_HOURS.sentHours}</span>
-          </p>
           <p className="font-medium text-foreground">
             {order.isQuote ? "נציג יחזור אליך עם הצעת מחיר בהקדם." : ORDER_HOURS.sentContact}
           </p>

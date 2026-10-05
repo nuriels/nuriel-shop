@@ -579,6 +579,39 @@ export async function processImportedImage(bytes: Buffer): Promise<ProcessedImag
   }
 }
 
+/**
+ * חלק 22: תמונה (לוגו) → data URL שמסמך ה-PDF יודע להטמיע (jsPDF: רק PNG / JPEG).
+ * PNG / JPEG — כמו שהם; WEBP / AVIF / GIF וכו' — מומרים ל-PNG עם sharp (שקיפות
+ * נשמרת), מוקטנים לכל היותר ל-maxDimension. לא נתמך / פגום → null.
+ */
+export async function imageToPdfDataUrl(bytes: Buffer, maxDimension = 600): Promise<string | null> {
+  const kind = sniffImageType(bytes);
+  if (kind === "png" || kind === "jpeg") {
+    return `data:image/${kind};base64,${bytes.toString("base64")}`;
+  }
+  if (!kind || kind === "svg" || kind === "html") return null;
+  const sharp = await loadSharp();
+  if (!sharp) return null;
+  try {
+    const png = await sharp(bytes, {
+      limitInputPixels: IMAGE_MAX_PIXELS,
+      failOn: "error",
+      animated: false,
+    })
+      .resize({
+        width: maxDimension,
+        height: maxDimension,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .png()
+      .toBuffer();
+    return `data:image/png;base64,${png.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* שמירה ב-Storage                                                     */
 /* ------------------------------------------------------------------ */

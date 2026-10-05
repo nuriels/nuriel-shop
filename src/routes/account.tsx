@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthState } from "@/hooks/useAuthState";
 import { useCustomerProfile } from "@/hooks/useCustomerProfile";
+import { usePriceTiersEnabled } from "@/hooks/usePriceTiers";
 
 type AccountTab = "orders" | "details";
 type Search = { tab?: AccountTab };
@@ -38,6 +39,8 @@ function AccountPage() {
   const navigate = Route.useNavigate();
   const activeTab: AccountTab = tab ?? "orders";
   const email = session?.user.email ?? role?.email ?? "";
+  // חנות B2B = דרגי מחיר פעילים: רק שם אישור המנהל משנה משהו ללקוח
+  const b2b = usePriceTiersEnabled();
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -115,7 +118,8 @@ function AccountPage() {
                   {email}
                 </p>
               </div>
-              {!role?.is_approved && (
+              {/* רק בחנות B2B (דרגי מחיר פעילים) — ללקוח קמעונאי זה מרתיע */}
+              {!role?.is_approved && b2b && (
                 <p className="rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-xs text-foreground">
                   החשבון ממתין לאישור מנהל — בינתיים מזמינים לפי המחירון הרגיל.
                 </p>

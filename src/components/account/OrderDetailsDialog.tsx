@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { OrderDocumentButton } from "@/components/OrderDocumentButton";
 import { OrderStatusSteps } from "@/components/account/OrderStatusSteps";
+import { PickupNotice } from "@/components/checkout/PickupNotice";
 import { formatIls, formatUnitIls } from "@/lib/catalog";
 import {
   ORDER_STATUS_BADGE,
@@ -285,17 +286,8 @@ function OrderDetails({
           {billing.address && <p className="text-muted-foreground">{billing.address}</p>}
         </section>
         {order.shipping_kind === "pickup" ? (
-          <section className="space-y-1 rounded-xl border border-violet-300 bg-violet-50 p-3 text-sm text-violet-950 dark:bg-violet-950/30 dark:text-violet-100">
-            <h3 className="mb-1 flex items-center gap-1.5 font-bold">
-              <Store className="size-4" aria-hidden="true" />
-              איסוף עצמי
-            </h3>
-            {pickupAddress ? (
-              <p className="opacity-90">{pickupAddress}</p>
-            ) : (
-              <p className="opacity-80">נעדכן כשההזמנה מוכנה לאיסוף.</p>
-            )}
-          </section>
+          // חלק 22: בלוק בולט — כתובת החנות ושעות הפעילות מהגדרות האתר
+          <PickupNotice address={pickupAddress} hours={settings?.business_hours} />
         ) : order.shipping_kind === "digital" ? (
           <section className="space-y-1 rounded-xl border border-sky-300 bg-sky-50 p-3 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
             <h3 className="mb-1 flex items-center gap-1.5 font-bold">

@@ -50,6 +50,9 @@ function toInfo(raw: Raw): BitPaymentInfo {
     storeName: str("store_name"),
     storePhone: str("store_phone"),
     registered: raw["registered"] === true,
+    pickup: raw["pickup"] === true,
+    storeAddress: str("store_address"),
+    storeHours: str("store_hours"),
   };
 }
 

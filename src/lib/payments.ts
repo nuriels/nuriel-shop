@@ -236,6 +236,8 @@ export type PaymentResult = {
   amount: number | null;
   /** ההזמנה עצמה סומנה "שולמה" (גם אם הניסיון הזה נכשל ואחר הצליח) */
   orderPaid: boolean;
+  /** חלק 22: הזמנה באיסוף עצמי — כתובת החנות ושעות הפעילות (מהגדרות האתר) */
+  pickup?: { address: string | null; hours: string | null } | null;
 };
 
 /** ?payment= בפאנל הניהול אחרי חזרה מ-Hyp */

@@ -75,13 +75,19 @@ export type LoadedOrderDocument = {
 export async function loadLogoDataUrl(logoPath: string | null): Promise<string | null> {
   if (!logoPath) return null;
   try {
-    const { data, error } = await supabaseAdmin.storage.from(BRANDING_BUCKET).download(logoPath);
-    if (error || !data) return null;
-    const buffer = Buffer.from(await data.arrayBuffer());
-    const isPng = buffer[0] === 0x89 && buffer[1] === 0x50;
-    const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
-    if (!isPng && !isJpeg) return null;
-    return `data:image/${isPng ? "png" : "jpeg"};base64,${buffer.toString("base64")}`;
+    let bytes: Buffer;
+    if (/^https?:\/\//i.test(logoPath)) {
+      // חלק 22: לוגו שהוגדר כקישור מלא — הורדה מוגנת (SSRF, גודל, זמן)
+      const { fetchRemoteImage } = await import("@/server/services/image-fetch");
+      bytes = (await fetchRemoteImage(logoPath)).bytes;
+    } else {
+      const { data, error } = await supabaseAdmin.storage.from(BRANDING_BUCKET).download(logoPath);
+      if (error || !data) return null;
+      bytes = Buffer.from(await data.arrayBuffer());
+    }
+    // PNG / JPEG כמו שהם; WEBP וכו' — מומרים ל-PNG (jsPDF מטמיע רק PNG / JPEG)
+    const { imageToPdfDataUrl } = await import("@/server/services/image-fetch");
+    return await imageToPdfDataUrl(bytes);
   } catch {
     return null;
   }
@@ -115,7 +121,7 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
       supabaseAdmin
         .from("site_settings")
         .select(
-          "site_title, logo_path, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, prices_include_vat, vat_rate",
+          "site_title, logo_path, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, prices_include_vat, vat_rate, brand_color, price_tiers_enabled",
         )
         .eq("id", true)
         .maybeSingle(),
@@ -186,6 +192,7 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
       supportPhone: settings?.support_phone ?? "",
       email: settings?.business_email ?? "",
       logoDataUrl: await loadLogoDataUrl(settings?.logo_path ?? null),
+      brandColor: settings?.brand_color ?? null,
     },
     customer: {
       businessName: billing.name,
@@ -211,6 +218,7 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
           vatRate: Number(order.vat_rate ?? settings?.vat_rate ?? DEFAULT_VAT_RATE),
         }),
     note: order.note,
+    b2b: settings?.price_tiers_enabled === true,
   };
 
   const pdf = await buildOrderDocumentPdf(documentData);

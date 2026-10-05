@@ -503,65 +503,22 @@ function StoreCatalog() {
           {...(canUseCart ? { onOpenCart: () => setCartOpen(true) } : {})}
         />
 
-        {!loading && !session && (
-          <section className="surface-cellar border-b border-white/10">
-            <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 sm:py-14 lg:grid-cols-[1.3fr_1fr] lg:items-end">
-              <div className="max-w-xl">
-                <h1 className="font-display text-3xl leading-tight text-primary-foreground sm:text-4xl">
-                  {settings?.site_title?.trim() || DEFAULT_STORE_NAME}
-                </h1>
-                <p className="mt-3 text-base leading-7 text-primary-foreground/75">
-                  כל המחירים גלויים — מוסיפים לסל ומזמינים בקופה, גם בלי הרשמה. לקוחות רשומים נהנים
-                  ממילוי פרטים אוטומטי ומהיסטוריית הזמנות באזור האישי.
-                </p>
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <Button
-                    size="lg"
-                    asChild
-                    className="bg-accent text-accent-foreground hover:bg-accent/90"
-                  >
-                    <a href="#catalog">להזמנה מהקטלוג</a>
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    asChild
-                    className="border-white/25 bg-transparent text-primary-foreground hover:bg-white/10 hover:text-primary-foreground"
-                  >
-                    <Link to="/login">התחברות</Link>
-                  </Button>
-                </div>
-              </div>
-
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-white/10 pt-6 lg:border-r lg:border-t-0 lg:pr-8 lg:pt-0">
-                <div>
-                  <dt className="text-sm text-primary-foreground/60">מוצרים בקטלוג</dt>
-                  <dd className="numeric font-display text-2xl text-accent">{products.length}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-primary-foreground/60">מבצעים פעילים</dt>
-                  <dd className="numeric font-display text-2xl text-accent">{promoItems.length}</dd>
-                </div>
-                <div className="col-span-2">
-                  <dt className="text-sm text-primary-foreground/60">שירות לקוחות</dt>
-                  <dd dir="ltr" className="numeric text-right text-lg text-primary-foreground">
-                    {settings?.support_phone?.trim() || settings?.business_phone?.trim() || "—"}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          </section>
-        )}
+        {/* חלק 22: בלי "הבלוק הכחול" (שם החנות, "להזמנה מהקטלוג" וסטטיסטיקות) — זה
+            נראה כמו לוח בקרה ולא כמו חנות. העמוד נפתח ישר בבאנרים. הכותרת הראשית
+            (h1) נשארת לגוגל ולקוראי מסך, בלי תצוגה. */}
+        <h1 className="sr-only">{settings?.site_title?.trim() || DEFAULT_STORE_NAME}</h1>
 
         {/* חלק 19: Grid עם באנר צדדי (רק במחשב, כשהוא פעיל) */}
-        <StorefrontMain className="py-8" contentClassName="space-y-8">
+        <StorefrontMain className="pb-8 pt-4 sm:pt-6" contentClassName="space-y-8">
           {settings?.maintenance_mode && isStaff && (
             <div className="rounded-lg border border-accent/50 bg-accent/10 p-4 text-sm font-medium text-foreground">
               מצב תחזוקה פעיל — האתר חסום ללקוחות ולאורחים. אתם רואים אותו כרגיל כדי לעדכן מלאי
               ומחירים.
             </div>
           )}
-          {isCustomer && !role?.is_approved && (
+          {/* "ממתין לאישור" — רק בחנות B2B (דרגי מחיר פעילים), שם האישור משנה את
+              המחירים. ללקוח רגיל בחנות קמעונאית ההודעה רק מרתיעה. */}
+          {isCustomer && !role?.is_approved && settings?.price_tiers_enabled === true && (
             <div className="rounded-lg border border-accent/40 bg-accent/5 p-4 text-sm text-foreground">
               החשבון שלך ממתין לאישור מנהל. בינתיים אפשר להזמין כרגיל לפי המחירון הרגיל — אחרי
               האישור יוצגו לך תנאי המחיר של העסק שלך.

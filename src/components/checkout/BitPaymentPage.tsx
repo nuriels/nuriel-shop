@@ -46,6 +46,7 @@ import {
   type BitPaymentInfo,
 } from "@/lib/bit-payments";
 import { cn } from "@/lib/utils";
+import { PickupNotice } from "@/components/checkout/PickupNotice";
 
 const israelTime = (iso: string | null) =>
   iso
@@ -310,8 +311,16 @@ export function BitPaymentPage({ orderId }: { orderId: string }) {
             <span dir="ltr" className="numeric font-semibold text-foreground">
               {info.orderNumber}
             </span>{" "}
-            שולמה ({formatIls(info.amount)}) ונמצאת בטיפול. נעדכן כשהיא תצא אליכם.
+            שולמה ({formatIls(info.amount)}) ונמצאת בטיפול.{" "}
+            {info.pickup ? "נעדכן כשהיא מוכנה לאיסוף." : "נעדכן כשהיא תצא אליכם."}
           </p>
+          {info.pickup && (
+            <PickupNotice
+              address={info.storeAddress}
+              hours={info.storeHours}
+              className="w-full max-w-md"
+            />
+          )}
           <div className="flex flex-wrap justify-center gap-2">
             {ordersLink}
             <Button asChild>
@@ -342,6 +351,13 @@ export function BitPaymentPage({ orderId }: { orderId: string }) {
             {info.hasReceipt && <li>✓ צילום המסך התקבל</li>}
             {info.reportedAt && <li>נשלח: {israelTime(info.reportedAt)}</li>}
           </ul>
+          {info.pickup && (
+            <PickupNotice
+              address={info.storeAddress}
+              hours={info.storeHours}
+              className="w-full max-w-md"
+            />
+          )}
           <div className="flex flex-wrap justify-center gap-2">
             {ordersLink}
             <Button asChild>

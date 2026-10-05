@@ -415,7 +415,7 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
             </div>
 
             {editing === node.name ? (
-              <div className="flex min-w-[12rem] flex-1 items-center gap-1 sm:min-w-0">
+              <div className="flex min-w-[calc(100%-4.5rem)] flex-1 items-center gap-1 sm:min-w-0">
                 <Input
                   value={editValue}
                   onChange={(event) => setEditValue(event.target.value)}
@@ -452,8 +452,12 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
                 </Button>
               </div>
             ) : (
-              <div className="flex min-w-[9rem] flex-1 items-baseline gap-2 px-1 sm:min-w-0">
-                <span className="truncate font-medium text-foreground">{node.name}</span>
+              // חלק 22: בנייד השם תופס את כל השורה ומוצג במלואו (יורד שורה, בלי "...");
+              // כפתורי הפעולה עוברים לשורה שמתחת. במחשב — שורה אחת כמו קודם.
+              <div className="flex min-w-[calc(100%-4.5rem)] flex-1 flex-wrap items-baseline gap-x-2 px-1 sm:min-w-0 sm:flex-nowrap">
+                <span className="min-w-0 whitespace-normal break-words font-medium text-foreground [overflow-wrap:anywhere] sm:truncate">
+                  {node.name}
+                </span>
                 <span
                   className="numeric shrink-0 text-xs text-muted-foreground"
                   title="מוצרים בקטגוריה, כולל תת-הקטגוריות"

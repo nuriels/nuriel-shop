@@ -87,7 +87,9 @@ export function ProductDetailDialog({
       <DialogContent
         ref={contentRef}
         dir="rtl"
-        className="max-h-[92vh] gap-0 overflow-y-auto p-0 text-right sm:max-w-3xl"
+        // חלק 22: העמודה של החלון מתכווצת לרוחב המסך (minmax(0,1fr)) — שם מוצר / מק"ט
+        // ארוכים בלי רווחים לא מרחיבים את החלון מעבר למסך (חיתוך + "זום" בנייד)
+        className="max-h-[92vh] max-w-full grid-cols-[minmax(0,1fr)] gap-0 overflow-y-auto overflow-x-hidden p-0 text-right sm:max-w-3xl"
       >
         <ProductDetailView
           product={product}
@@ -275,7 +277,7 @@ export function ProductDetailView({
         </div>
 
         {/* ---------- פרטים ---------- */}
-        <div className="flex min-w-0 flex-col gap-4 p-5 sm:p-6">
+        <div className="flex min-w-0 max-w-full flex-col gap-4 overflow-hidden whitespace-normal break-words p-5 sm:p-6">
           <div className="space-y-1.5">
             <div className="flex items-start justify-between gap-2">
               <p className="text-xs text-muted-foreground">{categoryPath.join(" › ")}</p>
@@ -367,15 +369,15 @@ export function ProductDetailView({
             </div>
           )}
 
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <dt>מק"ט</dt>
-            <dd dir="ltr" className="numeric text-right">
+            <dd dir="ltr" className="numeric min-w-0 break-all text-right">
               {choice.variant?.sku ?? product.sku}
             </dd>
             {product.barcode && (
               <>
                 <dt>ברקוד</dt>
-                <dd dir="ltr" className="numeric text-right">
+                <dd dir="ltr" className="numeric min-w-0 break-all text-right">
                   {product.barcode}
                 </dd>
               </>

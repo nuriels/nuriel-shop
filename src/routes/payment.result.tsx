@@ -7,6 +7,7 @@ import { AppFooter } from "@/components/AppFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PickupNotice } from "@/components/checkout/PickupNotice";
 import { useAuthState } from "@/hooks/useAuthState";
 import { getPaymentResult, retryOrderPayment } from "@/lib/payments.functions";
 import { isAddonOrPlanToken, type PaymentResult } from "@/lib/payments";
@@ -113,8 +114,16 @@ function PaymentResultPage() {
                   </p>
                 )}
                 <p className="text-sm leading-6 text-muted-foreground">
-                  אישור הזמנה נשלח למייל. נעדכן כשההזמנה תצא אליכם.
+                  אישור הזמנה נשלח למייל.{" "}
+                  {result.pickup ? "נעדכן כשההזמנה מוכנה לאיסוף." : "נעדכן כשההזמנה תצא אליכם."}
                 </p>
+                {result.pickup && (
+                  <PickupNotice
+                    address={result.pickup.address}
+                    hours={result.pickup.hours}
+                    className="w-full max-w-md"
+                  />
+                )}
                 <div className="flex flex-wrap justify-center gap-2">
                   {role?.role === "customer" && (
                     <Button asChild variant="outline">

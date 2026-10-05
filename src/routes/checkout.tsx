@@ -683,6 +683,8 @@ function CheckoutPage() {
           : ("delivery" as const),
       shippingName: needsShipping ? (selectedMethod?.name ?? null) : null,
       pickupAddress: selectedMethod?.kind === "pickup" ? pickupAddress : null,
+      pickupHours:
+        selectedMethod?.kind === "pickup" ? settings?.business_hours?.trim() || null : null,
       hasDigital: cart.some((item) => item.isDigital),
     };
     // חלק 16: חנות עם סליקה — אחרי יצירת ההזמנה עוברים לדף התשלום המאובטח

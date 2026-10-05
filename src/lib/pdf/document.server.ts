@@ -11,6 +11,7 @@ import type { VatBreakdown } from "@/lib/vat";
 import { ORDER_HOURS } from "@/lib/order-hours";
 import { formatUnitIls } from "@/lib/catalog";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { pdfPalette } from "./brand";
 
 export type DocumentBusiness = {
   name: string;
@@ -21,6 +22,8 @@ export type DocumentBusiness = {
   email: string;
   /** תמונת לוגו כ-data URL (PNG/JPEG בלבד) */
   logoDataUrl: string | null;
+  /** חלק 22: צבע המותג של החנות (#rrggbb) — כותרות המסמך והטבלה; null = ברירת המחדל */
+  brandColor?: string | null;
 };
 
 export type DocumentCustomer = {
@@ -63,6 +66,11 @@ export type DocumentData = {
   /** null בבקשת הצעת מחיר — במסמך כזה אין מחירים כלל */
   vat: VatBreakdown | null;
   note: string | null;
+  /**
+   * חלק 22: חנות B2B (דרגי מחיר פעילים) — רק שם מוצגת ההודעה "ההזמנה הועברה
+   * לטיפול סוכן להסדרת תשלום / עד 16:00". בחנות רגילה היא מטעה ולא מוצגת.
+   */
+  b2b?: boolean;
 };
 
 const INK = "#12211F";
@@ -114,6 +122,8 @@ export async function buildOrderDocumentPdf(
 
   const isQuote = data.kind === "quote";
   const showPrices = !isQuote && data.vat !== null;
+  // חלק 22: צבעי המסמך לפי צבע המותג של החנות (טקסט לבן / כהה לפי הניגודיות)
+  const palette = pdfPalette(data.business.brandColor);
 
   /** כתיבת טקסט לוגי — ההמרה לסדר ויזואלי נעשית כאן, במקום אחד */
   const write = (
@@ -189,22 +199,28 @@ export async function buildOrderDocumentPdf(
   // תיבת סוג המסמך (צד שמאל)
   const boxWidth = 62;
   const boxHeight = 26;
-  doc.setFillColor(INK);
+  doc.setFillColor(palette.fill);
   doc.roundedRect(LEFT, headerTop - 4, boxWidth, boxHeight, 2, 2, "F");
   write(isQuote ? "בקשה להצעת מחיר" : "אישור הזמנה", LEFT + boxWidth - 5, headerTop + 3, {
     size: 13,
     bold: true,
-    color: "#FFFFFF",
+    color: palette.onFill,
   });
-  write(data.orderNumber, LEFT + boxWidth - 5, headerTop + 9.5, { size: 10, color: "#C9D6CF" });
+  write(data.orderNumber, LEFT + boxWidth - 5, headerTop + 9.5, {
+    size: 10,
+    color: palette.onFillSoft,
+  });
   write(formatDate(data.createdAt), LEFT + boxWidth - 5, headerTop + 15.5, {
     size: 9,
-    color: "#C9D6CF",
+    color: palette.onFillSoft,
   });
-  write(data.statusLabel, LEFT + boxWidth - 5, headerTop + 20.5, { size: 9, color: "#C9D6CF" });
+  write(data.statusLabel, LEFT + boxWidth - 5, headerTop + 20.5, {
+    size: 9,
+    color: palette.onFillSoft,
+  });
 
   y = Math.max(y + 2, headerTop + boxHeight + 4);
-  doc.setDrawColor(BRASS);
+  doc.setDrawColor(palette.accent);
   doc.setLineWidth(0.6);
   doc.line(LEFT, y, RIGHT, y);
   y += 8;
@@ -292,14 +308,14 @@ export async function buildOrderDocumentPdf(
   }
 
   const drawTableHeader = (top: number): number => {
-    doc.setFillColor(INK);
+    doc.setFillColor(palette.fill);
     doc.rect(LEFT, top, CONTENT_WIDTH, 8, "F");
     columns.forEach((column, index) => {
       const isNumeric = column.key !== "name" && column.key !== "barcode" && column.key !== "index";
       write(column.label, columnRight[index]! - 2, top + 5.5, {
         size: 9,
         bold: true,
-        color: "#FFFFFF",
+        color: palette.onFill,
         align: isNumeric ? "right" : "right",
       });
     });
@@ -390,7 +406,7 @@ export async function buildOrderDocumentPdf(
       write(value, summaryLeft + 4, lineY, {
         size: strong ? 12 : 9.5,
         bold: strong,
-        color: strong ? BRASS : INK,
+        color: strong ? palette.accent : INK,
         align: "left",
       });
     });
@@ -408,8 +424,8 @@ export async function buildOrderDocumentPdf(
     y += 20;
   }
 
-  // הזמנה (לא הצעת מחיר): מה קורה עכשיו + שעות הטיפול
-  if (!isQuote) {
+  // הזמנה (לא הצעת מחיר) בחנות B2B: מה קורה עכשיו + שעות הטיפול
+  if (!isQuote && data.b2b === true) {
     const lines = wrapped(ORDER_HOURS.document, CONTENT_WIDTH - 8, 9.5);
     const boxHeight = 6 + lines.length * 5;
     if (y + boxHeight > PAGE_HEIGHT - footerReserve) {

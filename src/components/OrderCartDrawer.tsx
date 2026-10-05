@@ -38,7 +38,6 @@ import {
 import { calculateVat, DEFAULT_VAT_RATE } from "@/lib/vat";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useBackToClose } from "@/hooks/useBackToClose";
-import { ORDER_HOURS } from "@/lib/order-hours";
 import {
   cartSubtotal,
   freeShippingProgress,
@@ -263,13 +262,6 @@ export function OrderCartDrawer({
 
           <CartGiftLines gifts={gifts} />
           {nextHint && <PromotionHintLine hint={nextHint} />}
-
-          {items.length > 0 && (
-            <p className="flex items-start gap-2 rounded-lg border border-accent/30 bg-accent/10 p-3 text-xs leading-5 text-foreground">
-              <Clock className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
-              <span>{ORDER_HOURS.cart}</span>
-            </p>
-          )}
 
           {recommendations.length > 0 && (
             <div className="pt-2">

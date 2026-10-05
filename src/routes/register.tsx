@@ -36,6 +36,8 @@ function RegisterPage() {
   const googleLogin = useSubscription().can("googleLogin");
   const router = useRouter();
   const { settings } = useSiteSettings();
+  // חלק 22: "ממתין לאישור" — רק בחנות B2B (דרגי מחיר פעילים); בחנות רגילה זה מרתיע
+  const b2b = settings?.price_tiers_enabled === true;
   const register = useServerFn(registerCustomer);
   const checkInvite = useServerFn(checkCustomerInvite);
   const { invite: inviteToken } = Route.useSearch();
@@ -118,7 +120,7 @@ function RegisterPage() {
       }
 
       toast.success(
-        result.approved
+        result.approved || !b2b
           ? "החשבון נפתח ופעיל! שלחנו למייל טופס הצטרפות לחתימה."
           : "נרשמת בהצלחה! שלחנו למייל טופס הצטרפות לחתימה, והחשבון ממתין לאישור מנהל.",
       );
@@ -154,7 +156,9 @@ function RegisterPage() {
                 </Link>
               </Button>
               <p className="mt-2 text-center text-xs text-muted-foreground">
-                אחרי הכניסה ממלאים את פרטי העסק, והחשבון ממתין לאישור שלנו
+                {b2b
+                  ? "אחרי הכניסה ממלאים את פרטי העסק, והחשבון ממתין לאישור שלנו"
+                  : "כניסה בלי סיסמה — קוד חד-פעמי נשלח למייל"}
               </p>
               <OrDivider />
               {invite.status === "checking" && (

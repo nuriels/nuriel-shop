@@ -205,6 +205,10 @@ export type BitPaymentInfo = {
   storePhone: string | null;
   /** ההזמנה של לקוח רשום (יש לו "ההזמנות שלי") */
   registered: boolean;
+  /** חלק 22: איסוף עצמי — עם כתובת החנות ושעות הפעילות */
+  pickup: boolean;
+  storeAddress: string | null;
+  storeHours: string | null;
 };
 
 /** איפה העמוד עומד: לשלם / נשלח, ממתין לאישור / שולם / בוטל */
