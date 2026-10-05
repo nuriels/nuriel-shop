@@ -9,6 +9,7 @@ import {
   Scale,
   Search,
   Sparkles,
+  Star,
   Trash2,
   X,
 } from "lucide-react";
@@ -152,6 +153,8 @@ type FormState = {
   seoDescription: string;
   /** להציג בזאפ השוואת מחירים */
   showInZap: boolean;
+  /** חלק 20: "הקפץ למסך ראשי" — בבלוק "מוצרים נבחרים" במסך הבית */
+  isFeatured: boolean;
 };
 
 export type ProductDraft = { id: string; title: string; data: Json; updated_at: string };
@@ -195,6 +198,7 @@ function emptyForm(defaultCategory: string): FormState {
     seoTitle: "",
     seoDescription: "",
     showInZap: true,
+    isFeatured: false,
   };
 }
 
@@ -240,6 +244,7 @@ function fromProduct(product: GlobalProduct): FormState {
     seoTitle: product.seo_title ?? "",
     seoDescription: product.seo_description ?? "",
     showInZap: product.show_in_zap ?? true,
+    isFeatured: product.is_featured ?? false,
   };
 }
 
@@ -746,6 +751,7 @@ export function AdminProductDialog({
       seo_title: form.seoTitle.trim() || null,
       seo_description: form.seoDescription.trim() || null,
       show_in_zap: form.showInZap,
+      is_featured: form.isFeatured,
     };
     // דרגים 2/3: כשהם פעילים — נשמרים מהטופס. כשהם רדומים — מוצר קיים שומר
     // את הערכים שכבר יש לו (לא נמחקים), ומוצר חדש מקבל את אותו מחיר בכולם.
@@ -1445,9 +1451,9 @@ export function AdminProductDialog({
                   />
                 </div>
                 <p className="-mt-2 text-xs leading-5 text-muted-foreground">
-                  יורד אוטומטית כשלקוח שולח הזמנה (הכמות שמורה לו) וחוזר אם ההזמנה מבוטלת. ב-0 המוצר
-                  (או כשנשאר פחות ממארז אחד) מסומן "אזל" ונשלחת התראה. 0 במוצר שלא סומן "אזל" = מלאי
-                  שעוד לא נספר (בלי הגבלה).
+                  יורד אוטומטית כשלקוח שולח הזמנה (הכמות שמורה לו) וחוזר אם ההזמנה מבוטלת. במלאי 0
+                  (או כשנשאר פחות ממארז אחד) המוצר מוצג באתר "אזל מהמלאי", כפתור ההוספה לסל מנוטרל
+                  והוא יורד לסוף הרשימה — אוטומטית, גם בלי לסמן "אזל".
                   {form.variants.some((variant) => variant.stock.trim() !== "") &&
                     " לוריאציה עם מלאי משלה — המלאי שלה (בטבלת הוריאציות)."}
                 </p>
@@ -1483,6 +1489,34 @@ export function AdminProductDialog({
                 {form.category}" — כשמורידים את הסימון הוא חוזר לשם.
               </p>
             )}
+
+            {/* חלק 20: "הקפץ למסך ראשי" — בלוק "מוצרים נבחרים" במסך הבית */}
+            <label
+              htmlFor="p-featured"
+              className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${
+                form.isFeatured
+                  ? "border-amber-400 bg-amber-50/70 dark:border-amber-700 dark:bg-amber-950/30"
+                  : "border-border"
+              }`}
+            >
+              <span className="min-w-0">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Star
+                    className={`size-4 ${form.isFeatured ? "fill-amber-400 text-amber-500" : "text-muted-foreground"}`}
+                    aria-hidden="true"
+                  />
+                  הקפץ למסך ראשי
+                </span>
+                <span className="block text-xs leading-5 text-muted-foreground">
+                  המוצר יוצג בבלוק "מוצרים נבחרים" בעמוד הבית של החנות.
+                </span>
+              </span>
+              <Switch
+                id="p-featured"
+                checked={form.isFeatured}
+                onCheckedChange={(v) => patch({ isFeatured: v })}
+              />
+            </label>
 
             {/* זאפ השוואת מחירים (חלק 14) — מוצר שמסומן נכנס לפיד /zap.xml */}
             <label className="flex items-start gap-3 rounded-lg border border-border p-3">

@@ -64,10 +64,12 @@ export type GlobalProduct = {
   seo_description?: string | null;
   /** להציג בפיד של זאפ השוואת מחירים (/zap.xml) */
   show_in_zap?: boolean;
+  /** חלק 20: "הקפץ למסך ראשי" — בבלוק "מוצרים נבחרים" במסך הבית */
+  is_featured?: boolean;
 };
 
 export const PRODUCT_ADMIN_COLUMNS =
-  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto, is_order_bump, order_bump_text, is_digital, variant_attributes, seo_title, seo_description, show_in_zap" as const;
+  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto, is_order_bump, order_bump_text, is_digital, variant_attributes, seo_title, seo_description, show_in_zap, is_featured" as const;
 
 /** לסוכן שבונה הזמנה ללקוח: כל דרגי המחיר, בלי מחיר עלות (ניהולי בלבד) */
 export const STAFF_CATALOG_COLUMNS =
@@ -115,7 +117,42 @@ export type CatalogItem = {
   variant_attributes?: VariantAttribute[];
   /** הוריאציות הפעילות, עם המחיר לצופה וזמינות */
   variants?: CatalogVariant[];
+  /** חלק 20: "הקפץ למסך ראשי" — בבלוק "מוצרים נבחרים" במסך הבית */
+  is_featured?: boolean;
 };
+
+/**
+ * חלק 20 — מלאי חכם: יש במלאי למכירה לפחות מארז אחד (או יחידה אחת).
+ * מוצר דיגיטלי — תמיד (אין לו מלאי פיזי). זהה ל-product_stock_sellable במסד.
+ */
+export function stockSellable(item: {
+  stock_quantity: number;
+  pack_size?: number | null;
+  is_digital?: boolean | null;
+}): boolean {
+  if (item.is_digital) return true;
+  return item.stock_quantity >= Math.max(item.pack_size ?? 1, 1);
+}
+
+/**
+ * "אזל" כפי שהלקוח רואה באתר — למוצר בלי וריאציות: הסימון הידני, או מלאי 0
+ * (גם כשהסימון לא עודכן). למוצר עם וריאציות קובעות הוריאציות (במסד).
+ */
+export function shownAsSoldOut(item: {
+  is_out_of_stock: boolean;
+  stock_quantity: number;
+  pack_size?: number | null;
+  is_digital?: boolean | null;
+}): boolean {
+  return item.is_out_of_stock || !stockSellable(item);
+}
+
+/** קודם מה שיש במלאי, בסוף מה שאזל — מיון יציב (הסדר בתוך כל קבוצה נשמר) */
+export function inStockFirst<T extends { is_out_of_stock: boolean }>(items: T[]): T[] {
+  const available = items.filter((item) => !item.is_out_of_stock);
+  if (available.length === items.length) return items;
+  return [...available, ...items.filter((item) => item.is_out_of_stock)];
+}
 
 /** מוצר נחשב "חדש באתר" בחודש הראשון שלו */
 export const NEW_PRODUCT_DAYS = 30;

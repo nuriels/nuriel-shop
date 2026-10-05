@@ -132,7 +132,7 @@ export type EmailSettings = {
    * (דומיין המערכת המאומת ב-Resend) ומצורף בשרת. ברירת מחדל: orders.
    */
   sender_local_part: string;
-  /** כתובת למענה (Reply-To) — כל דומיין; ריק = אימייל העסק מהגדרות האתר */
+  /** חלק 20: לא בשימוש עוד (השדה הוסר מהממשק) — תשובות מגיעות לאימייל העסק מהגדרות האתר */
   reply_to_email: string;
   notify_admin_user_ids: string[];
 };

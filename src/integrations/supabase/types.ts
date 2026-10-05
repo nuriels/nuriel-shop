@@ -1179,6 +1179,7 @@ export type Database = {
           created_at: string;
           image_url: string | null;
           show_on_home: boolean;
+          show_on_homepage: boolean;
           name: string;
           parent_name: string | null;
           sort_order: number;
@@ -1189,6 +1190,7 @@ export type Database = {
           created_at?: string;
           image_url?: string | null;
           show_on_home?: boolean;
+          show_on_homepage?: boolean;
           name: string;
           parent_name?: string | null;
           sort_order?: number;
@@ -1199,6 +1201,7 @@ export type Database = {
           created_at?: string;
           image_url?: string | null;
           show_on_home?: boolean;
+          show_on_homepage?: boolean;
           name?: string;
           parent_name?: string | null;
           sort_order?: number;
@@ -1495,6 +1498,7 @@ export type Database = {
           seo_description: string | null;
           show_in_zap: boolean;
           low_stock_alerted: boolean;
+          is_featured: boolean;
         };
         Insert: {
           tenant_id?: string;
@@ -1538,6 +1542,7 @@ export type Database = {
           seo_description?: string | null;
           show_in_zap?: boolean;
           low_stock_alerted?: boolean;
+          is_featured?: boolean;
         };
         Update: {
           tenant_id?: string;
@@ -1581,6 +1586,7 @@ export type Database = {
           seo_description?: string | null;
           show_in_zap?: boolean;
           low_stock_alerted?: boolean;
+          is_featured?: boolean;
         };
         Relationships: [
           {
@@ -2837,6 +2843,7 @@ export type Database = {
           variant_attributes: Json;
           variants: Json;
           categories: string[];
+          is_featured: boolean;
         }[];
       };
       admin_dashboard: { Args: never; Returns: Json };

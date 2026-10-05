@@ -16,8 +16,8 @@ export type CategoryRow = {
   parent_name: string | null;
   sort_order: number;
   image_url: string | null;
-  /** מוצגת כריבוי במסך הבית של הקטלוג */
-  show_on_home: boolean;
+  /** חלק 20: "הצג קטגוריה במסך הבית" — ריבוע בעמוד הראשי של הקטלוג */
+  show_on_homepage: boolean;
 };
 
 export type CategoryNode = CategoryRow & {

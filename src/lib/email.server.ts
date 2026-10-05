@@ -7,8 +7,8 @@
 //    החנות בוחרת רק את החלק שלפני ה-@ (email_settings.sender_local_part,
 //    ברירת מחדל orders). הדומיין: מ-EMAIL_FROM_ADDRESS, ואם לא הוגדרה —
 //    TENANT_BASE_DOMAIN (ברירת מחדל nuri1.fit).
-//  - תשובות של לקוחות (Reply-To) מגיעות לחנות עצמה: הכתובת למענה מהגדרות
-//    המייל של החנות, או אימייל העסק מהגדרות האתר.
+//  - תשובות של לקוחות (Reply-To) מגיעות לחנות עצמה: אימייל העסק מהגדרות
+//    האתר.
 // אם המפתח חסר, השליחה מדולגת (לא חוסמת הזמנה) ונרשמת בלוג.
 //
 // חלק 17: חנות יכולה לחבר חשבון Resend משלה (מפתח + כתובת שולח על הדומיין
@@ -138,8 +138,9 @@ export type StoreSender = {
  * בפלטפורמה) + הכתובת שהחנות בחרה על דומיין המערכת ("electro@nuri1.fit";
  * ברירת מחדל orders@nuri1.fit). הדומיין תמיד של המערכת — גם אם במסד יש ערך
  * לא תקין, נופלים לברירת המחדל ולא שולחים מדומיין אחר.
- * Reply-To — הכתובת למענה שהחנות הגדירה, או אימייל העסק; כתובת על דומיין
- * המערכת עצמו לא משמשת למענה (אף אחד לא קורא אותה).
+ * Reply-To — אימייל העסק מ"הגדרות אתר" (חלק 20: השדה הנפרד "כתובת למענה"
+ * הוסר מהממשק, ולכן גם ערך ישן שנשאר בו במסד כבר לא משמש — אחרת הוא היה
+ * "תקוע" בלי דרך לשנות אותו). כתובת על דומיין המערכת לא משמשת למענה.
  */
 export async function storeSender(): Promise<StoreSender> {
   const systemDomain = systemSenderDomain();
@@ -159,17 +160,18 @@ export async function storeSender(): Promise<StoreSender> {
           .maybeSingle(),
         supabaseAdmin
           .from("email_settings")
-          .select("sender_local_part, reply_to_email")
+          .select("sender_local_part")
           .eq("id", true)
           .maybeSingle(),
       ]);
       name = site?.business_name?.trim() || site?.site_title?.trim() || tenant.name || "";
       const chosen = emailSettings?.sender_local_part?.trim().toLowerCase() ?? "";
       if (chosen !== "" && senderLocalPartProblem(chosen) === null) localPart = chosen;
+      const businessEmail = site?.business_email?.trim().toLowerCase() ?? "";
       replyTo =
-        [emailSettings?.reply_to_email, site?.business_email]
-          .map((value) => value?.trim().toLowerCase() ?? "")
-          .find((value) => isValidEmail(value) && value.split("@")[1] !== systemDomain) ?? null;
+        isValidEmail(businessEmail) && businessEmail.split("@")[1] !== systemDomain
+          ? businessEmail
+          : null;
     }
   } catch (error) {
     console.error("[email] failed to load the store sender", error);

@@ -24,7 +24,6 @@ import { NotificationLogCard } from "@/components/NotificationLogCard";
 type AdminOption = { user_id: string; email: string };
 type Diagnostics = Awaited<ReturnType<typeof getEmailDiagnostics>>;
 
-const EMAIL_FORMAT = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 /** דומיין המערכת — עד שהאבחון נטען (בשרת הוא נקבע מ-EMAIL_FROM_ADDRESS) */
 const FALLBACK_DOMAIN = "nuri1.fit";
 
@@ -32,8 +31,9 @@ const FALLBACK_DOMAIN = "nuri1.fit";
  * התראות מייל של החנות.
  * ברירת המחדל: המיילים יוצאים מתשתית אחת לכל החנויות (מפתח Resend גלובלי
  * בשרת), שמאומת רק על דומיין המערכת — לכן כתובת השולח @nuri1.fit. החנות
- * בוחרת את החלק שלפני ה-@ (ברירת מחדל orders), לאן יגיעו תשובות (Reply-To),
- * מי מקבל התראה על הזמנה חדשה, ובודקת שהשליחה עובדת.
+ * בוחרת את החלק שלפני ה-@ (ברירת מחדל orders), מי מקבל התראה על הזמנה
+ * חדשה, ובודקת שהשליחה עובדת. תשובות של לקוחות מגיעות לאימייל העסק
+ * מ"הגדרות אתר" (חלק 20: השדה הנפרד "כתובת למענה" הוסר — היה מבלבל).
  * חלק 17: אפשר לחבר חשבון Resend משלכם (מפתח + כתובת על הדומיין שלכם) —
  * אישורי ההזמנה ללקוחות יוצאים אז ממנו; ויומן של כל ההתראות שנשלחו.
  */
@@ -115,19 +115,9 @@ export function EmailSettingsPanel() {
       toast.error(`כתובת השולח: ${localProblem}`);
       return;
     }
-    const replyTo = settings.reply_to_email.trim().toLowerCase();
-    if (replyTo !== "" && !EMAIL_FORMAT.test(replyTo)) {
-      toast.error("הכתובת למענה אינה תקינה");
-      return;
-    }
     setBusy(true);
     try {
-      await saveEmailSettings({
-        ...settings,
-        sender_local_part: localPart,
-        reply_to_email: replyTo,
-      });
-      setSettings({ ...settings, reply_to_email: replyTo });
+      await saveEmailSettings({ ...settings, sender_local_part: localPart });
       setDiagnostics(await loadDiagnostics({ data: {} }).catch(() => diagnostics));
       toast.success(`הגדרות המייל נשמרו — המיילים יישלחו מ-${localPart}@${domain}`);
     } catch (error) {
@@ -149,7 +139,7 @@ export function EmailSettingsPanel() {
         <div>
           <h2 className="text-xl font-bold text-foreground">התראות מייל</h2>
           <p className="text-sm text-muted-foreground">
-            אישורי הזמנה ללקוחות, חשבון Resend משלכם, כתובת השולח, יומן התראות ובדיקת שליחה
+            אישורי הזמנה ללקוחות, כתובת השולח, יומן התראות ובדיקת שליחה
           </p>
         </div>
       </div>
@@ -225,29 +215,6 @@ export function EmailSettingsPanel() {
                 חזרה לברירת המחדל ({defaultLocal}@{domain})
               </Button>
             )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="e-reply-to">כתובת למענה (Reply-To) — לכאן יגיעו תשובות של לקוחות</Label>
-            <Input
-              id="e-reply-to"
-              type="email"
-              dir="ltr"
-              className="max-w-md"
-              placeholder="office@yourbusiness.co.il"
-              value={settings.reply_to_email}
-              onChange={(e) => setSettings({ ...settings, reply_to_email: e.target.value })}
-            />
-            <p className="text-xs text-muted-foreground">
-              כל כתובת (גם Gmail). ריק = אימייל העסק מ"הגדרות אתר"
-              {diagnostics?.replyTo ? (
-                <>
-                  {" "}
-                  (כרגע: <span dir="ltr">{diagnostics.replyTo}</span>)
-                </>
-              ) : null}
-              .
-            </p>
           </div>
 
           {diagnostics && (

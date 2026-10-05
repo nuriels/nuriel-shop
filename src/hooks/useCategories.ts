@@ -10,7 +10,7 @@ export async function fetchCategoryRows(force = false): Promise<CategoryRow[]> {
   if (cached !== null && !force) return cached;
   const { data, error } = await supabase
     .from("categories")
-    .select("id, name, parent_name, sort_order, image_url, show_on_home")
+    .select("id, name, parent_name, sort_order, image_url, show_on_homepage")
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
   if (error) {

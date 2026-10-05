@@ -19,7 +19,7 @@ import { useCart } from "@/hooks/useCart";
 import { useCategoryTree } from "@/hooks/useCategories";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { addToCartItems, type AddToCartOptions } from "@/lib/cart";
-import type { CatalogItem } from "@/lib/catalog";
+import { inStockFirst, type CatalogItem } from "@/lib/catalog";
 import { subtreeNames } from "@/lib/category-tree";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { trackAddToCart } from "@/lib/marketing";
@@ -111,6 +111,8 @@ function ProductPage() {
       fetchAllRows((from, to) =>
         supabase
           .rpc("get_catalog")
+          // חלק 20: מה שיש במלאי קודם (גם בהמלצות), מה שאזל — בסוף
+          .order("is_out_of_stock", { ascending: true })
           .order("created_at", { ascending: false })
           .order("id")
           .range(from, to),
@@ -118,7 +120,7 @@ function ProductPage() {
       loadSalesData(),
     ]);
     if (error) toast.error(error.message);
-    setProducts((data as CatalogItem[]) ?? []);
+    setProducts(inStockFirst((data as CatalogItem[]) ?? []));
     setSales(salesData);
     setLoading(false);
   }, []);

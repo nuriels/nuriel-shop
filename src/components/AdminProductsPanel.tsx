@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Eye, FileClock, Loader2, Lock, Package, Trash2 } from "lucide-react";
+import { Boxes, Eye, FileClock, Loader2, Lock, Package, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { variantAttributesOf } from "@/lib/variants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -32,6 +33,7 @@ import {
   formatSaleCountdown,
   isSaleActive,
   PRODUCT_ADMIN_COLUMNS,
+  stockSellable,
   type GlobalProduct,
 } from "@/lib/catalog";
 import { inCategories, productCountsByCategory, subtreeNames } from "@/lib/category-tree";
@@ -206,6 +208,29 @@ export function AdminProductsPanel({
     void load();
   };
 
+  // חלק 20: "הקפץ למסך ראשי" — מתג מהיר בכרטיס, נשמר מיד (בלי לפתוח את העריכה)
+  const setFeatured = async (product: GlobalProduct, next: boolean) => {
+    const patchFeatured = (value: boolean) =>
+      setProducts((current) =>
+        current.map((p) => (p.id === product.id ? { ...p, is_featured: value } : p)),
+      );
+    patchFeatured(next);
+    const { error } = await supabase
+      .from("global_products")
+      .update({ is_featured: next })
+      .eq("id", product.id);
+    if (error) {
+      patchFeatured(!next);
+      toast.error(error.message);
+      return;
+    }
+    toast.success(
+      next
+        ? `"${product.name}" יוצג ב"מוצרים נבחרים" במסך הבית`
+        : `"${product.name}" הוסר מ"מוצרים נבחרים"`,
+    );
+  };
+
   const deleteDraft = async (draft: ProductDraft) => {
     const { error } = await supabase.from("product_drafts").delete().eq("id", draft.id);
     if (error) {
@@ -278,11 +303,43 @@ export function AdminProductsPanel({
             מבצע בלי מחיר
           </Badge>
         )}
-        {product.is_out_of_stock && (
+        {product.is_out_of_stock ? (
           <Badge variant="destructive">{product.out_of_stock_auto ? "אזל (אוטומטי)" : "אזל"}</Badge>
+        ) : (
+          // חלק 20: מלאי 0 — באתר הוא כבר מוצג "אזל מהמלאי", גם בלי הסימון
+          variantAttributesOf(product).length === 0 &&
+          !stockSellable(product) && (
+            <Badge variant="destructive" title='באתר המוצר מוצג "אזל מהמלאי" עד שתעדכנו כמות במלאי'>
+              אזל (מלאי 0)
+            </Badge>
+          )
         )}
         {product.is_hidden && <Badge variant="outline">מוסתר · {product.category}</Badge>}
       </div>
+      <label
+        htmlFor={`featured-${product.id}`}
+        data-no-drag
+        data-featured-toggle={product.id}
+        className={`flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+          product.is_featured
+            ? "border-amber-400 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100"
+            : "border-border text-muted-foreground"
+        }`}
+      >
+        <span className="flex items-center gap-1.5">
+          <Star
+            className={`size-4 ${product.is_featured ? "fill-amber-400 text-amber-500" : ""}`}
+            aria-hidden="true"
+          />
+          הקפץ למסך ראשי
+        </span>
+        <Switch
+          id={`featured-${product.id}`}
+          checked={product.is_featured === true}
+          onCheckedChange={(next) => void setFeatured(product, next)}
+          aria-label={`הקפץ את "${product.name}" למסך הראשי`}
+        />
+      </label>
       <AdminProductDialog product={product} onSaved={load} />
       {product.is_hidden && (
         <Button

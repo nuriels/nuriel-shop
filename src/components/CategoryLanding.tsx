@@ -16,7 +16,7 @@ export function CategoryLanding({
   /** מספר המוצרים לכל קטגוריה, כולל תת-הקטגוריות */
   counts: Map<string, number>;
   onSelect: (name: string) => void;
-  /** true = המנהל עוד לא בחר קטגוריות ל"הצג במסך הבית", מוצגות קטגוריות השורש */
+  /** true = המנהל עוד לא בחר קטגוריות ל"הצג קטגוריה במסך הבית" — מוצגות 5 הראשונות */
   usingFallback?: boolean;
 }) {
   if (categories.length === 0) {
@@ -66,8 +66,8 @@ export function CategoryLanding({
       {usingFallback && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Package className="size-3.5 shrink-0" />
-          מוצגות קטגוריות השורש. בפאנל הניהול, "ניהול קטגוריות" אפשר לבחור בדיוק אילו קטגוריות יוצגו
-          כאן.
+          מוצגות הקטגוריות הראשונות. בפאנל הניהול, ב"ניהול קטגוריות", מסמנים "הצג קטגוריה במסך הבית"
+          כדי לבחור בדיוק אילו קטגוריות יוצגו כאן.
         </p>
       )}
     </div>

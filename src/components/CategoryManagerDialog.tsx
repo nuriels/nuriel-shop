@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -111,7 +112,51 @@ const CATEGORY_TREE_BODY_DESCRIPTION =
   "בונים עץ של עד " +
   MAX_CATEGORY_DEPTH +
   " רמות — למשל אלכוהול ← וויסקי ← סקוטי. לחיצה על קטגוריה בקטלוג מציגה גם את כל מה שמתחתיה. " +
-  'התמונה וה"הצגה במסך הבית" עובדות בכל רמה. מוצרים לא נמחקים מכאן לעולם.';
+  'התמונה וה"הצג קטגוריה במסך הבית" עובדות בכל רמה. מוצרים לא נמחקים מכאן לעולם.';
+
+/** "הצג קטגוריה במסך הבית" — מתג עם תווית (ביצירה ובשורה של כל קטגוריה) */
+function HomepageSwitch({
+  id,
+  checked,
+  disabled,
+  onChange,
+  compact = false,
+  categoryName,
+}: {
+  id: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+  /** בשורת הקטגוריה: תווית קצרה, ובנייד רק אייקון */
+  compact?: boolean;
+  categoryName?: string;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className={cn(
+        "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md text-xs font-medium",
+        compact ? "px-1.5 py-1" : "text-sm",
+        checked ? "text-primary" : "text-muted-foreground",
+        disabled && "cursor-not-allowed opacity-60",
+      )}
+      title={checked ? "מוצגת במסך הבית" : "הצג קטגוריה במסך הבית"}
+    >
+      <Home className={cn("size-4", checked && "fill-current")} aria-hidden="true" />
+      <span className={compact ? "hidden md:inline" : undefined}>
+        {compact ? "במסך הבית" : "הצג קטגוריה במסך הבית"}
+      </span>
+      <Switch
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onChange}
+        aria-label={categoryName ? `הצג את "${categoryName}" במסך הבית` : "הצג קטגוריה במסך הבית"}
+        data-homepage-switch={categoryName ?? "new"}
+      />
+    </label>
+  );
+}
 
 export type CategoryTreeBodyHandle = {
   hasPendingEdit: () => boolean;
@@ -120,7 +165,7 @@ export type CategoryTreeBodyHandle = {
 
 /**
  * גוף עריכת עץ הקטגוריות: הוספה בכל רמה, שינוי שם, העברה, סידור, תמונה
- * והצגה במסך הבית (בכל רמה), ומחיקה. כל שינוי שם, העברה ומחיקה עוברים חלון
+ * ו"הצג קטגוריה במסך הבית" (חלק 20: מתג ביצירה ובכל שורה), ומחיקה. כל שינוי שם, העברה ומחיקה עוברים חלון
  * אישור עם פירוט ההשפעה — ומחיקה אפשרית רק לקטגוריה ריקה, כך שמוצר לא יכול
  * להימחק בגלל לחיצה כאן. משותף לחלון הקופץ (עריכה מהירה) וללשונית הניהול.
  */
@@ -133,8 +178,10 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
     const [busy, setBusy] = useState(false);
     const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
     const [newRoot, setNewRoot] = useState("");
+    const [newRootHome, setNewRootHome] = useState(false);
     const [addingUnder, setAddingUnder] = useState<string | null>(null);
     const [childName, setChildName] = useState("");
+    const [childHome, setChildHome] = useState(false);
     const [editing, setEditing] = useState<string | null>(null);
     const [editValue, setEditValue] = useState("");
     const [pending, setPending] = useState<Pending | null>(null);
@@ -176,18 +223,24 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
       return siblings.reduce((max, node) => Math.max(max, node.sort_order), 0) + 1;
     };
 
-    const add = (rawName: string, parent: string | null) =>
+    const add = (rawName: string, parent: string | null, showOnHomepage: boolean) =>
       guard(async () => {
         const name = normalizeCategoryName(rawName);
         if (name === "") return;
-        const { error } = await supabase
-          .from("categories")
-          .insert({ name, parent_name: parent, sort_order: nextOrder(parent) });
+        const { error } = await supabase.from("categories").insert({
+          name,
+          parent_name: parent,
+          sort_order: nextOrder(parent),
+          show_on_homepage: showOnHomepage,
+        });
         if (error) throw new Error(error.message);
         await reload();
-        if (parent === null) setNewRoot("");
-        else {
+        if (parent === null) {
+          setNewRoot("");
+          setNewRootHome(false);
+        } else {
           setChildName("");
+          setChildHome(false);
           setAddingUnder(null);
           setCollapsed((current) => {
             const next = new Set(current);
@@ -195,7 +248,10 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
             return next;
           });
         }
-        toast.success(parent ? `"${name}" נוספה תחת "${parent}"` : `הקטגוריה "${name}" נוספה`);
+        toast.success(
+          (parent ? `"${name}" נוספה תחת "${parent}"` : `הקטגוריה "${name}" נוספה`) +
+            (showOnHomepage ? " ותוצג במסך הבית" : ""),
+        );
       });
 
     const moveWithinSiblings = (node: CategoryNode, direction: -1 | 1) =>
@@ -285,12 +341,11 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
         toast.success(`התמונה של "${name}" הוסרה`);
       });
 
-    const toggleShowOnHome = (node: CategoryNode) =>
+    const setShowOnHomepage = (node: CategoryNode, next: boolean) =>
       guard(async () => {
-        const next = !node.show_on_home;
         const { error } = await supabase
           .from("categories")
-          .update({ show_on_home: next })
+          .update({ show_on_homepage: next })
           .eq("name", node.name);
         if (error) throw new Error(error.message);
         await refreshCategories();
@@ -321,7 +376,8 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
 
       return (
         <li key={node.name}>
-          <div className="group flex items-center gap-1 rounded-lg border border-border bg-card py-1 pe-1 ps-1.5">
+          {/* בנייד הכפתורים יורדים לשורה שנייה — כדי שהשם לא יידחס עד שייעלם */}
+          <div className="group flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card py-1 pe-1 ps-1.5 sm:flex-nowrap">
             {hasChildren ? (
               <button
                 type="button"
@@ -359,7 +415,7 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
             </div>
 
             {editing === node.name ? (
-              <div className="flex min-w-0 flex-1 items-center gap-1">
+              <div className="flex min-w-[12rem] flex-1 items-center gap-1 sm:min-w-0">
                 <Input
                   value={editValue}
                   onChange={(event) => setEditValue(event.target.value)}
@@ -396,7 +452,7 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
                 </Button>
               </div>
             ) : (
-              <div className="flex min-w-0 flex-1 items-baseline gap-2 px-1">
+              <div className="flex min-w-[9rem] flex-1 items-baseline gap-2 px-1 sm:min-w-0">
                 <span className="truncate font-medium text-foreground">{node.name}</span>
                 <span
                   className="numeric shrink-0 text-xs text-muted-foreground"
@@ -408,7 +464,7 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
             )}
 
             {editing !== node.name && (
-              <div className="flex shrink-0 items-center">
+              <div className="ms-auto flex shrink-0 items-center">
                 <Button
                   size="icon"
                   variant="ghost"
@@ -438,6 +494,7 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
                     onClick={() => {
                       setAddingUnder(node.name);
                       setChildName("");
+                      setChildHome(false);
                       setEditing(null);
                     }}
                   >
@@ -445,22 +502,14 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
                     <span className="hidden sm:inline">תת-קטגוריה</span>
                   </Button>
                 )}
-                <Button
-                  size="icon"
-                  variant={node.show_on_home ? "secondary" : "ghost"}
-                  className="size-8"
+                <HomepageSwitch
+                  id={`home-${node.id ?? node.name}`}
+                  compact
+                  categoryName={node.name}
+                  checked={node.show_on_homepage}
                   disabled={busy}
-                  onClick={() => void toggleShowOnHome(node)}
-                  aria-pressed={node.show_on_home}
-                  aria-label={
-                    node.show_on_home
-                      ? `הסרת "${node.name}" ממסך הבית`
-                      : `הצגת "${node.name}" כריבוע במסך הבית`
-                  }
-                  title={node.show_on_home ? "מוצגת במסך הבית" : "הצגה במסך הבית"}
-                >
-                  <Home className={node.show_on_home ? "size-4 fill-current" : "size-4"} />
-                </Button>
+                  onChange={(next) => void setShowOnHomepage(node, next)}
+                />
                 <DropdownMenu dir="rtl">
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -516,39 +565,47 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
           </div>
 
           {addingUnder === node.name && (
-            <div className="ms-6 mt-1 flex gap-2 border-s border-border ps-3">
-              <Input
-                value={childName}
-                onChange={(event) => setChildName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    // בלי זה, ה-Enter "נוחת" על כפתור הביטול של חלון האישור שנפתח וסוגר אותו מיד
-                    event.preventDefault();
-                    void add(childName, node.name);
-                  }
-                  if (event.key === "Escape") setAddingUnder(null);
-                }}
-                placeholder={`תת-קטגוריה תחת "${node.name}"`}
-                maxLength={CATEGORY_NAME_MAX}
-                autoFocus
-                className="h-9"
+            <div className="ms-6 mt-1 space-y-2 border-s border-border ps-3">
+              <div className="flex gap-2">
+                <Input
+                  value={childName}
+                  onChange={(event) => setChildName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      // בלי זה, ה-Enter "נוחת" על כפתור הביטול של חלון האישור שנפתח וסוגר אותו מיד
+                      event.preventDefault();
+                      void add(childName, node.name, childHome);
+                    }
+                    if (event.key === "Escape") setAddingUnder(null);
+                  }}
+                  placeholder={`תת-קטגוריה תחת "${node.name}"`}
+                  maxLength={CATEGORY_NAME_MAX}
+                  autoFocus
+                  className="h-9"
+                />
+                <Button
+                  size="sm"
+                  className="h-9"
+                  disabled={busy || childName.trim() === ""}
+                  onClick={() => void add(childName, node.name, childHome)}
+                >
+                  הוספה
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9"
+                  onClick={() => setAddingUnder(null)}
+                >
+                  ביטול
+                </Button>
+              </div>
+              <HomepageSwitch
+                id={`new-child-home-${node.id ?? node.name}`}
+                checked={childHome}
+                disabled={busy}
+                onChange={setChildHome}
               />
-              <Button
-                size="sm"
-                className="h-9"
-                disabled={busy || childName.trim() === ""}
-                onClick={() => void add(childName, node.name)}
-              >
-                הוספה
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-9"
-                onClick={() => setAddingUnder(null)}
-              >
-                ביטול
-              </Button>
             </div>
           )}
 
@@ -709,25 +766,36 @@ const CategoryTreeBody = forwardRef<CategoryTreeBodyHandle, { active?: boolean }
 
     return (
       <>
-        <div className="flex gap-2">
-          <Input
-            value={newRoot}
-            onChange={(event) => setNewRoot(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                // בלי זה, ה-Enter "נוחת" על כפתור הביטול של חלון האישור שנפתח וסוגר אותו מיד
-                event.preventDefault();
-                void add(newRoot, null);
-              }
-            }}
-            placeholder="קטגוריה ראשית חדשה, למשל: משקאות אלכוהוליים"
-            maxLength={CATEGORY_NAME_MAX}
-            aria-label="שם קטגוריה ראשית חדשה"
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Input
+              value={newRoot}
+              onChange={(event) => setNewRoot(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  // בלי זה, ה-Enter "נוחת" על כפתור הביטול של חלון האישור שנפתח וסוגר אותו מיד
+                  event.preventDefault();
+                  void add(newRoot, null, newRootHome);
+                }
+              }}
+              placeholder="קטגוריה ראשית חדשה, למשל: משקאות אלכוהוליים"
+              maxLength={CATEGORY_NAME_MAX}
+              aria-label="שם קטגוריה ראשית חדשה"
+            />
+            <Button
+              onClick={() => void add(newRoot, null, newRootHome)}
+              disabled={busy || newRoot.trim() === ""}
+            >
+              <Plus className="size-4" />
+              הוספה
+            </Button>
+          </div>
+          <HomepageSwitch
+            id="new-root-home"
+            checked={newRootHome}
+            disabled={busy}
+            onChange={setNewRootHome}
           />
-          <Button onClick={() => void add(newRoot, null)} disabled={busy || newRoot.trim() === ""}>
-            <Plus className="size-4" />
-            הוספה
-          </Button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto pe-1">

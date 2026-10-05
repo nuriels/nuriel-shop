@@ -11,6 +11,7 @@ import { AccountNotice } from "@/components/AccountNotice";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { OnboardingGate } from "@/components/OnboardingGate";
 import { HotDealsStrip } from "@/components/HotDealsStrip";
+import { FeaturedProducts } from "@/components/FeaturedProducts";
 import { HomeBanner } from "@/components/BannerCarousel";
 import { CategoryBrowser } from "@/components/CategoryBrowser";
 import { CategoryLanding } from "@/components/CategoryLanding";
@@ -24,7 +25,8 @@ import { useCart } from "@/hooks/useCart";
 import { useCustomerProfile } from "@/hooks/useCustomerProfile";
 import { useCategoryTree } from "@/hooks/useCategories";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { isNewProduct, minOrderMessage, type CatalogItem } from "@/lib/catalog";
+import { inStockFirst, isNewProduct, minOrderMessage, type CatalogItem } from "@/lib/catalog";
+import { featuredBlock, homepageCategories } from "@/lib/homepage";
 import { addToCartItems, syncCartWithCatalog, type AddToCartOptions } from "@/lib/cart";
 import { inCategories, productCountsByCategory, subtreeNames } from "@/lib/category-tree";
 import { cartLineKey, cartMinimum, cartMinUnits, cartStep } from "@/lib/orders";
@@ -119,16 +121,19 @@ function StoreCatalog() {
 
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
-    // בעמודים — אלפי מוצרים לא נחתכים במגבלת השורות של ה-API
+    // בעמודים — אלפי מוצרים לא נחתכים במגבלת השורות של ה-API.
+    // חלק 20: מה שיש במלאי קודם, מה שאזל (גם מלאי 0) — בסוף. כל התצוגות
+    // (מסך הבית, קטגוריות, חיפוש, מבצעים) מסננות את הרשימה הזו ושומרות על הסדר.
     const { data, error } = await fetchAllRows((from, to) =>
       supabase
         .rpc("get_catalog")
+        .order("is_out_of_stock", { ascending: true })
         .order("created_at", { ascending: false })
         .order("id")
         .range(from, to),
     );
     if (error) toast.error(error.message);
-    setProducts(data as CatalogItem[]);
+    setProducts(inStockFirst(data as CatalogItem[]));
     setCatalogLoading(false);
   }, []);
 
@@ -173,21 +178,13 @@ function StoreCatalog() {
   useEffect(() => {
     if (role?.role === "warehouse") void navigate({ to: "/warehouse" });
   }, [role?.role, navigate]);
-  const featuredCategories = useMemo(
-    () =>
-      categoryTree.flat.filter(
-        (node) => node.show_on_home && (isStaffRole || (categoryCounts.get(node.name) ?? 0) > 0),
-      ),
+  // חלק 20: הקטגוריות שסומנו "הצג קטגוריה במסך הבית" — ואם אף אחת, 5 הראשונות
+  const { categories: landingCategories, usingFallback: usingFallbackCategories } = useMemo(
+    () => homepageCategories(categoryTree, categoryCounts, isStaffRole),
     [categoryTree, categoryCounts, isStaffRole],
   );
-  const usingFallbackCategories = featuredCategories.length === 0;
-  const landingCategories = useMemo(() => {
-    if (!usingFallbackCategories) return featuredCategories;
-    // המנהל עוד לא בחר קטגוריות ל"הצג במסך הבית" — קטגוריות השורש כברירת מחדל
-    return categoryTree.roots.filter(
-      (node) => isStaffRole || (categoryCounts.get(node.name) ?? 0) > 0,
-    );
-  }, [usingFallbackCategories, featuredCategories, categoryTree, categoryCounts, isStaffRole]);
+  // בלוק "מוצרים נבחרים" ("הקפץ למסך ראשי") — ואם אין, החדשים ביותר
+  const featured = useMemo(() => featuredBlock(products), [products]);
 
   const query = term.trim().toLowerCase();
   const showLanding = category === null && query === "";
@@ -508,6 +505,15 @@ function StoreCatalog() {
             onAddToCart={addToCart}
           />
 
+          {showLanding && !catalogLoading && (
+            <FeaturedProducts
+              block={featured}
+              canAdd={canUseCart}
+              addLabel={addLabel}
+              onAddToCart={canUseCart ? addToCart : undefined}
+            />
+          )}
+
           <section id="catalog" className="scroll-mt-4 space-y-4">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0">
@@ -557,7 +563,7 @@ function StoreCatalog() {
                   categories={landingCategories}
                   counts={categoryCounts}
                   onSelect={setCategory}
-                  usingFallback={usingFallbackCategories}
+                  usingFallback={usingFallbackCategories && isStaffRole}
                 />
               ) : (
                 <>

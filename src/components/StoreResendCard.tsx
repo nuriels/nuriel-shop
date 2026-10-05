@@ -304,7 +304,7 @@ export function StoreResendCard({
             ) : (
               <p className="text-xs text-muted-foreground">
                 הדומיין צריך להיות מאומת ב-<span dir="ltr">Resend → Domains</span>. שם השולח יהיה שם
-                החנות. תשובות של לקוחות יגיעו לכתובת למענה שמוגדרת למטה.
+                החנות. תשובות של לקוחות יגיעו לאימייל העסק מ"הגדרות אתר".
               </p>
             )}
           </div>
