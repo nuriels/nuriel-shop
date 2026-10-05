@@ -31,6 +31,9 @@ const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml", "/zap.xml"]);
 // חלק 16: לכאן Hyp מחזיר את הלקוח אחרי התשלום (מוגדר במסוף כדף הצלחה וכישלון).
 // מטופל לפני נעילת החנות — חידוש מנוי של חנות שפג תוקפה חייב לעבור.
 const HYP_RETURN_PATH = "/payments/hyp/return";
+// חלק 16ב: הודעת שרת-לשרת מ-Hyp אחרי תשלום (Webhook / IPN) — מוגדרת במסוף.
+// גם היא לפני נעילת החנות, ובלי SSR (תשובת טקסט קצרה ל-Hyp).
+const HYP_WEBHOOK_PATH = "/api/webhooks/hyp";
 
 // הזמנות שלא שולמו תוך 30 דקות מבוטלות (המלאי חוזר) — בדיקה כל 5 דקות
 void import("./server/services/payments").then((m) => m.startPaymentExpiryJob());
@@ -139,6 +142,10 @@ export default {
         return await runWithTenant(host, tenant, () =>
           handleHypReturn(request, requestOrigin(request)),
         );
+      }
+      if (pathname === HYP_WEBHOOK_PATH) {
+        const { handleHypWebhook } = await import("./server/services/payments");
+        return await runWithTenant(host, tenant, () => handleHypWebhook(request));
       }
       if (FEED_PATHS.has(pathname)) {
         const { renderFeed } = await import("./lib/feeds.server");

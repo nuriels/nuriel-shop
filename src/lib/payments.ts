@@ -20,6 +20,14 @@ export function hypReturnUrl(origin: string): string {
   return `${origin.replace(/\/$/, "")}${HYP_RETURN_PATH}`;
 }
 
+/** הודעת שרת-לשרת (Webhook / IPN) — זהה ל-HYP_WEBHOOK_PATH בשרת (חלק 16ב) */
+export const HYP_WEBHOOK_PATH = "/api/webhooks/hyp";
+
+/** הכתובת להגדרה במסוף ב-Hyp כהודעת שרת אחרי תשלום */
+export function hypWebhookUrl(origin: string): string {
+  return `${origin.replace(/\/$/, "")}${HYP_WEBHOOK_PATH}`;
+}
+
 /** טוקן של כוונת תשלום (Order ב-Hyp) — 32 תווים הקסדצימליים */
 export function isAddonOrPlanToken(value: string): boolean {
   return /^[0-9a-f]{32}$/.test(value);
@@ -51,6 +59,11 @@ export type PaymentSettings = {
   updatedAt: string | null;
   /** בדיקת הסליקה האחרונה (null = עוד לא בוצעה) */
   lastTest: PaymentTestResult | null;
+  /**
+   * חלק 16ב: הסליקה פתוחה במערכת (המתג הראשי במסד). false = ממתינה לאישור
+   * סופי של חברת האשראי — אפשר לשמור פרטי מסוף ולבדוק, אבל לא להפעיל.
+   */
+  live: boolean;
 };
 
 type Raw = Record<string, unknown>;
@@ -75,6 +88,7 @@ export function parsePaymentSettings(raw: unknown): PaymentSettings {
     keyHint: strOrNull(row["key_hint"]),
     updatedAt: strOrNull(row["updated_at"]),
     lastTest: parsePaymentTest(row["last_test"]),
+    live: row["live"] === true,
   };
 }
 

@@ -56,6 +56,8 @@ export function PlatformPaymentsCard() {
   }, [refresh]);
 
   const ready = settings?.enabled === true;
+  // חלק 16ב: הסליקה סגורה לחנויות וללקוחות עד לאישור סופי של חברת האשראי
+  const live = settings?.live === true;
   const origin = typeof window === "undefined" ? "" : window.location.origin;
 
   return (
@@ -76,12 +78,20 @@ export function PlatformPaymentsCard() {
           <span
             className={cn(
               "rounded-full px-2.5 py-0.5 text-xs font-bold",
-              ready
+              ready && live
                 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
-                : "bg-muted text-muted-foreground",
+                : ready
+                  ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+                  : "bg-muted text-muted-foreground",
             )}
           >
-            {settings === null ? "…" : ready ? "מחובר — מנויים ותוספים בתשלום מאובטח" : "לא מחובר"}
+            {settings === null
+              ? "…"
+              : ready && live
+                ? "מחובר — מנויים ותוספים בתשלום מאובטח"
+                : ready
+                  ? "מסוף מוגדר — הסליקה עדיין סגורה"
+                  : "לא מחובר"}
           </span>
         </CardTitle>
         <CardDescription>
@@ -97,6 +107,13 @@ export function PlatformPaymentsCard() {
             <ExternalLink className="size-3.5" aria-hidden="true" />
           </a>
         </CardDescription>
+        {settings !== null && !live && (
+          <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+            הסליקה באשראי סגורה כרגע לחנויות וללקוחות, עד לאישור סופי של חברת האשראי: בעלי החנויות
+            לא רואים את הגדרות הסליקה, והקופה לא מציעה תשלום באשראי. כאן אפשר כבר לשמור את פרטי
+            המסוף של הפלטפורמה ולבדוק אותם (בדיקת חיבור / חיוב ₪1).
+          </p>
+        )}
       </CardHeader>
       <CardContent>
         <PaymentTerminalForm

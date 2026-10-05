@@ -143,7 +143,15 @@ export type CheckoutPayload = {
   shipping_method_id: string;
   /** קוד קופון (חלק 14) — "" = בלי. נבדק ונקבע במסד */
   coupon_code: string;
+  /**
+   * אמצעי התשלום שהלקוח בחר (חלק 16ב) — בקשה בלבד: המסד מחליט
+   * (orders_card_payment_default). אשראי רק כשהסליקה פתוחה ופעילה בחנות.
+   */
+  payment_method: PaymentMethodChoice;
 };
+
+/** "תשלום באשראי (מאובטח)" או "תשלום מול נציג" (בלי חיוב באתר) */
+export type PaymentMethodChoice = "credit_card" | "offline";
 
 export function checkoutPayload(
   form: CheckoutForm,
@@ -152,6 +160,7 @@ export function checkoutPayload(
     requireAddress: true,
   },
   couponCode: string | null = null,
+  paymentMethod: PaymentMethodChoice = "offline",
 ): CheckoutPayload {
   const alternate = shipping.requireAddress && form.shipToDifferent;
   return {
@@ -172,6 +181,7 @@ export function checkoutPayload(
     accepted_terms: form.acceptedTerms,
     shipping_method_id: shipping.methodId ?? "",
     coupon_code: couponCode ?? "",
+    payment_method: paymentMethod,
   };
 }
 

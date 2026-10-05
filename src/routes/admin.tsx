@@ -26,7 +26,8 @@ import { ShippingMethodsPanel } from "@/components/ShippingMethodsPanel";
 import { CustomPricesPanel } from "@/components/CustomPricesPanel";
 import { BillingPanel } from "@/components/billing/BillingPanel";
 import { AddonsStorePanel } from "@/components/billing/AddonsStorePanel";
-import { PaymentSettingsPanel } from "@/components/payments/PaymentSettingsPanel";
+// TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
+// import { PaymentSettingsPanel } from "@/components/payments/PaymentSettingsPanel";
 import { LegalPagesPanel } from "@/components/legal/LegalPagesPanel";
 import { SiteInboxPanel, type InboxView } from "@/components/inbox/SiteInboxPanel";
 import { paymentOutcomeOf, type PaymentOutcome } from "@/lib/payments";
@@ -364,14 +365,24 @@ function AdminPage() {
               </TabsContent>
               <TabsContent value="site" className="space-y-6">
                 <SiteSettingsPanel />
+                {
+                  // TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
+                }
+                {/*
                 <PaymentSettingsPanel />
+                */}
               </TabsContent>
               <TabsContent value="legal">
                 <LegalPagesPanel />
               </TabsContent>
+              {
+                // TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
+              }
+              {/*
               <TabsContent value="payments">
                 <PaymentSettingsPanel testOutcome={payment} onOutcomeSeen={clearPayment} />
               </TabsContent>
+              */}
               <TabsContent value="marketing">
                 <MarketingPanel />
               </TabsContent>

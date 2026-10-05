@@ -33,7 +33,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { hypReturnUrl, type PaymentSettings, type PaymentTestResult } from "@/lib/payments";
+import {
+  hypReturnUrl,
+  hypWebhookUrl,
+  type PaymentSettings,
+  type PaymentTestResult,
+} from "@/lib/payments";
 import { cn } from "@/lib/utils";
 
 /** העתקת ערך ללוח — עם גיבוי כשאין הרשאת לוח (http) */
@@ -124,7 +129,8 @@ export function PaymentTerminalForm({
   useEffect(() => {
     if (!settings) return;
     setTerminal(settings.terminal ?? "");
-    setEnabled(settings.terminal ? settings.enabled : true);
+    // חלק 16ב: כל עוד הסליקה סגורה במערכת — אי אפשר להדליק (המסד גם חוסם)
+    setEnabled(settings.live ? (settings.terminal ? settings.enabled : true) : false);
     setMaxPayments(settings.maxPayments);
     setPassword("");
     setApiKey("");
@@ -132,6 +138,9 @@ export function PaymentTerminalForm({
 
   const connected = Boolean(settings?.terminal && settings.hasPassword && settings.hasKey);
   const returnUrl = hypReturnUrl(returnOrigin);
+  const webhookUrl = hypWebhookUrl(returnOrigin);
+  /** הסליקה פתוחה במערכת (המתג הראשי) — null בזמן הטעינה */
+  const live = settings ? settings.live : null;
 
   const save = async () => {
     setBusy("save");
@@ -179,12 +188,12 @@ export function PaymentTerminalForm({
         </p>
         <ol className="space-y-1.5 text-xs leading-5 text-muted-foreground">
           <li>
-            <span className="font-semibold text-foreground">1. מספר המסוף (Masof)</span> — המספר של
-            המסוף שלכם, בדרך כלל 10 ספרות.
+            <span className="font-semibold text-foreground">1. מספר מסוף (Hyp/MAX)</span> — המספר של
+            המסוף שלכם (Masof), בדרך כלל 10 ספרות.
           </li>
           <li>
-            <span className="font-semibold text-foreground">2. סיסמת API (PassP)</span> — סיסמה
-            שמוגדרת במסוף לעסקאות דרך האתר. זו לא הסיסמה שאיתה נכנסים לממשק של MAX.
+            <span className="font-semibold text-foreground">2. סיסמת מסוף</span> — סיסמת ה-API
+            (PassP) שמוגדרת במסוף לעסקאות דרך האתר. זו לא הסיסמה שאיתה נכנסים לממשק של MAX.
           </li>
           <li>
             <span className="font-semibold text-foreground">3. מפתח API (KEY)</span> — מחרוזת ארוכה
@@ -204,26 +213,44 @@ export function PaymentTerminalForm({
         </p>
       </div>
 
-      <div className="space-y-2 rounded-xl border border-dashed bg-secondary/40 p-4">
-        <p className="text-sm font-semibold">כתובת החזרה — להגדרה במסוף ב-Hyp</p>
-        <p className="text-xs leading-5 text-muted-foreground">
-          בהגדרות המסוף ב-Hyp (או דרך נציג MAX) הגדירו את הכתובת הזו גם כ"דף הצלחה" וגם כ"דף
-          כישלון". אליה הלקוח חוזר אחרי התשלום, והשרת מאמת מול Hyp שהתשלום אמיתי.
-        </p>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <code
-            dir="ltr"
-            className="min-w-0 flex-1 truncate rounded-lg border bg-background px-3 py-2 text-sm"
-          >
-            {returnUrl}
-          </code>
-          <CopyValueButton value={returnUrl} label="העתקת הכתובת" copiedText="הכתובת הועתקה" />
+      <div className="space-y-3 rounded-xl border border-dashed bg-secondary/40 p-4">
+        <p className="text-sm font-semibold">כתובות להגדרה במסוף ב-Hyp</p>
+        <div className="space-y-1.5">
+          <p className="text-xs leading-5 text-muted-foreground">
+            <span className="font-semibold text-foreground">דף הצלחה וגם דף כישלון</span> — אליה
+            הלקוח חוזר אחרי התשלום, והשרת מאמת מול Hyp שהתשלום אמיתי.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <code
+              dir="ltr"
+              className="min-w-0 flex-1 truncate rounded-lg border bg-background px-3 py-2 text-sm"
+            >
+              {returnUrl}
+            </code>
+            <CopyValueButton value={returnUrl} label="העתקת הכתובת" copiedText="הכתובת הועתקה" />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-xs leading-5 text-muted-foreground">
+            <span className="font-semibold text-foreground">הודעת שרת אחרי תשלום (Webhook)</span> —
+            אם במסוף יש אפשרות כזו: Hyp מודיע לשרת שלנו ישירות, כך שההזמנה מסומנת "שולמה" גם אם
+            הלקוח סגר את הדפדפן לפני שחזר לאתר.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <code
+              dir="ltr"
+              className="min-w-0 flex-1 truncate rounded-lg border bg-background px-3 py-2 text-sm"
+            >
+              {webhookUrl}
+            </code>
+            <CopyValueButton value={webhookUrl} label="העתקת הכתובת" copiedText="הכתובת הועתקה" />
+          </div>
         </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-terminal`}>1. מספר המסוף (Masof)</Label>
+          <Label htmlFor={`${idPrefix}-terminal`}>1. מספר מסוף (Hyp/MAX)</Label>
           <Input
             id={`${idPrefix}-terminal`}
             dir="ltr"
@@ -250,7 +277,7 @@ export function PaymentTerminalForm({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-password`}>2. סיסמת API (PassP)</Label>
+          <Label htmlFor={`${idPrefix}-password`}>2. סיסמת מסוף (סיסמת API — PassP)</Label>
           <Input
             id={`${idPrefix}-password`}
             type="password"
@@ -292,16 +319,29 @@ export function PaymentTerminalForm({
           className={cn(
             "flex items-center justify-between gap-3 rounded-xl border p-4",
             enabled ? "border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/20" : "",
+            live === false && "opacity-70",
           )}
         >
           <span className="space-y-0.5">
             <span className="block font-semibold">סליקה פעילה בקופה</span>
             <span className="block text-xs text-muted-foreground">
-              הזמנות של לקוחות ישולמו באשראי לפני שהן נכנסות לטיפול. כבוי — הקופה עובדת כמו קודם
-              (תיאום תשלום מול הלקוח). מומלץ להפעיל אחרי בדיקת סליקה מוצלחת.
+              בקופה תופיע ללקוח האפשרות "תשלום באשראי (מאובטח)" לצד "תשלום מול נציג". הזמנה באשראי
+              נכנסת לטיפול רק אחרי שהתשלום אושר. כבוי — הקופה עובדת כמו קודם. מומלץ להפעיל אחרי
+              בדיקת סליקה מוצלחת.
             </span>
+            {live === false && (
+              <span className="block text-xs font-semibold text-amber-700 dark:text-amber-300">
+                הסליקה באשראי עדיין לא נפתחה במערכת — ממתינה לאישור סופי של חברת האשראי. אפשר כבר
+                עכשיו לשמור את פרטי המסוף ולבדוק את החיבור.
+              </span>
+            )}
           </span>
-          <Switch id={`${idPrefix}-enabled`} checked={enabled} onCheckedChange={setEnabled} />
+          <Switch
+            id={`${idPrefix}-enabled`}
+            checked={enabled}
+            onCheckedChange={setEnabled}
+            disabled={live === false}
+          />
         </label>
       )}
 

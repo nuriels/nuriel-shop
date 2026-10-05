@@ -75,6 +75,7 @@ import {
   validateCheckoutForm,
   type CheckoutErrors,
   type CheckoutForm,
+  type PaymentMethodChoice,
 } from "@/lib/checkout";
 import { formatAddress } from "@/lib/order-details";
 import { placeGuestOrder, updateMyDetails } from "@/lib/checkout.functions";
@@ -111,6 +112,11 @@ export const Route = createFileRoute("/checkout")({
 });
 
 /** מזהה העגלה בדפדפן — לעגלות נטושות (מתחלף אחרי כל הזמנה) */
+// TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
+// חלק 16ב: כל עוד בחירת אמצעי התשלום מוסתרת — ההזמנות נשלחות "מול נציג"
+// (בלי חיוב באתר), גם אם מישהו פתח את הסליקה במסד. בהסרת ההסתרה: "credit_card".
+const DEFAULT_PAYMENT_METHOD: PaymentMethodChoice = "offline";
+
 const CART_SESSION_KEY = "checkout-cart-session";
 const EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -199,6 +205,8 @@ function CheckoutPage() {
   const [form, setForm] = useState<CheckoutForm>(EMPTY_CHECKOUT_FORM);
   const [attempted, setAttempted] = useState(false);
   const [saveToProfile, setSaveToProfile] = useState(true);
+  // חלק 16ב: "תשלום באשראי (מאובטח)" / "תשלום מול נציג" — רלוונטי רק בחנות עם סליקה פעילה
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodChoice>(DEFAULT_PAYMENT_METHOD);
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
@@ -292,6 +300,8 @@ function CheckoutPage() {
   const kind: "order" | "quote" = priced ? "order" : "quote";
   // סליקה באשראי (חלק 16): הזמנה (לא בקשת הצעת מחיר) בחנות שהפעילה סליקה
   const cardPayments = kind === "order" && settings?.card_payments_enabled === true;
+  // הלקוח בחר לשלם באשראי (המסד מאשר רק כשהסליקה פתוחה ופעילה בחנות)
+  const payByCard = cardPayments && paymentMethod === "credit_card";
 
   // הסל מול הקטלוג: מוצר שאזל / הוסר יוצא (עם הודעה), מחירים ומארזים מתעדכנים
   useEffect(() => {
@@ -606,6 +616,7 @@ function CheckoutPage() {
         requireAddress,
       },
       kind === "order" && coupon ? coupon.code : null,
+      payByCard ? "credit_card" : "offline",
     );
     const alternate = requireAddress && form.shipToDifferent;
     const delivery = alternate
@@ -648,7 +659,7 @@ function CheckoutPage() {
         const order = data?.[0];
         if (error || !order) throw new Error(error?.message ?? "שליחת ההזמנה נכשלה");
 
-        if (cardPayments && order.kind === "order") {
+        if (payByCard && order.kind === "order") {
           const payment = await payForOrderFn({ data: { orderId: order.id } });
           if (payment.status === "awaiting" || payment.status === "error") {
             await goToPayment(payment.redirectTo);
@@ -1208,6 +1219,79 @@ function CheckoutPage() {
                   </CardContent>
                 </Card>
 
+                {
+                  // TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
+                }
+                {/*
+                {cardPayments && (
+                  <Card className="shadow-card" id="co-payment">
+                    <CardContent className="space-y-3 pt-6">
+                      <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
+                        <CreditCard className="size-5 text-accent" aria-hidden="true" />
+                        אמצעי תשלום
+                      </h2>
+                      <RadioGroup
+                        dir="rtl"
+                        value={paymentMethod}
+                        onValueChange={(value) =>
+                          setPaymentMethod(value === "offline" ? "offline" : "credit_card")
+                        }
+                        className="gap-2"
+                        aria-label="אמצעי תשלום"
+                      >
+                        <label
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 transition-colors ${
+                            paymentMethod === "credit_card"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40"
+                          }`}
+                        >
+                          <RadioGroupItem value="credit_card" className="mt-1" />
+                          <CreditCard
+                            className="mt-0.5 size-5 shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-bold text-foreground">
+                              תשלום באשראי (מאובטח)
+                            </span>
+                            <span className="block text-xs leading-5 text-muted-foreground">
+                              בסיום עוברים לדף התשלום המאובטח של חברת הסליקה (Hyp / MAX). פרטי
+                              הכרטיס לא עוברים דרכנו ולא נשמרים אצלנו.
+                            </span>
+                          </span>
+                          <ShieldCheck
+                            className="mt-0.5 size-5 shrink-0 text-emerald-600"
+                            aria-hidden="true"
+                          />
+                        </label>
+                        <label
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 transition-colors ${
+                            paymentMethod === "offline"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40"
+                          }`}
+                        >
+                          <RadioGroupItem value="offline" className="mt-1" />
+                          <PackageCheck
+                            className="mt-0.5 size-5 shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-bold text-foreground">
+                              תשלום מול נציג
+                            </span>
+                            <span className="block text-xs leading-5 text-muted-foreground">
+                              בלי חיוב באתר — נציג ייצור קשר לאישור ההזמנה ולסידור התשלום.
+                            </span>
+                          </span>
+                        </label>
+                      </RadioGroup>
+                    </CardContent>
+                  </Card>
+                )}
+                */}
+
                 {/* ---------- אישורים ושליחה ---------- */}
                 <div className="space-y-4">
                   {isCustomer && (
@@ -1272,21 +1356,26 @@ function CheckoutPage() {
                     </p>
                   )}
 
+                  {
+                    // TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
+                    // בהסרת ההסתרה: הכפתור הזה (עם "לתשלום מאובטח") מחליף את הכפתור הפשוט שמתחתיו.
+                  }
+                  {/*
                   <Button type="submit" size="lg" className="h-12 w-full text-base" disabled={busy}>
                     {busy ? (
                       <Loader2 className="size-5 animate-spin" aria-hidden="true" />
-                    ) : cardPayments ? (
+                    ) : payByCard ? (
                       <CreditCard className="size-5" aria-hidden="true" />
                     ) : (
                       <PackageCheck className="size-5" aria-hidden="true" />
                     )}
                     {busy
-                      ? cardPayments
+                      ? payByCard
                         ? "מעבירים לתשלום מאובטח…"
                         : "שולח…"
                       : kind === "quote"
                         ? "שליחת הבקשה להצעת מחיר"
-                        : cardPayments
+                        : payByCard
                           ? `לתשלום מאובטח · ${formatIls(grandTotal)}`
                           : `אישור ושליחת ההזמנה · ${formatIls(grandTotal)}`}
                   </Button>
@@ -1294,9 +1383,28 @@ function CheckoutPage() {
                     <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                     {kind === "quote"
                       ? "הבקשה לא מחייבת — נחזור אליכם עם הצעת מחיר."
-                      : cardPayments
+                      : payByCard
                         ? "התשלום מתבצע בדף המאובטח של חברת הסליקה (Hyp). פרטי הכרטיס לא עוברים דרכנו ולא נשמרים אצלנו."
                         : "אין חיוב באתר — נציג ייצור קשר לאישור ההזמנה ולסידור התשלום."}
+                  </p>
+                  */}
+                  <Button type="submit" size="lg" className="h-12 w-full text-base" disabled={busy}>
+                    {busy ? (
+                      <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <PackageCheck className="size-5" aria-hidden="true" />
+                    )}
+                    {busy
+                      ? "שולח…"
+                      : kind === "quote"
+                        ? "שליחת הבקשה להצעת מחיר"
+                        : `אישור ושליחת ההזמנה · ${formatIls(grandTotal)}`}
+                  </Button>
+                  <p className="flex items-start justify-center gap-1.5 text-center text-xs leading-5 text-muted-foreground">
+                    <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                    {kind === "quote"
+                      ? "הבקשה לא מחייבת — נחזור אליכם עם הצעת מחיר."
+                      : "אין חיוב באתר — נציג ייצור קשר לאישור ההזמנה ולסידור התשלום."}
                   </p>
                 </div>
               </form>

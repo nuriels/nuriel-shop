@@ -5,11 +5,19 @@
  * לא מגיעים לדפדפן אף פעם. הדפדפן מקבל רק את הקישור החתום לדף התשלום.
  *
  * הפרוטוקול (Pay Protocol):
- *  1. בקשת תשלום — APISign / What=SIGN עם פרטי העסקה. Hyp מחזיר מחרוזת
- *     פרמטרים חתומה, ודף התשלום הוא  <base>?action=pay&<המחרוזת>.
- *     הסכום וה-Order חתומים — הלקוח לא יכול לשנות אותם בדרך.
- *  2. אחרי התשלום Hyp מחזיר את הלקוח לדף ההצלחה / הכישלון שהוגדר במסוף,
- *     עם Id, CCode, Amount, ACode, Order, Sign ועוד.
+ *  1. בקשת תשלום — generatePaymentUrl: APISign / What=SIGN עם פרטי העסקה
+ *     (Masof = מסוף, PassP = סיסמת המסוף, KEY = מפתח ה-API, Amount, Coin =
+ *     מטבע, Info = תיאור, Order = המזהה שלנו). נשלחת ב-POST (הפרטים בגוף
+ *     הבקשה ולא בכתובת), ואם Hyp לא מקבל POST — בצורה המתועדת (GET).
+ *     Hyp מחזיר מחרוזת פרמטרים חתומה, ודף התשלום הוא
+ *     <base>?action=pay&<המחרוזת>. הסכום וה-Order חתומים — הלקוח לא יכול
+ *     לשנות אותם בדרך.
+ *  2. כתובות החזרה: Hyp לוקח אותן מהגדרות המסוף (דף הצלחה / דף כישלון,
+ *     והודעת שרת-לשרת אם הוגדרה) — לא מהבקשה. מגדירים שם:
+ *       • דף הצלחה וכישלון: <האתר>/payments/hyp/return  (הלקוח חוזר לכאן)
+ *       • הודעת שרת (Webhook / IPN): <האתר>/api/webhooks/hyp
+ *     שתיהן מאמתות ומסמנות "שולם" — מי שמגיעה ראשונה; השנייה רואה ששולם.
+ *     החזרה מגיעה עם Id, CCode, Amount, ACode, Order, Sign ועוד.
  *  3. אימות — כל הפרמטרים שחזרו, כפי שהם, נשלחים ל-APISign / What=VERIFY
  *     עם KEY + PassP + Masof. רק CCode=0 בתשובה = החתימה אמיתית. בלי
  *     האימות הזה כל אחד יכול "להחזיר" לדף ההצלחה עם פרמטרים מזויפים.
@@ -21,6 +29,14 @@ export const HYP_DEFAULT_URL = "https://pay.hyp.co.il/p/";
 
 /** הנתיב שאליו Hyp מחזיר את הלקוח — מוגדר במסוף כדף הצלחה וכדף כישלון */
 export const HYP_RETURN_PATH = "/payments/hyp/return";
+
+/** הודעת שרת-לשרת מ-Hyp אחרי תשלום (Webhook / IPN) — מוגדרת במסוף */
+export const HYP_WEBHOOK_PATH = "/api/webhooks/hyp";
+
+/** מטבע העסקה — הפרמטר Coin ב-Hyp */
+export type HypCurrency = "ILS" | "USD" | "EUR";
+
+export const HYP_COIN: Record<HypCurrency, string> = { ILS: "1", USD: "2", EUR: "3" };
 
 const TIMEOUT_MS = 15_000;
 
@@ -37,7 +53,9 @@ export type HypPaymentRequest = {
   /** מזהה ייחודי שלנו (כוונת התשלום) — חוזר ב-Order */
   order: string;
   amount: number;
-  /** תיאור שמופיע בדף התשלום */
+  /** ברירת מחדל: ש"ח */
+  currency?: HypCurrency;
+  /** תיאור שמופיע בדף התשלום (Info — למשל "הזמנה SH260000123") */
   description: string;
   /** עד כמה תשלומים הלקוח יכול לבחור (1 = בלי תשלומים) */
   maxPayments?: number;
@@ -116,7 +134,7 @@ export function buildSignParams(creds: HypCredentials, req: HypPaymentRequest): 
   params.set("UTF8out", "True");
   params.set("Sign", "True");
   params.set("MoreData", "True");
-  params.set("Coin", "1");
+  params.set("Coin", HYP_COIN[req.currency ?? "ILS"] ?? HYP_COIN.ILS);
   params.set("PageLang", "HEB");
   params.set("tmp", "1");
   // תשלומים: עד maxPayments לבחירת הלקוח
@@ -139,49 +157,107 @@ export function buildSignParams(creds: HypCredentials, req: HypPaymentRequest): 
   return params;
 }
 
-async function hypGet(query: string): Promise<string> {
+/** בקשה ל-Hyp: GET (הפרמטרים בכתובת — הצורה המתועדת) או POST (בגוף הבקשה) */
+async function hypRequest(method: "GET" | "POST", query: string): Promise<string> {
   let response: Response;
   try {
-    response = await fetch(`${hypBaseUrl()}?${query}`, {
-      method: "GET",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { Accept: "text/plain, */*" },
-    });
+    response =
+      method === "GET"
+        ? await fetch(`${hypBaseUrl()}?${query}`, {
+            method: "GET",
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+            headers: { Accept: "text/plain, */*" },
+          })
+        : await fetch(hypBaseUrl(), {
+            method: "POST",
+            body: query,
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+              Accept: "text/plain, */*",
+            },
+          });
   } catch (error) {
-    console.error("[hyp] request failed", error instanceof Error ? error.message : error);
+    console.error(`[hyp] ${method} failed`, error instanceof Error ? error.message : error);
     throw new HypError("אין חיבור לחברת הסליקה כרגע. נסו שוב בעוד רגע.");
   }
   const text = (await response.text()).trim();
   if (!response.ok) {
-    console.error("[hyp] HTTP", response.status, text.slice(0, 200));
+    console.error(`[hyp] ${method} HTTP`, response.status, text.slice(0, 200));
     throw new HypError("חברת הסליקה החזירה שגיאה. נסו שוב בעוד רגע.");
   }
   return text;
 }
 
+const hypGet = (query: string) => hypRequest("GET", query);
+
+type SignOutcome =
+  { kind: "signed"; url: string } | { kind: "refused"; code: string | null; text: string };
+
+/** התשובה ל-SIGN: מחרוזת חתומה → קישור לדף התשלום; אחרת — סירוב */
+function readSignResponse(text: string): SignOutcome {
+  const signed = new URLSearchParams(text);
+  if (!text || !signed.has("signature")) {
+    return { kind: "refused", code: signed.get("CCode"), text };
+  }
+  signed.delete("action");
+  return { kind: "signed", url: `${hypBaseUrl()}?action=pay&${signed.toString()}` };
+}
+
+function signRefusal(outcome: Extract<SignOutcome, { kind: "refused" }>): HypError {
+  const { code } = outcome;
+  console.error("[hyp] SIGN refused", code, outcome.text.slice(0, 200));
+  return new HypError(
+    code === "901" || code === "902"
+      ? "פרטי המסוף בחברת הסליקה שגויים (מספר מסוף / סיסמת API / מפתח API). בדקו את הגדרות הסליקה."
+      : `חברת הסליקה סירבה ליצור את דף התשלום (קוד ${code ?? "לא ידוע"}).`,
+    code,
+  );
+}
+
+/** האם Hyp מקבל את בקשת החתימה ב-POST (נלמד בפעם הראשונה; null = עוד לא ידוע) */
+let signViaPost: boolean | null = null;
+
 /**
- * יצירת קישור מאובטח לדף התשלום של Hyp.
+ * Generate Payment URL — יצירת קישור מאובטח לדף התשלום של Hyp.
  * מחזיר את הכתובת המלאה שאליה מעבירים את הלקוח.
+ *
+ * POST קודם: מספר המסוף, סיסמת המסוף ומפתח ה-API עוברים בגוף הבקשה ולא
+ * בכתובת (שנשמרת ביומני שרתים). אם Hyp לא מחזיר מחרוזת חתומה ל-POST —
+ * שולחים שוב בצורה המתועדת (GET), והתשובה שלה קובעת. בקשת חתימה לא
+ * יוצרת עסקה ולא מחייבת, כך שניסיון שני בטוח.
  */
-export async function createPaymentLink(
+export async function generatePaymentUrl(
   creds: HypCredentials,
   req: HypPaymentRequest,
 ): Promise<string> {
-  const text = await hypGet(buildSignParams(creds, req).toString());
-  const signed = new URLSearchParams(text);
-  // תשובת שגיאה: CCode בלי חתימה (מסוף לא מורשה / פרטי API שגויים וכו')
-  if (!text || (!signed.has("signature") && signed.has("CCode"))) {
-    const code = signed.get("CCode");
-    console.error("[hyp] SIGN refused", code, text.slice(0, 200));
-    throw new HypError(
-      code === "901" || code === "902"
-        ? "פרטי המסוף בחברת הסליקה שגויים (מספר מסוף / סיסמת API / מפתח API). בדקו את הגדרות הסליקה."
-        : `חברת הסליקה סירבה ליצור את דף התשלום (קוד ${code ?? "לא ידוע"}).`,
-      code,
-    );
+  const query = buildSignParams(creds, req).toString();
+  if (signViaPost !== false) {
+    try {
+      const outcome = readSignResponse(await hypRequest("POST", query));
+      if (outcome.kind === "signed") {
+        signViaPost = true;
+        return outcome.url;
+      }
+    } catch {
+      // POST לא עבר (חיבור / HTTP) — ננסה בצורה המתועדת
+    }
   }
-  signed.delete("action");
-  return `${hypBaseUrl()}?action=pay&${signed.toString()}`;
+  const outcome = readSignResponse(await hypGet(query));
+  if (outcome.kind === "signed") {
+    // ה-GET הצליח אחרי שה-POST לא — מכאן והלאה ישר ב-GET
+    if (signViaPost === null) signViaPost = false;
+    return outcome.url;
+  }
+  throw signRefusal(outcome);
+}
+
+/** השם מחלק 16 — אותה פונקציה */
+export const createPaymentLink = generatePaymentUrl;
+
+/** לבדיקות: לשכוח מה נלמד על POST */
+export function resetHypTransportForTests(): void {
+  signViaPost = null;
 }
 
 /** הפרמטרים ש-Hyp מחזיר לדף ההצלחה / הכישלון */
