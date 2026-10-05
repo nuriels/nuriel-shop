@@ -55,6 +55,11 @@ export type SiteSettings = {
   label_width_mm: number;
   /** גובה מדבקת המשלוח במ"מ — 20 עד 300 */
   label_height_mm: number;
+  /**
+   * סליקה באשראי פעילה (חלק 16): הזמנות של לקוחות משולמות ב-Hyp לפני שהן
+   * נכנסות לטיפול. נשמר רק דרך "אמצעי תשלום וסליקה" (לא מטופס ההגדרות).
+   */
+  card_payments_enabled: boolean;
 };
 
 /** מידות ברירת המחדל של מדבקת משלוח (כמו במסד) */
@@ -90,7 +95,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, card_payments_enabled" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -132,6 +137,7 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     free_shipping_threshold: null,
     label_width_mm: DEFAULT_LABEL_SIZE.width,
     label_height_mm: DEFAULT_LABEL_SIZE.height,
+    card_payments_enabled: false,
   };
 }
 
@@ -149,8 +155,9 @@ export async function loadLabelSize(): Promise<{ width: number; height: number }
 }
 
 export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
-  // מתג הדרגים לא נשמר מטופס ההגדרות — משנים אותו רק במסד, בכוונה
-  const { price_tiers_enabled, ...editable } = settings;
+  // מתג הדרגים לא נשמר מטופס ההגדרות — משנים אותו רק במסד, בכוונה.
+  // הסליקה — רק דרך store_save_payment_settings (חלק 16)
+  const { price_tiers_enabled, card_payments_enabled, ...editable } = settings;
   const { error } = await supabase
     .from("site_settings")
     .update({ ...editable, brand_color: normalizeBrandColor(editable.brand_color) })

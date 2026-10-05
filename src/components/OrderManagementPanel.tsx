@@ -28,6 +28,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { PaymentBadge } from "@/components/orders/PaymentBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -681,6 +682,7 @@ export function OrderManagementPanel({
                                 <Badge variant={ORDER_STATUS_BADGE[order.status]}>
                                   {ORDER_STATUS_LABEL[order.status]}
                                 </Badge>
+                                <PaymentBadge status={order.payment_status} />
                                 {order.status === "awaiting_courier" && attempts > 0 && (
                                   <Badge
                                     variant="outline"

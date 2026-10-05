@@ -13,6 +13,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { PaymentBadge } from "@/components/orders/PaymentBadge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -132,6 +133,7 @@ function OrderDetails({
           <Badge variant={ORDER_STATUS_BADGE[order.status]}>
             {ORDER_STATUS_LABEL[order.status]}
           </Badge>
+          <PaymentBadge status={order.payment_status} />
         </div>
         <DialogDescription className="text-right">
           {formatOrderDate(order.created_at)}

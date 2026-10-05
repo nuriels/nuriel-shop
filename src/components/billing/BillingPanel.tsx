@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertTriangle,
+  Building2,
   CalendarClock,
   Check,
   Crown,
@@ -18,8 +20,13 @@ import {
 } from "lucide-react";
 import { getStoreBilling, type StoreBilling } from "@/lib/billing.functions";
 import { ADDON_DEFAULTS } from "@/lib/addons";
+import { BUSINESS_TYPE_LABELS, type BillingProfile, type PaymentOutcome } from "@/lib/payments";
+import { PaymentOutcomeBanner } from "@/components/billing/AddonsStorePanel";
+import { PlanPayDialog } from "@/components/billing/PlanPayDialog";
+import { BillingProfileDialog } from "@/components/billing/BillingProfileDialog";
 import {
   BILLING_KIND_LABELS,
+  BILLING_METHOD_LABELS,
   PAYMENT_METHOD_LABELS,
   PLAN_LABELS,
   TRIAL_DAYS,
@@ -54,12 +61,20 @@ type PaidPlan = Exclude<PlanType, "trial">;
 export function BillingPanel({
   onChoosePlan,
   onContactSupport,
+  paymentOutcome,
+  onOutcomeSeen,
 }: {
   onChoosePlan: (plan: PaidPlan) => void;
   onContactSupport: () => void;
+  /** חזרה מדף התשלום של Hyp (חלק 16) */
+  paymentOutcome?: PaymentOutcome | undefined;
+  onOutcomeSeen?: () => void;
 }) {
   const load = useServerFn(getStoreBilling);
+  const router = useRouter();
   const [data, setData] = useState<StoreBilling | null>(null);
+  const [payPlan, setPayPlan] = useState<PaidPlan | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -79,7 +94,17 @@ export function BillingPanel({
     void refresh();
   }, [refresh]);
 
+  // חזרה מתשלום מוצלח — המנוי מתעדכן גם בשאר המסכים (נעילות, באנרים)
+  useEffect(() => {
+    if (paymentOutcome === "success") void router.invalidate();
+  }, [paymentOutcome, router]);
+
   const sub = data?.subscription ?? null;
+  const paymentsReady = data?.paymentsReady === true;
+  // סליקת הפלטפורמה מחוברת: תשלום מאובטח; אחרת — פנייה לצוות (כמו קודם)
+  const choose = (plan: PaidPlan) => (paymentsReady ? setPayPlan(plan) : onChoosePlan(plan));
+  const setProfile = (profile: BillingProfile) =>
+    setData((current) => (current ? { ...current, billingProfile: profile } : current));
 
   return (
     <div className="space-y-6">
@@ -99,6 +124,10 @@ export function BillingPanel({
         </Button>
       </div>
 
+      {paymentOutcome && (
+        <PaymentOutcomeBanner outcome={paymentOutcome} onDismiss={onOutcomeSeen} />
+      )}
+
       {error && (
         <p role="alert" className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
@@ -108,7 +137,7 @@ export function BillingPanel({
       {sub ? (
         <CurrentPlanCard
           billing={data!}
-          onChoosePlan={onChoosePlan}
+          onChoosePlan={choose}
           onContactSupport={onContactSupport}
         />
       ) : (
@@ -119,13 +148,92 @@ export function BillingPanel({
 
       <PricingTables
         current={sub?.active && sub.plan !== "trial" ? sub.plan : null}
-        onChoose={onChoosePlan}
+        onChoose={choose}
+        renewable={paymentsReady}
       />
+
+      {data && (paymentsReady || data.billingProfile) && (
+        <BillingProfileCard profile={data.billingProfile} onEdit={() => setProfileOpen(true)} />
+      )}
 
       {data && data.addons.length > 0 && <MyAddons billing={data} />}
 
       {data && data.history.length > 0 && <BillingHistory billing={data} />}
+
+      <PlanPayDialog
+        plan={payPlan}
+        billingProfile={data?.billingProfile ?? null}
+        onProfileSaved={setProfile}
+        onClose={() => setPayPlan(null)}
+      />
+      <BillingProfileDialog
+        open={profileOpen}
+        initial={data?.billingProfile ?? null}
+        submitLabel="שמירה"
+        onClose={() => setProfileOpen(false)}
+        onSaved={(profile) => {
+          setProfile(profile);
+          setProfileOpen(false);
+        }}
+      />
     </div>
+  );
+}
+
+// ------------------------------------------------------------
+// פרטי העסק לחיוב (חלק 16)
+// ------------------------------------------------------------
+
+function BillingProfileCard({
+  profile,
+  onEdit,
+}: {
+  profile: BillingProfile | null;
+  onEdit: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+        <div className="space-y-1">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Building2 className="size-5 text-muted-foreground" aria-hidden="true" />
+            פרטי העסק לחיוב
+          </CardTitle>
+          <CardDescription>מופיעים בחיובי המנוי והתוספים.</CardDescription>
+        </div>
+        <Button variant="outline" size="sm" onClick={onEdit}>
+          {profile ? "עריכה" : "השלמת הפרטים"}
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {profile ? (
+          <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+            <div className="flex gap-2">
+              <dt className="text-muted-foreground">סוג עוסק:</dt>
+              <dd className="font-medium">{BUSINESS_TYPE_LABELS[profile.businessType]}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="text-muted-foreground">שם:</dt>
+              <dd className="font-medium">{profile.companyName}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="text-muted-foreground">מספר:</dt>
+              <dd dir="ltr" className="font-medium">
+                {profile.taxId}
+              </dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="text-muted-foreground">כתובת:</dt>
+              <dd className="font-medium">{profile.address}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            עוד לא הוזנו — נבקש אותם לפני התשלום הראשון.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -318,9 +426,12 @@ function CurrentPlanCard({
 function PricingTables({
   current,
   onChoose,
+  renewable = false,
 }: {
   current: PaidPlan | null;
   onChoose: (plan: PaidPlan) => void;
+  /** אפשר לחדש מראש את החבילה הנוכחית בתשלום מאובטח (חלק 16) */
+  renewable?: boolean;
 }) {
   // החבילות והמחירים — מהעורך של מנהל הפלטפורמה (חלק 14)
   const { catalog } = usePlanCatalog();
@@ -348,12 +459,14 @@ function PricingTables({
           plan="basic"
           info={catalog.plans.basic}
           current={current === "basic"}
+          renewable={renewable}
           onChoose={onChoose}
         />
         <PlanCard
           plan="premium"
           info={catalog.plans.premium}
           current={current === "premium"}
+          renewable={renewable}
           onChoose={onChoose}
           featured
         />
@@ -371,12 +484,14 @@ function PlanCard({
   info,
   current,
   featured = false,
+  renewable = false,
   onChoose,
 }: {
   plan: PaidPlan;
   info: PlanCardInfo;
   current: boolean;
   featured?: boolean;
+  renewable?: boolean;
   onChoose: (plan: PaidPlan) => void;
 }) {
   const monthly = info.monthlyPrice;
@@ -472,7 +587,7 @@ function PlanCard({
       <Button
         type="button"
         size="lg"
-        disabled={current}
+        disabled={current && !renewable}
         onClick={() => onChoose(plan)}
         className={cn(
           "mt-7 w-full text-base font-bold",
@@ -482,7 +597,9 @@ function PlanCard({
         )}
       >
         {current
-          ? "החבילה הנוכחית שלך"
+          ? renewable
+            ? "חידוש לשנה נוספת"
+            : "החבילה הנוכחית שלך"
           : `אני רוצה את ה${plan === "premium" ? "פרימיום" : "בסיסית"}`}
       </Button>
     </div>
@@ -598,7 +715,7 @@ function BillingHistory({ billing }: { billing: StoreBilling }) {
                   )}
                 </TableCell>
                 <TableCell className="text-xs">
-                  {entry.method ? PAYMENT_METHOD_LABELS[entry.method] : "—"}
+                  {entry.method ? BILLING_METHOD_LABELS[entry.method] : "—"}
                 </TableCell>
               </TableRow>
             ))}

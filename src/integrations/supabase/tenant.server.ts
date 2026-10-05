@@ -76,44 +76,7 @@ export async function resolveTenant(host: string): Promise<Tenant | null> {
   if (!idRes.ok) throw new Error(`tenant lookup failed (HTTP ${idRes.status})`);
   const id = (await idRes.json()) as string | null;
 
-  let tenant: Tenant | null = null;
-  if (id) {
-    const rowRes = await fetch(
-      `${url}/rest/v1/tenants?id=eq.${encodeURIComponent(id)}&select=id,slug,name,domain,is_default,status,custom_domain,custom_domain_status,custom_domain_verified_at,tenant_subscriptions(plan_type,status,trial_ends_at,current_period_end),tenant_addons(addon_name,status,expires_at)`,
-      { headers },
-    );
-    if (!rowRes.ok) throw new Error(`tenant lookup failed (HTTP ${rowRes.status})`);
-    const row = (
-      (await rowRes.json()) as (Omit<Tenant, "custom_domain_verified" | "subscription"> & {
-        custom_domain_verified_at?: string | null;
-        // יחס אחד-לאחד: אובייקט (או מערך בגרסאות ישנות של PostgREST)
-        tenant_subscriptions?: SubscriptionRow | SubscriptionRow[] | null;
-        tenant_addons?: AddonRow[] | null;
-      })[]
-    )[0];
-    const subscriptionRow = Array.isArray(row?.tenant_subscriptions)
-      ? (row.tenant_subscriptions[0] ?? null)
-      : (row?.tenant_subscriptions ?? null);
-    tenant = row
-      ? {
-          id: row.id,
-          slug: row.slug,
-          name: row.name,
-          domain: row.domain,
-          is_default: row.is_default,
-          status: row.status,
-          custom_domain: row.custom_domain ?? null,
-          custom_domain_status: row.custom_domain_status ?? null,
-          custom_domain_verified: Boolean(row.custom_domain_verified_at),
-          subscription: subscriptionStateFrom(
-            subscriptionRow,
-            row.is_default,
-            Date.now(),
-            row.tenant_addons ?? [],
-          ),
-        }
-      : null;
-  }
+  const tenant = id ? await loadTenantById(id) : null;
   cache.set(host, { tenant, expires: Date.now() + CACHE_TTL_MS });
   return tenant;
 }
@@ -126,6 +89,51 @@ export function invalidateTenantCache(tenantId: string): void {
   for (const [host, entry] of cache) {
     if (entry.tenant?.id === tenantId) cache.delete(host);
   }
+}
+
+/**
+ * רשומת החנות (עם המנוי והתוספים) לפי המזהה — גם מחוץ לבקשה של אותה חנות
+ * (למשל בחזרה מדף התשלום של Hyp לדומיין של הפלטפורמה — חלק 16)
+ */
+export async function loadTenantById(id: string): Promise<Tenant | null> {
+  const { url, key } = serviceEnv();
+  const headers = serviceHeaders(key);
+  const rowRes = await fetch(
+    `${url}/rest/v1/tenants?id=eq.${encodeURIComponent(id)}&select=id,slug,name,domain,is_default,status,custom_domain,custom_domain_status,custom_domain_verified_at,tenant_subscriptions(plan_type,status,trial_ends_at,current_period_end),tenant_addons(addon_name,status,expires_at)`,
+    { headers },
+  );
+  if (!rowRes.ok) throw new Error(`tenant lookup failed (HTTP ${rowRes.status})`);
+  const row = (
+    (await rowRes.json()) as (Omit<Tenant, "custom_domain_verified" | "subscription"> & {
+      custom_domain_verified_at?: string | null;
+      // יחס אחד-לאחד: אובייקט (או מערך בגרסאות ישנות של PostgREST)
+      tenant_subscriptions?: SubscriptionRow | SubscriptionRow[] | null;
+      tenant_addons?: AddonRow[] | null;
+    })[]
+  )[0];
+  const subscriptionRow = Array.isArray(row?.tenant_subscriptions)
+    ? (row.tenant_subscriptions[0] ?? null)
+    : (row?.tenant_subscriptions ?? null);
+  const tenant: Tenant | null = row
+    ? {
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        domain: row.domain,
+        is_default: row.is_default,
+        status: row.status,
+        custom_domain: row.custom_domain ?? null,
+        custom_domain_status: row.custom_domain_status ?? null,
+        custom_domain_verified: Boolean(row.custom_domain_verified_at),
+        subscription: subscriptionStateFrom(
+          subscriptionRow,
+          row.is_default,
+          Date.now(),
+          row.tenant_addons ?? [],
+        ),
+      }
+    : null;
+  return tenant;
 }
 
 export function runWithTenant<T>(host: string, tenant: Tenant | null, fn: () => T): T {

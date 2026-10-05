@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Building2,
   CircleAlert,
+  CreditCard,
   KeyRound,
   Loader2,
   MapPin,
@@ -35,7 +36,7 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthState } from "@/hooks/useAuthState";
-import { useCart } from "@/hooks/useCart";
+import { useCart, clearStoredCartNow } from "@/hooks/useCart";
 import { useCategoryTree } from "@/hooks/useCategories";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { clearStoredCart, useCartSync } from "@/hooks/useCartSync";
@@ -77,6 +78,7 @@ import {
 } from "@/lib/checkout";
 import { formatAddress } from "@/lib/order-details";
 import { placeGuestOrder, updateMyDetails } from "@/lib/checkout.functions";
+import { payForOrder } from "@/lib/payments.functions";
 import { sendOrderEmails } from "@/lib/email.functions";
 import { checkCoupon, restoreAbandonedCart, saveAbandonedCart } from "@/lib/marketing.functions";
 import { couponDiscount, normalizeCouponCode, type AppliedCoupon } from "@/lib/coupons";
@@ -185,6 +187,7 @@ function CheckoutPage() {
   const checkCouponFn = useServerFn(checkCoupon);
   const saveCartFn = useServerFn(saveAbandonedCart);
   const restoreCartFn = useServerFn(restoreAbandonedCart);
+  const payForOrderFn = useServerFn(payForOrder);
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   // התחברות עם Google — רק בחבילות שכוללות אותה (בבסיסית: מוסתר)
@@ -287,6 +290,8 @@ function CheckoutPage() {
   const subtree = useCallback((name: string) => subtreeNames(categoryTree, name), [categoryTree]);
   const priced = catalogLoading || products.some((product) => product.price !== null);
   const kind: "order" | "quote" = priced ? "order" : "quote";
+  // סליקה באשראי (חלק 16): הזמנה (לא בקשת הצעת מחיר) בחנות שהפעילה סליקה
+  const cardPayments = kind === "order" && settings?.card_payments_enabled === true;
 
   // הסל מול הקטלוג: מוצר שאזל / הוסר יוצא (עם הודעה), מחירים ומארזים מתעדכנים
   useEffect(() => {
@@ -616,6 +621,19 @@ function CheckoutPage() {
       pickupAddress: selectedMethod?.kind === "pickup" ? pickupAddress : null,
       hasDigital: cart.some((item) => item.isDigital),
     };
+    // חלק 16: חנות עם סליקה — אחרי יצירת ההזמנה עוברים לדף התשלום המאובטח
+    // של Hyp. הסל נסגר (ההזמנה כבר שומרת את הפריטים); אם התשלום לא יושלם —
+    // אפשר לנסות שוב מדף התוצאה, וההזמנה מתבטלת לבד אחרי 30 דקות.
+    const goToPayment = async (redirectTo: string) => {
+      if (role) await clearStoredCart(role.user_id).catch(() => undefined);
+      const fresh = randomUuid();
+      cartSession.current = fresh;
+      writeCartSession(fresh);
+      lastSavedCart.current = "";
+      setCart([]);
+      clearStoredCartNow();
+      window.location.assign(redirectTo);
+    };
     try {
       let result: PlacedOrder;
       if (isCustomer && role) {
@@ -629,6 +647,14 @@ function CheckoutPage() {
         });
         const order = data?.[0];
         if (error || !order) throw new Error(error?.message ?? "שליחת ההזמנה נכשלה");
+
+        if (cardPayments && order.kind === "order") {
+          const payment = await payForOrderFn({ data: { orderId: order.id } });
+          if (payment.status === "awaiting" || payment.status === "error") {
+            await goToPayment(payment.redirectTo);
+            return;
+          }
+        }
 
         let gifts: string[] = [];
         if (order.kind === "order") {
@@ -670,6 +696,10 @@ function CheckoutPage() {
       } else {
         // אורח: בלי חשבון — ההזמנה נוצרת בשרת (הגבלת קצב + בדיקות במסד)
         const order = await placeGuest({ data: { kind, items: lines, details } });
+        if (order.payment) {
+          await goToPayment(order.payment.redirectTo);
+          return;
+        }
         result = {
           orderNumber: order.orderNumber,
           isQuote: order.kind === "quote",
@@ -1245,20 +1275,28 @@ function CheckoutPage() {
                   <Button type="submit" size="lg" className="h-12 w-full text-base" disabled={busy}>
                     {busy ? (
                       <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+                    ) : cardPayments ? (
+                      <CreditCard className="size-5" aria-hidden="true" />
                     ) : (
                       <PackageCheck className="size-5" aria-hidden="true" />
                     )}
                     {busy
-                      ? "שולח…"
+                      ? cardPayments
+                        ? "מעבירים לתשלום מאובטח…"
+                        : "שולח…"
                       : kind === "quote"
                         ? "שליחת הבקשה להצעת מחיר"
-                        : `אישור ושליחת ההזמנה · ${formatIls(grandTotal)}`}
+                        : cardPayments
+                          ? `לתשלום מאובטח · ${formatIls(grandTotal)}`
+                          : `אישור ושליחת ההזמנה · ${formatIls(grandTotal)}`}
                   </Button>
                   <p className="flex items-start justify-center gap-1.5 text-center text-xs leading-5 text-muted-foreground">
                     <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                     {kind === "quote"
                       ? "הבקשה לא מחייבת — נחזור אליכם עם הצעת מחיר."
-                      : "אין חיוב באתר — נציג ייצור קשר לאישור ההזמנה ולסידור התשלום."}
+                      : cardPayments
+                        ? "התשלום מתבצע בדף המאובטח של חברת הסליקה (Hyp). פרטי הכרטיס לא עוברים דרכנו ולא נשמרים אצלנו."
+                        : "אין חיוב באתר — נציג ייצור קשר לאישור ההזמנה ולסידור התשלום."}
                   </p>
                 </div>
               </form>

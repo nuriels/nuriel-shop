@@ -15,6 +15,7 @@ import {
 import { ADDON_DEFAULTS, type PlatformAddonRow } from "@/lib/addons";
 import {
   BILLING_KIND_LABELS,
+  BILLING_METHOD_LABELS,
   PAYMENT_METHOD_LABELS,
   PLAN_LABELS,
   formatDate,
@@ -654,7 +655,7 @@ export function BillingHistoryDialog({
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {formatDate(entry.createdAt)}
-                          {entry.method ? ` · ${PAYMENT_METHOD_LABELS[entry.method]}` : ""}
+                          {entry.method ? ` · ${BILLING_METHOD_LABELS[entry.method]}` : ""}
                           {entry.periodEnd ? ` · עד ${formatDate(entry.periodEnd)}` : ""}
                           {entry.reference ? ` · אסמכתא ${entry.reference}` : ""}
                         </p>

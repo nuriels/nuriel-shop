@@ -122,13 +122,39 @@ export const placeGuestOrder = createServerFn({ method: "POST" })
       .eq("order_id", created.id)
       .eq("is_gift", true);
 
+    // חלק 16: חנות עם סליקה — ההזמנה ממתינה לתשלום, והאורח עובר לדף התשלום
+    // של Hyp. המיילים יוצאים רק אחרי אישור התשלום.
+    const { data: paymentRow } = await supabaseAdmin
+      .from("orders")
+      .select("payment_status")
+      .eq("id", created.id)
+      .maybeSingle();
+    let payment: { redirectTo: string; message?: string } | null = null;
+    if (paymentRow?.payment_status === "awaiting") {
+      const { startOrderPayment } = await import("@/server/services/payments");
+      const { getRequest } = await import("@tanstack/react-start/server");
+      const { requestOrigin } = await import("@/lib/feeds.server");
+      const request = getRequest();
+      const started = await startOrderPayment(created.id, request ? requestOrigin(request) : null);
+      if (started.status === "awaiting") payment = { redirectTo: started.url };
+      else if (started.status === "error") {
+        payment = {
+          redirectTo: `/payment/result?token=${started.token}&status=failed`,
+          message: started.message,
+        };
+      }
+    }
+
     // מיילים ברקע — האורח מקבל את מסך האישור מיד, בלי לחכות להפקת ה-PDF
-    const { sendOrderEmailsInternal } = await import("@/lib/order-emails.server");
-    void sendOrderEmailsInternal(created.id, null).catch((emailError: unknown) => {
-      console.error("[checkout] guest order emails failed", created.order_number, emailError);
-    });
+    if (!payment) {
+      const { sendOrderEmailsInternal } = await import("@/lib/order-emails.server");
+      void sendOrderEmailsInternal(created.id, null).catch((emailError: unknown) => {
+        console.error("[checkout] guest order emails failed", created.order_number, emailError);
+      });
+    }
 
     return {
+      payment,
       orderId: created.id,
       orderNumber: created.order_number,
       kind: created.kind as "order" | "quote",

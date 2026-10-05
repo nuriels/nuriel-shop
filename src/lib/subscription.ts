@@ -150,6 +150,14 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   other: "אחר",
 };
 
+/** אופן התשלום בהיסטוריה — גם תשלום באשראי דרך האתר (חלק 16) */
+export type BillingMethod = PaymentMethod | "credit_card";
+
+export const BILLING_METHOD_LABELS: Record<BillingMethod, string> = {
+  ...PAYMENT_METHOD_LABELS,
+  credit_card: "כרטיס אשראי (באתר)",
+};
+
 // ------------------------------------------------------------
 // מצב המנוי
 // ------------------------------------------------------------
@@ -288,7 +296,7 @@ export type BillingEntry = {
   amount: number;
   months: number | null;
   days: number | null;
-  method: PaymentMethod | null;
+  method: BillingMethod | null;
   periodStart: string | null;
   periodEnd: string | null;
   reference: string | null;
@@ -319,7 +327,8 @@ export function parseBillingHistory(raw: unknown): BillingEntry[] {
         method === "annual" ||
         method === "installments" ||
         method === "monthly" ||
-        method === "other"
+        method === "other" ||
+        method === "credit_card"
           ? method
           : null,
       periodStart: strOrNull(row["period_start"]),

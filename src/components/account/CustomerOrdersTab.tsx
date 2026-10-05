@@ -5,6 +5,7 @@ import { ClipboardList, Eye, Loader2, Package, RefreshCw, RotateCcw } from "luci
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { PaymentBadge } from "@/components/orders/PaymentBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { OrderDetailsDialog } from "@/components/account/OrderDetailsDialog";
@@ -218,6 +219,7 @@ export function CustomerOrdersTab({
                         <Badge variant={ORDER_STATUS_BADGE[order.status]}>
                           {ORDER_STATUS_LABEL[order.status]}
                         </Badge>
+                        <PaymentBadge status={order.payment_status} />
                       </div>
                     </div>
 

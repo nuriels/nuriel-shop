@@ -34,6 +34,18 @@ export async function sendOrderEmailsInternal(
   orderId: string,
   sentBy: string | null,
 ): Promise<{ staff: SendResult; customer: SendResult }> {
+  // חלק 16: הזמנה שממתינה לתשלום באשראי — המיילים (והתראת המלאי) יוצאים רק
+  // אחרי שהתשלום אושר (src/server/services/payments.ts)
+  const { data: payment } = await supabaseAdmin
+    .from("orders")
+    .select("payment_status")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (payment?.payment_status === "awaiting") {
+    const waiting = { sent: false, reason: "ההזמנה ממתינה לתשלום" };
+    return { staff: waiting, customer: waiting };
+  }
+
   const { order, customerEmail, customerName, agentEmail, agentName, pdf, isGuest } =
     await loadOrderDocument(orderId);
 

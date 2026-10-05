@@ -8,6 +8,7 @@ import {
   type SubscriptionState,
 } from "@/lib/subscription";
 import { parsePlatformAddons, type PlatformAddonRow } from "@/lib/addons";
+import { parseBillingProfile, type BillingProfile } from "@/lib/payments";
 
 /**
  * מנויים (חלק 13) — פונקציות השרת.
@@ -34,6 +35,9 @@ export type StoreBilling = {
   history: BillingEntry[];
   /** התוספים של החנות (חלק 15) — כולל שפגו / בוטלו */
   addons: PlatformAddonRow[];
+  /** סליקת הפלטפורמה מחוברת — תשלום מאובטח על המנוי (חלק 16) */
+  paymentsReady: boolean;
+  billingProfile: BillingProfile | null;
 };
 
 /** "המנוי שלי": המנוי, מספר המוצרים (מול מגבלת החבילה) והיסטוריית התשלומים */
@@ -48,6 +52,8 @@ export const getStoreBilling = createServerFn({ method: "POST" })
       productCount: Number(root["product_count"] ?? 0) || 0,
       history: parseBillingHistory(root["history"]),
       addons: parsePlatformAddons(root["addons"]),
+      paymentsReady: root["payments_ready"] === true,
+      billingProfile: root["billing_profile"] ? parseBillingProfile(root["billing_profile"]) : null,
     };
   });
 

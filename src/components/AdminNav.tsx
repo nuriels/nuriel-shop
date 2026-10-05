@@ -3,6 +3,7 @@ import {
   ArrowLeftRight,
   BadgePercent,
   BarChart3,
+  CreditCard,
   ClipboardCheck,
   ClipboardList,
   FolderTree,
@@ -65,6 +66,7 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
       { value: "coupons", label: "קופונים", icon: TicketPercent },
       { value: "abandoned", label: "עגלות נטושות", icon: ShoppingCart },
       { value: "shipping", label: "משלוחים", icon: Truck },
+      { value: "payments", label: "אמצעי תשלום וסליקה", icon: CreditCard },
     ],
   },
   {

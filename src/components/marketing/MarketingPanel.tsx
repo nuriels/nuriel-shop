@@ -33,7 +33,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { SeoCounter } from "@/components/marketing/SeoCounter";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useSubscription } from "@/hooks/useSubscription";
-import { ZAP_COMING_SOON } from "@/lib/addons";
+import { ADDON_DEFAULTS, addonPriceLabel } from "@/lib/addons";
+
+const ZAP_ADDON_PRICE_LABEL = addonPriceLabel(ADDON_DEFAULTS.zapier);
 import {
   EMPTY_MARKETING,
   MARKETING_COLUMNS,
@@ -432,12 +434,20 @@ export function MarketingPanel() {
                 <p className="text-sm text-muted-foreground">
                   ההצטרפות מתבצעת מול צוות זאפ (מודל תשלום לפי הקלקות).
                 </p>
-                <Button asChild variant="outline" size="sm">
-                  <a href={ZAP_JOIN_URL} target="_blank" rel="noreferrer">
-                    <ExternalLink className="size-4" />
-                    להרשמת חנות חדשה בזאפ
-                  </a>
-                </Button>
+                {/* חלק 16: קישור ההרשמה — רק אחרי רכישת התוסף "חיבור לזאפ" */}
+                {zapUnlocked ? (
+                  <Button asChild variant="outline" size="sm">
+                    <a href={ZAP_JOIN_URL} target="_blank" rel="noreferrer">
+                      <ExternalLink className="size-4" />
+                      להרשמת חנות חדשה בזאפ
+                    </a>
+                  </Button>
+                ) : (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Lock className="size-3.5" aria-hidden="true" />
+                    הקישור להרשמה יופיע כאן אחרי רכישת התוסף.
+                  </p>
+                )}
               </div>
             </li>
             <li className="flex gap-3">
@@ -473,12 +483,12 @@ export function MarketingPanel() {
                       <Lock className="size-4 text-orange-700" aria-hidden="true" />
                       הקישור לקובץ ייפתח עם התוסף "חיבור לזאפ"
                       <span className="rounded-full bg-orange-600 px-2 py-0.5 text-[11px] font-bold text-white">
-                        {ZAP_COMING_SOON}
+                        {ZAP_ADDON_PRICE_LABEL}
                       </span>
                     </p>
                     <p className="text-xs leading-5 text-muted-foreground">
-                      זאפ מאשר חנויות רק לאחר חיבור סליקת אשראי פעילה. בינתיים אפשר כבר להירשם בזאפ
-                      ולבחור אילו מוצרים יופיעו — הקובץ מוכן ומחכה.
+                      זאפ מאשר חנויות רק לאחר חיבור סליקת אשראי פעילה. אחרי רכישת התוסף יופיעו כאן
+                      הקישור להרשמה והקישור לקובץ — ובינתיים אפשר כבר לבחור אילו מוצרים יופיעו.
                     </p>
                     <Link
                       to="/admin"

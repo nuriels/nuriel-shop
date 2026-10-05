@@ -197,6 +197,168 @@ export type Database = {
         };
         Relationships: [];
       };
+      platform_settings: {
+        Row: {
+          id: boolean;
+          hyp_terminal_number: string | null;
+          hyp_api_password: string | null;
+          hyp_api_key: string | null;
+          hyp_max_payments: number;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: boolean;
+          hyp_terminal_number?: string | null;
+          hyp_api_password?: string | null;
+          hyp_api_key?: string | null;
+          hyp_max_payments?: number;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: boolean;
+          hyp_terminal_number?: string | null;
+          hyp_api_password?: string | null;
+          hyp_api_key?: string | null;
+          hyp_max_payments?: number;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      tenant_payment_secrets: {
+        Row: {
+          tenant_id: string;
+          hyp_api_password: string;
+          hyp_api_key: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          tenant_id: string;
+          hyp_api_password: string;
+          hyp_api_key: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          tenant_id?: string;
+          hyp_api_password?: string;
+          hyp_api_key?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      tenant_billing_profile: {
+        Row: {
+          tenant_id: string;
+          business_type: "exempt" | "licensed" | "company";
+          company_name: string;
+          tax_id: string;
+          address: string;
+          billing_email: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          tenant_id?: string;
+          business_type: "exempt" | "licensed" | "company";
+          company_name: string;
+          tax_id: string;
+          address: string;
+          billing_email?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          tenant_id?: string;
+          business_type?: "exempt" | "licensed" | "company";
+          company_name?: string;
+          tax_id?: string;
+          address?: string;
+          billing_email?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      payment_intents: {
+        Row: {
+          id: string;
+          token: string;
+          scope: "platform" | "store";
+          kind: "order" | "addon" | "plan";
+          tenant_id: string;
+          order_id: string | null;
+          addon_name: string | null;
+          plan_type: string | null;
+          months: number | null;
+          period_end: string | null;
+          amount: number;
+          max_payments: number;
+          description: string;
+          status: "pending" | "paid" | "failed" | "expired";
+          hyp_transaction_id: string | null;
+          payments: number | null;
+          card_last4: string | null;
+          error: string | null;
+          return_origin: string | null;
+          created_by: string | null;
+          created_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          token?: string;
+          scope: "platform" | "store";
+          kind: "order" | "addon" | "plan";
+          tenant_id: string;
+          order_id?: string | null;
+          addon_name?: string | null;
+          plan_type?: string | null;
+          months?: number | null;
+          period_end?: string | null;
+          amount: number;
+          max_payments?: number;
+          description: string;
+          status?: "pending" | "paid" | "failed" | "expired";
+          hyp_transaction_id?: string | null;
+          payments?: number | null;
+          card_last4?: string | null;
+          error?: string | null;
+          return_origin?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          completed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          token?: string;
+          scope?: "platform" | "store";
+          kind?: "order" | "addon" | "plan";
+          tenant_id?: string;
+          order_id?: string | null;
+          addon_name?: string | null;
+          plan_type?: string | null;
+          months?: number | null;
+          period_end?: string | null;
+          amount?: number;
+          max_payments?: number;
+          description?: string;
+          status?: "pending" | "paid" | "failed" | "expired";
+          hyp_transaction_id?: string | null;
+          payments?: number | null;
+          card_last4?: string | null;
+          error?: string | null;
+          return_origin?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          completed_at?: string | null;
+        };
+        Relationships: [];
+      };
       platform_addons: {
         Row: {
           addon_name: "google_sso" | "custom_domain" | "digital_products" | "zapier";
@@ -551,7 +713,7 @@ export type Database = {
           currency: string;
           months: number | null;
           days: number | null;
-          payment_method: "annual" | "installments" | "monthly" | "other" | null;
+          payment_method: "annual" | "installments" | "monthly" | "other" | "credit_card" | null;
           period_start: string | null;
           period_end: string | null;
           reference: string | null;
@@ -562,6 +724,8 @@ export type Database = {
           addon_name: string | null;
           payment_status: "paid" | "due";
           paid_at: string | null;
+          hyp_transaction_id: string | null;
+          payment_token: string | null;
         };
         Insert: {
           id?: string;
@@ -572,7 +736,7 @@ export type Database = {
           currency?: string;
           months?: number | null;
           days?: number | null;
-          payment_method?: "annual" | "installments" | "monthly" | "other" | null;
+          payment_method?: "annual" | "installments" | "monthly" | "other" | "credit_card" | null;
           period_start?: string | null;
           period_end?: string | null;
           reference?: string | null;
@@ -583,6 +747,8 @@ export type Database = {
           addon_name?: string | null;
           payment_status?: "paid" | "due";
           paid_at?: string | null;
+          hyp_transaction_id?: string | null;
+          payment_token?: string | null;
         };
         Update: {
           id?: string;
@@ -593,7 +759,7 @@ export type Database = {
           currency?: string;
           months?: number | null;
           days?: number | null;
-          payment_method?: "annual" | "installments" | "monthly" | "other" | null;
+          payment_method?: "annual" | "installments" | "monthly" | "other" | "credit_card" | null;
           period_start?: string | null;
           period_end?: string | null;
           reference?: string | null;
@@ -604,6 +770,8 @@ export type Database = {
           addon_name?: string | null;
           payment_status?: "paid" | "due";
           paid_at?: string | null;
+          hyp_transaction_id?: string | null;
+          payment_token?: string | null;
         };
         Relationships: [];
       };
@@ -1399,6 +1567,12 @@ export type Database = {
           coupon_discount_value: number | null;
           coupon_min_order: number | null;
           discount_amount: number;
+          payment_method: "offline" | "credit_card";
+          payment_status: "not_required" | "awaiting" | "paid" | "expired";
+          payment_due_at: string | null;
+          paid_at: string | null;
+          hyp_transaction_id: string | null;
+          payment_token: string | null;
         };
         Insert: {
           tenant_id?: string;
@@ -1452,6 +1626,12 @@ export type Database = {
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;
           discount_amount?: number;
+          payment_method?: "offline" | "credit_card";
+          payment_status?: "not_required" | "awaiting" | "paid" | "expired";
+          payment_due_at?: string | null;
+          paid_at?: string | null;
+          hyp_transaction_id?: string | null;
+          payment_token?: string | null;
         };
         Update: {
           tenant_id?: string;
@@ -1505,6 +1685,12 @@ export type Database = {
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;
           discount_amount?: number;
+          payment_method?: "offline" | "credit_card";
+          payment_status?: "not_required" | "awaiting" | "paid" | "expired";
+          payment_due_at?: string | null;
+          paid_at?: string | null;
+          hyp_transaction_id?: string | null;
+          payment_token?: string | null;
         };
         Relationships: [
           {
@@ -1955,6 +2141,9 @@ export type Database = {
           facebook_pixel_id: string | null;
           google_analytics_id: string | null;
           zap_delivery_days: number;
+          hyp_terminal_number: string | null;
+          card_payments_enabled: boolean;
+          hyp_max_payments: number;
         };
         Insert: {
           tenant_id?: string;
@@ -1992,6 +2181,9 @@ export type Database = {
           facebook_pixel_id?: string | null;
           google_analytics_id?: string | null;
           zap_delivery_days?: number;
+          hyp_terminal_number?: string | null;
+          card_payments_enabled?: boolean;
+          hyp_max_payments?: number;
         };
         Update: {
           tenant_id?: string;
@@ -2029,6 +2221,9 @@ export type Database = {
           facebook_pixel_id?: string | null;
           google_analytics_id?: string | null;
           zap_delivery_days?: number;
+          hyp_terminal_number?: string | null;
+          card_payments_enabled?: boolean;
+          hyp_max_payments?: number;
         };
         Relationships: [];
       };
@@ -2185,6 +2380,65 @@ export type Database = {
       tenant_subscription_active: { Args: { _tenant: string }; Returns: boolean };
       tenant_has_feature: { Args: { _tenant: string; _feature: string }; Returns: boolean };
       store_billing: { Args: never; Returns: Json };
+      israeli_id_valid: { Args: { _value: string }; Returns: boolean };
+      platform_payments_ready: { Args: never; Returns: boolean };
+      platform_payment_settings: { Args: never; Returns: Json };
+      platform_save_payment_settings: {
+        Args: {
+          _terminal: string | null;
+          _password?: string | null;
+          _key?: string | null;
+          _max_payments?: number | null;
+          _clear?: boolean;
+        };
+        Returns: Json;
+      };
+      store_payment_settings: { Args: never; Returns: Json };
+      store_save_payment_settings: {
+        Args: {
+          _terminal: string | null;
+          _password?: string | null;
+          _key?: string | null;
+          _enabled?: boolean;
+          _max_payments?: number;
+          _clear?: boolean;
+        };
+        Returns: Json;
+      };
+      hyp_credentials: {
+        Args: { _scope: string; _tenant?: string | null };
+        Returns: {
+          terminal: string | null;
+          api_password: string | null;
+          api_key: string | null;
+          max_payments: number | null;
+        }[];
+      };
+      order_payment_intent: { Args: { _order: string; _origin?: string | null }; Returns: Json };
+      billing_profile_json: { Args: { _tenant: string }; Returns: Json };
+      addon_checkout_start: {
+        Args: { _addon: string; _expected?: number | null; _origin?: string | null };
+        Returns: Json;
+      };
+      plan_quote_for: { Args: { _tenant: string; _plan: string }; Returns: Json };
+      plan_quote: { Args: { _plan: string }; Returns: Json };
+      plan_checkout_start: {
+        Args: { _plan: string; _expected?: number | null; _origin?: string | null };
+        Returns: Json;
+      };
+      payment_intent_lookup: { Args: { _token: string }; Returns: Json };
+      payment_intent_complete: {
+        Args: {
+          _token: string;
+          _transaction_id: string;
+          _amount: number;
+          _payments?: number | null;
+          _card_last4?: string | null;
+        };
+        Returns: Json;
+      };
+      payment_intent_fail: { Args: { _token: string; _error?: string | null }; Returns: undefined };
+      expire_unpaid_orders: { Args: never; Returns: number };
       tenant_active_addons: { Args: { _tenant: string }; Returns: string[] };
       tenant_addon_active: { Args: { _tenant: string; _addon: string }; Returns: boolean };
       tenant_features: { Args: { _tenant: string }; Returns: Json };

@@ -13,7 +13,8 @@ import {
 } from "@/lib/marketing";
 
 /** פופ-אפ: לא בקופה (לא מפריעים באמצע תשלום) ולא בעמודי הצוות / החשבון */
-const NO_POPUP_PATHS = /^\/checkout(\/|$)/;
+// הקופה ודף תוצאת התשלום (חלק 16) — בלי פופ-אפ מבצעים
+const NO_POPUP_PATHS = /^\/(checkout|payment)(\/|$)/;
 const POPUP_DELAY_MS = 1200;
 
 function readSeen(key: string): boolean {
@@ -118,7 +119,10 @@ export function MarketingLayer({
               aria-label={`העתקת קוד הקופון ${promo.coupon}`}
             >
               <span className="text-xs font-semibold text-muted-foreground">קוד קופון</span>
-              <span dir="ltr" className="font-mono text-xl font-black tracking-widest text-foreground">
+              <span
+                dir="ltr"
+                className="font-mono text-xl font-black tracking-widest text-foreground"
+              >
                 {promo.coupon}
               </span>
               <span className="flex items-center gap-1 text-xs font-bold text-primary">

@@ -45,6 +45,18 @@ function readStored(): Stored | null {
   }
 }
 
+/**
+ * ניקוי הסל השמור מיד (לפני מעבר לדף אחר) — למשל לפני ההעברה לדף התשלום של
+ * Hyp (חלק 16), כשאין זמן ל-effect שישמור את הסל הריק
+ */
+export function clearStoredCartNow(): void {
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // מצב פרטי / אחסון חסום
+  }
+}
+
 function writeStored(value: Stored): void {
   try {
     if (value.items.length === 0) window.localStorage.removeItem(STORAGE_KEY);

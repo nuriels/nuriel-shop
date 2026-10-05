@@ -26,6 +26,8 @@ import { ShippingMethodsPanel } from "@/components/ShippingMethodsPanel";
 import { CustomPricesPanel } from "@/components/CustomPricesPanel";
 import { BillingPanel } from "@/components/billing/BillingPanel";
 import { AddonsStorePanel } from "@/components/billing/AddonsStorePanel";
+import { PaymentSettingsPanel } from "@/components/payments/PaymentSettingsPanel";
+import { paymentOutcomeOf, type PaymentOutcome } from "@/lib/payments";
 import { PremiumLockCard } from "@/components/billing/PremiumLock";
 import { SupportPanel, type SupportCompose } from "@/components/support/SupportPanel";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -74,6 +76,8 @@ type Search = {
   ticket?: string | undefined;
   /** תמיכה: פנייה חדשה מוכנה מראש (premium / basic / billing) */
   compose?: string | undefined;
+  /** חזרה מדף התשלום של Hyp (חלק 16): success / failed / unverified */
+  payment?: PaymentOutcome | undefined;
 };
 
 const pickString = (value: unknown): string | undefined =>
@@ -92,7 +96,9 @@ export const Route = createFileRoute("/admin")({
     const order = pickString(search["order"]);
     const ticket = pickString(search["ticket"]);
     const compose = pickString(search["compose"]);
+    const payment = paymentOutcomeOf(search["payment"]);
     if (tab) result.tab = tab;
+    if (payment) result.payment = payment;
     if (order && /^[0-9a-f-]{36}$/i.test(order)) result.order = order;
     if (ticket && /^[0-9a-f-]{36}$/i.test(ticket)) result.ticket = ticket;
     if (compose && (COMPOSE_KEYS as readonly string[]).includes(compose)) result.compose = compose;
@@ -108,7 +114,7 @@ function AdminPage() {
   const { session, role, loading } = useAuthState();
   // הלשונית נשמרת בכתובת (?tab=orders): כל מעבר נרשם בהיסטוריה, כך ש"חזור"
   // בדפדפן מחזיר ללשונית הקודמת במקום לצאת מהפאנל
-  const { tab, ptab, pcat, pcust, order, ticket, compose } = Route.useSearch();
+  const { tab, ptab, pcat, pcust, order, ticket, compose, payment } = Route.useSearch();
   const navigate = Route.useNavigate();
 
   const signOut = async () => {
@@ -148,6 +154,15 @@ function AdminPage() {
     (next: string | null) =>
       void navigate({
         search: (prev) => ({ ...prev, tab: "support", ticket: next ?? undefined }),
+        resetScroll: false,
+      }),
+    [navigate],
+  );
+  const clearPayment = useCallback(
+    () =>
+      void navigate({
+        search: (prev) => ({ ...prev, payment: undefined }),
+        replace: true,
         resetScroll: false,
       }),
     [navigate],
@@ -320,8 +335,12 @@ function AdminPage() {
               <TabsContent value="shipping">
                 <ShippingMethodsPanel />
               </TabsContent>
-              <TabsContent value="site">
+              <TabsContent value="site" className="space-y-6">
                 <SiteSettingsPanel />
+                <PaymentSettingsPanel />
+              </TabsContent>
+              <TabsContent value="payments">
+                <PaymentSettingsPanel />
               </TabsContent>
               <TabsContent value="marketing">
                 <MarketingPanel />
@@ -341,10 +360,12 @@ function AdminPage() {
                 )}
               </TabsContent>
               <TabsContent value="addons">
-                <AddonsStorePanel />
+                <AddonsStorePanel paymentOutcome={payment} onOutcomeSeen={clearPayment} />
               </TabsContent>
               <TabsContent value="billing">
                 <BillingPanel
+                  paymentOutcome={payment}
+                  onOutcomeSeen={clearPayment}
                   onChoosePlan={(plan) => goTab("support", { compose: plan })}
                   onContactSupport={() => goTab("support", { compose: "billing" })}
                 />

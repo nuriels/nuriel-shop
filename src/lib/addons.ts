@@ -20,6 +20,7 @@ import {
   type PlanType,
   type SubscriptionState,
 } from "@/lib/subscription";
+import { parseBillingProfile, type BillingProfile } from "@/lib/payments";
 
 export type AddonBilling = "monthly" | "one_time";
 
@@ -63,7 +64,12 @@ export const FEATURE_ADDON: Partial<Record<FeatureKey, AddonName>> = {
 };
 
 /** הטקסט מתחת לכרטיס זאפ */
+/** הטקסט בכרטיס זאפ לפני הרכישה (חלק 16 — פתוח לרכישה) */
 export const ZAP_ADDON_NOTE =
+  'אתר זאפ מאשר חנויות רק לאחר חיבור סליקת אשראי פעילה — ודאו שהסליקה מחוברת ב"אמצעי תשלום וסליקה". מיד אחרי הרכישה יופיעו כאן הקישור להרשמה לזאפ והקישור לקובץ ה-XML למסירה לתמיכה של זאפ.';
+
+/** כשזאפ סגור לרכישה (platform_addons.available = false) */
+export const ZAP_ADDON_NOTE_SOON =
   "אתר זאפ מאשר חנויות רק לאחר חיבור סליקת אשראי פעילה. הפיצ'ר ייפתח לרכישה מיד עם השלמת חיבור הקופה. בינתיים, היכנסו להירשם בזאפ דרך הקישור: https://www.zap.co.il/joinzap.aspx. לאחר שנסדיר את האשראי והפיצ'ר ייפתח, תוכלו להעתיק את קובץ ה-XML לתמיכה של זאפ.";
 
 export const ZAP_COMING_SOON = "בקרוב - ממתין לאישור חברות אשראי";
@@ -98,6 +104,10 @@ export type AddonOffer = {
 export type AddonsStore = {
   subscription: SubscriptionState;
   addons: AddonOffer[];
+  /** סליקת הפלטפורמה מחוברת — רכישה בתשלום מאובטח (חלק 16) */
+  paymentsReady: boolean;
+  /** פרטי העוסק (null = עוד לא מולאו — נדרשים לפני התשלום) */
+  billingProfile: BillingProfile | null;
 };
 
 export type AddonPurchase = {
@@ -159,7 +169,12 @@ export function parseAddonsStore(raw: unknown): AddonsStore {
   const addons = (Array.isArray(root["addons"]) ? root["addons"] : [])
     .map(parseAddonOffer)
     .filter((offer): offer is AddonOffer => offer !== null);
-  return { subscription: parseSubscriptionState(root["subscription"]), addons };
+  return {
+    subscription: parseSubscriptionState(root["subscription"]),
+    addons,
+    paymentsReady: root["payments_ready"] === true,
+    billingProfile: root["billing_profile"] ? parseBillingProfile(root["billing_profile"]) : null,
+  };
 }
 
 export function parseAddonPurchase(raw: unknown): AddonPurchase {
