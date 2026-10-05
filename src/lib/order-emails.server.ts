@@ -3,30 +3,30 @@
  *
  * סיכום מלא לסוכן המשויך ולמנהלים שנבחרו בהגדרות המייל, ואישור ללקוח
  * (או לאורח — לאימייל שמילא בקופה). לכל המיילים מצורף מסמך PDF.
- * משותף ל-sendOrderEmails (לקוח מחובר / צוות) ולהזמנת אורח בקופה.
+ * משותף ל-sendOrderEmails (לקוח מחובר / צוות), להזמנת אורח בקופה ולתשלום
+ * שאושר (Webhook / חזרה מ-Hyp).
  * כשלון שליחה לא מבטל את ההזמנה — היא כבר נשמרה במסד.
+ *
+ * חלק 17: אישור ההזמנה ללקוח — sendOrderEmail (src/server/services/notifications.ts):
+ * דרך חשבון ה-Resend של החנות אם חובר, ובגיבוי — מפתח הפלטפורמה. כל ניסיון
+ * (גם ההתראה לצוות ומייל "נשלחה") נרשם ב-notification_logs.
  */
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { sendEmail, renderEmailHtml, escapeHtml, emailActionButton } from "@/lib/email.server";
-import { loadOrderDocument } from "@/lib/documents.server";
-import { calculateVat } from "@/lib/vat";
-import { formatUnitIls } from "@/lib/catalog";
+import { renderEmailHtml, escapeHtml, emailActionButton } from "@/lib/email.server";
 import {
   ORDER_CONTACT_COLUMNS,
   billingOf,
   deliveryOf,
   type OrderContactFields,
 } from "@/lib/order-details";
+import { ORDER_SHIPPING_COLUMNS, type OrderShippingFields } from "@/lib/shipping";
+import { loadPickupAddress, prepareOrderEmail } from "@/lib/order-email-data.server";
 import {
-  ORDER_SHIPPING_COLUMNS,
-  hasShippingLine,
-  orderShippingLabel,
-  shippingWasFree,
-  type OrderShippingFields,
-} from "@/lib/shipping";
-import { DEFAULT_STORE_NAME } from "@/lib/branding";
-import { orderDiscount, orderDiscountLabel } from "@/lib/coupons";
+  logNotification,
+  sendNotificationEmail,
+  sendOrderEmail,
+} from "@/server/services/notifications";
 
 type SendResult = { sent: boolean; reason?: string };
 
@@ -36,225 +36,56 @@ export async function sendOrderEmailsInternal(
 ): Promise<{ staff: SendResult; customer: SendResult }> {
   // חלק 16: הזמנה שממתינה לתשלום באשראי — המיילים (והתראת המלאי) יוצאים רק
   // אחרי שהתשלום אושר (src/server/services/payments.ts)
-  const { data: payment } = await supabaseAdmin
-    .from("orders")
-    .select("payment_status")
-    .eq("id", orderId)
-    .maybeSingle();
-  if (payment?.payment_status === "awaiting") {
+  const prepared = await prepareOrderEmail(orderId);
+  if (!prepared) {
     const waiting = { sent: false, reason: "ההזמנה ממתינה לתשלום" };
     return { staff: waiting, customer: waiting };
   }
 
-  const { order, customerEmail, customerName, agentEmail, agentName, pdf, isGuest } =
-    await loadOrderDocument(orderId);
-
-  const { data: customerProfile } = order.customer_id
-    ? await supabaseAdmin
-        .from("customer_profiles")
-        .select("business_name, contact_name, phone, business_address, city, zip_code, tax_id")
-        .eq("user_id", order.customer_id)
-        .maybeSingle()
-    : { data: null };
-
-  const billing = billingOf(order, customerProfile, customerEmail);
-  const delivery = deliveryOf(order, customerProfile);
-
-  const recipientEmails = new Set<string>();
-  if (agentEmail) recipientEmails.add(agentEmail);
-
-  const { data: emailSettings } = await supabaseAdmin
-    .from("email_settings")
-    .select("notify_admin_user_ids")
-    .eq("id", true)
-    .maybeSingle();
-  if (emailSettings?.notify_admin_user_ids?.length) {
-    const { data: admins } = await supabaseAdmin
-      .from("user_roles")
-      .select("email")
-      .in("user_id", emailSettings.notify_admin_user_ids);
-    for (const admin of admins ?? []) if (admin.email) recipientEmails.add(admin.email);
-  }
-
-  const isQuote = order.kind === "quote";
-  const documentLabel = isQuote ? "בקשה להצעת מחיר" : "הזמנה";
-
-  const shippingAmount = hasShippingLine(order) ? Number(order.shipping_price ?? 0) : 0;
-  // הנחת קופון (חלק 14) — כבר מופחתת ב-total של ההזמנה במסד
-  const discount = order.kind === "quote" ? 0 : orderDiscount(order);
-  const itemsTotal =
-    order.order_items.reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0) +
-    shippingAmount -
-    discount;
-  const vat = isQuote
-    ? null
-    : calculateVat(itemsTotal, {
-        pricesIncludeVat: order.prices_include_vat ?? true,
-        vatRate: Number(order.vat_rate ?? 18),
-      });
-
-  const money = (value: number) => `₪${value.toFixed(2)}`;
-
-  const itemsHtml = order.order_items
-    .map((item) => {
-      const cells = [
-        escapeHtml(item.product_name ?? "מוצר"),
-        escapeHtml(item.product_barcode ?? "—"),
-        String(item.quantity),
-        ...(isQuote
-          ? []
-          : [
-              formatUnitIls(Number(item.unit_price)),
-              money(Number(item.unit_price) * item.quantity),
-            ]),
-      ];
-      return `<tr>${cells
-        .map((cell) => `<td style="padding:6px 8px;border-bottom:1px solid #eee;">${cell}</td>`)
-        .join("")}</tr>`;
-    })
-    .join("");
-
-  // שורת המשלוח בטבלה (כלולה בסכום)
-  const shippingLabel = orderShippingLabel(order);
-  const shippingRowHtml = hasShippingLine(order)
-    ? `<tr>${[
-        escapeHtml(`משלוח: ${shippingLabel ?? "דמי משלוח"}`),
-        "—",
-        "1",
-        ...(isQuote
-          ? []
-          : [
-              shippingWasFree(order) ? "חינם" : money(shippingAmount),
-              shippingWasFree(order) ? "חינם" : money(shippingAmount),
-            ]),
-      ]
-        .map(
-          (cell) =>
-            `<td style="padding:6px 8px;border-bottom:1px solid #eee;background:#f7faf7;">${cell}</td>`,
-        )
-        .join("")}</tr>`
-    : "";
-
-  // שורת ההנחה בטבלה (כלולה בסכום)
-  const discountRowHtml =
-    discount > 0
-      ? `<tr>${[
-          escapeHtml(orderDiscountLabel(order)),
-          "—",
-          "1",
-          `-${money(discount)}`,
-          `-${money(discount)}`,
-        ]
-          .map(
-            (cell) =>
-              `<td style="padding:6px 8px;border-bottom:1px solid #eee;background:#f0fdf4;color:#15803d;">${cell}</td>`,
-          )
-          .join("")}</tr>`
-      : "";
-
-  const headers = ["מוצר", "ברקוד", "כמות", ...(isQuote ? [] : ["מחיר יחידה", 'סה"כ'])]
-    .map((header) => `<th style="text-align:right;padding:6px 8px;">${header}</th>`)
-    .join("");
-
-  const totalsHtml = vat
-    ? vat.showBreakdown
-      ? `<p style="margin-top:12px;">סה"כ לפני מע"מ: ${money(vat.net)}<br/>מע"מ ${vat.vatRate}%: ${money(vat.vat)}<br/><strong>סה"כ לתשלום: ${money(vat.gross)}</strong></p>`
-      : `<p style="margin-top:12px;"><strong>סה"כ לתשלום (כולל מע"מ): ${money(vat.gross)}</strong></p>`
-    : `<p style="margin-top:12px;">מסמך זה אינו כולל מחירים. נציג ייצור קשר עם הצעת מחיר מותאמת.</p>`;
-
-  // איסוף עצמי / דיגיטלי — אין כתובת משלוח; כתובת חלופית — מודגשת, כדי
-  // שהמשלוח לא ייצא בטעות לכתובת החיוב
-  const pickupAddress = order.shipping_kind === "pickup" ? await loadPickupAddress() : "";
-  const deliveryHtml =
-    order.shipping_kind === "pickup"
-      ? `<div style="margin-top:12px;padding:10px 12px;border:1px solid #c4b5fd;border-radius:8px;background:#f5f3ff;">
-        <p style="margin:0 0 4px;font-weight:bold;color:#5b21b6;">🏬 איסוף עצמי</p>
-        <p style="margin:0;">${pickupAddress ? `מהכתובת: ${escapeHtml(pickupAddress)}` : "נעדכן כשההזמנה מוכנה לאיסוף."}</p>
-      </div>`
-      : order.shipping_kind === "digital"
-        ? `<p><strong>משלוח:</strong> מוצרים דיגיטליים — הרישיונות יישלחו במייל נפרד.</p>`
-        : delivery.isAlternate
-          ? `<div style="margin-top:12px;padding:10px 12px;border:2px solid #d97706;border-radius:8px;background:#fffbeb;">
-        <p style="margin:0 0 4px;font-weight:bold;color:#92400e;">📦 משלוח לכתובת אחרת</p>
-        <p style="margin:0;">${escapeHtml(delivery.name)}${delivery.phone ? ` · <span dir="ltr">${escapeHtml(delivery.phone)}</span>` : ""}<br/>${escapeHtml(delivery.address)}</p>
-      </div>`
-          : delivery.address
-            ? `<p><strong>כתובת למשלוח:</strong> ${escapeHtml(delivery.address)}</p>`
-            : "";
-  const shippingMethodHtml =
-    shippingLabel && order.shipping_kind !== "digital"
-      ? `<p><strong>שיטת משלוח:</strong> ${escapeHtml(shippingLabel)}${
-          isQuote ? "" : ` · ${shippingWasFree(order) ? "חינם 🎉" : money(shippingAmount)}`
-        }</p>`
-      : "";
+  const { isQuote, isGuest, documentLabel, billing, html: parts } = prepared;
 
   const staffHtml = `
-    <p><strong>מספר מסמך:</strong> ${escapeHtml(order.order_number)}</p>
+    <p><strong>מספר מסמך:</strong> ${escapeHtml(prepared.orderNumber)}</p>
     <p><strong>סוג:</strong> ${documentLabel}${isGuest ? " · <strong>אורח (ללא חשבון)</strong>" : ""}</p>
     <p><strong>לקוח:</strong> ${escapeHtml(billing.name)}${billing.taxId ? ` · ת.ז / ח.פ <span dir="ltr">${escapeHtml(billing.taxId)}</span>` : ""}</p>
     <p><strong>טלפון:</strong> <span dir="ltr">${escapeHtml(billing.phone)}</span> · <strong>אימייל:</strong> <span dir="ltr">${escapeHtml(billing.email)}</span></p>
     ${billing.address ? `<p><strong>כתובת:</strong> ${escapeHtml(billing.address)}</p>` : ""}
-    ${shippingMethodHtml}
-    ${deliveryHtml}
-    ${order.note ? `<p><strong>הערות להזמנה:</strong> ${escapeHtml(order.note)}</p>` : ""}
-    <table style="width:100%;border-collapse:collapse;margin-top:12px;">
-      <thead><tr>${headers}</tr></thead>
-      <tbody>${itemsHtml}${shippingRowHtml}${discountRowHtml}</tbody>
-    </table>
-    ${totalsHtml}
+    ${parts.shippingMethod}
+    ${parts.delivery}
+    ${prepared.note ? `<p><strong>הערות להזמנה:</strong> ${escapeHtml(prepared.note)}</p>` : ""}
+    ${parts.staffTable}
+    ${parts.totals}
     <p style="margin-top:12px;color:#6b7280;font-size:13px;">המסמך המלא מצורף כקובץ PDF.</p>
   `;
 
-  const greetingName = escapeHtml(customerName || billing.name);
-  const customerHtml = isQuote
-    ? `
-    <p>שלום ${greetingName},</p>
-    <p>בקשתכם להצעת מחיר <strong dir="ltr">${escapeHtml(order.order_number)}</strong> התקבלה.</p>
-    <p>נציג יעבור על הפריטים ויחזור אליכם עם הצעת מחיר מותאמת.</p>
-    ${totalsHtml}
-    <p style="margin-top:12px;color:#6b7280;font-size:13px;">פירוט הפריטים מצורף כקובץ PDF.</p>
-  `
-    : `
-    <p>שלום ${greetingName},</p>
-    <p>ההזמנה שלכם <strong dir="ltr">${escapeHtml(order.order_number)}</strong> התקבלה ונשלחה לביצוע.</p>
-    <p>${agentName ? `${escapeHtml(agentName)}, הסוכן המטפל שלכם, ייצור` : "נציג ייצור"} איתכם קשר בהקדם לתיאום המשך הטיפול.</p>
-    ${shippingMethodHtml}
-    ${deliveryHtml}
-    ${discount > 0 ? `<p><strong>${escapeHtml(orderDiscountLabel(order))}:</strong> <span style="color:#15803d;">-${money(discount)}</span></p>` : ""}
-    ${totalsHtml}
-    <p style="margin-top:12px;color:#6b7280;font-size:13px;">אישור ההזמנה המלא מצורף כקובץ PDF.</p>
-  `;
+  // התראה פנימית לצוות החנות — תמיד דרך מערכת השליחה של הפלטפורמה
+  const staffSubject = `${documentLabel} חדשה ${prepared.orderNumber}${isGuest ? " (אורח)" : ""}`;
+  let staff: SendResult;
+  if (prepared.staffRecipients.length > 0) {
+    staff = await sendNotificationEmail({
+      template: "order_staff",
+      orderId,
+      to: prepared.staffRecipients,
+      subject: staffSubject,
+      html: await renderEmailHtml(`${documentLabel} חדשה התקבלה`, staffHtml),
+      attachments: prepared.attachments,
+      useStoreKey: false,
+    });
+  } else {
+    staff = { sent: false, reason: "אין נמענים מוגדרים" };
+    await logNotification(
+      { template: "order_staff", orderId, to: [], subject: staffSubject },
+      {
+        sent: false,
+        skipped: true,
+        reason: 'לא נבחרו מנהלים לקבלת התראה — סמנו אותם ב"מנהלים שיקבלו התראה על כל הזמנה חדשה"',
+      },
+      null,
+    );
+  }
 
-  const attachments = [{ filename: pdf.filename, content: pdf.base64 }];
-
-  const staff: SendResult =
-    recipientEmails.size > 0
-      ? await sendEmail({
-          to: [...recipientEmails],
-          subject: `${documentLabel} חדשה ${order.order_number}${isGuest ? " (אורח)" : ""}`,
-          html: await renderEmailHtml(`${documentLabel} חדשה התקבלה`, staffHtml),
-          attachments,
-        })
-      : { sent: false, reason: "אין נמענים מוגדרים" };
-
-  const customer: SendResult = customerEmail
-    ? await sendEmail({
-        to: [customerEmail],
-        subject: `${documentLabel} ${order.order_number} התקבלה`,
-        html: await renderEmailHtml(`${documentLabel} התקבלה`, customerHtml),
-        attachments,
-        // יומן המיילים בתיק הלקוח — רק ללקוח רשום (לאורח אין תיק)
-        ...(order.customer_id
-          ? {
-              logFor: {
-                userId: order.customer_id,
-                kind: isQuote ? ("quote" as const) : ("order" as const),
-                sentBy,
-              },
-            }
-          : {}),
-      })
-    : { sent: false, reason: "אין כתובת מייל ללקוח" };
+  // אישור ההזמנה ללקוח (חלק 17)
+  const customer: SendResult = await sendOrderEmail(orderId, { sentBy, prepared });
 
   // מלאי נמוך (חלק 14): אחרי כל הזמנה — מייל למנהל על מוצרים שירדו ל-3 ומטה
   if (!isQuote) {
@@ -262,7 +93,7 @@ export async function sendOrderEmailsInternal(
       const { sendLowStockAlerts } = await import("@/lib/stock-alerts.server");
       await sendLowStockAlerts(orderId);
     } catch (error) {
-      console.error("[stock-alerts] failed", order.order_number, error);
+      console.error("[stock-alerts] failed", prepared.orderNumber, error);
     }
   }
 
@@ -384,7 +215,10 @@ export async function sendShippedEmailInternal(
     ${accountUrl ? emailActionButton("למעקב אחרי ההזמנה", accountUrl) : ""}
   `;
 
-  return sendEmail({
+  // ללקוח — דרך חשבון ה-Resend של החנות אם חובר (חלק 17), ונרשם ביומן ההתראות
+  return sendNotificationEmail({
+    template: "order_shipped",
+    orderId,
     to: [to],
     subject: isPickup
       ? `הזמנה ${order.order_number} מוכנה לאיסוף`
@@ -394,17 +228,4 @@ export async function sendShippedEmailInternal(
       ? { logFor: { userId: order.customer_id, kind: "order" as const, sentBy } }
       : {}),
   });
-}
-
-/** כתובת האיסוף העצמי = כתובת העסק מהגדרות האתר */
-async function loadPickupAddress(): Promise<string> {
-  const { data } = await supabaseAdmin
-    .from("site_settings")
-    .select("business_address, business_name, site_title")
-    .eq("id", true)
-    .maybeSingle();
-  const address = data?.business_address?.trim() ?? "";
-  if (!address) return "";
-  const name = data?.business_name?.trim() || data?.site_title?.trim() || DEFAULT_STORE_NAME;
-  return `${name}, ${address}`;
 }

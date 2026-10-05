@@ -9,7 +9,7 @@ import {
 /**
  * דומיין מותאם אישית לחנות — פעולות מנהל החנות.
  *
- *  getCustomDomain    — המצב הנוכחי + לאן להפנות (תת-הדומיין של החנות, IP השרת)
+ *  getCustomDomain    — המצב הנוכחי + לאן להפנות (shops.nuri1.fit, IP השרת)
  *  saveCustomDomain   — שמירת דומיין (או הסרה) → pending
  *  verifyCustomDomain — בדיקת DNS אמיתית בשרת; רק אם עברה → verified.
  *                       מכאן סקריפט התעודות בשרת מוסיף ל-nginx ומנפיק SSL
@@ -20,8 +20,10 @@ import {
  */
 
 export type CustomDomainState = {
-  /** תת-הדומיין הקבוע של החנות — היעד של רשומת ה-CNAME */
+  /** תת-הדומיין הקבוע של החנות (גם הוא מתקבל כיעד CNAME) */
   storeHost: string | null;
+  /** היעד של רשומת ה-CNAME לדומיין פרטי — shops.nuri1.fit (חלק 17) */
+  cnameTarget: string | null;
   baseDomain: string | null;
   domain: string | null;
   status: CustomDomainStatus | null;
@@ -67,15 +69,20 @@ async function loadTenantRow(): Promise<TenantDomainRow> {
 
 async function toState(row: TenantDomainRow, withIps: boolean): Promise<CustomDomainState> {
   const { tenantBaseDomain } = await import("@/integrations/supabase/tenant.server");
+  const { customDomainCnameTarget, expectedTargets } =
+    await import("@/lib/custom-domain-dns.server");
   const baseDomain = tenantBaseDomain();
   const storeHost = baseDomain ? `${row.slug}.${baseDomain}` : null;
+  const cnameTarget = customDomainCnameTarget(baseDomain);
   let serverIps: string[] = [];
   if (withIps) {
-    const { expectedTargets } = await import("@/lib/custom-domain-dns.server");
-    serverIps = (await expectedTargets(storeHost).catch(() => ({ ips: [] as string[] }))).ips;
+    serverIps = (
+      await expectedTargets(storeHost, cnameTarget).catch(() => ({ ips: [] as string[] }))
+    ).ips;
   }
   return {
     storeHost,
+    cnameTarget,
     baseDomain,
     domain: row.custom_domain,
     status: (row.custom_domain_status as CustomDomainStatus | null) ?? null,
@@ -198,7 +205,7 @@ export const verifyCustomDomain = createServerFn({ method: "POST" })
     const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
     const { tenantBaseDomain } = await import("@/integrations/supabase/tenant.server");
     const { allowAction } = await import("@/lib/rate-limit.server");
-    const { lookupDomain, expectedTargets, evaluateDns } =
+    const { lookupDomain, expectedTargets, evaluateDns, customDomainCnameTarget } =
       await import("@/lib/custom-domain-dns.server");
 
     const row = await loadTenantRow();
@@ -211,7 +218,7 @@ export const verifyCustomDomain = createServerFn({ method: "POST" })
     const storeHost = baseDomain ? `${row.slug}.${baseDomain}` : null;
     const [findings, expected] = await Promise.all([
       lookupDomain(row.custom_domain),
-      expectedTargets(storeHost),
+      expectedTargets(storeHost, customDomainCnameTarget(baseDomain)),
     ]);
     const verdict = evaluateDns(row.custom_domain, findings, expected);
 

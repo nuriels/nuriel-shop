@@ -10,6 +10,10 @@
 //  - תשובות של לקוחות (Reply-To) מגיעות לחנות עצמה: הכתובת למענה מהגדרות
 //    המייל של החנות, או אימייל העסק מהגדרות האתר.
 // אם המפתח חסר, השליחה מדולגת (לא חוסמת הזמנה) ונרשמת בלוג.
+//
+// חלק 17: חנות יכולה לחבר חשבון Resend משלה (מפתח + כתובת שולח על הדומיין
+// שלה) — ההתראות ללקוחות נשלחות אז דרכו (transport), ואם נכשלו — חוזרות
+// למפתח הפלטפורמה (src/server/services/notifications.ts).
 
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { DEFAULT_SENDER_LOCAL_PART, senderLocalPartProblem } from "@/lib/email-sender";
@@ -35,7 +39,14 @@ export type EmailLogTarget = {
   sentBy?: string | null;
 };
 
-type SendEmailInput = {
+/** שליחה דרך חשבון Resend של החנות (במקום מפתח הפלטפורמה) */
+export type EmailTransport = {
+  apiKey: string;
+  /** כתובת השולח — על דומיין שהחנות אימתה ב-Resend שלה */
+  senderAddress: string;
+};
+
+export type SendEmailInput = {
   to: string[];
   subject: string;
   html: string;
@@ -52,9 +63,18 @@ type SendEmailInput = {
    * עונה ישירות ללקוח). גוברת על כתובת המענה של החנות.
    */
   replyTo?: string | null;
+  /** חלק 17: מפתח וכתובת שולח של החנות עצמה (ברירת מחדל — מפתח הפלטפורמה) */
+  transport?: EmailTransport;
 };
 
-type SendResult = { sent: boolean; reason?: string };
+export type SendResult = {
+  sent: boolean;
+  reason?: string;
+  /** מזהה ההודעה ב-Resend (כשנשלחה) */
+  id?: string | null;
+  /** לא היה ניסיון שליחה בכלל (אין מפתח / אין נמען תקין) */
+  skipped?: boolean;
+};
 
 const EMAIL_FORMAT = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 
@@ -81,7 +101,7 @@ export function defaultSenderLocalPart(): string {
 }
 
 /** כתובת ה-API של Resend (ניתן להחלפה בסביבת בדיקות בלבד — RESEND_API_URL) */
-function resendApiUrl(): string {
+export function resendApiUrl(): string {
   const custom = process.env["RESEND_API_URL"]?.trim().replace(/\/$/, "");
   return custom && /^https?:\/\//.test(custom) ? custom : "https://api.resend.com";
 }
@@ -182,42 +202,62 @@ function platformSenderFor(name: string, replyTo: string | null): StoreSender {
 
 export async function sendEmail(input: SendEmailInput): Promise<SendResult> {
   const result = await deliverEmail(input);
-  if (input.logFor) {
-    try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { memberIdOrNull } = await import("@/lib/caller.server");
-      const sentBy = await memberIdOrNull(input.logFor.sentBy);
-      await supabaseAdmin.from("customer_emails").insert({
-        user_id: input.logFor.userId,
-        to_email: input.to.join(", "),
-        subject: input.subject,
-        kind: input.logFor.kind,
-        html: input.html,
-        sent: result.sent,
-        error: result.sent ? null : (result.reason ?? null),
-        sent_by: sentBy,
-      });
-    } catch (error) {
-      // כשל ברישום ליומן לא צריך להפיל שליחה שכבר הצליחה
-      console.error("[email] failed to log email", error);
-    }
-  }
+  if (input.logFor) await recordCustomerEmail(input, result);
   return result;
 }
 
+/**
+ * רישום המייל ביומן המיילים בתיק הלקוח (customer_emails). נקרא מ-sendEmail
+ * כשיש logFor, או ישירות — כשמייל עבר כמה ניסיונות (מפתח החנות ואז מפתח
+ * הפלטפורמה) ורק התוצאה הסופית נרשמת בתיק.
+ */
+export async function recordCustomerEmail(
+  input: Pick<SendEmailInput, "to" | "subject" | "html" | "logFor">,
+  result: SendResult,
+): Promise<void> {
+  if (!input.logFor) return;
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { memberIdOrNull } = await import("@/lib/caller.server");
+    const sentBy = await memberIdOrNull(input.logFor.sentBy);
+    await supabaseAdmin.from("customer_emails").insert({
+      user_id: input.logFor.userId,
+      to_email: input.to.join(", "),
+      subject: input.subject,
+      kind: input.logFor.kind,
+      html: input.html,
+      sent: result.sent,
+      error: result.sent ? null : (result.reason ?? null),
+      sent_by: sentBy,
+    });
+  } catch (error) {
+    // כשל ברישום ליומן לא צריך להפיל שליחה שכבר הצליחה
+    console.error("[email] failed to log email", error);
+  }
+}
+
 async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
-  const apiKey = resendApiKey();
+  const apiKey = input.transport?.apiKey ?? resendApiKey();
   if (!apiKey) {
     // חשוב לרשום ללוג: בלי המפתח שום מייל לא יוצא, וזה נכשל "בשקט"
     console.error("[email] RESEND_API_KEY missing — email skipped:", input.subject);
-    return { sent: false, reason: "מפתח Resend (RESEND_API_KEY) לא הוגדר בשרת" };
+    return {
+      sent: false,
+      skipped: true,
+      reason: "מפתח Resend (RESEND_API_KEY) לא הוגדר בשרת",
+    };
   }
   const to = input.to.map((address) => address.trim()).filter(isValidEmail);
-  if (to.length === 0) return { sent: false, reason: "אין נמענים תקינים" };
+  if (to.length === 0) return { sent: false, skipped: true, reason: "אין נמענים תקינים" };
 
   const sender = input.platformSender
     ? platformSenderFor(input.platformSender.name, input.platformSender.replyTo ?? null)
     : await storeSender();
+  // חשבון Resend של החנות: אותו שם תצוגה, הכתובת מהדומיין המאומת של החנות
+  const from =
+    input.transport && isValidEmail(input.transport.senderAddress)
+      ? `"${sender.name}" <${input.transport.senderAddress.trim().toLowerCase()}>`
+      : sender.from;
   const replyTo =
     input.replyTo && isValidEmail(input.replyTo)
       ? input.replyTo.trim().toLowerCase()
@@ -230,7 +270,7 @@ async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: sender.from,
+        from,
         to,
         subject: input.subject,
         html: input.html,
@@ -245,7 +285,8 @@ async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
       // או "API key is invalid", וזו בדיוק המידע שהמנהל צריך.
       return { sent: false, reason: `שגיאת שליחה (${response.status}): ${body.slice(0, 300)}` };
     }
-    return { sent: true };
+    const payload = (await response.json().catch(() => null)) as { id?: unknown } | null;
+    return { sent: true, id: typeof payload?.id === "string" ? payload.id.slice(0, 200) : null };
   } catch (error) {
     console.error("[email] send failed", error);
     return { sent: false, reason: error instanceof Error ? error.message : "שגיאה לא ידועה" };

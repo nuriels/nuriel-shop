@@ -82,8 +82,8 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
       { value: "site", label: "הגדרות אתר", icon: Settings },
       { value: "legal", label: "עמודים משפטיים", icon: Scale },
       { value: "marketing", label: "שיווק ואינטגרציות", icon: Megaphone },
-      { value: "email", label: "הגדרות מייל", icon: Mail },
-      { value: "domain", label: "דומיין משלכם", icon: Globe },
+      { value: "email", label: "התראות מייל", icon: Mail },
+      { value: "domain", label: "דומיין פרטי", icon: Globe },
     ],
   },
   {

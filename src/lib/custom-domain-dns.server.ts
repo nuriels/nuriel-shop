@@ -2,8 +2,9 @@
  * בדיקת ה-DNS של דומיין מותאם — צד שרת בלבד (מודול dns של Node).
  *
  * הדומיין מחובר נכון אם:
- *  - יש לו רשומת CNAME אל תת-הדומיין של החנות (<slug>.nuri1.fit), או
- *  - כל רשומות ה-A שלו מפנות לכתובת השרת (הכתובת של <slug>.nuri1.fit, או
+ *  - יש לו רשומת CNAME אל יעד הדומיינים הפרטיים (shops.nuri1.fit — חלק 17)
+ *    או אל תת-הדומיין של החנות (<slug>.nuri1.fit — חיבורים מחלק 9), או
+ *  - כל רשומות ה-A שלו מפנות לכתובת השרת (הכתובת של היעדים האלה, או
  *    SERVER_PUBLIC_IPS מהסביבה).
  * רשומת AAAA (IPv6) שמפנה לשרת אחר מכשילה את הבדיקה: Let's Encrypt מעדיף
  * IPv6, וההנפקה של תעודת ה-SSL הייתה נכשלת.
@@ -13,7 +14,14 @@
  */
 
 export type DnsFindings = { cnames: string[]; a: string[]; aaaa: string[] };
-export type DnsExpected = { host: string | null; ips: string[]; ipv6: string[] };
+export type DnsExpected = {
+  /** יעד ה-CNAME שמוצג למנהל (shops.nuri1.fit) */
+  host: string | null;
+  ips: string[];
+  ipv6: string[];
+  /** יעדי CNAME נוספים שמתקבלים (תת-הדומיין של החנות) */
+  aliases?: string[];
+};
 export type DnsVerdict = {
   ok: boolean;
   method: "cname" | "a" | null;
@@ -67,24 +75,46 @@ export async function lookupDomain(domain: string): Promise<DnsFindings> {
   return { cnames, a, aaaa };
 }
 
-/** לאן הדומיין צריך להפנות: תת-הדומיין של החנות וכתובות השרת */
-export async function expectedTargets(storeHost: string | null): Promise<DnsExpected> {
+const HOST_FORMAT = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}$/;
+
+/**
+ * יעד ה-CNAME לדומיינים פרטיים: shops.<דומיין הבסיס> (shops.nuri1.fit),
+ * או CUSTOM_DOMAIN_CNAME_TARGET מהסביבה. ה-wildcard של *.nuri1.fit כבר מפנה
+ * אותו לשרת.
+ */
+export function customDomainCnameTarget(baseDomain: string | null): string | null {
+  const explicit = clean(process.env["CUSTOM_DOMAIN_CNAME_TARGET"] ?? "");
+  if (explicit && HOST_FORMAT.test(explicit)) return explicit;
+  return baseDomain ? `shops.${clean(baseDomain)}` : null;
+}
+
+/**
+ * לאן הדומיין צריך להפנות: יעד ה-CNAME (shops.nuri1.fit), תת-הדומיין של
+ * החנות (מתקבל גם הוא) וכתובות השרת
+ */
+export async function expectedTargets(
+  storeHost: string | null,
+  cnameTarget: string | null = null,
+): Promise<DnsExpected> {
   const fromEnv = (process.env["SERVER_PUBLIC_IPS"] ?? "")
     .split(/[,\s]+/)
     .map(clean)
     .filter(Boolean);
-  let ips: string[] = [];
-  let ipv6: string[] = [];
-  if (storeHost) {
-    [ips, ipv6] = await Promise.all([
-      query(storeHost, "A").catch(() => []),
-      query(storeHost, "AAAA").catch(() => []),
-    ]);
-  }
+  const hosts = list([cnameTarget, storeHost].filter((h): h is string => Boolean(h)));
+  const resolved = await Promise.all(
+    hosts.map((host) =>
+      Promise.all([query(host, "A").catch(() => []), query(host, "AAAA").catch(() => [])]),
+    ),
+  );
+  const primary = cnameTarget ? clean(cnameTarget) : storeHost ? clean(storeHost) : null;
   return {
-    host: storeHost ? clean(storeHost) : null,
-    ips: list([...ips, ...fromEnv.filter((ip) => !ip.includes(":"))]),
-    ipv6: list([...ipv6, ...fromEnv.filter((ip) => ip.includes(":"))]),
+    host: primary,
+    ips: list([...resolved.flatMap(([a]) => a), ...fromEnv.filter((ip) => !ip.includes(":"))]),
+    ipv6: list([
+      ...resolved.flatMap(([, aaaa]) => aaaa),
+      ...fromEnv.filter((ip) => ip.includes(":")),
+    ]),
+    aliases: hosts.filter((host) => host !== primary),
   };
 }
 
@@ -104,9 +134,13 @@ export function evaluateDns(
   const target = expected.host ?? "תת-הדומיין של החנות";
   const ipsText = expected.ips.join(", ");
 
-  // 1. CNAME ישירות לתת-הדומיין של החנות
-  if (expected.host && findings.cnames.includes(expected.host)) {
-    return verdict(true, "cname", `נמצאה רשומת CNAME תקינה: ${domain} → ${expected.host}`);
+  // 1. CNAME ישירות ליעד (shops.nuri1.fit) או לתת-הדומיין של החנות
+  const accepted = [expected.host, ...(expected.aliases ?? [])].filter((host): host is string =>
+    Boolean(host),
+  );
+  const cnameHit = findings.cnames.find((cname) => accepted.includes(cname));
+  if (cnameHit) {
+    return verdict(true, "cname", `נמצאה רשומת CNAME תקינה: ${domain} → ${cnameHit}`);
   }
 
   // 2. כתובות A (גם דרך שרשרת CNAME — ה-A שמתקבל בסוף)

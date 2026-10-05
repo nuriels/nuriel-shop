@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { loadEmailSettings, saveEmailSettings, type EmailSettings } from "@/lib/site";
 import { getEmailDiagnostics } from "@/lib/email.functions";
+import { getStoreEmailProvider, type StoreEmailProviderState } from "@/lib/notifications.functions";
 import {
   DEFAULT_SENDER_LOCAL_PART,
   parseSenderInput,
@@ -17,6 +18,8 @@ import {
 } from "@/lib/email-sender";
 import { SendMessagePanel } from "@/components/SendMessagePanel";
 import { EmailTestCard } from "@/components/EmailTestCard";
+import { StoreResendCard } from "@/components/StoreResendCard";
+import { NotificationLogCard } from "@/components/NotificationLogCard";
 
 type AdminOption = { user_id: string; email: string };
 type Diagnostics = Awaited<ReturnType<typeof getEmailDiagnostics>>;
@@ -26,11 +29,13 @@ const EMAIL_FORMAT = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 const FALLBACK_DOMAIN = "nuri1.fit";
 
 /**
- * הגדרות מייל של החנות.
- * המיילים יוצאים מתשתית אחת לכל החנויות (מפתח Resend גלובלי בשרת), שמאומת
- * רק על דומיין המערכת — לכן כתובת השולח תמיד @nuri1.fit. החנות בוחרת את החלק
- * שלפני ה-@ (ברירת מחדל orders), לאן יגיעו תשובות (Reply-To), מי מקבל התראה
- * על הזמנה חדשה, ובודקת שהשליחה עובדת.
+ * התראות מייל של החנות.
+ * ברירת המחדל: המיילים יוצאים מתשתית אחת לכל החנויות (מפתח Resend גלובלי
+ * בשרת), שמאומת רק על דומיין המערכת — לכן כתובת השולח @nuri1.fit. החנות
+ * בוחרת את החלק שלפני ה-@ (ברירת מחדל orders), לאן יגיעו תשובות (Reply-To),
+ * מי מקבל התראה על הזמנה חדשה, ובודקת שהשליחה עובדת.
+ * חלק 17: אפשר לחבר חשבון Resend משלכם (מפתח + כתובת על הדומיין שלכם) —
+ * אישורי ההזמנה ללקוחות יוצאים אז ממנו; ויומן של כל ההתראות שנשלחו.
  */
 export function EmailSettingsPanel() {
   const [settings, setSettings] = useState<EmailSettings | null>(null);
@@ -38,7 +43,10 @@ export function EmailSettingsPanel() {
   const [busy, setBusy] = useState(false);
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
   const [senderInputProblem, setSenderInputProblem] = useState<string | null>(null);
+  const [provider, setProvider] = useState<StoreEmailProviderState | null>(null);
+  const [logRefresh, setLogRefresh] = useState(0);
   const loadDiagnostics = useServerFn(getEmailDiagnostics);
+  const loadProvider = useServerFn(getStoreEmailProvider);
 
   const domain = diagnostics?.senderDomain || FALLBACK_DOMAIN;
   const defaultLocal = diagnostics?.defaultLocalPart || DEFAULT_SENDER_LOCAL_PART;
@@ -54,6 +62,11 @@ export function EmailSettingsPanel() {
         setDiagnostics(await loadDiagnostics({ data: {} }));
       } catch {
         // אבחון הוא תוספת בלבד — כשל בו לא מונע את עריכת ההגדרות
+      }
+      try {
+        setProvider(await loadProvider({ data: {} }));
+      } catch {
+        // החשבון של החנות — תוספת; כשל בטעינה לא מונע את שאר ההגדרות
       }
       setAdmins(
         (rolesResult.data ?? [])
@@ -134,12 +147,14 @@ export function EmailSettingsPanel() {
           <Mail className="size-5" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-foreground">הגדרות מייל</h2>
+          <h2 className="text-xl font-bold text-foreground">התראות מייל</h2>
           <p className="text-sm text-muted-foreground">
-            כתובת השולח, בדיקת שליחה, שליחת הודעות והתראות על הזמנות חדשות
+            אישורי הזמנה ללקוחות, חשבון Resend משלכם, כתובת השולח, יומן התראות ובדיקת שליחה
           </p>
         </div>
       </div>
+
+      <StoreResendCard state={provider} onChange={setProvider} />
 
       <Card className="shadow-card">
         <CardHeader>
@@ -149,6 +164,16 @@ export function EmailSettingsPanel() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {provider?.configured && (
+            <p className="rounded-lg border border-sky-200 bg-sky-50/70 p-3 text-xs leading-5 text-foreground dark:border-sky-900 dark:bg-sky-950/30">
+              החשבון שלכם ב-Resend מחובר: אישורי ההזמנה ללקוחות יוצאים מ-{" "}
+              <span dir="ltr" className="font-semibold">
+                {provider.senderEmail}
+              </span>
+              . הכתובת כאן משמשת לשאר המיילים (קודי כניסה, איפוס סיסמה, התראות לצוות) ולגיבוי — אם
+              השליחה דרך החשבון שלכם נכשלת.
+            </p>
+          )}
           <div className="space-y-2">
             <Label htmlFor="e-sender-local">המיילים ללקוחות ולצוות יישלחו מהכתובת</Label>
             <div dir="ltr" className="flex max-w-md">
@@ -266,9 +291,25 @@ export function EmailSettingsPanel() {
 
       <EmailTestCard
         sender={
-          diagnostics ? { name: diagnostics.senderName, address: diagnostics.senderAddress } : null
+          diagnostics
+            ? {
+                name: diagnostics.senderName,
+                address:
+                  provider?.configured && provider.senderEmail
+                    ? provider.senderEmail
+                    : diagnostics.senderAddress,
+              }
+            : null
         }
+        onSent={() => {
+          setLogRefresh((current) => current + 1);
+          void loadProvider({ data: {} })
+            .then(setProvider)
+            .catch(() => undefined);
+        }}
       />
+
+      <NotificationLogCard refreshKey={logRefresh} />
 
       <SendMessagePanel />
 

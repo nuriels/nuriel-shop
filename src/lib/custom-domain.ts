@@ -59,6 +59,28 @@ export function normalizeDomainInput(raw: string): string {
   }
 }
 
+/**
+ * הקלט של מנהל החנות: רק הדומיין — בלי http:// / https:// ובלי נתיב
+ * (null = תקין). נבדק לפני customDomainProblem, כדי להסביר מה להסיר.
+ */
+export function domainInputFormatProblem(raw: string): string | null {
+  const value = raw.trim();
+  if (value === "") return null;
+  if (
+    /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ||
+    /^https?(:|\/\/)/i.test(value) ||
+    /^www:/i.test(value)
+  ) {
+    // \u200e — כדי ש-"://" יוצג נכון בתוך משפט בעברית
+    return "בלי http://\u200e או https://\u200e — הזינו רק את הדומיין, למשל www.his-shop.co.il";
+  }
+  if (/[/?#\\]/.test(value)) {
+    return "בלי / ובלי נתיב — הזינו רק את הדומיין, למשל www.his-shop.co.il";
+  }
+  if (/\s/.test(value)) return "הדומיין לא יכול להכיל רווחים";
+  return null;
+}
+
 /** בעיה בפורמט הדומיין (null = תקין) */
 export function customDomainProblem(domain: string, baseDomain: string | null): string | null {
   if (domain === "") return "נא להזין דומיין, למשל www.his-shop.co.il";

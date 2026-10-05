@@ -6,6 +6,7 @@ import {
   Copy,
   ExternalLink,
   Globe,
+  Info,
   Loader2,
   Lock,
   RefreshCw,
@@ -31,6 +32,7 @@ import {
   CUSTOM_DOMAIN_STATUS_LABEL,
   customDomainProblem,
   dnsRecordName,
+  domainInputFormatProblem,
   isApexDomain,
   normalizeDomainInput,
   registrableDomain,
@@ -92,10 +94,58 @@ function CopyValue({ value, label }: { value: string; label: string }) {
 }
 
 /**
- * דומיין מותאם אישית: מנהל החנות מזין דומיין שרכש, מקבל הוראות ברורות
- * (רשומת CNAME אל <slug>.nuri1.fit, או A לדומיין ראשי), ולוחץ "אימות וחיבור
- * דומיין". השרת בודק את ה-DNS; אחרי אימות, סקריפט התעודות בשרת מחבר את
- * הדומיין ל-nginx ומנפיק SSL תוך כמה דקות — והמסך מתעדכן לבד ל"פעיל".
+ * הוראות ה-DNS הקצרות שמתחת לשדה הדומיין (חלק 17): רשומת A לכתובת ה-IP של
+ * השרת, או CNAME אל shops.nuri1.fit — עם כפתורי העתקה.
+ */
+function DnsQuickInstructions({
+  serverIp,
+  cnameTarget,
+}: {
+  serverIp: string | null;
+  cnameTarget: string | null;
+}) {
+  return (
+    <div
+      id="dns-instructions"
+      className="space-y-2 rounded-lg border border-sky-200 bg-sky-50/70 p-3 text-sm leading-6 text-foreground dark:border-sky-900 dark:bg-sky-950/30"
+    >
+      <p className="flex items-start gap-2">
+        <Info className="mt-1 size-4 shrink-0 text-sky-600" aria-hidden="true" />
+        <span>
+          כדי לחבר את הדומיין, יש להיכנס לרשם הדומיינים שלך ולהגדיר רשומת A (A Record) המצביעה
+          לכתובת ה-IP של השרת שלנו, או רשומת CNAME המצביעה ל-{" "}
+          <strong dir="ltr">{cnameTarget ?? "shops.nuri1.fit"}</strong>.
+        </span>
+      </p>
+      <dl className="grid gap-x-3 gap-y-1 ps-6 sm:grid-cols-[auto_1fr] sm:items-center">
+        <dt className="text-xs font-medium text-muted-foreground">רשומת A — כתובת ה-IP של השרת:</dt>
+        <dd>
+          {serverIp ? (
+            <CopyValue value={serverIp} label="כתובת ה-IP של השרת" />
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              הכתובת לא זמינה כרגע — רעננו את הדף, או השתמשו ברשומת CNAME
+            </span>
+          )}
+        </dd>
+        <dt className="text-xs font-medium text-muted-foreground">רשומת CNAME — יעד:</dt>
+        <dd>
+          <CopyValue value={cnameTarget ?? "shops.nuri1.fit"} label="יעד רשומת ה-CNAME" />
+        </dd>
+      </dl>
+      <p className="ps-6 text-xs text-muted-foreground">
+        CNAME מתאים לכתובת עם www (למשל www.his-shop.co.il). לדומיין ראשי בלי www — רשומת A.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * דומיין פרטי (מותאם אישית): מנהל החנות מזין דומיין שרכש, מקבל הוראות
+ * ברורות (רשומת CNAME אל shops.nuri1.fit, או A לכתובת השרת), ולוחץ "אימות
+ * וחיבור דומיין". השרת בודק את ה-DNS; אחרי אימות, סקריפט התעודות בשרת מחבר
+ * את הדומיין ל-nginx ומנפיק SSL תוך כמה דקות — והמסך מתעדכן לבד ל"פעיל".
+ * הדומיין נשמר בחנות (tenants.custom_domain) ומשתקף אוטומטית ל-site_settings.
  */
 export function CustomDomainPanel() {
   const load = useServerFn(getCustomDomain);
@@ -151,18 +201,23 @@ export function CustomDomainPanel() {
   if (!state) return <p className="text-sm text-muted-foreground">טוען את הגדרות הדומיין...</p>;
 
   const normalized = normalizeDomainInput(input);
+  const formatProblem = domainInputFormatProblem(input);
   const inputProblem =
-    input.trim() === "" ? null : customDomainProblem(normalized, state.baseDomain);
+    input.trim() === ""
+      ? null
+      : (formatProblem ?? customDomainProblem(normalized, state.baseDomain));
   const showForm = !state.domain || editing;
   const domain = state.domain;
   const status = state.status;
   const apex = domain ? isApexDomain(domain) : false;
   const recordName = domain ? dnsRecordName(domain) : "www";
   const serverIp = state.serverIps[0] ?? null;
+  const cnameTarget = state.cnameTarget ?? state.storeHost;
 
   const submitDomain = async (event: React.FormEvent) => {
     event.preventDefault();
-    const problem = customDomainProblem(normalized, state.baseDomain);
+    const problem =
+      domainInputFormatProblem(input) ?? customDomainProblem(normalized, state.baseDomain);
     if (problem) {
       toast.error(problem);
       return;
@@ -223,7 +278,7 @@ export function CustomDomainPanel() {
           <Globe className="size-5" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-foreground">דומיין משלכם</h2>
+          <h2 className="text-xl font-bold text-foreground">דומיין פרטי</h2>
           <p className="text-sm text-muted-foreground">
             חיבור דומיין שרכשתם (למשל www.his-shop.co.il) לחנות — עם תעודת SSL אוטומטית
           </p>
@@ -324,7 +379,10 @@ export function CustomDomainPanel() {
                     aria-invalid={inputProblem !== null}
                     onChange={(event) => setInput(event.target.value)}
                   />
-                  <Button type="submit" disabled={busy !== null || input.trim() === ""}>
+                  <Button
+                    type="submit"
+                    disabled={busy !== null || input.trim() === "" || inputProblem !== null}
+                  >
                     {busy === "save" ? <Loader2 className="size-4 animate-spin" /> : null}
                     שמירת הדומיין
                   </Button>
@@ -342,7 +400,22 @@ export function CustomDomainPanel() {
                   )}
                 </div>
                 {inputProblem ? (
-                  <p className="text-sm font-medium text-destructive">{inputProblem}</p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p className="text-sm font-medium text-destructive">{inputProblem}</p>
+                    {formatProblem &&
+                      normalized !== "" &&
+                      customDomainProblem(normalized, state.baseDomain) === null && (
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0"
+                          onClick={() => setInput(normalized)}
+                        >
+                          תיקון ל-<span dir="ltr">{normalized}</span>
+                        </Button>
+                      )}
+                  </div>
                 ) : input.trim() !== "" && normalized !== input.trim().toLowerCase() ? (
                   <p className="text-xs text-muted-foreground">
                     יישמר כ: <span dir="ltr">{normalized}</span>
@@ -353,6 +426,7 @@ export function CustomDomainPanel() {
                   </p>
                 )}
               </div>
+              <DnsQuickInstructions serverIp={serverIp} cnameTarget={cnameTarget} />
             </form>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
@@ -376,6 +450,11 @@ export function CustomDomainPanel() {
                 )}
                 הסרה
               </Button>
+              {status !== "active" && (
+                <div className="w-full pt-1">
+                  <DnsQuickInstructions serverIp={serverIp} cnameTarget={cnameTarget} />
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -438,7 +517,7 @@ export function CustomDomainPanel() {
                                 </span>
                               )
                             ) : (
-                              <CopyValue value={state.storeHost ?? ""} label="יעד הרשומה" />
+                              <CopyValue value={cnameTarget ?? ""} label="יעד הרשומה" />
                             )}
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">ברירת המחדל</td>
@@ -450,7 +529,7 @@ export function CustomDomainPanel() {
                     {!apex && (
                       <li>
                         כדי לחבר את הדומיין שלך, הוסף רשומת CNAME המפנה אל{" "}
-                        <strong dir="ltr">{state.storeHost}</strong>.
+                        <strong dir="ltr">{cnameTarget}</strong>.
                       </li>
                     )}
                     <li>

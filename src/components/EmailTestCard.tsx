@@ -15,6 +15,10 @@ type Outcome =
       fromName: string;
       fromAddress: string;
       replyTo: string | null;
+      /** חלק 17: דרך איזה מפתח יצא המייל */
+      provider: "tenant" | "platform" | null;
+      fellBack: boolean;
+      storeKeyError: string | null;
     }
   | { ok: false; reason: string };
 
@@ -37,10 +41,18 @@ function explain(reason: string): string | null {
 
 /**
  * "בדיקת שליחת מייל": המנהל מזין כתובת (ברירת מחדל — הכתובת שלו), והמערכת
- * שולחת מייל טסט מהשולח של החנות ("שם החנות <orders@nuri1.fit>"). התוצאה —
- * הצלחה, או השגיאה המדויקת של Resend עם הסבר מה לתקן.
+ * שולחת מייל טסט מהשולח של החנות ("שם החנות <orders@nuri1.fit>", או הכתובת
+ * שעל הדומיין של החנות כשחשבון Resend שלה מחובר). התוצאה — הצלחה (ודרך איזה
+ * מפתח), או השגיאה המדויקת של Resend עם הסבר מה לתקן.
  */
-export function EmailTestCard({ sender }: { sender: { name: string; address: string } | null }) {
+export function EmailTestCard({
+  sender,
+  onSent,
+}: {
+  sender: { name: string; address: string } | null;
+  /** אחרי כל ניסיון (הצלחה או כישלון) — לרענון יומן ההתראות */
+  onSent?: () => void;
+}) {
   const runTest = useServerFn(sendTestEmail);
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -66,6 +78,9 @@ export function EmailTestCard({ sender }: { sender: { name: string; address: str
         fromName: result.fromName,
         fromAddress: result.fromAddress,
         replyTo: result.replyTo,
+        provider: result.provider,
+        fellBack: result.fellBack,
+        storeKeyError: result.storeKeyError,
       });
     } catch (error) {
       setOutcome({
@@ -74,6 +89,7 @@ export function EmailTestCard({ sender }: { sender: { name: string; address: str
       });
     } finally {
       setBusy(false);
+      onSent?.();
     }
   };
 
@@ -146,6 +162,28 @@ export function EmailTestCard({ sender }: { sender: { name: string; address: str
                   </>
                 ) : null}
               </p>
+              {outcome.provider && (
+                <p className="text-xs">
+                  {outcome.provider === "tenant"
+                    ? "נשלח דרך חשבון ה-Resend של החנות."
+                    : "נשלח דרך מערכת השליחה של הפלטפורמה."}
+                </p>
+              )}
+              {outcome.fellBack && (
+                <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
+                  השליחה דרך חשבון ה-Resend שלכם נכשלה, ולכן המייל יצא בגיבוי דרך הפלטפורמה
+                  {outcome.storeKeyError ? (
+                    <span
+                      dir="ltr"
+                      className="mt-0.5 block break-words text-left font-mono text-[11px]"
+                    >
+                      {outcome.storeKeyError}
+                    </span>
+                  ) : (
+                    "."
+                  )}
+                </p>
+              )}
               <p className="text-xs">לא הגיע תוך דקה? כדאי לבדוק גם בתיקיית הספאם.</p>
             </div>
           </div>

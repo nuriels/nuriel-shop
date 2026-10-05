@@ -311,6 +311,87 @@ export type Database = {
         };
         Relationships: [];
       };
+      tenant_email_secrets: {
+        Row: {
+          tenant_id: string;
+          resend_api_key: string;
+          sender_email: string;
+          domain_status: "verified" | "unverified" | "unknown";
+          checked_at: string | null;
+          last_error: string | null;
+          last_error_at: string | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          tenant_id: string;
+          resend_api_key: string;
+          sender_email: string;
+          domain_status?: "verified" | "unverified" | "unknown";
+          checked_at?: string | null;
+          last_error?: string | null;
+          last_error_at?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          tenant_id?: string;
+          resend_api_key?: string;
+          sender_email?: string;
+          domain_status?: "verified" | "unverified" | "unknown";
+          checked_at?: string | null;
+          last_error?: string | null;
+          last_error_at?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      notification_logs: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          order_id: string | null;
+          type: "email";
+          template: "order_confirmation" | "order_staff" | "order_shipped" | "test";
+          recipient: string;
+          subject: string;
+          status: "sent" | "failed" | "skipped";
+          provider: "tenant" | "platform" | null;
+          provider_message_id: string | null;
+          error: string | null;
+          sent_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          order_id?: string | null;
+          type?: "email";
+          template?: "order_confirmation" | "order_staff" | "order_shipped" | "test";
+          recipient?: string;
+          subject?: string;
+          status: "sent" | "failed" | "skipped";
+          provider?: "tenant" | "platform" | null;
+          provider_message_id?: string | null;
+          error?: string | null;
+          sent_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          order_id?: string | null;
+          type?: "email";
+          template?: "order_confirmation" | "order_staff" | "order_shipped" | "test";
+          recipient?: string;
+          subject?: string;
+          status?: "sent" | "failed" | "skipped";
+          provider?: "tenant" | "platform" | null;
+          provider_message_id?: string | null;
+          error?: string | null;
+          sent_at?: string;
+        };
+        Relationships: [];
+      };
       tenant_payment_secrets: {
         Row: {
           tenant_id: string;
@@ -2228,6 +2309,7 @@ export type Database = {
           hyp_terminal_number: string | null;
           card_payments_enabled: boolean;
           cancellation_policy_content: string;
+          custom_domain: string | null;
           business_hours: string;
           hyp_max_payments: number;
         };
@@ -2270,6 +2352,7 @@ export type Database = {
           hyp_terminal_number?: string | null;
           card_payments_enabled?: boolean;
           cancellation_policy_content?: string;
+          custom_domain?: string | null;
           business_hours?: string;
           hyp_max_payments?: number;
         };
@@ -2312,6 +2395,7 @@ export type Database = {
           hyp_terminal_number?: string | null;
           card_payments_enabled?: boolean;
           cancellation_policy_content?: string;
+          custom_domain?: string | null;
           business_hours?: string;
           hyp_max_payments?: number;
         };

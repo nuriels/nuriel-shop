@@ -35,7 +35,9 @@ export const sendOrderEmails = createServerFn({ method: "POST" })
 
 /**
  * "בדיקת שליחת מייל" בהגדרות המייל של החנות: מייל טסט לכתובת שהמנהל מזין
- * (ברירת מחדל — המנהל עצמו), מהשולח של החנות — "שם החנות <orders@nuri1.fit>".
+ * (ברירת מחדל — המנהל עצמו), מהשולח של החנות — "שם החנות <orders@nuri1.fit>",
+ * או — אם החנות חיברה חשבון Resend משלה (חלק 17) — מהכתובת שעל הדומיין שלה,
+ * באותה דרך שיוצאים אישורי ההזמנה (כולל הגיבוי בפלטפורמה ורישום ביומן).
  * מחזיר את השגיאה המדויקת של Resend אם השליחה נכשלה (מפתח / דומיין לא מאומת).
  * מוגבל ל-10 בדיקות בשעה לחנות, כדי שלא ישמש לשליחת מיילים לכתובות זרות.
  */
@@ -51,8 +53,9 @@ export const sendTestEmail = createServerFn({ method: "POST" })
     return { to };
   })
   .handler(async ({ data, context }) => {
-    const { sendEmail, renderEmailHtml, storeSender, escapeHtml } =
-      await import("@/lib/email.server");
+    const { renderEmailHtml, storeSender, escapeHtml } = await import("@/lib/email.server");
+    const { sendNotificationEmail, tenantEmailTransport } =
+      await import("@/server/services/notifications");
     const { allowAction } = await import("@/lib/rate-limit.server");
     const { currentTenantId } = await import("@/integrations/supabase/tenant.server");
 
@@ -66,12 +69,15 @@ export const sendTestEmail = createServerFn({ method: "POST" })
     }
 
     const sender = await storeSender();
+    const transport = await tenantEmailTransport();
+    const storeFrom = transport ? `"${sender.name}" <${transport.senderAddress}>` : null;
     const sentAt = new Date().toLocaleString("he-IL", {
       timeZone: "Asia/Jerusalem",
       dateStyle: "short",
       timeStyle: "medium",
     });
-    const result = await sendEmail({
+    const result = await sendNotificationEmail({
+      template: "test",
       to: [to],
       subject: `מייל בדיקה — ${sender.name}`,
       // isTest משנה את שורת הסיום ל"אנו מבצעים בדיקה, נא לא להשיב למייל זה"
@@ -79,17 +85,29 @@ export const sendTestEmail = createServerFn({ method: "POST" })
         "מייל בדיקה",
         `<p>זהו מייל בדיקה מפאנל הניהול של <strong>${escapeHtml(sender.name)}</strong>.</p>
          <p>אם הוא הגיע — שליחת המיילים של החנות עובדת: אישורי הזמנה, "ההזמנה יצאה למשלוח", קודי כניסה ואיפוס סיסמה.</p>
-         <p style="color:#6b7280;font-size:13px;">נשלח מ: <span dir="ltr">${escapeHtml(sender.from)}</span><br/>בתאריך: ${escapeHtml(sentAt)}</p>`,
+         <p style="color:#6b7280;font-size:13px;">נשלח מ: <span dir="ltr">${escapeHtml(storeFrom ?? sender.from)}</span><br/>בתאריך: ${escapeHtml(sentAt)}</p>`,
         { isTest: true },
       ),
     });
-    if (!result.sent) throw new Error(result.reason ?? "השליחה נכשלה");
+    if (!result.sent) {
+      throw new Error(
+        result.storeKeyError
+          ? `השליחה נכשלה גם דרך חשבון ה-Resend שלכם (${result.storeKeyError}) וגם דרך הפלטפורמה (${result.reason ?? "שגיאה"})`
+          : (result.reason ?? "השליחה נכשלה"),
+      );
+    }
+    const viaStore = result.provider === "tenant" && transport !== null;
     return {
       sentTo: to,
-      from: sender.from,
+      from: viaStore ? (storeFrom ?? sender.from) : sender.from,
       fromName: sender.name,
-      fromAddress: sender.address,
+      fromAddress: viaStore ? transport.senderAddress : sender.address,
       replyTo: sender.replyTo,
+      /** חלק 17: דרך איזה מפתח יצא המייל */
+      provider: result.provider,
+      /** מפתח החנות נכשל ונשלח בגיבוי דרך הפלטפורמה */
+      fellBack: result.fellBack,
+      storeKeyError: result.storeKeyError ?? null,
     };
   });
 
