@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AccountSettingsDialog } from "@/components/AccountSettingsDialog";
 import { StaffNotificationsBell } from "@/components/StaffNotificationsBell";
+import { StoreSwitcher } from "@/components/StoreSwitcher";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useCanGoBack } from "@/hooks/useBackToClose";
 import type { UserRole } from "@/hooks/useAuthState";
@@ -157,7 +158,7 @@ export function SiteHeader({
           )}
         </nav>
 
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+        <div className="flex flex-1 items-center justify-end gap-2">
           {onOpenCart && (
             <Button
               size="sm"
@@ -176,12 +177,16 @@ export function SiteHeader({
           )}
           {email ? (
             <>
+              {/* חלק 18ב: איש צוות שמשויך לכמה חנויות — מעבר בין החנויות */}
+              {(role?.role === "admin" || role?.role === "agent" || role?.role === "warehouse") && (
+                <StoreSwitcher userId={role.user_id} />
+              )}
               {(role?.role === "agent" || role?.role === "admin") && (
                 <StaffNotificationsBell userId={role.user_id} />
               )}
               <span
                 dir="ltr"
-                className="hidden max-w-[24vw] truncate text-sm text-primary-foreground/70 md:block"
+                className="hidden max-w-[24vw] truncate text-sm text-primary-foreground/70 lg:block"
               >
                 {email}
               </span>

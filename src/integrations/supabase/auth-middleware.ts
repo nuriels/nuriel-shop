@@ -99,23 +99,31 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
       throw new Error("Unauthorized: No user ID found in token");
     }
 
-    // משתמש חסום נדחה בכל פעולת שרת שדורשת התחברות — גם אם החיבור שלו עוד
-    // בתוקף (הממשק מציג לו מסך "חסום", וכאן זה נאכף גם מול קריאה ישירה).
-    // משתמש של חנות אחרת נדחה גם הוא (בדיקה ברמת הפלטפורמה, מעבר לחנויות).
+    // השיוך לחנות של הבקשה (חלק 18ב — user_roles היא טבלת קשר: משתמש אחד
+    // יכול להיות משויך לכמה חנויות, שורה לכל חנות):
+    //  • משויך לחנות הזו וחסום בה → נדחה (גם אם החיבור שלו עוד בתוקף — הממשק
+    //    מציג מסך "חסום", וכאן זה נאכף גם מול קריאה ישירה).
+    //  • משויך רק לחנויות אחרות → נדחה (חוץ ממנהל-על, שמנהל את כל החנויות).
+    //  • בלי שום שיוך (למשל נרשם חדש שעוד לא השלים הרשמה) → ממשיך.
+    // תקלה בבדיקה — נדחה (לא מניחים שמותר).
     const { supabaseAdminUnscoped } = await import("./client.server");
-    const { data: roleRow } = await supabaseAdminUnscoped
+    const { data: memberships, error: membershipError } = await supabaseAdminUnscoped
       .from("user_roles")
       .select("tenant_id, is_blocked")
       .eq("user_id", data.claims.sub)
-      .maybeSingle();
-    if (roleRow && roleRow.tenant_id !== tenantId) {
-      // חריג יחיד: מנהל-על (God Mode) — מנהל את כל החנויות ואת פאנל הפלטפורמה
+      .limit(100);
+    if (membershipError) {
+      console.error("[auth] membership check failed", membershipError.message);
+      throw new Error("Unauthorized: membership check failed");
+    }
+    const here = memberships.find((row) => row.tenant_id === tenantId) ?? null;
+    if (!here && memberships.length > 0) {
       const { isPlatformAdminUser } = await import("./client.server");
       if (!(await isPlatformAdminUser(data.claims.sub))) {
         throw new Error("Unauthorized: account belongs to another store");
       }
     }
-    if (roleRow?.is_blocked) {
+    if (here?.is_blocked) {
       throw new Error("Unauthorized: account blocked");
     }
 

@@ -27,6 +27,7 @@ import {
  *    קוד נכון → אסימון שער חתום (portal-token.server.ts) + החנויות של המייל.
  * 2. checkPortalSlug — כתובת באנגלית: פורמט / שמורה / תפוסה, והצעה פנויה.
  * 3. createPortalStore — חשבון התחברות (אם אין) + חנות + המשתמש כמנהל שלה.
+ *    חלק 18ב: בעלים של חנות יכולים לפתוח עוד חנויות עם אותו חשבון (עד 10).
  * 4. getPortalStoreStatus — חנות חדשה: האם תעודת ה-SSL של הכתובת כבר הונפקה.
  * 5. enterPortalStore — קוד כניסה חד-פעמי (2 דקות) לאתר החנות:
  *    https://<slug>.nuri1.fit/admin-handoff#code=... → מחובר → /admin.
@@ -146,10 +147,12 @@ async function loadAccount(email: string): Promise<PortalAccount> {
   });
   const other = obj(root["other"]);
   const canCreate = root["can_create"] === true;
+  const maxStores = Number(root["max_stores"] ?? 0);
   return {
     hasAccount: typeof root["user_id"] === "string",
     stores,
     canCreate,
+    maxStores: Number.isFinite(maxStores) && maxStores > 0 ? maxStores : null,
     blockedReason:
       !canCreate && stores.length === 0 && str(other["role"])
         ? otherMembershipReason(str(other["role"]), str(other["tenant_name"]))
@@ -402,8 +405,8 @@ export const createPortalStore = createServerFn({ method: "POST" })
     const account = await loadAccount(email);
     if (!account.canCreate) {
       throw new Error(
-        account.stores.length > 0
-          ? "כבר יש לכם חנות במערכת. כל כתובת מייל מנהלת חנות אחת — לחנות נוספת השתמשו בכתובת אחרת."
+        account.maxStores !== null && account.stores.length >= account.maxStores
+          ? `הגעתם למספר החנויות המרבי לחשבון אחד (${account.maxStores}). לחנויות נוספות פנו לתמיכה.`
           : (account.blockedReason ?? "אי אפשר לפתוח חנות עם כתובת המייל הזו"),
       );
     }

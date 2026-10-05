@@ -10,7 +10,8 @@ import { Card, CardContent } from "@/components/ui/card";
 
 /**
  * כניסה מפאנל הפלטפורמה לניהול החנות ("היכנס לניהול" — God Mode), או
- * משער הפלטפורמה לחנות של בעליה (#...&from=portal — חלק 12).
+ * משער הפלטפורמה לחנות של בעליה (#...&from=portal — חלק 12), או ממחליף
+ * החנויות בניהול של חנות אחרת של אותו משתמש (#...&from=switch — חלק 18ב).
  * הכתובת מגיעה עם קוד חד-פעמי ב-fragment (#code=...): הקוד יוצא מהכתובת
  * מיד, נפדה בשרת תמורת חיבור רגיל באתר הזה, ומשם ישר לפאנל הניהול.
  */
@@ -29,11 +30,13 @@ function AdminHandoffPage() {
   const [error, setError] = useState<string | null>(null);
   // הגיעו משער הפלטפורמה (בעלי החנות) או מפאנל הפלטפורמה (מנהל-על)?
   // (נקרא כבר ברינדור הראשון — לפני שהקוד יוצא מהכתובת — שלא יהבהב הטקסט של מנהל-על)
-  const [fromPortal] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.hash.slice(1)).get("from") === "portal",
+  const [from] = useState(() =>
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.hash.slice(1)).get("from"),
   );
+  const fromPortal = from === "portal";
+  const fromSwitch = from === "switch";
   // הקוד חד-פעמי: לא לנסות פעמיים (StrictMode מריץ effect פעמיים בפיתוח)
   const started = useRef(false);
   const portalUrl = hostMode.baseDomain
@@ -47,13 +50,16 @@ function AdminHandoffPage() {
     const params = new URLSearchParams(window.location.hash.slice(1));
     const code = params.get("code") ?? "";
     const portal = params.get("from") === "portal";
+    const switching = params.get("from") === "switch";
     // הקוד יוצא מהכתובת מיד — לא נשאר בהיסטוריה ולא בשורת הכתובת
     window.history.replaceState(null, "", window.location.pathname);
     if (!code) {
       setError(
         portal
           ? "קישור הכניסה חסר. חזרו לשער הפלטפורמה ובחרו שוב את החנות."
-          : 'קישור הכניסה חסר. חזרו לפאנל הפלטפורמה ולחצו על "היכנס לניהול".',
+          : switching
+            ? "קישור המעבר חסר. חזרו לחנות הקודמת ובחרו שוב את החנות ממחליף החנויות."
+            : 'קישור הכניסה חסר. חזרו לפאנל הפלטפורמה ולחצו על "היכנס לניהול".',
       );
       return;
     }
@@ -62,13 +68,13 @@ function AdminHandoffPage() {
       try {
         // חיבור קודם באתר הזה (למשל חשבון בדיקה) — מסתיים לפני הכניסה לניהול
         await supabase.auth.signOut({ scope: "local" });
-        const { accessToken, refreshToken } = await redeem({ data: { code } });
+        const { accessToken, refreshToken, landing } = await redeem({ data: { code } });
         const { error: sessionError } = await supabase.auth.setSession({
           access_token: cleanAscii(accessToken, "access_token") ?? "",
           refresh_token: cleanAscii(refreshToken, "refresh_token") ?? "",
         });
         if (sessionError) throw sessionError;
-        await router.navigate({ to: "/admin", replace: true });
+        await router.navigate({ to: landing, replace: true });
       } catch (thrown) {
         setError(thrown instanceof Error ? thrown.message : "הכניסה לניהול החנות נכשלה");
       }
@@ -85,7 +91,9 @@ function AdminHandoffPage() {
                 <ShieldAlert className="size-6" aria-hidden="true" />
               </span>
               <div className="space-y-1">
-                <h1 className="text-lg font-bold text-foreground">הכניסה לניהול לא הצליחה</h1>
+                <h1 className="text-lg font-bold text-foreground">
+                  {fromSwitch ? "המעבר לחנות לא הצליח" : "הכניסה לניהול לא הצליחה"}
+                </h1>
                 <p className="text-sm leading-6 text-muted-foreground">{error}</p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
@@ -94,6 +102,7 @@ function AdminHandoffPage() {
                     <a href={portalUrl}>חזרה לשער הפלטפורמה</a>
                   </Button>
                 ) : (
+                  !fromSwitch &&
                   hostMode.platformUrl && (
                     <Button asChild>
                       <a href={hostMode.platformUrl}>חזרה לפאנל הפלטפורמה</a>
@@ -112,12 +121,18 @@ function AdminHandoffPage() {
               </span>
               <div className="space-y-1">
                 <h1 className="text-lg font-bold text-foreground">
-                  {fromPortal ? "נכנסים לניהול החנות שלכם…" : "נכנסים לניהול החנות…"}
+                  {fromSwitch
+                    ? "עוברים לחנות…"
+                    : fromPortal
+                      ? "נכנסים לניהול החנות שלכם…"
+                      : "נכנסים לניהול החנות…"}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  {fromPortal
-                    ? "מחברים אתכם לפאנל הניהול — רק עוד רגע"
-                    : "מנהל-על — הרשאות מלאות לחנות הזו"}
+                  {fromSwitch
+                    ? "אותו חשבון, בלי להתחבר מחדש — רק עוד רגע"
+                    : fromPortal
+                      ? "מחברים אתכם לפאנל הניהול — רק עוד רגע"
+                      : "מנהל-על — הרשאות מלאות לחנות הזו"}
                 </p>
               </div>
               <Loader2 className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />

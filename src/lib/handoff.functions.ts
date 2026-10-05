@@ -17,7 +17,21 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  * בעלי חנות שאימתו את המייל בשער נכנסים לניהול החנות שלהם. קוד כזה מסומן
  * kind = 'store_owner', ובפדיון נבדק שהמשתמש מנהל (admin) של החנות הזו
  * ולא חסום — במקום בדיקת מנהל-על.
+ *
+ * חלק 18ב — מחליף החנויות (store-switcher.functions.ts): משתמש שמשויך לכמה
+ * חנויות עובר מחנות לחנות בלי להתחבר מחדש. קוד כזה מסומן kind = 'store_switch',
+ * ובפדיון נבדק שהמשתמש איש צוות (admin / agent / warehouse) בחנות היעד ולא
+ * חסום בה. הפדיון מחזיר את התפקיד — לאן להיכנס (ניהול / סוכן / מחסן).
  */
+
+/** לאן נכנסים אחרי הכניסה, לפי התפקיד בחנות */
+export type HandoffLanding = "/admin" | "/agent" | "/warehouse";
+
+const LANDING: Record<string, HandoffLanding> = {
+  admin: "/admin",
+  agent: "/agent",
+  warehouse: "/warehouse",
+};
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** תוקף הקוד: רק כדי לעבור מהפאנל לאתר החנות */
@@ -112,15 +126,24 @@ export const redeemStoreAdminHandoff = createServerFn({ method: "POST" })
       .select("user_id, kind")
       .maybeSingle();
     if (!row) throw new Error(EXPIRED);
-    if (row.kind === "store_owner") {
-      // בעל החנות מהשער: עדיין מנהל של החנות הזו, ולא חסום
+    let landing: HandoffLanding = "/admin";
+    if (row.kind === "store_owner" || row.kind === "store_switch") {
+      // השיוך לחנות הזו (user_roles — שורה לכל חנות של המשתמש)
       const { data: role } = await supabaseAdminUnscoped
         .from("user_roles")
         .select("role, is_blocked")
         .eq("user_id", row.user_id)
         .eq("tenant_id", tenantId)
         .maybeSingle();
-      if (role?.role !== "admin") throw new Error("החשבון אינו מנהל של החנות הזו");
+      if (row.kind === "store_owner") {
+        // בעל החנות מהשער: עדיין מנהל של החנות הזו, ולא חסום
+        if (role?.role !== "admin") throw new Error("החשבון אינו מנהל של החנות הזו");
+      } else {
+        // מחליף החנויות: איש צוות בחנות היעד
+        const target = role ? LANDING[role.role] : undefined;
+        if (!role || !target) throw new Error("החשבון שלכם אינו משויך לניהול של החנות הזו");
+        landing = target;
+      }
       if (role.is_blocked) throw new Error("החשבון שלכם בחנות הזו חסום");
     } else if (!(await isPlatformAdminUser(row.user_id))) {
       throw new Error("אין לחשבון הרשאת מנהל-על");
@@ -134,7 +157,7 @@ export const redeemStoreAdminHandoff = createServerFn({ method: "POST" })
     const { sessionForEmail } = await import("@/lib/session.server");
     try {
       const { accessToken, refreshToken } = await sessionForEmail(email, "handoff");
-      return { accessToken, refreshToken, kind: row.kind };
+      return { accessToken, refreshToken, kind: row.kind, landing };
     } catch {
       throw new Error("החיבור לחנות נכשל. נסו שוב.");
     }

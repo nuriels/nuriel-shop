@@ -11,9 +11,18 @@ import { randomInt } from "node:crypto";
 import { supabaseAdminUnscoped } from "@/integrations/supabase/client.server";
 import { originForTenant, type Tenant } from "@/integrations/supabase/tenant.server";
 
-export type StoreAdminCredentials = { email: string; tempPassword: string; loginUrl: string };
+export type StoreAdminCredentials = {
+  email: string;
+  /** null = חשבון קיים (חלק 18ב) — נכנסים עם הסיסמה שכבר יש לו */
+  tempPassword: string | null;
+  loginUrl: string;
+  /** החשבון כבר היה קיים (מנהל של חנות אחרת) וצורף לחנות */
+  existingAccount: boolean;
+};
 
 const ALREADY_REGISTERED = "כתובת האימייל הזו כבר רשומה במערכת (בחנות זו או בחנות אחרת)";
+const CUSTOMER_ELSEWHERE =
+  "כתובת האימייל הזו רשומה כלקוח בחנות במערכת — חשבון לקוח שייך לחנות אחת. למנהל החנות צריך כתובת אחרת.";
 
 function tempPassword(): string {
   const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -23,24 +32,37 @@ function tempPassword(): string {
 }
 
 /**
- * בדיקה מוקדמת (לפני שמקימים חנות): האם כבר יש חשבון עם האימייל הזה.
- * חשבון התחברות אחד לכל אימייל בכל הפלטפורמה. ההכרעה הסופית היא של
- * Auth ביצירה עצמה — זו רק כדי לא להשאיר חנות בלי מנהל במקרה הנפוץ.
+ * בדיקה מוקדמת (לפני שמקימים חנות): האם האימייל יכול לנהל את החנות.
+ * חלק 18ב: חשבון אחד יכול לנהל כמה חנויות — רק חשבון של לקוח (בחנות אחרת)
+ * לא יכול. ההכרעה הסופית במסד (user_roles_membership_guard) — זו רק כדי לא
+ * להשאיר חנות בלי מנהל במקרה הנפוץ.
  */
 export async function storeAdminEmailProblem(email: string): Promise<string | null> {
   const { data } = await supabaseAdminUnscoped
     .from("user_roles")
     .select("user_id")
     .eq("email", email)
+    .eq("role", "customer")
     .limit(1);
-  return data && data.length > 0 ? ALREADY_REGISTERED : null;
+  return data && data.length > 0 ? CUSTOMER_ELSEWHERE : null;
 }
 
-/** חשבון חדש (אימייל + סיסמה זמנית) עם תפקיד admin בחנות הנתונה */
+/**
+ * מנהל לחנות: אם לאימייל כבר יש חשבון (למשל מנהל של חנות אחרת) — החשבון
+ * הקיים מצורף כמנהל (בלי סיסמה חדשה). אחרת — חשבון חדש עם סיסמה זמנית.
+ */
 export async function provisionStoreAdmin(
   tenant: Pick<Tenant, "id" | "slug" | "domain" | "is_default">,
   email: string,
 ): Promise<StoreAdminCredentials> {
+  const loginUrl = `${originForTenant(tenant)}/login`;
+  const { data: linkedId, error: linkError } = await supabaseAdminUnscoped.rpc(
+    "platform_link_store_admin",
+    { _tenant: tenant.id, _email: email },
+  );
+  if (linkError) throw new Error(linkError.message);
+  if (linkedId) return { email, tempPassword: null, loginUrl, existingAccount: true };
+
   const password = tempPassword();
   const { data: created, error: createError } = await supabaseAdminUnscoped.auth.admin.createUser({
     email,
@@ -68,7 +90,7 @@ export async function provisionStoreAdmin(
     throw new Error(roleError.message);
   }
 
-  return { email, tempPassword: password, loginUrl: `${originForTenant(tenant)}/login` };
+  return { email, tempPassword: password, loginUrl, existingAccount: false };
 }
 
 // ============================================================

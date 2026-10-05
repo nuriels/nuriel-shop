@@ -1033,7 +1033,7 @@ export type Database = {
           expires_at: string;
           used_at: string | null;
           /** platform_admin = מנהל-על מהפאנל; store_owner = בעל החנות משער הפלטפורמה */
-          kind: "platform_admin" | "store_owner";
+          kind: "platform_admin" | "store_owner" | "store_switch";
         };
         Insert: {
           token_hash: string;
@@ -1042,7 +1042,7 @@ export type Database = {
           created_at?: string;
           expires_at: string;
           used_at?: string | null;
-          kind?: "platform_admin" | "store_owner";
+          kind?: "platform_admin" | "store_owner" | "store_switch";
         };
         Update: {
           token_hash?: string;
@@ -1051,7 +1051,7 @@ export type Database = {
           created_at?: string;
           expires_at?: string;
           used_at?: string | null;
-          kind?: "platform_admin" | "store_owner";
+          kind?: "platform_admin" | "store_owner" | "store_switch";
         };
         Relationships: [];
       };
@@ -2939,6 +2939,30 @@ export type Database = {
       place_guest_order: {
         Args: { _kind: string; _items: Json; _details: Json };
         Returns: { id: string; kind: string; order_number: string; total: number }[];
+      };
+      my_stores: {
+        Args: never;
+        Returns: {
+          tenant_id: string;
+          slug: string;
+          name: string;
+          role: string;
+          is_owner: boolean;
+          status: string;
+          is_default: boolean;
+          domain: string | null;
+          custom_domain: string | null;
+          custom_domain_status: string | null;
+          is_current: boolean;
+        }[];
+      };
+      store_link_existing_account: {
+        Args: { _email: string; _role: string; _display_name?: string | null };
+        Returns: string | null;
+      };
+      platform_link_store_admin: {
+        Args: { _tenant: string; _email: string };
+        Returns: string | null;
       };
       my_store_role: {
         Args: never;

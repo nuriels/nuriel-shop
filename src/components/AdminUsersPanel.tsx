@@ -396,7 +396,11 @@ export function AdminUsersPanel({ isAdmin }: { isAdmin: boolean }) {
         setPendingDelete({ user, orderCount: result.orderCount });
         return;
       }
-      toast.success("המשתמש נמחק מהמערכת");
+      toast.success(
+        result.keptAccount
+          ? "המשתמש הוסר מהחנות הזו (החשבון שלו ממשיך לפעול בחנויות האחרות שלו)"
+          : "המשתמש נמחק מהמערכת",
+      );
       void load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "מחיקת המשתמש נכשלה");

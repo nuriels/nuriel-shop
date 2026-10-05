@@ -67,6 +67,16 @@ export function CreateStaffAccountDialog({ onCreated }: { onCreated: () => void 
       });
       onCreated();
 
+      // חלק 18ב: לאימייל כבר היה חשבון (למשל מנהל של חנות אחרת) — צורף לחנות הזו
+      if (result.mode === "existing") {
+        toast.success(
+          `${email} כבר רשום/ה במערכת — החשבון צורף לחנות. הכניסה עם הסיסמה הקיימת, והמעבר בין החנויות ממחליף החנויות בניהול.`,
+        );
+        reset();
+        setOpen(false);
+        return;
+      }
+
       if (result.mode === "temp" && result.tempPassword) {
         setCreated({ email, password: result.tempPassword, emailed: result.emailed });
         toast.success("המשתמש נוצר. יש להעתיק את הסיסמה הזמנית");
@@ -100,7 +110,10 @@ export function CreateStaffAccountDialog({ onCreated }: { onCreated: () => void 
       <DialogContent dir="rtl" className="max-h-[90vh] overflow-y-auto text-right">
         <DialogHeader>
           <DialogTitle>יצירת חשבון צוות</DialogTitle>
-          <DialogDescription>קישור לקביעת סיסמה, או סיסמה זמנית להעברה ידנית</DialogDescription>
+          <DialogDescription>
+            קישור לקביעת סיסמה, או סיסמה זמנית להעברה ידנית. כבר יש לאימייל חשבון (למשל מנהל של חנות
+            אחרת)? החשבון הקיים יצורף לחנות הזו.
+          </DialogDescription>
         </DialogHeader>
 
         {created ? (

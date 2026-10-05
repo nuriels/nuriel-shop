@@ -752,7 +752,9 @@ function StoresStep({
       ) : (
         account.stores.length > 0 && (
           <p className="text-center text-xs text-muted-foreground">
-            כל כתובת מייל מנהלת חנות אחת. לחנות נוספת — התחברו עם כתובת אחרת.
+            {account.maxStores !== null && account.stores.length >= account.maxStores
+              ? `הגעתם למספר החנויות המרבי לחשבון אחד (${account.maxStores}). לחנויות נוספות פנו לתמיכה.`
+              : "אי אפשר לפתוח חנות נוספת עם כתובת המייל הזו."}
           </p>
         )
       )}

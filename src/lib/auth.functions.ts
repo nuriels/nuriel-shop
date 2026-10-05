@@ -150,15 +150,17 @@ export const loginWithIdentifier = createServerFn({ method: "POST" })
     const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
     const { currentTenantId } = await import("@/integrations/supabase/tenant.server");
     const { isPlatformAdminUser } = await import("@/integrations/supabase/client.server");
-    const { data: membership } = await supabaseAdminUnscoped
+    // חלק 18ב: חשבון יכול להיות משויך לכמה חנויות — מספיק שהוא משויך לחנות הזו
+    const { data: memberships } = await supabaseAdminUnscoped
       .from("user_roles")
       .select("tenant_id")
       .eq("user_id", result.session.user.id)
-      .maybeSingle();
+      .limit(100);
+    const tenantId = currentTenantId();
     // חריג יחיד: מנהל-על (God Mode) — נכנס לפאנל הפלטפורמה ולניהול של כל חנות
     if (
-      membership &&
-      membership.tenant_id !== currentTenantId() &&
+      (memberships ?? []).length > 0 &&
+      !(memberships ?? []).some((row) => row.tenant_id === tenantId) &&
       !(await isPlatformAdminUser(result.session.user.id))
     ) {
       logLogin("warn", "account belongs to another store", { ip, email: maskEmail(email) });

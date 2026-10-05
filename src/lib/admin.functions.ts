@@ -112,13 +112,33 @@ export const createStaffUser = createServerFn({ method: "POST" })
     }
 
     // חסימת כפילות אימייל *לפני* יצירת המשתמש: גם בטבלת התפקידים שלנו
-    // וגם ב-auth (למשל שורה שנשארה מיצירה שנכשלה באמצע בעבר).
+    // (בחנות הזו) וגם ב-auth (למשל שורה שנשארה מיצירה שנכשלה באמצע בעבר).
     const { data: existingRole } = await supabaseAdmin
       .from("user_roles")
       .select("user_id")
       .eq("email", data.email)
       .maybeSingle();
-    if (existingRole) throw new Error("כתובת האימייל הזו כבר רשומה במערכת");
+    if (existingRole) throw new Error("כתובת האימייל הזו כבר רשומה בחנות");
+
+    // חלק 18ב: לאימייל כבר יש חשבון (למשל מנהל של חנות אחרת) — מצרפים את
+    // החשבון הקיים לחנות הזו בתפקיד שנבחר, במקום ליצור חשבון חדש. הוא נכנס
+    // עם הסיסמה שכבר יש לו, ובמחליף החנויות עובר בין החנויות שלו.
+    // רק מנהל, ורק לתפקידי צוות (חשבון לקוח שייך לחנות אחת — נאכף במסד).
+    if (callerRole === "admin" && data.role !== "customer") {
+      const { data: linkedId, error: linkError } = await context.supabase.rpc(
+        "store_link_existing_account",
+        { _email: data.email, _role: data.role, _display_name: data.displayName },
+      );
+      if (linkError) throw new Error(linkError.message);
+      if (linkedId) {
+        return {
+          userId: linkedId,
+          mode: "existing" as const,
+          tempPassword: null,
+          emailed: false,
+        };
+      }
+    }
 
     // במצב "temp" משתמשים בסיסמה שהמנהל הקליד (או אחת שחוללה בטופס);
     // במצב "link" נוצרת סיסמה אקראית שאף אחד לא רואה, והלקוח קובע משלו.
@@ -235,7 +255,7 @@ export const deleteUserAccount = createServerFn({ method: "POST" })
 
     const { data: target } = await supabaseAdmin
       .from("user_roles")
-      .select("user_id, email, role, is_protected")
+      .select("user_id, tenant_id, email, role, is_protected")
       .eq("user_id", data.userId)
       .maybeSingle();
     if (!target) throw new Error("המשתמש לא נמצא");
@@ -255,14 +275,31 @@ export const deleteUserAccount = createServerFn({ method: "POST" })
       .eq("customer_id", data.userId);
 
     if ((orderCount ?? 0) > 0 && !data.force) {
-      return { deleted: false, requiresConfirmation: true, orderCount: orderCount ?? 0 };
+      return {
+        deleted: false,
+        requiresConfirmation: true,
+        orderCount: orderCount ?? 0,
+        keptAccount: false,
+      };
     }
 
-    // מוחקים קודם את חשבון ההתחברות. אם הוא כבר לא קיים (למשל נמחק
-    // ידנית ב-Studio) ממשיכים בכל זאת לניקוי השורות שלנו.
-    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
-    if (authError && !/not found|does not exist/i.test(authError.message)) {
-      throw new Error(`מחיקת חשבון ההתחברות נכשלה: ${authError.message}`);
+    // חלק 18ב: משתמש שמשויך גם לחנויות אחרות — מוסרים רק את השיוך לחנות הזו.
+    // חשבון ההתחברות נשאר (הוא ממשיך לעבוד בחנויות האחרות שלו).
+    const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
+    const { count: otherStores, error: otherError } = await supabaseAdminUnscoped
+      .from("user_roles")
+      .select("tenant_id", { count: "exact", head: true })
+      .eq("user_id", data.userId)
+      .neq("tenant_id", target.tenant_id);
+    if (otherError) throw new Error(otherError.message);
+
+    if ((otherStores ?? 0) === 0) {
+      // מוחקים קודם את חשבון ההתחברות. אם הוא כבר לא קיים (למשל נמחק
+      // ידנית ב-Studio) ממשיכים בכל זאת לניקוי השורות שלנו.
+      const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
+      if (authError && !/not found|does not exist/i.test(authError.message)) {
+        throw new Error(`מחיקת חשבון ההתחברות נכשלה: ${authError.message}`);
+      }
     }
 
     // customer_profiles / orders / password_reset_tokens נמחקים בשרשור
@@ -272,7 +309,13 @@ export const deleteUserAccount = createServerFn({ method: "POST" })
       .eq("user_id", data.userId);
     if (roleError) throw new Error(roleError.message);
 
-    return { deleted: true, requiresConfirmation: false, orderCount: orderCount ?? 0 };
+    return {
+      deleted: true,
+      requiresConfirmation: false,
+      orderCount: orderCount ?? 0,
+      /** החשבון נשאר — הוסר רק מהחנות הזו (משויך לחנויות אחרות) */
+      keptAccount: (otherStores ?? 0) > 0,
+    };
   });
 
 /**
