@@ -2352,6 +2352,9 @@ export type Database = {
           payment_phone_enabled: boolean;
           payment_bit_enabled: boolean;
           payment_bit_phone: string | null;
+          desktop_banner_active: boolean;
+          desktop_banner_image_url: string | null;
+          desktop_banner_link: string | null;
           business_hours: string;
           hyp_max_payments: number;
         };
@@ -2398,6 +2401,9 @@ export type Database = {
           payment_phone_enabled?: boolean;
           payment_bit_enabled?: boolean;
           payment_bit_phone?: string | null;
+          desktop_banner_active?: boolean;
+          desktop_banner_image_url?: string | null;
+          desktop_banner_link?: string | null;
           business_hours?: string;
           hyp_max_payments?: number;
         };
@@ -2444,6 +2450,9 @@ export type Database = {
           payment_phone_enabled?: boolean;
           payment_bit_enabled?: boolean;
           payment_bit_phone?: string | null;
+          desktop_banner_active?: boolean;
+          desktop_banner_image_url?: string | null;
+          desktop_banner_link?: string | null;
           business_hours?: string;
           hyp_max_payments?: number;
         };

@@ -18,6 +18,8 @@ import {
 } from "@/lib/catalog";
 import { MinOrderNote, PackNote, QuantityPicker } from "@/components/QuantityDialog";
 import { VariantPicker, useVariantSelection } from "@/components/VariantPicker";
+import { RichContent } from "@/components/legal/RichContent";
+import { richTextIsEmpty, richTextToPlain, toRichHtml } from "@/lib/rich-text";
 import type { AddToCart } from "@/lib/cart";
 import { hasVariants, variantPriceRange } from "@/lib/variants";
 import { cn } from "@/lib/utils";
@@ -186,35 +188,50 @@ export function ProductDetailView({
   };
 
   const isPage = mode === "page";
+  // חלק 19: השם המלא — כהה ובולט, יורד שורה כמה שצריך (בלי truncate / line-clamp)
+  const titleClass =
+    "font-display whitespace-normal break-words [overflow-wrap:anywhere] text-2xl font-black leading-snug tracking-normal text-foreground sm:text-3xl";
   const title = isPage ? (
-    <h1 className="font-display break-words text-2xl font-bold leading-tight text-foreground sm:text-3xl">
+    <h1 className={titleClass} data-product-title>
       {product.name}
     </h1>
   ) : (
-    <DialogTitle className="font-display break-words text-2xl font-bold leading-tight text-foreground">
+    <DialogTitle className={titleClass} data-product-title>
       {product.name}
     </DialogTitle>
   );
+  // תיאור המוצר: HTML מעורך הטקסט העשיר (או טקסט ישן) — תמיד מנוקה לפני הצגה.
+  // יורד שורה בתוך רוחב העמודה (בלי גלילה לצדדים), וקוראים אותו בגלילה למטה.
+  const hasDescription = !richTextIsEmpty(toRichHtml(product.description));
   const descriptionBody: ReactNode = (
-    <div className="text-sm leading-7 text-foreground/90">
-      {product.description?.trim() ? (
-        <p className="whitespace-pre-line break-words">{product.description}</p>
+    <div
+      className="min-w-0 max-w-full overflow-hidden whitespace-normal break-words [overflow-wrap:anywhere]"
+      data-product-description
+    >
+      {hasDescription ? (
+        <RichContent
+          content={product.description}
+          className="text-sm leading-7 text-foreground sm:text-[0.95rem]"
+        />
       ) : (
-        <p className="text-muted-foreground">אין תיאור למוצר הזה.</p>
+        <p className="text-sm text-muted-foreground">אין תיאור למוצר הזה.</p>
       )}
     </div>
   );
+  // לקוראי מסך — תקציר קצר (התיאור המלא מוצג בעמוד עצמו)
+  const plainSummary = richTextToPlain(product.description).slice(0, 200);
 
   return (
     <>
       <div
         className={cn(
-          "grid md:grid-cols-2",
+          // minmax(0, 1fr): תוכן ארוך (קישור / מילה בלי רווחים) לא מרחיב את העמודה
+          "grid grid-cols-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]",
           isPage && "overflow-hidden rounded-2xl border bg-card shadow-sm",
         )}
       >
         {/* ---------- תמונה + גלריה ---------- */}
-        <div className="bg-secondary/60 p-4 md:rounded-s-lg">
+        <div className="min-w-0 bg-secondary/60 p-4 md:rounded-s-lg">
           <div
             className={cn(
               "relative flex items-center justify-center",
@@ -258,7 +275,7 @@ export function ProductDetailView({
         </div>
 
         {/* ---------- פרטים ---------- */}
-        <div className="flex flex-col gap-4 p-5 sm:p-6">
+        <div className="flex min-w-0 flex-col gap-4 p-5 sm:p-6">
           <div className="space-y-1.5">
             <div className="flex items-start justify-between gap-2">
               <p className="text-xs text-muted-foreground">{categoryPath.join(" › ")}</p>
@@ -330,10 +347,11 @@ export function ProductDetailView({
 
           {choice.hasVariants && !product.is_out_of_stock && <VariantPicker state={choice} />}
 
-          {isPage ? (
-            descriptionBody
-          ) : (
-            <DialogDescription asChild>{descriptionBody}</DialogDescription>
+          {descriptionBody}
+          {!isPage && (
+            <DialogDescription className="sr-only">
+              {plainSummary || `פרטי המוצר ${product.name}`}
+            </DialogDescription>
           )}
 
           {variations.length > 0 && (

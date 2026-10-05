@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppFooter } from "@/components/AppFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { StorefrontMain } from "@/components/layout/StorefrontMain";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { ProductDetailView } from "@/components/ProductDetailDialog";
 import {
@@ -187,7 +188,8 @@ function ProductPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader role={role} email={session?.user.email ?? null} onSignOut={signOut} />
-      <main className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-3 py-5 sm:px-4 sm:py-8">
+      {/* חלק 19: Grid עם באנר צדדי (רק במחשב, כשהוא פעיל) */}
+      <StorefrontMain width="5xl" className="py-5 sm:py-8" contentClassName="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Link
             to="/"
@@ -247,7 +249,7 @@ function ProductPage() {
             </CardContent>
           </Card>
         )}
-      </main>
+      </StorefrontMain>
       <AppFooter />
     </div>
   );

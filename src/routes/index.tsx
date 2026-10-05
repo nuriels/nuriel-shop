@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppFooter } from "@/components/AppFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { StorefrontMain } from "@/components/layout/StorefrontMain";
 import { AccountNotice } from "@/components/AccountNotice";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { OnboardingGate } from "@/components/OnboardingGate";
@@ -483,7 +484,8 @@ function StoreCatalog() {
           </section>
         )}
 
-        <main className="mx-auto w-full max-w-6xl flex-1 space-y-8 px-3 py-8 sm:px-4">
+        {/* חלק 19: Grid עם באנר צדדי (רק במחשב, כשהוא פעיל) */}
+        <StorefrontMain className="py-8" contentClassName="space-y-8">
           {settings?.maintenance_mode && isStaff && (
             <div className="rounded-lg border border-accent/50 bg-accent/10 p-4 text-sm font-medium text-foreground">
               מצב תחזוקה פעיל — האתר חסום ללקוחות ולאורחים. אתם רואים אותו כרגיל כדי לעדכן מלאי
@@ -597,7 +599,7 @@ function StoreCatalog() {
           </section>
 
           <HomeBanner slides={banners.bottom} label="באנר תחתון" />
-        </main>
+        </StorefrontMain>
 
         {canUseCart && (
           <OrderCartDrawer

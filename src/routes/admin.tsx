@@ -14,6 +14,7 @@ import { AdminProductsPanel } from "@/components/AdminProductsPanel";
 import { CategoryManagementPanel } from "@/components/CategoryManagerDialog";
 import { PendingProductsPanel } from "@/components/PendingProductsPanel";
 import { SiteSettingsPanel } from "@/components/SiteSettingsPanel";
+import { SideBannerCard } from "@/components/marketing/SideBannerCard";
 import { CartPromotionsPanel } from "@/components/sales/CartPromotionsPanel";
 import { CouponsPanel } from "@/components/marketing/CouponsPanel";
 import { AbandonedCartsPanel } from "@/components/marketing/AbandonedCartsPanel";
@@ -366,6 +367,8 @@ function AdminPage() {
               </TabsContent>
               <TabsContent value="site" className="space-y-6">
                 <SiteSettingsPanel />
+                {/* חלק 19: באנר צדדי למסכי מחשב */}
+                <SideBannerCard />
                 {/* חלק 17ב: תשלום טלפוני / ביט — גלוי (לא כמו הסליקה באשראי) */}
                 <OfflinePaymentMethodsCard />
                 {

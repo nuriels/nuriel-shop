@@ -169,6 +169,14 @@ export function compressMobileBannerImage(file: File): Promise<CompressResult> {
   return compress(file, { maxDimension: 1000, quality: 0.84 });
 }
 
+/**
+ * באנר צדדי למחשב (חלק 19): באנר צר וגבוה (למשל 300×600) — עד 1200px בצלע
+ * הארוכה (חד גם במסכים צפופים), WebP באיכות גבוהה
+ */
+export function compressSideBannerImage(file: File): Promise<CompressResult> {
+  return compress(file, { maxDimension: 1200, quality: 0.85 });
+}
+
 /** לוגו האתר: עד 600px, PNG עם שקיפות (נדרש גם למסמכי PDF) */
 export function compressLogoImage(file: File): Promise<CompressResult> {
   return compress(file, LOGO_OPTIONS);

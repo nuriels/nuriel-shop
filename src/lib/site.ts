@@ -1,5 +1,5 @@
 import { getTenantId, supabase } from "@/integrations/supabase/client";
-import { compressLogoImage, compressProductImage } from "@/lib/image";
+import { compressLogoImage, compressProductImage, compressSideBannerImage } from "@/lib/image";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { normalizeBrandColor } from "@/lib/brand-theme";
 import { DEFAULT_SENDER_LOCAL_PART } from "@/lib/email-sender";
@@ -75,6 +75,13 @@ export type SiteSettings = {
   payment_phone_enabled: boolean;
   payment_bit_enabled: boolean;
   payment_bit_phone: string | null;
+  /**
+   * באנר צדדי במסכי מחשב (חלק 19) — בעמודה השמאלית של חזית החנות, רק ב-lg
+   * ומעלה. נשמר רק מהכרטיס "באנרים ופרסומים" (saveSideBanner).
+   */
+  desktop_banner_active: boolean;
+  desktop_banner_image_url: string | null;
+  desktop_banner_link: string | null;
 };
 
 /** העמודים המשפטיים — נשמרים בנפרד (saveLegalTexts), לא מטופס הגדרות האתר */
@@ -93,6 +100,9 @@ export const SITE_FORM_EXCLUDED_KEYS = [
   "payment_phone_enabled",
   "payment_bit_enabled",
   "payment_bit_phone",
+  "desktop_banner_active",
+  "desktop_banner_image_url",
+  "desktop_banner_link",
 ] as const satisfies readonly (keyof SiteSettings)[];
 
 /** מידות ברירת המחדל של מדבקת משלוח (כמו במסד) */
@@ -128,7 +138,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, card_payments_enabled, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, card_payments_enabled, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -176,7 +186,63 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     payment_phone_enabled: true,
     payment_bit_enabled: false,
     payment_bit_phone: null,
+    desktop_banner_active: false,
+    desktop_banner_image_url: null,
+    desktop_banner_link: null,
   };
+}
+
+export type SideBannerSettings = Pick<
+  SiteSettings,
+  "desktop_banner_active" | "desktop_banner_image_url" | "desktop_banner_link"
+>;
+
+/** הקישור של הבאנר: כתובת מלאה (https://…) או עמוד באתר (/…) — כמו הבדיקה במסד */
+export function sideBannerLinkProblem(link: string): string | null {
+  const value = link.trim();
+  if (value === "") return null;
+  if (value.length > 2000) return "הקישור ארוך מדי";
+  if (!/^(https?:\/\/[^\s"'<>]+|\/(?!\/)[^\s"'<>]*)$/i.test(value)) {
+    return "כתובת מלאה (https://…) או עמוד באתר (למשל /?category=מבצעים)";
+  }
+  return null;
+}
+
+/**
+ * שמירת הבאנר הצדדי (חלק 19). המסד בודק שוב: קישורים בטוחים בלבד, ובאנר
+ * פעיל חייב תמונה.
+ */
+export async function saveSideBanner(settings: SideBannerSettings): Promise<SideBannerSettings> {
+  const { data, error } = await supabase
+    .from("site_settings")
+    .update({
+      desktop_banner_active: settings.desktop_banner_active,
+      desktop_banner_image_url: settings.desktop_banner_image_url?.trim() || null,
+      desktop_banner_link: settings.desktop_banner_link?.trim() || null,
+    })
+    .eq("id", true)
+    .select("desktop_banner_active, desktop_banner_image_url, desktop_banner_link")
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/**
+ * תמונת הבאנר הצדדי: נדחסת בדפדפן (WebP, עד 1200px) ועולה לתיקיית האתר של
+ * החנות בדלי branding (<tenant>/site/...) — כמו הלוגו. מחזיר קישור ציבורי.
+ */
+export async function uploadSideBannerImage(file: File): Promise<string> {
+  if (!file.type.startsWith("image/")) throw new Error("יש לבחור קובץ תמונה");
+  if (file.size > 15 * 1024 * 1024) throw new Error("גודל התמונה המקסימלי הוא 15MB");
+  const { file: optimized, extension } = await compressSideBannerImage(file);
+  const path = `${await tenantStoragePrefix()}/site/side-banner-${Date.now()}.${extension}`;
+  const { error } = await supabase.storage.from(BRANDING_BUCKET).upload(path, optimized, {
+    upsert: false,
+    contentType: optimized.type,
+    cacheControl: "31536000",
+  });
+  if (error) throw error;
+  return supabase.storage.from(BRANDING_BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
 /**

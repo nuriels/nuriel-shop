@@ -16,6 +16,7 @@ import {
   type CatalogItem,
 } from "@/lib/catalog";
 import { variantPriceRange, type CatalogVariant } from "@/lib/variants";
+import { richTextToPlain } from "@/lib/rich-text";
 
 function ProductImage({ item }: { item: CatalogItem }) {
   return (
@@ -76,6 +77,8 @@ function CatalogCard({
   const range = choice.hasVariants ? variantPriceRange(choice.variants) : null;
   // מחיר: של הוריאציה שנבחרה; לפני בחירה — "החל מ-" אם המחירים שונים
   const shownPrice = choice.variant ? choice.variant.price : product.price;
+  // תקציר בכרטיס — טקסט רגיל (התיאור יכול להיות HTML מהעורך, חלק 19)
+  const snippet = richTextToPlain(product.description);
   const fromPrice = !choice.variant && range !== null && range.min !== range.max ? range.min : null;
   const variantOwnPrice = choice.variant?.own_price === true;
 
@@ -103,9 +106,9 @@ function CatalogCard({
             {product.name}
           </h3>
         </button>
-        {product.description && (
+        {snippet && (
           <p className="line-clamp-1 text-xs leading-5 text-muted-foreground sm:line-clamp-2">
-            {product.description}
+            {snippet}
           </p>
         )}
 

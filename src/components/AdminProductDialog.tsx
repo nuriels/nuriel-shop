@@ -49,6 +49,8 @@ import {
   SEO_TITLE_RECOMMENDED,
 } from "@/lib/marketing";
 import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/legal/RichTextEditor";
+import { richTextIsEmpty, sanitizeRichHtml } from "@/lib/rich-text";
 import {
   Select,
   SelectContent,
@@ -269,8 +271,17 @@ function hasContent(form: FormState): boolean {
     form.imageUrl !== "" ||
     form.priceTier1.trim() !== "" ||
     form.barcode.trim() !== "" ||
-    form.description.trim() !== ""
+    !richTextIsEmpty(form.description)
   );
+}
+
+/** אורך מרבי לתיאור המוצר (HTML מהעורך) — כמו במסד */
+const DESCRIPTION_MAX = 20000;
+
+/** התיאור כפי שנשמר: HTML נקי מהעורך, או null כשאין טקסט */
+function descriptionForSave(html: string): string | null {
+  if (richTextIsEmpty(html)) return null;
+  return sanitizeRichHtml(html).trim() || null;
 }
 
 const DRAFT_DELAY_MS = 900;
@@ -611,6 +622,9 @@ export function AdminProductDialog({
 
   const validate = (): string | null => {
     if (form.name.trim() === "") return "נדרש שם מוצר";
+    if ((descriptionForSave(form.description) ?? "").length > DESCRIPTION_MAX) {
+      return "התיאור ארוך מדי — קצרו אותו מעט (או הסירו עיצוב מיותר)";
+    }
     if (form.orderBumpText.trim().length > 160)
       return "המשפט של מוצר הקופה ארוך מדי (עד 160 תווים)";
     if (form.category.trim() === "") return "נדרשת קטגוריה";
@@ -701,7 +715,8 @@ export function AdminProductDialog({
       barcode: form.barcode.trim() || null,
       // ברירת מחדל "A0A" אם לא הוזן איתור, כדי שבון הליקוט תמיד יציג משהו
       shelf_location: form.shelfLocation.trim() || "A0A",
-      description: form.description.trim() || null,
+      // חלק 19: HTML מעורך הטקסט העשיר (מנוקה — וגם בכל הצגה באתר)
+      description: descriptionForSave(form.description),
       // התמונה הראשית + הגלריה (תמונות נוספות מייבוא נשמרות; בלי ראשית — הבאה עולה)
       image_url: gallery[0] ?? null,
       images: gallery,
@@ -1134,12 +1149,18 @@ export function AdminProductDialog({
 
             <div className="space-y-2">
               <Label htmlFor="p-desc">תיאור (אופציונלי)</Label>
-              <Textarea
+              <RichTextEditor
                 id="p-desc"
-                rows={2}
+                variant="product"
+                ariaLabel="תיאור המוצר"
+                placeholder="מה חשוב לדעת על המוצר: מפרט, חומרים, מידות, שימוש…"
+                minHeight={160}
                 value={form.description}
-                onChange={(e) => patch({ description: e.target.value })}
+                onChange={(html) => patch({ description: html })}
               />
+              <p className="text-xs text-muted-foreground">
+                אפשר להדגיש, להוסיף מיני-כותרות, רשימות, צבעים וקישורים — כך זה יוצג בעמוד המוצר.
+              </p>
             </div>
 
             {tiersEnabled ? (

@@ -1,13 +1,14 @@
 import DOMPurify from "dompurify";
 
 /**
- * טקסט עשיר לעמודים המשפטיים (חלק 16א): התקנון, מדיניות הפרטיות ומדיניות
- * הביטולים נשמרים כ-HTML מהעורך בפאנל הניהול.
+ * טקסט עשיר — העמודים המשפטיים (חלק 16א) ותיאור המוצר (חלק 19): נשמרים
+ * כ-HTML מהעורך בפאנל הניהול.
  *
  * כל הצגה (באתר ובעורך) עוברת ניקוי ב-DOMPurify עם רשימה סגורה: תגיות
  * טקסט בסיסיות, קישורים בטוחים בלבד (http/https/mailto/tel/נתיב פנימי),
- * ומחלקה אחת — "טקסט אדום מודגש" למקומות שבעל החנות צריך להשלים.
- * בלי style, בלי תמונות, בלי סקריפטים ובלי אירועים.
+ * ומחלקות מרשימה סגורה בלבד — "טקסט אדום מודגש" למקומות שבעל החנות צריך
+ * להשלים, וצבעי הטקסט של העורך (RICH_TEXT_COLORS). בלי style, בלי
+ * תמונות, בלי סקריפטים ובלי אירועים.
  *
  * תוכן ישן (טקסט רגיל, לפני העורך) מומר ל-HTML: פסקה לכל בלוק, שורה חדשה
  * = <br>.
@@ -15,6 +16,30 @@ import DOMPurify from "dompurify";
 
 /** "מקום להשלמה" — טקסט אדום מודגש (בדיוק כמו בנוסחי ברירת המחדל) */
 export const RED_MARK_CLASS = "text-red-500 font-bold";
+
+export type RichTextColor = {
+  key: string;
+  label: string;
+  /** המחלקה שנשמרת ב-HTML (span class="…") */
+  className: string;
+  /** הצבע שהעורך מעביר לדפדפן (foreColor) ומיד מומר למחלקה */
+  hex: string;
+};
+
+/**
+ * צבעי הטקסט בעורך (חלק 19 — תיאור מוצר). נשמרים כמחלקה מהרשימה הזו בלבד,
+ * לא כצבע חופשי — כך הניקוי נשאר "רשימה סגורה" והצבעים קריאים על רקע בהיר.
+ * "צבע החנות" — צבע המותג של החנות (text-primary).
+ */
+export const RICH_TEXT_COLORS: readonly RichTextColor[] = [
+  { key: "brand", label: "צבע החנות", className: "text-primary", hex: "#123457" },
+  { key: "red", label: "אדום", className: "text-red-600", hex: "#dc2626" },
+  { key: "orange", label: "כתום", className: "text-orange-600", hex: "#ea580c" },
+  { key: "green", label: "ירוק", className: "text-green-700", hex: "#15803d" },
+  { key: "blue", label: "כחול", className: "text-blue-700", hex: "#1d4ed8" },
+  { key: "purple", label: "סגול", className: "text-purple-700", hex: "#7e22ce" },
+  { key: "gray", label: "אפור", className: "text-gray-500", hex: "#6b7280" },
+];
 
 export const RICH_ALLOWED_TAGS = [
   "p",
@@ -38,7 +63,10 @@ export const RICH_ALLOWED_TAGS = [
   "hr",
 ] as const;
 
-const ALLOWED_CLASSES = new Set(RED_MARK_CLASS.split(" "));
+const ALLOWED_CLASSES = new Set([
+  ...RED_MARK_CLASS.split(" "),
+  ...RICH_TEXT_COLORS.map((color) => color.className),
+]);
 
 /** קישורים: אתרים, מייל, טלפון, נתיב פנימי (/terms) או עוגן (#…) */
 const SAFE_URL = /^(?:https?:|mailto:|tel:|\/(?!\/)|#)/i;
@@ -91,7 +119,7 @@ function getPurifier(): Purifier | null {
   }
   instance.addHook("uponSanitizeAttribute", (node, data) => {
     if (data.attrName === "class") {
-      // מחלקות: רק "אדום מודגש", ורק על span
+      // מחלקות: רק "אדום מודגש" וצבעי הטקסט של העורך, ורק על span
       const kept =
         node.nodeName === "SPAN"
           ? data.attrValue
@@ -161,6 +189,19 @@ export function sanitizeRichHtml(html: string): string {
 export function richContentHtml(content: string | null | undefined): string {
   const html = toRichHtml(content);
   return html === "" ? "" : sanitizeRichHtml(html);
+}
+
+/**
+ * תוכן שמור (HTML או טקסט) → טקסט רגיל בשורה אחת — לתקציר בכרטיס המוצר,
+ * לחיפוש ולכל מקום שמציג טקסט ולא HTML.
+ */
+export function richTextToPlain(content: string | null | undefined): string {
+  const value = (content ?? "").trim();
+  if (value === "") return "";
+  return (looksLikeHtml(value) ? stripTags(value) : value)
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** אין טקסט אמיתי (רק תגיות ריקות / רווחים) */
