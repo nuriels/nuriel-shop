@@ -22,6 +22,7 @@ import { HomeBannersPanel } from "@/components/HomeBannersPanel";
 import { StockCountPanel } from "@/components/StockCountPanel";
 import { EmailSettingsPanel } from "@/components/EmailSettingsPanel";
 import { CustomDomainPanel } from "@/components/CustomDomainPanel";
+import { OfflinePaymentMethodsCard } from "@/components/payments/OfflinePaymentMethodsCard";
 import { ShippingMethodsPanel } from "@/components/ShippingMethodsPanel";
 import { CustomPricesPanel } from "@/components/CustomPricesPanel";
 import { BillingPanel } from "@/components/billing/BillingPanel";
@@ -365,6 +366,8 @@ function AdminPage() {
               </TabsContent>
               <TabsContent value="site" className="space-y-6">
                 <SiteSettingsPanel />
+                {/* חלק 17ב: תשלום טלפוני / ביט — גלוי (לא כמו הסליקה באשראי) */}
+                <OfflinePaymentMethodsCard />
                 {
                   // TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
                 }

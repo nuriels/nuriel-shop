@@ -40,6 +40,7 @@ import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
 import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
 import { Route as AdminSettingsDomainRouteImport } from './routes/admin_.settings_.domain'
+import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$orderId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -196,6 +197,11 @@ const AdminSettingsDomainRoute = AdminSettingsDomainRouteImport.update({
   path: '/admin/settings/domain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CheckoutBitOrderIdRoute = CheckoutBitOrderIdRouteImport.update({
+  id: '/checkout_/bit/$orderId',
+  path: '/checkout/bit/$orderId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -229,6 +235,7 @@ export interface FileRoutesByFullPath {
   '/platform/support': typeof PlatformSupportRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
+  '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -262,6 +269,7 @@ export interface FileRoutesByTo {
   '/platform/support': typeof PlatformSupportRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
+  '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -296,6 +304,7 @@ export interface FileRoutesById {
   '/platform_/support': typeof PlatformSupportRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/admin_/settings_/domain': typeof AdminSettingsDomainRoute
+  '/checkout_/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -331,6 +340,7 @@ export interface FileRouteTypes {
     | '/platform/support'
     | '/product/$productId'
     | '/admin/settings/domain'
+    | '/checkout/bit/$orderId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -364,6 +374,7 @@ export interface FileRouteTypes {
     | '/platform/support'
     | '/product/$productId'
     | '/admin/settings/domain'
+    | '/checkout/bit/$orderId'
   id:
     | '__root__'
     | '/'
@@ -397,6 +408,7 @@ export interface FileRouteTypes {
     | '/platform_/support'
     | '/product/$productId'
     | '/admin_/settings_/domain'
+    | '/checkout_/bit/$orderId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -431,6 +443,7 @@ export interface RootRouteChildren {
   PlatformSupportRoute: typeof PlatformSupportRoute
   ProductProductIdRoute: typeof ProductProductIdRoute
   AdminSettingsDomainRoute: typeof AdminSettingsDomainRoute
+  CheckoutBitOrderIdRoute: typeof CheckoutBitOrderIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -652,6 +665,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsDomainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/checkout_/bit/$orderId': {
+      id: '/checkout_/bit/$orderId'
+      path: '/checkout/bit/$orderId'
+      fullPath: '/checkout/bit/$orderId'
+      preLoaderRoute: typeof CheckoutBitOrderIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -687,6 +707,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformSupportRoute: PlatformSupportRoute,
   ProductProductIdRoute: ProductProductIdRoute,
   AdminSettingsDomainRoute: AdminSettingsDomainRoute,
+  CheckoutBitOrderIdRoute: CheckoutBitOrderIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

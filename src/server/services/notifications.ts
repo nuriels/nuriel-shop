@@ -324,6 +324,48 @@ function customerTotalsHtml(prepared: PreparedOrderEmail): string {
     </table>`;
 }
 
+/** "אמצעי תשלום" ללקוח (חלק 17ב): טלפוני / ביט (ממתין לאישור) / אשראי */
+function customerPaymentHtml(prepared: PreparedOrderEmail): string {
+  if (prepared.isQuote) return "";
+  const { method, status, bitReference, bitReceipt } = prepared.payment;
+  const box = (title: string, body: string, accent: string, background: string) =>
+    `<div style="margin:0 0 16px;padding:12px 14px;border:1px solid ${accent};border-radius:10px;background:${background};">
+      <p style="margin:0 0 6px;font-weight:bold;color:#12211F;">${title}</p>
+      ${body}
+    </div>`;
+  if (method === "bit") {
+    const proof = [
+      bitReference ? `מספר אסמכתא: <span dir="ltr">${escapeHtml(bitReference)}</span>` : "",
+      bitReceipt ? "צילום מסך של ההעברה צורף" : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return status === "paid"
+      ? box(
+          "💳 תשלום בביט",
+          `<p style="margin:0;">התשלום התקבל ואושר. ${proof}</p>`,
+          "#86efac",
+          "#f0fdf4",
+        )
+      : box(
+          "💳 תשלום בביט — ממתין לאישור",
+          `<p style="margin:0 0 4px;">קיבלנו את פרטי ההעברה${proof ? ` (${proof})` : ""}.</p>
+           <p style="margin:0;">ההזמנה תטופל מיד לאחר שבעל החנות יאשר את קבלת התשלום.</p>`,
+          "#fcd34d",
+          "#fffbeb",
+        );
+  }
+  if (method === "credit_card" && status === "paid") {
+    return box("💳 תשלום באשראי", `<p style="margin:0;">התשלום התקבל.</p>`, "#86efac", "#f0fdf4");
+  }
+  return box(
+    "📞 תשלום טלפוני מול נציג",
+    `<p style="margin:0;">אין חיוב באתר — נציג ייצור איתכם קשר לסידור התשלום.</p>`,
+    "#e2e8e2",
+    "#f7faf7",
+  );
+}
+
 /** גוף אישור ההזמנה ללקוח (בתוך העטיפה של renderEmailHtml) — פונקציה טהורה */
 export function renderOrderConfirmationBody(
   prepared: PreparedOrderEmail,
@@ -356,6 +398,7 @@ export function renderOrderConfirmationBody(
           : "נציג ייצור"
       } איתכם קשר בהקדם לתיאום המשך הטיפול.</p>`;
   const deliverySection = customerDeliveryHtml(prepared);
+  const paymentSection = customerPaymentHtml(prepared);
 
   return `
     <p style="margin:0 0 8px;">שלום ${greeting},</p>
@@ -365,6 +408,7 @@ export function renderOrderConfirmationBody(
     ${customerCartHtml(prepared)}
     ${customerTotalsHtml(prepared)}
     ${deliverySection ? `${sectionTitle("פרטי משלוח")}${deliverySection}` : ""}
+    ${paymentSection ? `${sectionTitle("אמצעי תשלום")}${paymentSection}` : ""}
     ${prepared.note ? `<p style="margin:0 0 12px;"><strong>הערות להזמנה:</strong> ${escapeHtml(prepared.note)}</p>` : ""}
     ${contact}
     ${accountUrl ? emailActionButton("למעקב אחרי ההזמנה", accountUrl) : ""}

@@ -67,6 +67,14 @@ export type SiteSettings = {
   cancellation_policy_content: string;
   /** שעות הפעילות (טקסט חופשי, שורה לכל טווח) — מוצגות בעמוד "צור קשר" */
   business_hours: string;
+  /**
+   * אמצעי תשלום חלופיים (חלק 17ב): "תשלום טלפוני מול נציג" ו"תשלום בביט",
+   * ומספר הנייד לקבלת ביט. נשמרים רק מהכרטיס "אמצעי תשלום חלופיים"
+   * (saveOfflinePaymentSettings), לא מטופס הגדרות האתר.
+   */
+  payment_phone_enabled: boolean;
+  payment_bit_enabled: boolean;
+  payment_bit_phone: string | null;
 };
 
 /** העמודים המשפטיים — נשמרים בנפרד (saveLegalTexts), לא מטופס הגדרות האתר */
@@ -82,6 +90,9 @@ export const SITE_FORM_EXCLUDED_KEYS = [
   "terms_content",
   "privacy_content",
   "cancellation_policy_content",
+  "payment_phone_enabled",
+  "payment_bit_enabled",
+  "payment_bit_phone",
 ] as const satisfies readonly (keyof SiteSettings)[];
 
 /** מידות ברירת המחדל של מדבקת משלוח (כמו במסד) */
@@ -117,7 +128,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, card_payments_enabled, cancellation_policy_content, business_hours" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, card_payments_enabled, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -162,7 +173,36 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     card_payments_enabled: false,
     cancellation_policy_content: "",
     business_hours: "",
+    payment_phone_enabled: true,
+    payment_bit_enabled: false,
+    payment_bit_phone: null,
   };
+}
+
+/**
+ * שמירת אמצעי התשלום החלופיים (חלק 17ב). המסד מנרמל את המספר ובודק: מספר
+ * נייד תקין, ביט רק עם מספר, ולפחות אמצעי תשלום אחד פעיל.
+ */
+export async function saveOfflinePaymentSettings(settings: {
+  phoneEnabled: boolean;
+  bitEnabled: boolean;
+  bitPhone: string;
+}): Promise<
+  Pick<SiteSettings, "payment_phone_enabled" | "payment_bit_enabled" | "payment_bit_phone">
+> {
+  const { normalizeBitPhone } = await import("@/lib/bit-payments");
+  const { data, error } = await supabase
+    .from("site_settings")
+    .update({
+      payment_phone_enabled: settings.phoneEnabled,
+      payment_bit_enabled: settings.bitEnabled,
+      payment_bit_phone: normalizeBitPhone(settings.bitPhone) || null,
+    })
+    .eq("id", true)
+    .select("payment_phone_enabled, payment_bit_enabled, payment_bit_phone")
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 /** מידות המדבקה של החנות — למסך ההזמנות (בלי לטעון את כל ההגדרות) */

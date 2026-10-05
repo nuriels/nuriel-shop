@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { PaymentBadge } from "@/components/orders/PaymentBadge";
+import { BitPaymentReview } from "@/components/orders/BitPaymentReview";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -682,7 +683,10 @@ export function OrderManagementPanel({
                                 <Badge variant={ORDER_STATUS_BADGE[order.status]}>
                                   {ORDER_STATUS_LABEL[order.status]}
                                 </Badge>
-                                <PaymentBadge status={order.payment_status} />
+                                <PaymentBadge
+                                  status={order.payment_status}
+                                  method={order.payment_method}
+                                />
                                 {order.status === "awaiting_courier" && attempts > 0 && (
                                   <Badge
                                     variant="outline"
@@ -718,6 +722,13 @@ export function OrderManagementPanel({
                                 ` · ${formatOrderDate(order.last_delivery_failure_at)}`}
                             </p>
                           )}
+
+                        {/* חלק 17ב: תשלום בביט — אסמכתא / צילום מסך ואישור בעל החנות */}
+                        <BitPaymentReview
+                          order={order}
+                          canReview={isAdminScope}
+                          onChanged={() => void load()}
+                        />
 
                         <OrderContactBlock order={order} />
 
@@ -931,6 +942,19 @@ export function OrderManagementPanel({
                           }
                           const step = NEXT_STEP[orderGroupOf(order.status)];
                           if (!step) return null;
+                          // חלק 17ב: הזמנה שעוד לא שולמה (ביט / אשראי) לא יוצאת לטיפול —
+                          // קודם מאשרים את התשלום (גם המסד חוסם)
+                          const unpaid =
+                            order.payment_status === "awaiting" ||
+                            order.payment_status === "awaiting_verification";
+                          if (unpaid && step.to !== "pending" && step.to !== "cancelled") {
+                            return (
+                              <Button className="w-full" variant="outline" disabled>
+                                <PackageCheck className="size-4" />
+                                {step.label} — אחרי אישור התשלום
+                              </Button>
+                            );
+                          }
                           return (
                             <Button
                               className="w-full"

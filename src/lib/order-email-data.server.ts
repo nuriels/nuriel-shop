@@ -16,6 +16,7 @@ import { billingOf, deliveryOf, type OrderBilling, type OrderDelivery } from "@/
 import { hasShippingLine, orderShippingLabel, shippingWasFree } from "@/lib/shipping";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { orderDiscount, orderDiscountLabel } from "@/lib/coupons";
+import type { PaymentMethod, PaymentStatus } from "@/lib/bit-payments";
 
 export type OrderEmailLine = {
   name: string;
@@ -50,6 +51,15 @@ export type PreparedOrderEmail = {
   /** איסוף עצמי: "שם העסק, הכתובת" ("" = לא הוגדרה / לא איסוף) */
   pickupAddress: string;
   note: string | null;
+  /** חלק 16 / 17ב: איך משלמים ומה המצב (טלפוני / אשראי / ביט) */
+  payment: {
+    method: PaymentMethod;
+    status: PaymentStatus;
+    /** ביט: מספר האסמכתא שהלקוח הזין */
+    bitReference: string | null;
+    /** ביט: הלקוח צירף צילום מסך */
+    bitReceipt: boolean;
+  };
   /** מסמך ה-PDF (אישור הזמנה / בקשה להצעת מחיר) */
   attachments: EmailAttachment[];
   cart: {
@@ -79,9 +89,10 @@ export const formatMoney = (value: number) => `₪${value.toFixed(2)}`;
 export async function prepareOrderEmail(orderId: string): Promise<PreparedOrderEmail | null> {
   const { data: payment } = await supabaseAdmin
     .from("orders")
-    .select("payment_status")
+    .select("payment_method, payment_status, bit_transaction_id, bit_receipt_url")
     .eq("id", orderId)
     .maybeSingle();
+  // ממתינה לתשלום (אשראי, או ביט שעוד לא נשלחה עליו אסמכתא) — בלי מיילים
   if (payment?.payment_status === "awaiting") return null;
 
   const { order, customerEmail, customerName, agentEmail, agentName, pdf, isGuest } =
@@ -254,6 +265,12 @@ export async function prepareOrderEmail(orderId: string): Promise<PreparedOrderE
     shippingKind: order.shipping_kind ?? null,
     pickupAddress,
     note: order.note,
+    payment: {
+      method: (payment?.payment_method ?? "offline") as PaymentMethod,
+      status: (payment?.payment_status ?? "not_required") as PaymentStatus,
+      bitReference: payment?.bit_transaction_id ?? null,
+      bitReceipt: Boolean(payment?.bit_receipt_url),
+    },
     attachments: [{ filename: pdf.filename, content: pdf.base64 }],
     cart: {
       lines: order.order_items.map((item) => ({

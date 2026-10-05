@@ -76,7 +76,12 @@ export async function provisionStoreAdmin(
 // ============================================================
 
 /** הדליים שבהם לכל חנות תיקייה משלה: <tenant_id>/... */
-export const TENANT_BUCKETS = ["product-images", "branding", "contact-attachments"] as const;
+export const TENANT_BUCKETS = [
+  "product-images",
+  "branding",
+  "contact-attachments",
+  "payment-receipts",
+] as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 

@@ -1732,12 +1732,17 @@ export type Database = {
           coupon_discount_value: number | null;
           coupon_min_order: number | null;
           discount_amount: number;
-          payment_method: "offline" | "credit_card";
-          payment_status: "not_required" | "awaiting" | "paid" | "expired";
+          payment_method: "offline" | "credit_card" | "bit";
+          payment_status:
+            "not_required" | "awaiting" | "awaiting_verification" | "paid" | "expired" | "rejected";
           payment_due_at: string | null;
           paid_at: string | null;
           hyp_transaction_id: string | null;
           payment_token: string | null;
+          bit_transaction_id: string | null;
+          bit_receipt_url: string | null;
+          payment_reported_at: string | null;
+          payment_confirmed_by: string | null;
         };
         Insert: {
           tenant_id?: string;
@@ -1791,12 +1796,17 @@ export type Database = {
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;
           discount_amount?: number;
-          payment_method?: "offline" | "credit_card";
-          payment_status?: "not_required" | "awaiting" | "paid" | "expired";
+          payment_method?: "offline" | "credit_card" | "bit";
+          payment_status?:
+            "not_required" | "awaiting" | "awaiting_verification" | "paid" | "expired" | "rejected";
           payment_due_at?: string | null;
           paid_at?: string | null;
           hyp_transaction_id?: string | null;
           payment_token?: string | null;
+          bit_transaction_id?: string | null;
+          bit_receipt_url?: string | null;
+          payment_reported_at?: string | null;
+          payment_confirmed_by?: string | null;
         };
         Update: {
           tenant_id?: string;
@@ -1850,12 +1860,17 @@ export type Database = {
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;
           discount_amount?: number;
-          payment_method?: "offline" | "credit_card";
-          payment_status?: "not_required" | "awaiting" | "paid" | "expired";
+          payment_method?: "offline" | "credit_card" | "bit";
+          payment_status?:
+            "not_required" | "awaiting" | "awaiting_verification" | "paid" | "expired" | "rejected";
           payment_due_at?: string | null;
           paid_at?: string | null;
           hyp_transaction_id?: string | null;
           payment_token?: string | null;
+          bit_transaction_id?: string | null;
+          bit_receipt_url?: string | null;
+          payment_reported_at?: string | null;
+          payment_confirmed_by?: string | null;
         };
         Relationships: [
           {
@@ -2310,6 +2325,9 @@ export type Database = {
           card_payments_enabled: boolean;
           cancellation_policy_content: string;
           custom_domain: string | null;
+          payment_phone_enabled: boolean;
+          payment_bit_enabled: boolean;
+          payment_bit_phone: string | null;
           business_hours: string;
           hyp_max_payments: number;
         };
@@ -2353,6 +2371,9 @@ export type Database = {
           card_payments_enabled?: boolean;
           cancellation_policy_content?: string;
           custom_domain?: string | null;
+          payment_phone_enabled?: boolean;
+          payment_bit_enabled?: boolean;
+          payment_bit_phone?: string | null;
           business_hours?: string;
           hyp_max_payments?: number;
         };
@@ -2396,6 +2417,9 @@ export type Database = {
           card_payments_enabled?: boolean;
           cancellation_policy_content?: string;
           custom_domain?: string | null;
+          payment_phone_enabled?: boolean;
+          payment_bit_enabled?: boolean;
+          payment_bit_phone?: string | null;
           business_hours?: string;
           hyp_max_payments?: number;
         };
@@ -2589,6 +2613,17 @@ export type Database = {
         }[];
       };
       order_payment_intent: { Args: { _order: string; _origin?: string | null }; Returns: Json };
+      bit_payment_info: { Args: { _order: string }; Returns: Json };
+      bit_payment_submit: {
+        Args: { _order: string; _reference: string | null; _receipt_path: string | null };
+        Returns: Json;
+      };
+      bit_payment_review: { Args: { _order: string; _approve: boolean }; Returns: Json };
+      bit_payments_active: { Args: { _tenant: string }; Returns: boolean };
+      order_amount_due: {
+        Args: { _total: number; _prices_include_vat: boolean; _vat_rate: number };
+        Returns: number;
+      };
       billing_profile_json: { Args: { _tenant: string }; Returns: Json };
       normalize_phone: { Args: { _phone: string }; Returns: string | null };
       normalize_order_number: { Args: { _value: string }; Returns: string | null };

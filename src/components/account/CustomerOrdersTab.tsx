@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { PaymentBadge } from "@/components/orders/PaymentBadge";
+import { BitPayNowLink } from "@/components/orders/BitPayNowLink";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { OrderDetailsDialog } from "@/components/account/OrderDetailsDialog";
@@ -219,9 +220,10 @@ export function CustomerOrdersTab({
                         <Badge variant={ORDER_STATUS_BADGE[order.status]}>
                           {ORDER_STATUS_LABEL[order.status]}
                         </Badge>
-                        <PaymentBadge status={order.payment_status} />
+                        <PaymentBadge status={order.payment_status} method={order.payment_method} />
                       </div>
                     </div>
+                    <BitPayNowLink order={order} className="w-fit" />
 
                     <div className="flex items-center gap-2">
                       <div className="flex -space-x-2 space-x-reverse">

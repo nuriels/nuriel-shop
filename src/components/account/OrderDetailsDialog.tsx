@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PaymentBadge } from "@/components/orders/PaymentBadge";
+import { BitPayNowLink } from "@/components/orders/BitPayNowLink";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -133,12 +134,13 @@ function OrderDetails({
           <Badge variant={ORDER_STATUS_BADGE[order.status]}>
             {ORDER_STATUS_LABEL[order.status]}
           </Badge>
-          <PaymentBadge status={order.payment_status} />
+          <PaymentBadge status={order.payment_status} method={order.payment_method} />
         </div>
         <DialogDescription className="text-right">
           {formatOrderDate(order.created_at)}
           {agentName ? ` · סוכן מטפל: ${agentName}` : ""}
         </DialogDescription>
+        <BitPayNowLink order={order} className="w-fit" />
       </DialogHeader>
 
       <OrderStatusSteps status={order.status} attempts={order.delivery_attempts ?? 0} />

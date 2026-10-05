@@ -11,9 +11,11 @@ import {
   MapPin,
   MessageSquareText,
   PackageCheck,
+  PhoneCall,
   Plus,
   ShieldCheck,
   ShoppingCart,
+  Smartphone,
   Store,
   Truck,
   X,
@@ -80,6 +82,14 @@ import {
 import { formatAddress } from "@/lib/order-details";
 import { placeGuestOrder, updateMyDetails } from "@/lib/checkout.functions";
 import { payForOrder } from "@/lib/payments.functions";
+import { getBitPayment } from "@/lib/bit-payments.functions";
+import {
+  bitPageStage,
+  clearPendingBitOrder,
+  formatBitPhone,
+  readPendingBitOrder,
+  writePendingBitOrder,
+} from "@/lib/bit-payments";
 import { sendOrderEmails } from "@/lib/email.functions";
 import { checkCoupon, restoreAbandonedCart, saveAbandonedCart } from "@/lib/marketing.functions";
 import { couponDiscount, normalizeCouponCode, type AppliedCoupon } from "@/lib/coupons";
@@ -194,6 +204,7 @@ function CheckoutPage() {
   const saveCartFn = useServerFn(saveAbandonedCart);
   const restoreCartFn = useServerFn(restoreAbandonedCart);
   const payForOrderFn = useServerFn(payForOrder);
+  const getBitPaymentFn = useServerFn(getBitPayment);
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   // התחברות עם Google — רק בחבילות שכוללות אותה (בבסיסית: מוסתר)
@@ -302,6 +313,48 @@ function CheckoutPage() {
   const cardPayments = kind === "order" && settings?.card_payments_enabled === true;
   // הלקוח בחר לשלם באשראי (המסד מאשר רק כשהסליקה פתוחה ופעילה בחנות)
   const payByCard = cardPayments && paymentMethod === "credit_card";
+  // חלק 17ב: אמצעי התשלום החלופיים שהחנות הפעילה — טלפוני מול נציג / ביט
+  const phoneEnabled = settings?.payment_phone_enabled ?? true;
+  const bitPhone = settings?.payment_bit_phone ?? null;
+  const bitEnabled = settings?.payment_bit_enabled === true && Boolean(bitPhone);
+  const payByBit = kind === "order" && bitEnabled && paymentMethod === "bit";
+  const offlineMethodCount = Number(phoneEnabled) + Number(bitEnabled);
+
+  // הבחירה תמיד באחד מהאמצעים הזמינים (למשל: טלפוני כבוי → ביט)
+  useEffect(() => {
+    if (!settings) return;
+    if (paymentMethod === "offline" && !phoneEnabled && bitEnabled) setPaymentMethod("bit");
+    if (paymentMethod === "bit" && !bitEnabled) setPaymentMethod("offline");
+  }, [settings, paymentMethod, phoneEnabled, bitEnabled]);
+
+  // ---------- חזרה לקופה אחרי מעבר לביט: הזמנה שעוד ממתינה לתשלום ----------
+  // ההזמנה נשמרה לפני המעבר לאפליקציה, והסימון בדפדפן מחזיר את הלקוח לעמוד
+  // אימות התשלום (/checkout/bit/<id>) — גם אם הדפדפן נסגר / התרענן בינתיים
+  const pendingChecked = useRef(false);
+  const [checkingPending, setCheckingPending] = useState(true);
+  useEffect(() => {
+    if (pendingChecked.current) return;
+    pendingChecked.current = true;
+    const pending = readPendingBitOrder();
+    if (!pending) {
+      setCheckingPending(false);
+      return;
+    }
+    void getBitPaymentFn({ data: { orderId: pending.orderId } })
+      .then((info) => {
+        if (info && bitPageStage(info) === "pay") {
+          void navigate({
+            to: "/checkout/bit/$orderId",
+            params: { orderId: pending.orderId },
+            replace: true,
+          });
+          return;
+        }
+        clearPendingBitOrder(pending.orderId);
+        setCheckingPending(false);
+      })
+      .catch(() => setCheckingPending(false));
+  }, [getBitPaymentFn, navigate]);
 
   // הסל מול הקטלוג: מוצר שאזל / הוסר יוצא (עם הודעה), מחירים ומארזים מתעדכנים
   useEffect(() => {
@@ -616,7 +669,7 @@ function CheckoutPage() {
         requireAddress,
       },
       kind === "order" && coupon ? coupon.code : null,
-      payByCard ? "credit_card" : "offline",
+      payByCard ? "credit_card" : payByBit ? "bit" : "offline",
     );
     const alternate = requireAddress && form.shipToDifferent;
     const delivery = alternate
@@ -645,6 +698,21 @@ function CheckoutPage() {
       clearStoredCartNow();
       window.location.assign(redirectTo);
     };
+    // חלק 17ב: ביט — ההזמנה כבר נשמרה במסד ("ממתינה לתשלום"). הסל נסגר, המזהה
+    // נשמר בדפדפן, ועוברים לעמוד התשלום בביט; המזהה בכתובת שומר את ההזמנה גם
+    // אם הדפדפן ייסגר / יתרענן במעבר לאפליקציה.
+    const goToBit = async (orderId: string, orderNumber: string) => {
+      writePendingBitOrder({ orderId, orderNumber });
+      if (role) await clearStoredCart(role.user_id).catch(() => undefined);
+      const fresh = randomUuid();
+      cartSession.current = fresh;
+      writeCartSession(fresh);
+      lastSavedCart.current = "";
+      setCoupon(null);
+      setCart([]);
+      clearStoredCartNow();
+      await navigate({ to: "/checkout/bit/$orderId", params: { orderId } });
+    };
     try {
       let result: PlacedOrder;
       if (isCustomer && role) {
@@ -665,6 +733,24 @@ function CheckoutPage() {
             await goToPayment(payment.redirectTo);
             return;
           }
+        }
+
+        if (payByBit && order.kind === "order") {
+          if (saveToProfile) {
+            void saveDetails({
+              data: {
+                businessName: form.customerName,
+                contactName: "",
+                taxId: form.customerTaxId,
+                phone: form.customerPhone,
+                city: form.billingCity,
+                address: form.billingAddress,
+                zipCode: form.billingZip,
+              },
+            }).catch(() => undefined);
+          }
+          await goToBit(order.id, order.order_number);
+          return;
         }
 
         let gifts: string[] = [];
@@ -709,6 +795,10 @@ function CheckoutPage() {
         const order = await placeGuest({ data: { kind, items: lines, details } });
         if (order.payment) {
           await goToPayment(order.payment.redirectTo);
+          return;
+        }
+        if (order.bit) {
+          await goToBit(order.orderId, order.orderNumber);
           return;
         }
         result = {
@@ -787,7 +877,7 @@ function CheckoutPage() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-6 sm:px-4 sm:py-8">
         {placed ? (
           <CheckoutSuccess order={placed} />
-        ) : authLoading || !cartReady ? (
+        ) : authLoading || !cartReady || checkingPending ? (
           <p className="flex items-center justify-center gap-2 py-20 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> טוען את הקופה…
           </p>
@@ -1219,6 +1309,76 @@ function CheckoutPage() {
                   </CardContent>
                 </Card>
 
+                {/* ---------- אמצעי תשלום (חלק 17ב): טלפוני מול נציג / ביט ---------- */}
+                {kind === "order" && offlineMethodCount > 0 && (
+                  <Card className="shadow-card" id="co-payment-methods">
+                    <CardContent className="space-y-3 pt-6">
+                      <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
+                        <ShieldCheck className="size-5 text-accent" aria-hidden="true" />
+                        אמצעי תשלום
+                      </h2>
+                      <RadioGroup
+                        dir="rtl"
+                        value={paymentMethod === "bit" && bitEnabled ? "bit" : "offline"}
+                        onValueChange={(value) =>
+                          setPaymentMethod(value === "bit" ? "bit" : "offline")
+                        }
+                        className="gap-2"
+                        aria-label="אמצעי תשלום"
+                      >
+                        {phoneEnabled && (
+                          <label
+                            className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 transition-colors ${
+                              !payByBit
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:border-primary/40"
+                            }`}
+                          >
+                            <RadioGroupItem value="offline" className="mt-1" />
+                            <PhoneCall
+                              className="mt-0.5 size-5 shrink-0 text-muted-foreground"
+                              aria-hidden="true"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-bold text-foreground">
+                                תשלום טלפוני מול נציג
+                              </span>
+                              <span className="block text-xs leading-5 text-muted-foreground">
+                                בלי חיוב באתר — נציג ייצור קשר לאישור ההזמנה ולסידור התשלום.
+                              </span>
+                            </span>
+                          </label>
+                        )}
+                        {bitEnabled && (
+                          <label
+                            className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 transition-colors ${
+                              payByBit
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:border-primary/40"
+                            }`}
+                          >
+                            <RadioGroupItem value="bit" className="mt-1" />
+                            <Smartphone
+                              className="mt-0.5 size-5 shrink-0 text-muted-foreground"
+                              aria-hidden="true"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-bold text-foreground">תשלום בביט</span>
+                              <span className="block text-xs leading-5 text-muted-foreground">
+                                ההזמנה נשמרת, ואז עוברים לעמוד התשלום: מעבירים בביט למספר{" "}
+                                <span dir="ltr" className="font-semibold text-foreground">
+                                  {formatBitPhone(bitPhone)}
+                                </span>{" "}
+                                ושולחים מספר אסמכתא או צילום מסך של ההעברה.
+                              </span>
+                            </span>
+                          </label>
+                        )}
+                      </RadioGroup>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {
                   // TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
                 }
@@ -1391,20 +1551,28 @@ function CheckoutPage() {
                   <Button type="submit" size="lg" className="h-12 w-full text-base" disabled={busy}>
                     {busy ? (
                       <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+                    ) : payByBit ? (
+                      <Smartphone className="size-5" aria-hidden="true" />
                     ) : (
                       <PackageCheck className="size-5" aria-hidden="true" />
                     )}
                     {busy
-                      ? "שולח…"
+                      ? payByBit
+                        ? "שומרים את ההזמנה…"
+                        : "שולח…"
                       : kind === "quote"
                         ? "שליחת הבקשה להצעת מחיר"
-                        : `אישור ושליחת ההזמנה · ${formatIls(grandTotal)}`}
+                        : payByBit
+                          ? `המשך לתשלום בביט · ${formatIls(grandTotal)}`
+                          : `אישור ושליחת ההזמנה · ${formatIls(grandTotal)}`}
                   </Button>
                   <p className="flex items-start justify-center gap-1.5 text-center text-xs leading-5 text-muted-foreground">
                     <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                     {kind === "quote"
                       ? "הבקשה לא מחייבת — נחזור אליכם עם הצעת מחיר."
-                      : "אין חיוב באתר — נציג ייצור קשר לאישור ההזמנה ולסידור התשלום."}
+                      : payByBit
+                        ? "ההזמנה נשמרת עכשיו, ואז עוברים לעמוד התשלום בביט — גם אם הדפדפן ייסגר במעבר לאפליקציה, ההזמנה לא תאבד."
+                        : "אין חיוב באתר — נציג ייצור קשר לאישור ההזמנה ולסידור התשלום."}
                   </p>
                 </div>
               </form>

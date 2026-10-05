@@ -44,6 +44,43 @@ export async function sendOrderEmailsInternal(
 
   const { isQuote, isGuest, documentLabel, billing, html: parts } = prepared;
 
+  // אמצעי התשלום (חלק 17ב) — בביט: מה הלקוח שלח, וקישור לאישור בפאנל
+  const { payment } = prepared;
+  let paymentHtml = "";
+  if (!isQuote) {
+    if (payment.method === "bit") {
+      const proof = [
+        payment.bitReference
+          ? `אסמכתא: <span dir="ltr">${escapeHtml(payment.bitReference)}</span>`
+          : "",
+        payment.bitReceipt ? "צילום מסך מצורף (בפאנל)" : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      let adminLink = "";
+      try {
+        const { tenantSiteOrigin } = await import("@/integrations/supabase/tenant.server");
+        adminLink = emailActionButton(
+          "לבדיקה ולאישור התשלום",
+          `${tenantSiteOrigin()}/admin?tab=orders&order=${prepared.orderId}`,
+        );
+      } catch {
+        adminLink = "";
+      }
+      paymentHtml =
+        payment.status === "paid"
+          ? `<p><strong>אמצעי תשלום:</strong> ביט — שולם ואושר${proof ? ` · ${proof}` : ""}</p>`
+          : `<div style="margin-top:12px;padding:10px 12px;border:2px solid #f59e0b;border-radius:8px;background:#fffbeb;">
+        <p style="margin:0 0 4px;font-weight:bold;color:#92400e;">💳 תשלום בביט — ממתין לאישור שלכם</p>
+        <p style="margin:0;">${proof || "הלקוח דיווח על העברה"}. בדקו שהכסף התקבל באפליקציית ביט ואשרו את התשלום בפאנל — רק אז ההזמנה יוצאת לטיפול.</p>
+      </div>${adminLink}`;
+    } else if (payment.method === "credit_card" && payment.status === "paid") {
+      paymentHtml = `<p><strong>אמצעי תשלום:</strong> אשראי — שולם</p>`;
+    } else {
+      paymentHtml = `<p><strong>אמצעי תשלום:</strong> תשלום טלפוני מול נציג (בלי חיוב באתר)</p>`;
+    }
+  }
+
   const staffHtml = `
     <p><strong>מספר מסמך:</strong> ${escapeHtml(prepared.orderNumber)}</p>
     <p><strong>סוג:</strong> ${documentLabel}${isGuest ? " · <strong>אורח (ללא חשבון)</strong>" : ""}</p>
@@ -52,6 +89,7 @@ export async function sendOrderEmailsInternal(
     ${billing.address ? `<p><strong>כתובת:</strong> ${escapeHtml(billing.address)}</p>` : ""}
     ${parts.shippingMethod}
     ${parts.delivery}
+    ${paymentHtml}
     ${prepared.note ? `<p><strong>הערות להזמנה:</strong> ${escapeHtml(prepared.note)}</p>` : ""}
     ${parts.staffTable}
     ${parts.totals}

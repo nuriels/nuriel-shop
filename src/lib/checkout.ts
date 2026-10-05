@@ -150,8 +150,11 @@ export type CheckoutPayload = {
   payment_method: PaymentMethodChoice;
 };
 
-/** "תשלום באשראי (מאובטח)" או "תשלום מול נציג" (בלי חיוב באתר) */
-export type PaymentMethodChoice = "credit_card" | "offline";
+/**
+ * "תשלום באשראי (מאובטח)", "תשלום טלפוני מול נציג" (בלי חיוב באתר) או
+ * "תשלום בביט" (חלק 17ב — ההזמנה נשמרת ואז עוברים לעמוד התשלום בביט)
+ */
+export type PaymentMethodChoice = "credit_card" | "offline" | "bit";
 
 export function checkoutPayload(
   form: CheckoutForm,

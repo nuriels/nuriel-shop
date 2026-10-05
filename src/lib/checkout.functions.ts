@@ -46,8 +46,8 @@ function cleanPayload(input: unknown): CheckoutPayload {
       // מזהה בלבד — השיטה עצמה (פעילה, של החנות) נבדקת במסד
       result[key] = typeof value === "string" && UUID.test(value) ? value : "";
     } else if (key === "payment_method") {
-      // חלק 16ב: בקשה בלבד — המסד מחליט אם ההזמנה משולמת באשראי
-      result[key] = value === "credit_card" ? "credit_card" : "offline";
+      // חלק 16ב / 17ב: בקשה בלבד — המסד מחליט לפי מה שזמין בחנות
+      result[key] = value === "credit_card" ? "credit_card" : value === "bit" ? "bit" : "offline";
     } else if (key === "coupon_code") {
       // קוד הקופון — רק התווים המותרים; התנאים וההנחה נקבעים במסד
       result[key] =
@@ -128,13 +128,16 @@ export const placeGuestOrder = createServerFn({ method: "POST" })
 
     // חלק 16: חנות עם סליקה — ההזמנה ממתינה לתשלום, והאורח עובר לדף התשלום
     // של Hyp. המיילים יוצאים רק אחרי אישור התשלום.
+    // חלק 17ב: ביט — ההזמנה כבר נשמרה ("ממתינה לתשלום"), והאורח עובר לעמוד
+    // התשלום בביט; המיילים יוצאים כשהוא שולח אסמכתא / צילום מסך.
     const { data: paymentRow } = await supabaseAdmin
       .from("orders")
-      .select("payment_status")
+      .select("payment_method, payment_status")
       .eq("id", created.id)
       .maybeSingle();
+    const bit = paymentRow?.payment_method === "bit" && paymentRow.payment_status === "awaiting";
     let payment: { redirectTo: string; message?: string } | null = null;
-    if (paymentRow?.payment_status === "awaiting") {
+    if (paymentRow?.payment_method === "credit_card" && paymentRow.payment_status === "awaiting") {
       const { startOrderPayment } = await import("@/server/services/payments");
       const { getRequest } = await import("@tanstack/react-start/server");
       const { requestOrigin } = await import("@/lib/feeds.server");
@@ -150,7 +153,7 @@ export const placeGuestOrder = createServerFn({ method: "POST" })
     }
 
     // מיילים ברקע — האורח מקבל את מסך האישור מיד, בלי לחכות להפקת ה-PDF
-    if (!payment) {
+    if (!payment && !bit) {
       const { sendOrderEmailsInternal } = await import("@/lib/order-emails.server");
       void sendOrderEmailsInternal(created.id, null).catch((emailError: unknown) => {
         console.error("[checkout] guest order emails failed", created.order_number, emailError);
@@ -159,6 +162,8 @@ export const placeGuestOrder = createServerFn({ method: "POST" })
 
     return {
       payment,
+      /** חלק 17ב: ההזמנה ממתינה לתשלום בביט → /checkout/bit/<orderId> */
+      bit,
       orderId: created.id,
       orderNumber: created.order_number,
       kind: created.kind as "order" | "quote",
