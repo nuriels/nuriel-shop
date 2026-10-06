@@ -5,7 +5,10 @@ import {
   Check,
   ClipboardCheck,
   ClipboardList,
+  FileText,
   Loader2,
+  Printer,
+  RotateCcw,
   ScanBarcode,
   TriangleAlert,
   X,
@@ -43,10 +46,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCategoryTree } from "@/hooks/useCategories";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { formatPath, subtreeNames } from "@/lib/category-tree";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { detectBarcodes, isBarcodeDetectionSupported } from "@/lib/barcode-scan";
+import {
+  buildCountReport,
+  countReportHtml,
+  formatMoneyIls,
+  signed,
+  type CountReport,
+  type CountReportInput,
+} from "@/lib/stock-count";
 import { useBackToClose } from "@/hooks/useBackToClose";
+import { cn } from "@/lib/utils";
 
 type StockCount = {
   id: string;
@@ -68,6 +81,8 @@ type CountProduct = {
   pack_size: number | null;
   is_out_of_stock: boolean;
   is_hidden: boolean;
+  cost_price: number | null;
+  price_tier1: number | null;
 };
 
 type CountLine = {
@@ -75,14 +90,20 @@ type CountLine = {
   counted_units: number;
   packs: number | null;
   loose_units: number | null;
+  counted_at: string;
   recorded_before: number | null;
   reserved_open: number | null;
   applied_quantity: number | null;
+  unit_value: number | null;
+  value_source: "cost" | "price" | null;
 };
 
-type Filter = "all" | "uncounted" | "counted" | "diff";
+type TableKind = "uncounted" | "counted";
 
-const PAGE = 60;
+const LINE_COLUMNS =
+  "product_id, counted_units, packs, loose_units, counted_at, recorded_before, reserved_open, applied_quantity, unit_value, value_source";
+
+const PAGE = 50;
 const collator = new Intl.Collator("he", { numeric: true, sensitivity: "base" });
 
 function packOf(product: CountProduct): number | null {
@@ -99,6 +120,12 @@ function neverCounted(product: CountProduct, reserved: number): boolean {
   return product.stock_quantity === 0 && !product.is_out_of_stock && reserved === 0;
 }
 
+/** שווי ליחידה להערכה לפני העדכון — כמו במסד: מחיר עלות, אחרת מחיר מכירה */
+function estimatedUnitValue(product: CountProduct): number {
+  const cost = Number(product.cost_price ?? 0);
+  return cost > 0 ? cost : Number(product.price_tier1 ?? 0);
+}
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("he-IL", {
     day: "numeric",
@@ -109,23 +136,34 @@ function formatDate(iso: string): string {
   });
 }
 
-/** ספירת מלאי — פתיחת ספירה, ספירה במחסן (סריקה/חיפוש), סיכום ואישור אטומי */
+/**
+ * ספירת מלאי (חלק 23): "התחל ספירת מלאי חדשה" → שתי טבלאות: למעלה "מוצרים
+ * שטרם נספרו" (כל הקטלוג בהתחלה), למטה "מוצרים שנספרו". כמות + "שמור" מעבירה
+ * את המוצר למטה (0 נשמר כ-0; שדה ריק לא מעביר), ושם אפשר לעדכן שוב. הספירה
+ * נשמרת במסד — אפשר לסגור את המחשב ולהמשיך אחר כך.
+ * "סיים ספירה ועדכן מלאי": עדכון חותך רק למה שנספר (0 → "אזל"), ודו"ח ספירה
+ * להדפסה: כמות קודמת, חדשה, והפרש בשווי.
+ */
 export function StockCountPanel() {
   const categoryTree = useCategoryTree();
+  const { settings } = useSiteSettings();
   const [counts, setCounts] = useState<StockCount[]>([]);
   const [products, setProducts] = useState<CountProduct[]>([]);
   const [reserved, setReserved] = useState<Map<string, number>>(new Map());
   const [lines, setLines] = useState<Map<string, CountLine>>(new Map());
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Filter>("all");
   const [term, setTerm] = useState("");
-  const [visible, setVisible] = useState(PAGE);
+  const [visible, setVisible] = useState<Record<TableKind, number>>({
+    uncounted: PAGE,
+    counted: PAGE,
+  });
   const [focusId, setFocusId] = useState<string | null>(null);
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [historyCount, setHistoryCount] = useState<StockCount | null>(null);
+  const [finishOpen, setFinishOpen] = useState(false);
+  const [reportCount, setReportCount] = useState<StockCount | null>(null);
 
   const openCount = counts.find((count) => count.status === "open") ?? null;
   const clearFocus = useCallback(() => setFocusId(null), []);
+  const storeName = settings?.business_name?.trim() || settings?.site_title?.trim() || "החנות";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -139,7 +177,7 @@ export function StockCountPanel() {
         supabase
           .from("global_products")
           .select(
-            "id, sku, name, category, barcode, shelf_location, stock_quantity, pack_size, is_out_of_stock, is_hidden",
+            "id, sku, name, category, barcode, shelf_location, stock_quantity, pack_size, is_out_of_stock, is_hidden, cost_price, price_tier1",
           )
           .order("id")
           .range(from, to),
@@ -158,9 +196,7 @@ export function StockCountPanel() {
       const { data, error: linesError } = await fetchAllRows((from, to) =>
         supabase
           .from("stock_count_lines")
-          .select(
-            "product_id, counted_units, packs, loose_units, recorded_before, reserved_open, applied_quantity",
-          )
+          .select(LINE_COLUMNS)
           .eq("count_id", open.id)
           .order("id")
           .range(from, to),
@@ -194,41 +230,52 @@ export function StockCountPanel() {
   const countedInScope = scoped.filter((product) => lines.has(product.id)).length;
 
   const query = term.trim().toLowerCase();
-  const filtered = useMemo(
+  const matches = useCallback(
+    (product: CountProduct) =>
+      query === "" ||
+      product.name.toLowerCase().includes(query) ||
+      product.sku.toLowerCase().includes(query) ||
+      (product.barcode ?? "").includes(query) ||
+      (product.shelf_location ?? "").toLowerCase().includes(query),
+    [query],
+  );
+
+  // למעלה: טרם נספרו (לפי המדפים). למטה: נספרו — האחרון שנספר ראשון
+  const uncounted = useMemo(
+    () => scoped.filter((product) => !lines.has(product.id) && matches(product)),
+    [scoped, lines, matches],
+  );
+  const counted = useMemo(
     () =>
-      scoped.filter((product) => {
-        const line = lines.get(product.id);
-        if (filter === "uncounted" && line) return false;
-        if (filter === "counted" && !line) return false;
-        if (filter === "diff") {
-          if (!line) return false;
-          if (line.counted_units === expectedOnShelf(product, reserved.get(product.id) ?? 0)) {
-            return false;
-          }
-        }
-        if (query === "") return true;
-        return (
-          product.name.toLowerCase().includes(query) ||
-          product.sku.includes(query) ||
-          (product.barcode ?? "").includes(query) ||
-          (product.shelf_location ?? "").toLowerCase().includes(query)
-        );
-      }),
-    [scoped, lines, filter, query, reserved],
+      scoped
+        .filter((product) => lines.has(product.id) && matches(product))
+        .sort((a, b) =>
+          (lines.get(b.id)?.counted_at ?? "").localeCompare(lines.get(a.id)?.counted_at ?? ""),
+        ),
+    [scoped, lines, matches],
   );
 
   useEffect(() => {
-    setVisible(PAGE);
-  }, [filter, query]);
+    setVisible({ uncounted: PAGE, counted: PAGE });
+  }, [query]);
 
-  const onSaved = useCallback((line: CountLine | null, productId: string) => {
-    setLines((current) => {
-      const next = new Map(current);
-      if (line) next.set(productId, line);
-      else next.delete(productId);
-      return next;
-    });
-  }, []);
+  const onSaved = useCallback(
+    (line: CountLine | null, productId: string, from: TableKind) => {
+      if (from === "uncounted" && line) {
+        // ממשיכים ישר למוצר הבא בטבלה העליונה — ספירה רצופה מהמקלדת
+        const at = uncounted.findIndex((product) => product.id === productId);
+        const next = uncounted[at + 1] ?? null;
+        if (next) setFocusId(next.id);
+      }
+      setLines((current) => {
+        const next = new Map(current);
+        if (line) next.set(productId, line);
+        else next.delete(productId);
+        return next;
+      });
+    },
+    [uncounted],
+  );
 
   /** ברקוד מסורק (מקורא ברקודים או מהמצלמה) → קופצים לשורת המוצר */
   const jumpToBarcode = useCallback(
@@ -245,7 +292,6 @@ export function StockCountPanel() {
         );
         return false;
       }
-      setFilter("all");
       setTerm(code);
       setFocusId(product.id);
       return true;
@@ -262,8 +308,10 @@ export function StockCountPanel() {
     );
   }
 
+  const progress = scoped.length === 0 ? 0 : Math.round((countedInScope / scoped.length) * 100);
+
   return (
-    <section className="space-y-6">
+    <section className="space-y-6" data-stock-count>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex size-11 items-center justify-center rounded-xl gradient-brand text-primary-foreground">
@@ -272,7 +320,7 @@ export function StockCountPanel() {
           <div>
             <h2 className="text-xl font-bold text-foreground">ספירת מלאי</h2>
             <p className="text-sm text-muted-foreground">
-              סופרים את מה שעל המדפים, בודקים הפרשים, ורק אז מעדכנים את המלאי — בפעולה אחת.
+              סופרים מה שעל המדפים, ובסוף מעדכנים את המלאי בפעולה אחת — עם דו״ח הפרשים להדפסה.
             </p>
           </div>
         </div>
@@ -283,117 +331,104 @@ export function StockCountPanel() {
           <Card>
             <CardContent className="space-y-4 pt-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="font-semibold text-foreground">{openCount.title || "ספירת מלאי"}</p>
                   <p className="text-sm text-muted-foreground">
                     {openCount.scope_category
                       ? `קטגוריה: ${openCount.scope_category} (כולל תת-קטגוריות)`
                       : "כל המחסן"}{" "}
-                    · נפתחה {formatDate(openCount.created_at)}
+                    · נפתחה {formatDate(openCount.created_at)} · נשמרת אוטומטית — אפשר להמשיך אחר כך
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <CancelCountButton count={openCount} onDone={load} />
-                  <Button onClick={() => setReviewOpen(true)} disabled={countedInScope === 0}>
+                  <Button
+                    onClick={() => setFinishOpen(true)}
+                    disabled={countedInScope === 0}
+                    data-finish-count
+                  >
                     <ClipboardCheck className="size-4" />
-                    סיכום ואישור
+                    סיים ספירה ועדכן מלאי
                   </Button>
                 </div>
               </div>
               <div className="space-y-1.5">
                 <div className="flex justify-between text-sm">
-                  <span className="text-foreground">
+                  <span className="text-foreground" data-count-progress>
                     נספרו <span className="numeric font-semibold">{countedInScope}</span> מתוך{" "}
                     <span className="numeric">{scoped.length}</span> מוצרים
                   </span>
-                  <span className="numeric text-muted-foreground">
-                    {scoped.length === 0 ? 0 : Math.round((countedInScope / scoped.length) * 100)}%
-                  </span>
+                  <span className="numeric text-muted-foreground">{progress}%</span>
                 </div>
                 <div
                   className="h-2 overflow-hidden rounded-full bg-secondary"
                   role="progressbar"
+                  aria-label="התקדמות הספירה"
                   aria-valuemin={0}
                   aria-valuemax={scoped.length}
                   aria-valuenow={countedInScope}
                 >
                   <div
                     className="h-full rounded-full bg-accent transition-[width]"
-                    style={{
-                      width: `${scoped.length === 0 ? 0 : (countedInScope / scoped.length) * 100}%`,
-                    }}
+                    style={{ width: `${progress}%` }}
                   />
                 </div>
               </div>
               <ScanBar value={term} onChange={setTerm} onScan={jumpToBarcode} />
-              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="סינון">
-                {(
-                  [
-                    ["all", `הכל (${scoped.length})`],
-                    ["uncounted", `לא נספרו (${scoped.length - countedInScope})`],
-                    ["counted", `נספרו (${countedInScope})`],
-                    ["diff", "עם הפרש"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    role="radio"
-                    aria-checked={filter === value}
-                    onClick={() => setFilter(value)}
-                    className={`min-h-9 rounded-full border px-3 text-sm transition-colors ${
-                      filter === value
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-card text-foreground hover:bg-secondary"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
             </CardContent>
           </Card>
 
-          {filtered.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-              {query !== "" ? "לא נמצאו מוצרים תואמים" : "אין מוצרים ברשימה הזו"}
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {filtered.slice(0, visible).map((product) => (
-                <CountRow
-                  key={product.id}
-                  countId={openCount.id}
-                  product={product}
-                  reserved={reserved.get(product.id) ?? 0}
-                  line={lines.get(product.id) ?? null}
-                  focus={focusId === product.id}
-                  onFocused={clearFocus}
-                  onSaved={onSaved}
-                />
-              ))}
-            </ul>
-          )}
-          {filtered.length > visible && (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setVisible((value) => value + PAGE)}
-            >
-              הצגת עוד {Math.min(PAGE, filtered.length - visible)} מוצרים (מוצגים {visible} מתוך{" "}
-              {filtered.length})
-            </Button>
-          )}
+          <CountTable
+            kind="uncounted"
+            title="מוצרים שטרם נספרו"
+            hint='הזינו כמות ולחצו "שמור" (או Enter) — המוצר עובר לטבלה התחתונה. 0 נשמר כ-0; שדה ריק לא עובר.'
+            emptyText={
+              query !== ""
+                ? "אין מוצרים תואמים שטרם נספרו"
+                : 'כל המוצרים בטווח נספרו — אפשר ללחוץ "סיים ספירה ועדכן מלאי"'
+            }
+            countId={openCount.id}
+            products={uncounted}
+            visible={visible.uncounted}
+            onMore={() => setVisible((value) => ({ ...value, uncounted: value.uncounted + PAGE }))}
+            lines={lines}
+            reserved={reserved}
+            focusId={focusId}
+            onFocused={clearFocus}
+            onSaved={onSaved}
+          />
 
-          <ReviewDialog
-            open={reviewOpen}
-            onOpenChange={setReviewOpen}
+          <CountTable
+            kind="counted"
+            title="מוצרים שנספרו"
+            hint='מצאתם עוד פריטים? עדכנו את הכמות ולחצו "עדכון". אפשר גם להחזיר מוצר לטבלה העליונה.'
+            emptyText={
+              query !== ""
+                ? "אין מוצרים תואמים שנספרו"
+                : 'עדיין לא נספרו מוצרים. הזינו כמות בטבלה למעלה ולחצו "שמור".'
+            }
+            countId={openCount.id}
+            products={counted}
+            visible={visible.counted}
+            onMore={() => setVisible((value) => ({ ...value, counted: value.counted + PAGE }))}
+            lines={lines}
+            reserved={reserved}
+            focusId={focusId}
+            onFocused={clearFocus}
+            onSaved={onSaved}
+          />
+
+          <FinishDialog
+            open={finishOpen}
+            onOpenChange={setFinishOpen}
             count={openCount}
             scoped={scoped}
             lines={lines}
             reserved={reserved}
-            onApplied={() => {
-              setReviewOpen(false);
+            onApplied={(applied) => {
+              setFinishOpen(false);
+              setTerm("");
+              setReportCount(applied);
               void load();
             }}
           />
@@ -422,16 +457,17 @@ export function StockCountPanel() {
                       <p className="font-medium text-foreground">{count.title || "ספירת מלאי"}</p>
                       <p className="text-xs text-muted-foreground">
                         {count.scope_category ?? "כל המחסן"} · נפתחה {formatDate(count.created_at)}
-                        {count.applied_at ? ` · אושרה ${formatDate(count.applied_at)}` : ""}
+                        {count.applied_at ? ` · עודכנה ${formatDate(count.applied_at)}` : ""}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={count.status === "applied" ? "secondary" : "outline"}>
-                        {count.status === "applied" ? "אושרה" : "בוטלה"}
+                        {count.status === "applied" ? "עודכנה" : "בוטלה"}
                       </Badge>
                       {count.status === "applied" && (
-                        <Button variant="ghost" size="sm" onClick={() => setHistoryCount(count)}>
-                          פרטים
+                        <Button variant="ghost" size="sm" onClick={() => setReportCount(count)}>
+                          <FileText className="size-4" />
+                          דו״ח ספירה
                         </Button>
                       )}
                     </div>
@@ -442,10 +478,11 @@ export function StockCountPanel() {
         </CardContent>
       </Card>
 
-      <HistoryDialog
-        count={historyCount}
+      <ReportDialog
+        count={reportCount}
         products={products}
-        onOpenChange={(open) => !open && setHistoryCount(null)}
+        storeName={storeName}
+        onOpenChange={(open) => !open && setReportCount(null)}
       />
     </section>
   );
@@ -487,7 +524,7 @@ function NewCountCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">פתיחת ספירה חדשה</CardTitle>
+        <CardTitle className="text-lg">ספירת מלאי חדשה</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -517,13 +554,21 @@ function NewCountCard({
           </div>
         </div>
         <ul className="list-disc space-y-1 pr-5 text-sm text-muted-foreground">
-          <li>כל מוצר שנספר נשמר מיד — אפשר לעצור ולהמשיך, וכמה עובדים יכולים לספור במקביל.</li>
-          <li>המלאי באתר לא משתנה עד שלוחצים "סיכום ואישור" בסוף.</li>
+          <li>
+            כל מוצר שנספר נשמר מיד במערכת — אפשר לסגור את המחשב ולהמשיך אחר כך, וכמה עובדים יכולים
+            לספור במקביל.
+          </li>
+          <li>המלאי באתר לא משתנה עד שלוחצים &quot;סיים ספירה ועדכן מלאי&quot; בסוף.</li>
+          <li>מוצרים שלא נספרו נשארים בדיוק כמו שהם. מוצר שנספר 0 יסומן &quot;אזל במלאי&quot;.</li>
           <li>מומלץ לסיים ליקוט של הזמנות פתוחות לפני הספירה.</li>
         </ul>
-        <Button onClick={() => void open()} disabled={busy}>
-          {busy && <Loader2 className="size-4 animate-spin" />}
-          פתיחת הספירה
+        <Button onClick={() => void open()} disabled={busy} size="lg" data-start-count>
+          {busy ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <ClipboardList className="size-4" />
+          )}
+          התחל ספירת מלאי חדשה
         </Button>
       </CardContent>
     </Card>
@@ -683,9 +728,105 @@ function ScanBar({
   );
 }
 
-type SaveState = "idle" | "saving" | "saved" | "error";
+/** טבלה אחת מהשתיים: "טרם נספרו" (למעלה) או "נספרו" (למטה) */
+function CountTable({
+  kind,
+  title,
+  hint,
+  emptyText,
+  countId,
+  products,
+  visible,
+  onMore,
+  lines,
+  reserved,
+  focusId,
+  onFocused,
+  onSaved,
+}: {
+  kind: TableKind;
+  title: string;
+  hint: string;
+  emptyText: string;
+  countId: string;
+  products: CountProduct[];
+  visible: number;
+  onMore: () => void;
+  lines: Map<string, CountLine>;
+  reserved: Map<string, number>;
+  focusId: string | null;
+  onFocused: () => void;
+  onSaved: (line: CountLine | null, productId: string, from: TableKind) => void;
+}) {
+  const shown = products.slice(0, visible);
+  const titleId = `count-table-${kind}`;
+  return (
+    <section className="space-y-2" aria-labelledby={titleId} data-count-table={kind}>
+      <div className="space-y-0.5">
+        <h3 id={titleId} className="flex items-center gap-2 text-base font-bold text-foreground">
+          {title}
+          <Badge
+            variant={kind === "counted" ? "secondary" : "outline"}
+            className="numeric"
+            data-count-total
+          >
+            {products.length}
+          </Badge>
+        </h3>
+        <p className="text-xs leading-5 text-muted-foreground">{hint}</p>
+      </div>
+      {products.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+          {emptyText}
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-border bg-card shadow-card">
+          <table className="w-full table-fixed text-sm">
+            <thead className="bg-secondary text-xs text-muted-foreground">
+              <tr>
+                <th className="p-2 text-right font-medium">מוצר</th>
+                <th className="hidden w-24 p-2 text-center font-medium sm:table-cell">רשום</th>
+                {kind === "counted" && (
+                  <th className="hidden w-24 p-2 text-center font-medium sm:table-cell">הפרש</th>
+                )}
+                <th className="w-[6.5rem] p-2 text-center font-medium sm:w-44">
+                  {kind === "counted" ? "נספר" : "כמות שנספרה"}
+                </th>
+                <th className="w-[5rem] p-2 sm:w-36">
+                  <span className="sr-only">פעולה</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {shown.map((product) => (
+                <CountRow
+                  key={`${kind}-${product.id}`}
+                  kind={kind}
+                  countId={countId}
+                  product={product}
+                  reserved={reserved.get(product.id) ?? 0}
+                  line={lines.get(product.id) ?? null}
+                  focus={focusId === product.id}
+                  onFocused={onFocused}
+                  onSaved={onSaved}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {products.length > visible && (
+        <Button variant="outline" className="w-full" onClick={onMore}>
+          הצגת עוד {Math.min(PAGE, products.length - visible)} מוצרים (מוצגים {visible} מתוך{" "}
+          {products.length})
+        </Button>
+      )}
+    </section>
+  );
+}
 
 const CountRow = memo(function CountRow({
+  kind,
   countId,
   product,
   reserved,
@@ -694,24 +835,23 @@ const CountRow = memo(function CountRow({
   onFocused,
   onSaved,
 }: {
+  kind: TableKind;
   countId: string;
   product: CountProduct;
   reserved: number;
   line: CountLine | null;
   focus: boolean;
   onFocused: () => void;
-  onSaved: (line: CountLine | null, productId: string) => void;
+  onSaved: (line: CountLine | null, productId: string, from: TableKind) => void;
 }) {
   const pack = packOf(product);
   const [packs, setPacks] = useState(() => (line?.packs != null ? String(line.packs) : ""));
   const [units, setUnits] = useState(() =>
     line ? String(pack ? (line.loose_units ?? 0) : line.counted_units) : "",
   );
-  const [state, setState] = useState<SaveState>(line ? "saved" : "idle");
+  const [busy, setBusy] = useState(false);
   const firstInput = useRef<HTMLInputElement>(null);
-  const rowRef = useRef<HTMLLIElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSaved = useRef<string>(line ? `${line.counted_units}` : "");
+  const rowRef = useRef<HTMLTableRowElement>(null);
 
   useEffect(() => {
     if (!focus) return;
@@ -721,6 +861,7 @@ const CountRow = memo(function CountRow({
     onFocused();
   }, [focus, onFocused]);
 
+  /** הכמות ביחידות; null = לא הוזן כלום; NaN = לא תקין */
   const total = (): number | null => {
     const p = packs.trim() === "" ? 0 : Number(packs);
     const u = units.trim() === "" ? 0 : Number(units);
@@ -730,75 +871,69 @@ const CountRow = memo(function CountRow({
   };
 
   const save = async () => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-    const counted = total();
-    if (Number.isNaN(counted)) {
-      setState("error");
+    const value = total();
+    if (value === null) {
+      // שדה ריק לא מעביר את המוצר — 0 צריך להקליד במפורש
+      toast.error(`הזינו כמות ל"${product.name}" (0 אם אין במלאי)`);
+      firstInput.current?.focus();
       return;
     }
-    const key = counted === null ? "" : String(counted);
-    if (key === lastSaved.current) return;
-    setState("saving");
-    if (counted === null) {
-      const { error } = await supabase
-        .from("stock_count_lines")
-        .delete()
-        .eq("count_id", countId)
-        .eq("product_id", product.id);
-      if (error) {
-        setState("error");
-        toast.error(error.message);
-        return;
-      }
-      lastSaved.current = "";
-      setState("idle");
-      onSaved(null, product.id);
+    if (Number.isNaN(value)) {
+      toast.error("כמות לא תקינה — מספר שלם, 0 ומעלה");
+      firstInput.current?.focus();
       return;
     }
+    setBusy(true);
     const row = {
       count_id: countId,
       product_id: product.id,
-      counted_units: counted,
+      counted_units: value,
       packs: pack ? (packs.trim() === "" ? 0 : Number(packs)) : null,
       loose_units: pack ? (units.trim() === "" ? 0 : Number(units)) : null,
     };
     const { error } = await supabase
       .from("stock_count_lines")
       .upsert(row, { onConflict: "count_id,product_id" });
+    setBusy(false);
     if (error) {
-      setState("error");
       toast.error(error.message);
       return;
     }
-    lastSaved.current = key;
-    setState("saved");
+    if (kind === "counted") toast.success(`"${product.name}" עודכן: ${value} יח׳`);
     onSaved(
-      { ...row, recorded_before: null, reserved_open: null, applied_quantity: null },
+      {
+        product_id: product.id,
+        counted_units: row.counted_units,
+        packs: row.packs,
+        loose_units: row.loose_units,
+        counted_at: new Date().toISOString(),
+        recorded_before: null,
+        reserved_open: null,
+        applied_quantity: null,
+        unit_value: null,
+        value_source: null,
+      },
       product.id,
+      kind,
     );
   };
 
-  const schedule = () => {
-    if (timer.current) clearTimeout(timer.current);
-    setState("idle");
-    timer.current = setTimeout(() => void save(), 900);
+  /** החזרה ל"טרם נספרו" (נספר בטעות) */
+  const undo = async () => {
+    setBusy(true);
+    const { error } = await supabase
+      .from("stock_count_lines")
+      .delete()
+      .eq("count_id", countId)
+      .eq("product_id", product.id);
+    setBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`"${product.name}" חזר לטבלת "טרם נספרו"`);
+    onSaved(null, product.id, kind);
   };
-
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-
-  const counted = total();
-  const expected = expectedOnShelf(product, reserved);
-  const fresh = neverCounted(product, reserved);
-  const diff =
-    counted === null || Number.isNaN(counted) || fresh ? null : (counted as number) - expected;
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
@@ -807,122 +942,146 @@ const CountRow = memo(function CountRow({
     }
   };
 
-  return (
-    <li
-      ref={rowRef}
-      className={`rounded-lg border bg-card p-3 shadow-card ${line ? "border-accent/40" : "border-border"}`}
-    >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <p className="line-clamp-2 font-semibold text-foreground">{product.name}</p>
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-            {product.shelf_location && product.shelf_location !== "A0A" && (
-              <Badge variant="outline">איתור {product.shelf_location}</Badge>
-            )}
-            <span dir="ltr" className="numeric">
-              {product.barcode ?? product.sku}
-            </span>
-            {product.is_hidden && <Badge variant="outline">מוסתר</Badge>}
-            {pack && <Badge variant="secondary">מארז {pack}</Badge>}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {fresh ? (
-              "לא נספר עד היום"
-            ) : (
-              <>
-                רשום במערכת: <span className="numeric">{expected}</span>
-                {reserved > 0 && (
-                  <>
-                    {" "}
-                    (זמין <span className="numeric">{product.stock_quantity}</span> + שמור להזמנות{" "}
-                    <span className="numeric">{reserved}</span>)
-                  </>
-                )}
-              </>
-            )}
-          </p>
-        </div>
+  const expected = expectedOnShelf(product, reserved);
+  const fresh = neverCounted(product, reserved);
+  const diff = kind === "counted" && line && !fresh ? line.counted_units - expected : null;
+  const recorded = fresh ? "לא נספר עד היום" : `רשום: ${expected}`;
+  const diffNode =
+    diff === null ? (
+      <span className="text-xs text-muted-foreground">חדש</span>
+    ) : (
+      <span
+        className={cn(
+          "numeric text-sm font-semibold",
+          diff === 0 ? "text-muted-foreground" : diff > 0 ? "text-primary" : "text-destructive",
+        )}
+      >
+        {diff === 0 ? "תואם" : <bdi>{signed(diff)}</bdi>}
+      </span>
+    );
+  const inputClass = "h-10 w-full min-w-0 px-1.5 text-center";
 
-        <div className="flex flex-wrap items-end gap-2">
-          {pack && (
-            <div className="space-y-1">
-              <Label htmlFor={`packs-${product.id}`} className="text-xs">
-                מארזים ({pack})
-              </Label>
-              <Input
-                ref={firstInput}
-                id={`packs-${product.id}`}
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                value={packs}
-                onChange={(event) => {
-                  setPacks(event.target.value);
-                  schedule();
-                }}
-                onBlur={() => void save()}
-                onKeyDown={onKeyDown}
-                className="h-11 w-20 text-center"
-              />
-            </div>
+  return (
+    <tr
+      ref={rowRef}
+      className={cn("align-top", kind === "counted" && "bg-accent/5")}
+      data-count-row={product.name}
+    >
+      <td className="min-w-0 p-2">
+        <p className="whitespace-normal break-words font-semibold text-foreground [overflow-wrap:anywhere]">
+          {product.name}
+        </p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+          <span dir="ltr" className="numeric break-all">
+            {product.barcode ?? product.sku}
+          </span>
+          {product.shelf_location && product.shelf_location !== "A0A" && (
+            <Badge variant="outline" className="px-1.5 py-0 text-[11px]">
+              איתור {product.shelf_location}
+            </Badge>
           )}
-          <div className="space-y-1">
-            <Label htmlFor={`units-${product.id}`} className="text-xs">
-              {pack ? "בודדים" : "יחידות"}
-            </Label>
+          {product.is_hidden && (
+            <Badge variant="outline" className="px-1.5 py-0 text-[11px]">
+              מוסתר
+            </Badge>
+          )}
+          {pack && (
+            <Badge variant="secondary" className="px-1.5 py-0 text-[11px]">
+              מארז {pack}
+            </Badge>
+          )}
+        </div>
+        {/* בנייד — מה שבמחשב מופיע בעמודות */}
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground sm:hidden">
+          <span className="numeric">{recorded}</span>
+          {kind === "counted" && <span>הפרש: {diffNode}</span>}
+        </p>
+      </td>
+      <td className="hidden p-2 text-center sm:table-cell">
+        {fresh ? (
+          <span className="text-xs text-muted-foreground">לא נספר עד היום</span>
+        ) : (
+          <span className="numeric text-foreground">{expected}</span>
+        )}
+        {reserved > 0 && (
+          <span className="block text-[11px] text-muted-foreground">
+            כולל <span className="numeric">{reserved}</span> שמורים להזמנות
+          </span>
+        )}
+      </td>
+      {kind === "counted" && <td className="hidden p-2 text-center sm:table-cell">{diffNode}</td>}
+      <td className="p-2">
+        <div className={cn("flex gap-1", pack ? "flex-col sm:flex-row" : "")}>
+          {pack && (
             <Input
-              ref={pack ? undefined : firstInput}
-              id={`units-${product.id}`}
+              ref={firstInput}
               type="number"
               inputMode="numeric"
               min={0}
               step={1}
-              value={units}
-              onChange={(event) => {
-                setUnits(event.target.value);
-                schedule();
-              }}
-              onBlur={() => void save()}
+              value={packs}
+              onChange={(event) => setPacks(event.target.value)}
               onKeyDown={onKeyDown}
-              className="h-11 w-20 text-center"
+              placeholder={`מארזים (${pack})`}
+              aria-label={`מארזים של ${pack} — ${product.name}`}
+              className={inputClass}
             />
-          </div>
-          <div className="flex min-h-11 min-w-24 flex-col justify-center text-xs">
-            {counted !== null && !Number.isNaN(counted) && (
-              <span className="numeric font-semibold text-foreground">= {counted} יח׳</span>
-            )}
-            {Number.isNaN(counted) && <span className="text-destructive">מספר לא תקין</span>}
-            {diff !== null && (
-              <span
-                className={`numeric ${diff === 0 ? "text-muted-foreground" : diff > 0 ? "text-primary" : "text-destructive"}`}
-              >
-                {diff === 0 ? (
-                  "תואם"
-                ) : (
-                  <>
-                    <bdi dir="ltr">{diff > 0 ? `+${diff}` : diff}</bdi> מהרשום
-                  </>
-                )}
-              </span>
-            )}
-          </div>
-          <span className="flex size-6 items-center justify-center" aria-live="polite">
-            {state === "saving" && (
-              <Loader2 className="size-4 animate-spin text-muted-foreground" />
-            )}
-            {state === "saved" && <Check className="size-4 text-primary" aria-label="נשמר" />}
-            {state === "error" && (
-              <TriangleAlert className="size-4 text-destructive" aria-label="לא נשמר" />
-            )}
-          </span>
+          )}
+          <Input
+            ref={pack ? undefined : firstInput}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1}
+            value={units}
+            onChange={(event) => setUnits(event.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={pack ? "בודדים" : "כמות"}
+            aria-label={`${pack ? "יחידות בודדות" : "כמות שנספרה"} — ${product.name}`}
+            className={inputClass}
+            data-count-input
+          />
         </div>
-      </div>
-    </li>
+      </td>
+      <td className="p-2">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
+          <Button
+            size="sm"
+            className="h-10 w-full sm:w-auto"
+            variant={kind === "counted" ? "outline" : "default"}
+            disabled={busy}
+            onClick={() => void save()}
+            aria-label={`${kind === "counted" ? "עדכון" : "שמירה"} — ${product.name}`}
+          >
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : kind === "counted" ? null : (
+              <Check className="size-4" aria-hidden="true" />
+            )}
+            {kind === "counted" ? "עדכון" : "שמור"}
+          </Button>
+          {kind === "counted" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-full px-2 text-xs text-muted-foreground sm:h-10 sm:w-auto"
+              disabled={busy}
+              onClick={() => void undo()}
+              aria-label={`החזרת ${product.name} לטבלת "טרם נספרו"`}
+              title='החזרה ל"טרם נספרו"'
+            >
+              <RotateCcw className="size-3.5" aria-hidden="true" />
+              <span className="sm:sr-only">החזרה</span>
+            </Button>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 });
 
-function ReviewDialog({
+/** "סיים ספירה ועדכן מלאי": סיכום, אישור, עדכון חותך — ואז הדו"ח */
+function FinishDialog({
   open,
   onOpenChange,
   count,
@@ -937,7 +1096,7 @@ function ReviewDialog({
   scoped: CountProduct[];
   lines: Map<string, CountLine>;
   reserved: Map<string, number>;
-  onApplied: () => void;
+  onApplied: (count: StockCount) => void;
 }) {
   const [busy, setBusy] = useState(false);
   useBackToClose(open, () => onOpenChange(false));
@@ -948,25 +1107,24 @@ function ReviewDialog({
         .map((product) => {
           const line = lines.get(product.id) as CountLine;
           const held = reserved.get(product.id) ?? 0;
-          const expected = expectedOnShelf(product, held);
           const available = Math.max(line.counted_units - held, 0);
           const pack = packOf(product) ?? 1;
           return {
             product,
             counted: line.counted_units,
             held,
-            expected,
             available,
-            fresh: neverCounted(product, held),
             willBeOut: available < pack,
-            diff: line.counted_units - expected,
+            diffUnits: available - product.stock_quantity,
+            diffValue: (available - product.stock_quantity) * estimatedUnitValue(product),
           };
-        })
-        .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)),
+        }),
     [scoped, lines, reserved],
   );
-  const uncounted = scoped.length - rows.length;
+  const uncountedCount = scoped.length - rows.length;
   const outCount = rows.filter((row) => row.willBeOut && !row.product.is_out_of_stock).length;
+  const changed = rows.filter((row) => row.diffUnits !== 0).length;
+  const valueDiff = rows.reduce((sum, row) => sum + row.diffValue, 0);
   const shortOnReserve = rows.filter((row) => row.counted < row.held);
 
   const apply = async () => {
@@ -984,29 +1142,44 @@ function ReviewDialog({
       }`,
       { duration: 8000 },
     );
-    onApplied();
+    onApplied({ ...count, status: "applied", applied_at: new Date().toISOString() });
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="max-h-[90vh] max-w-3xl overflow-y-auto text-right">
+      <DialogContent dir="rtl" className="max-h-[90vh] max-w-xl overflow-y-auto text-right">
         <DialogHeader>
-          <DialogTitle>סיכום הספירה לפני עדכון המלאי</DialogTitle>
+          <DialogTitle>לסיים את הספירה ולעדכן את המלאי?</DialogTitle>
           <DialogDescription>
-            הכמות הזמינה למכירה = מה שנספר על המדף, פחות מה ששמור ללקוחות בהזמנות שעוד לא נשלחו
-            (הסחורה שלהן עדיין פיזית במחסן).
+            הכמויות של המוצרים שנספרו יוחלפו בכמות שנספרה (פחות מה ששמור ללקוחות בהזמנות שעוד לא
+            נשלחו). מוצרים שלא נספרו לא ישתנו. אחרי העדכון יוצג דו״ח ספירה להדפסה.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-2 sm:grid-cols-3">
-          <SummaryTile label="מוצרים שנספרו" value={rows.length} />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <SummaryTile label="נספרו (יתעדכנו)" value={String(rows.length)} />
+          <SummaryTile label="ישתנו" value={String(changed)} />
           <SummaryTile
             label='יסומנו "אזל"'
-            value={outCount}
+            value={String(outCount)}
             tone={outCount > 0 ? "warn" : undefined}
           />
-          <SummaryTile label="לא נספרו (לא ישתנו)" value={uncounted} />
+          <SummaryTile label="לא נספרו (לא ישתנו)" value={String(uncountedCount)} />
         </div>
+        <p className="rounded-lg border border-border bg-secondary/50 p-3 text-sm">
+          הפרש משוער בשווי:{" "}
+          <bdi
+            className={cn(
+              "numeric font-bold",
+              valueDiff > 0 ? "text-primary" : valueDiff < 0 ? "text-destructive" : "",
+            )}
+          >
+            {signed(valueDiff, true)}
+          </bdi>{" "}
+          <span className="text-xs text-muted-foreground">
+            (לפי מחיר עלות; כשאין — מחיר מכירה. הסכום המדויק בדו״ח)
+          </span>
+        </p>
 
         {shortOnReserve.length > 0 && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-foreground">
@@ -1023,82 +1196,24 @@ function ReviewDialog({
           </div>
         )}
 
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[36rem] text-sm">
-            <thead className="bg-secondary text-xs text-muted-foreground">
-              <tr>
-                <th className="p-2 text-right font-medium">מוצר</th>
-                <th className="p-2 text-center font-medium">רשום</th>
-                <th className="p-2 text-center font-medium">נספר</th>
-                <th className="p-2 text-center font-medium">שמור להזמנות</th>
-                <th className="p-2 text-center font-medium">יהיה זמין</th>
-                <th className="p-2 text-center font-medium">הפרש</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((row) => (
-                <tr key={row.product.id}>
-                  <td className="p-2">
-                    <span className="line-clamp-1">{row.product.name}</span>
-                    {row.willBeOut && (
-                      <span className="text-xs text-destructive">
-                        {" "}
-                        · {row.available === 0 ? "אזל" : "פחות ממארז — אזל"}
-                      </span>
-                    )}
-                  </td>
-                  <td className="numeric p-2 text-center text-muted-foreground">
-                    {row.fresh ? "—" : row.expected}
-                  </td>
-                  <td className="numeric p-2 text-center font-semibold">{row.counted}</td>
-                  <td className="numeric p-2 text-center text-muted-foreground">
-                    {row.held || "—"}
-                  </td>
-                  <td className="numeric p-2 text-center">{row.available}</td>
-                  <td
-                    className={`numeric p-2 text-center ${row.fresh || row.diff === 0 ? "text-muted-foreground" : row.diff > 0 ? "text-primary" : "text-destructive"}`}
-                  >
-                    {row.fresh ? (
-                      "חדש"
-                    ) : row.diff === 0 ? (
-                      "תואם"
-                    ) : (
-                      <bdi dir="ltr">{row.diff > 0 ? `+${row.diff}` : row.diff}</bdi>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-start">
+          <Button
+            size="lg"
+            onClick={() => void apply()}
+            disabled={busy || rows.length === 0}
+            data-confirm-finish
+          >
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <ClipboardCheck className="size-4" />
+            )}
+            כן — סיים ספירה ועדכן מלאי
+          </Button>
+          <Button size="lg" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+            חזרה לספירה
+          </Button>
         </div>
-
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button size="lg" className="w-full" disabled={busy || rows.length === 0}>
-              {busy ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <ClipboardCheck className="size-4" />
-              )}
-              אישור ועדכון המלאי
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent dir="rtl" className="text-right">
-            <AlertDialogHeader>
-              <AlertDialogTitle>לעדכן את המלאי לפי הספירה?</AlertDialogTitle>
-              <AlertDialogDescription>
-                {rows.length} מוצרים יתעדכנו בבת אחת
-                {outCount > 0 ? `, ${outCount} יסומנו "אזל"` : ""}.
-                {uncounted > 0 ? ` ${uncounted} מוצרים שלא נספרו יישארו כמו שהם.` : ""} אחרי האישור
-                הספירה נסגרת ונשמרת בהיסטוריה.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="gap-2 sm:flex-row-reverse sm:justify-start">
-              <AlertDialogAction onClick={() => void apply()}>כן, לעדכן את המלאי</AlertDialogAction>
-              <AlertDialogCancel>חזרה לספירה</AlertDialogCancel>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </DialogContent>
     </Dialog>
   );
@@ -1110,92 +1225,205 @@ function SummaryTile({
   tone,
 }: {
   label: string;
-  value: number;
-  tone?: "warn" | undefined;
+  value: string;
+  tone?: "warn" | "gain" | "loss" | undefined;
 }) {
   return (
     <div
-      className={`rounded-lg border p-3 ${tone === "warn" ? "border-destructive/40 bg-destructive/5" : "border-border bg-secondary/50"}`}
+      className={cn(
+        "rounded-lg border p-3",
+        tone === "warn"
+          ? "border-destructive/40 bg-destructive/5"
+          : "border-border bg-secondary/50",
+      )}
     >
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="numeric font-display text-2xl text-foreground">{value}</p>
+      <p
+        className={cn(
+          "numeric font-display text-xl text-foreground",
+          tone === "gain" && "text-primary",
+          tone === "loss" && "text-destructive",
+        )}
+      >
+        <bdi>{value}</bdi>
+      </p>
     </div>
   );
 }
 
-function HistoryDialog({
+/** דו"ח ספירה: לכל פריט — כמות קודמת, חדשה, הפרש ביחידות ובשווי; הדפסה */
+function ReportDialog({
   count,
   products,
+  storeName,
   onOpenChange,
 }: {
   count: StockCount | null;
   products: CountProduct[];
+  storeName: string;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [lines, setLines] = useState<CountLine[] | null>(null);
+  const [report, setReport] = useState<CountReport | null>(null);
   useBackToClose(count !== null, () => onOpenChange(false));
+  const byId = useMemo(
+    () =>
+      new Map(
+        products.map((product) => [
+          product.id,
+          { name: product.name, sku: product.sku, barcode: product.barcode },
+        ]),
+      ),
+    [products],
+  );
+
   useEffect(() => {
     if (!count) return;
-    setLines(null);
+    setReport(null);
+    let alive = true;
     void fetchAllRows((from, to) =>
       supabase
         .from("stock_count_lines")
-        .select(
-          "product_id, counted_units, packs, loose_units, recorded_before, reserved_open, applied_quantity",
-        )
+        .select(LINE_COLUMNS)
         .eq("count_id", count.id)
         .order("id")
         .range(from, to),
     ).then(({ data, error }) => {
+      if (!alive) return;
       if (error) toast.error(error.message);
-      setLines(data as CountLine[]);
+      setReport(buildCountReport((data ?? []) as CountReportInput[], byId));
     });
-  }, [count]);
-  const byId = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
+    return () => {
+      alive = false;
+    };
+  }, [count, byId]);
 
+  const print = () => {
+    if (!count || !report) return;
+    const html = countReportHtml(report, {
+      storeName,
+      title: count.title || "ספירת מלאי",
+      scope: count.scope_category ?? "כל המחסן",
+      appliedAt: count.applied_at,
+    });
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast.error("הדפדפן חסם את חלון ההדפסה — אפשרו חלונות קופצים לאתר ונסו שוב");
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    window.setTimeout(() => win.print(), 300);
+  };
+
+  const t = report?.totals;
   return (
     <Dialog open={count !== null} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="max-h-[90vh] max-w-2xl overflow-y-auto text-right">
+      <DialogContent
+        dir="rtl"
+        className="max-h-[92vh] max-w-3xl overflow-y-auto text-right"
+        data-count-report
+      >
         <DialogHeader>
-          <DialogTitle>{count?.title || "ספירת מלאי"}</DialogTitle>
+          <DialogTitle>דו״ח ספירה — {count?.title || "ספירת מלאי"}</DialogTitle>
           <DialogDescription>
-            {count?.applied_at ? `אושרה ${formatDate(count.applied_at)}` : ""} · מה היה רשום, מה
-            נספר ומה נקבע
+            {count?.scope_category ?? "כל המחסן"}
+            {count?.applied_at ? ` · עודכן ${formatDate(count.applied_at)}` : ""} · כמות קודמת, כמות
+            חדשה והפרש בשווי לכל פריט שנספר
           </DialogDescription>
         </DialogHeader>
-        {lines === null ? (
+        {report === null || !t ? (
           <Loader2 className="size-5 animate-spin" />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full min-w-[30rem] text-sm">
-              <thead className="bg-secondary text-xs text-muted-foreground">
-                <tr>
-                  <th className="p-2 text-right font-medium">מוצר</th>
-                  <th className="p-2 text-center font-medium">היה זמין</th>
-                  <th className="p-2 text-center font-medium">נספר</th>
-                  <th className="p-2 text-center font-medium">שמור</th>
-                  <th className="p-2 text-center font-medium">נקבע</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {lines.map((line) => (
-                  <tr key={line.product_id}>
-                    <td className="p-2">{byId.get(line.product_id)?.name ?? "מוצר שנמחק"}</td>
-                    <td className="numeric p-2 text-center text-muted-foreground">
-                      {line.recorded_before ?? "—"}
-                    </td>
-                    <td className="numeric p-2 text-center">{line.counted_units}</td>
-                    <td className="numeric p-2 text-center text-muted-foreground">
-                      {line.reserved_open || "—"}
-                    </td>
-                    <td className="numeric p-2 text-center font-semibold">
-                      {line.applied_quantity ?? "—"}
-                    </td>
+          <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <SummaryTile label="פריטים שנספרו" value={String(t.lines)} />
+              <SummaryTile label="השתנו" value={String(t.changed)} />
+              <SummaryTile label="עודף (שווי)" value={signed(t.valueGained, true)} tone="gain" />
+              <SummaryTile label="חוסר (שווי)" value={signed(-t.valueLost, true)} tone="loss" />
+            </div>
+            <p className="text-sm" data-report-net>
+              הפרש נטו בשווי:{" "}
+              <bdi
+                className={cn(
+                  "numeric font-bold",
+                  t.netValue > 0 ? "text-primary" : t.netValue < 0 ? "text-destructive" : "",
+                )}
+              >
+                {signed(t.netValue, true)}
+              </bdi>
+            </p>
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full min-w-[38rem] text-sm">
+                <thead className="bg-secondary text-xs text-muted-foreground">
+                  <tr>
+                    <th className="p-2 text-right font-medium">מוצר</th>
+                    <th className="p-2 text-center font-medium">כמות קודמת</th>
+                    <th className="p-2 text-center font-medium">כמות חדשה</th>
+                    {report.hasReserved && (
+                      <th className="p-2 text-center font-medium">שמור להזמנות</th>
+                    )}
+                    <th className="p-2 text-center font-medium">הפרש</th>
+                    <th className="p-2 text-center font-medium">שווי ליחידה</th>
+                    <th className="p-2 text-center font-medium">הפרש בשווי</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {report.lines.map((line) => {
+                    const tone =
+                      line.diffUnits > 0
+                        ? "text-primary"
+                        : line.diffUnits < 0
+                          ? "text-destructive"
+                          : "text-muted-foreground";
+                    return (
+                      <tr key={line.productId} data-report-row={line.name}>
+                        <td className="p-2">
+                          <span className="block break-words">{line.name}</span>
+                          <span dir="ltr" className="numeric text-[11px] text-muted-foreground">
+                            {line.barcode ?? line.sku}
+                          </span>
+                        </td>
+                        <td className="numeric p-2 text-center text-muted-foreground">
+                          {line.before}
+                        </td>
+                        <td className="numeric p-2 text-center font-semibold">{line.after}</td>
+                        {report.hasReserved && (
+                          <td className="numeric p-2 text-center text-muted-foreground">
+                            {line.reserved || "—"}
+                          </td>
+                        )}
+                        <td className={cn("numeric p-2 text-center", tone)}>
+                          <bdi>{signed(line.diffUnits)}</bdi>
+                        </td>
+                        <td className="numeric p-2 text-center text-muted-foreground">
+                          {formatMoneyIls(line.unitValue)}
+                          {line.valueSource === "price" ? "*" : ""}
+                        </td>
+                        <td className={cn("numeric p-2 text-center font-semibold", tone)}>
+                          <bdi>{signed(line.diffValue, true)}</bdi>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              השווי ליחידה נקבע ברגע העדכון: מחיר העלות
+              {report.usesSalePrice ? "; * = אין מחיר עלות — לפי מחיר המכירה" : ""}.
+            </p>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-start">
+              <Button onClick={print} data-print-report>
+                <Printer className="size-4" />
+                הדפסת הדו״ח
+              </Button>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                סגירה
+              </Button>
+            </div>
+          </>
         )}
       </DialogContent>
     </Dialog>

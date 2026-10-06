@@ -66,10 +66,14 @@ export type GlobalProduct = {
   show_in_zap?: boolean;
   /** חלק 20: "הקפץ למסך ראשי" — בבלוק "מוצרים נבחרים" במסך הבית */
   is_featured?: boolean;
+  /** חלק 23: מדבקת המוצר מהגלריה, גודל ושקיפות (אחוזים) */
+  sticker_id?: string | null;
+  sticker_size?: number;
+  sticker_opacity?: number;
 };
 
 export const PRODUCT_ADMIN_COLUMNS =
-  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto, is_order_bump, order_bump_text, is_digital, variant_attributes, seo_title, seo_description, show_in_zap, is_featured" as const;
+  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto, is_order_bump, order_bump_text, is_digital, variant_attributes, seo_title, seo_description, show_in_zap, is_featured, sticker_id, sticker_size, sticker_opacity" as const;
 
 /** לסוכן שבונה הזמנה ללקוח: כל דרגי המחיר, בלי מחיר עלות (ניהולי בלבד) */
 export const STAFF_CATALOG_COLUMNS =
@@ -119,6 +123,19 @@ export type CatalogItem = {
   variants?: CatalogVariant[];
   /** חלק 20: "הקפץ למסך ראשי" — בבלוק "מוצרים נבחרים" במסך הבית */
   is_featured?: boolean;
+  /** חלק 23: מדבקת המוצר (פינה עליונה שמאלית של התמונה); null = בלי */
+  sticker?: ProductStickerView | null;
+};
+
+/** מדבקה כפי שמוצגת על המוצר: תמונה, גודל (% מרוחב התמונה) ושקיפות (%) */
+export type ProductStickerView = {
+  url: string;
+  /** 10–60: אחוז מרוחב אזור התמונה */
+  size: number;
+  /** 10–100 */
+  opacity: number;
+  /** שם המדבקה (טקסט חלופי); null = דקורטיבית */
+  label: string | null;
 };
 
 /**

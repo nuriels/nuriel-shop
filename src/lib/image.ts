@@ -177,6 +177,11 @@ export function compressSideBannerImage(file: File): Promise<CompressResult> {
   return compress(file, { maxDimension: 1200, quality: 0.85 });
 }
 
+/** מדבקת מוצר (חלק 23): עד 400px, PNG עם שקיפות — מוצגת קטנה ועגולה מעל התמונה */
+export function compressStickerImage(file: File): Promise<CompressResult> {
+  return compress(file, { maxDimension: 400, quality: 0.92, preserveTransparency: true });
+}
+
 /** לוגו האתר: עד 600px, PNG עם שקיפות (נדרש גם למסמכי PDF) */
 export function compressLogoImage(file: File): Promise<CompressResult> {
   return compress(file, LOGO_OPTIONS);

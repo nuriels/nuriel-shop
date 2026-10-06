@@ -7,6 +7,7 @@ import {
   type BannerDevice,
   type BannerSlide,
 } from "@/lib/banners";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 /** GIF שקוף של פיקסל אחד — מקור "ריק" למכשיר שלא אמור להוריד את התמונה */
 const BLANK_IMAGE =
@@ -16,20 +17,6 @@ const DESKTOP_QUERY = "(min-width: 768px)";
 const MOBILE_QUERY = "(max-width: 767.98px)";
 const AUTOPLAY_MS = 5000;
 const SWIPE_THRESHOLD = 40;
-
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() =>
-    typeof window === "undefined" ? false : window.matchMedia(query).matches,
-  );
-  useEffect(() => {
-    const list = window.matchMedia(query);
-    const update = () => setMatches(list.matches);
-    update();
-    list.addEventListener("change", update);
-    return () => list.removeEventListener("change", update);
-  }, [query]);
-  return matches;
-}
 
 function aspectFor(slides: BannerSlide[], device: BannerDevice): string {
   const first = slides[0];
@@ -193,7 +180,7 @@ export function BannerCarousel({
                 aria-label="התמונה הקודמת"
                 className="absolute right-3 top-1/2 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow-sm backdrop-blur-sm hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:flex"
               >
-                <ChevronRight className="size-5" />
+                <ChevronRight className="pointer-events-none size-5" />
               </button>
               <button
                 type="button"
@@ -201,7 +188,7 @@ export function BannerCarousel({
                 aria-label="התמונה הבאה"
                 className="absolute left-3 top-1/2 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow-sm backdrop-blur-sm hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:flex"
               >
-                <ChevronLeft className="size-5" />
+                <ChevronLeft className="pointer-events-none size-5" />
               </button>
             </>
           )}
@@ -227,7 +214,12 @@ export function BannerCarousel({
               aria-label={paused ? "הפעלת החלפה אוטומטית" : "עצירת החלפה אוטומטית"}
               className="absolute left-2 bottom-1.5 flex size-8 items-center justify-center rounded-full text-white/90 hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
-              {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
+              {/* בלי pointer-events: החלפת האייקון מתחת לעכבר לא "תוקעת" את מצב הריחוף */}
+              {paused ? (
+                <Play className="pointer-events-none size-4" />
+              ) : (
+                <Pause className="pointer-events-none size-4" />
+              )}
             </button>
           </div>
         </>

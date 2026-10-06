@@ -51,6 +51,13 @@ import {
 } from "@/lib/marketing";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/legal/RichTextEditor";
+import { StickerField } from "@/components/products/StickerField";
+import {
+  STICKER_OPACITY,
+  STICKER_SIZE,
+  clampStickerOpacity,
+  clampStickerSize,
+} from "@/lib/stickers";
 import { richTextIsEmpty, sanitizeRichHtml } from "@/lib/rich-text";
 import {
   Select,
@@ -155,6 +162,10 @@ type FormState = {
   showInZap: boolean;
   /** חלק 20: "הקפץ למסך ראשי" — בבלוק "מוצרים נבחרים" במסך הבית */
   isFeatured: boolean;
+  /** חלק 23: מדבקת מוצר מהגלריה ("" = בלי), גודל ושקיפות באחוזים */
+  stickerId: string;
+  stickerSize: number;
+  stickerOpacity: number;
 };
 
 export type ProductDraft = { id: string; title: string; data: Json; updated_at: string };
@@ -199,6 +210,9 @@ function emptyForm(defaultCategory: string): FormState {
     seoDescription: "",
     showInZap: true,
     isFeatured: false,
+    stickerId: "",
+    stickerSize: STICKER_SIZE.default,
+    stickerOpacity: STICKER_OPACITY.default,
   };
 }
 
@@ -245,6 +259,9 @@ function fromProduct(product: GlobalProduct): FormState {
     seoDescription: product.seo_description ?? "",
     showInZap: product.show_in_zap ?? true,
     isFeatured: product.is_featured ?? false,
+    stickerId: product.sticker_id ?? "",
+    stickerSize: product.sticker_size ?? STICKER_SIZE.default,
+    stickerOpacity: product.sticker_opacity ?? STICKER_OPACITY.default,
   };
 }
 
@@ -290,6 +307,9 @@ function descriptionForSave(html: string): string | null {
 }
 
 const DRAFT_DELAY_MS = 900;
+
+/** חלק 23: כמה תמונות למוצר בסך הכל (הראשית + הגלריה) */
+const MAX_GALLERY = 10;
 
 /** מחליף את רשימת המוצרים הקשורים של מוצר (הסדר נשמר); מחזיר הודעת שגיאה או null */
 /** כמה קטגוריות נוספות למוצר (יחד עם הראשית — עד 10, כמו בייבוא) */
@@ -398,6 +418,7 @@ export function AdminProductDialog({
   // גרסת המוצר שממנה נטען הטופס (נטענת מחדש מהמסד בכל פתיחה)
   const [loaded, setLoaded] = useState<GlobalProduct | null>(product ?? null);
   const [uploading, setUploading] = useState(false);
+  const [uploadingExtra, setUploadingExtra] = useState(false);
   const [imageNote, setImageNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -417,6 +438,7 @@ export function AdminProductDialog({
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftChain = useRef<Promise<void>>(Promise.resolve());
   const productSaved = useRef(false);
+  const extraInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -616,6 +638,45 @@ export function AdminProductDialog({
     }
   };
 
+  /**
+   * חלק 23: תמונות נוספות לגלריה (בעמוד המוצר הן מתחלפות בקרוסלה). עד
+   * MAX_GALLERY תמונות בסך הכל, כולל הראשית.
+   */
+  const uploadExtraImages = async (files: FileList | null) => {
+    const list = Array.from(files ?? []);
+    if (list.length === 0) return;
+    const room = MAX_GALLERY - (form.imageUrl ? 1 : 0) - form.extraImages.length;
+    if (room <= 0) {
+      toast.error(`אפשר עד ${MAX_GALLERY} תמונות למוצר`);
+      return;
+    }
+    setUploadingExtra(true);
+    const added: string[] = [];
+    try {
+      for (const file of list.slice(0, room)) {
+        const { url } = await uploadProductImage(file);
+        added.push(url);
+      }
+      if (list.length > room) toast.info(`נוספו ${room} תמונות — אפשר עד ${MAX_GALLERY} למוצר`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "העלאת התמונה נכשלה");
+    } finally {
+      if (added.length > 0) {
+        setForm((current) =>
+          current.imageUrl
+            ? { ...current, extraImages: [...current.extraImages, ...added] }
+            : // אין עדיין תמונה ראשית — הראשונה שהועלתה נהיית הראשית
+              {
+                ...current,
+                imageUrl: added[0] ?? "",
+                extraImages: [...current.extraImages, ...added.slice(1)],
+              },
+        );
+      }
+      setUploadingExtra(false);
+    }
+  };
+
   /** המחיר הרגיל שמולו נבדק מחיר המבצע (כמו במסד) */
   const regularPrice = (): number => {
     const prices = [Number(form.priceTier1)];
@@ -752,6 +813,9 @@ export function AdminProductDialog({
       seo_description: form.seoDescription.trim() || null,
       show_in_zap: form.showInZap,
       is_featured: form.isFeatured,
+      sticker_id: form.stickerId || null,
+      sticker_size: clampStickerSize(form.stickerSize),
+      sticker_opacity: clampStickerOpacity(form.stickerOpacity),
     };
     // דרגים 2/3: כשהם פעילים — נשמרים מהטופס. כשהם רדומים — מוצר קיים שומר
     // את הערכים שכבר יש לו (לא נמחקים), ומוצר חדש מקבל את אותו מחיר בכולם.
@@ -989,11 +1053,43 @@ export function AdminProductDialog({
                 {imageNote ??
                   'התמונה נדחסת אוטומטית לטעינה מהירה, ומוצגת ללקוחות בכיתוב "להמחשה בלבד".'}
               </p>
-              {form.extraImages.length > 0 && (
-                <div className="space-y-1.5" data-extra-images>
+              {/* חלק 23: תמונות נוספות — בעמוד המוצר מתחלפות בקרוסלה */}
+              <div className="space-y-1.5" data-extra-images>
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs font-medium text-muted-foreground">
-                    תמונות נוספות בגלריה ({form.extraImages.length})
+                    {form.extraImages.length > 0
+                      ? `תמונות נוספות בגלריה (${form.extraImages.length}) — מתחלפות בעמוד המוצר`
+                      : "תמונות נוספות (לא חובה) — יותר מתמונה אחת מתחלפות בעמוד המוצר"}
                   </p>
+                  <input
+                    ref={extraInput}
+                    id="p-extra-images"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="sr-only"
+                    disabled={uploadingExtra}
+                    onChange={(e) => {
+                      void uploadExtraImages(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={uploadingExtra}
+                    onClick={() => extraInput.current?.click()}
+                  >
+                    {uploadingExtra ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Plus className="size-4" />
+                    )}
+                    הוספת תמונות
+                  </Button>
+                </div>
+                {form.extraImages.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {form.extraImages.map((url, index) => (
                       <div
@@ -1014,9 +1110,26 @@ export function AdminProductDialog({
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
+
+            {/* חלק 23: מדבקת מוצר — מגלריית המדבקות של החנות */}
+            <StickerField
+              value={{
+                stickerId: form.stickerId,
+                size: form.stickerSize,
+                opacity: form.stickerOpacity,
+              }}
+              onChange={(next) =>
+                patch({
+                  ...(next.stickerId !== undefined ? { stickerId: next.stickerId } : {}),
+                  ...(next.size !== undefined ? { stickerSize: next.size } : {}),
+                  ...(next.opacity !== undefined ? { stickerOpacity: next.opacity } : {}),
+                })
+              }
+              previewImage={form.imageUrl || null}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="p-name">שם המוצר</Label>

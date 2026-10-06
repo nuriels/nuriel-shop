@@ -208,7 +208,10 @@ export async function prepareOrderEmail(orderId: string): Promise<PreparedOrderE
   const totalsHtml = vat
     ? vat.showBreakdown
       ? `<p style="margin-top:12px;">סה"כ לפני מע"מ: ${money(vat.net)}<br/>מע"מ ${vat.vatRate}%: ${money(vat.vat)}<br/><strong>סה"כ לתשלום: ${money(vat.gross)}</strong></p>`
-      : `<p style="margin-top:12px;"><strong>סה"כ לתשלום (כולל מע"מ): ${money(vat.gross)}</strong></p>`
+      : vat.exempt
+        ? // חלק 23: לא נגבה מע"מ (עוסק פטור)
+          `<p style="margin-top:12px;"><strong>סה"כ לתשלום: ${money(vat.gross)}</strong><br/>ללא מע"מ</p>`
+        : `<p style="margin-top:12px;"><strong>סה"כ לתשלום (כולל מע"מ): ${money(vat.gross)}</strong></p>`
     : `<p style="margin-top:12px;">מסמך זה אינו כולל מחירים. נציג ייצור קשר עם הצעת מחיר מותאמת.</p>`;
 
   // איסוף עצמי / דיגיטלי — אין כתובת משלוח; כתובת חלופית — מודגשת, כדי

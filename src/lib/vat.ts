@@ -4,6 +4,8 @@
  * שתי שיטות עבודה, נקבעות בהגדרות הניהול:
  *  - "כולל מע"מ"  — המחירים בקטלוג הם המחיר הסופי; מציגים סה"כ אחד בלבד.
  *  - "לפני מע"מ" — המחירים בקטלוג הם לפני מס; מוסיפים מע"מ ומציגים פירוט.
+ * ובנוסף (חלק 23): מע"מ 0% — עוסק פטור (או הזמנה שנשמרה ב-0%) — אין מע"מ
+ * בכלל: סה"כ אחד, בלי פירוט ובלי "כולל מע"מ".
  */
 
 export type VatSettings = {
@@ -23,7 +25,25 @@ export type VatBreakdown = {
   /** האם להציג פירוט מע"מ נפרד (רק בשיטת "לפני מע"מ") */
   showBreakdown: boolean;
   vatRate: number;
+  /** חלק 23: לא נגבה מע"מ (0%) — "ללא מע"מ" במקום "כולל מע"מ" */
+  exempt?: boolean;
 };
+
+/** סוג העוסק של החנות (חלק 23): פטור — מע"מ 0% נעול; מורשה / חברה — כרגיל */
+export type StoreBusinessType = "exempt" | "authorized";
+
+export const BUSINESS_TYPE_OPTIONS: { value: StoreBusinessType; label: string; hint: string }[] = [
+  {
+    value: "authorized",
+    label: "עוסק מורשה / חברה",
+    hint: "המע״מ מחושב ומוצג לפי ההגדרות למטה.",
+  },
+  {
+    value: "exempt",
+    label: "עוסק פטור / זעיר",
+    hint: "לא גובים מע״מ: המע״מ ננעל על 0% באתר, בקופה ובמסמכי ה-PDF.",
+  },
+];
 
 const round2 = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 
@@ -37,6 +57,12 @@ export function calculateVat(itemsTotal: number, settings: VatSettings): VatBrea
   const rate = Number.isFinite(settings.vatRate) ? Math.max(0, settings.vatRate) : DEFAULT_VAT_RATE;
   const factor = rate / 100;
 
+  if (rate === 0) {
+    // עוסק פטור: אין מע"מ — הסכום הוא הסה"כ, בלי פירוט
+    const total = round2(itemsTotal);
+    return { net: total, vat: 0, gross: total, showBreakdown: false, vatRate: 0, exempt: true };
+  }
+
   if (settings.pricesIncludeVat) {
     const gross = round2(itemsTotal);
     const net = round2(gross / (1 + factor));
@@ -46,4 +72,16 @@ export function calculateVat(itemsTotal: number, settings: VatSettings): VatBrea
   const net = round2(itemsTotal);
   const vat = round2(net * factor);
   return { net, vat, gross: round2(net + vat), showBreakdown: true, vatRate: rate };
+}
+
+/**
+ * השורה הקטנה מתחת לסה"כ בסל / בקופה: "כולל מע"מ", או — כשלא נגבה מע"מ —
+ * "עוסק פטור" (כשהחנות מוגדרת כך) / "ללא מע"מ".
+ */
+export function vatTotalCaption(
+  vat: VatBreakdown,
+  businessType?: StoreBusinessType | null,
+): string {
+  if (vat.exempt) return businessType === "exempt" ? "עוסק פטור — ללא מע״מ" : "ללא מע״מ";
+  return "כולל מע״מ";
 }

@@ -316,6 +316,10 @@ function customerTotalsHtml(prepared: PreparedOrderEmail): string {
     parts.push(row('סה"כ לפני מע"מ', formatMoney(vat.net)));
     parts.push(row(`מע"מ ${vat.vatRate}%`, formatMoney(vat.vat)));
     parts.push(row('סה"כ לתשלום', formatMoney(vat.gross), true));
+  } else if (vat.exempt) {
+    // חלק 23: לא נגבה מע"מ (עוסק פטור)
+    parts.push(row('סה"כ לתשלום', formatMoney(vat.gross), true));
+    parts.push(row('ללא מע"מ', "", false, "#5b6670"));
   } else {
     parts.push(row('סה"כ לתשלום (כולל מע"מ)', formatMoney(vat.gross), true));
   }

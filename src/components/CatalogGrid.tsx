@@ -17,6 +17,8 @@ import {
 } from "@/lib/catalog";
 import { variantPriceRange, type CatalogVariant } from "@/lib/variants";
 import { richTextToPlain } from "@/lib/rich-text";
+import { ProductSticker } from "@/components/products/ProductSticker";
+import { cn } from "@/lib/utils";
 
 function ProductImage({ item }: { item: CatalogItem }) {
   return (
@@ -32,6 +34,8 @@ function ProductImage({ item }: { item: CatalogItem }) {
       ) : (
         <Package className="size-10 text-muted-foreground" />
       )}
+      {/* חלק 23: מדבקת המוצר — תמיד בפינה העליונה השמאלית */}
+      <ProductSticker sticker={item.sticker} />
       {(item.is_promo || item.original_price !== null) && (
         <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground sm:right-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs">
           <Flame className="size-3" />
@@ -41,7 +45,13 @@ function ProductImage({ item }: { item: CatalogItem }) {
         </span>
       )}
       {item.is_digital && (
-        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[11px] font-semibold text-white sm:left-3 sm:top-3">
+        <span
+          className={cn(
+            "absolute left-2 inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[11px] font-semibold text-white sm:left-3",
+            // הפינה העליונה השמאלית שמורה למדבקה — אז "דיגיטלי" יורד למטה
+            item.sticker ? "bottom-2 sm:bottom-3" : "top-2 sm:top-3",
+          )}
+        >
           <KeyRound className="size-3" aria-hidden="true" />
           דיגיטלי
         </span>

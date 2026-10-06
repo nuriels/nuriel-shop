@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { VatNote } from "@/components/VatNote";
 import { ProductRecommendations } from "@/components/sales/ProductRecommendations";
 import { useStorefrontSales } from "@/components/sales/StorefrontSalesContext";
 import { recommendForProduct } from "@/lib/cart-promotions";
-import { Flame, KeyRound, Link2, Package, Plus } from "lucide-react";
+import { Flame, KeyRound, Link2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ import type { AddToCart } from "@/lib/cart";
 import { hasVariants, variantPriceRange } from "@/lib/variants";
 import { cn } from "@/lib/utils";
 import { useBackToClose } from "@/hooks/useBackToClose";
+import { ProductImageCarousel } from "@/components/products/ProductImageCarousel";
+import { ProductSticker } from "@/components/products/ProductSticker";
 
 /** הכתובת הקבועה של עמוד המוצר (SEO, שיתוף, זאפ) */
 function productPath(productId: string): string {
@@ -135,7 +137,9 @@ export function ProductDetailView({
     [sales, product],
   );
   const [quantity, setQuantity] = useState(1);
-  const [activeImage, setActiveImage] = useState<string | null>(null);
+  // חלק 23: התמונה שמוצגת בקרוסלה (מתחלפת לבד; גם התמונות הקטנות בוחרות)
+  const [activeImage, setActiveImage] = useState(0);
+  const showImage = useCallback((next: number) => setActiveImage(next), []);
   // וריאציות (צבע / מידה): חובה לבחור לפני ההוספה לסל
   const choice = useVariantSelection(product);
 
@@ -149,13 +153,12 @@ export function ProductDetailView({
   // מוצר חדש נפתח — מתחילים ממארז/יחידה אחת ומהתמונה הראשית
   useEffect(() => {
     setQuantity(minimumQuantity(product));
-    setActiveImage(null);
+    setActiveImage(0);
     // מאפסים רק כשנפתח מוצר אחר — לא כשאותו מוצר נטען מחדש מהקטלוג
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product.id]);
 
   const categoryPath = tree.byName.get(product.category)?.path ?? [product.category];
-  const shownImage = activeImage ?? gallery[0] ?? null;
   // וריאציה עם מחיר משלה — בלי מחיר מבצע מחוק (המבצע הוא על מחיר המוצר)
   const variantOwnPrice = choice.variant?.own_price === true;
   const onSale = product.original_price !== null && !variantOwnPrice;
@@ -234,38 +237,33 @@ export function ProductDetailView({
       >
         {/* ---------- תמונה + גלריה ---------- */}
         <div className="min-w-0 bg-secondary/60 p-4 md:rounded-s-lg">
-          <div
-            className={cn(
-              "relative flex items-center justify-center",
-              isPage ? "h-72 sm:h-96" : "h-64 sm:h-80",
-            )}
+          {/* חלק 23: כמה תמונות — קרוסלה שמתחלפת כל 3 שניות (חצים, נקודות, החלקה) */}
+          <ProductImageCarousel
+            images={gallery}
+            alt={product.name}
+            index={activeImage}
+            onIndexChange={showImage}
+            className={isPage ? "h-72 sm:h-96" : "h-64 sm:h-80"}
           >
-            {shownImage ? (
-              <img
-                src={shownImage}
-                alt={product.name}
-                className="h-full w-full object-contain mix-blend-multiply"
-              />
-            ) : (
-              <Package className="size-16 text-muted-foreground" />
-            )}
+            <ProductSticker sticker={product.sticker} />
             {product.is_out_of_stock && (
-              <span className="absolute inset-x-0 bottom-2 mx-auto w-fit rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground">
+              <span className="absolute right-2 top-2 z-[1] w-fit rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground">
                 אזל מהמלאי
               </span>
             )}
-          </div>
+          </ProductImageCarousel>
           {gallery.length > 1 && (
             <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-              {gallery.map((url) => (
+              {gallery.map((url, imageIndex) => (
                 <button
                   key={url}
                   type="button"
-                  onClick={() => setActiveImage(url)}
-                  aria-label="הצגת תמונה"
+                  onClick={() => setActiveImage(imageIndex)}
+                  aria-label={`הצגת תמונה ${imageIndex + 1}`}
+                  aria-current={imageIndex === activeImage ? "true" : undefined}
                   className={cn(
                     "size-14 shrink-0 overflow-hidden rounded-md border-2 bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    url === shownImage ? "border-accent" : "border-transparent",
+                    imageIndex === activeImage ? "border-accent" : "border-transparent",
                   )}
                 >
                   <img src={url} alt="" className="h-full w-full object-contain" />

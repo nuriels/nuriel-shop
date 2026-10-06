@@ -12,6 +12,7 @@ import {
   packStep,
   type CatalogItem,
 } from "@/lib/catalog";
+import { ProductSticker } from "@/components/products/ProductSticker";
 
 /** רצועת "מבצעים חמים" — נגללת לרוחב, בראש הקטלוג */
 export function HotDealsStrip({
@@ -48,7 +49,7 @@ export function HotDealsStrip({
               type="button"
               onClick={() => setDetails(item)}
               aria-label={`פרטים על ${item.name}`}
-              className="flex h-28 cursor-pointer items-center justify-center bg-secondary/60 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              className="relative flex h-28 cursor-pointer items-center justify-center bg-secondary/60 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               {item.image_url ? (
                 <img
@@ -61,6 +62,10 @@ export function HotDealsStrip({
               ) : (
                 <Package className="size-8 text-muted-foreground" />
               )}
+              <ProductSticker
+                sticker={item.sticker}
+                className="left-1.5 top-1.5 sm:left-1.5 sm:top-1.5"
+              />
             </button>
             <div className="flex flex-1 flex-col gap-1.5 p-3">
               <button

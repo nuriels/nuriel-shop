@@ -24,7 +24,8 @@ import {
   cartTotal,
   type CartItem,
 } from "@/lib/orders";
-import type { VatBreakdown } from "@/lib/vat";
+import { vatTotalCaption, type VatBreakdown } from "@/lib/vat";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
 import type { FreeShippingProgress, GiftLine } from "@/lib/cart-promotions";
 import { FreeShippingBar } from "@/components/sales/FreeShippingBar";
 import { CartGiftLines } from "@/components/sales/CartGifts";
@@ -75,6 +76,7 @@ export function CheckoutSummary({
   couponSlot?: ReactNode;
 }) {
   const [openOnMobile, setOpenOnMobile] = useState(false);
+  const { settings } = useSiteSettings();
   const count = cartCount(items);
   const depositTotal = cartDepositTotal(items);
   const grandTotal = vat.gross + depositTotal;
@@ -291,7 +293,11 @@ export function CheckoutSummary({
                   {formatIls(grandTotal)}
                 </dd>
               </div>
-              {!vat.showBreakdown && <p className="text-xs text-muted-foreground">כולל מע״מ</p>}
+              {!vat.showBreakdown && (
+                <p className="text-xs text-muted-foreground" data-vat-caption>
+                  {vatTotalCaption(vat, settings?.business_type)}
+                </p>
+              )}
             </dl>
           ) : (
             <p className="rounded-lg bg-secondary/60 p-3 text-xs leading-5 text-muted-foreground">

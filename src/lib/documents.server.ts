@@ -121,7 +121,7 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
       supabaseAdmin
         .from("site_settings")
         .select(
-          "site_title, logo_path, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, prices_include_vat, vat_rate, brand_color, price_tiers_enabled",
+          "site_title, logo_path, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, prices_include_vat, vat_rate, brand_color, price_tiers_enabled, business_type",
         )
         .eq("id", true)
         .maybeSingle(),
@@ -193,6 +193,7 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
       email: settings?.business_email ?? "",
       logoDataUrl: await loadLogoDataUrl(settings?.logo_path ?? null),
       brandColor: settings?.brand_color ?? null,
+      businessType: settings?.business_type === "exempt" ? "exempt" : "authorized",
     },
     customer: {
       businessName: billing.name,

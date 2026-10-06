@@ -21,6 +21,9 @@ import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { BrandColorField } from "@/components/BrandColorField";
 import { SabbathModeCard } from "@/components/SabbathModeCard";
 import { LabelSizeCard } from "@/components/delivery/LabelSizeCard";
+import { useLegalIdentity } from "@/hooks/useLegalIdentity";
+import { BUSINESS_TYPE_OPTIONS, DEFAULT_VAT_RATE } from "@/lib/vat";
+import { cn } from "@/lib/utils";
 
 const NOT_IN_FORM = new Set<keyof SiteSettings>(SITE_FORM_EXCLUDED_KEYS);
 
@@ -42,6 +45,8 @@ export function SiteSettingsPanel() {
   const [form, setForm] = useState<SiteSettings | null>(settings);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
+  // פרטי החיוב מול הפלטפורמה — רק לרמז ("מוגדר אצלך עוסק פטור"), לא משנה כלום לבד
+  const billingSaysExempt = useLegalIdentity()?.businessType === "exempt";
 
   // הטופס מתמלא פעם אחת כשההגדרות נטענות. רענון מאוחר של ההגדרות (למשל אחרי
   // הפעלת מצב שבת) לא דורס שינויים שהמנהל הקליד ועוד לא שמר.
@@ -52,6 +57,7 @@ export function SiteSettingsPanel() {
   if (!form) return <p className="text-sm text-muted-foreground">טוען הגדרות...</p>;
 
   const dirty = settings !== null && !sameSettings(form, settings);
+  const exempt = form.business_type === "exempt";
 
   const patch = (next: Partial<SiteSettings>) =>
     setForm((current) => (current ? { ...current, ...next } : current));
@@ -345,7 +351,75 @@ export function SiteSettingsPanel() {
           <CardTitle className="text-base">מע״מ ותצוגת מחירים</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <label className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
+          {/* חלק 23: סוג העוסק — פטור נועל את המע"מ על 0% (גם במסד) */}
+          <fieldset className="space-y-2" data-business-type>
+            <legend className="text-sm font-medium">סוג העוסק</legend>
+            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="סוג העוסק">
+              {BUSINESS_TYPE_OPTIONS.map((option) => {
+                const selected = (exempt ? "exempt" : "authorized") === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() =>
+                      patch({
+                        business_type: option.value,
+                        // מה שהמסד יקבע בשמירה — כדי שהטופס יציג את זה כבר עכשיו
+                        vat_rate:
+                          option.value === "exempt"
+                            ? 0
+                            : form.business_type === "exempt" && Number(form.vat_rate) === 0
+                              ? DEFAULT_VAT_RATE
+                              : form.vat_rate,
+                      })
+                    }
+                    className={cn(
+                      "rounded-lg border p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      selected
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : "border-border hover:bg-secondary/60",
+                    )}
+                  >
+                    <span className="block text-sm font-semibold text-foreground">
+                      {option.label}
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+                      {option.hint}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {billingSaysExempt && form.business_type !== "exempt" && (
+              <p
+                className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs leading-5 text-amber-950"
+                role="note"
+              >
+                בפרטי החיוב שלך מוגדר &quot;עוסק פטור&quot;. אם זה נכון גם לחנות — בחרו כאן
+                &quot;עוסק פטור / זעיר&quot;, כדי שלא ייגבה מע״מ מהלקוחות.
+              </p>
+            )}
+          </fieldset>
+
+          {exempt ? (
+            <p
+              className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm leading-6 text-foreground"
+              data-vat-locked
+            >
+              <strong>עוסק פטור — המע״מ נעול על 0%.</strong> המחירים בקטלוג הם המחיר הסופי ללקוח:
+              בלי &quot;+ מע״מ&quot; ליד המחיר, בלי שורת מע״מ בסל ובקופה, ובמסמכי ההזמנה יופיע
+              &quot;עוסק פטור — ללא מע״מ&quot;.
+            </p>
+          ) : null}
+
+          <label
+            className={cn(
+              "flex items-start justify-between gap-3 rounded-lg border border-border p-3",
+              exempt && "hidden",
+            )}
+          >
             <span className="space-y-1">
               <span className="block text-sm font-medium">המחירים שמוזנים בקטלוג כוללים מע״מ</span>
               <span className="block text-xs text-muted-foreground">
@@ -361,7 +435,7 @@ export function SiteSettingsPanel() {
             />
           </label>
 
-          <div className="space-y-2 sm:max-w-48">
+          <div className={cn("space-y-2 sm:max-w-48", exempt && "hidden")}>
             <Label htmlFor="s-vat">שיעור מע״מ (%)</Label>
             <Input
               id="s-vat"

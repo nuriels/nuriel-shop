@@ -806,6 +806,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      product_stickers: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          image_url: string;
+          name: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          image_url: string;
+          name?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          image_url?: string;
+          name?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       product_relations: {
         Row: {
           tenant_id: string;
@@ -1499,6 +1526,9 @@ export type Database = {
           show_in_zap: boolean;
           low_stock_alerted: boolean;
           is_featured: boolean;
+          sticker_id: string | null;
+          sticker_size: number;
+          sticker_opacity: number;
         };
         Insert: {
           tenant_id?: string;
@@ -1543,6 +1573,9 @@ export type Database = {
           show_in_zap?: boolean;
           low_stock_alerted?: boolean;
           is_featured?: boolean;
+          sticker_id?: string | null;
+          sticker_size?: number;
+          sticker_opacity?: number;
         };
         Update: {
           tenant_id?: string;
@@ -1587,6 +1620,9 @@ export type Database = {
           show_in_zap?: boolean;
           low_stock_alerted?: boolean;
           is_featured?: boolean;
+          sticker_id?: string | null;
+          sticker_size?: number;
+          sticker_opacity?: number;
         };
         Relationships: [
           {
@@ -2283,6 +2319,8 @@ export type Database = {
           product_id: string;
           recorded_before: number | null;
           reserved_open: number | null;
+          unit_value: number | null;
+          value_source: "cost" | "price" | null;
         };
         Insert: {
           tenant_id?: string;
@@ -2297,6 +2335,8 @@ export type Database = {
           product_id: string;
           recorded_before?: number | null;
           reserved_open?: number | null;
+          unit_value?: number | null;
+          value_source?: "cost" | "price" | null;
         };
         Update: {
           tenant_id?: string;
@@ -2311,6 +2351,8 @@ export type Database = {
           product_id?: string;
           recorded_before?: number | null;
           reserved_open?: number | null;
+          unit_value?: number | null;
+          value_source?: "cost" | "price" | null;
         };
         Relationships: [];
       };
@@ -2341,6 +2383,7 @@ export type Database = {
           terms_content: string;
           updated_at: string;
           vat_rate: number;
+          business_type: "exempt" | "authorized";
           label_width_mm: number;
           label_height_mm: number;
           seo_title: string;
@@ -2390,6 +2433,7 @@ export type Database = {
           terms_content?: string;
           updated_at?: string;
           vat_rate?: number;
+          business_type?: "exempt" | "authorized";
           label_width_mm?: number;
           label_height_mm?: number;
           seo_title?: string;
@@ -2439,6 +2483,7 @@ export type Database = {
           terms_content?: string;
           updated_at?: string;
           vat_rate?: number;
+          business_type?: "exempt" | "authorized";
           label_width_mm?: number;
           label_height_mm?: number;
           seo_title?: string;
@@ -2844,6 +2889,7 @@ export type Database = {
           variants: Json;
           categories: string[];
           is_featured: boolean;
+          sticker: Json | null;
         }[];
       };
       admin_dashboard: { Args: never; Returns: Json };

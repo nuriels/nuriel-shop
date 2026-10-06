@@ -2,6 +2,7 @@ import { Package, Plus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { VatNote } from "@/components/VatNote";
 import { formatIls, type CatalogItem } from "@/lib/catalog";
+import { ProductSticker } from "@/components/products/ProductSticker";
 import { cn } from "@/lib/utils";
 import { hasVariants } from "@/lib/variants";
 
@@ -49,7 +50,7 @@ export function ProductRecommendations({
               >
                 <div
                   className={cn(
-                    "flex items-center justify-center bg-secondary/60 p-2",
+                    "relative flex items-center justify-center bg-secondary/60 p-2",
                     compact ? "h-20" : "h-24 sm:h-28",
                   )}
                 >
@@ -64,6 +65,10 @@ export function ProductRecommendations({
                   ) : (
                     <Package className="size-7 text-muted-foreground" aria-hidden="true" />
                   )}
+                  <ProductSticker
+                    sticker={item.sticker}
+                    className="left-1.5 top-1.5 sm:left-1.5 sm:top-1.5"
+                  />
                 </div>
                 <p
                   title={item.name}

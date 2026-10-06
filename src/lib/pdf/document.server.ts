@@ -24,6 +24,8 @@ export type DocumentBusiness = {
   logoDataUrl: string | null;
   /** חלק 22: צבע המותג של החנות (#rrggbb) — כותרות המסמך והטבלה; null = ברירת המחדל */
   brandColor?: string | null;
+  /** חלק 23: עוסק פטור — "עוסק פטור" ליד המספר, וסה"כ בלי מע"מ */
+  businessType?: "exempt" | "authorized" | null;
 };
 
 export type DocumentCustomer = {
@@ -183,7 +185,11 @@ export async function buildOrderDocumentPdf(
   y += 5.5;
 
   const businessLines = [
-    data.business.taxId ? `ח.פ / עוסק מורשה: ${data.business.taxId}` : "",
+    data.business.taxId
+      ? data.business.businessType === "exempt"
+        ? `עוסק פטור: ${data.business.taxId}`
+        : `ח.פ / עוסק מורשה: ${data.business.taxId}`
+      : "",
     data.business.address,
     data.business.supportPhone || data.business.phone
       ? `שירות לקוחות: ${data.business.supportPhone || data.business.phone}`
@@ -388,7 +394,17 @@ export async function buildOrderDocumentPdf(
           [`מע"מ ${data.vat.vatRate}%`, formatMoney(data.vat.vat), false],
           ['סה"כ לתשלום', formatMoney(data.vat.gross), true],
         ]
-      : [['סה"כ לתשלום (כולל מע"מ)', formatMoney(data.vat.gross), true]];
+      : data.vat.exempt
+        ? // חלק 23: לא נגבה מע"מ (עוסק פטור / 0%)
+          [
+            [
+              data.business.businessType === "exempt" ? 'עוסק פטור — ללא מע"מ' : 'ללא מע"מ',
+              "",
+              false,
+            ],
+            ['סה"כ לתשלום', formatMoney(data.vat.gross), true],
+          ]
+        : [['סה"כ לתשלום (כולל מע"מ)', formatMoney(data.vat.gross), true]];
 
     const summaryHeight = lines.length * 7 + 6;
     doc.setFillColor(SOFT);

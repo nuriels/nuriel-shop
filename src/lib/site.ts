@@ -3,6 +3,7 @@ import { compressLogoImage, compressProductImage, compressSideBannerImage } from
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { normalizeBrandColor } from "@/lib/brand-theme";
 import { DEFAULT_SENDER_LOCAL_PART } from "@/lib/email-sender";
+import type { StoreBusinessType } from "@/lib/vat";
 
 export const BRANDING_BUCKET = "branding";
 export const PRODUCT_IMAGES_BUCKET = "product-images";
@@ -35,6 +36,11 @@ export type SiteSettings = {
   /** true = המחירים בקטלוג כוללים מע"מ; false = מוסיפים מע"מ בעגלה ובמסמך */
   prices_include_vat: boolean;
   vat_rate: number;
+  /**
+   * חלק 23: סוג העוסק — "exempt" (עוסק פטור / זעיר): המע"מ ננעל על 0% בכל האתר
+   * (גם במסד); "authorized" (עוסק מורשה / חברה): המע"מ כרגיל
+   */
+  business_type: StoreBusinessType;
   /** true = האתר חסום ללקוחות ולאורחים; מנהלים ממשיכים לעבוד כרגיל */
   maintenance_mode: boolean;
   maintenance_message: string;
@@ -138,7 +144,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, card_payments_enabled, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, card_payments_enabled, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -153,6 +159,8 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
       ...row,
       label_width_mm: Number(row.label_width_mm) || DEFAULT_LABEL_SIZE.width,
       label_height_mm: Number(row.label_height_mm) || DEFAULT_LABEL_SIZE.height,
+      // חלק 23: ערך חסר (מסד לפני המיגרציה) = עוסק מורשה, כמו ברירת המחדל במסד
+      business_type: row.business_type === "exempt" ? "exempt" : "authorized",
     };
   }
   return {
@@ -171,6 +179,7 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     sells_alcohol: true,
     prices_include_vat: true,
     vat_rate: 18,
+    business_type: "authorized",
     maintenance_mode: false,
     maintenance_message: "",
     email_signature: "",

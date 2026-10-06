@@ -35,7 +35,7 @@ import {
   depositPerUnit,
   type CartItem,
 } from "@/lib/orders";
-import { calculateVat, DEFAULT_VAT_RATE } from "@/lib/vat";
+import { calculateVat, DEFAULT_VAT_RATE, vatTotalCaption } from "@/lib/vat";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useBackToClose } from "@/hooks/useBackToClose";
 import {
@@ -304,7 +304,11 @@ export function OrderCartDrawer({
                 </span>
               </div>
               {!vat.showBreakdown && (
-                <p className="text-xs text-muted-foreground">המחירים כוללים מע״מ</p>
+                <p className="text-xs text-muted-foreground">
+                  {vat.exempt
+                    ? vatTotalCaption(vat, settings?.business_type)
+                    : "המחירים כוללים מע״מ"}
+                </p>
               )}
               {cartNeedsShipping(items) && (
                 <p className="text-xs text-muted-foreground">
