@@ -1,13 +1,10 @@
 import { useState } from "react";
 import { CreditCard, Hourglass, Send, Users } from "lucide-react";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
+import { requestExtraAdminWithNotify } from "@/lib/admin-seats.functions";
 import { Button } from "@/components/ui/button";
-import {
-  EXTRA_ADMIN_YEARLY_PRICE,
-  requestExtraAdmin,
-  seatsFull,
-  type StoreAdminSeats,
-} from "@/lib/admin-seats";
+import { EXTRA_ADMIN_YEARLY_PRICE, seatsFull, type StoreAdminSeats } from "@/lib/admin-seats";
 
 /**
  * ניהול הצוות: כמה מנהלים מותרים בחבילה. בהגעה למגבלה — באנר שיווקי עם "שלח בקשת
@@ -21,6 +18,7 @@ export function AdminSeatsBanner({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const requestUpgrade = useServerFn(requestExtraAdminWithNotify);
   if (!seats) return null;
   const full = seatsFull(seats);
   const request = seats.request;
@@ -28,7 +26,7 @@ export function AdminSeatsBanner({
   const send = async () => {
     setBusy(true);
     try {
-      await requestExtraAdmin();
+      await requestUpgrade();
       toast.success("הבקשה נשלחה — נחזור אליך עם קישור תשלום");
       onChanged();
     } catch (error) {

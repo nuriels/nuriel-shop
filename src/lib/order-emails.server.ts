@@ -151,7 +151,7 @@ export async function sendShippedEmailInternal(
   const { data: orderData, error } = await supabaseAdmin
     .from("orders")
     .select(
-      `id, order_number, customer_id, kind, status, ${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, order_items (product_name, quantity, is_deposit, is_gift, is_digital)`,
+      `id, order_number, customer_id, kind, status, tracking_number, shipping_provider, tracking_url, ${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, order_items (product_name, quantity, is_deposit, is_gift, is_digital)`,
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -163,6 +163,9 @@ export async function sendShippedEmailInternal(
       customer_id: string | null;
       kind: string;
       status: string;
+      tracking_number: string | null;
+      shipping_provider: string | null;
+      tracking_url: string | null;
       order_items: {
         product_name: string | null;
         quantity: number;
@@ -176,6 +179,8 @@ export async function sendShippedEmailInternal(
   const physical = order.order_items.filter((item) => !item.is_deposit && !item.is_digital);
   if (physical.length === 0) return { sent: false, reason: "הזמנה דיגיטלית — אין משלוח פיזי" };
   const isPickup = order.shipping_kind === "pickup";
+  // חלק 25: יש מספר מעקב / קישור → מייל "ההזמנה שלך בדרך!" עם חברת השילוח וכפתור למעקב
+  const hasTracking = !isPickup && Boolean(order.tracking_number || order.tracking_url);
 
   const [{ data: customerRole }, { data: customerProfile }] = await Promise.all([
     order.customer_id
@@ -241,7 +246,8 @@ export async function sendShippedEmailInternal(
         : `<p>ההזמנה שלכם <strong dir="ltr">${escapeHtml(order.order_number)}</strong> יצאה למשלוח 🚚</p>
     <p>השליח ייצור קשר לפני ההגעה, אם יהיה צורך.</p>`
     }
-    ${deliveryHtml}
+    ${hasTracking ? trackingEmailHtml(order) : ""}
+  ${deliveryHtml}
     ${
       itemsHtml
         ? `<table style="width:100%;border-collapse:collapse;margin-top:12px;">
@@ -258,12 +264,31 @@ export async function sendShippedEmailInternal(
     template: "order_shipped",
     orderId,
     to: [to],
-    subject: isPickup
-      ? `הזמנה ${order.order_number} מוכנה לאיסוף`
-      : `הזמנה ${order.order_number} יצאה למשלוח`,
-    html: await renderEmailHtml(isPickup ? "ההזמנה מוכנה לאיסוף" : "ההזמנה יצאה למשלוח", body),
+    subject: hasTracking
+      ? `ההזמנה שלך בדרך! (${order.order_number})`
+      : isPickup
+        ? `הזמנה ${order.order_number} מוכנה לאיסוף`
+        : `הזמנה ${order.order_number} יצאה למשלוח`,
+    html: await renderEmailHtml(
+      hasTracking ? "ההזמנה שלך בדרך!" : isPickup ? "ההזמנה מוכנה לאיסוף" : "ההזמנה יצאה למשלוח",
+      body,
+    ),
     ...(order.customer_id
       ? { logFor: { userId: order.customer_id, kind: "order" as const, sentBy } }
       : {}),
   });
+}
+
+/** חלק 25: פרטי המעקב במייל — חברת שילוח, מספר מעקב וכפתור בולט לקישור המעקב */
+export function trackingEmailHtml(order: {
+  tracking_number: string | null;
+  shipping_provider: string | null;
+  tracking_url: string | null;
+}): string {
+  return `<div style="margin:12px 0;padding:16px 18px;border:2px solid #12211F;border-radius:12px;background:#f7faf7;">
+    <p style="margin:0 0 8px;font-size:20px;font-weight:bold;color:#12211F;">ההזמנה שלך בדרך! 🎉</p>
+    ${order.shipping_provider ? `<p style="margin:0;">חברת שילוח: <strong>${escapeHtml(order.shipping_provider)}</strong></p>` : ""}
+    ${order.tracking_number ? `<p style="margin:4px 0 0;">מספר מעקב: <strong dir="ltr" style="font-family:monospace;font-size:16px;letter-spacing:1px;">${escapeHtml(order.tracking_number)}</strong></p>` : ""}
+    ${order.tracking_url ? emailActionButton("מעקב אחר החבילה", order.tracking_url) : ""}
+  </div>`;
 }

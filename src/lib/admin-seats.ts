@@ -73,11 +73,6 @@ export async function loadStoreAdminSeats(): Promise<StoreAdminSeats> {
   return data as unknown as StoreAdminSeats;
 }
 
-export async function requestExtraAdmin(): Promise<void> {
-  const { error } = await supabase.rpc("request_extra_admin");
-  if (error) throw error;
-}
-
 export async function loadPlatformUpgradeRequests(): Promise<PlatformUpgradeRequest[]> {
   const { data, error } = await supabase.rpc("platform_upgrade_requests");
   if (error) throw error;

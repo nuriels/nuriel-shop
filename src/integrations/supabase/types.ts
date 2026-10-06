@@ -1801,6 +1801,7 @@ export type Database = {
           shipping_provider: string | null;
           tracking_url: string | null;
           tracking_updated_at: string | null;
+          tracking_notified_number: string | null;
           coupon_discount_type: string | null;
           coupon_discount_value: number | null;
           coupon_min_order: number | null;
@@ -1869,6 +1870,7 @@ export type Database = {
           shipping_provider?: string | null;
           tracking_url?: string | null;
           tracking_updated_at?: string | null;
+          tracking_notified_number?: string | null;
           coupon_discount_type?: string | null;
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;
@@ -1937,6 +1939,7 @@ export type Database = {
           shipping_provider?: string | null;
           tracking_url?: string | null;
           tracking_updated_at?: string | null;
+          tracking_notified_number?: string | null;
           coupon_discount_type?: string | null;
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;
@@ -2601,6 +2604,13 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      order_claim_tracking_email: { Args: { _order_id: string }; Returns: Json };
+      order_release_tracking_email: {
+        Args: { _order_id: string; _previous: string | null };
+        Returns: undefined;
+      };
+      upgrade_request_claim_notification: { Args: { _request_id: string }; Returns: boolean };
+      upgrade_request_release_notification: { Args: { _request_id: string }; Returns: undefined };
       store_admin_seats: { Args: Record<PropertyKey, never>; Returns: Json };
       request_extra_admin: { Args: Record<PropertyKey, never>; Returns: Json };
       platform_upgrade_requests: { Args: Record<PropertyKey, never>; Returns: Json };

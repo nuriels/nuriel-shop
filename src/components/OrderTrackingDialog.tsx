@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Loader2, Truck } from "lucide-react";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
+import { sendTrackingEmail } from "@/lib/tracking-email.functions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -37,6 +39,7 @@ export function OrderTrackingDialog({
   const [number, setNumber] = useState("");
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const notifyCustomer = useServerFn(sendTrackingEmail);
 
   useEffect(() => {
     if (!order) return;
@@ -60,7 +63,20 @@ export function OrderTrackingDialog({
         number,
         url,
       });
-      toast.success("פרטי השילוח נשמרו");
+      // חלק 25: מספר מעקב חדש → מייל "ההזמנה שלך בדרך!" ללקוח (פעם אחת לכל מספר)
+      let message = "פרטי השילוח נשמרו";
+      if (number.trim()) {
+        try {
+          const result = await notifyCustomer({ data: { orderId: order.id } });
+          if (result.sent) message = "פרטי השילוח נשמרו ונשלח מייל ללקוח";
+          else if (!result.skipped) toast.warning(`המייל ללקוח לא נשלח: ${result.reason ?? ""}`);
+        } catch (mailError) {
+          toast.warning(
+            `המייל ללקוח לא נשלח: ${mailError instanceof Error ? mailError.message : ""}`,
+          );
+        }
+      }
+      toast.success(message);
       onSaved();
       onClose();
     } catch (error) {
@@ -99,8 +115,8 @@ export function OrderTrackingDialog({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              שינוי הסטטוס כאן לא שולח מייל ללקוח — למייל &quot;נשלח&quot; השתמשו בפעולות שבכרטיס
-              ההזמנה.
+              מספר מעקב חדש שולח ללקוח מייל &quot;ההזמנה שלך בדרך!&quot; (פעם אחת לכל מספר). שינוי
+              הסטטוס לבד לא שולח מייל.
             </p>
           </div>
           <div className="space-y-1.5">

@@ -9,7 +9,7 @@ import { escapeHtml, emailActionButton, isValidEmail, sendEmail } from "@/lib/em
 import type { AddonPurchase } from "@/lib/addons";
 import { formatDate, formatShekels } from "@/lib/subscription";
 
-type Targets = {
+export type Targets = {
   tenant_id: string;
   store_name: string;
   store_slug: string;
@@ -17,7 +17,7 @@ type Targets = {
   platform_emails: string[];
 };
 
-function recipients(targets: Targets): string[] {
+export function recipients(targets: Targets): string[] {
   const override = (process.env["SUPPORT_NOTIFY_EMAIL"] ?? "")
     .split(",")
     .map((value) => value.trim().toLowerCase())
@@ -25,7 +25,7 @@ function recipients(targets: Targets): string[] {
   return override.length > 0 ? override : targets.platform_emails.filter((e) => isValidEmail(e));
 }
 
-function platformUrl(): string | null {
+export function platformUrl(): string | null {
   const host = process.env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase();
   return host ? `https://${host}/platform` : null;
 }
