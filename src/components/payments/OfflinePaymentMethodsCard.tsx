@@ -56,8 +56,7 @@ export function OfflinePaymentMethodsCard() {
     );
   }
 
-  const cardEnabled = settings?.card_payments_enabled === true;
-  const problem = offlinePaymentSettingsProblem(form, cardEnabled);
+  const problem = offlinePaymentSettingsProblem(form);
   const phoneProblem = bitPhoneProblem(form.bitPhone);
   const bitPhoneMissing = form.bitEnabled && normalizeBitPhone(form.bitPhone) === "";
   const dirty =

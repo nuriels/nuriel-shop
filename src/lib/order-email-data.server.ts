@@ -83,8 +83,8 @@ export type PreparedOrderEmail = {
 export const formatMoney = (value: number) => `₪${value.toFixed(2)}`;
 
 /**
- * null = ההזמנה ממתינה לתשלום באשראי (חלק 16) — המיילים יוצאים רק אחרי
- * שהתשלום אושר (src/server/services/payments.ts)
+ * null = ההזמנה ממתינה לתשלום (ביט — חלק 17ב) — המיילים יוצאים רק אחרי
+ * שהלקוח שולח אסמכתא / צילום מסך
  */
 export async function prepareOrderEmail(orderId: string): Promise<PreparedOrderEmail | null> {
   const { data: payment } = await supabaseAdmin
@@ -92,7 +92,7 @@ export async function prepareOrderEmail(orderId: string): Promise<PreparedOrderE
     .select("payment_method, payment_status, bit_transaction_id, bit_receipt_url")
     .eq("id", orderId)
     .maybeSingle();
-  // ממתינה לתשלום (אשראי, או ביט שעוד לא נשלחה עליו אסמכתא) — בלי מיילים
+  // ממתינה לתשלום (ביט שעוד לא נשלחה עליו אסמכתא) — בלי מיילים
   if (payment?.payment_status === "awaiting") return null;
 
   const { order, customerEmail, customerName, agentEmail, agentName, pdf, isGuest } =

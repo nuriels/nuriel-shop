@@ -144,17 +144,17 @@ export type CheckoutPayload = {
   /** קוד קופון (חלק 14) — "" = בלי. נבדק ונקבע במסד */
   coupon_code: string;
   /**
-   * אמצעי התשלום שהלקוח בחר (חלק 16ב) — בקשה בלבד: המסד מחליט
-   * (orders_card_payment_default). אשראי רק כשהסליקה פתוחה ופעילה בחנות.
+   * אמצעי התשלום שהלקוח בחר — בקשה בלבד: המסד מחליט לפי מה שזמין בחנות
+   * (הטריגר orders_default_payment)
    */
   payment_method: PaymentMethodChoice;
 };
 
 /**
- * "תשלום באשראי (מאובטח)", "תשלום טלפוני מול נציג" (בלי חיוב באתר) או
- * "תשלום בביט" (חלק 17ב — ההזמנה נשמרת ואז עוברים לעמוד התשלום בביט)
+ * "תשלום טלפוני מול נציג" (בלי חיוב באתר) או "תשלום בביט" (חלק 17ב — ההזמנה
+ * נשמרת ואז עוברים לעמוד התשלום בביט)
  */
-export type PaymentMethodChoice = "credit_card" | "offline" | "bit";
+export type PaymentMethodChoice = "offline" | "bit";
 
 export function checkoutPayload(
   form: CheckoutForm,

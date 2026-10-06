@@ -619,7 +619,7 @@ function SalesAnalytics({ onOpenProducts }: { onOpenProducts: () => void }) {
           value={data ? formatMoneyTile(data.revenue) : ""}
           delta={data ? periodDelta(data.revenue, data.prev.revenue) : null}
           deltaContext={context}
-          note="אשראי / ביט ששולמו, ותשלום במקום שנמסר · כולל מע״מ ומשלוח"
+          note="ביט ששולמו, ותשלום במקום שנמסר · כולל מע״מ ומשלוח"
           trend={data?.series}
           trendValue="revenue"
         />

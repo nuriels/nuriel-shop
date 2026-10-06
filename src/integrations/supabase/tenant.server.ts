@@ -93,7 +93,6 @@ export function invalidateTenantCache(tenantId: string): void {
 
 /**
  * רשומת החנות (עם המנוי והתוספים) לפי המזהה — גם מחוץ לבקשה של אותה חנות
- * (למשל בחזרה מדף התשלום של Hyp לדומיין של הפלטפורמה — חלק 16)
  */
 export async function loadTenantById(id: string): Promise<Tenant | null> {
   const { url, key } = serviceEnv();

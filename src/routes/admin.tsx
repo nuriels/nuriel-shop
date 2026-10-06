@@ -28,11 +28,8 @@ import { ShippingMethodsPanel } from "@/components/ShippingMethodsPanel";
 import { CustomPricesPanel } from "@/components/CustomPricesPanel";
 import { BillingPanel } from "@/components/billing/BillingPanel";
 import { AddonsStorePanel } from "@/components/billing/AddonsStorePanel";
-// TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
-// import { PaymentSettingsPanel } from "@/components/payments/PaymentSettingsPanel";
 import { LegalPagesPanel } from "@/components/legal/LegalPagesPanel";
 import { SiteInboxPanel, type InboxView } from "@/components/inbox/SiteInboxPanel";
-import { paymentOutcomeOf, type PaymentOutcome } from "@/lib/payments";
 import { PremiumLockCard } from "@/components/billing/PremiumLock";
 import { SupportPanel, type SupportCompose } from "@/components/support/SupportPanel";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -81,8 +78,6 @@ type Search = {
   ticket?: string | undefined;
   /** תמיכה: פנייה חדשה מוכנה מראש (premium / basic / billing) */
   compose?: string | undefined;
-  /** חזרה מדף התשלום של Hyp (חלק 16): success / failed / unverified */
-  payment?: PaymentOutcome | undefined;
   /** פניות מהאתר (חלק 16א): contact / cancellations */
   inbox?: InboxView | undefined;
 };
@@ -103,11 +98,9 @@ export const Route = createFileRoute("/admin")({
     const order = pickString(search["order"]);
     const ticket = pickString(search["ticket"]);
     const compose = pickString(search["compose"]);
-    const payment = paymentOutcomeOf(search["payment"]);
     const inbox = search["inbox"];
     if (tab) result.tab = tab;
     if (inbox === "contact" || inbox === "cancellations") result.inbox = inbox;
-    if (payment) result.payment = payment;
     if (order && /^[0-9a-f-]{36}$/i.test(order)) result.order = order;
     if (ticket && /^[0-9a-f-]{36}$/i.test(ticket)) result.ticket = ticket;
     if (compose && (COMPOSE_KEYS as readonly string[]).includes(compose)) result.compose = compose;
@@ -123,7 +116,7 @@ function AdminPage() {
   const { session, role, loading } = useAuthState();
   // הלשונית נשמרת בכתובת (?tab=orders): כל מעבר נרשם בהיסטוריה, כך ש"חזור"
   // בדפדפן מחזיר ללשונית הקודמת במקום לצאת מהפאנל
-  const { tab, ptab, pcat, pcust, order, ticket, compose, payment, inbox } = Route.useSearch();
+  const { tab, ptab, pcat, pcust, order, ticket, compose, inbox } = Route.useSearch();
   const navigate = Route.useNavigate();
 
   const signOut = async () => {
@@ -163,15 +156,6 @@ function AdminPage() {
     (next: string | null) =>
       void navigate({
         search: (prev) => ({ ...prev, tab: "support", ticket: next ?? undefined }),
-        resetScroll: false,
-      }),
-    [navigate],
-  );
-  const clearPayment = useCallback(
-    () =>
-      void navigate({
-        search: (prev) => ({ ...prev, payment: undefined }),
-        replace: true,
         resetScroll: false,
       }),
     [navigate],
@@ -369,26 +353,12 @@ function AdminPage() {
                 <SiteSettingsPanel />
                 {/* חלק 19: באנר צדדי למסכי מחשב */}
                 <SideBannerCard />
-                {/* חלק 17ב: תשלום טלפוני / ביט — גלוי (לא כמו הסליקה באשראי) */}
+                {/* חלק 17ב: אמצעי התשלום בקופה — טלפוני מול נציג / ביט */}
                 <OfflinePaymentMethodsCard />
-                {
-                  // TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
-                }
-                {/*
-                <PaymentSettingsPanel />
-                */}
               </TabsContent>
               <TabsContent value="legal">
                 <LegalPagesPanel />
               </TabsContent>
-              {
-                // TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
-              }
-              {/*
-              <TabsContent value="payments">
-                <PaymentSettingsPanel testOutcome={payment} onOutcomeSeen={clearPayment} />
-              </TabsContent>
-              */}
               <TabsContent value="marketing">
                 <MarketingPanel />
               </TabsContent>
@@ -407,12 +377,10 @@ function AdminPage() {
                 )}
               </TabsContent>
               <TabsContent value="addons">
-                <AddonsStorePanel paymentOutcome={payment} onOutcomeSeen={clearPayment} />
+                <AddonsStorePanel />
               </TabsContent>
               <TabsContent value="billing">
                 <BillingPanel
-                  paymentOutcome={payment}
-                  onOutcomeSeen={clearPayment}
                   onChoosePlan={(plan) => goTab("support", { compose: plan })}
                   onContactSupport={() => goTab("support", { compose: "billing" })}
                 />

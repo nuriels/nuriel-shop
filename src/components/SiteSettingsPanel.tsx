@@ -29,7 +29,7 @@ const NOT_IN_FORM = new Set<keyof SiteSettings>(SITE_FORM_EXCLUDED_KEYS);
 
 /**
  * האם שני מצבי הגדרות זהים (כל השדות פשוטים: טקסט / מספר / בוליאני / null).
- * שדות שנשמרים במקום אחר (סליקה, עמודים משפטיים) לא נחשבים — שמירה שם לא
+ * שדות שנשמרים במקום אחר (אמצעי תשלום, עמודים משפטיים) לא נחשבים — שמירה שם לא
  * הופכת את הטופס הזה ל"לא שמור".
  */
 function sameSettings(a: SiteSettings, b: SiteSettings): boolean {

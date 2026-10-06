@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { BUSINESS_TYPE_LABELS, type BusinessType } from "@/lib/payments";
+import { BUSINESS_TYPE_LABELS, type BusinessType } from "@/lib/billing-profile";
 
 /** השם המשפטי ומספר העוסק / ח.פ של החנות — לעמוד "צור קשר" (חובת גילוי) */
 export type LegalIdentity = {

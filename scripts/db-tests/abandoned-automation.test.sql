@@ -33,7 +33,6 @@ SELECT tests.check('store B admin: only store B''s cart',
   $$WITH x AS (SELECT set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-0000000000b1', true))
     SELECT array_agg(d) = ARRAY['ac000000-0000-0000-0000-000000000006']::uuid[] FROM x, LATERAL public.abandoned_carts_due() d$$);
 SELECT tests.run('guest: no permission', $$SELECT * FROM public.abandoned_carts_due()$$, NULL, 'permission denied');
-SELECT tests.check('card clearing is closed in the DB (Hyp frozen)', $$SELECT NOT public.card_clearing_live()$$);
 
 SELECT set_config('request.headers', '', false);
 DELETE FROM public.abandoned_carts WHERE id::text LIKE 'ac000000-%';

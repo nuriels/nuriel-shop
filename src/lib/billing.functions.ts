@@ -8,7 +8,12 @@ import {
   type SubscriptionState,
 } from "@/lib/subscription";
 import { parsePlatformAddons, type PlatformAddonRow } from "@/lib/addons";
-import { parseBillingProfile, type BillingProfile } from "@/lib/payments";
+import {
+  billingProfileProblem,
+  parseBillingProfile,
+  type BillingProfile,
+  type BillingProfileInput,
+} from "@/lib/billing-profile";
 
 /**
  * מנויים (חלק 13) — פונקציות השרת.
@@ -35,8 +40,6 @@ export type StoreBilling = {
   history: BillingEntry[];
   /** התוספים של החנות (חלק 15) — כולל שפגו / בוטלו */
   addons: PlatformAddonRow[];
-  /** סליקת הפלטפורמה מחוברת — תשלום מאובטח על המנוי (חלק 16) */
-  paymentsReady: boolean;
   billingProfile: BillingProfile | null;
 };
 
@@ -52,7 +55,6 @@ export const getStoreBilling = createServerFn({ method: "POST" })
       productCount: Number(root["product_count"] ?? 0) || 0,
       history: parseBillingHistory(root["history"]),
       addons: parsePlatformAddons(root["addons"]),
-      paymentsReady: root["payments_ready"] === true,
       billingProfile: root["billing_profile"] ? parseBillingProfile(root["billing_profile"]) : null,
     };
   });
@@ -213,4 +215,48 @@ export const platformSavePricing = createServerFn({ method: "POST" })
     });
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+// ------------------------------------------------------------
+// פרטי העוסק של בעל החנות (לחיוב המנוי והתוספים — תשלום ידני)
+// ------------------------------------------------------------
+
+export const saveBillingProfile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: BillingProfileInput) => {
+    const profile: BillingProfileInput = {
+      businessType: input?.businessType,
+      companyName: String(input?.companyName ?? "").trim(),
+      taxId: String(input?.taxId ?? "").replace(/\D/g, ""),
+      address: String(input?.address ?? "").trim(),
+      billingEmail: String(input?.billingEmail ?? "")
+        .trim()
+        .toLowerCase(),
+    };
+    const problem = billingProfileProblem(profile);
+    if (problem || !profile.businessType) throw new Error(problem ?? "בחרו סוג עוסק");
+    return { ...profile, businessType: profile.businessType };
+  })
+  .handler(async ({ data, context }): Promise<BillingProfile> => {
+    const { currentTenantId } = await import("@/integrations/supabase/tenant.server");
+    const { data: saved, error } = await context.supabase
+      .from("tenant_billing_profile")
+      .upsert(
+        {
+          tenant_id: currentTenantId(),
+          business_type: data.businessType,
+          company_name: data.companyName,
+          tax_id: data.taxId.padStart(9, "0"),
+          address: data.address,
+          billing_email: data.billingEmail || null,
+        },
+        { onConflict: "tenant_id" },
+      )
+      .select("business_type, company_name, tax_id, address, billing_email")
+      .single();
+    if (error) {
+      if (/tax_id_check/.test(error.message)) throw new Error("מספר ח.פ / ע.מ / ת.ז אינו תקין");
+      throw new Error(error.message);
+    }
+    return parseBillingProfile(saved);
   });

@@ -150,7 +150,7 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   other: "אחר",
 };
 
-/** אופן התשלום בהיסטוריה — גם תשלום באשראי דרך האתר (חלק 16) */
+/** אופן התשלום בהיסטוריה — credit_card: שורות ישנות בלבד (Hyp הוסר בחלק 28) */
 export type BillingMethod = PaymentMethod | "credit_card";
 
 export const BILLING_METHOD_LABELS: Record<BillingMethod, string> = {

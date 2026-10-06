@@ -37,7 +37,7 @@ SELECT pg_temp.mk('0a000000-0000-0000-0000-000000000002', 1);  -- במקום, נ
 SELECT pg_temp.mk('0a000000-0000-0000-0000-000000000003', 4);  -- במקום, ממתינה (לא שולמה)
 SELECT pg_temp.mk('0a000000-0000-0000-0000-000000000004', 9);  -- בוטלה
 SELECT pg_temp.mk('0a000000-0000-0000-0000-000000000005', 3);  -- החודש שעבר, שולמה
--- עדכון תשלום מותר רק במסלול התשלום (kobi.payment_update) — כמו Hyp / ביט
+-- עדכון תשלום מותר רק במסלול התשלום (kobi.payment_update) — כמו בביט; credit_card = הזמנה ישנה
 SELECT set_config('kobi.payment_update', 'on', false);
 UPDATE public.orders SET payment_method = 'credit_card', payment_status = 'paid', paid_at = now()
  WHERE id IN ('0a000000-0000-0000-0000-000000000001', '0a000000-0000-0000-0000-000000000004', '0a000000-0000-0000-0000-000000000005');

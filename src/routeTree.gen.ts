@@ -36,7 +36,6 @@ import { Route as AdminDashboardRouteImport } from './routes/admin_.dashboard'
 import { Route as AdminOrdersRouteImport } from './routes/admin_.orders'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
 import { Route as CourierTokenRouteImport } from './routes/courier.$token'
-import { Route as PaymentResultRouteImport } from './routes/payment.result'
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
 import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
 import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrades'
@@ -183,11 +182,6 @@ const CourierTokenRoute = CourierTokenRouteImport.update({
   path: '/courier/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PaymentResultRoute = PaymentResultRouteImport.update({
-  id: '/payment/result',
-  path: '/payment/result',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PlatformPlansRoute = PlatformPlansRouteImport.update({
   id: '/platform_/plans',
   path: '/platform/plans',
@@ -269,7 +263,6 @@ export interface FileRoutesByFullPath {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/courier/$token': typeof CourierTokenRoute
-  '/payment/result': typeof PaymentResultRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
   '/platform/upgrades': typeof PlatformUpgradesRoute
@@ -309,7 +302,6 @@ export interface FileRoutesByTo {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/courier/$token': typeof CourierTokenRoute
-  '/payment/result': typeof PaymentResultRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
   '/platform/upgrades': typeof PlatformUpgradesRoute
@@ -350,7 +342,6 @@ export interface FileRoutesById {
   '/admin_/orders': typeof AdminOrdersRoute
   '/admin_/settings': typeof AdminSettingsRoute
   '/courier/$token': typeof CourierTokenRoute
-  '/payment/result': typeof PaymentResultRoute
   '/platform_/plans': typeof PlatformPlansRoute
   '/platform_/support': typeof PlatformSupportRoute
   '/platform_/upgrades': typeof PlatformUpgradesRoute
@@ -392,7 +383,6 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/settings'
     | '/courier/$token'
-    | '/payment/result'
     | '/platform/plans'
     | '/platform/support'
     | '/platform/upgrades'
@@ -432,7 +422,6 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/settings'
     | '/courier/$token'
-    | '/payment/result'
     | '/platform/plans'
     | '/platform/support'
     | '/platform/upgrades'
@@ -472,7 +461,6 @@ export interface FileRouteTypes {
     | '/admin_/orders'
     | '/admin_/settings'
     | '/courier/$token'
-    | '/payment/result'
     | '/platform_/plans'
     | '/platform_/support'
     | '/platform_/upgrades'
@@ -513,7 +501,6 @@ export interface RootRouteChildren {
   AdminOrdersRoute: typeof AdminOrdersRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   CourierTokenRoute: typeof CourierTokenRoute
-  PaymentResultRoute: typeof PaymentResultRoute
   PlatformPlansRoute: typeof PlatformPlansRoute
   PlatformSupportRoute: typeof PlatformSupportRoute
   PlatformUpgradesRoute: typeof PlatformUpgradesRoute
@@ -717,13 +704,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CourierTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/payment/result': {
-      id: '/payment/result'
-      path: '/payment/result'
-      fullPath: '/payment/result'
-      preLoaderRoute: typeof PaymentResultRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/platform_/plans': {
       id: '/platform_/plans'
       path: '/platform/plans'
@@ -825,7 +805,6 @@ const rootRouteChildren: RootRouteChildren = {
   AdminOrdersRoute: AdminOrdersRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   CourierTokenRoute: CourierTokenRoute,
-  PaymentResultRoute: PaymentResultRoute,
   PlatformPlansRoute: PlatformPlansRoute,
   PlatformSupportRoute: PlatformSupportRoute,
   PlatformUpgradesRoute: PlatformUpgradesRoute,

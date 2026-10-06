@@ -30,15 +30,8 @@ const STATIC_PATH = /^\/assets\/|\.[a-z0-9]{2,5}$/i;
 const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml", "/zap.xml"]);
 // חלק 24: האייקונים ותמונת השיתוף (/pwa/…) נוצרים לפי החנות — לא קובץ סטטי בלי חנות
 const STORE_ASSET_PATH = /^\/pwa\//;
-// חלק 16: לכאן Hyp מחזיר את הלקוח אחרי התשלום (מוגדר במסוף כדף הצלחה וכישלון).
-// מטופל לפני נעילת החנות — חידוש מנוי של חנות שפג תוקפה חייב לעבור.
-const HYP_RETURN_PATH = "/payments/hyp/return";
-// חלק 16ב: הודעת שרת-לשרת מ-Hyp אחרי תשלום (Webhook / IPN) — מוגדרת במסוף.
-// גם היא לפני נעילת החנות, ובלי SSR (תשובת טקסט קצרה ל-Hyp).
-const HYP_WEBHOOK_PATH = "/api/webhooks/hyp";
-
-// הזמנות שלא שולמו תוך 30 דקות מבוטלות (המלאי חוזר) — בדיקה כל 5 דקות
-void import("./server/services/payments").then((m) => m.startPaymentExpiryJob());
+// הזמנות ביט שלא שולמו תוך 24 שעות מבוטלות (המלאי חוזר) — בדיקה כל 5 דקות
+void import("./server/services/payment-expiry").then((m) => m.startPaymentExpiryJob());
 
 const STORE_NOT_FOUND_HTML = `<!doctype html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8" /><title>החנות לא נמצאה</title>
@@ -141,17 +134,6 @@ export default {
           status: 404,
           headers: { "content-type": "text/html; charset=utf-8" },
         });
-      }
-      if (pathname === HYP_RETURN_PATH) {
-        const { handleHypReturn } = await import("./server/services/payments");
-        const { requestOrigin } = await import("./lib/feeds.server");
-        return await runWithTenant(host, tenant, () =>
-          handleHypReturn(request, requestOrigin(request)),
-        );
-      }
-      if (pathname === HYP_WEBHOOK_PATH) {
-        const { handleHypWebhook } = await import("./server/services/payments");
-        return await runWithTenant(host, tenant, () => handleHypWebhook(request));
       }
       if (FEED_PATHS.has(pathname)) {
         const { renderFeed } = await import("./lib/feeds.server");

@@ -13,7 +13,7 @@ import { attachmentBytesMatch, attachmentExtension, cleanAttachmentName } from "
 // אמצעי תשלום ומצבי תשלום
 // ------------------------------------------------------------
 
-/** offline = תשלום טלפוני מול נציג | credit_card = Hyp | bit = העברה בביט */
+/** offline = תשלום טלפוני מול נציג | bit = העברה בביט | credit_card = הזמנות ישנות (Hyp הוסר בחלק 28) */
 export type PaymentMethod = "offline" | "credit_card" | "bit";
 
 /**
@@ -40,11 +40,11 @@ export function paymentStatusLabel(
   const bit = method === "bit";
   switch (status) {
     case "awaiting":
-      return bit ? "ממתינה לתשלום בביט" : "ממתינה לתשלום באשראי";
+      return bit ? "ממתינה לתשלום בביט" : "ממתינה לתשלום";
     case "awaiting_verification":
       return "ממתינה לאישור תשלום (ביט)";
     case "paid":
-      return bit ? "שולמה בביט" : "שולמה באשראי";
+      return bit ? "שולמה בביט" : method === "credit_card" ? "שולמה באשראי" : "שולמה";
     case "expired":
       return "לא שולמה בזמן";
     case "rejected":
@@ -89,16 +89,13 @@ export type OfflinePaymentSettings = {
 };
 
 /** בדיקת ההגדרות לפני שמירה (כמו הטריגר במסד); null = תקין */
-export function offlinePaymentSettingsProblem(
-  settings: OfflinePaymentSettings,
-  cardEnabled = false,
-): string | null {
+export function offlinePaymentSettingsProblem(settings: OfflinePaymentSettings): string | null {
   const phoneProblem = bitPhoneProblem(settings.bitPhone);
   if (phoneProblem) return phoneProblem;
   if (settings.bitEnabled && normalizeBitPhone(settings.bitPhone) === "") {
     return "כדי להפעיל תשלום בביט יש להזין מספר טלפון לקבלת תשלום בביט";
   }
-  if (!settings.phoneEnabled && !settings.bitEnabled && !cardEnabled) {
+  if (!settings.phoneEnabled && !settings.bitEnabled) {
     return "יש להשאיר לפחות אמצעי תשלום אחד פעיל בקופה";
   }
   return null;

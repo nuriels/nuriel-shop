@@ -945,7 +945,7 @@ export function OrderManagementPanel({
                           }
                           const step = NEXT_STEP[orderGroupOf(order.status)];
                           if (!step) return null;
-                          // חלק 17ב: הזמנה שעוד לא שולמה (ביט / אשראי) לא יוצאת לטיפול —
+                          // חלק 17ב: הזמנה שעוד לא שולמה (ביט) לא יוצאת לטיפול —
                           // קודם מאשרים את התשלום (גם המסד חוסם)
                           const unpaid =
                             order.payment_status === "awaiting" ||

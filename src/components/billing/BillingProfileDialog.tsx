@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Building2, Loader2, ShieldCheck } from "lucide-react";
-import { saveBillingProfile } from "@/lib/payments.functions";
+import { saveBillingProfile } from "@/lib/billing.functions";
 import {
   BUSINESS_TYPES,
   BUSINESS_TYPE_LABELS,
@@ -9,7 +9,7 @@ import {
   taxIdLabel,
   type BillingProfile,
   type BusinessType,
-} from "@/lib/payments";
+} from "@/lib/billing-profile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertTriangle,
@@ -21,9 +20,7 @@ import {
 } from "lucide-react";
 import { getStoreBilling, type StoreBilling } from "@/lib/billing.functions";
 import { ADDON_DEFAULTS } from "@/lib/addons";
-import { BUSINESS_TYPE_LABELS, type BillingProfile, type PaymentOutcome } from "@/lib/payments";
-import { PaymentOutcomeBanner } from "@/components/billing/AddonsStorePanel";
-import { PlanPayDialog } from "@/components/billing/PlanPayDialog";
+import { BUSINESS_TYPE_LABELS, type BillingProfile } from "@/lib/billing-profile";
 import { BillingProfileDialog } from "@/components/billing/BillingProfileDialog";
 import {
   BILLING_KIND_LABELS,
@@ -64,19 +61,12 @@ type PaidPlan = Exclude<PlanType, "trial">;
 export function BillingPanel({
   onChoosePlan,
   onContactSupport,
-  paymentOutcome,
-  onOutcomeSeen,
 }: {
   onChoosePlan: (plan: PaidPlan) => void;
   onContactSupport: () => void;
-  /** חזרה מדף התשלום של Hyp (חלק 16) */
-  paymentOutcome?: PaymentOutcome | undefined;
-  onOutcomeSeen?: () => void;
 }) {
   const load = useServerFn(getStoreBilling);
-  const router = useRouter();
   const [data, setData] = useState<StoreBilling | null>(null);
-  const [payPlan, setPayPlan] = useState<PaidPlan | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -97,15 +87,7 @@ export function BillingPanel({
     void refresh();
   }, [refresh]);
 
-  // חזרה מתשלום מוצלח — המנוי מתעדכן גם בשאר המסכים (נעילות, באנרים)
-  useEffect(() => {
-    if (paymentOutcome === "success") void router.invalidate();
-  }, [paymentOutcome, router]);
-
   const sub = data?.subscription ?? null;
-  const paymentsReady = data?.paymentsReady === true;
-  // סליקת הפלטפורמה מחוברת: תשלום מאובטח; אחרת — פנייה לצוות (כמו קודם)
-  const choose = (plan: PaidPlan) => (paymentsReady ? setPayPlan(plan) : onChoosePlan(plan));
   const setProfile = (profile: BillingProfile) =>
     setData((current) => (current ? { ...current, billingProfile: profile } : current));
 
@@ -127,10 +109,6 @@ export function BillingPanel({
         </Button>
       </div>
 
-      {paymentOutcome && (
-        <PaymentOutcomeBanner outcome={paymentOutcome} onDismiss={onOutcomeSeen} />
-      )}
-
       {error && (
         <p role="alert" className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
@@ -141,7 +119,7 @@ export function BillingPanel({
         <>
           <CurrentPlanCard
             billing={data!}
-            onChoosePlan={choose}
+            onChoosePlan={onChoosePlan}
             onContactSupport={onContactSupport}
           />
           <AdminSeatsSummary />
@@ -154,11 +132,10 @@ export function BillingPanel({
 
       <PricingTables
         current={sub?.active && sub.plan !== "trial" ? sub.plan : null}
-        onChoose={choose}
-        renewable={paymentsReady}
+        onChoose={onChoosePlan}
       />
 
-      {data && (paymentsReady || data.billingProfile) && (
+      {data?.billingProfile && (
         <BillingProfileCard profile={data.billingProfile} onEdit={() => setProfileOpen(true)} />
       )}
 
@@ -166,12 +143,6 @@ export function BillingPanel({
 
       {data && data.history.length > 0 && <BillingHistory billing={data} />}
 
-      <PlanPayDialog
-        plan={payPlan}
-        billingProfile={data?.billingProfile ?? null}
-        onProfileSaved={setProfile}
-        onClose={() => setPayPlan(null)}
-      />
       <BillingProfileDialog
         open={profileOpen}
         initial={data?.billingProfile ?? null}
@@ -432,12 +403,9 @@ function CurrentPlanCard({
 function PricingTables({
   current,
   onChoose,
-  renewable = false,
 }: {
   current: PaidPlan | null;
   onChoose: (plan: PaidPlan) => void;
-  /** אפשר לחדש מראש את החבילה הנוכחית בתשלום מאובטח (חלק 16) */
-  renewable?: boolean;
 }) {
   // החבילות והמחירים — מהעורך של מנהל הפלטפורמה (חלק 14)
   const { catalog } = usePlanCatalog();
@@ -465,14 +433,12 @@ function PricingTables({
           plan="basic"
           info={catalog.plans.basic}
           current={current === "basic"}
-          renewable={renewable}
           onChoose={onChoose}
         />
         <PlanCard
           plan="premium"
           info={catalog.plans.premium}
           current={current === "premium"}
-          renewable={renewable}
           onChoose={onChoose}
           featured
         />
@@ -490,14 +456,12 @@ function PlanCard({
   info,
   current,
   featured = false,
-  renewable = false,
   onChoose,
 }: {
   plan: PaidPlan;
   info: PlanCardInfo;
   current: boolean;
   featured?: boolean;
-  renewable?: boolean;
   onChoose: (plan: PaidPlan) => void;
 }) {
   const monthly = info.monthlyPrice;
@@ -605,7 +569,7 @@ function PlanCard({
       <Button
         type="button"
         size="lg"
-        disabled={current && !renewable}
+        disabled={current}
         onClick={() => onChoose(plan)}
         className={cn(
           "mt-7 w-full text-base font-bold",
@@ -615,9 +579,7 @@ function PlanCard({
         )}
       >
         {current
-          ? renewable
-            ? "חידוש לשנה נוספת"
-            : "החבילה הנוכחית שלך"
+          ? "החבילה הנוכחית שלך"
           : `אני רוצה את ה${plan === "premium" ? "פרימיום" : "בסיסית"}`}
       </Button>
     </div>

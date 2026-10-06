@@ -3,8 +3,8 @@
  *
  * סיכום מלא לסוכן המשויך ולמנהלים שנבחרו בהגדרות המייל, ואישור ללקוח
  * (או לאורח — לאימייל שמילא בקופה). לכל המיילים מצורף מסמך PDF.
- * משותף ל-sendOrderEmails (לקוח מחובר / צוות), להזמנת אורח בקופה ולתשלום
- * שאושר (Webhook / חזרה מ-Hyp).
+ * משותף ל-sendOrderEmails (לקוח מחובר / צוות), להזמנת אורח בקופה ולהזמנת
+ * ביט אחרי שנשלחה אסמכתא.
  * כשלון שליחה לא מבטל את ההזמנה — היא כבר נשמרה במסד.
  *
  * חלק 17: אישור ההזמנה ללקוח — sendOrderEmail (src/server/services/notifications.ts):
@@ -34,8 +34,8 @@ export async function sendOrderEmailsInternal(
   orderId: string,
   sentBy: string | null,
 ): Promise<{ staff: SendResult; customer: SendResult }> {
-  // חלק 16: הזמנה שממתינה לתשלום באשראי — המיילים (והתראת המלאי) יוצאים רק
-  // אחרי שהתשלום אושר (src/server/services/payments.ts)
+  // הזמנה שממתינה לתשלום (ביט שעוד לא נשלחה עליו אסמכתא) — המיילים (והתראת
+  // המלאי) יוצאים רק אחרי שהלקוח שולח אסמכתא / צילום מסך
   const prepared = await prepareOrderEmail(orderId);
   if (!prepared) {
     const waiting = { sent: false, reason: "ההזמנה ממתינה לתשלום" };

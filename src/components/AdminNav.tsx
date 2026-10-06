@@ -71,8 +71,6 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
       { value: "coupons", label: "קופונים", icon: TicketPercent },
       { value: "abandoned", label: "עגלות נטושות", icon: ShoppingCart },
       { value: "shipping", label: "משלוחים", icon: Truck },
-      // TODO: Hyp/MAX credit card clearing is temporarily hidden until API details and business approval are finalized. Do not delete.
-      // { value: "payments", label: "אמצעי תשלום וסליקה", icon: CreditCard },
     ],
   },
   {

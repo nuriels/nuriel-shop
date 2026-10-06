@@ -7,7 +7,6 @@ import { SSL_AGENT_STALE_MS } from "@/lib/ssl-status";
 import { PLATFORM_SITE_NAME } from "@/lib/platform.functions";
 import { CreateStoreForm, type CreatedStore } from "@/components/platform/CreateStoreForm";
 import { PlatformAdminsCard } from "@/components/platform/PlatformAdminsCard";
-import { PlatformPaymentsCard } from "@/components/platform/PlatformPaymentsCard";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { StoreCredentials } from "@/components/platform/StoreCredentials";
 import { StoresTable, type Store } from "@/components/platform/StoresTable";
@@ -183,7 +182,6 @@ function PlatformConsole({
         </CardContent>
       </Card>
 
-      <PlatformPaymentsCard />
       <PlatformAdminsCard currentUserId={currentUserId} />
     </>
   );

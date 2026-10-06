@@ -4,7 +4,7 @@
  *  sendOrderEmail        — אישור הזמנה מעוצב ללקוח הקצה: מספר ההזמנה, סיכום
  *                          העגלה, הסכומים ופרטי המשלוח (+ מסמך PDF מצורף).
  *                          נקרא עם כל הזמנה (sendOrderEmailsInternal) — גם
- *                          אחרי תשלום מאושר ב-Webhook של Hyp.
+ *                          אחרי שנשלחה אסמכתת ביט.
  *  sendNotificationEmail — שליחה דרך Resend + רישום כל ניסיון ב-notification_logs.
  *  checkResendKey        — בדיקת מפתח Resend של חנות בשמירה (GET /domains).
  *
