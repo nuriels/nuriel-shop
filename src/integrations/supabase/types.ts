@@ -2604,6 +2604,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      store_analytics: { Args: { _period?: string }; Returns: Json };
       order_claim_tracking_email: { Args: { _order_id: string }; Returns: Json };
       order_release_tracking_email: {
         Args: { _order_id: string; _previous: string | null };

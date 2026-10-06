@@ -43,6 +43,7 @@ import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrade
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
 import { Route as PwaIconRouteImport } from './routes/pwa.$icon'
 import { Route as AdminSettingsDomainRouteImport } from './routes/admin_.settings_.domain'
+import { Route as ApiAdminAnalyticsRouteImport } from './routes/api.admin.analytics'
 import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$orderId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -215,6 +216,11 @@ const AdminSettingsDomainRoute = AdminSettingsDomainRouteImport.update({
   path: '/admin/settings/domain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminAnalyticsRoute = ApiAdminAnalyticsRouteImport.update({
+  id: '/api/admin/analytics',
+  path: '/api/admin/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CheckoutBitOrderIdRoute = CheckoutBitOrderIdRouteImport.update({
   id: '/checkout_/bit/$orderId',
   path: '/checkout/bit/$orderId',
@@ -256,6 +262,7 @@ export interface FileRoutesByFullPath {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
+  '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRoutesByTo {
@@ -293,6 +300,7 @@ export interface FileRoutesByTo {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
+  '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRoutesById {
@@ -331,6 +339,7 @@ export interface FileRoutesById {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/admin_/settings_/domain': typeof AdminSettingsDomainRoute
+  '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/checkout_/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRouteTypes {
@@ -370,6 +379,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/admin/settings/domain'
+    | '/api/admin/analytics'
     | '/checkout/bit/$orderId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -407,6 +417,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/admin/settings/domain'
+    | '/api/admin/analytics'
     | '/checkout/bit/$orderId'
   id:
     | '__root__'
@@ -444,6 +455,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/admin_/settings_/domain'
+    | '/api/admin/analytics'
     | '/checkout_/bit/$orderId'
   fileRoutesById: FileRoutesById
 }
@@ -482,6 +494,7 @@ export interface RootRouteChildren {
   ProductProductIdRoute: typeof ProductProductIdRoute
   PwaIconRoute: typeof PwaIconRoute
   AdminSettingsDomainRoute: typeof AdminSettingsDomainRoute
+  ApiAdminAnalyticsRoute: typeof ApiAdminAnalyticsRoute
   CheckoutBitOrderIdRoute: typeof CheckoutBitOrderIdRoute
 }
 
@@ -725,6 +738,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsDomainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/analytics': {
+      id: '/api/admin/analytics'
+      path: '/api/admin/analytics'
+      fullPath: '/api/admin/analytics'
+      preLoaderRoute: typeof ApiAdminAnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/checkout_/bit/$orderId': {
       id: '/checkout_/bit/$orderId'
       path: '/checkout/bit/$orderId'
@@ -770,6 +790,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProductProductIdRoute: ProductProductIdRoute,
   PwaIconRoute: PwaIconRoute,
   AdminSettingsDomainRoute: AdminSettingsDomainRoute,
+  ApiAdminAnalyticsRoute: ApiAdminAnalyticsRoute,
   CheckoutBitOrderIdRoute: CheckoutBitOrderIdRoute,
 }
 export const routeTree = rootRouteImport

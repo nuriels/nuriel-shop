@@ -2,16 +2,19 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import {
   ArrowLeft,
   Banknote,
+  Calculator,
   ClipboardList,
   Eye,
   Inbox,
   LayoutDashboard,
   Loader2,
   Minus,
+  PackageX,
   RefreshCw,
   TrendingDown,
   TrendingUp,
   TriangleAlert,
+  Trophy,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -23,7 +26,6 @@ import {
   formatMoneyTile,
   loadDashboard,
   periodDelta,
-  previousPeriodLabel,
   relativeTime,
   shortDay,
   type DashboardData,
@@ -32,6 +34,12 @@ import {
 } from "@/lib/dashboard";
 import { ORDER_KIND_LABEL, ORDER_STATUS_BADGE, ORDER_STATUS_LABEL } from "@/lib/orders";
 import { cn } from "@/lib/utils";
+import {
+  ANALYTICS_PERIODS,
+  fetchStoreAnalytics,
+  type AnalyticsPeriod,
+  type StoreAnalytics,
+} from "@/lib/analytics";
 
 /** רענון אוטומטי כשהלשונית פתוחה — הסטטוסים ברשימה מתעדכנים לבד */
 const REFRESH_MS = 30_000;
@@ -90,7 +98,6 @@ export function AdminDashboard({
         minute: "2-digit",
       })
     : null;
-  const comparedTo = previousPeriodLabel(now);
 
   return (
     <div className="space-y-5">
@@ -129,37 +136,9 @@ export function AdminDashboard({
       ) : (
         <>
           {/* ---------- כרטיסיות ---------- */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatTile
-              icon={Banknote}
-              label="הכנסות החודש"
-              loading={!data}
-              value={data ? formatMoneyTile(data.totals.revenueMonth) : ""}
-              delta={
-                data ? periodDelta(data.totals.revenueMonth, data.totals.revenuePrevPeriod) : null
-              }
-              deltaContext={`לעומת ${comparedTo}`}
-              note="הזמנות שלא בוטלו · כולל מע״מ ומשלוח"
-              trend={data?.series}
-              trendValue="revenue"
-            />
-            <StatTile
-              icon={ClipboardList}
-              label="הזמנות החודש"
-              loading={!data}
-              value={data ? data.totals.ordersMonth.toLocaleString("he-IL") : ""}
-              delta={
-                data ? periodDelta(data.totals.ordersMonth, data.totals.ordersPrevPeriod) : null
-              }
-              deltaContext={`לעומת ${comparedTo}`}
-              note={
-                data && data.totals.quotesMonth > 0
-                  ? `+ ${data.totals.quotesMonth} בקשות להצעת מחיר`
-                  : "בלי בקשות להצעת מחיר"
-              }
-              trend={data?.series}
-              trendValue="orders"
-            />
+          <SalesAnalytics onOpenProducts={() => onOpenTab("stock")} />
+          {/* ---------- תפעול ---------- */}
+          <div className="grid gap-3 sm:grid-cols-2">
             <StatTile
               icon={Inbox}
               label="הזמנות פתוחות"
@@ -570,5 +549,185 @@ function StatusBadge({ order }: { order: DashboardData["recent"][number] }) {
         </span>
       )}
     </span>
+  );
+}
+
+/**
+ * חלק 26: "ביצועי מכירות" — טווח (החודש / החודש שעבר / השנה), הכנסות ששולמו, הזמנות,
+ * ממוצע להזמנה (עם שינוי מול התקופה המקבילה), הנמכרים ביותר והתראות מלאי.
+ * הנתונים מ-GET /api/admin/analytics (store_analytics במסד).
+ */
+function SalesAnalytics({ onOpenProducts }: { onOpenProducts: () => void }) {
+  const [period, setPeriod] = useState<AnalyticsPeriod>("month");
+  const [data, setData] = useState<StoreAnalytics | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setData(null);
+    setError(null);
+    fetchStoreAnalytics(period)
+      .then((result) => {
+        if (alive) setData(result);
+      })
+      .catch((loadError: unknown) => {
+        if (alive) setError(loadError instanceof Error ? loadError.message : "טעינת הנתונים נכשלה");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [period]);
+  const context = ANALYTICS_PERIODS.find((p) => p.value === period)?.context ?? "";
+  return (
+    <section aria-labelledby="sales-title" className="space-y-3" data-sales-analytics="">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="sales-title" className="font-bold text-foreground">
+          ביצועי מכירות
+        </h2>
+        <div role="radiogroup" aria-label="טווח זמן" className="flex rounded-lg bg-secondary p-1">
+          {ANALYTICS_PERIODS.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              role="radio"
+              aria-checked={period === p.value}
+              onClick={() => setPeriod(p.value)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                period === p.value
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {error && (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm"
+        >
+          {error}
+        </p>
+      )}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatTile
+          icon={Banknote}
+          label="הכנסות (שולמו)"
+          loading={!data && !error}
+          value={data ? formatMoneyTile(data.revenue) : ""}
+          delta={data ? periodDelta(data.revenue, data.prev.revenue) : null}
+          deltaContext={context}
+          note="אשראי / ביט ששולמו, ותשלום במקום שנמסר · כולל מע״מ ומשלוח"
+          trend={data?.series}
+          trendValue="revenue"
+        />
+        <StatTile
+          icon={ClipboardList}
+          label="הזמנות"
+          loading={!data && !error}
+          value={data ? data.orders.toLocaleString("he-IL") : ""}
+          delta={data ? periodDelta(data.orders, data.prev.orders) : null}
+          deltaContext={context}
+          note={data ? `מתוכן ${data.paidOrders.toLocaleString("he-IL")} שולמו · בלי מבוטלות` : ""}
+          trend={data?.series}
+          trendValue="orders"
+        />
+        <StatTile
+          icon={Calculator}
+          label="ממוצע להזמנה"
+          loading={!data && !error}
+          value={data ? formatMoneyTile(data.aov) : ""}
+          delta={data ? periodDelta(data.aov, data.prev.aov) : null}
+          deltaContext={context}
+          note="הכנסות חלקי הזמנות ששולמו"
+        />
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Card className="shadow-card" data-top-products="">
+          <CardContent className="space-y-3 p-4">
+            <h3 className="flex items-center gap-2 font-bold text-foreground">
+              <Trophy className="size-4 text-accent" aria-hidden="true" />
+              הנמכרים ביותר
+            </h3>
+            {!data ? (
+              <p className="text-sm text-muted-foreground">{error ? "—" : "טוען…"}</p>
+            ) : data.topProducts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">עוד אין מכירות ששולמו בתקופה הזו</p>
+            ) : (
+              <ol className="space-y-2">
+                {data.topProducts.map((product, index) => (
+                  <li
+                    key={product.productId}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="numeric flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold">
+                        {index + 1}
+                      </span>
+                      <span className="truncate font-medium">{product.name}</span>
+                    </span>
+                    <span className="numeric shrink-0 text-muted-foreground">
+                      {product.units.toLocaleString("he-IL")} יח׳
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="shadow-card" data-stock-alerts="">
+          <CardContent className="space-y-3 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 font-bold text-foreground">
+                <PackageX className="size-4 text-destructive" aria-hidden="true" />
+                התראות מלאי
+                {data && data.stockAlertsTotal > 0 && (
+                  <Badge variant="destructive" className="numeric">
+                    {data.stockAlertsTotal}
+                  </Badge>
+                )}
+              </h3>
+              <Button variant="ghost" size="sm" onClick={onOpenProducts}>
+                למסך המלאי
+              </Button>
+            </div>
+            {!data ? (
+              <p className="text-sm text-muted-foreground">{error ? "—" : "טוען…"}</p>
+            ) : data.stockAlerts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">אין מוצרים עם 3 יחידות או פחות 👌</p>
+            ) : (
+              <ul className="space-y-2">
+                {data.stockAlerts.map((alert) => (
+                  <li
+                    key={`${alert.productId}-${alert.variant ?? ""}`}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="min-w-0 truncate font-medium">
+                      {alert.name}
+                      {alert.variant && (
+                        <span className="text-muted-foreground"> · {alert.variant}</span>
+                      )}
+                    </span>
+                    <Badge
+                      variant={alert.stock <= 0 ? "destructive" : "secondary"}
+                      className="numeric shrink-0"
+                    >
+                      {alert.stock <= 0 ? "אזל" : `${alert.stock} יח׳`}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {data && data.stockAlertsTotal > data.stockAlerts.length && (
+              <p className="text-xs text-muted-foreground">
+                ועוד {data.stockAlertsTotal - data.stockAlerts.length} מוצרים במלאי נמוך
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </section>
   );
 }
