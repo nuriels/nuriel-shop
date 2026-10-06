@@ -28,6 +28,8 @@ import {
 // לכל חנות מהמסד (src/lib/feeds.server.ts).
 const STATIC_PATH = /^\/assets\/|\.[a-z0-9]{2,5}$/i;
 const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml", "/zap.xml"]);
+// חלק 24: האייקונים ותמונת השיתוף (/pwa/…) נוצרים לפי החנות — לא קובץ סטטי בלי חנות
+const STORE_ASSET_PATH = /^\/pwa\//;
 // חלק 16: לכאן Hyp מחזיר את הלקוח אחרי התשלום (מוגדר במסוף כדף הצלחה וכישלון).
 // מטופל לפני נעילת החנות — חידוש מנוי של חנות שפג תוקפה חייב לעבור.
 const HYP_RETURN_PATH = "/payments/hyp/return";
@@ -126,7 +128,11 @@ export default {
     try {
       const host = requestHost(request);
       const pathname = new URL(request.url).pathname;
-      if (STATIC_PATH.test(pathname) && !FEED_PATHS.has(pathname)) {
+      if (
+        STATIC_PATH.test(pathname) &&
+        !FEED_PATHS.has(pathname) &&
+        !STORE_ASSET_PATH.test(pathname)
+      ) {
         return await runWithTenant(host, null, () => handle(request, env, ctx));
       }
       const tenant = await resolveTenant(host);

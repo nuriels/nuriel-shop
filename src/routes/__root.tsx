@@ -130,12 +130,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: description },
         // חלק 21: תמונת השיתוף — הלוגו של החנות (בעמוד מוצר: תמונת המוצר)
-        ...(loaderData?.schema?.logoUrl
+        // חלק 24: PNG מהלוגו מהדומיין של החנות (אם יש כתובת אתר); אחרת — כמו קודם
+        ...(loaderData?.shareImage
           ? [
-              { property: "og:image", content: loaderData.schema.logoUrl },
-              { name: "twitter:image", content: loaderData.schema.logoUrl },
+              { property: "og:image", content: loaderData.shareImage },
+              { name: "twitter:image", content: loaderData.shareImage },
             ]
-          : []),
+          : loaderData?.schema?.logoUrl
+            ? [
+                { property: "og:image", content: loaderData.schema.logoUrl },
+                { name: "twitter:image", content: loaderData.schema.logoUrl },
+              ]
+            : []),
         // צבע שורת הדפדפן בטלפון
         ...(brandColor ? [{ name: "theme-color", content: brandColor }] : []),
       ],
@@ -143,6 +149,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       links: [
         { rel: "stylesheet", href: appCss },
         { rel: "icon", type: "image/png", href: "/favicon.png" },
+        // חלק 24: אייקון "הוספה למסך הבית" — מהלוגו של החנות (אייפון: 180; אנדרואיד: 192)
+        ...(loaderData?.appleIcon
+          ? [
+              { rel: "apple-touch-icon", sizes: "180x180", href: loaderData.appleIcon },
+              {
+                rel: "icon",
+                type: "image/png",
+                sizes: "192x192",
+                href: loaderData.appleIcon.replace("apple-touch-icon", "icon-192"),
+              },
+            ]
+          : []),
         { rel: "preconnect", href: "https://fonts.googleapis.com" },
         { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
         {

@@ -41,6 +41,9 @@ import {
 import { CreateCustomerDialog } from "@/components/CreateCustomerDialog";
 import { InviteCustomerDialog } from "@/components/InviteCustomerDialog";
 import { CreateStaffAccountDialog } from "@/components/CreateStaffAccountDialog";
+import { AdminSeatsBanner } from "@/components/AdminSeatsBanner";
+import { useStoreAdminSeats } from "@/hooks/useStoreAdminSeats";
+import { seatsFull } from "@/lib/admin-seats";
 import { CustomerFileDialog } from "@/components/CustomerFileDialog";
 import { EditUserDialog } from "@/components/EditUserDialog";
 import { ChangeRoleDialog } from "@/components/ChangeRoleDialog";
@@ -192,6 +195,8 @@ function UserGroupNav({
 
 /** ניהול משתמשים — אישור/חסימה/מחיקה, איפוס סיסמה, קבוצת מחיר ושיוך סוכן */
 export function AdminUsersPanel({ isAdmin }: { isAdmin: boolean }) {
+  // חלק 24: כמה מנהלים מותרים בחבילה (המגבלה עצמה נאכפת במסד)
+  const { seats, reload: reloadSeats } = useStoreAdminSeats(isAdmin);
   const tiersEnabled = usePriceTiersEnabled();
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
@@ -781,6 +786,7 @@ export function AdminUsersPanel({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <section className="space-y-6">
+      {isAdmin && <AdminSeatsBanner seats={seats} onChanged={() => void reloadSeats()} />}
       <PasswordResetRequestsPanel />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -795,7 +801,13 @@ export function AdminUsersPanel({ isAdmin }: { isAdmin: boolean }) {
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
             רענון נתונים
           </Button>
-          <CreateStaffAccountDialog onCreated={load} />
+          <CreateStaffAccountDialog
+            onCreated={() => {
+              void load();
+              void reloadSeats();
+            }}
+            adminSeatsFull={seatsFull(seats)}
+          />
           <InviteCustomerDialog handlers={handlerOptions} />
           <CreateCustomerDialog
             agents={handlers.map((h) => ({

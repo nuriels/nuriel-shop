@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { Gem, LifeBuoy, Lock, Store } from "lucide-react";
+import { Gem, LifeBuoy, Lock, Store, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthState } from "@/hooks/useAuthState";
 import { FORBIDDEN_PAGE } from "@/lib/blocked-pages";
@@ -16,7 +16,7 @@ export function PlatformShell({
   active,
   children,
 }: {
-  active: "stores" | "support" | "plans";
+  active: "stores" | "support" | "plans" | "upgrades";
   children: (props: { userId: string }) => ReactNode;
 }) {
   const { session, loading } = useAuthState();
@@ -64,6 +64,13 @@ export function PlatformShell({
                   icon={<Gem className="size-4" />}
                 >
                   חבילות ומחירים
+                </NavLink>
+                <NavLink
+                  to="/platform/upgrades"
+                  active={active === "upgrades"}
+                  icon={<UserPlus className="size-4" />}
+                >
+                  בקשות שדרוג
                 </NavLink>
               </nav>
             )}
@@ -120,7 +127,7 @@ function NavLink({
   badge = 0,
   children,
 }: {
-  to: "/platform" | "/platform/support" | "/platform/plans";
+  to: "/platform" | "/platform/support" | "/platform/plans" | "/platform/upgrades";
   active: boolean;
   icon: ReactNode;
   badge?: number;

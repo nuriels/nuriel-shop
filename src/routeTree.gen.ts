@@ -38,7 +38,9 @@ import { Route as CourierTokenRouteImport } from './routes/courier.$token'
 import { Route as PaymentResultRouteImport } from './routes/payment.result'
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
 import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
+import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrades'
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
+import { Route as PwaIconRouteImport } from './routes/pwa.$icon'
 import { Route as AdminSettingsDomainRouteImport } from './routes/admin_.settings_.domain'
 import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$orderId'
 
@@ -187,9 +189,19 @@ const PlatformSupportRoute = PlatformSupportRouteImport.update({
   path: '/platform/support',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlatformUpgradesRoute = PlatformUpgradesRouteImport.update({
+  id: '/platform_/upgrades',
+  path: '/platform/upgrades',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProductProductIdRoute = ProductProductIdRouteImport.update({
   id: '/product/$productId',
   path: '/product/$productId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PwaIconRoute = PwaIconRouteImport.update({
+  id: '/pwa/$icon',
+  path: '/pwa/$icon',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminSettingsDomainRoute = AdminSettingsDomainRouteImport.update({
@@ -233,7 +245,9 @@ export interface FileRoutesByFullPath {
   '/payment/result': typeof PaymentResultRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
+  '/platform/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
+  '/pwa/$icon': typeof PwaIconRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
@@ -267,7 +281,9 @@ export interface FileRoutesByTo {
   '/payment/result': typeof PaymentResultRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
+  '/platform/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
+  '/pwa/$icon': typeof PwaIconRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
@@ -302,7 +318,9 @@ export interface FileRoutesById {
   '/payment/result': typeof PaymentResultRoute
   '/platform_/plans': typeof PlatformPlansRoute
   '/platform_/support': typeof PlatformSupportRoute
+  '/platform_/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
+  '/pwa/$icon': typeof PwaIconRoute
   '/admin_/settings_/domain': typeof AdminSettingsDomainRoute
   '/checkout_/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
@@ -338,7 +356,9 @@ export interface FileRouteTypes {
     | '/payment/result'
     | '/platform/plans'
     | '/platform/support'
+    | '/platform/upgrades'
     | '/product/$productId'
+    | '/pwa/$icon'
     | '/admin/settings/domain'
     | '/checkout/bit/$orderId'
   fileRoutesByTo: FileRoutesByTo
@@ -372,7 +392,9 @@ export interface FileRouteTypes {
     | '/payment/result'
     | '/platform/plans'
     | '/platform/support'
+    | '/platform/upgrades'
     | '/product/$productId'
+    | '/pwa/$icon'
     | '/admin/settings/domain'
     | '/checkout/bit/$orderId'
   id:
@@ -406,7 +428,9 @@ export interface FileRouteTypes {
     | '/payment/result'
     | '/platform_/plans'
     | '/platform_/support'
+    | '/platform_/upgrades'
     | '/product/$productId'
+    | '/pwa/$icon'
     | '/admin_/settings_/domain'
     | '/checkout_/bit/$orderId'
   fileRoutesById: FileRoutesById
@@ -441,7 +465,9 @@ export interface RootRouteChildren {
   PaymentResultRoute: typeof PaymentResultRoute
   PlatformPlansRoute: typeof PlatformPlansRoute
   PlatformSupportRoute: typeof PlatformSupportRoute
+  PlatformUpgradesRoute: typeof PlatformUpgradesRoute
   ProductProductIdRoute: typeof ProductProductIdRoute
+  PwaIconRoute: typeof PwaIconRoute
   AdminSettingsDomainRoute: typeof AdminSettingsDomainRoute
   CheckoutBitOrderIdRoute: typeof CheckoutBitOrderIdRoute
 }
@@ -651,11 +677,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformSupportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/platform_/upgrades': {
+      id: '/platform_/upgrades'
+      path: '/platform/upgrades'
+      fullPath: '/platform/upgrades'
+      preLoaderRoute: typeof PlatformUpgradesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/product/$productId': {
       id: '/product/$productId'
       path: '/product/$productId'
       fullPath: '/product/$productId'
       preLoaderRoute: typeof ProductProductIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pwa/$icon': {
+      id: '/pwa/$icon'
+      path: '/pwa/$icon'
+      fullPath: '/pwa/$icon'
+      preLoaderRoute: typeof PwaIconRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin_/settings_/domain': {
@@ -705,7 +745,9 @@ const rootRouteChildren: RootRouteChildren = {
   PaymentResultRoute: PaymentResultRoute,
   PlatformPlansRoute: PlatformPlansRoute,
   PlatformSupportRoute: PlatformSupportRoute,
+  PlatformUpgradesRoute: PlatformUpgradesRoute,
   ProductProductIdRoute: ProductProductIdRoute,
+  PwaIconRoute: PwaIconRoute,
   AdminSettingsDomainRoute: AdminSettingsDomainRoute,
   CheckoutBitOrderIdRoute: CheckoutBitOrderIdRoute,
 }

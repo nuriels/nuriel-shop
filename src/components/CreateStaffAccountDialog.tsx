@@ -29,7 +29,14 @@ import {
 } from "@/components/PasswordSetupFields";
 
 /** יצירת חשבון סוכן/מנהל ע"י אדמין */
-export function CreateStaffAccountDialog({ onCreated }: { onCreated: () => void }) {
+export function CreateStaffAccountDialog({
+  onCreated,
+  adminSeatsFull = false,
+}: {
+  onCreated: () => void;
+  /** חלק 24: החנות הגיעה למגבלת המנהלים בחבילה — אי אפשר לבחור "מנהל" */
+  adminSeatsFull?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -173,9 +180,16 @@ export function CreateStaffAccountDialog({ onCreated }: { onCreated: () => void 
                 <SelectContent dir="rtl">
                   <SelectItem value="agent">סוכן</SelectItem>
                   <SelectItem value="warehouse">מחסנאי (ליקוט בלבד)</SelectItem>
-                  <SelectItem value="admin">מנהל</SelectItem>
+                  <SelectItem value="admin" disabled={adminSeatsFull}>
+                    {adminSeatsFull ? "מנהל — הגעת למגבלה בחבילה" : "מנהל"}
+                  </SelectItem>
                 </SelectContent>
               </Select>
+              {adminSeatsFull && (
+                <p className="text-xs text-muted-foreground">
+                  הגעת למגבלת המנהלים בחבילה. להוספת מנהל — &quot;שלח בקשת שדרוג&quot; בראש המסך.
+                </p>
+              )}
             </div>
             <PasswordSetupFields value={passwordSetup} onChange={setPasswordSetup} />
 

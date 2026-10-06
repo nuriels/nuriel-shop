@@ -262,6 +262,8 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     tracking: null,
     promo: null,
     schema: null,
+    shareImage: null,
+    appleIcon: null,
   };
   if (isPlatformRequest()) return { siteName: PLATFORM_SITE_NAME, ...none };
   const tenant = maybeCurrentTenant();
@@ -298,6 +300,10 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
       : null;
   return {
     siteName: storeName || DEFAULT_STORE_NAME,
+    // חלק 24: תמונת שיתוף ואייקון מסך הבית — PNG מהלוגו, מהדומיין של החנות (/pwa/…);
+    // v משתנה כשהלוגו משתנה (ווטסאפ / אייפון שומרים במטמון)
+    shareImage: logoPath && origin ? `${origin}/pwa/og-image.png?v=${logoVersion(logoPath)}` : null,
+    appleIcon: logoPath ? `/pwa/apple-touch-icon.png?v=${logoVersion(logoPath)}` : null,
     brandColor: data?.brand_color ?? null,
     sabbath: data?.is_sabbath_mode === true,
     isDefaultStore: tenant.is_default,
@@ -323,3 +329,10 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
         : null,
   };
 });
+
+/** חלק 24: גרסה קצרה של נתיב הלוגו (מחרוזת → base36) — מתחלפת כשהלוגו מתחלף */
+function logoVersion(path: string): string {
+  let h = 5381;
+  for (let i = 0; i < path.length; i++) h = ((h << 5) + h + path.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}

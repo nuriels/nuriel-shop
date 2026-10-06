@@ -17,6 +17,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Users,
 } from "lucide-react";
 import { getStoreBilling, type StoreBilling } from "@/lib/billing.functions";
 import { ADDON_DEFAULTS } from "@/lib/addons";
@@ -38,6 +39,8 @@ import {
 } from "@/lib/subscription";
 import { usePlanCatalog } from "@/hooks/usePlanCatalog";
 import type { PlanCard as PlanCardInfo } from "@/lib/plan-catalog";
+import { PLAN_USERS_TEXT } from "@/lib/admin-seats";
+import { AdminSeatsSummary } from "@/components/billing/AdminSeatsSummary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -135,11 +138,14 @@ export function BillingPanel({
       )}
 
       {sub ? (
-        <CurrentPlanCard
-          billing={data!}
-          onChoosePlan={choose}
-          onContactSupport={onContactSupport}
-        />
+        <>
+          <CurrentPlanCard
+            billing={data!}
+            onChoosePlan={choose}
+            onContactSupport={onContactSupport}
+          />
+          <AdminSeatsSummary />
+        </>
       ) : (
         !error && (
           <div className="h-40 animate-pulse rounded-2xl bg-muted" aria-label="טוען את המנוי" />
@@ -566,6 +572,18 @@ function PlanCard({
       </p>
 
       <ul className="mt-6 flex-1 space-y-2.5">
+        {/* חלק 24: כמה משתמשים (מנהלים) בחבילה */}
+        <li data-plan-users="" className="flex items-start gap-2.5 text-sm font-semibold">
+          <span
+            className={cn(
+              "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full",
+              featured ? "bg-accent text-accent-foreground" : "bg-primary/10 text-primary",
+            )}
+          >
+            <Users className="size-3.5" aria-hidden="true" />
+          </span>
+          {PLAN_USERS_TEXT[plan]}
+        </li>
         {info.features.map((feature, index) => {
           const highlight = plan === "premium" && index === 0;
           return (

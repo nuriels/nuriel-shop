@@ -459,6 +459,7 @@ export type Database = {
           order_id: string | null;
           addon_name: string | null;
           plan_type: string | null;
+          extra_admins_count: number;
           months: number | null;
           period_end: string | null;
           amount: number;
@@ -483,6 +484,7 @@ export type Database = {
           order_id?: string | null;
           addon_name?: string | null;
           plan_type?: string | null;
+          extra_admins_count?: number;
           months?: number | null;
           period_end?: string | null;
           amount: number;
@@ -507,6 +509,7 @@ export type Database = {
           order_id?: string | null;
           addon_name?: string | null;
           plan_type?: string | null;
+          extra_admins_count?: number;
           months?: number | null;
           period_end?: string | null;
           amount?: number;
@@ -2586,6 +2589,16 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      store_admin_seats: { Args: Record<PropertyKey, never>; Returns: Json };
+      request_extra_admin: { Args: Record<PropertyKey, never>; Returns: Json };
+      platform_upgrade_requests: { Args: Record<PropertyKey, never>; Returns: Json };
+      platform_send_upgrade_link: {
+        Args: { _request_id: string; _payment_url: string };
+        Returns: undefined;
+      };
+      platform_approve_upgrade: { Args: { _request_id: string }; Returns: Json };
+      platform_delete_upgrade_request: { Args: { _request_id: string }; Returns: undefined };
+      tenant_admin_limit: { Args: { _tenant: string }; Returns: number };
       current_tenant_id: { Args: Record<string, never>; Returns: string | null };
       tenant_for_host: { Args: { _host: string }; Returns: string | null };
       is_platform_admin: { Args: { _user_id?: string }; Returns: boolean };
