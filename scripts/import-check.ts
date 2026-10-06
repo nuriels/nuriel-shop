@@ -32,8 +32,15 @@ const aliHtml = `
 </body></html>`;
 
 const images = extractImages(aliHtml);
-check("מערך imagePathList נקלט (הבאג המרכזי)", images.includes("https://ae01.alicdn.com/kf/A1.jpg"), images.join(" | "));
-check("תמונה שנייה מהמערך נקלטת ומוגדלת מ-thumbnail", images.includes("https://ae01.alicdn.com/kf/A2.jpg"));
+check(
+  "מערך imagePathList נקלט (הבאג המרכזי)",
+  images.includes("https://ae01.alicdn.com/kf/A1.jpg"),
+  images.join(" | "),
+);
+check(
+  "תמונה שנייה מהמערך נקלטת ומוגדלת מ-thumbnail",
+  images.includes("https://ae01.alicdn.com/kf/A2.jpg"),
+);
 check("כתובת //protocol-relative מטופלת", images.includes("https://ae01.alicdn.com/kf/A3.webp"));
 check("נמצאו לפחות 4 תמונות שונות", new Set(images).size >= 4, `נמצאו ${images.length}`);
 check("thumbnail כפול של A1 לא יוצר כפילות", images.filter((u) => u.includes("A1")).length === 1);
@@ -54,19 +61,35 @@ check("סריקה כללית מוגבלת ל-24", manyGeneric.length === 24, Str
 const manyStructured = extractImages(
   `<script>{"imagePathList":[${Array.from({ length: 35 }, (_, i) => `"https://ae01.alicdn.com/kf/S${i}.jpg"`).join(",")}]}</script>`,
 );
-check("גלריה מובנית ללא תקרת 12/16 — כל ה-35 נשלפות", manyStructured.length === 35, String(manyStructured.length));
+check(
+  "גלריה מובנית ללא תקרת 12/16 — כל ה-35 נשלפות",
+  manyStructured.length === 35,
+  String(manyStructured.length),
+);
 
 // --- באג הכפילויות: אותה תמונה בפורמט jpg + jpg_.webp ---
 const dupes = extractImages(`
 <script>{"imagePathList":["https://ae01.alicdn.com/kf/D1.jpg","https://ae01.alicdn.com/kf/D1.jpg_.webp","https://ae01.alicdn.com/kf/D2.png_960x960q75.png_.avif","https://ae01.alicdn.com/kf/D2.png"]}</script>`);
-check("jpg ו-jpg_.webp של אותה תמונה = פעם אחת", dupes.filter((u) => u.includes("D1")).length === 1, dupes.join(" | "));
-check("שרשור avif+מידות מזוהה ככפילות", dupes.filter((u) => u.includes("D2")).length === 1, dupes.join(" | "));
-check("סה\"כ 2 תמונות ייחודיות", dupes.length === 2, String(dupes.length));
+check(
+  "jpg ו-jpg_.webp של אותה תמונה = פעם אחת",
+  dupes.filter((u) => u.includes("D1")).length === 1,
+  dupes.join(" | "),
+);
+check(
+  "שרשור avif+מידות מזוהה ככפילות",
+  dupes.filter((u) => u.includes("D2")).length === 1,
+  dupes.join(" | "),
+);
+check('סה"כ 2 תמונות ייחודיות', dupes.length === 2, String(dupes.length));
 
 // --- תמונות צבעים (skuPropertyImagePath) נשלפות ---
 const sku = extractImages(`
 <script>{"imagePathList":["https://ae01.alicdn.com/kf/M.jpg"],"skuVals":[{"skuPropertyImagePath":"https://ae01.alicdn.com/kf/COLOR-GOLD.jpg"},{"skuPropertyImagePath":"https://ae01.alicdn.com/kf/COLOR-SILVER.jpg"}]}</script>`);
-check("תמונות צבעי המוצר נשלפות", sku.some((u) => u.includes("COLOR-GOLD")) && sku.some((u) => u.includes("COLOR-SILVER")), sku.join(" | "));
+check(
+  "תמונות צבעי המוצר נשלפות",
+  sku.some((u) => u.includes("COLOR-GOLD")) && sku.some((u) => u.includes("COLOR-SILVER")),
+  sku.join(" | "),
+);
 
 // --- קיצור כותרות ---
 const longTitle =
@@ -82,7 +105,11 @@ check("עברית: חיתוך במפריד ושמירה על תחילת השם",
 check("עברית: עד 8 מילים", hebrewShort.split(/\s+/).length <= 8, hebrewShort);
 
 check("כותרת קצרה נשארת כמו שהיא", shortenTitle("טבעת כסף 925") === "טבעת כסף 925");
-check("סיומת אתר מוסרת", !/AliExpress/i.test(shortenTitle("Gold Ring - AliExpress 2026")), shortenTitle("Gold Ring - AliExpress 2026"));
+check(
+  "סיומת אתר מוסרת",
+  !/AliExpress/i.test(shortenTitle("Gold Ring - AliExpress 2026")),
+  shortenTitle("Gold Ring - AliExpress 2026"),
+);
 
 // --- קיבוץ לפי קטגוריות ---
 const grouped = groupByCategory(
@@ -103,7 +130,10 @@ check(
 );
 check("קטגוריות זרות/ריקות בתחתית", grouped.at(-1)?.name !== "שעון" && grouped.length === 4);
 check("מוצרים מרובים באותה קטגוריה מקובצים", grouped[1]?.rows.length === 2);
-check("קטגוריה ריקה מקבלת תווית", grouped.some((g) => g.name === "ללא קטגוריה"));
+check(
+  "קטגוריה ריקה מקבלת תווית",
+  grouped.some((g) => g.name === "ללא קטגוריה"),
+);
 
 // --- חילוץ קישורים מטקסט שיווקי ---
 check(
@@ -112,9 +142,20 @@ check(
     "https://a.aliexpress.com/_mNvXyZ",
   String(extractUrlFromText("‏₪19.90 | עגילי זהב! https://a.aliexpress.com/_mNvXyZ לחצו!")),
 );
-check("פיסוק נדבק מוסר", extractUrlFromText("תראו: https://he.aliexpress.com/item/100500.html, מדהים") === "https://he.aliexpress.com/item/100500.html");
-check("קישור נקי נשאר כמו שהוא", extractUrlFromText("https://example.com/p/1") === "https://example.com/p/1");
-check("דומיין aliexpress בלי פרוטוקול", extractUrlFromText("מצאתי aliexpress.com/item/42.html שווה") === "https://aliexpress.com/item/42.html");
+check(
+  "פיסוק נדבק מוסר",
+  extractUrlFromText("תראו: https://he.aliexpress.com/item/100500.html, מדהים") ===
+    "https://he.aliexpress.com/item/100500.html",
+);
+check(
+  "קישור נקי נשאר כמו שהוא",
+  extractUrlFromText("https://example.com/p/1") === "https://example.com/p/1",
+);
+check(
+  "דומיין aliexpress בלי פרוטוקול",
+  extractUrlFromText("מצאתי aliexpress.com/item/42.html שווה") ===
+    "https://aliexpress.com/item/42.html",
+);
 check("טקסט בלי קישור מחזיר null", extractUrlFromText("סתם טקסט בלי כלום") === null);
 check("קלט ריק מחזיר null", extractUrlFromText("   ") === null);
 

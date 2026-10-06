@@ -24,6 +24,7 @@ import { CategoryManagerDialog } from "@/components/CategoryManagerDialog";
 import { AdminProductDialog, type ProductDraft } from "@/components/AdminProductDialog";
 import { ScanIntakeDialog } from "@/components/ScanIntakeDialog";
 import { ProductImportDialog } from "@/components/products/ProductImportDialog";
+import { ProductUrlImportDialog } from "@/components/products/ProductUrlImportDialog";
 import { ProductGrid } from "@/components/ProductGrid";
 import { usePriceTiersEnabled } from "@/hooks/usePriceTiers";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -411,6 +412,12 @@ export function AdminProductsPanel({
             onImported={load}
             productCount={products.length}
             maxProducts={maxProducts}
+          />
+          {/* ייבוא מוצר בודד מקישור — AliExpress, Amazon, חנות אחרת (חלק 29) */}
+          <ProductUrlImportDialog
+            disabled={maxProducts !== null && !loading && products.length >= maxProducts}
+            onSaved={load}
+            onDraftsChanged={loadDrafts}
           />
           {maxProducts !== null && !loading && products.length >= maxProducts ? (
             <span className="flex flex-col items-end gap-1">

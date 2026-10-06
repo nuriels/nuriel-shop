@@ -59,6 +59,7 @@ import {
   clampStickerSize,
 } from "@/lib/stickers";
 import { richTextIsEmpty, sanitizeRichHtml } from "@/lib/rich-text";
+import type { ProductPrefill } from "@/lib/url-import";
 import {
   Select,
   SelectContent,
@@ -391,6 +392,10 @@ export function AdminProductDialog({
   triggerLabel,
   initialBarcode,
   initialName,
+  prefill,
+  autoOpen = false,
+  hideTrigger = false,
+  onClosed,
 }: {
   /** ריק ליצירת מוצר חדש */
   product?: GlobalProduct;
@@ -404,6 +409,14 @@ export function AdminProductDialog({
   /** ערכים שמגיעים מסריקת ברקוד — ממלאים מראש את הטופס */
   initialBarcode?: string;
   initialName?: string;
+  /** ייבוא מקישור (חלק 29): שם, תיאור ותמונות שכבר נשמרו אצלנו — ממלאים מראש מוצר חדש */
+  prefill?: ProductPrefill;
+  /** לפתוח מיד, בלי לחיצה על הכפתור (אחרי ייבוא מקישור) */
+  autoOpen?: boolean;
+  /** בלי כפתור פתיחה — החלון נפתח מבחוץ (autoOpen) */
+  hideTrigger?: boolean;
+  /** נקרא כשהחלון נסגר (נשמר / בוטל) */
+  onClosed?: () => void;
 }) {
   const isEdit = product !== undefined;
   const tiersEnabled = usePriceTiersEnabled();
@@ -411,7 +424,13 @@ export function AdminProductDialog({
   const { can } = useSubscription();
   const categories = useCategories();
   const categoryTree = useCategoryTree();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen);
+  // ייבוא מקישור: מודיעים להורה כשהחלון נסגר (כדי להוריד אותו מהמסך)
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (wasOpen.current && !open) onClosed?.();
+    wasOpen.current = open;
+  }, [open, onClosed]);
   const [form, setForm] = useState<FormState>(() =>
     product ? fromProduct(product) : emptyForm(categories[0] ?? ""),
   );
@@ -454,10 +473,22 @@ export function AdminProductDialog({
             ...emptyForm(categories[0] ?? ""),
             barcode: initialBarcode ?? "",
             name: initialName ?? "",
+            ...(prefill
+              ? {
+                  name: prefill.name,
+                  description: prefill.description,
+                  imageUrl: prefill.imageUrl,
+                  extraImages: prefill.extraImages.slice(0, MAX_GALLERY - 1),
+                }
+              : {}),
           };
     setForm(initial);
     setLoaded(product ?? null);
-    baseline.current = JSON.stringify(initial);
+    // ייבוא מקישור: מה שיובא עוד לא נשמר — הטופס "לא שמור" מההתחלה, כך שהטיוטה
+    // נשמרת אוטומטית, וסגירה בלי שמירה לא מאבדת את הייבוא
+    baseline.current = JSON.stringify(
+      prefill && !product && !draft ? emptyForm(categories[0] ?? "") : initial,
+    );
 
     loadedRelated.current = [];
     loadedVariants.current = variantsSnapshot({ variantAttributes: [], variants: [] });
@@ -983,29 +1014,31 @@ export function AdminProductDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogTrigger asChild>
-          {isEdit ? (
-            <Button variant="outline" size="sm" className="min-h-11 w-full">
-              <Pencil className="size-4" />
-              עריכה
-            </Button>
-          ) : draft ? (
-            <Button size="sm" className="min-h-11 w-full">
-              <Pencil className="size-4" />
-              המשך עריכה
-            </Button>
-          ) : triggerLabel ? (
-            <Button size="sm" variant="outline">
-              <Plus className="size-4" />
-              {triggerLabel}
-            </Button>
-          ) : (
-            <Button>
-              <Plus className="size-4" />
-              מוצר חדש
-            </Button>
-          )}
-        </DialogTrigger>
+        {!hideTrigger && (
+          <DialogTrigger asChild>
+            {isEdit ? (
+              <Button variant="outline" size="sm" className="min-h-11 w-full">
+                <Pencil className="size-4" />
+                עריכה
+              </Button>
+            ) : draft ? (
+              <Button size="sm" className="min-h-11 w-full">
+                <Pencil className="size-4" />
+                המשך עריכה
+              </Button>
+            ) : triggerLabel ? (
+              <Button size="sm" variant="outline">
+                <Plus className="size-4" />
+                {triggerLabel}
+              </Button>
+            ) : (
+              <Button>
+                <Plus className="size-4" />
+                מוצר חדש
+              </Button>
+            )}
+          </DialogTrigger>
+        )}
         <DialogContent dir="rtl" className="max-h-[90vh] overflow-y-auto text-right">
           <DialogHeader>
             <DialogTitle>

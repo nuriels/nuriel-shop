@@ -174,7 +174,7 @@ function blockedAddressError(): ImageImportError {
  * תרגום הדומיין לכתובות IP — וחסימה אם אחת מהן פנימית. החיבור יוצא רק
  * לכתובות שבדקנו כאן (Node מעביר אותן ישר ל-connect).
  */
-const safeLookup: net.LookupFunction = (hostname, options, callback) => {
+export const safeLookup: net.LookupFunction = (hostname, options, callback) => {
   dns.lookup(hostname, { ...options, all: true }, (error, addresses) => {
     if (error) {
       callback(error, "", 4);
