@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AbandonedRemindersButton } from "@/components/marketing/AbandonedRemindersButton";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -174,10 +175,11 @@ export function AbandonedCartsPanel() {
             עגלות נטושות
           </h2>
           <p className="text-sm text-muted-foreground">
-            לקוחות שהזינו אימייל בקופה ולא השלימו את ההזמנה. תזכורת עם קישור שממלא את הסל מחדש —
-            ועם קופון, אם תרצו — מחזירה חלק נכבד מהם.
+            לקוחות שהזינו אימייל בקופה ולא השלימו את ההזמנה. תזכורת עם קישור שממלא את הסל מחדש — ועם
+            קופון, אם תרצו — מחזירה חלק נכבד מהם.
           </p>
         </div>
+        <AbandonedRemindersButton onDone={() => void load()} />
         <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
           {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
           רענון
@@ -227,7 +229,9 @@ export function AbandonedCartsPanel() {
             <span
               className={cn(
                 "rounded-full px-1.5 text-xs font-bold",
-                filter === option.value ? "bg-primary-foreground/20" : "bg-muted text-muted-foreground",
+                filter === option.value
+                  ? "bg-primary-foreground/20"
+                  : "bg-muted text-muted-foreground",
               )}
             >
               {counts[option.value]}
@@ -257,7 +261,8 @@ export function AbandonedCartsPanel() {
       ) : (
         <div className="space-y-3">
           {carts.map((cart) => {
-            const active = cart.status === "open" && Date.now() - Date.parse(cart.updated_at) < ACTIVE_MS;
+            const active =
+              cart.status === "open" && Date.now() - Date.parse(cart.updated_at) < ACTIVE_MS;
             return (
               <Card key={cart.id}>
                 <CardContent className="space-y-3 p-4">
@@ -266,12 +271,18 @@ export function AbandonedCartsPanel() {
                       <p className="flex flex-wrap items-center gap-2 font-semibold">
                         {cart.customer_name || "לקוח"}
                         {active && (
-                          <Badge variant="outline" className="border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+                          <Badge
+                            variant="outline"
+                            className="border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200"
+                          >
                             עדיין בקופה
                           </Badge>
                         )}
                         {cart.status === "recovered" && (
-                          <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800">
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-300 bg-emerald-50 text-emerald-800"
+                          >
                             הזמין
                           </Badge>
                         )}
@@ -282,7 +293,11 @@ export function AbandonedCartsPanel() {
                           {cart.email}
                         </span>
                         {cart.phone && (
-                          <a href={`tel:${cart.phone}`} className="inline-flex items-center gap-1 hover:underline" dir="ltr">
+                          <a
+                            href={`tel:${cart.phone}`}
+                            className="inline-flex items-center gap-1 hover:underline"
+                            dir="ltr"
+                          >
                             <Phone className="size-3.5" aria-hidden="true" />
                             {cart.phone}
                           </a>
@@ -334,9 +349,12 @@ export function AbandonedCartsPanel() {
                       {cart.reminder_count > 0 && cart.last_reminder_at && (
                         <span className="inline-flex items-center gap-1">
                           <MailCheck className="size-3.5 text-emerald-600" aria-hidden="true" />
-                          {cart.reminder_count === 1 ? "נשלחה תזכורת" : `נשלחו ${cart.reminder_count} תזכורות`}{" "}
+                          {cart.reminder_count === 1
+                            ? "נשלחה תזכורת"
+                            : `נשלחו ${cart.reminder_count} תזכורות`}{" "}
                           (אחרונה {timeAgo(cart.last_reminder_at)}
-                          {cart.last_reminder_coupon ? ` · קופון ${cart.last_reminder_coupon}` : ""})
+                          {cart.last_reminder_coupon ? ` · קופון ${cart.last_reminder_coupon}` : ""}
+                          )
                         </span>
                       )}
                       {cart.restored_at && (
@@ -376,7 +394,11 @@ export function AbandonedCartsPanel() {
                           <Trash2 className="size-4" />
                           מחיקה
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => void setStatus(cart, "open")}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void setStatus(cart, "open")}
+                        >
                           החזרה לרשימה
                         </Button>
                       </>
@@ -514,7 +536,9 @@ function ReminderDialog({
 
           {cart && (
             <div className="rounded-xl bg-secondary/50 p-3 text-sm">
-              <p className="font-semibold">בסל: {cart.items.length} מוצרים · {formatIls(cart.total)}</p>
+              <p className="font-semibold">
+                בסל: {cart.items.length} מוצרים · {formatIls(cart.total)}
+              </p>
               <p className="truncate text-xs text-muted-foreground">
                 {cart.items.map((item) => item.name).join(" · ")}
               </p>
@@ -528,7 +552,11 @@ function ReminderDialog({
             disabled={busy || message.trim().length < 2}
             onClick={() => void submit()}
           >
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4 -scale-x-100" />
+            )}
             שליחת התזכורת
           </Button>
         </div>

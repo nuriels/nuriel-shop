@@ -42,8 +42,10 @@ import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
 import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrades'
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
 import { Route as PwaIconRouteImport } from './routes/pwa.$icon'
+import { Route as AdminMarketingAbandonedCartsRouteImport } from './routes/admin_.marketing.abandoned-carts'
 import { Route as AdminSettingsDomainRouteImport } from './routes/admin_.settings_.domain'
 import { Route as ApiAdminAnalyticsRouteImport } from './routes/api.admin.analytics'
+import { Route as ApiAdminTriggerAbandonedCartsRouteImport } from './routes/api.admin.trigger-abandoned-carts'
 import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$orderId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -211,6 +213,12 @@ const PwaIconRoute = PwaIconRouteImport.update({
   path: '/pwa/$icon',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminMarketingAbandonedCartsRoute =
+  AdminMarketingAbandonedCartsRouteImport.update({
+    id: '/admin_/marketing/abandoned-carts',
+    path: '/admin/marketing/abandoned-carts',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AdminSettingsDomainRoute = AdminSettingsDomainRouteImport.update({
   id: '/admin_/settings_/domain',
   path: '/admin/settings/domain',
@@ -221,6 +229,12 @@ const ApiAdminAnalyticsRoute = ApiAdminAnalyticsRouteImport.update({
   path: '/api/admin/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminTriggerAbandonedCartsRoute =
+  ApiAdminTriggerAbandonedCartsRouteImport.update({
+    id: '/api/admin/trigger-abandoned-carts',
+    path: '/api/admin/trigger-abandoned-carts',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const CheckoutBitOrderIdRoute = CheckoutBitOrderIdRouteImport.update({
   id: '/checkout_/bit/$orderId',
   path: '/checkout/bit/$orderId',
@@ -261,8 +275,10 @@ export interface FileRoutesByFullPath {
   '/platform/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
+  '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRoutesByTo {
@@ -299,8 +315,10 @@ export interface FileRoutesByTo {
   '/platform/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
+  '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRoutesById {
@@ -338,8 +356,10 @@ export interface FileRoutesById {
   '/platform_/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/admin_/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin_/settings_/domain': typeof AdminSettingsDomainRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
+  '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/checkout_/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRouteTypes {
@@ -378,8 +398,10 @@ export interface FileRouteTypes {
     | '/platform/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/admin/marketing/abandoned-carts'
     | '/admin/settings/domain'
     | '/api/admin/analytics'
+    | '/api/admin/trigger-abandoned-carts'
     | '/checkout/bit/$orderId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -416,8 +438,10 @@ export interface FileRouteTypes {
     | '/platform/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/admin/marketing/abandoned-carts'
     | '/admin/settings/domain'
     | '/api/admin/analytics'
+    | '/api/admin/trigger-abandoned-carts'
     | '/checkout/bit/$orderId'
   id:
     | '__root__'
@@ -454,8 +478,10 @@ export interface FileRouteTypes {
     | '/platform_/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/admin_/marketing/abandoned-carts'
     | '/admin_/settings_/domain'
     | '/api/admin/analytics'
+    | '/api/admin/trigger-abandoned-carts'
     | '/checkout_/bit/$orderId'
   fileRoutesById: FileRoutesById
 }
@@ -493,8 +519,10 @@ export interface RootRouteChildren {
   PlatformUpgradesRoute: typeof PlatformUpgradesRoute
   ProductProductIdRoute: typeof ProductProductIdRoute
   PwaIconRoute: typeof PwaIconRoute
+  AdminMarketingAbandonedCartsRoute: typeof AdminMarketingAbandonedCartsRoute
   AdminSettingsDomainRoute: typeof AdminSettingsDomainRoute
   ApiAdminAnalyticsRoute: typeof ApiAdminAnalyticsRoute
+  ApiAdminTriggerAbandonedCartsRoute: typeof ApiAdminTriggerAbandonedCartsRoute
   CheckoutBitOrderIdRoute: typeof CheckoutBitOrderIdRoute
 }
 
@@ -731,6 +759,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PwaIconRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/marketing/abandoned-carts': {
+      id: '/admin_/marketing/abandoned-carts'
+      path: '/admin/marketing/abandoned-carts'
+      fullPath: '/admin/marketing/abandoned-carts'
+      preLoaderRoute: typeof AdminMarketingAbandonedCartsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/settings_/domain': {
       id: '/admin_/settings_/domain'
       path: '/admin/settings/domain'
@@ -743,6 +778,13 @@ declare module '@tanstack/react-router' {
       path: '/api/admin/analytics'
       fullPath: '/api/admin/analytics'
       preLoaderRoute: typeof ApiAdminAnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/trigger-abandoned-carts': {
+      id: '/api/admin/trigger-abandoned-carts'
+      path: '/api/admin/trigger-abandoned-carts'
+      fullPath: '/api/admin/trigger-abandoned-carts'
+      preLoaderRoute: typeof ApiAdminTriggerAbandonedCartsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/checkout_/bit/$orderId': {
@@ -789,8 +831,10 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformUpgradesRoute: PlatformUpgradesRoute,
   ProductProductIdRoute: ProductProductIdRoute,
   PwaIconRoute: PwaIconRoute,
+  AdminMarketingAbandonedCartsRoute: AdminMarketingAbandonedCartsRoute,
   AdminSettingsDomainRoute: AdminSettingsDomainRoute,
   ApiAdminAnalyticsRoute: ApiAdminAnalyticsRoute,
+  ApiAdminTriggerAbandonedCartsRoute: ApiAdminTriggerAbandonedCartsRoute,
   CheckoutBitOrderIdRoute: CheckoutBitOrderIdRoute,
 }
 export const routeTree = rootRouteImport

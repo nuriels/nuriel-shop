@@ -2604,6 +2604,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      abandoned_carts_due: {
+        Args: { _min_age_hours?: number; _limit?: number };
+        Returns: string[];
+      };
       store_analytics: { Args: { _period?: string }; Returns: Json };
       order_claim_tracking_email: { Args: { _order_id: string }; Returns: Json };
       order_release_tracking_email: {

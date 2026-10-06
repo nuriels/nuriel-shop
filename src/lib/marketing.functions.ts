@@ -222,58 +222,19 @@ export const sendCartReminder = createServerFn({ method: "POST" })
         throw new Error("תוקף הקופון הסתיים — בחרו קופון אחר");
       }
       couponLine = couponLabel(
-        coupon.discount_type === "fixed" ? "fixed" : "percent",
+        coupon.discount_type === "fixed" || coupon.discount_type === "free_shipping"
+          ? coupon.discount_type
+          : "percent",
         Number(coupon.discount_value),
       );
     }
 
-    const { escapeHtml, emailActionButton, renderEmailHtml, sendEmail, textToEmailHtml } =
-      await import("@/lib/email.server");
-    const { tenantSiteOrigin } = await import("@/integrations/supabase/tenant.server");
-    const restoreUrl = `${tenantSiteOrigin()}/checkout?restore=${cart.restore_token}`;
-
-    const items = (Array.isArray(cart.items) ? cart.items : []) as CartItem[];
-    const money = (value: number) => `₪${value.toFixed(2)}`;
-    const rows = items
-      .map((item) => {
-        const name = item.variant_label
-          ? `${item.name} — ${item.variant_label}`
-          : (item.name ?? "");
-        const image =
-          item.image_url && /^https?:\/\//i.test(item.image_url)
-            ? `<img src="${escapeHtml(item.image_url)}" alt="" width="48" height="48" style="width:48px;height:48px;object-fit:contain;border-radius:6px;background:#f3f5f3;" />`
-            : "";
-        return `<tr>
-          <td style="padding:6px 8px;border-bottom:1px solid #eee;width:56px;">${image}</td>
-          <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(name)}</td>
-          <td style="padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap;">× ${Number(item.quantity ?? 1)}</td>
-          <td style="padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap;">${money(Number(item.unit_price ?? 0) * Number(item.quantity ?? 1))}</td>
-        </tr>`;
-      })
-      .join("");
-    const greeting = cart.customer_name ? `שלום ${escapeHtml(cart.customer_name)},` : "שלום,";
-    const couponHtml = data.couponCode
-      ? `<div style="margin:18px 0;padding:14px 16px;border:2px dashed #16a34a;border-radius:10px;background:#f0fdf4;text-align:center;">
-          <p style="margin:0 0 6px;font-weight:bold;color:#166534;">🎁 מתנה בשבילכם: ${escapeHtml(couponLine)}</p>
-          <p style="margin:0;font-size:22px;font-weight:bold;letter-spacing:2px;color:#14532d;" dir="ltr">${escapeHtml(data.couponCode)}</p>
-          <p style="margin:6px 0 0;font-size:12px;color:#166534;">הקופון יופעל לבד בקופה דרך הכפתור למטה</p>
-        </div>`
-      : "";
-    const body = `
-      <p>${greeting}</p>
-      ${textToEmailHtml(data.message)}
-      ${couponHtml}
-      <table style="width:100%;border-collapse:collapse;margin-top:12px;">
-        <tbody>${rows}</tbody>
-      </table>
-      <p style="margin-top:10px;"><strong>סה"כ בסל: ${money(Number(cart.total))}</strong></p>
-      ${emailActionButton("להשלמת ההזמנה", restoreUrl)}
-    `;
-
-    const result = await sendEmail({
-      to: [cart.email],
-      subject: data.couponCode ? "שכחתם משהו בסל — ומחכה לכם הנחה 🎁" : "שכחתם משהו בסל? 🛒",
-      html: await renderEmailHtml("הסל שלכם מחכה לכם", body),
+    const { sendCartReminderEmail } = await import("@/lib/abandoned-carts.server");
+    const result = await sendCartReminderEmail({
+      cart,
+      message: data.message,
+      couponCode: data.couponCode,
+      couponLine,
     });
     if (!result.sent) throw new Error(result.reason ?? "שליחת המייל נכשלה");
 
