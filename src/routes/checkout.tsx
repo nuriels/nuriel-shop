@@ -424,7 +424,8 @@ function CheckoutPage() {
 
   // ---------- הסכומים, מתנות, משלוח חינם, מוצר קופה ----------
   // הנחת קופון — על סכום המוצרים (בלי משלוח / פיקדון / מתנות), כמו במסד
-  const discount = kind === "order" && coupon ? couponDiscount(coupon, productsSubtotal) : 0;
+  const discount =
+    kind === "order" && coupon ? couponDiscount(coupon, productsSubtotal, shippingAmount) : 0;
   const vat = calculateVat(cartTotal(cart) + shippingAmount - discount, {
     pricesIncludeVat: settings?.prices_include_vat ?? true,
     vatRate: Number(settings?.vat_rate ?? DEFAULT_VAT_RATE),

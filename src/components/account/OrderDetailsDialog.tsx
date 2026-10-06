@@ -40,6 +40,7 @@ import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { DigitalBadge, ItemStatusBadge, LicenseKeyDisplay } from "@/components/OrderItemExtras";
 import { hasShippingLine, orderShippingLabel, shippingWasFree } from "@/lib/shipping";
 import { orderDiscount, orderDiscountLabel } from "@/lib/coupons";
+import { OrderTrackingInfo } from "@/components/account/OrderTrackingInfo";
 
 /**
  * פירוט הזמנה / קבלה ללקוח: מצב ההזמנה, הפריטים, הסכומים (כולל מע"מ),
@@ -145,6 +146,8 @@ function OrderDetails({
       </DialogHeader>
 
       <OrderStatusSteps status={order.status} attempts={order.delivery_attempts ?? 0} />
+      {/* חלק 24: מספר מעקב וקישור למעקב — כשהחנות הזינה */}
+      <OrderTrackingInfo order={order} />
 
       {/* ---------- פריטים ---------- */}
       <section aria-label="פריטים" className="rounded-xl border border-border">

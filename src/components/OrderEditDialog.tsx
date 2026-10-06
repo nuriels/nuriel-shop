@@ -100,7 +100,10 @@ export function OrderEditDialog({
     order.shipping_kind !== "digital" &&
     (shippingName !== null || Number(order.shipping_price ?? 0) > 0 || order.kind === "order");
   // הנחת קופון (חלק 14) — לפי התנאים שצולמו בהזמנה, על המוצרים אחרי העריכה
-  const discount = isQuote && !convertToOrder ? 0 : orderCouponDiscount(order, productsTotal);
+  const discount =
+    isQuote && !convertToOrder
+      ? 0
+      : orderCouponDiscount(order, productsTotal, Number(order.shipping_price ?? 0));
   const activeTotal = itemsTotal + shippingCharge - discount;
   const vat = calculateVat(activeTotal, {
     pricesIncludeVat: order.prices_include_vat ?? true,

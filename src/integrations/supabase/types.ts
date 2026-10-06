@@ -101,7 +101,7 @@ export type Database = {
           id: string;
           tenant_id: string;
           code: string;
-          discount_type: "percent" | "fixed";
+          discount_type: "percent" | "fixed" | "free_shipping";
           discount_value: number;
           is_active: boolean;
           description: string | null;
@@ -117,7 +117,7 @@ export type Database = {
           id?: string;
           tenant_id?: string;
           code: string;
-          discount_type: "percent" | "fixed";
+          discount_type: "percent" | "fixed" | "free_shipping";
           discount_value: number;
           is_active?: boolean;
           description?: string | null;
@@ -133,7 +133,7 @@ export type Database = {
           id?: string;
           tenant_id?: string;
           code?: string;
-          discount_type?: "percent" | "fixed";
+          discount_type?: "percent" | "fixed" | "free_shipping";
           discount_value?: number;
           is_active?: boolean;
           description?: string | null;
@@ -1797,6 +1797,10 @@ export type Database = {
           shipping_price: number;
           coupon_id: string | null;
           coupon_code: string | null;
+          tracking_number: string | null;
+          shipping_provider: string | null;
+          tracking_url: string | null;
+          tracking_updated_at: string | null;
           coupon_discount_type: string | null;
           coupon_discount_value: number | null;
           coupon_min_order: number | null;
@@ -1861,6 +1865,10 @@ export type Database = {
           shipping_price?: number;
           coupon_id?: string | null;
           coupon_code?: string | null;
+          tracking_number?: string | null;
+          shipping_provider?: string | null;
+          tracking_url?: string | null;
+          tracking_updated_at?: string | null;
           coupon_discount_type?: string | null;
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;
@@ -1925,6 +1933,10 @@ export type Database = {
           shipping_price?: number;
           coupon_id?: string | null;
           coupon_code?: string | null;
+          tracking_number?: string | null;
+          shipping_provider?: string | null;
+          tracking_url?: string | null;
+          tracking_updated_at?: string | null;
           coupon_discount_type?: string | null;
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;

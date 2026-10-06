@@ -53,11 +53,15 @@ import { cn } from "@/lib/utils";
 type Usage = { uses: number; total: number };
 
 const STATUS_STYLE: Record<CouponStatus, string> = {
-  active: "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
+  active:
+    "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
   inactive: "border-border bg-muted text-muted-foreground",
-  scheduled: "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200",
-  expired: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
-  used_up: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
+  scheduled:
+    "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200",
+  expired:
+    "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
+  used_up:
+    "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
 };
 
 const shortDate = (iso: string) =>
@@ -130,8 +134,13 @@ export function CouponsPanel() {
   }, [load]);
 
   const toggle = async (coupon: Coupon, next: boolean) => {
-    setCoupons((list) => list?.map((c) => (c.id === coupon.id ? { ...c, is_active: next } : c)) ?? list);
-    const { error } = await supabase.from("coupons").update({ is_active: next }).eq("id", coupon.id);
+    setCoupons(
+      (list) => list?.map((c) => (c.id === coupon.id ? { ...c, is_active: next } : c)) ?? list,
+    );
+    const { error } = await supabase
+      .from("coupons")
+      .update({ is_active: next })
+      .eq("id", coupon.id);
     if (error) {
       toast.error(error.message);
       void load();
@@ -167,13 +176,17 @@ export function CouponsPanel() {
             קופונים וקודי הנחה
           </h2>
           <p className="text-sm text-muted-foreground">
-            קוד שהלקוח מקליד בקופה ומקבל הנחה — באחוזים או בסכום קבוע, מסכום המוצרים (לפני
-            משלוח). אפשר להציג קוד בפופ-אפ המבצעים ולצרף לתזכורת על עגלה נטושה.
+            קוד שהלקוח מקליד בקופה ומקבל הנחה — באחוזים או בסכום קבוע, מסכום המוצרים (לפני משלוח).
+            אפשר להציג קוד בפופ-אפ המבצעים ולצרף לתזכורת על עגלה נטושה.
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
             רענון
           </Button>
           <Button size="sm" onClick={() => setEditing("new")}>
@@ -211,7 +224,10 @@ export function CouponsPanel() {
             const used = usage.get(coupon.id) ?? { uses: 0, total: 0 };
             const status = couponStatus(coupon, used.uses);
             return (
-              <Card key={coupon.id} className={cn("overflow-hidden", !coupon.is_active && "opacity-75")}>
+              <Card
+                key={coupon.id}
+                className={cn("overflow-hidden", !coupon.is_active && "opacity-75")}
+              >
                 <CardContent className="space-y-3 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -223,13 +239,18 @@ export function CouponsPanel() {
                         title="העתקת הקוד"
                       >
                         {coupon.code}
-                        <Copy className="size-3.5 opacity-50 group-hover:opacity-100" aria-hidden="true" />
+                        <Copy
+                          className="size-3.5 opacity-50 group-hover:opacity-100"
+                          aria-hidden="true"
+                        />
                       </button>
                       <p className="mt-1.5 text-base font-bold">
                         {couponLabel(coupon.discount_type, coupon.discount_value)}
                       </p>
                       {coupon.description && (
-                        <p className="truncate text-xs text-muted-foreground">{coupon.description}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {coupon.description}
+                        </p>
                       )}
                     </div>
                     <div className="flex flex-col items-end gap-2">
@@ -247,7 +268,9 @@ export function CouponsPanel() {
                     <dt className="text-muted-foreground">שימושים</dt>
                     <dd className="font-semibold">
                       {used.uses.toLocaleString("he-IL")}
-                      {coupon.max_uses !== null ? ` / ${coupon.max_uses.toLocaleString("he-IL")}` : ""}
+                      {coupon.max_uses !== null
+                        ? ` / ${coupon.max_uses.toLocaleString("he-IL")}`
+                        : ""}
                       {used.total > 0 && (
                         <span className="font-normal text-muted-foreground">
                           {" "}
@@ -400,8 +423,11 @@ function CouponDialog({
     const code = normalizeCouponCode(form.code);
     const codeProblem = couponCodeProblem(code);
     if (codeProblem) return setError(codeProblem);
-    const value = Number(form.value);
-    if (!Number.isFinite(value) || value <= 0) return setError("ערך ההנחה חייב להיות גדול מ-0");
+    // חלק 24: משלוח חינם — בלי ערך הנחה (ההנחה = דמי המשלוח של ההזמנה)
+    const value = form.type === "free_shipping" ? 0 : Number(form.value);
+    if (form.type !== "free_shipping" && (!Number.isFinite(value) || value <= 0)) {
+      return setError("ערך ההנחה חייב להיות גדול מ-0");
+    }
     if (form.type === "percent" && value > 100) return setError("הנחה באחוזים: עד 100%");
     const minOrder = form.minOrder.trim() === "" ? null : Number(form.minOrder);
     if (minOrder !== null && (!Number.isFinite(minOrder) || minOrder <= 0)) {
@@ -486,11 +512,12 @@ function CouponDialog({
 
           <div className="space-y-1.5">
             <Label>סוג ההנחה</Label>
-            <div className="grid grid-cols-2 gap-2" role="radiogroup">
+            <div className="grid grid-cols-3 gap-2" role="radiogroup">
               {(
                 [
                   ["percent", "אחוז מהסכום", "%"],
                   ["fixed", "סכום קבוע", "₪"],
+                  ["free_shipping", "משלוח חינם", "🚚"],
                 ] as const
               ).map(([value, label, sign]) => (
                 <button
@@ -514,8 +541,10 @@ function CouponDialog({
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="cp-value">{form.type === "percent" ? "אחוז הנחה" : "סכום הנחה (₪)"}</Label>
+            <div className={cn("space-y-1.5", form.type === "free_shipping" && "hidden")}>
+              <Label htmlFor="cp-value">
+                {form.type === "percent" ? "אחוז הנחה" : "סכום הנחה (₪)"}
+              </Label>
               <Input
                 id="cp-value"
                 inputMode="decimal"
@@ -587,7 +616,10 @@ function CouponDialog({
           </label>
 
           {error && (
-            <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p
+              role="alert"
+              className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
               {error}
             </p>
           )}

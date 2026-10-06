@@ -51,6 +51,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { OrderEditDialog } from "@/components/OrderEditDialog";
+import { OrderTrackingDialog } from "@/components/OrderTrackingDialog";
 import { CreateOrderDialog } from "@/components/CreateOrderDialog";
 import { OrderDocumentButton } from "@/components/OrderDocumentButton";
 import { OrderContactBlock } from "@/components/OrderContactBlock";
@@ -163,6 +164,8 @@ export function OrderManagementPanel({
   const [customerFilter, setCustomerFilter] = useState<string>("all");
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [editing, setEditing] = useState<OrderRow | null>(null);
+  /** חלק 24: "פרטי שילוח ומעקב" */
+  const [tracking, setTracking] = useState<OrderRow | null>(null);
   const [pendingDelete, setPendingDelete] = useState<OrderRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -974,6 +977,10 @@ export function OrderManagementPanel({
                           // כפתורים לפי הרוחב הפנוי — יורדים שורה במקום להידחס
                           className="grid grid-cols-[repeat(auto-fit,minmax(6.75rem,1fr))] gap-2"
                         >
+                          <Button variant="outline" onClick={() => setTracking(order)}>
+                            <Truck className="size-4" aria-hidden="true" />
+                            שילוח ומעקב
+                          </Button>
                           <Button variant="outline" onClick={() => setEditing(order)}>
                             <Pencil className="size-4" />
                             צפייה ועריכה
@@ -1074,6 +1081,11 @@ export function OrderManagementPanel({
         )}
       </GroupSidebarLayout>
 
+      <OrderTrackingDialog
+        order={tracking}
+        onClose={() => setTracking(null)}
+        onSaved={() => void load()}
+      />
       <OrderEditDialog
         order={editing}
         onClose={() => setEditing(null)}

@@ -4,7 +4,7 @@
  * (orders_shipping_and_total) — הנוסחה חייבת להיות זהה.
  */
 
-export type CouponType = "percent" | "fixed";
+export type CouponType = "percent" | "fixed" | "free_shipping";
 
 export type Coupon = {
   id: string;
@@ -60,9 +60,12 @@ const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 1
 export function couponDiscount(
   coupon: Pick<AppliedCoupon, "discountType" | "discountValue" | "minOrderTotal">,
   productsSubtotal: number,
+  /** חלק 24: דמי המשלוח — בקופון "משלוח חינם" זו ההנחה */
+  shippingAmount = 0,
 ): number {
-  if (!Number.isFinite(productsSubtotal) || productsSubtotal <= 0) return 0;
   if (coupon.minOrderTotal !== null && productsSubtotal < coupon.minOrderTotal) return 0;
+  if (coupon.discountType === "free_shipping") return Math.max(0, round2(shippingAmount));
+  if (!Number.isFinite(productsSubtotal) || productsSubtotal <= 0) return 0;
   const raw =
     coupon.discountType === "percent"
       ? round2((productsSubtotal * coupon.discountValue) / 100)
@@ -73,6 +76,7 @@ export function couponDiscount(
 /** "10% הנחה" / "₪20 הנחה" */
 export function couponLabel(type: CouponType, value: number): string {
   const amount = Number.isInteger(value) ? String(value) : value.toFixed(2);
+  if (type === "free_shipping") return "משלוח חינם";
   return type === "percent" ? `${amount}% הנחה` : `₪${amount} הנחה`;
 }
 
@@ -90,15 +94,23 @@ export type OrderCouponFields = {
 };
 
 /** ההנחה מחדש לפי הצילום על ההזמנה (עריכת הזמנה — כמו שהמסד יחשב) */
-export function orderCouponDiscount(order: OrderCouponFields, productsSubtotal: number): number {
+export function orderCouponDiscount(
+  order: OrderCouponFields,
+  productsSubtotal: number,
+  shippingAmount = 0,
+): number {
   if (!order.coupon_code || !order.coupon_discount_type) return 0;
   return couponDiscount(
     {
-      discountType: order.coupon_discount_type === "fixed" ? "fixed" : "percent",
+      discountType:
+        order.coupon_discount_type === "fixed" || order.coupon_discount_type === "free_shipping"
+          ? order.coupon_discount_type
+          : "percent",
       discountValue: Number(order.coupon_discount_value ?? 0),
       minOrderTotal: order.coupon_min_order == null ? null : Number(order.coupon_min_order),
     },
     productsSubtotal,
+    shippingAmount,
   );
 }
 

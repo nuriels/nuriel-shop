@@ -31,6 +31,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SitemapRouteImport } from './routes/sitemap'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as WarehouseRouteImport } from './routes/warehouse'
+import { Route as AdminCouponsRouteImport } from './routes/admin_.coupons'
 import { Route as AdminDashboardRouteImport } from './routes/admin_.dashboard'
 import { Route as AdminOrdersRouteImport } from './routes/admin_.orders'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
@@ -154,6 +155,11 @@ const WarehouseRoute = WarehouseRouteImport.update({
   path: '/warehouse',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminCouponsRoute = AdminCouponsRouteImport.update({
+  id: '/admin_/coupons',
+  path: '/admin/coupons',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminDashboardRoute = AdminDashboardRouteImport.update({
   id: '/admin_/dashboard',
   path: '/admin/dashboard',
@@ -238,6 +244,7 @@ export interface FileRoutesByFullPath {
   '/sitemap': typeof SitemapRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
+  '/admin/coupons': typeof AdminCouponsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -274,6 +281,7 @@ export interface FileRoutesByTo {
   '/sitemap': typeof SitemapRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
+  '/admin/coupons': typeof AdminCouponsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -311,6 +319,7 @@ export interface FileRoutesById {
   '/sitemap': typeof SitemapRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
+  '/admin_/coupons': typeof AdminCouponsRoute
   '/admin_/dashboard': typeof AdminDashboardRoute
   '/admin_/orders': typeof AdminOrdersRoute
   '/admin_/settings': typeof AdminSettingsRoute
@@ -349,6 +358,7 @@ export interface FileRouteTypes {
     | '/sitemap'
     | '/terms'
     | '/warehouse'
+    | '/admin/coupons'
     | '/admin/dashboard'
     | '/admin/orders'
     | '/admin/settings'
@@ -385,6 +395,7 @@ export interface FileRouteTypes {
     | '/sitemap'
     | '/terms'
     | '/warehouse'
+    | '/admin/coupons'
     | '/admin/dashboard'
     | '/admin/orders'
     | '/admin/settings'
@@ -421,6 +432,7 @@ export interface FileRouteTypes {
     | '/sitemap'
     | '/terms'
     | '/warehouse'
+    | '/admin_/coupons'
     | '/admin_/dashboard'
     | '/admin_/orders'
     | '/admin_/settings'
@@ -458,6 +470,7 @@ export interface RootRouteChildren {
   SitemapRoute: typeof SitemapRoute
   TermsRoute: typeof TermsRoute
   WarehouseRoute: typeof WarehouseRoute
+  AdminCouponsRoute: typeof AdminCouponsRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   AdminOrdersRoute: typeof AdminOrdersRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
@@ -628,6 +641,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WarehouseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/coupons': {
+      id: '/admin_/coupons'
+      path: '/admin/coupons'
+      fullPath: '/admin/coupons'
+      preLoaderRoute: typeof AdminCouponsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/dashboard': {
       id: '/admin_/dashboard'
       path: '/admin/dashboard'
@@ -738,6 +758,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapRoute: SitemapRoute,
   TermsRoute: TermsRoute,
   WarehouseRoute: WarehouseRoute,
+  AdminCouponsRoute: AdminCouponsRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   AdminOrdersRoute: AdminOrdersRoute,
   AdminSettingsRoute: AdminSettingsRoute,

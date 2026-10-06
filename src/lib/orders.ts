@@ -274,6 +274,11 @@ export type OrderRow = OrderContactFields & {
   last_delivery_failure_note: string | null;
   last_delivery_failure_at: string | null;
   shipped_at: string | null;
+  /** חלק 24: מעקב משלוח (חברה, מספר, קישור) — מזין צוות החנות */
+  tracking_number?: string | null;
+  shipping_provider?: string | null;
+  tracking_url?: string | null;
+  tracking_updated_at?: string | null;
   delivered_at: string | null;
   /** שיטת המשלוח שנבחרה בקופה (צילום) */
   shipping_method_id?: string | null;
@@ -306,6 +311,7 @@ export type OrderRow = OrderContactFields & {
 /** העמודות שנטענות בכל מסכי ההזמנות (לקוח, סוכן ומנהל) */
 export const ORDER_SELECT_COLUMNS =
   "id, customer_id, agent_id, order_number, status, kind, total, note, vat_rate, prices_include_vat, created_at, " +
+  "tracking_number, shipping_provider, tracking_url, tracking_updated_at, " +
   "delivery_attempts, last_delivery_failure_note, last_delivery_failure_at, shipped_at, delivered_at, " +
   "payment_method, payment_status, paid_at, hyp_transaction_id, " +
   "bit_transaction_id, bit_receipt_url, payment_reported_at, payment_due_at, " +
