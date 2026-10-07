@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoPage, LoadingLine } from "@/components/legal/InfoPage";
 import { supabase } from "@/integrations/supabase/client";
 import { useCategoryTree } from "@/hooks/useCategories";
+import { useStorePages } from "@/hooks/useStorePages";
 import { countByCategory, totalCounts, type CategoryNode } from "@/lib/category-tree";
 import { fetchAllRows } from "@/lib/fetch-all";
 
@@ -39,6 +40,7 @@ function useActiveCategoryCounts(): Map<string, number> | null {
  * העץ; משמאל — העמודים הכלליים. (למנועי חיפוש יש גם /sitemap.xml)
  */
 function SitemapPage() {
+  const pages = useStorePages();
   const tree = useCategoryTree();
   const counts = useActiveCategoryCounts();
   const visible = (node: CategoryNode) =>
@@ -125,6 +127,14 @@ function SitemapPage() {
                   הצהרת נגישות
                 </Link>
               </PageLink>
+              {/* חלק 30: עמודי התוכן שבעל החנות פרסם */}
+              {(pages ?? []).map((page) => (
+                <PageLink key={page.id}>
+                  <Link to="/pages/$slug" params={{ slug: page.slug }}>
+                    {page.title}
+                  </Link>
+                </PageLink>
+              ))}
             </ul>
           </CardContent>
         </Card>

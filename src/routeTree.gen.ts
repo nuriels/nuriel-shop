@@ -34,8 +34,10 @@ import { Route as WarehouseRouteImport } from './routes/warehouse'
 import { Route as AdminCouponsRouteImport } from './routes/admin_.coupons'
 import { Route as AdminDashboardRouteImport } from './routes/admin_.dashboard'
 import { Route as AdminOrdersRouteImport } from './routes/admin_.orders'
+import { Route as AdminPagesRouteImport } from './routes/admin_.pages'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
 import { Route as CourierTokenRouteImport } from './routes/courier.$token'
+import { Route as PagesSlugRouteImport } from './routes/pages.$slug'
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
 import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
 import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrades'
@@ -172,6 +174,11 @@ const AdminOrdersRoute = AdminOrdersRouteImport.update({
   path: '/admin/orders',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminPagesRoute = AdminPagesRouteImport.update({
+  id: '/admin_/pages',
+  path: '/admin/pages',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminSettingsRoute = AdminSettingsRouteImport.update({
   id: '/admin_/settings',
   path: '/admin/settings',
@@ -180,6 +187,11 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
 const CourierTokenRoute = CourierTokenRouteImport.update({
   id: '/courier/$token',
   path: '/courier/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PagesSlugRoute = PagesSlugRouteImport.update({
+  id: '/pages/$slug',
+  path: '/pages/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlatformPlansRoute = PlatformPlansRouteImport.update({
@@ -261,8 +273,10 @@ export interface FileRoutesByFullPath {
   '/admin/coupons': typeof AdminCouponsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/orders': typeof AdminOrdersRoute
+  '/admin/pages': typeof AdminPagesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/pages/$slug': typeof PagesSlugRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
   '/platform/upgrades': typeof PlatformUpgradesRoute
@@ -300,8 +314,10 @@ export interface FileRoutesByTo {
   '/admin/coupons': typeof AdminCouponsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/orders': typeof AdminOrdersRoute
+  '/admin/pages': typeof AdminPagesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/pages/$slug': typeof PagesSlugRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
   '/platform/upgrades': typeof PlatformUpgradesRoute
@@ -340,8 +356,10 @@ export interface FileRoutesById {
   '/admin_/coupons': typeof AdminCouponsRoute
   '/admin_/dashboard': typeof AdminDashboardRoute
   '/admin_/orders': typeof AdminOrdersRoute
+  '/admin_/pages': typeof AdminPagesRoute
   '/admin_/settings': typeof AdminSettingsRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/pages/$slug': typeof PagesSlugRoute
   '/platform_/plans': typeof PlatformPlansRoute
   '/platform_/support': typeof PlatformSupportRoute
   '/platform_/upgrades': typeof PlatformUpgradesRoute
@@ -381,8 +399,10 @@ export interface FileRouteTypes {
     | '/admin/coupons'
     | '/admin/dashboard'
     | '/admin/orders'
+    | '/admin/pages'
     | '/admin/settings'
     | '/courier/$token'
+    | '/pages/$slug'
     | '/platform/plans'
     | '/platform/support'
     | '/platform/upgrades'
@@ -420,8 +440,10 @@ export interface FileRouteTypes {
     | '/admin/coupons'
     | '/admin/dashboard'
     | '/admin/orders'
+    | '/admin/pages'
     | '/admin/settings'
     | '/courier/$token'
+    | '/pages/$slug'
     | '/platform/plans'
     | '/platform/support'
     | '/platform/upgrades'
@@ -459,8 +481,10 @@ export interface FileRouteTypes {
     | '/admin_/coupons'
     | '/admin_/dashboard'
     | '/admin_/orders'
+    | '/admin_/pages'
     | '/admin_/settings'
     | '/courier/$token'
+    | '/pages/$slug'
     | '/platform_/plans'
     | '/platform_/support'
     | '/platform_/upgrades'
@@ -499,8 +523,10 @@ export interface RootRouteChildren {
   AdminCouponsRoute: typeof AdminCouponsRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   AdminOrdersRoute: typeof AdminOrdersRoute
+  AdminPagesRoute: typeof AdminPagesRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   CourierTokenRoute: typeof CourierTokenRoute
+  PagesSlugRoute: typeof PagesSlugRoute
   PlatformPlansRoute: typeof PlatformPlansRoute
   PlatformSupportRoute: typeof PlatformSupportRoute
   PlatformUpgradesRoute: typeof PlatformUpgradesRoute
@@ -690,6 +716,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminOrdersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/pages': {
+      id: '/admin_/pages'
+      path: '/admin/pages'
+      fullPath: '/admin/pages'
+      preLoaderRoute: typeof AdminPagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/settings': {
       id: '/admin_/settings'
       path: '/admin/settings'
@@ -702,6 +735,13 @@ declare module '@tanstack/react-router' {
       path: '/courier/$token'
       fullPath: '/courier/$token'
       preLoaderRoute: typeof CourierTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pages/$slug': {
+      id: '/pages/$slug'
+      path: '/pages/$slug'
+      fullPath: '/pages/$slug'
+      preLoaderRoute: typeof PagesSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/platform_/plans': {
@@ -803,8 +843,10 @@ const rootRouteChildren: RootRouteChildren = {
   AdminCouponsRoute: AdminCouponsRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   AdminOrdersRoute: AdminOrdersRoute,
+  AdminPagesRoute: AdminPagesRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   CourierTokenRoute: CourierTokenRoute,
+  PagesSlugRoute: PagesSlugRoute,
   PlatformPlansRoute: PlatformPlansRoute,
   PlatformSupportRoute: PlatformSupportRoute,
   PlatformUpgradesRoute: PlatformUpgradesRoute,

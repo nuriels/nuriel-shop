@@ -171,9 +171,15 @@ async function sitemapEntries(origin: string): Promise<SitemapEntry[]> {
   // שער הפלטפורמה — רק דף הנחיתה
   if (tenant?.slug === PORTAL_STORE_SLUG) return [{ loc: `${origin}/`, priority: "1.0" }];
 
-  const [products, { data: categories }] = await Promise.all([
+  const [products, { data: categories }, { data: pages }] = await Promise.all([
     loadFeedProducts(),
     supabaseAdmin.from("categories").select("name, parent_name"),
+    // חלק 30: עמודי התוכן שפורסמו
+    supabaseAdmin
+      .from("pages")
+      .select("slug, updated_at")
+      .eq("is_published", true)
+      .order("sort_order"),
   ]);
   const newest = products.reduce<string | null>(
     (latest, p) => (!latest || p.updated_at > latest ? p.updated_at : latest),
@@ -187,6 +193,11 @@ async function sitemapEntries(origin: string): Promise<SitemapEntry[]> {
     { loc: `${origin}/terms`, priority: "0.2" },
     { loc: `${origin}/privacy`, priority: "0.2" },
     { loc: `${origin}/cancellations`, priority: "0.2" },
+    ...(pages ?? []).map((page) => ({
+      loc: `${origin}/pages/${encodeURIComponent(page.slug)}`,
+      lastmod: page.updated_at,
+      priority: "0.4",
+    })),
   ];
 
   // קטגוריות שיש בהן מוצרים (כולל קטגוריות-אב שלהן)

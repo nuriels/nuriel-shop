@@ -29,6 +29,8 @@ import { CustomPricesPanel } from "@/components/CustomPricesPanel";
 import { BillingPanel } from "@/components/billing/BillingPanel";
 import { AddonsStorePanel } from "@/components/billing/AddonsStorePanel";
 import { LegalPagesPanel } from "@/components/legal/LegalPagesPanel";
+import { PagesPanel } from "@/components/pages/PagesPanel";
+import { CustomDomainSettingsCard } from "@/components/CustomDomainSettingsCard";
 import { SiteInboxPanel, type InboxView } from "@/components/inbox/SiteInboxPanel";
 import { PremiumLockCard } from "@/components/billing/PremiumLock";
 import { SupportPanel, type SupportCompose } from "@/components/support/SupportPanel";
@@ -353,11 +355,16 @@ function AdminPage() {
                 <SiteSettingsPanel />
                 {/* חלק 19: באנר צדדי למסכי מחשב */}
                 <SideBannerCard />
+                {/* חלק 30: דומיין אישי (המנגנון המלא — לשונית "דומיין פרטי") */}
+                <CustomDomainSettingsCard onOpenDomainTab={() => goTab("domain")} />
                 {/* חלק 17ב: אמצעי התשלום בקופה — טלפוני מול נציג / ביט */}
                 <OfflinePaymentMethodsCard />
               </TabsContent>
               <TabsContent value="legal">
                 <LegalPagesPanel />
+              </TabsContent>
+              <TabsContent value="pages">
+                <PagesPanel />
               </TabsContent>
               <TabsContent value="marketing">
                 <MarketingPanel />

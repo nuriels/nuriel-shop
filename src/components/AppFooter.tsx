@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { APP_VERSION, DEFAULT_STORE_NAME } from "@/lib/branding";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
+import { useStorePages } from "@/hooks/useStorePages";
 
 export function AppFooter() {
   const { settings } = useSiteSettings();
@@ -8,6 +9,8 @@ export function AppFooter() {
     settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME;
   const year = new Date().getFullYear();
   const phone = settings?.support_phone?.trim() || settings?.business_phone?.trim() || "";
+  // חלק 30: עמודי התוכן שבעל החנות פרסם
+  const pages = useStorePages();
 
   return (
     <footer className="surface-cellar mt-10 w-full">
@@ -36,29 +39,53 @@ export function AppFooter() {
           )}
         </div>
 
-        <nav aria-label="קישורים בתחתית האתר" className="grid grid-cols-2 gap-x-8 gap-y-1.5">
-          <Link to="/about" className="hover:text-accent">
-            אודות
-          </Link>
-          <Link to="/terms" className="hover:text-accent">
-            תקנון האתר
-          </Link>
-          <Link to="/contact" className="hover:text-accent">
-            צור קשר
-          </Link>
-          <Link to="/privacy" className="hover:text-accent">
-            מדיניות פרטיות
-          </Link>
-          <Link to="/sitemap" className="hover:text-accent">
-            מפת האתר
-          </Link>
-          <Link
-            to="/cancellations"
-            className="font-semibold text-primary-foreground hover:text-accent"
+        <div className="flex flex-col gap-6 sm:flex-row sm:gap-12">
+          <nav
+            aria-label="קישורים בתחתית האתר"
+            className="grid grid-cols-2 gap-x-8 gap-y-1.5 self-start"
           >
-            ביטול עסקה
-          </Link>
-        </nav>
+            <Link to="/about" className="hover:text-accent">
+              אודות
+            </Link>
+            <Link to="/terms" className="hover:text-accent">
+              תקנון האתר
+            </Link>
+            <Link to="/contact" className="hover:text-accent">
+              צור קשר
+            </Link>
+            <Link to="/privacy" className="hover:text-accent">
+              מדיניות פרטיות
+            </Link>
+            <Link to="/sitemap" className="hover:text-accent">
+              מפת האתר
+            </Link>
+            <Link
+              to="/cancellations"
+              className="font-semibold text-primary-foreground hover:text-accent"
+            >
+              ביטול עסקה
+            </Link>
+          </nav>
+
+          {pages && pages.length > 0 && (
+            <nav aria-label="מידע שימושי" data-testid="footer-pages" className="space-y-2">
+              <p className="font-semibold text-primary-foreground">מידע שימושי</p>
+              <ul className="space-y-1.5">
+                {pages.map((page) => (
+                  <li key={page.id}>
+                    <Link
+                      to="/pages/$slug"
+                      params={{ slug: page.slug }}
+                      className="hover:text-accent"
+                    >
+                      {page.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
+        </div>
       </div>
 
       <div className="border-t border-white/10">
