@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { getSiteSeo } from "@/lib/platform.functions";
+import { getCategoryParents } from "@/lib/seo.functions";
+import { breadcrumbTrail, categoryTrail } from "@/lib/seo-urls";
 import { createFileRoute, Link, useLoaderData } from "@tanstack/react-router";
 import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -64,8 +66,12 @@ export const Route = createFileRoute("/")({
   // JSON-LD) נטענים בשרת ונשמרים במצב שהדפדפן ממשיך ממנו, כך שהתגיות זהות בשרת
   // ובדפדפן (בלי אי-התאמה בהידרציה). הקטלוג עצמו עדיין נטען ומוצג בדפדפן בלבד.
   ssr: "data-only",
-  // פעם אחת לטעינת עמוד — מעבר בין קטגוריות לא טוען שוב (התגיות לפי ?category=)
-  loader: () => getSiteSeo(),
+  // פעם אחת לטעינת עמוד — מעבר בין קטגוריות לא טוען שוב (התגיות לפי ?category=).
+  // חלק 31: גם קטגוריות האב — לפירורי לחם היררכיים בעמודי הקטגוריה
+  loader: async () => {
+    const [site, categoryParents] = await Promise.all([getSiteSeo(), getCategoryParents()]);
+    return { ...site, categoryParents };
+  },
   staleTime: Infinity,
   // הקטגוריה והתצוגה בכתובת: כל בחירה נרשמת בהיסטוריה, ו"חזור" בדפדפן מחזיר
   // מתצוגת המוצרים לריבועי הקטגוריות (או לקטגוריה הקודמת) — בלי רענון
@@ -89,6 +95,7 @@ export const Route = createFileRoute("/")({
     if (category) {
       const meta = categoryMeta(siteName, category);
       const url = categoryUrl(schema.url, category);
+      const trail = categoryTrail(category, site.categoryParents ?? {});
       return {
         meta: [
           { title: meta.title },
@@ -99,15 +106,11 @@ export const Route = createFileRoute("/")({
           { name: "twitter:title", content: meta.title },
           { name: "twitter:description", content: meta.description },
         ],
-        links: [{ rel: "canonical", href: url }],
         scripts: [
           {
             type: "application/ld+json",
             children: jsonLdText(
-              breadcrumbJsonLd([
-                { name: siteName, url: `${schema.url}/` },
-                { name: category, url: null },
-              ]),
+              breadcrumbJsonLd(breadcrumbTrail(schema.url, siteName, trail, null)),
             ),
           },
         ],
@@ -116,7 +119,6 @@ export const Route = createFileRoute("/")({
     // מסך הבית (גם ?view= / ?cart=) — הכתובת הקנונית היא דף הבית
     return {
       meta: [{ property: "og:url", content: `${schema.url}/` }],
-      links: [{ rel: "canonical", href: `${schema.url}/` }],
       scripts: [
         {
           type: "application/ld+json",

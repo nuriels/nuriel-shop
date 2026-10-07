@@ -7,8 +7,12 @@
  *                   חלק 15: נעול (403) עד שהחנות רוכשת את התוסף "חיבור לזאפ".
  *
  * נקרא מ-src/server.ts (לפני האפליקציה), בתוך runWithTenant — supabaseAdmin
- * כבר מוגבל לחנות של הבקשה. הכתובות בקבצים — מהדומיין שממנו הגיעה הבקשה
- * (גוגל דורש שמפת האתר והעמודים יהיו באותו דומיין).
+ * כבר מוגבל לחנות של הבקשה.
+ *
+ * חלק 31: הכתובות במפת האתר וב-robots.txt — מהכתובת הרשמית של החנות (דומיין
+ * אישי פעיל, אחרת הסאב-דומיין), אותה כתובת כמו ה-canonical בעמודים. כך גם
+ * כשנכנסים דרך הסאב-דומיין, גוגל מקבל רק את הכתובות הרשמיות. רק אם אין כתובת
+ * רשמית (פיתוח מקומי) — הדומיין של הבקשה.
  */
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -16,7 +20,9 @@ import {
   isPlatformRequest,
   maybeCurrentTenant,
   storeLockReason,
+  tenantSiteOrigin,
 } from "@/integrations/supabase/tenant.server";
+import { isLocalOrigin } from "@/lib/seo-urls";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { plainText } from "@/lib/marketing";
 import { PORTAL_STORE_SLUG } from "@/lib/portal";
@@ -48,6 +54,20 @@ export function requestOrigin(request: Request): string {
   const isLocal = /^(localhost|127\.|\[::1\])/.test(host);
   const proto = forwardedProto || (isLocal ? url.protocol.replace(":", "") : "https");
   return `${proto}://${host}`;
+}
+
+/**
+ * חלק 31: הכתובת הרשמית של החנות (כמו ה-canonical) — ואם אין (פיתוח מקומי,
+ * חנות בלי כתובת מוגדרת) — הדומיין של הבקשה.
+ */
+export function feedOrigin(request: Request): string {
+  try {
+    const official = tenantSiteOrigin().replace(/\/+$/, "");
+    if (!isLocalOrigin(official)) return official;
+  } catch {
+    // אין כתובת רשמית — ממשיכים לדומיין של הבקשה
+  }
+  return requestOrigin(request);
 }
 
 /** תווים מותרים ב-XML 1.0 + escape */
@@ -345,7 +365,7 @@ export function zapFeedUnlocked(): boolean {
 }
 
 export async function renderFeed(pathname: string, request: Request): Promise<Response> {
-  const origin = requestOrigin(request);
+  const origin = feedOrigin(request);
   // דומיין פאנל הפלטפורמה / חנות נעולה — לא לסריקה
   const open = !isPlatformRequest() && storeLockReason() === null;
 

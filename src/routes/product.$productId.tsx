@@ -25,11 +25,13 @@ import { fetchAllRows } from "@/lib/fetch-all";
 import { trackAddToCart } from "@/lib/marketing";
 import { EMPTY_SALES, loadSalesData, type SalesData } from "@/lib/sales-data";
 import { getProductSeo, type ProductSeo } from "@/lib/seo.functions";
-import { breadcrumbJsonLd, categoryUrl, jsonLdText, productJsonLd } from "@/lib/structured-data";
+import { breadcrumbJsonLd, jsonLdText, productJsonLd } from "@/lib/structured-data";
+import { breadcrumbTrail } from "@/lib/seo-urls";
 
 /**
  * חלק 21: JSON-LD לעמוד מוצר — Product + Offer (מחיר, זמינות במלאי, תמונות)
- * ופירורי לחם (בית ← קטגוריה ← מוצר), לתוצאות עשירות בחיפוש של גוגל
+ * ופירורי לחם, לתוצאות עשירות בחיפוש של גוגל. חלק 31: פירורי הלחם כוללים את
+ * קטגוריות האב (בית ← ראשית ← משנה ← מוצר).
  */
 function productStructuredData(seo: ProductSeo): { type: string; children: string }[] {
   const product = productJsonLd({
@@ -50,11 +52,14 @@ function productStructuredData(seo: ProductSeo): { type: string; children: strin
     scripts.push({
       type: "application/ld+json",
       children: jsonLdText(
-        breadcrumbJsonLd([
-          { name: seo.storeName, url: `${seo.origin}/` },
-          { name: seo.category, url: categoryUrl(seo.origin, seo.category) },
-          { name: seo.name, url: null },
-        ]),
+        breadcrumbJsonLd(
+          breadcrumbTrail(
+            seo.origin,
+            seo.storeName,
+            seo.categoryPath.length > 0 ? seo.categoryPath : seo.category ? [seo.category] : [],
+            seo.name,
+          ),
+        ),
       ),
     });
   }
@@ -96,6 +101,7 @@ export const Route = createFileRoute("/product/$productId")({
         { property: "product:price:amount", content: seo.price.toFixed(2) },
         { property: "product:price:currency", content: "ILS" },
       ],
+      // חלק 31: הכתובת הקנונית — רק כשהמוצר קיים (ה-root מדלג על עמודי מוצר)
       links: seo.url ? [{ rel: "canonical", href: seo.url }] : [],
       scripts: productStructuredData(seo),
     };

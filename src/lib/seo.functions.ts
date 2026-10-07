@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { plainText } from "@/lib/marketing";
+import { categoryParentsFrom, categoryTrail, type CategoryParents } from "@/lib/seo-urls";
 
 /**
  * SEO לעמוד מוצר (חלק 14): נטען בשרת (SSR) לפני שהעמוד נשלח, כך שגוגל,
@@ -26,6 +27,8 @@ export type ProductSeo = {
   sku: string;
   barcode: string | null;
   category: string;
+  /** חלק 31: הקטגוריה עם קטגוריות האב שלה (מהראשית ועד הקטגוריה) — לפירורי הלחם */
+  categoryPath: string[];
   storeName: string;
   /** הכתובת הקנונית של העמוד (הדומיין הראשי של החנות) */
   url: string | null;
@@ -47,20 +50,23 @@ export const getProductSeo = createServerFn({ method: "GET" })
     if (isPlatformRequest() || !maybeCurrentTenant()) return null;
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [{ data: rows, error }, { data: settings }, { data: extra }] = await Promise.all([
-      supabaseAdmin.rpc("storefront_feed_products").eq("id", data.id).limit(1),
-      supabaseAdmin
-        .from("site_settings")
-        .select("business_name, site_title")
-        .eq("id", true)
-        .maybeSingle(),
-      // תמונות נוספות ותוקף המבצע — לסכמת המוצר (המוצר עצמו כבר נבדק ב-RPC)
-      supabaseAdmin
-        .from("global_products")
-        .select("images, sale_ends_at")
-        .eq("id", data.id)
-        .maybeSingle(),
-    ]);
+    const [{ data: rows, error }, { data: settings }, { data: extra }, { data: categories }] =
+      await Promise.all([
+        supabaseAdmin.rpc("storefront_feed_products").eq("id", data.id).limit(1),
+        supabaseAdmin
+          .from("site_settings")
+          .select("business_name, site_title")
+          .eq("id", true)
+          .maybeSingle(),
+        // תמונות נוספות ותוקף המבצע — לסכמת המוצר (המוצר עצמו כבר נבדק ב-RPC)
+        supabaseAdmin
+          .from("global_products")
+          .select("images, sale_ends_at")
+          .eq("id", data.id)
+          .maybeSingle(),
+        // חלק 31: קטגוריות האב — לפירורי לחם היררכיים (בית ← ראשית ← משנה ← מוצר)
+        supabaseAdmin.from("categories").select("name, parent_name"),
+      ]);
     if (error) {
       console.error("[seo] product lookup failed", error.message);
       return null;
@@ -107,8 +113,30 @@ export const getProductSeo = createServerFn({ method: "GET" })
       sku: product.sku,
       barcode: product.barcode,
       category: product.category,
+      categoryPath: product.category
+        ? categoryTrail(product.category, categoryParentsFrom(categories))
+        : [],
       storeName,
       url,
       origin,
     };
   });
+
+/**
+ * חלק 31: "קטגוריה ← קטגוריית אב" של החנות — לפירורי הלחם של עמודי הקטגוריה
+ * (נטען פעם אחת עם הקטלוג, בשרת).
+ */
+export const getCategoryParents = createServerFn({ method: "GET" }).handler(
+  async (): Promise<CategoryParents> => {
+    const { isPlatformRequest, maybeCurrentTenant } =
+      await import("@/integrations/supabase/tenant.server");
+    if (isPlatformRequest() || !maybeCurrentTenant()) return {};
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin.from("categories").select("name, parent_name");
+    if (error) {
+      console.error("[seo] categories lookup failed", error.message);
+      return {};
+    }
+    return categoryParentsFrom(data);
+  },
+);

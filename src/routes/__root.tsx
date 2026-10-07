@@ -21,6 +21,7 @@ import { StorefrontGate } from "@/components/StorefrontGate";
 import { MarketingLayer } from "@/components/marketing/MarketingLayer";
 import { CartProvider } from "@/hooks/useCart";
 import { NO_MARKETING_PATHS, trackingHeadScripts } from "@/lib/marketing";
+import { canonicalUrl } from "@/lib/seo-urls";
 
 function NotFoundComponent() {
   return (
@@ -113,6 +114,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     // Facebook Pixel / Google Analytics — רק בעמודי החנות (לא בפאנלים ובחשבון)
     const path = matches[matches.length - 1]?.pathname ?? "/";
     const tracking = NO_MARKETING_PATHS.test(path) ? [] : trackingHeadScripts(loaderData?.tracking);
+    // חלק 31: כתובת קנונית אחת לכל עמוד ציבורי — מהכתובת הרשמית של החנות (דומיין
+    // אישי פעיל, אחרת הסאב-דומיין), לא מהדומיין שממנו נכנסו. נוצרת בשרת (SSR).
+    // עמוד מוצר ועמוד תוכן מוסיפים אותה בעצמם (רק כשהעמוד באמת קיים); אזורים
+    // פרטיים — בלי.
+    // (ב-head של ה-root הטיפוס מכיר רק את ה-root — העמוד עצמו הוא ה-match האחרון)
+    const leaf = matches[matches.length - 1] as { search?: unknown } | undefined;
+    const canonical = /^\/(product|pages)\//.test(path)
+      ? null
+      : canonicalUrl(
+          loaderData?.schema?.url,
+          path,
+          (leaf?.search ?? null) as Record<string, unknown> | null,
+        );
     return {
       styles: brandCss ? [{ children: brandCss }] : [],
       meta: [
@@ -126,6 +140,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { property: "og:site_name", content: siteName },
         { property: "og:type", content: "website" },
         { property: "og:locale", content: "he_IL" },
+        ...(canonical ? [{ property: "og:url", content: canonical }] : []),
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: description },
@@ -148,6 +163,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       scripts: tracking,
       links: [
         { rel: "stylesheet", href: appCss },
+        ...(canonical ? [{ rel: "canonical", href: canonical }] : []),
         { rel: "icon", type: "image/png", href: "/favicon.png" },
         // חלק 24: אייקון "הוספה למסך הבית" — מהלוגו של החנות (אייפון: 180; אנדרואיד: 192)
         ...(loaderData?.appleIcon

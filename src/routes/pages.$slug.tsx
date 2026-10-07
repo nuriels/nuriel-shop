@@ -1,43 +1,96 @@
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { EyeOff, FileQuestion, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { InfoPage } from "@/components/legal/InfoPage";
+import { InfoPage, LoadingLine } from "@/components/legal/InfoPage";
 import { RichContent } from "@/components/legal/RichContent";
 import { loadStorePage } from "@/lib/pages-data";
-import { richTextToPlain } from "@/lib/rich-text";
+import { getStorePageSeo } from "@/lib/pages.functions";
+import { breadcrumbTrail, canonicalUrl } from "@/lib/seo-urls";
+import { breadcrumbJsonLd, jsonLdText } from "@/lib/structured-data";
 
 /**
  * /pages/<slug> — עמוד תוכן של החנות (חלק 30): מדיניות משלוחים, שאלות
  * נפוצות וכו', כפי שבעל החנות כתב בלשונית "עמודי תוכן". החנות נקבעת לפי
  * הדומיין (סאב-דומיין או דומיין אישי), כך שאותה כתובת בחנויות שונות מציגה
  * עמודים שונים. התוכן מנוקה לפני ההצגה (RichContent → DOMPurify).
+ *
+ * חלק 31: "data-only" — העמוד נטען בשרת, כך שהכותרת, התיאור, הכתובת הקנונית
+ * (מה-root) ופירורי הלחם (JSON-LD) כבר ב-HTML שגוגל מקבל. טיוטה — רק למנהל,
+ * נטענת בדפדפן עם ההרשאות שלו.
  */
 export const Route = createFileRoute("/pages/$slug")({
-  ssr: false,
-  loader: async ({ params }) => ({ page: await loadStorePage(params.slug) }),
+  ssr: "data-only",
+  loader: async ({ params }) => ({
+    page: await getStorePageSeo({ data: { slug: params.slug } }),
+  }),
   head: ({ loaderData }) => {
     const page = loaderData?.page ?? null;
-    if (!page)
+    if (!page) {
       return { meta: [{ title: "העמוד לא נמצא" }, { name: "robots", content: "noindex" }] };
-    const description = richTextToPlain(page.content_html).slice(0, 160);
+    }
+    const title = `${page.title} | ${page.storeName}`;
     return {
       meta: [
-        { title: page.title },
-        ...(description ? [{ name: "description", content: description }] : []),
-        { property: "og:title", content: page.title },
-        // טיוטה (רק מנהל רואה) — לא לאינדקס
-        ...(page.is_published ? [] : [{ name: "robots", content: "noindex" }]),
+        { title },
+        { name: "description", content: page.description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: page.description },
+        { property: "og:type", content: "article" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: page.description },
       ],
+      // הכתובת הקנונית — רק לעמוד שפורסם (ה-root מדלג על עמודי תוכן)
+      links: (() => {
+        const href = canonicalUrl(page.origin, `/pages/${page.slug}`);
+        return href ? [{ rel: "canonical", href }] : [];
+      })(),
+      scripts: page.origin
+        ? [
+            {
+              type: "application/ld+json",
+              children: jsonLdText(
+                breadcrumbJsonLd(breadcrumbTrail(page.origin, page.storeName, [], page.title)),
+              ),
+            },
+          ]
+        : [],
     };
   },
   component: StorePageView,
 });
 
+type ViewPage = { title: string; content_html: string; is_published: boolean; updated_at: string };
+
 function StorePageView() {
-  const { page } = Route.useLoaderData();
+  const { slug } = Route.useParams();
+  const { page: published } = Route.useLoaderData();
+  // לא פורסם / לא קיים — אולי טיוטה שהמנהל מסתכל עליה (ההרשאות במסד)
+  const [draft, setDraft] = useState<ViewPage | null | undefined>(published ? null : undefined);
+
+  useEffect(() => {
+    if (published) return;
+    let alive = true;
+    setDraft(undefined);
+    loadStorePage(slug)
+      .then((page) => alive && setDraft(page))
+      .catch(() => alive && setDraft(null));
+    return () => {
+      alive = false;
+    };
+  }, [published, slug]);
+
+  const page: ViewPage | null = published ?? draft ?? null;
 
   if (!page) {
+    if (draft === undefined) {
+      return (
+        <InfoPage title="טוען…" icon={<FileText aria-hidden="true" />}>
+          <LoadingLine />
+        </InfoPage>
+      );
+    }
     return (
       <InfoPage title="העמוד לא נמצא" icon={<FileQuestion aria-hidden="true" />}>
         <Card className="shadow-card">
