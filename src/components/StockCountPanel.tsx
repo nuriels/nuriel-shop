@@ -277,14 +277,20 @@ export function StockCountPanel() {
     [uncounted],
   );
 
-  /** ברקוד מסורק (מקורא ברקודים או מהמצלמה) → קופצים לשורת המוצר */
+  /**
+   * ברקוד מסורק (מקורא ברקודים או מהמצלמה) → קופצים לשורת המוצר. גם מק"ט:
+   * מדבקות הברקוד של החנות (חלק 32) מקודדות את המק"ט למוצר בלי ברקוד יצרן.
+   */
   const jumpToBarcode = useCallback(
     (raw: string) => {
       const code = raw.trim();
       if (code === "") return false;
-      const product = scoped.find((candidate) => candidate.barcode === code);
+      const matches = (candidate: { barcode: string | null; sku: string }) =>
+        candidate.barcode === code || candidate.sku === code;
+      const product =
+        scoped.find((candidate) => candidate.barcode === code) ?? scoped.find(matches);
       if (!product) {
-        const elsewhere = products.find((candidate) => candidate.barcode === code);
+        const elsewhere = products.find(matches);
         toast.error(
           elsewhere
             ? `"${elsewhere.name}" לא נמצא בטווח הספירה הזו (${elsewhere.category})`

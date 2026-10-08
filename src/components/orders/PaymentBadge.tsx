@@ -1,5 +1,14 @@
-import { Ban, CreditCard, Hourglass, ShieldQuestion, Smartphone, TimerOff } from "lucide-react";
+import {
+  Ban,
+  CreditCard,
+  Hourglass,
+  Receipt,
+  ShieldQuestion,
+  Smartphone,
+  TimerOff,
+} from "lucide-react";
 import { paymentStatusLabel, type PaymentMethod, type PaymentStatus } from "@/lib/bit-payments";
+import { posPaymentText } from "@/lib/pos";
 import { cn } from "@/lib/utils";
 
 const TONE = {
@@ -17,16 +26,42 @@ const TONE = {
  * אשראי — הזמנות ישנות בלבד (Hyp הוסר בחלק 28).
  * חלק 17ב: ביט (ממתינה לתשלום / ממתינה לאישור תשלום / שולמה / נדחה).
  * הזמנה בלי תשלום באתר (not_required — טלפוני מול נציג) — בלי תג.
+ * חלק 32: הזמנה מהקופה המהירה — אמצעי התשלום שנרשם בקופה ("שולמה · מזומן"
+ * / "תשלום בהמשך").
  */
 export function PaymentBadge({
   status,
   method,
+  posMethod,
   className,
 }: {
   status: string | null | undefined;
   method?: string | null | undefined;
+  /** pos_payment_method — רק בהזמנות מהקופה */
+  posMethod?: string | null | undefined;
   className?: string;
 }) {
+  const pos = posPaymentText(posMethod, status === "paid");
+  if (pos) {
+    return (
+      <span
+        data-payment-status={status ?? undefined}
+        data-pos-payment={posMethod ?? undefined}
+        className={cn(
+          "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+          pos.paid ? TONE.emerald : TONE.amber,
+          className,
+        )}
+      >
+        {pos.paid ? (
+          <Receipt className="size-3" aria-hidden="true" />
+        ) : (
+          <Hourglass className="size-3" aria-hidden="true" />
+        )}
+        {pos.label}
+      </span>
+    );
+  }
   const label = paymentStatusLabel(
     (method ?? null) as PaymentMethod | null,
     (status ?? null) as PaymentStatus | null,

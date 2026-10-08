@@ -294,6 +294,13 @@ export type OrderRow = OrderContactFields & {
   coupon_discount_value?: number | null;
   coupon_min_order?: number | null;
   discount_amount?: number;
+  /** חלק 32: הנחה ידנית מהקופה המהירה — כלולה ב-discount_amount */
+  manual_discount_type?: string | null;
+  manual_discount_value?: number | null;
+  manual_discount_amount?: number | null;
+  /** חלק 32: 'pos' = נוצרה בקופה המהירה; אמצעי התשלום שנרשם בקופה */
+  order_source?: string | null;
+  pos_payment_method?: string | null;
   /** אמצעי התשלום ומצבו (חלק 17ב): offline (טלפוני) / bit; credit_card — הזמנות ישנות בלבד */
   payment_method?: "offline" | "credit_card" | "bit";
   payment_status?:
@@ -312,7 +319,7 @@ export const ORDER_SELECT_COLUMNS =
   "id, customer_id, agent_id, order_number, status, kind, total, note, vat_rate, prices_include_vat, created_at, " +
   "tracking_number, shipping_provider, tracking_url, tracking_updated_at, " +
   "delivery_attempts, last_delivery_failure_note, last_delivery_failure_at, shipped_at, delivered_at, " +
-  "payment_method, payment_status, paid_at, " +
+  "payment_method, payment_status, paid_at, order_source, pos_payment_method, " +
   "bit_transaction_id, bit_receipt_url, payment_reported_at, payment_due_at, " +
   `${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ${ORDER_COUPON_COLUMNS}, ` +
   "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit, is_gift, " +

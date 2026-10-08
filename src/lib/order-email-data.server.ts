@@ -59,6 +59,8 @@ export type PreparedOrderEmail = {
     bitReference: string | null;
     /** ביט: הלקוח צירף צילום מסך */
     bitReceipt: boolean;
+    /** חלק 32: הזמנה מהקופה המהירה — אמצעי התשלום שנרשם בקופה (null = לא מהקופה) */
+    posMethod: string | null;
   };
   /** מסמך ה-PDF (אישור הזמנה / בקשה להצעת מחיר) */
   attachments: EmailAttachment[];
@@ -89,7 +91,9 @@ export const formatMoney = (value: number) => `₪${value.toFixed(2)}`;
 export async function prepareOrderEmail(orderId: string): Promise<PreparedOrderEmail | null> {
   const { data: payment } = await supabaseAdmin
     .from("orders")
-    .select("payment_method, payment_status, bit_transaction_id, bit_receipt_url")
+    .select(
+      "payment_method, payment_status, bit_transaction_id, bit_receipt_url, pos_payment_method",
+    )
     .eq("id", orderId)
     .maybeSingle();
   // ממתינה לתשלום (ביט שעוד לא נשלחה עליו אסמכתא) — בלי מיילים
@@ -273,6 +277,7 @@ export async function prepareOrderEmail(orderId: string): Promise<PreparedOrderE
       status: (payment?.payment_status ?? "not_required") as PaymentStatus,
       bitReference: payment?.bit_transaction_id ?? null,
       bitReceipt: Boolean(payment?.bit_receipt_url),
+      posMethod: payment?.pos_payment_method ?? null,
     },
     attachments: [{ filename: pdf.filename, content: pdf.base64 }],
     cart: {

@@ -34,6 +34,7 @@ import {
   type PreparedOrderEmail,
 } from "@/lib/order-email-data.server";
 import { formatUnitIls } from "@/lib/catalog";
+import { POS_PAYMENT_LABEL, isPosPaymentMethod } from "@/lib/pos";
 
 export type NotificationTemplate = "order_confirmation" | "order_staff" | "order_shipped" | "test";
 export type NotificationProvider = "tenant" | "platform";
@@ -331,12 +332,36 @@ function customerTotalsHtml(prepared: PreparedOrderEmail): string {
 /** "אמצעי תשלום" ללקוח (חלק 17ב): טלפוני / ביט (ממתין לאישור) / אשראי */
 function customerPaymentHtml(prepared: PreparedOrderEmail): string {
   if (prepared.isQuote) return "";
-  const { method, status, bitReference, bitReceipt } = prepared.payment;
+  const { method, status, bitReference, bitReceipt, posMethod } = prepared.payment;
   const box = (title: string, body: string, accent: string, background: string) =>
     `<div style="margin:0 0 16px;padding:12px 14px;border:1px solid ${accent};border-radius:10px;background:${background};">
       <p style="margin:0 0 6px;font-weight:bold;color:#12211F;">${title}</p>
       ${body}
     </div>`;
+  // חלק 32: הזמנה מהקופה המהירה (טלפונית / בחנות) — מה שנרשם בקופה
+  if (isPosPaymentMethod(posMethod)) {
+    if (posMethod === "later") {
+      return box(
+        "🧾 תשלום",
+        `<p style="margin:0;">התשלום יוסדר מול החנות.</p>`,
+        "#e2e8e2",
+        "#f7faf7",
+      );
+    }
+    return status === "paid"
+      ? box(
+          `🧾 תשלום: ${escapeHtml(POS_PAYMENT_LABEL[posMethod])}`,
+          `<p style="margin:0;">התשלום התקבל — תודה!</p>`,
+          "#86efac",
+          "#f0fdf4",
+        )
+      : box(
+          `🧾 תשלום: ${escapeHtml(POS_PAYMENT_LABEL[posMethod])}`,
+          `<p style="margin:0;">התשלום יוסדר מול החנות.</p>`,
+          "#e2e8e2",
+          "#f7faf7",
+        );
+  }
   if (method === "bit") {
     const proof = [
       bitReference ? `מספר אסמכתא: <span dir="ltr">${escapeHtml(bitReference)}</span>` : "",

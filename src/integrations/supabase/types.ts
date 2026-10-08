@@ -1710,6 +1710,12 @@ export type Database = {
           payment_due_at: string | null;
           paid_at: string | null;
           bit_transaction_id: string | null;
+          order_source: string;
+          created_by: string | null;
+          manual_discount_type: string | null;
+          manual_discount_value: number | null;
+          manual_discount_amount: number;
+          pos_payment_method: string | null;
           bit_receipt_url: string | null;
           payment_reported_at: string | null;
           payment_confirmed_by: string | null;
@@ -1777,6 +1783,12 @@ export type Database = {
           payment_due_at?: string | null;
           paid_at?: string | null;
           bit_transaction_id?: string | null;
+          order_source?: string;
+          created_by?: string | null;
+          manual_discount_type?: string | null;
+          manual_discount_value?: number | null;
+          manual_discount_amount?: number;
+          pos_payment_method?: string | null;
           bit_receipt_url?: string | null;
           payment_reported_at?: string | null;
           payment_confirmed_by?: string | null;
@@ -1844,6 +1856,12 @@ export type Database = {
           payment_due_at?: string | null;
           paid_at?: string | null;
           bit_transaction_id?: string | null;
+          order_source?: string;
+          created_by?: string | null;
+          manual_discount_type?: string | null;
+          manual_discount_value?: number | null;
+          manual_discount_amount?: number;
+          pos_payment_method?: string | null;
           bit_receipt_url?: string | null;
           payment_reported_at?: string | null;
           payment_confirmed_by?: string | null;
@@ -2295,6 +2313,8 @@ export type Database = {
           vat_rate: number;
           business_type: "exempt" | "authorized";
           label_width_mm: number;
+          barcode_label_width_mm: number;
+          barcode_label_height_mm: number;
           label_height_mm: number;
           seo_title: string;
           seo_description: string;
@@ -2342,6 +2362,8 @@ export type Database = {
           vat_rate?: number;
           business_type?: "exempt" | "authorized";
           label_width_mm?: number;
+          barcode_label_width_mm?: number;
+          barcode_label_height_mm?: number;
           label_height_mm?: number;
           seo_title?: string;
           seo_description?: string;
@@ -2389,6 +2411,8 @@ export type Database = {
           vat_rate?: number;
           business_type?: "exempt" | "authorized";
           label_width_mm?: number;
+          barcode_label_width_mm?: number;
+          barcode_label_height_mm?: number;
           label_height_mm?: number;
           seo_title?: string;
           seo_description?: string;
@@ -2794,6 +2818,31 @@ export type Database = {
       category_product_counts: {
         Args: never;
         Returns: { category: string; products: number }[];
+      };
+      admin_create_order: {
+        Args: { _customer_id: string | null; _items: Json; _details: Json };
+        Returns: { id: string; order_number: string; total: number; status: string }[];
+      };
+      admin_search_customers: {
+        Args: { _term?: string };
+        Returns: {
+          kind: string;
+          customer_id: string | null;
+          name: string;
+          phone: string | null;
+          email: string | null;
+          city: string | null;
+          address: string | null;
+          zip: string | null;
+          price_tier: number;
+          price_list_type: string;
+          orders_count: number;
+          last_order_at: string | null;
+        }[];
+      };
+      pos_unit_price: {
+        Args: { _customer_id: string | null; _product_id: string; _variant_id?: string | null };
+        Returns: number;
       };
       place_order: {
         Args: {

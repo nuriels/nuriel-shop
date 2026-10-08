@@ -11,7 +11,8 @@
  * - PDF: עמוד אחד לכל מדבקה בגודל המדבקה המדויק (jsPDF).
  * - תמונה (PNG): לשיתוף מהיר בוואטסאפ לשליח.
  *
- * צד לקוח בלבד.
+ * צד לקוח בלבד. עזרי הציור (גופן, טקסט מותאם לתיבה, ברקוד) משותפים גם
+ * למדבקות הברקוד של המוצרים (חלק 32 — src/lib/barcode-labels.ts).
  */
 
 import { deliveryOf, formatPhone, type ProfileContact } from "@/lib/order-details";
@@ -42,14 +43,14 @@ export const LABEL_DPMM = 12;
 const INK = "#000000";
 const PAPER = "#ffffff";
 
-function fontFamily(): string {
+export function fontFamily(): string {
   if (typeof document === "undefined") return "Heebo, Arial, sans-serif";
   const family = getComputedStyle(document.body).fontFamily;
   return family && family.trim() !== "" ? family : "Heebo, Arial, sans-serif";
 }
 
 /** הגופן של האתר (Heebo) חייב להיטען לפני הציור — אחרת canvas נופל ל-Arial */
-async function ensureFonts(): Promise<void> {
+export async function ensureFonts(): Promise<void> {
   if (typeof document === "undefined" || !("fonts" in document)) return;
   try {
     await Promise.all([
@@ -128,12 +129,18 @@ export const SAMPLE_LABEL: LabelData = {
 
 type Ctx = CanvasRenderingContext2D;
 
-function setFont(ctx: Ctx, weight: number, px: number): void {
+export function setFont(ctx: Ctx, weight: number, px: number): void {
   ctx.font = `${weight} ${Math.max(1, Math.round(px))}px ${fontFamily()}`;
 }
 
 /** הגופן הגדול ביותר (עד max) שבו הטקסט נכנס ברוחב */
-function fitFont(ctx: Ctx, text: string, weight: number, maxPx: number, width: number): number {
+export function fitFont(
+  ctx: Ctx,
+  text: string,
+  weight: number,
+  maxPx: number,
+  width: number,
+): number {
   let px = maxPx;
   setFont(ctx, weight, px);
   const measured = ctx.measureText(text).width;
@@ -169,7 +176,7 @@ function wrapLines(ctx: Ctx, text: string, width: number, maxLines: number): str
  * טקסט בתוך תיבה: קודם מנסים שורה אחת בגופן המלא; אם לא נכנס — מקטינים
  * עד minRatio, ומשם עוברים לשתי שורות (אם מותר).
  */
-function drawTextBox(
+export function drawTextBox(
   ctx: Ctx,
   text: string,
   box: { x: number; y: number; width: number; height: number },
@@ -211,7 +218,7 @@ function drawTextBox(
 }
 
 /** ברקוד CODE128 — רשימת 0/1 של מודולים (jsbarcode במצב אובייקט) */
-async function barcodeModules(value: string): Promise<string | null> {
+export async function barcodeModules(value: string): Promise<string | null> {
   try {
     const { default: JsBarcode } = await import("jsbarcode");
     const target: { encodings?: { data: string }[] } = {};
@@ -389,7 +396,7 @@ export async function renderLabelCanvas(
   return canvas;
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error("יצירת התמונה נכשלה"))),

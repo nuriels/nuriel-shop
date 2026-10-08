@@ -1,6 +1,7 @@
 import { staffLabel } from "@/lib/staff";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { Link } from "@tanstack/react-router";
 import {
   Bike,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   PackageCheck,
   PackageOpen,
   Pencil,
+  Receipt,
   RefreshCw,
   Tag,
   TicketPercent,
@@ -555,7 +557,16 @@ export function OrderManagementPanel({
             {loading ? "טוען הזמנות..." : `${orders.length} הזמנות במערכת`}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {/* חלק 32: הקופה המהירה (מנהל) — הזמנה טלפונית / מכירה בחנות */}
+          {isAdminScope && (
+            <Button asChild data-testid="open-pos">
+              <Link to="/admin" search={{ tab: "pos" }}>
+                <Receipt className="size-4" aria-hidden="true" />
+                קופה מהירה
+              </Link>
+            </Button>
+          )}
           <CreateOrderDialog scope={scope} onCreated={load} />
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
@@ -689,7 +700,18 @@ export function OrderManagementPanel({
                                 <PaymentBadge
                                   status={order.payment_status}
                                   method={order.payment_method}
+                                  posMethod={order.pos_payment_method}
                                 />
+                                {order.order_source === "pos" && (
+                                  <Badge
+                                    variant="outline"
+                                    className="gap-1"
+                                    title="נוצרה בקופה המהירה"
+                                  >
+                                    <Receipt className="size-3" aria-hidden="true" />
+                                    קופה
+                                  </Badge>
+                                )}
                                 {order.status === "awaiting_courier" && attempts > 0 && (
                                   <Badge
                                     variant="outline"

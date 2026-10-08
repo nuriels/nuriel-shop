@@ -25,6 +25,7 @@ import { formatIls } from "@/lib/catalog";
 import { ORDER_STATUSES, ORDER_STATUS_LABEL, type OrderRow, type OrderStatus } from "@/lib/orders";
 import { calculateVat } from "@/lib/vat";
 import { orderCouponDiscount, orderDiscountLabel } from "@/lib/coupons";
+import { orderManualDiscount } from "@/lib/pos";
 import { orderShippingLabel } from "@/lib/shipping";
 
 type Draft = {
@@ -100,10 +101,20 @@ export function OrderEditDialog({
     order.shipping_kind !== "digital" &&
     (shippingName !== null || Number(order.shipping_price ?? 0) > 0 || order.kind === "order");
   // הנחת קופון (חלק 14) — לפי התנאים שצולמו בהזמנה, על המוצרים אחרי העריכה
-  const discount =
+  const couponDiscount =
     isQuote && !convertToOrder
       ? 0
       : orderCouponDiscount(order, productsTotal, Number(order.shipping_price ?? 0));
+  // חלק 32: הנחה ידנית מהקופה — אחרי הקופון, על המוצרים בלבד (כמו במסד)
+  const manualDiscount =
+    isQuote && !convertToOrder
+      ? 0
+      : orderManualDiscount(
+          order,
+          productsTotal,
+          order.coupon_discount_type === "free_shipping" ? 0 : couponDiscount,
+        );
+  const discount = couponDiscount + manualDiscount;
   const activeTotal = itemsTotal + shippingCharge - discount;
   const vat = calculateVat(activeTotal, {
     pricesIncludeVat: order.prices_include_vat ?? true,

@@ -3,6 +3,7 @@
  * החישוב כאן רק לתצוגה בקופה ובמסכים: ההנחה בפועל נקבעת במסד
  * (orders_shipping_and_total) — הנוסחה חייבת להיות זהה.
  */
+import { manualDiscountLabel } from "@/lib/pos";
 
 export type CouponType = "percent" | "fixed" | "free_shipping";
 
@@ -80,9 +81,12 @@ export function couponLabel(type: CouponType, value: number): string {
   return type === "percent" ? `${amount}% הנחה` : `₪${amount} הנחה`;
 }
 
-/** שדות הקופון על ההזמנה — לבחירה מהמסד יחד עם שאר פרטי ההזמנה */
+/**
+ * שדות ההנחה על ההזמנה — לבחירה מהמסד יחד עם שאר פרטי ההזמנה: הקופון
+ * (חלק 14) וההנחה הידנית מהקופה המהירה (חלק 32). discount_amount = שתיהן.
+ */
 export const ORDER_COUPON_COLUMNS =
-  "coupon_code, coupon_discount_type, coupon_discount_value, coupon_min_order, discount_amount" as const;
+  "coupon_code, coupon_discount_type, coupon_discount_value, coupon_min_order, discount_amount, manual_discount_type, manual_discount_value, manual_discount_amount" as const;
 
 export type OrderCouponFields = {
   coupon_code?: string | null;
@@ -90,7 +94,12 @@ export type OrderCouponFields = {
   coupon_discount_type?: string | null;
   coupon_discount_value?: number | string | null;
   coupon_min_order?: number | string | null;
+  /** כל ההנחה שהופחתה (קופון + הנחה ידנית) — כבר מופחתת ב-total */
   discount_amount?: number | string | null;
+  /** חלק 32: הנחה ידנית מהקופה ('percent' / 'fixed') והסכום שחושב במסד */
+  manual_discount_type?: string | null;
+  manual_discount_value?: number | string | null;
+  manual_discount_amount?: number | string | null;
 };
 
 /** ההנחה מחדש לפי הצילום על ההזמנה (עריכת הזמנה — כמו שהמסד יחשב) */
@@ -114,15 +123,25 @@ export function orderCouponDiscount(
   );
 }
 
-/** כמה הופחת מההזמנה בקופון (0 = בלי) */
+/** כמה הופחת מההזמנה — קופון + הנחה ידנית (0 = בלי) */
 export function orderDiscount(order: OrderCouponFields): number {
   const value = Number(order.discount_amount ?? 0);
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-/** "קופון SAVE10" — לשורת ההנחה במסמכים ובמיילים */
+/**
+ * לשורת ההנחה במסמכים ובמיילים: "הנחת קופון SAVE10" / "הנחה 10%" /
+ * "הנחה" — ושתיהן יחד: "הנחת קופון SAVE10 + הנחה 10%".
+ */
 export function orderDiscountLabel(order: OrderCouponFields): string {
-  return order.coupon_code ? `הנחת קופון ${order.coupon_code}` : "הנחה";
+  const manual = Number(order.manual_discount_amount ?? 0) > 0;
+  const manualLabel = manualDiscountLabel(order.manual_discount_type, order.manual_discount_value);
+  const total = orderDiscount(order);
+  const couponPart = order.coupon_code && (!manual || total > Number(order.manual_discount_amount));
+  if (couponPart && manual) return `הנחת קופון ${order.coupon_code} + ${manualLabel}`;
+  if (couponPart) return `הנחת קופון ${order.coupon_code}`;
+  if (manual) return manualLabel;
+  return "הנחה";
 }
 
 export type CouponStatus = "active" | "inactive" | "scheduled" | "expired" | "used_up";

@@ -21,6 +21,8 @@ import { AbandonedCartsPanel } from "@/components/marketing/AbandonedCartsPanel"
 import { MarketingPanel } from "@/components/marketing/MarketingPanel";
 import { HomeBannersPanel } from "@/components/HomeBannersPanel";
 import { StockCountPanel } from "@/components/StockCountPanel";
+import { PosPanel } from "@/components/pos/PosPanel";
+import { BarcodeLabelsPanel } from "@/components/labels/BarcodeLabelsPanel";
 import { EmailSettingsPanel } from "@/components/EmailSettingsPanel";
 import { CustomDomainPanel } from "@/components/CustomDomainPanel";
 import { OfflinePaymentMethodsCard } from "@/components/payments/OfflinePaymentMethodsCard";
@@ -271,6 +273,16 @@ function AdminPage() {
                   }
                 />
               </TabsContent>
+              {/* חלק 32: קופה מהירה — הזמנה טלפונית / מכירה בחנות (/admin/orders/new) */}
+              <TabsContent value="pos">
+                <PosPanel
+                  onOpenOrder={(orderId) =>
+                    void navigate({
+                      search: (prev) => ({ ...prev, tab: "orders", order: orderId }),
+                    })
+                  }
+                />
+              </TabsContent>
               <TabsContent value="inbox">
                 <SiteInboxPanel
                   view={inbox ?? "contact"}
@@ -329,6 +341,10 @@ function AdminPage() {
               </TabsContent>
               <TabsContent value="stock">
                 <StockCountPanel />
+              </TabsContent>
+              {/* חלק 32: מחולל מדבקות ברקוד (/admin/inventory/labels) */}
+              <TabsContent value="labels">
+                <BarcodeLabelsPanel />
               </TabsContent>
               <TabsContent value="categories">
                 <CategoryManagementPanel />

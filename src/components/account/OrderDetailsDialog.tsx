@@ -136,7 +136,11 @@ function OrderDetails({
           <Badge variant={ORDER_STATUS_BADGE[order.status]}>
             {ORDER_STATUS_LABEL[order.status]}
           </Badge>
-          <PaymentBadge status={order.payment_status} method={order.payment_method} />
+          <PaymentBadge
+            status={order.payment_status}
+            method={order.payment_method}
+            posMethod={order.pos_payment_method}
+          />
         </div>
         <DialogDescription className="text-right">
           {formatOrderDate(order.created_at)}

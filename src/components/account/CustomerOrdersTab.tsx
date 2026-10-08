@@ -220,7 +220,11 @@ export function CustomerOrdersTab({
                         <Badge variant={ORDER_STATUS_BADGE[order.status]}>
                           {ORDER_STATUS_LABEL[order.status]}
                         </Badge>
-                        <PaymentBadge status={order.payment_status} method={order.payment_method} />
+                        <PaymentBadge
+                          status={order.payment_status}
+                          method={order.payment_method}
+                          posMethod={order.pos_payment_method}
+                        />
                       </div>
                     </div>
                     <BitPayNowLink order={order} className="w-fit" />

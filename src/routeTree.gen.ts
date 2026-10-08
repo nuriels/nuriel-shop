@@ -43,7 +43,9 @@ import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
 import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrades'
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
 import { Route as PwaIconRouteImport } from './routes/pwa.$icon'
+import { Route as AdminInventoryLabelsRouteImport } from './routes/admin_.inventory_.labels'
 import { Route as AdminMarketingAbandonedCartsRouteImport } from './routes/admin_.marketing.abandoned-carts'
+import { Route as AdminOrdersNewRouteImport } from './routes/admin_.orders_.new'
 import { Route as AdminSettingsDomainRouteImport } from './routes/admin_.settings_.domain'
 import { Route as ApiAdminAnalyticsRouteImport } from './routes/api.admin.analytics'
 import { Route as ApiAdminTriggerAbandonedCartsRouteImport } from './routes/api.admin.trigger-abandoned-carts'
@@ -219,12 +221,22 @@ const PwaIconRoute = PwaIconRouteImport.update({
   path: '/pwa/$icon',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminInventoryLabelsRoute = AdminInventoryLabelsRouteImport.update({
+  id: '/admin_/inventory_/labels',
+  path: '/admin/inventory/labels',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminMarketingAbandonedCartsRoute =
   AdminMarketingAbandonedCartsRouteImport.update({
     id: '/admin_/marketing/abandoned-carts',
     path: '/admin/marketing/abandoned-carts',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AdminOrdersNewRoute = AdminOrdersNewRouteImport.update({
+  id: '/admin_/orders_/new',
+  path: '/admin/orders/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminSettingsDomainRoute = AdminSettingsDomainRouteImport.update({
   id: '/admin_/settings_/domain',
   path: '/admin/settings/domain',
@@ -282,7 +294,9 @@ export interface FileRoutesByFullPath {
   '/platform/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
+  '/admin/orders/new': typeof AdminOrdersNewRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
@@ -323,7 +337,9 @@ export interface FileRoutesByTo {
   '/platform/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
+  '/admin/orders/new': typeof AdminOrdersNewRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
@@ -365,7 +381,9 @@ export interface FileRoutesById {
   '/platform_/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/admin_/inventory_/labels': typeof AdminInventoryLabelsRoute
   '/admin_/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
+  '/admin_/orders_/new': typeof AdminOrdersNewRoute
   '/admin_/settings_/domain': typeof AdminSettingsDomainRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
@@ -408,7 +426,9 @@ export interface FileRouteTypes {
     | '/platform/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/admin/inventory/labels'
     | '/admin/marketing/abandoned-carts'
+    | '/admin/orders/new'
     | '/admin/settings/domain'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
@@ -449,7 +469,9 @@ export interface FileRouteTypes {
     | '/platform/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/admin/inventory/labels'
     | '/admin/marketing/abandoned-carts'
+    | '/admin/orders/new'
     | '/admin/settings/domain'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
@@ -490,7 +512,9 @@ export interface FileRouteTypes {
     | '/platform_/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/admin_/inventory_/labels'
     | '/admin_/marketing/abandoned-carts'
+    | '/admin_/orders_/new'
     | '/admin_/settings_/domain'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
@@ -532,7 +556,9 @@ export interface RootRouteChildren {
   PlatformUpgradesRoute: typeof PlatformUpgradesRoute
   ProductProductIdRoute: typeof ProductProductIdRoute
   PwaIconRoute: typeof PwaIconRoute
+  AdminInventoryLabelsRoute: typeof AdminInventoryLabelsRoute
   AdminMarketingAbandonedCartsRoute: typeof AdminMarketingAbandonedCartsRoute
+  AdminOrdersNewRoute: typeof AdminOrdersNewRoute
   AdminSettingsDomainRoute: typeof AdminSettingsDomainRoute
   ApiAdminAnalyticsRoute: typeof ApiAdminAnalyticsRoute
   ApiAdminTriggerAbandonedCartsRoute: typeof ApiAdminTriggerAbandonedCartsRoute
@@ -779,11 +805,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PwaIconRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/inventory_/labels': {
+      id: '/admin_/inventory_/labels'
+      path: '/admin/inventory/labels'
+      fullPath: '/admin/inventory/labels'
+      preLoaderRoute: typeof AdminInventoryLabelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/marketing/abandoned-carts': {
       id: '/admin_/marketing/abandoned-carts'
       path: '/admin/marketing/abandoned-carts'
       fullPath: '/admin/marketing/abandoned-carts'
       preLoaderRoute: typeof AdminMarketingAbandonedCartsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin_/orders_/new': {
+      id: '/admin_/orders_/new'
+      path: '/admin/orders/new'
+      fullPath: '/admin/orders/new'
+      preLoaderRoute: typeof AdminOrdersNewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin_/settings_/domain': {
@@ -852,7 +892,9 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformUpgradesRoute: PlatformUpgradesRoute,
   ProductProductIdRoute: ProductProductIdRoute,
   PwaIconRoute: PwaIconRoute,
+  AdminInventoryLabelsRoute: AdminInventoryLabelsRoute,
   AdminMarketingAbandonedCartsRoute: AdminMarketingAbandonedCartsRoute,
+  AdminOrdersNewRoute: AdminOrdersNewRoute,
   AdminSettingsDomainRoute: AdminSettingsDomainRoute,
   ApiAdminAnalyticsRoute: ApiAdminAnalyticsRoute,
   ApiAdminTriggerAbandonedCartsRoute: ApiAdminTriggerAbandonedCartsRoute,

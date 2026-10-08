@@ -372,3 +372,62 @@ html.a11y-focus :focus-visible {
     outline: none;
   }
 }
+
+/* ------------------------------------------------------------------
+ * חלק 32: תצוגת ההדפסה של מדבקות הברקוד (LabelPrintView). בהדפסה — רק
+ * המדבקות; גודל העמוד נקבע דינמית ב-@page לפי גודל המדבקה / A4.
+ * ------------------------------------------------------------------ */
+@media print {
+  html.label-printing,
+  html.label-printing body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+  html.label-printing body > *:not([data-label-print-root]) {
+    display: none !important;
+  }
+  html.label-printing [data-label-print-root] {
+    position: static !important;
+    inset: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  html.label-printing .label-print-chrome {
+    display: none !important;
+  }
+  html.label-printing .label-print-sheet {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    zoom: 1 !important;
+  }
+  /* גובה העמוד פחות שבריר מ"מ — בלי זה עיגול הפיקסלים יוצר עמוד ריק אחרי כל מדבקה */
+  html.label-printing .label-roll-item {
+    display: block !important;
+    height: calc(var(--label-h, 40mm) - 0.3mm) !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+  html.label-printing .label-roll-item:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  html.label-printing .label-a4-page {
+    height: 296.4mm !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+  html.label-printing .label-a4-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+}

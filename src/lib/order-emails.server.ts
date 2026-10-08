@@ -22,6 +22,7 @@ import {
 } from "@/lib/order-details";
 import { ORDER_SHIPPING_COLUMNS, type OrderShippingFields } from "@/lib/shipping";
 import { loadPickupAddress, prepareOrderEmail } from "@/lib/order-email-data.server";
+import { posPaymentText } from "@/lib/pos";
 import {
   logNotification,
   sendNotificationEmail,
@@ -47,7 +48,11 @@ export async function sendOrderEmailsInternal(
   // אמצעי התשלום (חלק 17ב) — בביט: מה הלקוח שלח, וקישור לאישור בפאנל
   const { payment } = prepared;
   let paymentHtml = "";
-  if (!isQuote) {
+  // חלק 32: הזמנה מהקופה המהירה — אמצעי התשלום שנרשם בקופה
+  const pos = posPaymentText(payment.posMethod, payment.status === "paid");
+  if (!isQuote && pos) {
+    paymentHtml = `<p><strong>אמצעי תשלום:</strong> ${escapeHtml(pos.label)} <span style="color:#6b7280;">(נרשם בקופה המהירה)</span></p>`;
+  } else if (!isQuote) {
     if (payment.method === "bit") {
       const proof = [
         payment.bitReference
