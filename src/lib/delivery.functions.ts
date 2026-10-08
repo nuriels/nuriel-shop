@@ -96,6 +96,28 @@ export const markOrdersShipped = createServerFn({ method: "POST" })
       }
     }
 
+    // חלק 35: הזמנה שעוד חסר בה מספר סידורי — מדלגים עליה (אחרת המסד דוחה
+    // את כל העדכון המרוכז)
+    if (eligible.length > 0) {
+      const { data: missingRows, error: missingError } = await context.supabase.rpc(
+        "orders_missing_serials",
+        { _order_ids: eligible },
+      );
+      if (missingError) throw new Error(missingError.message);
+      const missing = new Map((missingRows ?? []).map((row) => [row.order_id, row]));
+      for (const row of rows ?? []) {
+        const gap = missing.get(row.id);
+        if (!gap) continue;
+        skipped.push({
+          order_number: row.order_number,
+          reason: `חסר מספר סידורי: "${gap.product_name ?? "מוצר"}" (${gap.assigned} מתוך ${gap.required})`,
+        });
+      }
+      for (let index = eligible.length - 1; index >= 0; index -= 1) {
+        if (missing.has(eligible[index]!)) eligible.splice(index, 1);
+      }
+    }
+
     let updated: MarkShippedResult["updated"] = [];
     if (eligible.length > 0) {
       const { data: changed, error: updateError } = await context.supabase

@@ -18,6 +18,8 @@ import { SUSPENDED_ALLOWED_PATHS } from "@/lib/blocked-pages";
 import { DEFAULT_STORE_NAME, getSiteSeo } from "@/lib/platform.functions";
 import { brandThemeCss, normalizeBrandColor } from "@/lib/brand-theme";
 import { StorefrontGate } from "@/components/StorefrontGate";
+import { RestBanner } from "@/components/RestBanner";
+import { RestStateProvider } from "@/components/RestStateProvider";
 import { MarketingLayer } from "@/components/marketing/MarketingLayer";
 import { CartProvider } from "@/hooks/useCart";
 import { NO_MARKETING_PATHS, trackingHeadScripts } from "@/lib/marketing";
@@ -215,14 +217,18 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* הסל משותף לכל העמודים (קטלוג → קופה) ונשמר בדפדפן */}
       <CartProvider>
-        {/* מצב שבת: לקוחות ואורחים רואים "שבת שלום" במקום עמודי החנות */}
-        <StorefrontGate
-          sabbath={site?.sabbath === true}
-          storeName={site?.siteName || DEFAULT_STORE_NAME}
-        >
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
-        </StorefrontGate>
+        {/* חלק 35: שמירת שבת וחג אוטומטית — גלישה פתוחה, סל וקופה נעולים */}
+        <RestStateProvider settings={site?.rest ?? null}>
+          {/* מצב שבת: לקוחות ואורחים רואים "שבת שלום" במקום עמודי החנות */}
+          <StorefrontGate
+            sabbath={site?.sabbath === true}
+            storeName={site?.siteName || DEFAULT_STORE_NAME}
+          >
+            <RestBanner />
+            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+            <Outlet />
+          </StorefrontGate>
+        </RestStateProvider>
         {/* פופ-אפ המבצעים ומעקב מעברי עמוד (Pixel) — חלק 14 */}
         <MarketingLayer
           promo={site?.promo ?? null}

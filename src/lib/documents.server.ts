@@ -13,6 +13,7 @@ import {
 import { calculateVat, DEFAULT_VAT_RATE } from "@/lib/vat";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/orders";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { serialLineText } from "@/lib/serials";
 import {
   ORDER_SHIPPING_COLUMNS,
   hasShippingLine,
@@ -56,6 +57,9 @@ type OrderRecord = OrderContactFields &
       product_sku: string | null;
       product_barcode: string | null;
       is_digital?: boolean;
+      /** חלק 35: מספרים סידוריים ותוקף אחריות */
+      serial_number?: string | null;
+      warranty_until?: string | null;
     }[];
   };
 
@@ -98,7 +102,7 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
   const { data: orderData, error } = await supabaseAdmin
     .from("orders")
     .select(
-      `id, order_number, customer_id, agent_id, status, kind, total, note, vat_rate, prices_include_vat, created_at, ${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ${ORDER_COUPON_COLUMNS}, order_items (quantity, unit_price, product_name, product_sku, product_barcode, is_digital)`,
+      `id, order_number, customer_id, agent_id, status, kind, total, note, vat_rate, prices_include_vat, created_at, ${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ${ORDER_COUPON_COLUMNS}, order_items (quantity, unit_price, product_name, product_sku, product_barcode, is_digital, serial_number, warranty_until)`,
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -145,6 +149,8 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
 
   const items: DocumentItem[] = order.order_items.map((item) => ({
     name: `${item.product_name ?? "מוצר"}${item.is_digital ? " (דיגיטלי — נשלח במייל)" : ""}`,
+    // חלק 35: "מספר סידורי: X | תוקף אחריות עד: DD/MM/YYYY" — שורה נוספת בקבלה
+    note: serialLineText(item.serial_number, item.warranty_until),
     barcode: item.product_barcode,
     sku: item.product_sku,
     quantity: item.quantity,

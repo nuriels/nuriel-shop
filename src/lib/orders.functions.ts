@@ -7,6 +7,7 @@ import {
 } from "@/lib/order-details";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireStoreOpen } from "@/lib/rest-window.middleware";
 
 /** פעולות הזמנה בצד השרת: שכפול הזמנה ובון ליקוט למחסן */
 
@@ -16,7 +17,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  * הלקוח — לא במחירים שהיו בהזמנה המקורית.
  */
 export const reorderOrder = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireStoreOpen])
   .inputValidator((input: { orderId: string }) => {
     const orderId = String(input?.orderId ?? "").trim();
     if (!orderId) throw new Error("חסר מזהה הזמנה");

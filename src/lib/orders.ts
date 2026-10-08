@@ -254,6 +254,11 @@ export type OrderItemRow = {
   license_sent_to?: string | null;
   /** "אדום · S" — הוריאציה שנבחרה (כבר כלולה גם ב-product_name) */
   variant_label?: string | null;
+  /** חלק 35: המספרים הסידוריים שנמכרו בשורה ("A1, A2") ותוקף האחריות */
+  serial_number?: string | null;
+  warranty_until?: string | null;
+  /** השורה דורשת מספר סידורי לכל יחידה לפני משלוח / מסירה */
+  serial_required?: boolean;
 };
 
 export type OrderRow = OrderContactFields & {
@@ -325,7 +330,8 @@ export const ORDER_SELECT_COLUMNS =
   "bit_transaction_id, bit_receipt_url, payment_reported_at, payment_due_at, " +
   `${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ${ORDER_COUPON_COLUMNS}, ` +
   "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit, is_gift, " +
-  "is_digital, item_status, digital_license_key, license_sent_at, license_sent_to, variant_label)";
+  "is_digital, item_status, digital_license_key, license_sent_at, license_sent_to, variant_label, " +
+  "serial_number, warranty_until, serial_required)";
 
 /**
  * חלק 33: "נוצר בקופה על ידי: רונית" — מי מהצוות הקליד את ההזמנה (מוצג בניהול

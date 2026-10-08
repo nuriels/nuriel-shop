@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useRestState } from "@/hooks/useRestState";
+import { REST_CHECKOUT_MESSAGE, reopenText, restGreeting } from "@/lib/rest-window";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowRight,
   Building2,
   CircleAlert,
+  MoonStar,
   KeyRound,
   Loader2,
   MapPin,
@@ -62,6 +65,8 @@ import {
   cartSubtotal,
   evaluateCartPromotions,
   freeShippingProgress,
+  minimumOrderMessage,
+  minimumOrderStatus,
   pickOrderBump,
 } from "@/lib/cart-promotions";
 import { subtreeNames } from "@/lib/category-tree";
@@ -438,6 +443,13 @@ function CheckoutPage() {
     kind === "order"
       ? freeShippingProgress(cartSubtotal(cart), settings?.free_shipping_threshold)
       : null;
+  // חלק 35: מינימום להזמנה (סכום המוצרים) + שבת / חג (שעון ישראל)
+  const minimum =
+    kind === "order"
+      ? minimumOrderStatus(cartSubtotal(cart), settings?.minimum_order_amount)
+      : null;
+  const belowMinimum = minimum !== null && !minimum.reached;
+  const { state: restState, closed: restClosed } = useRestState();
   const cartIds = useMemo(() => new Set(cart.map((item) => item.productId)), [cart]);
   const bump =
     kind === "order" && cart.length > 0
@@ -630,6 +642,16 @@ function CheckoutPage() {
     event.preventDefault();
     setAttempted(true);
     setSubmitError(null);
+    if (restClosed) {
+      setSubmitError(REST_CHECKOUT_MESSAGE);
+      toast.error(REST_CHECKOUT_MESSAGE);
+      return;
+    }
+    if (minimum && !minimum.reached) {
+      setSubmitError(minimumOrderMessage(minimum, formatIls));
+      toast.error(minimumOrderMessage(minimum, formatIls));
+      return;
+    }
     if (shippingMissing) {
       const element = document.getElementById("co-shipping");
       element?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -911,6 +933,31 @@ function CheckoutPage() {
                 </div>
               )}
             </div>
+
+            {/* חלק 35: שבת / חג — הודעה בולטת, והקופה נעולה (נאכף גם בשרת ובמסד) */}
+            {restClosed && restState.closed && (
+              <div
+                role="alert"
+                className="flex flex-col items-center gap-2 rounded-2xl bg-indigo-950 px-5 py-6 text-center text-indigo-50 shadow-card"
+                data-testid="checkout-rest-closed"
+              >
+                <MoonStar className="size-8 text-amber-300" aria-hidden="true" />
+                <p className="font-display text-2xl font-bold">{restGreeting(restState)}</p>
+                <p className="text-lg">{REST_CHECKOUT_MESSAGE}</p>
+                <p className="text-sm opacity-80">
+                  נחזור לפעילות {reopenText(restState)}. הסל שלכם נשמר — אפשר להשלים את ההזמנה אז.
+                </p>
+              </div>
+            )}
+            {!restClosed && belowMinimum && minimum && (
+              <p
+                role="alert"
+                className="rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-center text-sm font-semibold text-amber-950"
+                data-testid="checkout-minimum-order"
+              >
+                {minimumOrderMessage(minimum, formatIls)}
+              </p>
+            )}
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start">
               <form noValidate onSubmit={submit} className="order-2 space-y-5 lg:order-1">
@@ -1412,7 +1459,13 @@ function CheckoutPage() {
                     </p>
                   )}
 
-                  <Button type="submit" size="lg" className="h-12 w-full text-base" disabled={busy}>
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="h-12 w-full text-base"
+                    disabled={busy || restClosed || belowMinimum}
+                    data-testid="checkout-submit"
+                  >
                     {busy ? (
                       <Loader2 className="size-5 animate-spin" aria-hidden="true" />
                     ) : payByBit ? (

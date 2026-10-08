@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   EyeOff,
+  Hash,
   KeyRound,
   Loader2,
   Package,
+  PackagePlus,
   Pencil,
   Plus,
   Scale,
@@ -84,6 +86,8 @@ import { formatBytes } from "@/lib/image";
 import { useBackToClose } from "@/hooks/useBackToClose";
 import { ProductPicker } from "@/components/sales/ProductPicker";
 import { VariantsEditor } from "@/components/VariantsEditor";
+import { SerialReceiveDialog } from "@/components/serials/SerialReceiveDialog";
+import { warrantyLabel } from "@/lib/serials";
 import {
   VARIANT_ADMIN_COLUMNS,
   attributesProblem,
@@ -167,6 +171,9 @@ type FormState = {
   stickerId: string;
   stickerSize: number;
   stickerOpacity: number;
+  /** חלק 35: מספר סידורי לכל יחידה + חודשי אחריות */
+  requiresSerial: boolean;
+  warrantyMonths: string;
 };
 
 export type ProductDraft = { id: string; title: string; data: Json; updated_at: string };
@@ -214,6 +221,8 @@ function emptyForm(defaultCategory: string): FormState {
     stickerId: "",
     stickerSize: STICKER_SIZE.default,
     stickerOpacity: STICKER_OPACITY.default,
+    requiresSerial: false,
+    warrantyMonths: "0",
   };
 }
 
@@ -263,6 +272,8 @@ function fromProduct(product: GlobalProduct): FormState {
     stickerId: product.sticker_id ?? "",
     stickerSize: product.sticker_size ?? STICKER_SIZE.default,
     stickerOpacity: product.sticker_opacity ?? STICKER_OPACITY.default,
+    requiresSerial: product.requires_serial ?? false,
+    warrantyMonths: String(product.warranty_months ?? 0),
   };
 }
 
@@ -436,6 +447,8 @@ export function AdminProductDialog({
   );
   // גרסת המוצר שממנה נטען הטופס (נטענת מחדש מהמסד בכל פתיחה)
   const [loaded, setLoaded] = useState<GlobalProduct | null>(product ?? null);
+  // חלק 35: קליטת סחורה למוצר עם מספרים סידוריים (מתוך חלון המוצר)
+  const [receiveOpen, setReceiveOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingExtra, setUploadingExtra] = useState(false);
   const [imageNote, setImageNote] = useState<string | null>(null);
@@ -781,6 +794,14 @@ export function AdminProductDialog({
         return "כל הוריאציות כבויות — הפעילו לפחות אחת (או הסירו את המאפיינים)";
       }
     }
+    // חלק 35: חודשי אחריות — מספר שלם 0–240
+    const warranty = Number(form.warrantyMonths ?? "0");
+    if (!Number.isInteger(warranty) || warranty < 0 || warranty > 240) {
+      return "חודשי אחריות: מספר שלם בין 0 ל-240 (0 = בלי אחריות)";
+    }
+    if (form.requiresSerial && !form.isDigital && !isEdit && Number(form.stockQuantity) > 0) {
+      return 'מוצר עם מספר סידורי נשמר עם מלאי 0 — אחרי השמירה מוסיפים יחידות ב"קליטת סחורה"';
+    }
     if (form.hasDeposit && !form.isDigital) {
       if (form.depositPrice.trim() === "" || Number(form.depositPrice) < 0) {
         return "נדרש מחיר פיקדון תקין ליחידה";
@@ -847,6 +868,12 @@ export function AdminProductDialog({
       sticker_id: form.stickerId || null,
       sticker_size: clampStickerSize(form.stickerSize),
       sticker_opacity: clampStickerOpacity(form.stickerOpacity),
+      // חלק 35: מספרים סידוריים (מוצר פיזי בלבד) + אחריות
+      requires_serial: (form.requiresSerial ?? false) && !form.isDigital,
+      warranty_months: Math.max(
+        0,
+        Math.min(240, Math.floor(Number(form.warrantyMonths ?? "0") || 0)),
+      ),
     };
     // דרגים 2/3: כשהם פעילים — נשמרים מהטופס. כשהם רדומים — מוצר קיים שומר
     // את הערכים שכבר יש לו (לא נמחקים), ומוצר חדש מקבל את אותו מחיר בכולם.
@@ -865,7 +892,14 @@ export function AdminProductDialog({
       const update: TablesUpdate<"global_products"> = { ...common, ...tierFields };
       // מלאי ו"אזל" נשלחים רק אם המנהל שינה אותם — אחרת הזמנה שנכנסה בזמן
       // שהטופס היה פתוח הייתה נדרסת בכמות הישנה
-      if (loaded && stock !== loaded.stock_quantity) update.stock_quantity = stock;
+      // מוצר עם מספרים סידוריים: המלאי משתנה רק בקליטה / בהוצאה מהמלאי
+      if (
+        loaded &&
+        stock !== loaded.stock_quantity &&
+        !(form.requiresSerial && loaded.requires_serial)
+      ) {
+        update.stock_quantity = stock;
+      }
       if (loaded && form.isOutOfStock !== loaded.is_out_of_stock) {
         update.is_out_of_stock = form.isOutOfStock;
       }
@@ -1494,6 +1528,58 @@ export function AdminProductDialog({
               </p>
             </div>
 
+            {/* חלק 35: מספר סידורי לכל יחידה + אחריות (חנויות חומרה / מוצרי חשמל) */}
+            {!form.isDigital && (
+              <div
+                className={`space-y-3 rounded-lg border p-3 ${
+                  form.requiresSerial
+                    ? "border-violet-300 bg-violet-50/60 dark:border-violet-800 dark:bg-violet-950/30"
+                    : "border-border"
+                }`}
+              >
+                <label className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <Hash
+                      className="size-4 text-violet-700 dark:text-violet-300"
+                      aria-hidden="true"
+                    />
+                    דורש מספר סידורי (S/N) לכל יחידה
+                  </span>
+                  <Switch
+                    checked={form.requiresSerial ?? false}
+                    onCheckedChange={(v) => patch({ requiresSerial: v })}
+                    data-testid="product-requires-serial"
+                  />
+                </label>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {form.requiresSerial
+                    ? 'המלאי נקלט בסריקת מספר סידורי לכל יחידה ("קליטת סחורה"). בליקוט ובקופה סורקים את המספר של היחידה שנמכרה — בלי זה ההזמנה לא עוברת ל"נשלחה" / "נמסרה". הלקוח רואה את המספר ותוקף האחריות בהזמנה ובקבלה.'
+                    : "למוצרים עם מעקב אחריות (מחשבים, טלפונים, מכשירי חשמל): כל יחידה מקבלת מספר סידורי בקליטה, והמספר נרשם על הלקוח במכירה."}
+                </p>
+                <div className="grid items-end gap-3 sm:grid-cols-[10rem_1fr]">
+                  <div className="space-y-2">
+                    <Label htmlFor="p-warranty">חודשי אחריות</Label>
+                    <Input
+                      id="p-warranty"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={240}
+                      step="1"
+                      value={form.warrantyMonths ?? "0"}
+                      onChange={(e) => patch({ warrantyMonths: e.target.value })}
+                      data-testid="product-warranty-months"
+                    />
+                  </div>
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {warrantyLabel(Number(form.warrantyMonths))
+                      ? `${warrantyLabel(Number(form.warrantyMonths))} מיום הרכישה — התאריך מחושב ומוצג ללקוח.`
+                      : "0 = בלי אחריות (למשל 12 = שנה, 24 = שנתיים)."}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {!form.isDigital && (
               <div className="space-y-3 rounded-lg border border-border p-3">
                 <label className="flex items-center justify-between gap-2">
@@ -1585,17 +1671,52 @@ export function AdminProductDialog({
               </p>
             ) : (
               <>
-                <div className="space-y-2 sm:max-w-[14rem]">
-                  <Label htmlFor="p-stock">כמות במלאי</Label>
-                  <Input
-                    id="p-stock"
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    value={form.stockQuantity}
-                    onChange={(e) => patch({ stockQuantity: e.target.value })}
-                  />
-                </div>
+                {form.requiresSerial ? (
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="space-y-2 sm:max-w-[14rem]">
+                      <Label htmlFor="p-stock">כמות במלאי</Label>
+                      <Input
+                        id="p-stock"
+                        type="number"
+                        value={isEdit ? form.stockQuantity : "0"}
+                        readOnly
+                        disabled
+                        aria-describedby="p-stock-serial-note"
+                      />
+                    </div>
+                    {isEdit && loaded?.requires_serial ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setReceiveOpen(true)}
+                        data-testid="product-receive-serials"
+                      >
+                        <PackagePlus className="size-4" />
+                        קליטת סחורה (סריקת מספרים)
+                      </Button>
+                    ) : null}
+                    <p
+                      id="p-stock-serial-note"
+                      className="basis-full text-xs leading-5 text-muted-foreground"
+                    >
+                      {isEdit && loaded?.requires_serial
+                        ? 'המלאי עולה רק בקליטה — מספר סידורי לכל יחידה. רשימת היחידות ובדיקת אחריות: "מספרים סידוריים ואחריות" בתפריט.'
+                        : 'שמרו את המוצר — ואז "קליטת סחורה": סריקת מספר סידורי לכל יחידה שנכנסת למלאי.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 sm:max-w-[14rem]">
+                    <Label htmlFor="p-stock">כמות במלאי</Label>
+                    <Input
+                      id="p-stock"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={form.stockQuantity}
+                      onChange={(e) => patch({ stockQuantity: e.target.value })}
+                    />
+                  </div>
+                )}
                 <p className="-mt-2 text-xs leading-5 text-muted-foreground">
                   יורד אוטומטית כשלקוח שולח הזמנה (הכמות שמורה לו) וחוזר אם ההזמנה מבוטלת. במלאי 0
                   (או כשנשאר פחות ממארז אחד) המוצר מוצג באתר "אזל מהמלאי", כפתור ההוספה לסל מנוטרל
@@ -1929,6 +2050,22 @@ export function AdminProductDialog({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {isEdit && product && (
+        <SerialReceiveDialog
+          open={receiveOpen}
+          onOpenChange={setReceiveOpen}
+          productId={product.id}
+          productName={form.name || product.name}
+          onReceived={(result) => {
+            // המלאי החדש — גם בטופס וגם ב"מה שנטען" (כדי שהשמירה לא תדרוס)
+            patch({ stockQuantity: String(result.stock_quantity) });
+            setLoaded((current) =>
+              current ? { ...current, stock_quantity: result.stock_quantity } : current,
+            );
+          }}
+        />
+      )}
     </>
   );
 }

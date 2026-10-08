@@ -45,6 +45,7 @@ import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrade
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
 import { Route as PwaIconRouteImport } from './routes/pwa.$icon'
 import { Route as AdminInventoryLabelsRouteImport } from './routes/admin_.inventory_.labels'
+import { Route as AdminInventorySerialsRouteImport } from './routes/admin_.inventory_.serials'
 import { Route as AdminMarketingAbandonedCartsRouteImport } from './routes/admin_.marketing.abandoned-carts'
 import { Route as AdminMarketingReviewsRouteImport } from './routes/admin_.marketing.reviews'
 import { Route as AdminOrdersNewRouteImport } from './routes/admin_.orders_.new'
@@ -234,6 +235,11 @@ const AdminInventoryLabelsRoute = AdminInventoryLabelsRouteImport.update({
   path: '/admin/inventory/labels',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminInventorySerialsRoute = AdminInventorySerialsRouteImport.update({
+  id: '/admin_/inventory_/serials',
+  path: '/admin/inventory/serials',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminMarketingAbandonedCartsRoute =
   AdminMarketingAbandonedCartsRouteImport.update({
     id: '/admin_/marketing/abandoned-carts',
@@ -314,6 +320,7 @@ export interface FileRoutesByFullPath {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
+  '/admin/inventory/serials': typeof AdminInventorySerialsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin/marketing/reviews': typeof AdminMarketingReviewsRoute
   '/admin/orders/new': typeof AdminOrdersNewRoute
@@ -360,6 +367,7 @@ export interface FileRoutesByTo {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
+  '/admin/inventory/serials': typeof AdminInventorySerialsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin/marketing/reviews': typeof AdminMarketingReviewsRoute
   '/admin/orders/new': typeof AdminOrdersNewRoute
@@ -407,6 +415,7 @@ export interface FileRoutesById {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/admin_/inventory_/labels': typeof AdminInventoryLabelsRoute
+  '/admin_/inventory_/serials': typeof AdminInventorySerialsRoute
   '/admin_/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin_/marketing/reviews': typeof AdminMarketingReviewsRoute
   '/admin_/orders_/new': typeof AdminOrdersNewRoute
@@ -455,6 +464,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/admin/inventory/labels'
+    | '/admin/inventory/serials'
     | '/admin/marketing/abandoned-carts'
     | '/admin/marketing/reviews'
     | '/admin/orders/new'
@@ -501,6 +511,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/admin/inventory/labels'
+    | '/admin/inventory/serials'
     | '/admin/marketing/abandoned-carts'
     | '/admin/marketing/reviews'
     | '/admin/orders/new'
@@ -547,6 +558,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/admin_/inventory_/labels'
+    | '/admin_/inventory_/serials'
     | '/admin_/marketing/abandoned-carts'
     | '/admin_/marketing/reviews'
     | '/admin_/orders_/new'
@@ -594,6 +606,7 @@ export interface RootRouteChildren {
   ProductProductIdRoute: typeof ProductProductIdRoute
   PwaIconRoute: typeof PwaIconRoute
   AdminInventoryLabelsRoute: typeof AdminInventoryLabelsRoute
+  AdminInventorySerialsRoute: typeof AdminInventorySerialsRoute
   AdminMarketingAbandonedCartsRoute: typeof AdminMarketingAbandonedCartsRoute
   AdminMarketingReviewsRoute: typeof AdminMarketingReviewsRoute
   AdminOrdersNewRoute: typeof AdminOrdersNewRoute
@@ -858,6 +871,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminInventoryLabelsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/inventory_/serials': {
+      id: '/admin_/inventory_/serials'
+      path: '/admin/inventory/serials'
+      fullPath: '/admin/inventory/serials'
+      preLoaderRoute: typeof AdminInventorySerialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/marketing/abandoned-carts': {
       id: '/admin_/marketing/abandoned-carts'
       path: '/admin/marketing/abandoned-carts'
@@ -954,6 +974,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProductProductIdRoute: ProductProductIdRoute,
   PwaIconRoute: PwaIconRoute,
   AdminInventoryLabelsRoute: AdminInventoryLabelsRoute,
+  AdminInventorySerialsRoute: AdminInventorySerialsRoute,
   AdminMarketingAbandonedCartsRoute: AdminMarketingAbandonedCartsRoute,
   AdminMarketingReviewsRoute: AdminMarketingReviewsRoute,
   AdminOrdersNewRoute: AdminOrdersNewRoute,

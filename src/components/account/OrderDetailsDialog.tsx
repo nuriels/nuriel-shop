@@ -5,6 +5,7 @@ import {
   MapPin,
   Package,
   Receipt,
+  ShieldCheck,
   RotateCcw,
   StickyNote,
   Store,
@@ -38,6 +39,7 @@ import { calculateVat } from "@/lib/vat";
 import { useBackToClose } from "@/hooks/useBackToClose";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { DigitalBadge, ItemStatusBadge, LicenseKeyDisplay } from "@/components/OrderItemExtras";
+import { serialLineText } from "@/lib/serials";
 import { hasShippingLine, orderShippingLabel, shippingWasFree } from "@/lib/shipping";
 import { orderDiscount, orderDiscountLabel } from "@/lib/coupons";
 import { OrderTrackingInfo } from "@/components/account/OrderTrackingInfo";
@@ -199,6 +201,16 @@ function OrderDetails({
                       מפתח הרישיון יישלח אליך במייל ויופיע כאן.
                     </p>
                   ) : null)}
+                {/* חלק 35: "מספר סידורי: X | תוקף אחריות עד: DD/MM/YYYY" */}
+                {serialLineText(item.serial_number, item.warranty_until) && (
+                  <p
+                    className="mt-1 flex items-center gap-1 text-xs font-medium text-foreground/80"
+                    data-testid="account-serial-line"
+                  >
+                    <ShieldCheck className="size-3.5 shrink-0 text-green-700" aria-hidden="true" />
+                    <span>{serialLineText(item.serial_number, item.warranty_until)}</span>
+                  </p>
+                )}
               </div>
               {!isQuote && (
                 <span className="numeric shrink-0 text-sm font-bold">

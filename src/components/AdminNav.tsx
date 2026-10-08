@@ -12,6 +12,7 @@ import {
   Gem,
   Gift,
   Globe,
+  Hash,
   Inbox,
   LayoutDashboard,
   LayoutTemplate,
@@ -79,6 +80,8 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
       { value: "stock", label: "ספירת מלאי", icon: ClipboardCheck },
       { value: "stock-check", label: "בדיקת מלאי", icon: ScanSearch },
       { value: "labels", label: "מדבקות ברקוד", icon: Barcode },
+      // חלק 35: קליטה לפי מספר סידורי + בדיקת אחריות
+      { value: "serials", label: "מספרים סידוריים ואחריות", icon: Hash },
       { value: "transfers", label: "העברה בין איתורים", icon: ArrowLeftRight },
       { value: "pending", label: "ממתינים לאישור", icon: Inbox },
     ],

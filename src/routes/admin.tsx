@@ -24,6 +24,7 @@ import { HomeBannersPanel } from "@/components/HomeBannersPanel";
 import { StockCountPanel } from "@/components/StockCountPanel";
 import { PosPanel } from "@/components/pos/PosPanel";
 import { BarcodeLabelsPanel } from "@/components/labels/BarcodeLabelsPanel";
+import { SerialsPanel } from "@/components/serials/SerialsPanel";
 import { StaffPanel } from "@/components/staff/StaffPanel";
 import { ReviewsPanel } from "@/components/reviews/ReviewsPanel";
 import { FulfillmentPanel } from "@/components/fulfillment/FulfillmentPanel";
@@ -420,6 +421,10 @@ function AdminPage() {
                 <StockCountPanel />
               </TabsContent>
               {/* חלק 32: מחולל מדבקות ברקוד (/admin/inventory/labels) */}
+              {/* חלק 35: מספרים סידוריים ואחריות (/admin/inventory/serials) */}
+              <TabsContent value="serials">
+                <SerialsPanel />
+              </TabsContent>
               <TabsContent value="labels">
                 <BarcodeLabelsPanel />
               </TabsContent>

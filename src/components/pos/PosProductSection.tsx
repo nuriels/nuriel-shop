@@ -36,6 +36,8 @@ import {
   type PosVariant,
 } from "@/lib/pos";
 import { variantAttributesOf, variantLabel } from "@/lib/variants";
+import { SerialSmartInput } from "@/components/serials/SerialSmartInput";
+import { loadAvailableSerials } from "@/lib/serials-data";
 import { cn } from "@/lib/utils";
 
 export type PosProductSectionHandle = { focusSearch: () => void };
@@ -59,6 +61,10 @@ export const PosProductSection = forwardRef<
     onVariant: (key: string, variantId: string) => void;
     onRemove: (key: string) => void;
     catalogPrice: (product: PosProduct, variant: PosVariant | null) => number;
+    /** חלק 35: המוצרים שדורשים מספר סידורי, והמספרים שנסרקו לשורה */
+    serialProducts?: ReadonlySet<string>;
+    onSerials?: (key: string, serials: string[]) => void;
+    inStore?: boolean;
   }
 >(function PosProductSection(
   {
@@ -72,6 +78,9 @@ export const PosProductSection = forwardRef<
     onVariant,
     onRemove,
     catalogPrice,
+    serialProducts,
+    onSerials,
+    inStore = true,
   },
   ref,
 ) {
@@ -245,6 +254,9 @@ export const PosProductSection = forwardRef<
                   onResetPrice={() => onResetPrice(line.key)}
                   onVariant={(variantId) => onVariant(line.key, variantId)}
                   onRemove={() => onRemove(line.key)}
+                  serialRequired={serialProducts?.has(line.productId) ?? false}
+                  onSerials={(serials) => onSerials?.(line.key, serials)}
+                  inStore={inStore}
                 />
               );
             })}
@@ -277,6 +289,9 @@ function CartLine({
   onResetPrice,
   onVariant,
   onRemove,
+  serialRequired = false,
+  onSerials,
+  inStore = true,
 }: {
   line: PosCartLine;
   product: PosProduct;
@@ -287,6 +302,9 @@ function CartLine({
   onResetPrice: () => void;
   onVariant: (variantId: string) => void;
   onRemove: () => void;
+  serialRequired?: boolean;
+  onSerials?: (serials: string[]) => void;
+  inStore?: boolean;
 }) {
   const attributes = variantAttributesOf(product);
   const needsVariant = hasActiveVariants(product);
@@ -430,7 +448,98 @@ function CartLine({
             : "המוצר אזל מהמלאי — ההזמנה תישמר בכל זאת"}
         </p>
       )}
+
+      {serialRequired && (
+        <PosLineSerials
+          productId={product.id}
+          quantity={line.quantity}
+          serials={line.serials ?? []}
+          required={inStore}
+          onChange={(serials) => onSerials?.(serials)}
+        />
+      )}
     </li>
+  );
+}
+
+/**
+ * חלק 35: מספר סידורי לכל יחידה בקופה — סריקה (Enter) או בחירה מהיחידות
+ * הפנויות. מכירה בחנות — חובה לכל יחידה; הזמנה למשלוח — אפשר גם בליקוט.
+ * המספר נבדק מול המלאי כבר בסריקה, וננעל להזמנה ביצירתה.
+ */
+function PosLineSerials({
+  productId,
+  quantity,
+  serials,
+  required,
+  onChange,
+}: {
+  productId: string;
+  quantity: number;
+  serials: string[];
+  required: boolean;
+  onChange: (serials: string[]) => void;
+}) {
+  const complete = serials.length >= quantity;
+  return (
+    <div
+      className={cn(
+        "space-y-1.5 rounded-md border px-2.5 py-2",
+        complete
+          ? "border-green-600/25 bg-green-50/60 dark:bg-green-950/20"
+          : required
+            ? "border-amber-500/40 bg-amber-50/70 dark:bg-amber-950/20"
+            : "border-border bg-secondary/30",
+      )}
+      data-testid="pos-line-serials"
+    >
+      <p className="text-xs font-semibold">
+        מספר סידורי: {serials.length} מתוך {quantity}
+        {!complete && (
+          <span className="font-normal text-muted-foreground">
+            {required ? " — חובה במכירה בחנות" : " — אפשר עכשיו או בליקוט"}
+          </span>
+        )}
+      </p>
+      {serials.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5">
+          {serials.map((serial) => (
+            <li
+              key={serial}
+              dir="ltr"
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 font-mono text-xs"
+              data-testid="pos-serial-chip"
+            >
+              {serial}
+              <button
+                type="button"
+                className="rounded-full p-0.5 text-muted-foreground hover:text-destructive"
+                onClick={() => onChange(serials.filter((s) => s !== serial))}
+                aria-label={`הסרת ${serial}`}
+              >
+                <X className="size-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!complete && (
+        <SerialSmartInput
+          productId={productId}
+          exclude={serials}
+          testId="pos-serial-input"
+          placeholder={`סרקו מספר סידורי (${serials.length + 1} מתוך ${quantity})`}
+          onPick={async (serial) => {
+            // בדיקה מול המלאי כבר בסריקה (ננעל להזמנה רק ביצירתה)
+            const match = await loadAvailableSerials(productId, serial);
+            if (!match.some((row) => row.serial_number === serial)) {
+              throw new Error(`המספר הסידורי ${serial} לא נמצא במלאי הפנוי של המוצר`);
+            }
+            onChange([...serials, serial]);
+          }}
+        />
+      )}
+    </div>
   );
 }
 

@@ -49,6 +49,16 @@ import {
   type PickingWorker,
   type Shortage,
 } from "@/lib/picking";
+import { OrderItemSerials } from "@/components/serials/OrderItemSerials";
+import { supabase } from "@/integrations/supabase/client";
+
+type SerialLine = {
+  item_id: string;
+  quantity: number;
+  serial_required: boolean;
+  serial_number: string | null;
+  warranty_until: string | null;
+};
 
 /**
  * מסך ליקוט של הזמנה אחת — מותאם למסופון: טקסט וכפתורים גדולים, סימון ✓ לכל
@@ -83,13 +93,22 @@ export function PickingScreen({
   const mine = order.picker_id === meId;
   const canAct = !readOnly && (mine || isAdmin);
 
+  // חלק 35: שורות שדורשות מספר סידורי (מוצג מתחת לשורה — סריקה לכל יחידה)
+  const [serialLines, setSerialLines] = useState<Map<string, SerialLine>>(new Map());
+  const loadSerials = useCallback(async () => {
+    const { data, error } = await supabase.rpc("order_serial_lines", { _order_id: order.id });
+    if (error) return;
+    setSerialLines(new Map((data ?? []).map((row) => [row.item_id, row])));
+  }, [order.id]);
+
   const load = useCallback(async () => {
     try {
       setLines(await fetchPickingLines(order.id));
+      void loadSerials();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "טעינת השורות נכשלה");
     }
-  }, [order.id]);
+  }, [order.id, loadSerials]);
 
   useEffect(() => {
     void load();
@@ -317,6 +336,25 @@ export function PickingScreen({
                   <p className="text-xl font-extrabold text-foreground">
                     {pickQuantityLabel(line.quantity, line.pack_size)}
                   </p>
+                  {serialLines.has(line.item_id) && (
+                    <div className="max-w-md pt-1">
+                      <OrderItemSerials
+                        item={{
+                          id: line.item_id,
+                          product_id: line.product_id,
+                          product_name: line.name,
+                          quantity: serialLines.get(line.item_id)!.quantity,
+                          serial_number: serialLines.get(line.item_id)!.serial_number,
+                          serial_required: serialLines.get(line.item_id)!.serial_required,
+                          warranty_until: serialLines.get(line.item_id)!.warranty_until,
+                        }}
+                        orderStatus={order.status}
+                        canEdit={canAct}
+                        isManager={isAdmin}
+                        onChanged={() => void loadSerials()}
+                      />
+                    </div>
+                  )}
                   {canAct && (
                     <div className="flex flex-wrap items-center gap-2 pt-1 print:hidden">
                       <Button

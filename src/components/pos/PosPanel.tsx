@@ -69,6 +69,7 @@ import {
   type CreatedPosOrder,
   type PosShippingMethod,
 } from "@/lib/pos-data";
+import { loadSerialProducts } from "@/lib/serials-data";
 import { calculateVat, vatTotalCaption } from "@/lib/vat";
 import { cn } from "@/lib/utils";
 
@@ -119,12 +120,18 @@ export function PosPanel({
   const sendEmails = useServerFn(sendOrderEmails);
   useLiftA11yButton();
 
+  // חלק 35: המוצרים שדורשים מספר סידורי לכל יחידה
+  const [serialProducts, setSerialProducts] = useState<ReadonlySet<string>>(new Set());
+
   const loadCatalog = useCallback(async () => {
     setReloading(true);
     try {
       const [catalog, shipping] = await Promise.all([loadPosCatalog(), loadPosShippingMethods()]);
       setProducts(catalog);
       setMethods(shipping);
+      void loadSerialProducts()
+        .then((rows) => setSerialProducts(new Set(rows.map((row) => row.product_id))))
+        .catch(() => setSerialProducts(new Set()));
       setLoadError(null);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "טעינת הקטלוג נכשלה");
@@ -284,7 +291,7 @@ export function PosPanel({
     note,
   };
   const problems = [
-    ...posDraftProblems(draft, productsById),
+    ...posDraftProblems(draft, productsById, serialProducts),
     ...(parsedDiscount.problem ? [parsedDiscount.problem] : []),
   ];
 
@@ -409,7 +416,17 @@ export function PosPanel({
               lines={lines}
               onAdd={addProduct}
               onQuantity={(key, quantity) =>
-                updateLine(key, (line) => ({ ...line, quantity: clampQuantity(quantity) }))
+                updateLine(key, (line) => {
+                  const next = clampQuantity(quantity);
+                  // פחות יחידות — המספרים הסידוריים העודפים (האחרונים שנסרקו) יורדים
+                  return {
+                    ...line,
+                    quantity: next,
+                    ...(line.serials && line.serials.length > next
+                      ? { serials: line.serials.slice(0, next) }
+                      : {}),
+                  };
+                })
               }
               onPrice={(key, price) =>
                 updateLine(key, (line) => ({ ...line, unitPrice: price, priceEdited: true }))
@@ -429,6 +446,9 @@ export function PosPanel({
               onVariant={setLineVariant}
               onRemove={(key) => setLines((current) => current.filter((line) => line.key !== key))}
               catalogPrice={catalogPrice}
+              serialProducts={serialProducts}
+              onSerials={(key, serials) => updateLine(key, (line) => ({ ...line, serials }))}
+              inStore={shipping.methodId === null}
             />
           )}
         </div>

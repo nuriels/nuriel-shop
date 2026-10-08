@@ -24,7 +24,7 @@ export function HotDealsStrip({
   items: CatalogItem[];
   canAdd: boolean;
   addLabel?: string;
-  onAddToCart?: AddToCart;
+  onAddToCart?: AddToCart | undefined;
 }) {
   const [details, setDetails] = useState<CatalogItem | null>(null);
   const [picking, setPicking] = useState<CatalogItem | null>(null);

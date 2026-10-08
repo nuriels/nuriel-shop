@@ -20,6 +20,7 @@ import {
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { BrandColorField } from "@/components/BrandColorField";
 import { SabbathModeCard } from "@/components/SabbathModeCard";
+import { ShabbatScheduleCard } from "@/components/ShabbatScheduleCard";
 import { LabelSizeCard } from "@/components/delivery/LabelSizeCard";
 import { useLegalIdentity } from "@/hooks/useLegalIdentity";
 import { BUSINESS_TYPE_OPTIONS, DEFAULT_VAT_RATE } from "@/lib/vat";
@@ -127,6 +128,14 @@ export function SiteSettingsPanel() {
         checked={form.is_sabbath_mode}
         storeName={form.business_name.trim() || form.site_title || DEFAULT_STORE_NAME}
         onSaved={(on) => patch({ is_sabbath_mode: on })}
+      />
+
+      {/* חלק 35: שבת וחגים לפי לוח זמנים (נשמר בכפתור משלו) */}
+      <ShabbatScheduleCard
+        enabled={form.shabbat_auto_enabled}
+        startTime={form.shabbat_start_time}
+        endTime={form.shabbat_end_time}
+        holidays={form.holidays}
       />
 
       <Card className="shadow-card">
@@ -455,9 +464,34 @@ export function SiteSettingsPanel() {
 
       <Card className="shadow-card">
         <CardHeader>
-          <CardTitle className="text-base">משלוח חינם</CardTitle>
+          <CardTitle className="text-base">חוקי סל: מינימום להזמנה ומשלוח חינם</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
+          {/* חלק 35: מינימום להזמנה מהאתר */}
+          <div className="space-y-2 sm:max-w-56">
+            <Label htmlFor="s-minimum-order">מינימום להזמנה מהאתר (₪)</Label>
+            <Input
+              id="s-minimum-order"
+              type="number"
+              min={1}
+              step="1"
+              dir="ltr"
+              className="numeric"
+              placeholder="ללא"
+              value={form.minimum_order_amount ?? ""}
+              onChange={(e) => {
+                const value = e.target.value.trim();
+                patch({
+                  minimum_order_amount: value === "" || !(Number(value) > 0) ? null : Number(value),
+                });
+              }}
+              data-testid="settings-minimum-order"
+            />
+          </div>
+          <p className="pb-2 text-xs leading-5 text-muted-foreground">
+            סל שסכום המוצרים בו נמוך מהמינימום לא יעבור לקופה, והלקוח יראה כמה חסר (נאכף גם במסד).
+            לא חל על בקשת הצעת מחיר ועל הקופה המהירה בחנות. ריק = בלי מינימום.
+          </p>
           <div className="space-y-2 sm:max-w-56">
             <Label htmlFor="s-free-shipping">משלוח חינם בהזמנה מעל (₪)</Label>
             <Input

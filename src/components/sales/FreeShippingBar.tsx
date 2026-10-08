@@ -23,10 +23,10 @@ export function FreeShippingBar({ progress }: { progress: FreeShippingProgress }
         ) : (
           <>
             <Truck className="size-4 shrink-0 text-primary" aria-hidden="true" />
-            <span>
-              חסרים לך עוד{" "}
+            <span data-testid="free-shipping-remaining">
+              הוסיפו עוד{" "}
               <strong className="numeric whitespace-nowrap">{formatIls(progress.remaining)}</strong>{" "}
-              למשלוח חינם!
+              לקבלת משלוח חינם!
             </span>
           </>
         )}

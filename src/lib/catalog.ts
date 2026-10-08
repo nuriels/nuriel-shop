@@ -70,10 +70,14 @@ export type GlobalProduct = {
   sticker_id?: string | null;
   sticker_size?: number;
   sticker_opacity?: number;
+  /** חלק 35: נמכר עם מספר סידורי לכל יחידה (קליטה וליקוט בסריקה) */
+  requires_serial?: boolean;
+  /** חלק 35: חודשי אחריות מיום הרכישה (0 = בלי) */
+  warranty_months?: number;
 };
 
 export const PRODUCT_ADMIN_COLUMNS =
-  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto, is_order_bump, order_bump_text, is_digital, variant_attributes, seo_title, seo_description, show_in_zap, is_featured, sticker_id, sticker_size, sticker_opacity" as const;
+  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto, is_order_bump, order_bump_text, is_digital, variant_attributes, seo_title, seo_description, show_in_zap, is_featured, sticker_id, sticker_size, sticker_opacity, requires_serial, warranty_months" as const;
 
 /** לסוכן שבונה הזמנה ללקוח: כל דרגי המחיר, בלי מחיר עלות (ניהולי בלבד) */
 export const STAFF_CATALOG_COLUMNS =

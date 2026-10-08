@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import type { TenantPlan, TenantStatus } from "@/integrations/supabase/types";
+import type { Json, TenantPlan, TenantStatus } from "@/integrations/supabase/types";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { PORTAL_STORE_SLUG } from "@/lib/portal";
 
@@ -264,6 +264,7 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     schema: null,
     shareImage: null,
     appleIcon: null,
+    rest: null,
   };
   if (isPlatformRequest()) return { siteName: PLATFORM_SITE_NAME, ...none };
   const tenant = maybeCurrentTenant();
@@ -273,7 +274,7 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
   const { data } = await supabaseAdmin
     .from("site_settings")
     .select(
-      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, facebook_pixel_id, google_analytics_id, promo_popup_enabled, promo_popup_text, promo_popup_coupon, logo_path, business_phone, support_phone, business_email, business_address, business_hours",
+      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, facebook_pixel_id, google_analytics_id, promo_popup_enabled, promo_popup_text, promo_popup_coupon, logo_path, business_phone, support_phone, business_email, business_address, business_hours, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays",
     )
     .eq("id", true)
     .maybeSingle();
@@ -306,6 +307,16 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     appleIcon: logoPath ? `/pwa/apple-touch-icon.png?v=${logoVersion(logoPath)}` : null,
     brandColor: data?.brand_color ?? null,
     sabbath: data?.is_sabbath_mode === true,
+    // חלק 35: שמירת שבת וחג אוטומטית — ההגדרות (החישוב לפי שעון ישראל, גם ב-SSR)
+    rest:
+      data?.shabbat_auto_enabled === true
+        ? {
+            enabled: true,
+            startTime: data.shabbat_start_time ?? "16:00",
+            endTime: data.shabbat_end_time ?? "20:30",
+            holidays: (Array.isArray(data.holidays) ? data.holidays : []) as Json,
+          }
+        : null,
     isDefaultStore: tenant.is_default,
     isPortal,
     subscription: tenant.subscription,

@@ -41,11 +41,15 @@ import { useBackToClose } from "@/hooks/useBackToClose";
 import {
   cartSubtotal,
   freeShippingProgress,
+  minimumOrderMessage,
+  minimumOrderStatus,
   recommendForCart,
   type PromotionEvaluation,
 } from "@/lib/cart-promotions";
 import { useStorefrontSales } from "@/components/sales/StorefrontSalesContext";
 import { ProductRecommendations } from "@/components/sales/ProductRecommendations";
+import { useRestState } from "@/hooks/useRestState";
+import { REST_CHECKOUT_MESSAGE } from "@/lib/rest-window";
 import { FreeShippingBar } from "@/components/sales/FreeShippingBar";
 import { CartGiftLines, PromotionHintLine } from "@/components/sales/CartGifts";
 
@@ -120,7 +124,22 @@ export function OrderCartDrawer({
   const depositTotal = cartDepositTotal(items);
   const grandTotal = vat.gross + depositTotal;
 
+  // חלק 35: שבת / חג — הסל נשאר, הקופה נעולה; מינימום להזמנה
+  const { closed: restClosed } = useRestState();
+  const minimum = priced
+    ? minimumOrderStatus(cartSubtotal(items), settings?.minimum_order_amount)
+    : null;
+  const belowMinimum = minimum !== null && !minimum.reached;
+
   const goToCheckout = () => {
+    if (restClosed) {
+      toast.error(REST_CHECKOUT_MESSAGE, { duration: 8000 });
+      return;
+    }
+    if (minimum && !minimum.reached) {
+      toast.error(minimumOrderMessage(minimum, formatIls), { duration: 8000 });
+      return;
+    }
     // בדיקה לפני הקופה (נאכף גם במסד): אף שורה מתחת למינימום להזמנה
     const tooFew = items.find((item) => item.quantity < cartMinimum(item));
     if (tooFew) {
@@ -318,7 +337,31 @@ export function OrderCartDrawer({
             </div>
           )}
 
-          <Button size="lg" className="w-full" disabled={items.length === 0} onClick={goToCheckout}>
+          {items.length > 0 && restClosed && (
+            <p
+              role="alert"
+              className="rounded-lg bg-indigo-950 px-3 py-2 text-center text-sm font-medium text-indigo-50"
+              data-testid="cart-rest-closed"
+            >
+              {REST_CHECKOUT_MESSAGE}
+            </p>
+          )}
+          {items.length > 0 && !restClosed && belowMinimum && minimum && (
+            <p
+              role="alert"
+              className="rounded-lg border border-amber-400 bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-950"
+              data-testid="cart-minimum-order"
+            >
+              {minimumOrderMessage(minimum, formatIls)}
+            </p>
+          )}
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={items.length === 0 || restClosed || belowMinimum}
+            onClick={goToCheckout}
+            data-testid="cart-checkout"
+          >
             {isQuote ? "המשך לשליחת הבקשה" : "המשך לקופה"}
             <ArrowLeft className="size-4" aria-hidden="true" />
           </Button>

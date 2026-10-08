@@ -312,6 +312,8 @@ export type PosCartLine = {
   unitPrice: number;
   /** המנהל שינה את המחיר ידנית — לא מתעדכן כשמחליפים לקוח */
   priceEdited: boolean;
+  /** חלק 35: המספרים הסידוריים שנסרקו לשורה (מוצר שדורש מספר סידורי) */
+  serials?: string[];
 };
 
 export const POS_MAX_QUANTITY = 99_999;
@@ -484,6 +486,8 @@ export type PosDraft = {
 export function posDraftProblems(
   draft: PosDraft,
   productsById: ReadonlyMap<string, PosProduct>,
+  /** חלק 35: המוצרים שדורשים מספר סידורי לכל יחידה */
+  serialProducts: ReadonlySet<string> = new Set(),
 ): string[] {
   const problems: string[] = [];
   const guest = draft.customerId === null;
@@ -517,6 +521,17 @@ export function posDraftProblems(
     if (!Number.isFinite(line.unitPrice) || line.unitPrice < 0) {
       problems.push(`המחיר של "${product.name}" אינו תקין`);
     }
+    // חלק 35: מכירה בחנות (נמסרת מיד) — מספר סידורי לכל יחידה; במשלוח — אפשר בליקוט
+    const serials = line.serials?.length ?? 0;
+    if (serialProducts.has(line.productId)) {
+      if (serials > line.quantity) {
+        problems.push(`יותר מספרים סידוריים מיחידות עבור "${product.name}"`);
+      } else if (draft.shipping.methodId === null && serials < line.quantity) {
+        problems.push(
+          `סרקו מספר סידורי לכל יחידה של "${product.name}" (${serials} מתוך ${line.quantity})`,
+        );
+      }
+    }
   }
   if (draft.note.trim().length > 1000) problems.push("ההערה ארוכה מדי (עד 1000 תווים)");
   return problems;
@@ -524,7 +539,14 @@ export function posDraftProblems(
 
 export type PosOrderPayload = {
   _customer_id: string | null;
-  _items: { product_id: string; variant_id: string | null; quantity: number; unit_price: string }[];
+  _items: {
+    product_id: string;
+    variant_id: string | null;
+    quantity: number;
+    unit_price: string;
+    /** חלק 35: המספרים הסידוריים שנסרקו (רק כשיש) */
+    serials?: string[];
+  }[];
   _details: {
     [key: string]: string | boolean | null | { type: ManualDiscountType; value: string };
   };
@@ -540,6 +562,7 @@ export function posOrderPayload(draft: PosDraft): PosOrderPayload {
       variant_id: line.variantId,
       quantity: clampQuantity(line.quantity),
       unit_price: round2(Math.max(0, line.unitPrice)).toFixed(2),
+      ...(line.serials && line.serials.length > 0 ? { serials: [...line.serials] } : {}),
     })),
     _details: {
       customer_name: draft.form.name.trim(),

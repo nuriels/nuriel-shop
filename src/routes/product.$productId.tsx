@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRestState } from "@/hooks/useRestState";
+import { REST_CHECKOUT_MESSAGE } from "@/lib/rest-window";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRight, Loader2, PackageX, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
@@ -158,10 +160,17 @@ function ProductPage() {
   const isCustomer = role?.role === "customer";
   const isStaff = role !== null && !isCustomer;
   const canUseCart = !session || isCustomer;
+  // חלק 35: שבת / חג (שעון ישראל) — הגלישה פתוחה, אבל אין הוספה לסל
+  const { closed: restClosed } = useRestState();
+  const canAddToCart = canUseCart && !restClosed;
   const hasPrices = products.some((p) => p.price !== null);
   const addLabel = hasPrices ? "הוספה לסל" : "הוספה לבקשה";
 
   const addToCart = (item: CatalogItem, requested = 1, options?: AddToCartOptions) => {
+    if (restClosed) {
+      toast.info(REST_CHECKOUT_MESSAGE);
+      return;
+    }
     const variant = options?.variant ?? null;
     if (hasVariants(item) && !variant) {
       toast.info(`בחרו ${attributeNames(variantAttributesOf(item))} עבור "${item.name}"`);
@@ -203,7 +212,7 @@ function ProductPage() {
       subtree,
       canAdd: canUseCart,
       addLabel,
-      onAddToCart: canUseCart ? addToCart : undefined,
+      onAddToCart: canAddToCart ? addToCart : undefined,
     }),
     // addToCart תלוי רק במצב הסל
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -268,9 +277,9 @@ function ProductPage() {
               <ProductDetailView
                 product={product}
                 mode="page"
-                canAdd={canUseCart}
+                canAdd={canAddToCart}
                 addLabel={addLabel}
-                onAddToCart={canUseCart ? addToCart : undefined}
+                onAddToCart={canAddToCart ? addToCart : undefined}
                 onShowProduct={(item) =>
                   void navigate({ to: "/product/$productId", params: { productId: item.id } })
                 }
@@ -282,9 +291,9 @@ function ProductPage() {
                 items={related.items}
                 linked={related.linked}
                 category={product.category}
-                canAdd={canUseCart}
+                canAdd={canAddToCart}
                 addLabel={addLabel}
-                onAddToCart={canUseCart ? addToCart : undefined}
+                onAddToCart={canAddToCart ? addToCart : undefined}
                 onOpenProduct={(item) =>
                   void navigate({ to: "/product/$productId", params: { productId: item.id } })
                 }

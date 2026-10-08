@@ -4,6 +4,7 @@ import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { normalizeBrandColor } from "@/lib/brand-theme";
 import { DEFAULT_SENDER_LOCAL_PART } from "@/lib/email-sender";
 import type { StoreBusinessType } from "@/lib/vat";
+import type { Json } from "@/integrations/supabase/types";
 
 export const BRANDING_BUCKET = "branding";
 export const PRODUCT_IMAGES_BUCKET = "product-images";
@@ -83,6 +84,19 @@ export type SiteSettings = {
   desktop_banner_active: boolean;
   desktop_banner_image_url: string | null;
   desktop_banner_link: string | null;
+  /** חלק 35: מינימום להזמנה מהאתר (סכום המוצרים, לפני משלוח); null = בלי */
+  minimum_order_amount: number | null;
+  /**
+   * חלק 35: שמירת שבת וחג אוטומטית (שעון ישראל) — נשמרים רק מהכרטיס
+   * "שמירת שבת וחג אוטומטית" (saveRestSchedule), לא מטופס הגדרות האתר.
+   */
+  shabbat_auto_enabled: boolean;
+  /** "HH:MM:SS" מהמסד — כניסת שבת ביום שישי */
+  shabbat_start_time: string;
+  /** "HH:MM:SS" מהמסד — צאת שבת במוצאי שבת */
+  shabbat_end_time: string;
+  /** [{name, start, end}] — "YYYY-MM-DDTHH:MM" שעון ישראל */
+  holidays: Json;
 };
 
 /** העמודים המשפטיים — נשמרים בנפרד (saveLegalTexts), לא מטופס הגדרות האתר */
@@ -103,6 +117,10 @@ export const SITE_FORM_EXCLUDED_KEYS = [
   "desktop_banner_active",
   "desktop_banner_image_url",
   "desktop_banner_link",
+  "shabbat_auto_enabled",
+  "shabbat_start_time",
+  "shabbat_end_time",
+  "holidays",
 ] as const satisfies readonly (keyof SiteSettings)[];
 
 /** מידות ברירת המחדל של מדבקת משלוח (כמו במסד) */
@@ -138,7 +156,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link, minimum_order_amount, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -155,6 +173,15 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
       label_height_mm: Number(row.label_height_mm) || DEFAULT_LABEL_SIZE.height,
       // חלק 23: ערך חסר (מסד לפני המיגרציה) = עוסק מורשה, כמו ברירת המחדל במסד
       business_type: row.business_type === "exempt" ? "exempt" : "authorized",
+      // חלק 35: מסד לפני המיגרציה — ברירות המחדל (כבוי, 16:00–20:30, בלי מינימום)
+      minimum_order_amount:
+        row.minimum_order_amount === null || row.minimum_order_amount === undefined
+          ? null
+          : Number(row.minimum_order_amount) || null,
+      shabbat_auto_enabled: row.shabbat_auto_enabled === true,
+      shabbat_start_time: row.shabbat_start_time ?? "16:00:00",
+      shabbat_end_time: row.shabbat_end_time ?? "20:30:00",
+      holidays: Array.isArray(row.holidays) ? (row.holidays as Json) : [],
     };
   }
   return {
@@ -191,6 +218,11 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     desktop_banner_active: false,
     desktop_banner_image_url: null,
     desktop_banner_link: null,
+    minimum_order_amount: null,
+    shabbat_auto_enabled: false,
+    shabbat_start_time: "16:00:00",
+    shabbat_end_time: "20:30:00",
+    holidays: [],
   };
 }
 
@@ -298,6 +330,25 @@ export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
       ...editable,
       brand_color: normalizeBrandColor(settings.brand_color),
       business_hours: settings.business_hours.trim(),
+    })
+    .eq("id", true);
+  if (error) throw error;
+}
+
+/** חלק 35: שמירת שבת וחג אוטומטית — נשמר מהכרטיס שלו (הרשימה נבדקת וממוינת במסד) */
+export async function saveRestSchedule(schedule: {
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+  holidays: { name: string | null; start: string; end: string }[];
+}): Promise<void> {
+  const { error } = await supabase
+    .from("site_settings")
+    .update({
+      shabbat_auto_enabled: schedule.enabled,
+      shabbat_start_time: schedule.startTime,
+      shabbat_end_time: schedule.endTime,
+      holidays: schedule.holidays,
     })
     .eq("id", true);
   if (error) throw error;

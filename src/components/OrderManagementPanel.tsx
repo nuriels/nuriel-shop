@@ -59,6 +59,7 @@ import { CreateOrderDialog } from "@/components/CreateOrderDialog";
 import { OrderDocumentButton } from "@/components/OrderDocumentButton";
 import { OrderContactBlock } from "@/components/OrderContactBlock";
 import { DigitalBadge, ItemStatusBadge, LicenseSender } from "@/components/OrderItemExtras";
+import { OrderItemSerials } from "@/components/serials/OrderItemSerials";
 import { hasShippingLine, orderShippingLabel, shippingWasFree } from "@/lib/shipping";
 import { orderDiscount, orderDiscountLabel } from "@/lib/coupons";
 import { CourierDialog } from "@/components/delivery/CourierDialog";
@@ -832,6 +833,19 @@ export function OrderManagementPanel({
                                     {item.digital_license_key}
                                   </p>
                                 ) : null)}
+                              {/* חלק 35: מספר סידורי לכל יחידה (סריקה / בחירה) */}
+                              {!item.is_deposit &&
+                                order.kind === "order" &&
+                                (item.serial_required || item.serial_number) && (
+                                  <OrderItemSerials
+                                    item={item}
+                                    orderStatus={order.status}
+                                    canEdit={isAdminScope}
+                                    isManager={isAdminScope}
+                                    onChanged={() => void load()}
+                                    compact
+                                  />
+                                )}
                             </li>
                           ))}
                           {hasShippingLine(order) && (

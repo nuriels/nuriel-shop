@@ -46,6 +46,8 @@ export type DocumentShipping = {
 
 export type DocumentItem = {
   name: string;
+  /** חלק 35: שורה קטנה מתחת לשם (מספר סידורי ותוקף אחריות) */
+  note?: string | null;
   barcode: string | null;
   sku: string | null;
   quantity: number;
@@ -336,7 +338,8 @@ export async function buildOrderDocumentPdf(
 
   for (const [index, item] of data.items.entries()) {
     const nameLines = wrapped(item.name, nameWidth, 9);
-    const rowHeight = Math.max(7.5, nameLines.length * 4.4 + 3.2);
+    const noteLines = item.note ? wrapped(item.note, nameWidth, 7.5) : [];
+    const rowHeight = Math.max(7.5, nameLines.length * 4.4 + noteLines.length * 3.8 + 3.2);
 
     if (y + rowHeight > PAGE_HEIGHT - footerReserve) {
       doc.addPage();
@@ -355,6 +358,12 @@ export async function buildOrderDocumentPdf(
     write(String(index + 1), columnRight[0]! - 2, baseline, { size: 9, color: MUTED });
     nameLines.forEach((line, lineIndex) => {
       write(line, columnRight[1]! - 2, baseline + lineIndex * 4.4, { size: 9 });
+    });
+    noteLines.forEach((line, lineIndex) => {
+      write(line, columnRight[1]! - 2, baseline + nameLines.length * 4.4 + lineIndex * 3.8 - 0.6, {
+        size: 7.5,
+        color: MUTED,
+      });
     });
     write(item.barcode ?? "—", columnRight[2]! - 2, baseline, { size: 9, color: MUTED });
     write(String(item.quantity), columnRight[3]! - 2, baseline, { size: 9 });

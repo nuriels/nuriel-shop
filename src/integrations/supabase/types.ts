@@ -785,6 +785,48 @@ export type Database = {
         };
         Relationships: [];
       };
+      product_serials: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          product_id: string;
+          serial_number: string;
+          status: "in_stock" | "sold";
+          received_at: string;
+          received_by: string | null;
+          order_id: string | null;
+          order_item_id: string | null;
+          sold_at: string | null;
+          warranty_until: string | null;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          product_id: string;
+          serial_number: string;
+          status?: "in_stock" | "sold";
+          received_at?: string;
+          received_by?: string | null;
+          order_id?: string | null;
+          order_item_id?: string | null;
+          sold_at?: string | null;
+          warranty_until?: string | null;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          product_id?: string;
+          serial_number?: string;
+          status?: "in_stock" | "sold";
+          received_at?: string;
+          received_by?: string | null;
+          order_id?: string | null;
+          order_item_id?: string | null;
+          sold_at?: string | null;
+          warranty_until?: string | null;
+        };
+        Relationships: [];
+      };
       product_relations: {
         Row: {
           tenant_id: string;
@@ -1475,6 +1517,8 @@ export type Database = {
           sticker_id: string | null;
           sticker_size: number;
           sticker_opacity: number;
+          requires_serial: boolean;
+          warranty_months: number;
         };
         Insert: {
           tenant_id?: string;
@@ -1522,6 +1566,8 @@ export type Database = {
           sticker_id?: string | null;
           sticker_size?: number;
           sticker_opacity?: number;
+          requires_serial?: boolean;
+          warranty_months?: number;
         };
         Update: {
           tenant_id?: string;
@@ -1569,6 +1615,8 @@ export type Database = {
           sticker_id?: string | null;
           sticker_size?: number;
           sticker_opacity?: number;
+          requires_serial?: boolean;
+          warranty_months?: number;
         };
         Relationships: [
           {
@@ -1611,6 +1659,9 @@ export type Database = {
           variant_id: string | null;
           variant_label: string | null;
           reserved_from_variant: boolean;
+          serial_number: string | null;
+          warranty_until: string | null;
+          serial_required: boolean;
         };
         Insert: {
           tenant_id?: string;
@@ -1642,6 +1693,9 @@ export type Database = {
           variant_id?: string | null;
           variant_label?: string | null;
           reserved_from_variant?: boolean;
+          serial_number?: string | null;
+          warranty_until?: string | null;
+          serial_required?: boolean;
         };
         Update: {
           tenant_id?: string;
@@ -1673,6 +1727,9 @@ export type Database = {
           variant_id?: string | null;
           variant_label?: string | null;
           reserved_from_variant?: boolean;
+          serial_number?: string | null;
+          warranty_until?: string | null;
+          serial_required?: boolean;
         };
         Relationships: [
           {
@@ -2362,6 +2419,11 @@ export type Database = {
           barcode_label_height_mm: number;
           /** חלק 34: הצגת ביקורות הלקוחות וטופס "כתוב ביקורת" בעמוד המוצר */
           reviews_enabled: boolean;
+          shabbat_auto_enabled: boolean;
+          shabbat_start_time: string;
+          shabbat_end_time: string;
+          holidays: Json;
+          minimum_order_amount: number | null;
           label_height_mm: number;
           seo_title: string;
           seo_description: string;
@@ -2413,6 +2475,11 @@ export type Database = {
           barcode_label_height_mm?: number;
           /** חלק 34: הצגת ביקורות הלקוחות וטופס "כתוב ביקורת" בעמוד המוצר */
           reviews_enabled?: boolean;
+          shabbat_auto_enabled?: boolean;
+          shabbat_start_time?: string;
+          shabbat_end_time?: string;
+          holidays?: Json;
+          minimum_order_amount?: number | null;
           label_height_mm?: number;
           seo_title?: string;
           seo_description?: string;
@@ -2464,6 +2531,11 @@ export type Database = {
           barcode_label_height_mm?: number;
           /** חלק 34: הצגת ביקורות הלקוחות וטופס "כתוב ביקורת" בעמוד המוצר */
           reviews_enabled?: boolean;
+          shabbat_auto_enabled?: boolean;
+          shabbat_start_time?: string;
+          shabbat_end_time?: string;
+          holidays?: Json;
+          minimum_order_amount?: number | null;
           label_height_mm?: number;
           seo_title?: string;
           seo_description?: string;
@@ -3054,6 +3126,103 @@ export type Database = {
         }[];
       };
       admin_review_moderate: { Args: { _ids: string[]; _action: string }; Returns: number };
+      serial_products: {
+        Args: never;
+        Returns: {
+          product_id: string;
+          name: string;
+          sku: string;
+          barcode: string | null;
+          warranty_months: number;
+          stock_quantity: number;
+          in_stock_serials: number;
+          sold_serials: number;
+          missing_serials: number;
+        }[];
+      };
+      product_serial_gap: { Args: { _product_id: string }; Returns: number };
+      product_serials_receive: {
+        Args: { _product_id: string; _serials: string[]; _mode?: string };
+        Returns: Json;
+      };
+      product_serial_update: { Args: { _serial_id: string; _serial: string }; Returns: string };
+      product_serial_remove: { Args: { _serial_id: string; _write_off?: boolean }; Returns: Json };
+      product_serials_list: {
+        Args: { _product_id: string; _status?: string; _search?: string; _limit?: number };
+        Returns: {
+          id: string;
+          serial_number: string;
+          status: string;
+          received_at: string;
+          sold_at: string | null;
+          warranty_until: string | null;
+          order_id: string | null;
+          order_number: string | null;
+          customer_name: string | null;
+        }[];
+      };
+      product_serials_available: {
+        Args: { _product_id: string; _search?: string; _limit?: number };
+        Returns: { id: string; serial_number: string; received_at: string }[];
+      };
+      serial_lookup: {
+        Args: { _serial: string };
+        Returns: {
+          id: string;
+          serial_number: string;
+          status: string;
+          product_id: string;
+          product_name: string;
+          product_sku: string;
+          received_at: string;
+          sold_at: string | null;
+          warranty_until: string | null;
+          warranty_active: boolean;
+          order_id: string | null;
+          order_number: string | null;
+          customer_name: string | null;
+          customer_phone: string | null;
+        }[];
+      };
+      order_item_assign_serial: {
+        Args: { _order_item_id: string; _serial: string };
+        Returns: Json;
+      };
+      order_item_unassign_serial: {
+        Args: { _order_item_id: string; _serial_id: string };
+        Returns: undefined;
+      };
+      order_item_serials: {
+        Args: { _order_item_id: string };
+        Returns: {
+          id: string;
+          serial_number: string;
+          sold_at: string;
+          warranty_until: string | null;
+        }[];
+      };
+      order_serial_lines: {
+        Args: { _order_id: string };
+        Returns: {
+          item_id: string;
+          product_id: string;
+          product_name: string | null;
+          quantity: number;
+          serial_required: boolean;
+          serial_number: string | null;
+          warranty_until: string | null;
+        }[];
+      };
+      orders_missing_serials: {
+        Args: { _order_ids: string[] };
+        Returns: {
+          order_id: string;
+          product_name: string | null;
+          assigned: number;
+          required: number;
+        }[];
+      };
+      store_rest_state: { Args: { _tenant?: string | null; _at?: string }; Returns: Json };
       store_staff_role: { Args: { _user_id?: string }; Returns: string | null };
       staff_can: { Args: { _permission: string; _user_id?: string }; Returns: boolean };
       is_cashier: { Args: { _user_id: string }; Returns: boolean };
@@ -3169,7 +3338,7 @@ export type Database = {
       };
     };
     Enums: {
-      [_ in never]: never;
+      product_serial_status: "in_stock" | "sold";
     };
     CompositeTypes: {
       [_ in never]: never;

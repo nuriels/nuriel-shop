@@ -1,3 +1,4 @@
+import { requireStoreOpen } from "@/lib/rest-window.middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
@@ -96,6 +97,8 @@ function cleanLines(input: unknown): OrderLineInput[] {
  * פרטי הקופה. כאן: הגבלת קצב לפי IP, ומיילים (לאורח ולמנהלים).
  */
 export const placeGuestOrder = createServerFn({ method: "POST" })
+  // חלק 35: שבת / חג — עוצרים כבר כאן (גם המסד חוסם)
+  .middleware([requireStoreOpen])
   .inputValidator((input: { kind: "order" | "quote"; items: unknown; details: unknown }) => ({
     kind: input?.kind === "quote" ? ("quote" as const) : ("order" as const),
     items: cleanLines(input?.items),

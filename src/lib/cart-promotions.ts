@@ -158,6 +158,26 @@ export function freeShippingProgress(
   };
 }
 
+/** חלק 35: מינימום להזמנה — כמה חסר (null כשהחנות לא הגדירה מינימום) */
+export type MinimumOrderStatus = { minimum: number; remaining: number; reached: boolean };
+
+export function minimumOrderStatus(
+  subtotal: number,
+  minimum: number | null | undefined,
+): MinimumOrderStatus | null {
+  if (minimum === null || minimum === undefined || !(minimum > 0)) return null;
+  const remaining = Math.max(0, (cents(minimum) - cents(subtotal)) / 100);
+  return { minimum, remaining, reached: remaining === 0 };
+}
+
+/** "סכום ההזמנה המינימלי באתר הוא ₪150 — הוסיפו עוד ₪45 כדי להמשיך לתשלום" */
+export function minimumOrderMessage(
+  status: MinimumOrderStatus,
+  format: (n: number) => string,
+): string {
+  return `סכום ההזמנה המינימלי באתר הוא ${format(status.minimum)} — הוסיפו עוד ${format(status.remaining)} כדי להמשיך לתשלום`;
+}
+
 export type OrderBump = { product_id: string; pitch: string | null };
 export type OrderBumpOffer = { product: CatalogItem; pitch: string | null };
 

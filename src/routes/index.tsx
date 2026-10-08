@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRestState } from "@/hooks/useRestState";
+import { REST_CHECKOUT_MESSAGE } from "@/lib/rest-window";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { getSiteSeo } from "@/lib/platform.functions";
 import { getCategoryParents } from "@/lib/seo.functions";
@@ -312,6 +314,9 @@ function StoreCatalog() {
   const isCustomer = role?.role === "customer";
   const cartMode: CartMode = hasPrices ? "order" : "quote";
   const canUseCart = !session || isCustomer;
+  // חלק 35: שבת / חג (שעון ישראל) — הגלישה פתוחה, אבל אין הוספה לסל
+  const { closed: restClosed } = useRestState();
+  const canAddToCart = canUseCart && !restClosed;
   const addLabel = cartMode === "order" ? "הוספה לסל" : "הוספה לבקשה";
 
   // ?cart=open — פותחים את הסל פעם אחת ומנקים את הכתובת
@@ -330,6 +335,10 @@ function StoreCatalog() {
   const cartEdited = useRef(false);
 
   const addToCart = (item: CatalogItem, requested = 1, options?: AddToCartOptions) => {
+    if (restClosed) {
+      toast.info(REST_CHECKOUT_MESSAGE);
+      return;
+    }
     const variant = options?.variant ?? null;
     // מוצר עם וריאציות: בלי בחירה (צבע / מידה) — לא נכנס לסל
     if (hasVariants(item) && !variant) {
@@ -405,7 +414,7 @@ function StoreCatalog() {
       subtree,
       canAdd: canUseCart,
       addLabel,
-      onAddToCart: canUseCart ? addToCart : undefined,
+      onAddToCart: canAddToCart ? addToCart : undefined,
     }),
     // addToCart נבנה מחדש בכל רינדור, אבל תלוי רק במצב הסל (cartMode) — מספיק לרענן לפיו
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -532,17 +541,17 @@ function StoreCatalog() {
 
           <HotDealsStrip
             items={promoItems}
-            canAdd={canUseCart}
+            canAdd={canAddToCart}
             addLabel={addLabel}
-            onAddToCart={addToCart}
+            onAddToCart={canAddToCart ? addToCart : undefined}
           />
 
           {showLanding && !catalogLoading && (
             <FeaturedProducts
               block={featured}
-              canAdd={canUseCart}
+              canAdd={canAddToCart}
               addLabel={addLabel}
-              onAddToCart={canUseCart ? addToCart : undefined}
+              onAddToCart={canAddToCart ? addToCart : undefined}
             />
           )}
 
@@ -616,9 +625,9 @@ function StoreCatalog() {
                   <CatalogSections
                     sections={groupBySubcategory(categoryTree, category, visible)}
                     onOpenCategory={setCategory}
-                    canAdd={canUseCart}
+                    canAdd={canAddToCart}
                     addLabel={addLabel}
-                    onAddToCart={addToCart}
+                    onAddToCart={canAddToCart ? addToCart : undefined}
                     emptyText={
                       query !== ""
                         ? "לא נמצאו מוצרים תואמים"

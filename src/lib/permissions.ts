@@ -149,6 +149,8 @@ export const ADMIN_TAB_RULES: Record<string, AdminTabRule> = {
   categories: { permission: "admin" },
   stock: { permission: "admin" },
   labels: { permission: "inventory" },
+  // חלק 35: מספרים סידוריים — מחסנאי, מנהל ובעלים
+  serials: { permission: "inventory" },
   transfers: { permission: "inventory" },
   pending: { permission: "admin" },
   promotions: { permission: "admin" },
