@@ -1,6 +1,7 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { createFileRoute, Link, useLoaderData, useRouteContext } from "@tanstack/react-router";
-import { AlertTriangle, Crown, Hourglass } from "lucide-react";
+import { AlertTriangle, Crown, Hourglass, Lock } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppFooter } from "@/components/AppFooter";
 import { SabbathStaffBanner } from "@/components/StorefrontGate";
@@ -23,6 +24,10 @@ import { HomeBannersPanel } from "@/components/HomeBannersPanel";
 import { StockCountPanel } from "@/components/StockCountPanel";
 import { PosPanel } from "@/components/pos/PosPanel";
 import { BarcodeLabelsPanel } from "@/components/labels/BarcodeLabelsPanel";
+import { StaffPanel } from "@/components/staff/StaffPanel";
+import { FulfillmentPanel } from "@/components/fulfillment/FulfillmentPanel";
+import { PickingPanel } from "@/components/PickingPanel";
+import { StockCheckPanel } from "@/components/StockCheckPanel";
 import { EmailSettingsPanel } from "@/components/EmailSettingsPanel";
 import { CustomDomainPanel } from "@/components/CustomDomainPanel";
 import { OfflinePaymentMethodsCard } from "@/components/payments/OfflinePaymentMethodsCard";
@@ -37,7 +42,7 @@ import { SiteInboxPanel, type InboxView } from "@/components/inbox/SiteInboxPane
 import { PremiumLockCard } from "@/components/billing/PremiumLock";
 import { SupportPanel, type SupportCompose } from "@/components/support/SupportPanel";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { AdminNav, EXPIRED_ALLOWED_TABS } from "@/components/AdminNav";
+import { AdminNav, EXPIRED_ALLOWED_TABS, adminSectionLabel } from "@/components/AdminNav";
 import { TransfersPanel } from "@/components/TransfersPanel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,6 +51,15 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { PLAN_LABELS, endingSoon, remainingLabel } from "@/lib/subscription";
 import { usePlanCatalog } from "@/hooks/usePlanCatalog";
 import type { PlanCatalog } from "@/lib/plan-catalog";
+import {
+  NO_PERMISSION_MESSAGE,
+  STAFF_ROLE_LABEL,
+  adminHomeTab,
+  canEnterAdmin,
+  canOpenAdminTab,
+  effectiveStaffRole,
+  staffCan,
+} from "@/lib/permissions";
 
 /** פניות מוכנות מראש (?compose=) — "לבחירת חבילה" ב"המנוי שלי" פותח פנייה לצוות */
 const COMPOSE_KEYS = ["premium", "basic", "billing"] as const;
@@ -127,7 +141,12 @@ function AdminPage() {
     await supabase.auth.signOut();
   };
 
-  const isAdmin = role?.role === "admin";
+  // חלק 33: התפקיד בצוות קובע מה פתוח בפאנל. בעלים / מנהל — הכל (מנהל: בלי
+  // החבילה והתוספים); קופאי — הקופה; מחסנאי — ליקוט, משלוחים, מלאי ומדבקות
+  const staffRole = effectiveStaffRole(role);
+  const isAdmin = staffCan(staffRole, "admin");
+  const canEnter = canEnterAdmin(staffRole);
+  const homeTab = adminHomeTab(staffRole);
   // חנות שהוקפאה ע"י מנהל הפלטפורמה: הלקוחות רואים נעילה, והמנהל רואה כאן הסבר
   const { hostMode } = useRouteContext({ from: "__root__" });
   const site = useLoaderData({ from: "__root__" });
@@ -139,10 +158,15 @@ function AdminPage() {
   const godMode = role?.is_platform_admin === true && role.is_member === false;
   const expired = hostMode.lock === "expired";
   const locked = expired && !godMode;
-  // המסך הראשון של מנהל החנות — לוח הבקרה (ובחנות שהמנוי שלה פג — "המנוי שלי")
-  const requestedTab = tab ?? (locked ? "billing" : "dashboard");
+  // המסך הראשון: מנהל — לוח הבקרה (ובחנות שהמנוי שלה פג — "המנוי שלי");
+  // קופאי — הקופה; מחסנאי — הליקוט
+  const requestedTab = tab ?? (locked && isAdmin ? "billing" : homeTab);
+  // לשונית שאסורה לתפקיד (גם בכתובת ישירה) — חזרה למסך הבית שלו
+  const permittedTab = canOpenAdminTab(staffRole, requestedTab) ? requestedTab : homeTab;
   const activeTab =
-    locked && !EXPIRED_ALLOWED_TABS.includes(requestedTab) ? "billing" : requestedTab;
+    locked && !EXPIRED_ALLOWED_TABS.includes(permittedTab) ? "billing" : permittedTab;
+  // חנות שהמנוי שלה פג: לקופאי / מחסנאי אין "המנוי שלי" — הפאנל נעול עבורם
+  const lockedForStaff = locked && !isAdmin;
 
   const goTab = useCallback(
     (next: string, extra: { compose?: string; ticket?: string } = {}) =>
@@ -164,6 +188,21 @@ function AdminPage() {
       }),
     [navigate],
   );
+  // ניסיון גישה ללשונית חסומה (למשל קופאי ב-/admin/analytics) — הודעה + מסך הבית
+  const deniedTab =
+    !loading && canEnter && tab !== undefined && !canOpenAdminTab(staffRole, tab) ? tab : null;
+  useEffect(() => {
+    if (!deniedTab) return;
+    toast.error(NO_PERMISSION_MESSAGE, {
+      id: "admin-no-permission",
+      description: `הועברת למסך "${adminSectionLabel(homeTab)}"`,
+    });
+    void navigate({
+      search: (prev) => ({ ...prev, tab: homeTab, order: undefined }),
+      replace: true,
+    });
+  }, [deniedTab, homeTab, navigate]);
+
   const clearCompose = useCallback(
     () =>
       void navigate({
@@ -232,20 +271,36 @@ function AdminPage() {
               </button>
             </div>
           )}
-        {loading ? null : !isAdmin ? (
+        {loading ? null : !canEnter ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-              <p className="text-sm text-muted-foreground">עמוד זה מיועד למנהלי המערכת בלבד.</p>
+              <p className="text-sm text-muted-foreground">עמוד זה מיועד לצוות החנות בלבד.</p>
               <Button asChild>
                 <Link to="/">חזרה לקטלוג</Link>
               </Button>
+            </CardContent>
+          </Card>
+        ) : lockedForStaff ? (
+          <Card className="border-dashed" data-testid="staff-store-locked">
+            <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+              <Lock className="size-6 text-muted-foreground" aria-hidden="true" />
+              <p className="font-semibold">המנוי של החנות הסתיים — הניהול נעול זמנית</p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                {staffRole ? `${STAFF_ROLE_LABEL[staffRole]}: ` : ""}
+                הגישה תחזור מיד כשבעל החנות יחדש את המנוי. בינתיים אפשר לפנות אליו.
+              </p>
             </CardContent>
           </Card>
         ) : (
           // תפריט בצד ימין (במחשב) / מגירה (בטלפון). הלשונית נשארת בכתובת (?tab=),
           // כך ש"חזור" וקישורים ישירים ממשיכים לעבוד כמו קודם
           <div className="space-y-4 md:grid md:grid-cols-[15rem_minmax(0,1fr)] md:items-start md:gap-6 md:space-y-0">
-            <AdminNav value={activeTab} onChange={(next) => goTab(next)} locked={locked} />
+            <AdminNav
+              value={activeTab}
+              onChange={(next) => goTab(next)}
+              locked={locked}
+              staffRole={staffRole}
+            />
             <Tabs value={activeTab} dir="rtl" className="min-w-0">
               <TabsContent value="dashboard">
                 <AdminDashboard
@@ -262,7 +317,7 @@ function AdminPage() {
               <TabsContent value="orders">
                 <OrderManagementPanel
                   scope="admin"
-                  meId={role?.user_id}
+                  {...(role ? { meId: role.user_id } : {})}
                   openOrderId={order ?? null}
                   onOrderOpened={() =>
                     void navigate({
@@ -275,13 +330,31 @@ function AdminPage() {
               </TabsContent>
               {/* חלק 32: קופה מהירה — הזמנה טלפונית / מכירה בחנות (/admin/orders/new) */}
               <TabsContent value="pos">
+                {/* קופאי לא רואה הזמנות (ההכנסות של החנות) — בלי "פתיחת ההזמנה" */}
                 <PosPanel
-                  onOpenOrder={(orderId) =>
-                    void navigate({
-                      search: (prev) => ({ ...prev, tab: "orders", order: orderId }),
-                    })
-                  }
+                  {...(isAdmin
+                    ? {
+                        onOpenOrder: (orderId: string) =>
+                          void navigate({
+                            search: (prev) => ({ ...prev, tab: "orders", order: orderId }),
+                          }),
+                      }
+                    : {})}
                 />
+              </TabsContent>
+              {/* חלק 33: המסכים של המחסנאי — ליקוט, סטטוס משלוחים, בדיקת מלאי */}
+              <TabsContent value="picking">
+                {role && <PickingPanel meId={role.user_id} isAdmin={isAdmin} />}
+              </TabsContent>
+              <TabsContent value="fulfillment">
+                <FulfillmentPanel />
+              </TabsContent>
+              <TabsContent value="stock-check">
+                <StockCheckPanel />
+              </TabsContent>
+              {/* חלק 33: צוות והרשאות (/admin/settings/staff) */}
+              <TabsContent value="staff">
+                {role && <StaffPanel meId={role.user_id} myRole={staffRole} />}
               </TabsContent>
               <TabsContent value="inbox">
                 <SiteInboxPanel
@@ -308,7 +381,10 @@ function AdminPage() {
                 <TransfersPanel />
               </TabsContent>
               <TabsContent value="users">
-                <AdminUsersPanel isAdmin={isAdmin} />
+                <AdminUsersPanel
+                  isAdmin={isAdmin}
+                  canManageManagers={staffCan(staffRole, "staff.managers")}
+                />
               </TabsContent>
               <TabsContent value="custom-prices">
                 <CustomPricesPanel
@@ -400,10 +476,11 @@ function AdminPage() {
                 )}
               </TabsContent>
               <TabsContent value="addons">
-                <AddonsStorePanel />
+                <AddonsStorePanel canPurchase={staffCan(staffRole, "billing.manage")} />
               </TabsContent>
               <TabsContent value="billing">
                 <BillingPanel
+                  canManageBilling={staffCan(staffRole, "billing.manage")}
                   onChoosePlan={(plan) => goTab("support", { compose: plan })}
                   onContactSupport={() => goTab("support", { compose: "billing" })}
                 />

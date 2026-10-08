@@ -1,15 +1,14 @@
 /**
- * הקופה המהירה (חלק 32) — גישה לנתונים מהדפדפן, בהרשאות המנהל המחובר.
- * הקטלוג נטען פעם אחת (חיפוש מיידי, גם עם קורא ברקודים), חיפוש הלקוחות
- * והיצירה — פונקציות במסד (admin_search_customers / admin_create_order).
+ * הקופה המהירה (חלק 32) — גישה לנתונים מהדפדפן, בהרשאות העובד המחובר
+ * (חלק 33: בעלים, מנהל או קופאי). הקטלוג נטען פעם אחת (חיפוש מיידי, גם עם
+ * קורא ברקודים) מקטלוג הצוות במסד — בלי מחיר עלות (staff_product_catalog);
+ * חיפוש הלקוחות והיצירה — פונקציות במסד (admin_search_customers /
+ * admin_create_order).
  */
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { fetchAllRows } from "@/lib/fetch-all";
 import type { PosCustomer, PosOrderPayload, PosProduct, PosVariant } from "@/lib/pos";
-
-export const POS_PRODUCT_COLUMNS =
-  "id, sku, name, category, barcode, image_url, price_tier1, price_tier2, price_tier3, sale_price, sale_starts_at, sale_ends_at, stock_quantity, is_hidden, is_digital, has_deposit, deposit_price, deposit_units, variant_attributes" as const;
 
 export type PosShippingMethod = {
   id: string;
@@ -28,25 +27,10 @@ const numOrNull = (value: unknown): number | null =>
 
 /** כל המוצרים (גם מוסתרים — אפשר למכור בחנות מוצר שלא מוצג באתר) + הוריאציות הפעילות */
 export async function loadPosCatalog(): Promise<PosProduct[]> {
+  // הסדר נקבע במסד (שם, מזהה) — עמודים יציבים
   const [products, variants] = await Promise.all([
-    fetchAllRows((from, to) =>
-      supabase
-        .from("global_products")
-        .select(POS_PRODUCT_COLUMNS)
-        .order("name")
-        .order("id")
-        .range(from, to),
-    ),
-    fetchAllRows((from, to) =>
-      supabase
-        .from("product_variants")
-        .select("id, product_id, options, sku, price, stock_quantity, is_active, sort_order")
-        .eq("is_active", true)
-        .order("product_id")
-        .order("sort_order")
-        .order("id")
-        .range(from, to),
-    ),
+    fetchAllRows((from, to) => supabase.rpc("staff_product_catalog").range(from, to)),
+    fetchAllRows((from, to) => supabase.rpc("staff_product_variants").range(from, to)),
   ]);
   if (products.error) throw new Error(products.error.message);
   if (variants.error) throw new Error(variants.error.message);

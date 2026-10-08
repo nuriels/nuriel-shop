@@ -31,6 +31,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SitemapRouteImport } from './routes/sitemap'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as WarehouseRouteImport } from './routes/warehouse'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin_.analytics'
 import { Route as AdminCouponsRouteImport } from './routes/admin_.coupons'
 import { Route as AdminDashboardRouteImport } from './routes/admin_.dashboard'
 import { Route as AdminOrdersRouteImport } from './routes/admin_.orders'
@@ -47,6 +48,7 @@ import { Route as AdminInventoryLabelsRouteImport } from './routes/admin_.invent
 import { Route as AdminMarketingAbandonedCartsRouteImport } from './routes/admin_.marketing.abandoned-carts'
 import { Route as AdminOrdersNewRouteImport } from './routes/admin_.orders_.new'
 import { Route as AdminSettingsDomainRouteImport } from './routes/admin_.settings_.domain'
+import { Route as AdminSettingsStaffRouteImport } from './routes/admin_.settings_.staff'
 import { Route as ApiAdminAnalyticsRouteImport } from './routes/api.admin.analytics'
 import { Route as ApiAdminTriggerAbandonedCartsRouteImport } from './routes/api.admin.trigger-abandoned-carts'
 import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$orderId'
@@ -161,6 +163,11 @@ const WarehouseRoute = WarehouseRouteImport.update({
   path: '/warehouse',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/admin_/analytics',
+  path: '/admin/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminCouponsRoute = AdminCouponsRouteImport.update({
   id: '/admin_/coupons',
   path: '/admin/coupons',
@@ -242,6 +249,11 @@ const AdminSettingsDomainRoute = AdminSettingsDomainRouteImport.update({
   path: '/admin/settings/domain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminSettingsStaffRoute = AdminSettingsStaffRouteImport.update({
+  id: '/admin_/settings_/staff',
+  path: '/admin/settings/staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminAnalyticsRoute = ApiAdminAnalyticsRouteImport.update({
   id: '/api/admin/analytics',
   path: '/api/admin/analytics',
@@ -282,6 +294,7 @@ export interface FileRoutesByFullPath {
   '/sitemap': typeof SitemapRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/coupons': typeof AdminCouponsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/orders': typeof AdminOrdersRoute
@@ -298,6 +311,7 @@ export interface FileRoutesByFullPath {
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin/orders/new': typeof AdminOrdersNewRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
+  '/admin/settings/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
@@ -325,6 +339,7 @@ export interface FileRoutesByTo {
   '/sitemap': typeof SitemapRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/coupons': typeof AdminCouponsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/orders': typeof AdminOrdersRoute
@@ -341,6 +356,7 @@ export interface FileRoutesByTo {
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin/orders/new': typeof AdminOrdersNewRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
+  '/admin/settings/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
@@ -369,6 +385,7 @@ export interface FileRoutesById {
   '/sitemap': typeof SitemapRoute
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
+  '/admin_/analytics': typeof AdminAnalyticsRoute
   '/admin_/coupons': typeof AdminCouponsRoute
   '/admin_/dashboard': typeof AdminDashboardRoute
   '/admin_/orders': typeof AdminOrdersRoute
@@ -385,6 +402,7 @@ export interface FileRoutesById {
   '/admin_/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin_/orders_/new': typeof AdminOrdersNewRoute
   '/admin_/settings_/domain': typeof AdminSettingsDomainRoute
+  '/admin_/settings_/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/checkout_/bit/$orderId': typeof CheckoutBitOrderIdRoute
@@ -414,6 +432,7 @@ export interface FileRouteTypes {
     | '/sitemap'
     | '/terms'
     | '/warehouse'
+    | '/admin/analytics'
     | '/admin/coupons'
     | '/admin/dashboard'
     | '/admin/orders'
@@ -430,6 +449,7 @@ export interface FileRouteTypes {
     | '/admin/marketing/abandoned-carts'
     | '/admin/orders/new'
     | '/admin/settings/domain'
+    | '/admin/settings/staff'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
     | '/checkout/bit/$orderId'
@@ -457,6 +477,7 @@ export interface FileRouteTypes {
     | '/sitemap'
     | '/terms'
     | '/warehouse'
+    | '/admin/analytics'
     | '/admin/coupons'
     | '/admin/dashboard'
     | '/admin/orders'
@@ -473,6 +494,7 @@ export interface FileRouteTypes {
     | '/admin/marketing/abandoned-carts'
     | '/admin/orders/new'
     | '/admin/settings/domain'
+    | '/admin/settings/staff'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
     | '/checkout/bit/$orderId'
@@ -500,6 +522,7 @@ export interface FileRouteTypes {
     | '/sitemap'
     | '/terms'
     | '/warehouse'
+    | '/admin_/analytics'
     | '/admin_/coupons'
     | '/admin_/dashboard'
     | '/admin_/orders'
@@ -516,6 +539,7 @@ export interface FileRouteTypes {
     | '/admin_/marketing/abandoned-carts'
     | '/admin_/orders_/new'
     | '/admin_/settings_/domain'
+    | '/admin_/settings_/staff'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
     | '/checkout_/bit/$orderId'
@@ -544,6 +568,7 @@ export interface RootRouteChildren {
   SitemapRoute: typeof SitemapRoute
   TermsRoute: typeof TermsRoute
   WarehouseRoute: typeof WarehouseRoute
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
   AdminCouponsRoute: typeof AdminCouponsRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   AdminOrdersRoute: typeof AdminOrdersRoute
@@ -560,6 +585,7 @@ export interface RootRouteChildren {
   AdminMarketingAbandonedCartsRoute: typeof AdminMarketingAbandonedCartsRoute
   AdminOrdersNewRoute: typeof AdminOrdersNewRoute
   AdminSettingsDomainRoute: typeof AdminSettingsDomainRoute
+  AdminSettingsStaffRoute: typeof AdminSettingsStaffRoute
   ApiAdminAnalyticsRoute: typeof ApiAdminAnalyticsRoute
   ApiAdminTriggerAbandonedCartsRoute: typeof ApiAdminTriggerAbandonedCartsRoute
   CheckoutBitOrderIdRoute: typeof CheckoutBitOrderIdRoute
@@ -721,6 +747,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WarehouseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/analytics': {
+      id: '/admin_/analytics'
+      path: '/admin/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/coupons': {
       id: '/admin_/coupons'
       path: '/admin/coupons'
@@ -833,6 +866,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsDomainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/settings_/staff': {
+      id: '/admin_/settings_/staff'
+      path: '/admin/settings/staff'
+      fullPath: '/admin/settings/staff'
+      preLoaderRoute: typeof AdminSettingsStaffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/analytics': {
       id: '/api/admin/analytics'
       path: '/api/admin/analytics'
@@ -880,6 +920,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapRoute: SitemapRoute,
   TermsRoute: TermsRoute,
   WarehouseRoute: WarehouseRoute,
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
   AdminCouponsRoute: AdminCouponsRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   AdminOrdersRoute: AdminOrdersRoute,
@@ -896,6 +937,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminMarketingAbandonedCartsRoute: AdminMarketingAbandonedCartsRoute,
   AdminOrdersNewRoute: AdminOrdersNewRoute,
   AdminSettingsDomainRoute: AdminSettingsDomainRoute,
+  AdminSettingsStaffRoute: AdminSettingsStaffRoute,
   ApiAdminAnalyticsRoute: ApiAdminAnalyticsRoute,
   ApiAdminTriggerAbandonedCartsRoute: ApiAdminTriggerAbandonedCartsRoute,
   CheckoutBitOrderIdRoute: CheckoutBitOrderIdRoute,

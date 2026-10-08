@@ -87,7 +87,12 @@ type CreatedSummary = CreatedPosOrder & {
  * תשלום והנחה → "יצירת הזמנה". ההזמנה נוצרת במסד כמו כל הזמנה: מספר,
  * מלאי, מתנות, התראות, ומיילים (אישור ללקוח + התראה לצוות).
  */
-export function PosPanel({ onOpenOrder }: { onOpenOrder: (orderId: string) => void }) {
+export function PosPanel({
+  onOpenOrder,
+}: {
+  /** "פתיחת ההזמנה" אחרי היצירה — רק למי שרואה הזמנות (חלק 33: לא לקופאי) */
+  onOpenOrder?: (orderId: string) => void;
+}) {
   const { settings } = useSiteSettings();
   const [products, setProducts] = useState<PosProduct[] | null>(null);
   const [methods, setMethods] = useState<PosShippingMethod[]>([]);
@@ -731,7 +736,9 @@ export function PosPanel({ onOpenOrder }: { onOpenOrder: (orderId: string) => vo
                   : "לא הוזן אימייל — לא נשלח אישור ללקוח."}{" "}
                 {created.inStore
                   ? "המלאי עודכן והמכירה נסגרה."
-                  : "ההזמנה ממתינה לטיפול ברשימת ההזמנות."}
+                  : onOpenOrder
+                    ? "ההזמנה ממתינה לטיפול ברשימת ההזמנות."
+                    : "ההזמנה הועברה לטיפול הצוות."}
               </p>
             </div>
           )}
@@ -746,18 +753,21 @@ export function PosPanel({ onOpenOrder }: { onOpenOrder: (orderId: string) => vo
             >
               הזמנה חדשה
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                const id = created?.id;
-                setCreated(null);
-                reset();
-                if (id) onOpenOrder(id);
-              }}
-            >
-              <ClipboardList className="size-4" aria-hidden="true" />
-              פתיחת ההזמנה
-            </Button>
+            {onOpenOrder && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const id = created?.id;
+                  setCreated(null);
+                  reset();
+                  if (id) onOpenOrder(id);
+                }}
+                data-testid="pos-open-order"
+              >
+                <ClipboardList className="size-4" aria-hidden="true" />
+                פתיחת ההזמנה
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

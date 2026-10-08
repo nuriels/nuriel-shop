@@ -248,9 +248,10 @@ function StoreCatalog() {
   // מסך הכניסה לקטלוג מציג ריבועי קטגוריות במקום את כל המוצרים; ברגע
   // שנבחרה קטגוריה או שהוקלד חיפוש, עוברים לתצוגת מוצרים כרגיל
   const isStaffRole = role?.role === "admin" || role?.role === "agent";
-  // מחסנאי — האזור שלו הוא הליקוט בלבד
+  // חלק 33: למחסנאי ולקופאי יש מסך בית משלהם בפאנל — ליקוט / הקופה המהירה
   useEffect(() => {
-    if (role?.role === "warehouse") void navigate({ to: "/warehouse" });
+    if (role?.role === "warehouse") void navigate({ to: "/admin", search: { tab: "picking" } });
+    if (role?.role === "cashier") void navigate({ to: "/admin", search: { tab: "pos" } });
   }, [role?.role, navigate]);
   // חלק 20: הקטגוריות שסומנו "הצג קטגוריה במסך הבית" — ואם אף אחת, 5 הראשונות
   const { categories: landingCategories, usingFallback: usingFallbackCategories } = useMemo(

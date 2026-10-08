@@ -22,13 +22,16 @@ import {
   Menu,
   MessageSquare,
   Package,
+  PackageCheck,
   Puzzle,
   Receipt,
   Scale,
+  ScanSearch,
   Settings,
   ShoppingCart,
   TicketPercent,
   Truck,
+  UserCog,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -36,12 +39,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useBackToClose } from "@/hooks/useBackToClose";
 import { loadInboxCounts } from "@/lib/site-inbox";
 import { SITE_INBOX_CHANGED } from "@/components/inbox/SiteInboxPanel";
+import { showAdminTabInNav, type StaffRole } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 type Section = { value: string; label: string; icon: LucideIcon };
 
-/** תפריט הניהול — מקובץ לפי תחום. הערכים = ?tab= בכתובת (לא לשנות — קישורים קיימים) */
+/**
+ * תפריט הניהול — מקובץ לפי תחום. הערכים = ?tab= בכתובת (לא לשנות — קישורים קיימים).
+ * חלק 33: כל עובד רואה רק את מה שמותר לתפקיד שלו (ADMIN_TAB_RULES ב-permissions.ts).
+ */
 export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
   {
     title: "סקירה",
@@ -52,6 +59,9 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
     items: [
       { value: "orders", label: "הזמנות", icon: ClipboardList },
       { value: "pos", label: "קופה מהירה", icon: Receipt },
+      // המחסנאי (חלק 33): ליקוט + עדכון סטטוס משלוח, בלי מחירים
+      { value: "picking", label: "ליקוט הזמנות", icon: PackageCheck },
+      { value: "fulfillment", label: "סטטוס משלוחים", icon: Truck },
       { value: "inbox", label: "פניות וביטולי עסקה", icon: MessageSquare },
       { value: "users", label: "משתמשים", icon: Users },
       { value: "custom-prices", label: "מחירי לקוחות מיוחדים", icon: BadgePercent },
@@ -64,6 +74,7 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
       { value: "products", label: "מוצרים וקטגוריות", icon: Package },
       { value: "categories", label: "ניהול קטגוריות", icon: FolderTree },
       { value: "stock", label: "ספירת מלאי", icon: ClipboardCheck },
+      { value: "stock-check", label: "בדיקת מלאי", icon: ScanSearch },
       { value: "labels", label: "מדבקות ברקוד", icon: Barcode },
       { value: "transfers", label: "העברה בין איתורים", icon: ArrowLeftRight },
       { value: "pending", label: "ממתינים לאישור", icon: Inbox },
@@ -93,6 +104,7 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
   {
     title: "חשבון",
     items: [
+      { value: "staff", label: "צוות והרשאות", icon: UserCog },
       { value: "addons", label: "שדרוגים ותוספים", icon: Puzzle },
       { value: "billing", label: "המנוי שלי", icon: Gem },
       { value: "support", label: "תמיכה ועזרה", icon: LifeBuoy },
@@ -112,9 +124,10 @@ export function adminSectionLabel(value: string): string {
 }
 
 /** כמה בקשות מוצר ממתינות לטיפול — מוצג ליד "ממתינים לאישור" */
-function usePendingCount(): number {
+function usePendingCount(enabled: boolean): number {
   const [count, setCount] = useState(0);
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     const load = async () => {
       const { count: total } = await supabase
@@ -129,14 +142,15 @@ function usePendingCount(): number {
       alive = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [enabled]);
   return count;
 }
 
 /** כמה פניות תמיכה עם תשובה שלא נקראה — מוצג ליד "תמיכה ועזרה" */
-function useSupportUnread(): number {
+function useSupportUnread(enabled: boolean): number {
   const [count, setCount] = useState(0);
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     const load = async () => {
       const { data } = await supabase.rpc("support_unread_count");
@@ -148,14 +162,15 @@ function useSupportUnread(): number {
       alive = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [enabled]);
   return count;
 }
 
 /** פניות חדשות מהאתר + הודעות ביטול פתוחות — מוצג ליד "פניות וביטולי עסקה" */
-function useInboxCount(): number {
+function useInboxCount(enabled: boolean): number {
   const [count, setCount] = useState(0);
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     const load = async () => {
       const counts = await loadInboxCounts();
@@ -170,25 +185,38 @@ function useInboxCount(): number {
       window.clearInterval(timer);
       window.removeEventListener(SITE_INBOX_CHANGED, onChange);
     };
-  }, []);
+  }, [enabled]);
   return count;
+}
+
+/** הקבוצות והלשוניות שהתפקיד רואה בתפריט (קבוצה ריקה — לא מוצגת) */
+function visibleAdminSections(staffRole: StaffRole | null): typeof ADMIN_SECTIONS {
+  return ADMIN_SECTIONS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => showAdminTabInNav(staffRole, item.value)),
+  })).filter((group) => group.items.length > 0);
 }
 
 function NavList({
   value,
   onChange,
   locked,
+  staffRole,
 }: {
   value: string;
   onChange: (next: string) => void;
   locked: boolean;
+  staffRole: StaffRole | null;
 }) {
-  const pending = usePendingCount();
-  const supportUnread = useSupportUnread();
-  const inboxCount = useInboxCount();
+  const sections = visibleAdminSections(staffRole);
+  const has = (tab: string) => sections.some((group) => group.items.some((i) => i.value === tab));
+  // המונים רק למי שרואה את הלשונית (לקופאי / מחסנאי — בלי שאילתות מיותרות)
+  const pending = usePendingCount(has("pending"));
+  const supportUnread = useSupportUnread(has("support"));
+  const inboxCount = useInboxCount(has("inbox"));
   return (
     <div className="space-y-4">
-      {ADMIN_SECTIONS.map((group) => (
+      {sections.map((group) => (
         <div key={group.title} className="space-y-1">
           <p className="px-3 text-xs font-semibold text-muted-foreground">{group.title}</p>
           <ul className="space-y-0.5">
@@ -249,11 +277,14 @@ export function AdminNav({
   value,
   onChange,
   locked = false,
+  staffRole,
 }: {
   value: string;
   onChange: (next: string) => void;
   /** המנוי פג — כל הלשוניות נעולות חוץ מ"המנוי שלי" ו"תמיכה ועזרה" */
   locked?: boolean;
+  /** חלק 33: התפקיד בצוות — התפריט מציג רק את מה שמותר לו */
+  staffRole: StaffRole | null;
 }) {
   const [open, setOpen] = useState(false);
   useBackToClose(open, () => setOpen(false));
@@ -268,7 +299,7 @@ export function AdminNav({
           aria-label="תפריט ניהול"
           className="sticky top-[calc(var(--site-header-h,0px)+1rem)] rounded-xl border border-border bg-card p-2 py-3 shadow-card"
         >
-          <NavList value={value} onChange={onChange} locked={locked} />
+          <NavList value={value} onChange={onChange} locked={locked} staffRole={staffRole} />
         </nav>
       </aside>
 
@@ -292,7 +323,7 @@ export function AdminNav({
               <SheetTitle>תפריט ניהול</SheetTitle>
             </SheetHeader>
             <nav aria-label="תפריט ניהול">
-              <NavList value={value} onChange={pick} locked={locked} />
+              <NavList value={value} onChange={pick} locked={locked} staffRole={staffRole} />
             </nav>
           </SheetContent>
         </Sheet>

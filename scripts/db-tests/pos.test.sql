@@ -72,15 +72,15 @@ ON CONFLICT DO NOTHING;
 -- ---------- הרשאות ----------
 SELECT tests.run('pos: agent cannot create a POS order',
   $$SELECT * FROM public.admin_create_order(NULL, '[{"product_id":"9f000000-0000-0000-0000-000000000001","quantity":1}]', '{"customer_name":"אורח","customer_phone":"0501234567"}')$$,
-  :AG, 'רק מנהלי החנות');
+  :AG, 'אין לך הרשאה מתאימה');
 SELECT tests.run('pos: customer cannot create a POS order',
   $$SELECT * FROM public.admin_create_order(NULL, '[{"product_id":"9f000000-0000-0000-0000-000000000001","quantity":1}]', '{"customer_name":"אורח","customer_phone":"0501234567"}')$$,
-  :PC, 'רק מנהלי החנות');
+  :PC, 'אין לך הרשאה מתאימה');
 SELECT tests.run('pos: anonymous cannot call',
   $$SELECT * FROM public.admin_create_order(NULL, '[]', '{}')$$, NULL, 'permission denied');
 SELECT tests.run('pos: admin of store B cannot sell store A products (on store A site)',
   $$SELECT * FROM public.admin_create_order(NULL, '[{"product_id":"9f000000-0000-0000-0000-000000000001","quantity":1}]', '{"customer_name":"אורח","customer_phone":"0501234567"}')$$,
-  :B1, 'רק מנהלי החנות');
+  :B1, 'אין לך הרשאה מתאימה');
 
 -- ---------- ולידציה ----------
 SELECT tests.run('pos: empty cart refused',
@@ -133,7 +133,7 @@ SELECT tests.run('pos #1: guest in-store sale (cash, paid)',
 SELECT tests.check('pos #1: POS order, guest, details cleaned',
   $$SELECT order_source = 'pos' AND customer_id IS NULL AND customer_name = 'דנה כהן'
            AND customer_phone = '0501234567' AND customer_email = 'dana@example.com'
-           AND customer_tax_id IS NULL AND created_by = 'a0000000-0000-0000-0000-0000000000a1'
+           AND customer_tax_id IS NULL AND created_by_staff_id = 'a0000000-0000-0000-0000-0000000000a1'
       FROM public.orders WHERE note = 'pos-1'$$);
 SELECT tests.check('pos #1: guest price = tier 1, sale applies (2x100 + 40 = 240)',
   $$SELECT total = 240 AND discount_amount = 0 AND manual_discount_amount = 0 AND shipping_price = 0
@@ -245,16 +245,16 @@ SELECT tests.run('guard: customer cannot mark their own order as POS / give a di
     VALUES ('a0000000-0000-0000-0000-0000000000e7', 'order', 'pos', 'percent', 50, 'cash', 'guard-1')$$, :PC, NULL, 1);
 SELECT tests.check('guard: stored as a regular web order, no discount / POS payment',
   $$SELECT order_source = 'web' AND manual_discount_type IS NULL AND manual_discount_value IS NULL
-           AND pos_payment_method IS NULL AND created_by IS NULL
+           AND pos_payment_method IS NULL AND created_by_staff_id IS NULL
       FROM public.orders WHERE note = 'guard-1'$$);
 SELECT tests.server('guard: a web guest order still needs the full checkout details',
   $$INSERT INTO public.orders (tenant_id, customer_id, kind, customer_name, customer_phone, order_source)
     VALUES ('70000000-0000-0000-0000-00000000000a', NULL, 'order', 'אורח', '0501234567', 'pos')$$,
   'orders_guest_details_check');
 SELECT tests.run('guard: POS source cannot be changed afterwards',
-  $$UPDATE public.orders SET order_source = 'web', created_by = NULL WHERE note = 'pos-1'$$, :OA, NULL, 1);
+  $$UPDATE public.orders SET order_source = 'web', created_by_staff_id = NULL WHERE note = 'pos-1'$$, :OA, NULL, 1);
 SELECT tests.check('guard: still POS, creator kept',
-  $$SELECT order_source = 'pos' AND created_by = 'a0000000-0000-0000-0000-0000000000a1'
+  $$SELECT order_source = 'pos' AND created_by_staff_id = 'a0000000-0000-0000-0000-0000000000a1'
       FROM public.orders WHERE note = 'pos-1'$$);
 SELECT tests.run('guard: admin changes the manual discount of an order → total recalculated',
   $$UPDATE public.orders SET manual_discount_type = 'fixed', manual_discount_value = 20 WHERE note = 'pos-2'$$, :OA, NULL, 1);
@@ -287,9 +287,9 @@ SELECT tests.run('admin order with coupon POSTEN (10%) + manual ₪30 off',
 SELECT tests.run('admin adds 2 x 100 to it',
   $$INSERT INTO public.order_items (order_id, product_id, quantity, unit_price)
     SELECT id, '9f000000-0000-0000-0000-000000000001', 2, 100 FROM public.orders WHERE note = 'pos-coupon'$$, :OA, NULL, 1);
-SELECT tests.check('coupon 20 + manual 30 = discount 50, total 150, still a web order',
+SELECT tests.check('coupon 20 + manual 30 = discount 50, total 150, web order opened by the admin',
   $$SELECT coupon_code = 'POSTEN' AND manual_discount_amount = 30 AND discount_amount = 50 AND total = 150
-           AND order_source = 'web' AND created_by IS NULL
+           AND order_source = 'web' AND created_by_staff_id = 'a0000000-0000-0000-0000-0000000000a1'
       FROM public.orders WHERE note = 'pos-coupon'$$);
 SELECT tests.run('manual discount bigger than what the coupon left → capped (total 0)',
   $$UPDATE public.orders SET manual_discount_value = 999 WHERE note = 'pos-coupon'$$, :OA, NULL, 1);

@@ -8,6 +8,13 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 export const requestExtraAdminWithNotify = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    // חלק 33: שדרוג החבילה (מקום למנהל נוסף) — בעל החנות בלבד (גם המסד אוכף)
+    const { requireStaffPermission } = await import("@/lib/caller.server");
+    await requireStaffPermission(
+      context.userId,
+      "billing.manage",
+      "רק בעל החנות יכול לשנות את החבילה או לרכוש תוספים",
+    );
     const { data, error } = await context.supabase.rpc("request_extra_admin");
     if (error) throw new Error(error.message);
     const request = data as unknown as { id: string; status: string };

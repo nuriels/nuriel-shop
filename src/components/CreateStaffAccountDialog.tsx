@@ -28,19 +28,28 @@ import {
   type PasswordSetup,
 } from "@/components/PasswordSetupFields";
 
-/** יצירת חשבון סוכן/מנהל ע"י אדמין */
+type StaffAccountRole = "agent" | "admin" | "warehouse" | "cashier";
+
+/** יצירת חשבון צוות (סוכן / קופאי / מחסנאי / מנהל) ע"י מנהל */
 export function CreateStaffAccountDialog({
   onCreated,
   adminSeatsFull = false,
+  canAddManagers = true,
+  defaultRole = "agent",
+  triggerLabel = "סוכן/מנהל חדש",
 }: {
   onCreated: () => void;
   /** חלק 24: החנות הגיעה למגבלת המנהלים בחבילה — אי אפשר לבחור "מנהל" */
   adminSeatsFull?: boolean;
+  /** חלק 33: רק בעל החנות ממנה מנהלים */
+  canAddManagers?: boolean;
+  defaultRole?: StaffAccountRole;
+  triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [role, setRole] = useState<"agent" | "admin" | "warehouse">("agent");
+  const [role, setRole] = useState<StaffAccountRole>(defaultRole);
   const [busy, setBusy] = useState(false);
   const [passwordSetup, setPasswordSetup] = useState<PasswordSetup>(defaultPasswordSetup);
   const [created, setCreated] = useState<{
@@ -53,7 +62,7 @@ export function CreateStaffAccountDialog({
   const reset = () => {
     setEmail("");
     setDisplayName("");
-    setRole("agent");
+    setRole(defaultRole);
     setPasswordSetup(defaultPasswordSetup);
     setCreated(null);
   };
@@ -109,9 +118,9 @@ export function CreateStaffAccountDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline">
+        <Button variant="outline" data-testid="staff-invite">
           <UserPlus className="size-4" />
-          סוכן/מנהל חדש
+          {triggerLabel}
         </Button>
       </DialogTrigger>
       <DialogContent dir="rtl" className="max-h-[90vh] overflow-y-auto text-right">
@@ -170,22 +179,24 @@ export function CreateStaffAccountDialog({
             </div>
             <div className="space-y-2">
               <Label>תפקיד</Label>
-              <Select
-                value={role}
-                onValueChange={(v) => setRole(v as "agent" | "admin" | "warehouse")}
-              >
-                <SelectTrigger dir="rtl">
+              <Select value={role} onValueChange={(v) => setRole(v as StaffAccountRole)}>
+                <SelectTrigger dir="rtl" data-testid="staff-invite-role">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent dir="rtl">
-                  <SelectItem value="agent">סוכן</SelectItem>
-                  <SelectItem value="warehouse">מחסנאי (ליקוט בלבד)</SelectItem>
-                  <SelectItem value="admin" disabled={adminSeatsFull}>
-                    {adminSeatsFull ? "מנהל — הגעת למגבלה בחבילה" : "מנהל"}
+                  <SelectItem value="cashier">קופאי (קופה מהירה בלבד)</SelectItem>
+                  <SelectItem value="warehouse">מחסנאי (מלאי, ליקוט ומשלוחים)</SelectItem>
+                  <SelectItem value="agent">סוכן מכירות</SelectItem>
+                  <SelectItem value="admin" disabled={adminSeatsFull || !canAddManagers}>
+                    {!canAddManagers
+                      ? "מנהל חנות — רק בעל החנות ממנה מנהלים"
+                      : adminSeatsFull
+                        ? "מנהל חנות — הגעת למגבלה בחבילה"
+                        : "מנהל חנות"}
                   </SelectItem>
                 </SelectContent>
               </Select>
-              {adminSeatsFull && (
+              {adminSeatsFull && canAddManagers && (
                 <p className="text-xs text-muted-foreground">
                   הגעת למגבלת המנהלים בחבילה. להוספת מנהל — &quot;שלח בקשת שדרוג&quot; בראש המסך.
                 </p>

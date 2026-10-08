@@ -32,7 +32,11 @@ export function StorefrontGate({
 
 function SabbathGate({ storeName, children }: { storeName: string; children: ReactNode }) {
   const { role } = useAuthState();
-  const isStaff = role?.role === "admin" || role?.role === "agent" || role?.role === "warehouse";
+  const isStaff =
+    role?.role === "admin" ||
+    role?.role === "agent" ||
+    role?.role === "warehouse" ||
+    role?.role === "cashier";
   // עד שידוע מי המשתמש (וגם ב-SSR) — מסך השבת, כדי שלקוח לא יראה את הקטלוג לרגע
   if (!isStaff) return <SabbathScreen storeName={storeName} />;
   return (

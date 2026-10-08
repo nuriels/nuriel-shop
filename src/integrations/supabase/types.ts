@@ -1711,7 +1711,7 @@ export type Database = {
           paid_at: string | null;
           bit_transaction_id: string | null;
           order_source: string;
-          created_by: string | null;
+          created_by_staff_id: string | null;
           manual_discount_type: string | null;
           manual_discount_value: number | null;
           manual_discount_amount: number;
@@ -1784,7 +1784,7 @@ export type Database = {
           paid_at?: string | null;
           bit_transaction_id?: string | null;
           order_source?: string;
-          created_by?: string | null;
+          created_by_staff_id?: string | null;
           manual_discount_type?: string | null;
           manual_discount_value?: number | null;
           manual_discount_amount?: number;
@@ -1857,7 +1857,7 @@ export type Database = {
           paid_at?: string | null;
           bit_transaction_id?: string | null;
           order_source?: string;
-          created_by?: string | null;
+          created_by_staff_id?: string | null;
           manual_discount_type?: string | null;
           manual_discount_value?: number | null;
           manual_discount_amount?: number;
@@ -2952,7 +2952,89 @@ export type Database = {
           must_change_password: boolean;
           is_platform_admin: boolean;
           is_member: boolean;
+          /** חלק 33: owner / manager / cashier / warehouse / agent — או null */
+          staff_role: "owner" | "manager" | "cashier" | "warehouse" | "agent" | null;
         }[];
+      };
+      store_staff_role: { Args: { _user_id?: string }; Returns: string | null };
+      staff_can: { Args: { _permission: string; _user_id?: string }; Returns: boolean };
+      is_cashier: { Args: { _user_id: string }; Returns: boolean };
+      store_set_staff_role: { Args: { _user_id: string; _staff_role: string }; Returns: string };
+      staff_product_catalog: {
+        Args: never;
+        Returns: {
+          id: string;
+          sku: string;
+          name: string;
+          category: string;
+          barcode: string | null;
+          image_url: string | null;
+          price_tier1: number;
+          price_tier2: number | null;
+          price_tier3: number | null;
+          sale_price: number | null;
+          sale_starts_at: string | null;
+          sale_ends_at: string | null;
+          stock_quantity: number;
+          is_hidden: boolean;
+          is_digital: boolean;
+          has_deposit: boolean;
+          deposit_price: number | null;
+          deposit_units: number | null;
+          variant_attributes: Json;
+          category_ids: string[];
+        }[];
+      };
+      staff_product_variants: {
+        Args: never;
+        Returns: {
+          id: string;
+          product_id: string;
+          options: Json;
+          sku: string | null;
+          price: number | null;
+          stock_quantity: number | null;
+          is_active: boolean;
+          sort_order: number;
+        }[];
+      };
+      save_barcode_label_size: {
+        Args: { _width_mm: number; _height_mm: number };
+        Returns: undefined;
+      };
+      fulfillment_orders: {
+        Args: { _include_delivered?: boolean };
+        Returns: {
+          id: string;
+          order_number: string;
+          created_at: string;
+          status: string;
+          is_urgent: boolean;
+          customer_name: string | null;
+          customer_phone: string | null;
+          city: string | null;
+          address: string | null;
+          zip: string | null;
+          shipping_method_name: string | null;
+          shipping_kind: string | null;
+          tracking_number: string | null;
+          shipping_provider: string | null;
+          delivery_attempts: number;
+          items_count: number;
+          units_count: number;
+          order_source: string;
+          note: string | null;
+          updated_at: string;
+        }[];
+      };
+      fulfillment_set_status: {
+        Args: {
+          _order_id: string;
+          _status: string;
+          _tracking_number?: string;
+          _shipping_provider?: string;
+        };
+        Returns: Json;
       };
       replace_home_banners: { Args: { _slides: Json }; Returns: number };
       price_tiers_enabled: { Args: never; Returns: boolean };

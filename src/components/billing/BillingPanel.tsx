@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Building2,
@@ -58,13 +59,26 @@ type PaidPlan = Exclude<PlanType, "trial">;
  * אין סליקה באתר — "לבחירת חבילה" פותח פנייה לצוות (נושא מוכן מראש), והתשלום
  * מתועד ע"י הנהלת הפלטפורמה.
  */
+/** חלק 33: מנהל חנות רואה את המנוי, אבל רק בעל החנות משנה חבילה ופרטי חיוב */
+const OWNER_ONLY_BILLING = "רק בעל החנות יכול לשנות את החבילה או את פרטי החיוב";
+
 export function BillingPanel({
-  onChoosePlan,
+  onChoosePlan: choosePlan,
   onContactSupport,
+  canManageBilling = true,
 }: {
   onChoosePlan: (plan: PaidPlan) => void;
   onContactSupport: () => void;
+  /** בעל החנות (או מנהל-על) — false למנהל חנות */
+  canManageBilling?: boolean;
 }) {
+  const onChoosePlan = (plan: PaidPlan) => {
+    if (!canManageBilling) {
+      toast.error(OWNER_ONLY_BILLING);
+      return;
+    }
+    choosePlan(plan);
+  };
   const load = useServerFn(getStoreBilling);
   const [data, setData] = useState<StoreBilling | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -108,6 +122,15 @@ export function BillingPanel({
           רענון
         </Button>
       </div>
+      {!canManageBilling && (
+        <p
+          className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground"
+          data-testid="billing-owner-only"
+        >
+          <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
+          צפייה בלבד: שינוי החבילה, רכישת תוספים ועדכון פרטי החיוב — רק בעל החנות.
+        </p>
+      )}
 
       {error && (
         <p role="alert" className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -136,7 +159,10 @@ export function BillingPanel({
       />
 
       {data?.billingProfile && (
-        <BillingProfileCard profile={data.billingProfile} onEdit={() => setProfileOpen(true)} />
+        <BillingProfileCard
+          profile={data.billingProfile}
+          onEdit={() => (canManageBilling ? setProfileOpen(true) : toast.error(OWNER_ONLY_BILLING))}
+        />
       )}
 
       {data && data.addons.length > 0 && <MyAddons billing={data} />}

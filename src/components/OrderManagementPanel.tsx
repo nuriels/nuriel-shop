@@ -1,4 +1,4 @@
-import { staffLabel } from "@/lib/staff";
+import { staffLabel, staffName } from "@/lib/staff";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
@@ -26,6 +26,7 @@ import {
   XCircle,
   ClipboardCheck,
   Undo2,
+  UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -73,6 +74,7 @@ import {
   canAssignCourier,
   canMarkShipped,
   formatOrderDate,
+  orderCreatedByText,
   orderGroupOf,
   type OrderGroup,
   type OrderRow,
@@ -158,6 +160,8 @@ export function OrderManagementPanel({
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [customers, setCustomers] = useState<PersonOption[]>([]);
   const [agents, setAgents] = useState<PersonOption[]>([]);
+  /** חלק 33: שמות כל אנשי הצוות — ל"נוצר בקופה על ידי" */
+  const [staffNames, setStaffNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [group, setGroup] = useState<PanelGroup>("awaiting");
   const [changingId, setChangingId] = useState<string | null>(null);
@@ -229,6 +233,11 @@ export function OrderManagementPanel({
         allRoles
           .filter((r) => r.role === "agent" || r.role === "admin")
           .map((r) => ({ user_id: r.user_id, label: staffLabel(r) })),
+      );
+      setStaffNames(
+        new Map(
+          allRoles.filter((r) => r.role !== "customer").map((r) => [r.user_id, staffName(r)]),
+        ),
       );
     } else {
       setCustomers(
@@ -734,6 +743,19 @@ export function OrderManagementPanel({
                                 order.agent_id &&
                                 ` · סוכן: ${agentLabel.get(order.agent_id) ?? "-"}`}
                             </p>
+                            {/* חלק 33: מי מהצוות הקליד את ההזמנה */}
+                            {scope === "admin" && order.created_by_staff_id && (
+                              <p
+                                className="flex items-center gap-1 text-xs text-muted-foreground"
+                                data-testid="order-created-by"
+                              >
+                                <UserRound className="size-3 shrink-0" aria-hidden="true" />
+                                {orderCreatedByText(
+                                  order,
+                                  staffNames.get(order.created_by_staff_id),
+                                )}
+                              </p>
+                            )}
                           </div>
                         </div>
 

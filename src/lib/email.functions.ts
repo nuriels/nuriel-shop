@@ -20,14 +20,18 @@ export const sendOrderEmails = createServerFn({ method: "POST" })
 
     const { data: order } = await supabaseAdmin
       .from("orders")
-      .select("customer_id, agent_id")
+      .select("customer_id, agent_id, created_by_staff_id")
       .eq("id", data.orderId)
       .maybeSingle();
     if (!order) throw new Error("ההזמנה לא נמצאה");
 
     const { loadCaller } = await import("@/lib/caller.server");
     const caller = await loadCaller(context.userId);
-    const isOwner = context.userId === order.customer_id || context.userId === order.agent_id;
+    // הלקוח / הסוכן של ההזמנה, העובד שהקליד אותה (למשל קופאי בקופה), או מנהל
+    const isOwner =
+      context.userId === order.customer_id ||
+      context.userId === order.agent_id ||
+      context.userId === order.created_by_staff_id;
     if (!isOwner && caller.role !== "admin") throw new Error("אין הרשאה");
 
     return sendOrderEmailsInternal(data.orderId, context.userId);

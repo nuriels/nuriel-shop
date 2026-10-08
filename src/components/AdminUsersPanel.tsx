@@ -129,7 +129,7 @@ const USER_GROUPS: {
   {
     id: "admins",
     label: "מנהלים",
-    hint: "למנהלים גישה מלאה לכל המערכת. המנהל הראשי מוגן, ואי אפשר לחסום אותו או לשנות לו הרשאות.",
+    hint: 'למנהלים גישה לכל הניהול. בעל החנות מוגן — אי אפשר לחסום אותו או לשנות לו הרשאות, ורק הוא ממנה מנהלים. קופאים ומחסנאים — במסך "צוות והרשאות".',
     empty: "אין מנהלים נוספים.",
     icon: ShieldCheck,
   },
@@ -194,7 +194,14 @@ function UserGroupNav({
 }
 
 /** ניהול משתמשים — אישור/חסימה/מחיקה, איפוס סיסמה, קבוצת מחיר ושיוך סוכן */
-export function AdminUsersPanel({ isAdmin }: { isAdmin: boolean }) {
+export function AdminUsersPanel({
+  isAdmin,
+  canManageManagers = true,
+}: {
+  isAdmin: boolean;
+  /** חלק 33: רק בעל החנות ממנה / מוריד / חוסם מנהלים */
+  canManageManagers?: boolean;
+}) {
   // חלק 24: כמה מנהלים מותרים בחבילה (המגבלה עצמה נאכפת במסד)
   const { seats, reload: reloadSeats } = useStoreAdminSeats(isAdmin);
   const tiersEnabled = usePriceTiersEnabled();
@@ -237,7 +244,12 @@ export function AdminUsersPanel({ isAdmin }: { isAdmin: boolean }) {
         ),
     ]);
     if (rolesResult.error) toast.error(rolesResult.error.message);
-    setRoles((rolesResult.data as RoleRow[] | null) ?? []);
+    // חלק 33: קופאים ומחסנאים מנוהלים במסך "צוות והרשאות"
+    setRoles(
+      ((rolesResult.data as RoleRow[] | null) ?? []).filter(
+        (r) => r.role !== "cashier" && r.role !== "warehouse",
+      ),
+    );
     setProfiles(
       Object.fromEntries(
         ((profilesResult.data as Profile[] | null) ?? []).map((p) => [p.user_id, p]),
@@ -807,6 +819,7 @@ export function AdminUsersPanel({ isAdmin }: { isAdmin: boolean }) {
               void reloadSeats();
             }}
             adminSeatsFull={seatsFull(seats)}
+            canAddManagers={canManageManagers}
           />
           <InviteCustomerDialog handlers={handlerOptions} />
           <CreateCustomerDialog

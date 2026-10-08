@@ -31,6 +31,8 @@ const LANDING: Record<string, HandoffLanding> = {
   admin: "/admin",
   agent: "/agent",
   warehouse: "/warehouse",
+  // חלק 33: הפאנל מעביר את הקופאי למסך הבית שלו (הקופה)
+  cashier: "/admin",
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

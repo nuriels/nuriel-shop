@@ -5,6 +5,7 @@ import {
   ClipboardList,
   LayoutDashboard,
   LogOut,
+  Receipt,
   ShieldCheck,
   ShoppingCart,
   Store,
@@ -100,7 +101,7 @@ export function SiteHeader({
         </Link>
 
         <nav className="flex items-center gap-1 sm:mr-2">
-          {role?.role !== "warehouse" && (
+          {role?.role !== "warehouse" && role?.role !== "cashier" && (
             <Link
               to="/"
               activeOptions={{ exact: true }}
@@ -111,14 +112,27 @@ export function SiteHeader({
               <span className="hidden sm:inline">קטלוג</span>
             </Link>
           )}
+          {/* חלק 33: מסך הבית של המחסנאי / הקופאי בפאנל */}
           {role?.role === "warehouse" && (
             <Link
-              to="/warehouse"
+              to="/admin"
+              search={{ tab: "picking" }}
               className={navLinkClass}
-              activeProps={{ className: navActiveClass }}
+              activeProps={{ className: "" }}
             >
               <ClipboardList className="size-4" />
-              ליקוט
+              מחסן
+            </Link>
+          )}
+          {role?.role === "cashier" && (
+            <Link
+              to="/admin"
+              search={{ tab: "pos" }}
+              className={navLinkClass}
+              activeProps={{ className: "" }}
+            >
+              <Receipt className="size-4" />
+              קופה
             </Link>
           )}
           {/* האזור האישי (הזמנות + הפרטים שלי) — גלוי תמיד ללקוח מחובר, גם במובייל */}
@@ -178,9 +192,10 @@ export function SiteHeader({
           {email ? (
             <>
               {/* חלק 18ב: איש צוות שמשויך לכמה חנויות — מעבר בין החנויות */}
-              {(role?.role === "admin" || role?.role === "agent" || role?.role === "warehouse") && (
-                <StoreSwitcher userId={role.user_id} />
-              )}
+              {(role?.role === "admin" ||
+                role?.role === "agent" ||
+                role?.role === "warehouse" ||
+                role?.role === "cashier") && <StoreSwitcher userId={role.user_id} />}
               {(role?.role === "agent" || role?.role === "admin") && (
                 <StaffNotificationsBell userId={role.user_id} />
               )}

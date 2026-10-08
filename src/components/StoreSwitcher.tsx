@@ -22,6 +22,7 @@ const ROLE_LABEL: Record<StoreRole, string> = {
   admin: "מנהל",
   agent: "סוכן",
   warehouse: "מחסן",
+  cashier: "קופה",
 };
 
 /** טעינה אחת לכל המסכים (הכותרת מופיעה בכל עמוד) — לכל משתמש בנפרד */

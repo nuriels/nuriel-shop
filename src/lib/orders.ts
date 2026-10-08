@@ -301,6 +301,8 @@ export type OrderRow = OrderContactFields & {
   /** חלק 32: 'pos' = נוצרה בקופה המהירה; אמצעי התשלום שנרשם בקופה */
   order_source?: string | null;
   pos_payment_method?: string | null;
+  /** חלק 33: העובד שהקליד את ההזמנה (קופה / הזמנה שנפתחה ללקוח מהניהול) */
+  created_by_staff_id?: string | null;
   /** אמצעי התשלום ומצבו (חלק 17ב): offline (טלפוני) / bit; credit_card — הזמנות ישנות בלבד */
   payment_method?: "offline" | "credit_card" | "bit";
   payment_status?:
@@ -319,11 +321,26 @@ export const ORDER_SELECT_COLUMNS =
   "id, customer_id, agent_id, order_number, status, kind, total, note, vat_rate, prices_include_vat, created_at, " +
   "tracking_number, shipping_provider, tracking_url, tracking_updated_at, " +
   "delivery_attempts, last_delivery_failure_note, last_delivery_failure_at, shipped_at, delivered_at, " +
-  "payment_method, payment_status, paid_at, order_source, pos_payment_method, " +
+  "payment_method, payment_status, paid_at, order_source, pos_payment_method, created_by_staff_id, " +
   "bit_transaction_id, bit_receipt_url, payment_reported_at, payment_due_at, " +
   `${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ${ORDER_COUPON_COLUMNS}, ` +
   "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit, is_gift, " +
   "is_digital, item_status, digital_license_key, license_sent_at, license_sent_to, variant_label)";
+
+/**
+ * חלק 33: "נוצר בקופה על ידי: רונית" — מי מהצוות הקליד את ההזמנה (מוצג בניהול
+ * בלבד). null כשהלקוח הזמין בעצמו.
+ */
+export function orderCreatedByText(
+  order: { order_source?: string | null; created_by_staff_id?: string | null },
+  staffName: string | null | undefined,
+): string | null {
+  if (!order.created_by_staff_id) return null;
+  const name = staffName?.trim() || "עובד";
+  return order.order_source === "pos"
+    ? `נוצר בקופה על ידי: ${name}`
+    : `נוצרה ידנית על ידי: ${name}`;
+}
 
 /**
  * מספר ההזמנה נקבע במסד בלבד (טריגר `orders_assign_number`):

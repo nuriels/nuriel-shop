@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import type { StaffRole } from "@/lib/permissions";
 
-export type Role = "admin" | "agent" | "customer" | "warehouse";
+export type Role = "admin" | "agent" | "customer" | "warehouse" | "cashier";
 
 export type UserRole = {
   user_id: string;
@@ -17,6 +18,11 @@ export type UserRole = {
   is_platform_admin?: boolean;
   /** false = מנהל-על שמנהל את החנות בלי להיות רשום בצוות שלה (God Mode) */
   is_member?: boolean;
+  /**
+   * חלק 33: התפקיד בצוות — owner / manager / cashier / warehouse / agent
+   * (null = לקוח / חסום). להרשאות: effectiveStaffRole + staffCan (permissions.ts)
+   */
+  staff_role?: StaffRole | null;
 };
 
 const ROLE_COLUMNS =

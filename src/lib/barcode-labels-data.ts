@@ -1,5 +1,6 @@
 /**
- * מחולל מדבקות הברקוד (חלק 32) — הנתונים מהדפדפן, בהרשאות המנהל.
+ * מחולל מדבקות הברקוד (חלק 32) — הנתונים מהדפדפן, בהרשאות העובד המחובר
+ * (חלק 33: גם מחסנאי). המוצרים — מקטלוג הצוות במסד, בלי מחיר עלות.
  */
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetch-all";
@@ -25,49 +26,30 @@ const num = (value: unknown): number => {
 
 /** כל המוצרים של החנות, עם הקטגוריות הנוספות (לסינון לפי קטגוריה) */
 export async function loadLabelCatalog(): Promise<LabelCatalogProduct[]> {
-  const [products, links] = await Promise.all([
-    fetchAllRows((from, to) =>
-      supabase
-        .from("global_products")
-        .select(
-          "id, sku, name, category, barcode, image_url, price_tier1, stock_quantity, is_hidden, is_digital",
-        )
-        .order("category")
-        .order("name")
-        .order("id")
-        .range(from, to),
-    ),
-    fetchAllRows((from, to) =>
-      supabase
-        .from("product_categories")
-        .select("product_id, category_id")
-        .order("product_id")
-        .order("category_id")
-        .range(from, to),
-    ),
-  ]);
+  const products = await fetchAllRows((from, to) =>
+    supabase.rpc("staff_product_catalog").range(from, to),
+  );
   if (products.error) throw new Error(products.error.message);
-  const extra = new Map<string, string[]>();
-  for (const row of (links.data ?? []) as { product_id: string; category_id: string }[]) {
-    extra.set(row.product_id, [...(extra.get(row.product_id) ?? []), row.category_id]);
-  }
-  return (products.data as Record<string, unknown>[]).map((row) => {
-    const id = String(row["id"]);
-    const category = String(row["category"] ?? "");
-    return {
-      id,
-      sku: String(row["sku"] ?? ""),
-      name: String(row["name"] ?? ""),
-      barcode: (row["barcode"] as string | null) ?? null,
-      price_tier1: num(row["price_tier1"]),
-      stock_quantity: num(row["stock_quantity"]),
-      is_digital: row["is_digital"] === true,
-      category,
-      extraCategoryIds: extra.get(id) ?? [],
-      image_url: (row["image_url"] as string | null) ?? null,
-      is_hidden: row["is_hidden"] === true,
-    };
-  });
+  const rows = (products.data as Record<string, unknown>[]).map((row) => ({
+    id: String(row["id"]),
+    sku: String(row["sku"] ?? ""),
+    name: String(row["name"] ?? ""),
+    barcode: (row["barcode"] as string | null) ?? null,
+    price_tier1: num(row["price_tier1"]),
+    stock_quantity: num(row["stock_quantity"]),
+    is_digital: row["is_digital"] === true,
+    category: String(row["category"] ?? ""),
+    extraCategoryIds: Array.isArray(row["category_ids"]) ? (row["category_ids"] as string[]) : [],
+    image_url: (row["image_url"] as string | null) ?? null,
+    is_hidden: row["is_hidden"] === true,
+  }));
+  // לפי קטגוריה ואז שם (כמו בעץ הקטגוריות)
+  return rows.sort(
+    (a, b) =>
+      a.category.localeCompare(b.category, "he") ||
+      a.name.localeCompare(b.name, "he") ||
+      a.id.localeCompare(b.id),
+  );
 }
 
 /** גודל מדבקת הברקוד השמור של החנות (ברירת מחדל 70×40) */
@@ -84,11 +66,14 @@ export async function loadBarcodeLabelSize(): Promise<BarcodeLabelSize> {
   });
 }
 
-/** שמירת הגודל לחנות — כך שבפעם הבאה (גם ממחשב אחר) הוא כבר מוכן */
+/**
+ * שמירת הגודל לחנות — כך שבפעם הבאה (גם ממחשב אחר) הוא כבר מוכן.
+ * פונקציה במסד (save_barcode_label_size) — גם מחסנאי שומר, בלי גישה לשאר ההגדרות.
+ */
 export async function saveBarcodeLabelSize(size: BarcodeLabelSize): Promise<void> {
-  const { error } = await supabase
-    .from("site_settings")
-    .update({ barcode_label_width_mm: size.width, barcode_label_height_mm: size.height })
-    .eq("id", true);
+  const { error } = await supabase.rpc("save_barcode_label_size", {
+    _width_mm: size.width,
+    _height_mm: size.height,
+  });
   if (error) throw new Error(error.message);
 }

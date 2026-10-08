@@ -27,7 +27,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** תוקף הקוד: רק כדי לעבור לכתובת של החנות האחרת */
 const SWITCH_TTL_MS = 2 * 60 * 1000;
 
-export type StoreRole = "admin" | "agent" | "warehouse";
+export type StoreRole = "admin" | "agent" | "warehouse" | "cashier";
 
 export type MyStore = {
   id: string;
@@ -57,7 +57,7 @@ type MyStoreRow = {
   is_current: boolean;
 };
 
-const ROLES: readonly StoreRole[] = ["admin", "agent", "warehouse"];
+const ROLES: readonly StoreRole[] = ["admin", "agent", "warehouse", "cashier"];
 
 async function loadMyStores(supabase: SupabaseClient<Database>): Promise<MyStore[]> {
   const { originForTenant } = await import("@/integrations/supabase/tenant.server");

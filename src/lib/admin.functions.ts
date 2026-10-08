@@ -5,7 +5,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 type CreateUserInput = {
   email: string;
-  role: "admin" | "agent" | "customer" | "warehouse";
+  /** "admin" = מנהל חנות (חלק 33: רק בעל החנות ממנה מנהלים) */
+  role: "admin" | "agent" | "customer" | "warehouse" | "cashier";
   businessName?: string;
   businessAddress?: string;
   taxId?: string;
@@ -54,7 +55,13 @@ export const createStaffUser = createServerFn({ method: "POST" })
       .toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("כתובת אימייל לא תקינה");
     const role = input?.role;
-    if (role !== "admin" && role !== "agent" && role !== "customer" && role !== "warehouse") {
+    if (
+      role !== "admin" &&
+      role !== "agent" &&
+      role !== "customer" &&
+      role !== "warehouse" &&
+      role !== "cashier"
+    ) {
       throw new Error("תפקיד לא תקין");
     }
     let priceTier: 1 | 2 | 3 | null = null;
@@ -109,6 +116,14 @@ export const createStaffUser = createServerFn({ method: "POST" })
     if (callerRole !== "admin" && callerRole !== "agent") throw new Error("אין הרשאה");
     if (callerRole === "agent" && data.role !== "customer") {
       throw new Error("סוכן יכול ליצור לקוחות בלבד");
+    }
+    // חלק 33: אנשי צוות — מי שמנהל את הצוות; מנהלים — רק בעל החנות
+    const { staffCan, NO_PERMISSION_MESSAGE } = await import("@/lib/permissions");
+    if (data.role !== "customer" && !staffCan(caller.staffRole, "staff.manage")) {
+      throw new Error(NO_PERMISSION_MESSAGE);
+    }
+    if (data.role === "admin" && !staffCan(caller.staffRole, "staff.managers")) {
+      throw new Error("רק בעל החנות יכול להוסיף מנהלים");
     }
 
     // חסימת כפילות אימייל *לפני* יצירת המשתמש: גם בטבלת התפקידים שלנו
@@ -173,7 +188,12 @@ export const createStaffUser = createServerFn({ method: "POST" })
       must_change_password: data.passwordMode === "temp",
       display_name: data.displayName,
     });
-    if (roleError) throw new Error(roleError.message);
+    if (roleError) {
+      // השיוך לחנות נכשל (למשל מגבלת המנהלים בחבילה) — לא משאירים חשבון
+      // התחברות "יתום" שתופס את כתובת האימייל
+      await supabaseAdmin.auth.admin.deleteUser(created.user.id).catch(() => undefined);
+      throw new Error(roleError.message);
+    }
 
     if (data.role === "customer") {
       const agentId = callerRole === "agent" ? context.userId : data.agentId;
@@ -259,7 +279,12 @@ export const deleteUserAccount = createServerFn({ method: "POST" })
       .eq("user_id", data.userId)
       .maybeSingle();
     if (!target) throw new Error("המשתמש לא נמצא");
-    if (target.is_protected) throw new Error("אי אפשר למחוק את המנהל הראשי של המערכת");
+    if (target.is_protected) throw new Error("אי אפשר למחוק את בעל החנות");
+    // חלק 33: מנהל חנות מוסר רק ע"י בעל החנות
+    const { staffCan } = await import("@/lib/permissions");
+    if (target.role === "admin" && !staffCan(caller.staffRole, "staff.managers")) {
+      throw new Error("רק בעל החנות יכול להסיר מנהל");
+    }
 
     if (target.role === "admin") {
       const { count } = await supabaseAdmin
@@ -330,7 +355,7 @@ export const updateUserDetails = createServerFn({ method: "POST" })
   .inputValidator(
     (input: {
       userId: string;
-      role?: "admin" | "agent" | "customer" | "warehouse";
+      role?: "admin" | "agent" | "customer" | "warehouse" | "cashier";
       priceTier?: 1 | 2 | 3 | null;
       priceListType?: PriceListType;
       agentId?: string | null;
@@ -345,7 +370,10 @@ export const updateUserDetails = createServerFn({ method: "POST" })
     }) => {
       const userId = String(input?.userId ?? "").trim();
       if (!userId) throw new Error("חסר מזהה משתמש");
-      if (input.role !== undefined && !["admin", "agent", "customer"].includes(input.role)) {
+      if (
+        input.role !== undefined &&
+        !["admin", "agent", "customer", "warehouse", "cashier"].includes(input.role)
+      ) {
         throw new Error("תפקיד לא תקין");
       }
       if (
@@ -407,9 +435,21 @@ export const updateUserDetails = createServerFn({ method: "POST" })
       }
     }
 
-    // המנהל הראשי מוגן — אי אפשר לשנות לו תפקיד (גם המסד חוסם)
+    // בעל החנות מוגן — אי אפשר לשנות לו תפקיד (גם המסד חוסם)
     if (target.is_protected && data.role !== undefined && data.role !== "admin") {
-      throw new Error("אי אפשר לשנות את ההרשאות של המנהל הראשי");
+      throw new Error("אי אפשר לשנות את התפקיד של בעל החנות");
+    }
+    // חלק 33: מינוי מנהל, או שינוי תפקיד של מנהל — רק בעל החנות
+    if (
+      isAdmin &&
+      data.role !== undefined &&
+      data.role !== target.role &&
+      (data.role === "admin" || target.role === "admin")
+    ) {
+      const { staffCan } = await import("@/lib/permissions");
+      if (!staffCan(caller.staffRole, "staff.managers")) {
+        throw new Error("רק בעל החנות יכול למנות מנהלים או לשנות תפקיד של מנהל");
+      }
     }
 
     if (isAdmin) {
@@ -423,7 +463,7 @@ export const updateUserDetails = createServerFn({ method: "POST" })
         rolePatch.role = data.role;
         // עובד שנרשם בטעות כלקוח ממתין — קידום לצוות מאשר אותו אוטומטית,
         // אחרת הוא ממשיך להיספר ב"ממתינים לאישור"
-        if (data.role === "agent" || data.role === "admin") rolePatch.is_approved = true;
+        if (data.role !== "customer") rolePatch.is_approved = true;
       }
       if (data.agentNumber !== undefined) rolePatch.agent_number = data.agentNumber;
       if (data.displayName !== undefined) rolePatch.display_name = data.displayName;

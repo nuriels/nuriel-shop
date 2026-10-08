@@ -238,6 +238,13 @@ export const saveBillingProfile = createServerFn({ method: "POST" })
     return { ...profile, businessType: profile.businessType };
   })
   .handler(async ({ data, context }): Promise<BillingProfile> => {
+    // חלק 33: פרטי החיוב של המנוי — בעל החנות בלבד (גם המסד אוכף)
+    const { requireStaffPermission } = await import("@/lib/caller.server");
+    await requireStaffPermission(
+      context.userId,
+      "billing.manage",
+      "רק בעל החנות יכול לעדכן את פרטי החיוב",
+    );
     const { currentTenantId } = await import("@/integrations/supabase/tenant.server");
     const { data: saved, error } = await context.supabase
       .from("tenant_billing_profile")

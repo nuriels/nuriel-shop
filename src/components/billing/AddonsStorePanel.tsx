@@ -71,12 +71,20 @@ const TONES: Record<AddonName, string> = {
   zapier: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
 };
 
-export function AddonsStorePanel() {
+/** חלק 33: רכישת תוספים — רק בעל החנות (מנהל חנות רואה, לא קונה) */
+export function AddonsStorePanel({ canPurchase = true }: { canPurchase?: boolean }) {
   const load = useServerFn(getAddonsStore);
   const [data, setData] = useState<AddonsStore | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [buying, setBuying] = useState<AddonOffer | null>(null);
+  const [buying, setBuyingOffer] = useState<AddonOffer | null>(null);
+  const setBuying = (offer: AddonOffer | null) => {
+    if (offer && !canPurchase) {
+      toast.error("רק בעל החנות יכול לרכוש תוספים או לשנות את החבילה");
+      return;
+    }
+    setBuyingOffer(offer);
+  };
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -115,6 +123,12 @@ export function AddonsStorePanel() {
           רענון
         </Button>
       </div>
+
+      {!canPurchase && (
+        <p className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+          צפייה בלבד: רכישת תוספים ושינוי החבילה — רק בעל החנות.
+        </p>
+      )}
 
       {error && (
         <p role="alert" className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">

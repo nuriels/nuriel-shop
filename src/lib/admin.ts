@@ -1,11 +1,12 @@
 import type { UserRole } from "@/hooks/useAuthState";
 
-export type Role = "admin" | "agent" | "customer" | "warehouse";
+export type Role = "admin" | "agent" | "customer" | "warehouse" | "cashier";
 
 export const ROLE_LABEL: Record<Role, string> = {
   admin: "מנהל",
   agent: "סוכן",
   warehouse: "מחסנאי",
+  cashier: "קופאי",
   customer: "לקוח",
 };
 

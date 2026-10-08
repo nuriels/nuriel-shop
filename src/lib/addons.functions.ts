@@ -75,6 +75,13 @@ export const purchaseAddon = createServerFn({ method: "POST" })
     return { addon: addonOf(input?.addon), expectedAmount: expected };
   })
   .handler(async ({ data, context }): Promise<AddonPurchase> => {
+    // חלק 33: רכישת תוספים — בעל החנות בלבד (גם המסד אוכף)
+    const { requireStaffPermission } = await import("@/lib/caller.server");
+    await requireStaffPermission(
+      context.userId,
+      "billing.manage",
+      "רק בעל החנות יכול לרכוש תוספים או לשנות את החבילה",
+    );
     const { data: raw, error } = await context.supabase.rpc("addon_purchase", {
       _addon: data.addon,
       _expected: data.expectedAmount,
