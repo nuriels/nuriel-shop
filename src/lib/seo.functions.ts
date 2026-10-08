@@ -34,6 +34,8 @@ export type ProductSeo = {
   url: string | null;
   /** הכתובת הראשית של החנות (לפירורי הלחם) */
   origin: string | null;
+  /** חלק 34: דירוג הלקוחות (ביקורות מאושרות) — aggregateRating לגוגל; null בלי ביקורות */
+  rating: { average: number; count: number } | null;
 };
 
 export const getProductSeo = createServerFn({ method: "GET" })
@@ -50,23 +52,30 @@ export const getProductSeo = createServerFn({ method: "GET" })
     if (isPlatformRequest() || !maybeCurrentTenant()) return null;
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [{ data: rows, error }, { data: settings }, { data: extra }, { data: categories }] =
-      await Promise.all([
-        supabaseAdmin.rpc("storefront_feed_products").eq("id", data.id).limit(1),
-        supabaseAdmin
-          .from("site_settings")
-          .select("business_name, site_title")
-          .eq("id", true)
-          .maybeSingle(),
-        // תמונות נוספות ותוקף המבצע — לסכמת המוצר (המוצר עצמו כבר נבדק ב-RPC)
-        supabaseAdmin
-          .from("global_products")
-          .select("images, sale_ends_at")
-          .eq("id", data.id)
-          .maybeSingle(),
-        // חלק 31: קטגוריות האב — לפירורי לחם היררכיים (בית ← ראשית ← משנה ← מוצר)
-        supabaseAdmin.from("categories").select("name, parent_name"),
-      ]);
+    const [
+      { data: rows, error },
+      { data: settings },
+      { data: extra },
+      { data: categories },
+      { data: reviewSummary },
+    ] = await Promise.all([
+      supabaseAdmin.rpc("storefront_feed_products").eq("id", data.id).limit(1),
+      supabaseAdmin
+        .from("site_settings")
+        .select("business_name, site_title")
+        .eq("id", true)
+        .maybeSingle(),
+      // תמונות נוספות ותוקף המבצע — לסכמת המוצר (המוצר עצמו כבר נבדק ב-RPC)
+      supabaseAdmin
+        .from("global_products")
+        .select("images, sale_ends_at")
+        .eq("id", data.id)
+        .maybeSingle(),
+      // חלק 31: קטגוריות האב — לפירורי לחם היררכיים (בית ← ראשית ← משנה ← מוצר)
+      supabaseAdmin.from("categories").select("name, parent_name"),
+      // חלק 34: ממוצע הכוכבים ומספר הביקורות המאושרות (כוכבים בתוצאות החיפוש)
+      supabaseAdmin.rpc("product_review_summary", { _product_id: data.id }),
+    ]);
     if (error) {
       console.error("[seo] product lookup failed", error.message);
       return null;
@@ -119,8 +128,20 @@ export const getProductSeo = createServerFn({ method: "GET" })
       storeName,
       url,
       origin,
+      rating: ratingOf(reviewSummary),
     };
   });
+
+/** הסיכום ממסד הנתונים → דירוג לסכמה (רק כשיש ביקורות מאושרות) */
+function ratingOf(raw: unknown): ProductSeo["rating"] {
+  if (!raw || typeof raw !== "object") return null;
+  const summary = raw as { enabled?: boolean; count?: unknown; average?: unknown };
+  const count = Number(summary.count);
+  const average = Number(summary.average);
+  if (summary.enabled === false || !Number.isFinite(count) || count < 1) return null;
+  if (!Number.isFinite(average) || average < 1 || average > 5) return null;
+  return { average, count: Math.trunc(count) };
+}
 
 /**
  * חלק 31: "קטגוריה ← קטגוריית אב" של החנות — לפירורי הלחם של עמודי הקטגוריה

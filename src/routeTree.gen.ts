@@ -46,6 +46,7 @@ import { Route as ProductProductIdRouteImport } from './routes/product.$productI
 import { Route as PwaIconRouteImport } from './routes/pwa.$icon'
 import { Route as AdminInventoryLabelsRouteImport } from './routes/admin_.inventory_.labels'
 import { Route as AdminMarketingAbandonedCartsRouteImport } from './routes/admin_.marketing.abandoned-carts'
+import { Route as AdminMarketingReviewsRouteImport } from './routes/admin_.marketing.reviews'
 import { Route as AdminOrdersNewRouteImport } from './routes/admin_.orders_.new'
 import { Route as AdminSettingsDomainRouteImport } from './routes/admin_.settings_.domain'
 import { Route as AdminSettingsStaffRouteImport } from './routes/admin_.settings_.staff'
@@ -239,6 +240,11 @@ const AdminMarketingAbandonedCartsRoute =
     path: '/admin/marketing/abandoned-carts',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AdminMarketingReviewsRoute = AdminMarketingReviewsRouteImport.update({
+  id: '/admin_/marketing/reviews',
+  path: '/admin/marketing/reviews',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminOrdersNewRoute = AdminOrdersNewRouteImport.update({
   id: '/admin_/orders_/new',
   path: '/admin/orders/new',
@@ -309,6 +315,7 @@ export interface FileRoutesByFullPath {
   '/pwa/$icon': typeof PwaIconRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
+  '/admin/marketing/reviews': typeof AdminMarketingReviewsRoute
   '/admin/orders/new': typeof AdminOrdersNewRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
   '/admin/settings/staff': typeof AdminSettingsStaffRoute
@@ -354,6 +361,7 @@ export interface FileRoutesByTo {
   '/pwa/$icon': typeof PwaIconRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
+  '/admin/marketing/reviews': typeof AdminMarketingReviewsRoute
   '/admin/orders/new': typeof AdminOrdersNewRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
   '/admin/settings/staff': typeof AdminSettingsStaffRoute
@@ -400,6 +408,7 @@ export interface FileRoutesById {
   '/pwa/$icon': typeof PwaIconRoute
   '/admin_/inventory_/labels': typeof AdminInventoryLabelsRoute
   '/admin_/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
+  '/admin_/marketing/reviews': typeof AdminMarketingReviewsRoute
   '/admin_/orders_/new': typeof AdminOrdersNewRoute
   '/admin_/settings_/domain': typeof AdminSettingsDomainRoute
   '/admin_/settings_/staff': typeof AdminSettingsStaffRoute
@@ -447,6 +456,7 @@ export interface FileRouteTypes {
     | '/pwa/$icon'
     | '/admin/inventory/labels'
     | '/admin/marketing/abandoned-carts'
+    | '/admin/marketing/reviews'
     | '/admin/orders/new'
     | '/admin/settings/domain'
     | '/admin/settings/staff'
@@ -492,6 +502,7 @@ export interface FileRouteTypes {
     | '/pwa/$icon'
     | '/admin/inventory/labels'
     | '/admin/marketing/abandoned-carts'
+    | '/admin/marketing/reviews'
     | '/admin/orders/new'
     | '/admin/settings/domain'
     | '/admin/settings/staff'
@@ -537,6 +548,7 @@ export interface FileRouteTypes {
     | '/pwa/$icon'
     | '/admin_/inventory_/labels'
     | '/admin_/marketing/abandoned-carts'
+    | '/admin_/marketing/reviews'
     | '/admin_/orders_/new'
     | '/admin_/settings_/domain'
     | '/admin_/settings_/staff'
@@ -583,6 +595,7 @@ export interface RootRouteChildren {
   PwaIconRoute: typeof PwaIconRoute
   AdminInventoryLabelsRoute: typeof AdminInventoryLabelsRoute
   AdminMarketingAbandonedCartsRoute: typeof AdminMarketingAbandonedCartsRoute
+  AdminMarketingReviewsRoute: typeof AdminMarketingReviewsRoute
   AdminOrdersNewRoute: typeof AdminOrdersNewRoute
   AdminSettingsDomainRoute: typeof AdminSettingsDomainRoute
   AdminSettingsStaffRoute: typeof AdminSettingsStaffRoute
@@ -852,6 +865,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminMarketingAbandonedCartsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/marketing/reviews': {
+      id: '/admin_/marketing/reviews'
+      path: '/admin/marketing/reviews'
+      fullPath: '/admin/marketing/reviews'
+      preLoaderRoute: typeof AdminMarketingReviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/orders_/new': {
       id: '/admin_/orders_/new'
       path: '/admin/orders/new'
@@ -935,6 +955,7 @@ const rootRouteChildren: RootRouteChildren = {
   PwaIconRoute: PwaIconRoute,
   AdminInventoryLabelsRoute: AdminInventoryLabelsRoute,
   AdminMarketingAbandonedCartsRoute: AdminMarketingAbandonedCartsRoute,
+  AdminMarketingReviewsRoute: AdminMarketingReviewsRoute,
   AdminOrdersNewRoute: AdminOrdersNewRoute,
   AdminSettingsDomainRoute: AdminSettingsDomainRoute,
   AdminSettingsStaffRoute: AdminSettingsStaffRoute,

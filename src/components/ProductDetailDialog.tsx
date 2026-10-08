@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils";
 import { useBackToClose } from "@/hooks/useBackToClose";
 import { ProductImageCarousel } from "@/components/products/ProductImageCarousel";
 import { ProductSticker } from "@/components/products/ProductSticker";
+import { RatingInline } from "@/components/reviews/RatingInline";
+import { useRatingSummaries } from "@/hooks/useRatingSummaries";
 
 /** הכתובת הקבועה של עמוד המוצר (SEO, שיתוף, זאפ) */
 function productPath(productId: string): string {
@@ -119,6 +121,7 @@ export function ProductDetailView({
   onAddToCart,
   onShowProduct,
   onAdded,
+  showRecommendations = true,
 }: {
   product: CatalogItem;
   mode: "dialog" | "page";
@@ -128,9 +131,14 @@ export function ProductDetailView({
   onShowProduct?: ((item: CatalogItem) => void) | undefined;
   /** אחרי הוספה לסל (בחלון — נסגר) */
   onAdded?: (() => void) | undefined;
+  /** השורה "מוצרים נוספים שאולי תאהבו" (בעמוד המוצר — רשת מלאה מתחת לפרטים) */
+  showRecommendations?: boolean;
 }) {
   const tree = useCategoryTree();
   const sales = useStorefrontSales();
+  // חלק 34: דירוג הלקוחות (ממוצע + מספר ביקורות מאושרות)
+  const ratings = useRatingSummaries();
+  const rating = ratings.get(product.id);
   // "מוצרים נוספים שאולי תאהבו": מה שהמנהל קישר, ואם לא — מאותה קטגוריה
   const recommendations = useMemo(
     () => (sales ? recommendForProduct(product, sales) : []),
@@ -289,6 +297,12 @@ export function ProductDetailView({
               </button>
             </div>
             {title}
+            <RatingInline
+              rating={rating}
+              size="md"
+              long
+              {...(isPage ? { href: "#reviews" } : { href: `${productPath(product.id)}#reviews` })}
+            />
             {(product.is_promo || onSale) && (
               <Badge className="gap-1 border-0 bg-accent text-accent-foreground">
                 <Flame className="size-3" />
@@ -419,7 +433,7 @@ export function ProductDetailView({
         </div>
       </div>
 
-      {recommendations.length > 0 && (
+      {showRecommendations && recommendations.length > 0 && (
         <div
           className={cn(
             "border-t border-border bg-secondary/30 px-5 py-4 sm:px-6",

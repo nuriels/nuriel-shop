@@ -21,6 +21,7 @@ import {
   Megaphone,
   Menu,
   MessageSquare,
+  MessageSquareQuote,
   Package,
   PackageCheck,
   Puzzle,
@@ -40,6 +41,8 @@ import { useBackToClose } from "@/hooks/useBackToClose";
 import { loadInboxCounts } from "@/lib/site-inbox";
 import { SITE_INBOX_CHANGED } from "@/components/inbox/SiteInboxPanel";
 import { showAdminTabInNav, type StaffRole } from "@/lib/permissions";
+import { countPendingReviews } from "@/lib/reviews-data";
+import { REVIEWS_CHANGED } from "@/lib/reviews";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
@@ -85,6 +88,7 @@ export const ADMIN_SECTIONS: { title: string; items: Section[] }[] = [
     items: [
       { value: "promotions", label: "מתנות ומוצרי קופה", icon: Gift },
       { value: "coupons", label: "קופונים", icon: TicketPercent },
+      { value: "reviews", label: "ביקורות לקוחות", icon: MessageSquareQuote },
       { value: "abandoned", label: "עגלות נטושות", icon: ShoppingCart },
       { value: "shipping", label: "משלוחים", icon: Truck },
     ],
@@ -189,6 +193,29 @@ function useInboxCount(enabled: boolean): number {
   return count;
 }
 
+/** חלק 34: כמה ביקורות ממתינות לאישור — מוצג ליד "ביקורות לקוחות" */
+function usePendingReviews(enabled: boolean): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    const load = async () => {
+      const total = await countPendingReviews();
+      if (alive) setCount(total);
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 60_000);
+    const onChange = () => void load();
+    window.addEventListener(REVIEWS_CHANGED, onChange);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      window.removeEventListener(REVIEWS_CHANGED, onChange);
+    };
+  }, [enabled]);
+  return count;
+}
+
 /** הקבוצות והלשוניות שהתפקיד רואה בתפריט (קבוצה ריקה — לא מוצגת) */
 function visibleAdminSections(staffRole: StaffRole | null): typeof ADMIN_SECTIONS {
   return ADMIN_SECTIONS.map((group) => ({
@@ -214,6 +241,7 @@ function NavList({
   const pending = usePendingCount(has("pending"));
   const supportUnread = useSupportUnread(has("support"));
   const inboxCount = useInboxCount(has("inbox"));
+  const pendingReviews = usePendingReviews(has("reviews"));
   return (
     <div className="space-y-4">
       {sections.map((group) => (
@@ -231,7 +259,9 @@ function NavList({
                     ? supportUnread
                     : item === "inbox" && inboxCount > 0
                       ? inboxCount
-                      : null;
+                      : item === "reviews" && pendingReviews > 0
+                        ? pendingReviews
+                        : null;
               return (
                 <li key={item}>
                   <button

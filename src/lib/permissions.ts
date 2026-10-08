@@ -154,6 +154,8 @@ export const ADMIN_TAB_RULES: Record<string, AdminTabRule> = {
   promotions: { permission: "admin" },
   coupons: { permission: "admin" },
   abandoned: { permission: "admin" },
+  // חלק 34: אישור ביקורות לקוחות — בעלים ומנהל בלבד
+  reviews: { permission: "admin" },
   shipping: { permission: "admin" },
   home: { permission: "admin" },
   site: { permission: "admin" },

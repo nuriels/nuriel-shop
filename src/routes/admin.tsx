@@ -25,6 +25,7 @@ import { StockCountPanel } from "@/components/StockCountPanel";
 import { PosPanel } from "@/components/pos/PosPanel";
 import { BarcodeLabelsPanel } from "@/components/labels/BarcodeLabelsPanel";
 import { StaffPanel } from "@/components/staff/StaffPanel";
+import { ReviewsPanel } from "@/components/reviews/ReviewsPanel";
 import { FulfillmentPanel } from "@/components/fulfillment/FulfillmentPanel";
 import { PickingPanel } from "@/components/PickingPanel";
 import { StockCheckPanel } from "@/components/StockCheckPanel";
@@ -439,6 +440,10 @@ function AdminPage() {
               </TabsContent>
               <TabsContent value="abandoned">
                 <AbandonedCartsPanel />
+              </TabsContent>
+              {/* חלק 34: ביקורות לקוחות (/admin/marketing/reviews) */}
+              <TabsContent value="reviews">
+                <ReviewsPanel />
               </TabsContent>
               <TabsContent value="shipping">
                 <ShippingMethodsPanel />

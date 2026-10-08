@@ -18,6 +18,9 @@ import {
 import { variantPriceRange, type CatalogVariant } from "@/lib/variants";
 import { richTextToPlain } from "@/lib/rich-text";
 import { ProductSticker } from "@/components/products/ProductSticker";
+import { RatingInline } from "@/components/reviews/RatingInline";
+import { useRatingSummaries } from "@/hooks/useRatingSummaries";
+import type { RatingSummary } from "@/lib/reviews";
 import { cn } from "@/lib/utils";
 
 function ProductImage({ item }: { item: CatalogItem }) {
@@ -75,6 +78,7 @@ function CatalogCard({
   onAddToCart,
   onOpen,
   onPick,
+  rating,
 }: {
   product: CatalogItem;
   canAdd: boolean;
@@ -82,6 +86,8 @@ function CatalogCard({
   onAddToCart?: AddToCart | undefined;
   onOpen: () => void;
   onPick: (variant: CatalogVariant | null) => void;
+  /** חלק 34: דירוג הלקוחות (ממוצע + מספר ביקורות מאושרות) */
+  rating?: RatingSummary | undefined;
 }) {
   const choice = useVariantSelection(product);
   const range = choice.hasVariants ? variantPriceRange(choice.variants) : null;
@@ -116,6 +122,7 @@ function CatalogCard({
             {product.name}
           </h3>
         </button>
+        <RatingInline rating={rating} />
         {snippet && (
           <p className="line-clamp-1 text-xs leading-5 text-muted-foreground sm:line-clamp-2">
             {snippet}
@@ -214,13 +221,17 @@ export function CatalogGrid({
   canAdd,
   addLabel = "הוספה לסל",
   onAddToCart,
+  onOpenProduct,
 }: {
   products: CatalogItem[];
   emptyText?: string;
   canAdd: boolean;
   addLabel?: string;
   onAddToCart?: AddToCart | undefined;
+  /** לחיצה על מוצר: ברירת מחדל — חלון פרטים; בעמוד מוצר — מעבר לעמוד שלו */
+  onOpenProduct?: ((product: CatalogItem) => void) | undefined;
 }) {
+  const ratings = useRatingSummaries();
   const [details, setDetails] = useState<CatalogItem | null>(null);
   const [picking, setPicking] = useState<{
     item: CatalogItem;
@@ -248,8 +259,9 @@ export function CatalogGrid({
             canAdd={canAdd}
             addLabel={addLabel}
             onAddToCart={onAddToCart}
-            onOpen={() => setDetails(product)}
+            onOpen={() => (onOpenProduct ? onOpenProduct(product) : setDetails(product))}
             onPick={(variant) => setPicking({ item: product, variant })}
+            rating={ratings.get(product.id)}
           />
         ))}
       </div>

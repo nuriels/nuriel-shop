@@ -8,6 +8,8 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { StorefrontMain } from "@/components/layout/StorefrontMain";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { ProductDetailView } from "@/components/ProductDetailDialog";
+import { RelatedProductsSection } from "@/components/RelatedProductsSection";
+import { ProductReviews } from "@/components/reviews/ProductReviews";
 import {
   StorefrontSalesProvider,
   type StorefrontSales,
@@ -24,6 +26,8 @@ import { subtreeNames } from "@/lib/category-tree";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { trackAddToCart } from "@/lib/marketing";
 import { EMPTY_SALES, loadSalesData, type SalesData } from "@/lib/sales-data";
+import { recommendForProduct } from "@/lib/cart-promotions";
+import { RELATED_GRID_LIMIT } from "@/lib/reviews";
 import { getProductSeo, type ProductSeo } from "@/lib/seo.functions";
 import { breadcrumbJsonLd, jsonLdText, productJsonLd } from "@/lib/structured-data";
 import { breadcrumbTrail } from "@/lib/seo-urls";
@@ -46,6 +50,7 @@ function productStructuredData(seo: ProductSeo): { type: string; children: strin
     inStock: seo.inStock,
     barcode: seo.barcode,
     saleEndsAt: seo.saleEndsAt,
+    rating: seo.rating,
   });
   const scripts = [{ type: "application/ld+json", children: jsonLdText(product) }];
   if (seo.origin) {
@@ -172,6 +177,21 @@ function ProductPage() {
     });
   };
 
+  // חלק 34: מוצרים נלווים — מה שהמנהל קישר (ואם לא — מאותה קטגוריה)
+  const related = useMemo(() => {
+    if (!product) return { items: [] as CatalogItem[], linked: false };
+    const items = recommendForProduct(product, {
+      catalog: products,
+      catalogById,
+      related: sales.related,
+      limit: RELATED_GRID_LIMIT,
+    });
+    const linked = (sales.related.get(product.id) ?? []).some((id) =>
+      items.some((item) => item.id === id),
+    );
+    return { items, linked };
+  }, [product, products, catalogById, sales.related]);
+
   const subtree = useCallback((name: string) => subtreeNames(categoryTree, name), [categoryTree]);
   const storefrontSales: StorefrontSales = useMemo(
     () => ({
@@ -244,16 +264,34 @@ function ProductPage() {
           </div>
         ) : product ? (
           <StorefrontSalesProvider value={storefrontSales}>
-            <ProductDetailView
-              product={product}
-              mode="page"
-              canAdd={canUseCart}
-              addLabel={addLabel}
-              onAddToCart={canUseCart ? addToCart : undefined}
-              onShowProduct={(item) =>
-                void navigate({ to: "/product/$productId", params: { productId: item.id } })
-              }
-            />
+            <div className="space-y-8">
+              <ProductDetailView
+                product={product}
+                mode="page"
+                canAdd={canUseCart}
+                addLabel={addLabel}
+                onAddToCart={canUseCart ? addToCart : undefined}
+                onShowProduct={(item) =>
+                  void navigate({ to: "/product/$productId", params: { productId: item.id } })
+                }
+                // בעמוד: רשת מלאה של מוצרים נלווים מתחת לפרטים (במקום השורה הקטנה)
+                showRecommendations={false}
+              />
+              {/* חלק 34: מוצרים נלווים (Upsell) */}
+              <RelatedProductsSection
+                items={related.items}
+                linked={related.linked}
+                category={product.category}
+                canAdd={canUseCart}
+                addLabel={addLabel}
+                onAddToCart={canUseCart ? addToCart : undefined}
+                onOpenProduct={(item) =>
+                  void navigate({ to: "/product/$productId", params: { productId: item.id } })
+                }
+              />
+              {/* חלק 34: חוות דעת לקוחות */}
+              <ProductReviews productId={product.id} productName={product.name} />
+            </div>
           </StorefrontSalesProvider>
         ) : (
           <Card className="mx-auto max-w-xl border-dashed">

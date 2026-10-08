@@ -1849,10 +1849,12 @@ export function AdminProductDialog({
             </details>
 
             <div className="space-y-2 rounded-lg border border-border p-3">
-              <Label htmlFor="p-related">מוצרים קשורים — "מוצרים נוספים שאולי תאהבו"</Label>
+              <Label htmlFor="p-related">
+                מוצרים נלווים (Upsell) — "מוצרים נלווים שיכולים לעניין אותך"
+              </Label>
               <p className="text-xs leading-5 text-muted-foreground">
-                יוצגו בחלון המוצר ובסל, לפי הסדר כאן. אם לא תבחרו — יוצגו אוטומטית מוצרים מאותה
-                קטגוריה.
+                חפשו ובחרו מהקטלוג (שם, מק&quot;ט או ברקוד), עד 12. יוצגו בעמוד המוצר מתחת לפרטים,
+                בחלון המוצר ובסל — לפי הסדר כאן. אם לא תבחרו — יוצגו אוטומטית מוצרים מאותה קטגוריה.
               </p>
               <ProductPicker
                 id="p-related"

@@ -38,6 +38,8 @@ export type ProductSchemaInput = {
   barcode?: string | null;
   /** סיום מבצע פעיל (ISO) — priceValidUntil */
   saleEndsAt?: string | null;
+  /** חלק 34: דירוג הלקוחות — aggregateRating (כוכבים בתוצאות החיפוש) */
+  rating?: { average: number; count: number } | null;
 };
 
 export type BreadcrumbItem = { name: string; url: string | null };
@@ -172,6 +174,17 @@ export function productJsonLd(product: ProductSchemaInput): Record<string, unkno
     ...(images.length > 0 ? { image: images } : {}),
     ...(product.url ? { url: product.url } : {}),
     ...gtin,
+    ...(product.rating && product.rating.count > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: product.rating.average.toFixed(1),
+            reviewCount: product.rating.count,
+            bestRating: "5",
+            worstRating: "1",
+          },
+        }
+      : {}),
     offers: {
       "@type": "Offer",
       priceCurrency: "ILS",

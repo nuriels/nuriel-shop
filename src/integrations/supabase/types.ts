@@ -740,6 +740,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      product_reviews: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          product_id: string;
+          customer_name: string;
+          rating: number;
+          content: string;
+          is_approved: boolean;
+          created_at: string;
+          user_id: string | null;
+          verified_purchase: boolean;
+          approved_at: string | null;
+          approved_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string;
+          product_id: string;
+          customer_name: string;
+          rating: number;
+          content: string;
+          is_approved?: boolean;
+          created_at?: string;
+          user_id?: string | null;
+          verified_purchase?: boolean;
+          approved_at?: string | null;
+          approved_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          product_id?: string;
+          customer_name?: string;
+          rating?: number;
+          content?: string;
+          is_approved?: boolean;
+          created_at?: string;
+          user_id?: string | null;
+          verified_purchase?: boolean;
+          approved_at?: string | null;
+          approved_by?: string | null;
+        };
+        Relationships: [];
+      };
       product_relations: {
         Row: {
           tenant_id: string;
@@ -2315,6 +2360,8 @@ export type Database = {
           label_width_mm: number;
           barcode_label_width_mm: number;
           barcode_label_height_mm: number;
+          /** חלק 34: הצגת ביקורות הלקוחות וטופס "כתוב ביקורת" בעמוד המוצר */
+          reviews_enabled: boolean;
           label_height_mm: number;
           seo_title: string;
           seo_description: string;
@@ -2364,6 +2411,8 @@ export type Database = {
           label_width_mm?: number;
           barcode_label_width_mm?: number;
           barcode_label_height_mm?: number;
+          /** חלק 34: הצגת ביקורות הלקוחות וטופס "כתוב ביקורת" בעמוד המוצר */
+          reviews_enabled?: boolean;
           label_height_mm?: number;
           seo_title?: string;
           seo_description?: string;
@@ -2413,6 +2462,8 @@ export type Database = {
           label_width_mm?: number;
           barcode_label_width_mm?: number;
           barcode_label_height_mm?: number;
+          /** חלק 34: הצגת ביקורות הלקוחות וטופס "כתוב ביקורת" בעמוד המוצר */
+          reviews_enabled?: boolean;
           label_height_mm?: number;
           seo_title?: string;
           seo_description?: string;
@@ -2956,6 +3007,53 @@ export type Database = {
           staff_role: "owner" | "manager" | "cashier" | "warehouse" | "agent" | null;
         }[];
       };
+      reviews_enabled: { Args: never; Returns: boolean };
+      product_review_submit: {
+        Args: {
+          _product_id: string;
+          _customer_name: string;
+          _rating: number;
+          _content: string;
+          _user_id?: string | null;
+        };
+        Returns: Json;
+      };
+      product_reviews_public: {
+        Args: { _product_id: string; _limit?: number; _offset?: number };
+        Returns: {
+          id: string;
+          customer_name: string;
+          rating: number;
+          content: string;
+          created_at: string;
+          verified_purchase: boolean;
+        }[];
+      };
+      product_review_summary: { Args: { _product_id: string }; Returns: Json };
+      product_rating_summaries: {
+        Args: never;
+        Returns: { product_id: string; review_count: number; average_rating: number }[];
+      };
+      admin_product_reviews: {
+        Args: { _status?: string };
+        Returns: {
+          id: string;
+          product_id: string;
+          product_name: string;
+          product_image_url: string | null;
+          product_hidden: boolean;
+          customer_name: string;
+          customer_email: string | null;
+          rating: number;
+          content: string;
+          is_approved: boolean;
+          verified_purchase: boolean;
+          created_at: string;
+          approved_at: string | null;
+          approved_by_name: string | null;
+        }[];
+      };
+      admin_review_moderate: { Args: { _ids: string[]; _action: string }; Returns: number };
       store_staff_role: { Args: { _user_id?: string }; Returns: string | null };
       staff_can: { Args: { _permission: string; _user_id?: string }; Returns: boolean };
       is_cashier: { Args: { _user_id: string }; Returns: boolean };
