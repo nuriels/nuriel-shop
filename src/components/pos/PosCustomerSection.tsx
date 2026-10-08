@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 /**
  * שלב 1 בקופה: הלקוח. חיפוש לקוח קיים (רשום, או מי שהזמין בעבר כאורח —
  * לפי שם / טלפון / אימייל), או פרטי לקוח חדש. לקוח רשום → ההזמנה נשמרת
- * בחשבון שלו ובמחירים שלו; אורח → שם + נייד (אימייל — לאישור ההזמנה).
+ * בחשבון שלו ובמחירים שלו; אורח → שם + נייד. אימייל — לא חובה (רק לשליחת
+ * אישור הזמנה ללקוח במייל).
  * למשלוח עד הבית — גם עיר וכתובת.
  */
 export function PosCustomerSection({
@@ -119,7 +120,9 @@ export function PosCustomerSection({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pos-email">אימייל (לאישור ההזמנה)</Label>
+            <Label htmlFor="pos-email">
+              אימייל <span className="font-normal text-muted-foreground">(לא חובה)</span>
+            </Label>
             <Input
               id="pos-email"
               value={form.email}
@@ -130,8 +133,12 @@ export function PosCustomerSection({
               placeholder="name@example.com"
               className="text-right"
               onChange={set("email")}
+              aria-describedby="pos-email-hint"
               data-testid="pos-email"
             />
+            <p id="pos-email-hint" className="text-xs text-muted-foreground">
+              רק אם רוצים לשלוח ללקוח אישור הזמנה במייל
+            </p>
           </div>
         </div>
 
