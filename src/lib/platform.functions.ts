@@ -274,7 +274,7 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
   const { data } = await supabaseAdmin
     .from("site_settings")
     .select(
-      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, facebook_pixel_id, google_analytics_id, promo_popup_enabled, promo_popup_text, promo_popup_coupon, logo_path, business_phone, support_phone, business_email, business_address, business_hours, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays",
+      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, facebook_pixel_id, google_analytics_id, promo_popup_enabled, promo_popup_text, promo_popup_coupon, logo_path, business_phone, support_phone, business_email, business_address, business_hours, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url",
     )
     .eq("id", true)
     .maybeSingle();
@@ -315,6 +315,8 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
             startTime: data.shabbat_start_time ?? "16:00",
             endTime: data.shabbat_end_time ?? "20:30",
             holidays: (Array.isArray(data.holidays) ? data.holidays : []) as Json,
+            shabbatMessage: data.shabbat_message ?? null,
+            shabbatImageUrl: data.shabbat_image_url ?? null,
           }
         : null,
     isDefaultStore: tenant.is_default,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRestState } from "@/hooks/useRestState";
+import { RestGreetingCard } from "@/components/RestGreetingCard";
 import { REST_CHECKOUT_MESSAGE } from "@/lib/rest-window";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { getSiteSeo } from "@/lib/platform.functions";
@@ -536,6 +537,9 @@ function StoreCatalog() {
               האישור יוצגו לך תנאי המחיר של העסק שלך.
             </div>
           )}
+
+          {/* חלק 35ב: בשבת / בחג — כרטיס הברכה (תמונה + "שבת שלום" / "חג סוכות שמח") */}
+          <RestGreetingCard />
 
           <HomeBanner slides={banners.top} label="באנר עליון" />
 

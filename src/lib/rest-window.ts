@@ -23,7 +23,17 @@ export type Holiday = {
   /** "YYYY-MM-DDTHH:MM" שעון ישראל */
   start: string;
   end: string;
+  /** הברכה שהלקוחות רואים בחג (למשל "חג סוכות שמח"); ריק = "חג שמח" */
+  message?: string | null;
+  /** תמונת החג (כתובת מלאה); ריק = בלי תמונה */
+  imageUrl?: string | null;
 };
+
+/** אורך מרבי לברכה ולכתובת התמונה (כמו במסד) */
+export const REST_MESSAGE_MAX = 120;
+export const REST_IMAGE_URL_MAX = 500;
+export const DEFAULT_SHABBAT_MESSAGE = "שבת שלום";
+export const DEFAULT_HOLIDAY_MESSAGE = "חג שמח";
 
 export type RestSettings = {
   enabled: boolean;
@@ -32,6 +42,9 @@ export type RestSettings = {
   /** "HH:MM" — צאת שבת במוצאי שבת */
   endTime: string;
   holidays: Holiday[];
+  /** הברכה בשבת (ריק = "שבת שלום") ותמונת השבת */
+  shabbatMessage?: string | null;
+  shabbatImageUrl?: string | null;
 };
 
 export type RestKind = "shabbat" | "holiday";
@@ -43,6 +56,10 @@ export type RestState =
       name: string | null;
       /** מתי האתר חוזר לפעילות (שעון ישראל, "מקומי") */
       reopensAt: number;
+      /** הברכה ללקוחות ("שבת שלום" / "חג סוכות שמח") */
+      message: string;
+      /** התמונה של השבת / החג (או null) */
+      imageUrl: string | null;
     }
   | {
       closed: false;
@@ -139,6 +156,8 @@ export function restSettingsFrom(
         shabbat_start_time?: string | null;
         shabbat_end_time?: string | null;
         holidays?: unknown;
+        shabbat_message?: string | null;
+        shabbat_image_url?: string | null;
       }
     | null
     | undefined,
@@ -149,7 +168,15 @@ export function restSettingsFrom(
     startTime: shortTime(row.shabbat_start_time, DEFAULT_REST_SETTINGS.startTime),
     endTime: shortTime(row.shabbat_end_time, DEFAULT_REST_SETTINGS.endTime),
     holidays: parseHolidays(row.holidays),
+    shabbatMessage: row.shabbat_message?.trim() || null,
+    shabbatImageUrl: row.shabbat_image_url?.trim() || null,
   };
+}
+
+/** כתובת תמונה תקינה (http/https, עד 500 תווים) */
+export function isRestImageUrl(value: string | null | undefined): boolean {
+  const url = (value ?? "").trim();
+  return url.length > 0 && url.length <= REST_IMAGE_URL_MAX && /^https?:\/\/\S+$/i.test(url);
 }
 
 /** רשימת החגים מה-JSON (רשומות לא תקינות — מדולגות) */
@@ -163,12 +190,23 @@ export function parseHolidays(raw: unknown): Holiday[] {
     const end = typeof record["end"] === "string" ? record["end"] : "";
     if (parseLocal(start) === null || parseLocal(end) === null) continue;
     const name = typeof record["name"] === "string" ? record["name"].trim() || null : null;
-    list.push({ name, start, end });
+    const message = typeof record["message"] === "string" ? record["message"].trim() || null : null;
+    const rawImage = record["image_url"] ?? record["imageUrl"];
+    const imageUrl =
+      typeof rawImage === "string" && isRestImageUrl(rawImage) ? rawImage.trim() : null;
+    list.push({ name, start, end, message, imageUrl });
   }
   return list;
 }
 
-type RestWindow = { start: number; end: number; kind: RestKind; name: string | null };
+type RestWindow = {
+  start: number;
+  end: number;
+  kind: RestKind;
+  name: string | null;
+  message: string | null;
+  imageUrl: string | null;
+};
 
 /** חלונות המנוחה שחופפים לטווח (זהה ל-store_rest_windows) */
 export function restWindows(settings: RestSettings, from: number, to: number): RestWindow[] {
@@ -182,14 +220,32 @@ export function restWindows(settings: RestSettings, from: number, to: number): R
       if (new Date(day).getUTCDay() !== 5) continue;
       const start = day + startMinutes * MINUTE;
       const end = day + DAY + endMinutes * MINUTE;
-      if (start < to && end > from) windows.push({ start, end, kind: "shabbat", name: null });
+      if (start < to && end > from) {
+        windows.push({
+          start,
+          end,
+          kind: "shabbat",
+          name: null,
+          message: settings.shabbatMessage?.trim() || null,
+          imageUrl: settings.shabbatImageUrl?.trim() || null,
+        });
+      }
     }
   }
   for (const holiday of settings.holidays) {
     const start = parseLocal(holiday.start);
     const end = parseLocal(holiday.end);
     if (start === null || end === null || end <= start) continue;
-    if (start < to && end > from) windows.push({ start, end, kind: "holiday", name: holiday.name });
+    if (start < to && end > from) {
+      windows.push({
+        start,
+        end,
+        kind: "holiday",
+        name: holiday.name,
+        message: holiday.message?.trim() || null,
+        imageUrl: holiday.imageUrl?.trim() || null,
+      });
+    }
   }
   return windows;
 }
@@ -220,7 +276,16 @@ export function computeRestState(settings: RestSettings, at: Date = new Date()):
     if (!chained) break;
     reopensAt = chained.end;
   }
-  return { closed: true, kind: current.kind, name: current.name, reopensAt };
+  return {
+    closed: true,
+    kind: current.kind,
+    name: current.name,
+    reopensAt,
+    message:
+      current.message ||
+      (current.kind === "shabbat" ? DEFAULT_SHABBAT_MESSAGE : DEFAULT_HOLIDAY_MESSAGE),
+    imageUrl: current.imageUrl,
+  };
 }
 
 const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
@@ -242,9 +307,12 @@ export function formatLocalDay(ms: number): string {
   return `יום ${WEEKDAYS[new Date(ms).getUTCDay()]} ${formatLocalDate(ms)}`;
 }
 
-/** הכותרת במסך / בפס: "שבת שלום" / "חג שמח" */
+/** הכותרת במסך / בפס: הברכה שהחנות כתבה ("חג סוכות שמח"), או "שבת שלום" / "חג שמח" */
 export function restGreeting(state: Extract<RestState, { closed: true }>): string {
-  return state.kind === "shabbat" ? "שבת שלום" : "חג שמח";
+  return (
+    state.message?.trim() ||
+    (state.kind === "shabbat" ? DEFAULT_SHABBAT_MESSAGE : DEFAULT_HOLIDAY_MESSAGE)
+  );
 }
 
 /**
@@ -284,17 +352,17 @@ export function closingSoonText(
 // חגי ישראל (ימים טובים) — לפי הלוח העברי של הדפדפן (Intl, calendar: hebrew)
 // ------------------------------------------------------------
 
-type YomTov = { name: string; month: string; day: number; days: number };
+type YomTov = { name: string; month: string; day: number; days: number; message: string };
 
 /** ימים טובים בארץ: ערב החג בשעת הכניסה → היום האחרון בשעת היציאה */
 const YAMIM_TOVIM: YomTov[] = [
-  { name: "ראש השנה", month: "Tishri", day: 1, days: 2 },
-  { name: "יום כיפור", month: "Tishri", day: 10, days: 1 },
-  { name: "סוכות", month: "Tishri", day: 15, days: 1 },
-  { name: "שמחת תורה", month: "Tishri", day: 22, days: 1 },
-  { name: "פסח", month: "Nisan", day: 15, days: 1 },
-  { name: "שביעי של פסח", month: "Nisan", day: 21, days: 1 },
-  { name: "שבועות", month: "Sivan", day: 6, days: 1 },
+  { name: "ראש השנה", month: "Tishri", day: 1, days: 2, message: "שנה טובה ומתוקה" },
+  { name: "יום כיפור", month: "Tishri", day: 10, days: 1, message: "גמר חתימה טובה" },
+  { name: "סוכות", month: "Tishri", day: 15, days: 1, message: "חג סוכות שמח" },
+  { name: "שמחת תורה", month: "Tishri", day: 22, days: 1, message: "חג שמח" },
+  { name: "פסח", month: "Nisan", day: 15, days: 1, message: "חג פסח שמח" },
+  { name: "שביעי של פסח", month: "Nisan", day: 21, days: 1, message: "חג שמח" },
+  { name: "שבועות", month: "Sivan", day: 6, days: 1, message: "חג שבועות שמח" },
 ];
 
 let hebrewFormatter: Intl.DateTimeFormat | null | undefined;
@@ -342,10 +410,12 @@ export function upcomingYamimTovim(
     if (!match) continue;
     const start = day - DAY + startMinutes * MINUTE;
     const end = day + (match.days - 1) * DAY + endMinutes * MINUTE;
-    const holiday = {
+    const holiday: Holiday = {
       name: match.name,
       start: formatLocalValue(start),
       end: formatLocalValue(end),
+      message: match.message,
+      imageUrl: null,
     };
     // חג שכבר נכנס — לא מציעים (אפשר להוסיף ידנית)
     if (start <= israelLocal(from) || existing.has(holiday.start)) continue;
@@ -363,5 +433,11 @@ export function holidayProblem(holiday: Holiday): string | null {
   if (end <= start) return `בחג "${label}": שעת הסיום חייבת להיות אחרי שעת הכניסה`;
   if (end - start > 8 * DAY) return `החג "${label}" ארוך מדי (עד 8 ימים ברצף)`;
   if ((holiday.name ?? "").trim().length > 60) return "שם החג: עד 60 תווים";
+  if ((holiday.message ?? "").trim().length > REST_MESSAGE_MAX) {
+    return `בחג "${label}": הברכה עד ${REST_MESSAGE_MAX} תווים`;
+  }
+  if (holiday.imageUrl && !isRestImageUrl(holiday.imageUrl)) {
+    return `בחג "${label}": כתובת התמונה אינה תקינה`;
+  }
   return null;
 }

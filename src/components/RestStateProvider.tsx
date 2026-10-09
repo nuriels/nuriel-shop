@@ -14,7 +14,16 @@ export function RestStateProvider({
   children,
 }: {
   settings:
-    { enabled: boolean; startTime: string; endTime: string; holidays: unknown } | null | undefined;
+    | {
+        enabled: boolean;
+        startTime: string;
+        endTime: string;
+        holidays: unknown;
+        shabbatMessage?: string | null;
+        shabbatImageUrl?: string | null;
+      }
+    | null
+    | undefined;
   children: ReactNode;
 }) {
   const rest: RestSettings = useMemo(
@@ -25,6 +34,8 @@ export function RestStateProvider({
             shabbat_start_time: settings.startTime,
             shabbat_end_time: settings.endTime,
             holidays: settings.holidays,
+            shabbat_message: settings.shabbatMessage ?? null,
+            shabbat_image_url: settings.shabbatImageUrl ?? null,
           })
         : DEFAULT_REST_SETTINGS,
     [settings],

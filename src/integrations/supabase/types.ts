@@ -2424,6 +2424,8 @@ export type Database = {
           shabbat_end_time: string;
           holidays: Json;
           minimum_order_amount: number | null;
+          shabbat_message: string | null;
+          shabbat_image_url: string | null;
           label_height_mm: number;
           seo_title: string;
           seo_description: string;
@@ -2480,6 +2482,8 @@ export type Database = {
           shabbat_end_time?: string;
           holidays?: Json;
           minimum_order_amount?: number | null;
+          shabbat_message?: string | null;
+          shabbat_image_url?: string | null;
           label_height_mm?: number;
           seo_title?: string;
           seo_description?: string;
@@ -2536,6 +2540,8 @@ export type Database = {
           shabbat_end_time?: string;
           holidays?: Json;
           minimum_order_amount?: number | null;
+          shabbat_message?: string | null;
+          shabbat_image_url?: string | null;
           label_height_mm?: number;
           seo_title?: string;
           seo_description?: string;

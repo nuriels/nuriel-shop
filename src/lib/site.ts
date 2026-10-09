@@ -95,8 +95,11 @@ export type SiteSettings = {
   shabbat_start_time: string;
   /** "HH:MM:SS" מהמסד — צאת שבת במוצאי שבת */
   shabbat_end_time: string;
-  /** [{name, start, end}] — "YYYY-MM-DDTHH:MM" שעון ישראל */
+  /** [{name, start, end, message, image_url}] — "YYYY-MM-DDTHH:MM" שעון ישראל */
   holidays: Json;
+  /** חלק 35ב: הברכה בשבת (ריק = "שבת שלום") ותמונת השבת */
+  shabbat_message: string | null;
+  shabbat_image_url: string | null;
 };
 
 /** העמודים המשפטיים — נשמרים בנפרד (saveLegalTexts), לא מטופס הגדרות האתר */
@@ -121,6 +124,8 @@ export const SITE_FORM_EXCLUDED_KEYS = [
   "shabbat_start_time",
   "shabbat_end_time",
   "holidays",
+  "shabbat_message",
+  "shabbat_image_url",
 ] as const satisfies readonly (keyof SiteSettings)[];
 
 /** מידות ברירת המחדל של מדבקת משלוח (כמו במסד) */
@@ -156,7 +161,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link, minimum_order_amount, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link, minimum_order_amount, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -182,6 +187,8 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
       shabbat_start_time: row.shabbat_start_time ?? "16:00:00",
       shabbat_end_time: row.shabbat_end_time ?? "20:30:00",
       holidays: Array.isArray(row.holidays) ? (row.holidays as Json) : [],
+      shabbat_message: row.shabbat_message ?? null,
+      shabbat_image_url: row.shabbat_image_url ?? null,
     };
   }
   return {
@@ -223,6 +230,8 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     shabbat_start_time: "16:00:00",
     shabbat_end_time: "20:30:00",
     holidays: [],
+    shabbat_message: null,
+    shabbat_image_url: null,
   };
 }
 
@@ -340,7 +349,16 @@ export async function saveRestSchedule(schedule: {
   enabled: boolean;
   startTime: string;
   endTime: string;
-  holidays: { name: string | null; start: string; end: string }[];
+  holidays: {
+    name: string | null;
+    start: string;
+    end: string;
+    message?: string | null;
+    imageUrl?: string | null;
+  }[];
+  /** חלק 35ב: הברכה והתמונה של השבת */
+  shabbatMessage?: string | null;
+  shabbatImageUrl?: string | null;
 }): Promise<void> {
   const { error } = await supabase
     .from("site_settings")
@@ -348,10 +366,38 @@ export async function saveRestSchedule(schedule: {
       shabbat_auto_enabled: schedule.enabled,
       shabbat_start_time: schedule.startTime,
       shabbat_end_time: schedule.endTime,
-      holidays: schedule.holidays,
+      // במסד: message / image_url לכל חג (נבדק ומנוקה שם)
+      holidays: schedule.holidays.map((h) => ({
+        name: h.name,
+        start: h.start,
+        end: h.end,
+        message: h.message?.trim() || null,
+        image_url: h.imageUrl?.trim() || null,
+      })),
+      shabbat_message: schedule.shabbatMessage?.trim() || null,
+      shabbat_image_url: schedule.shabbatImageUrl?.trim() || null,
     })
     .eq("id", true);
   if (error) throw error;
+}
+
+/**
+ * חלק 35ב: העלאת תמונה לשבת / לחג (כרטיס הברכה באתר). נדחסת כמו באנר רחב,
+ * נשמרת בדלי המיתוג של החנות ומוחזרת כתובת ציבורית.
+ */
+export async function uploadRestImage(file: File, kind: "shabbat" | "holiday"): Promise<string> {
+  if (!file.type.startsWith("image/")) throw new Error("יש לבחור קובץ תמונה");
+  if (file.size > 15 * 1024 * 1024) throw new Error("גודל התמונה המקסימלי הוא 15MB");
+  const { compressDesktopBannerImage } = await import("@/lib/image");
+  const { file: optimized, extension } = await compressDesktopBannerImage(file);
+  const path = `${await tenantStoragePrefix()}/site/${kind}-${Date.now()}.${extension}`;
+  const { error } = await supabase.storage.from(BRANDING_BUCKET).upload(path, optimized, {
+    upsert: false,
+    contentType: optimized.type,
+    cacheControl: "31536000",
+  });
+  if (error) throw error;
+  return supabase.storage.from(BRANDING_BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
 /**

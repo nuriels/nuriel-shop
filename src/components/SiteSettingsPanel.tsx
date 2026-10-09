@@ -136,6 +136,8 @@ export function SiteSettingsPanel() {
         startTime={form.shabbat_start_time}
         endTime={form.shabbat_end_time}
         holidays={form.holidays}
+        shabbatMessage={form.shabbat_message}
+        shabbatImageUrl={form.shabbat_image_url}
       />
 
       <Card className="shadow-card">

@@ -941,7 +941,17 @@ function CheckoutPage() {
                 className="flex flex-col items-center gap-2 rounded-2xl bg-indigo-950 px-5 py-6 text-center text-indigo-50 shadow-card"
                 data-testid="checkout-rest-closed"
               >
-                <MoonStar className="size-8 text-amber-300" aria-hidden="true" />
+                {/* חלק 35ב: התמונה שהחנות העלתה לשבת / לחג */}
+                {restState.imageUrl ? (
+                  <img
+                    src={restState.imageUrl}
+                    alt={restGreeting(restState)}
+                    className="max-h-64 w-full rounded-xl object-cover"
+                    data-testid="checkout-rest-image"
+                  />
+                ) : (
+                  <MoonStar className="size-8 text-amber-300" aria-hidden="true" />
+                )}
                 <p className="font-display text-2xl font-bold">{restGreeting(restState)}</p>
                 <p className="text-lg">{REST_CHECKOUT_MESSAGE}</p>
                 <p className="text-sm opacity-80">
