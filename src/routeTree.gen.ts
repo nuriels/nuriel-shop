@@ -49,6 +49,7 @@ import { Route as AdminInventorySerialsRouteImport } from './routes/admin_.inven
 import { Route as AdminMarketingAbandonedCartsRouteImport } from './routes/admin_.marketing.abandoned-carts'
 import { Route as AdminMarketingReviewsRouteImport } from './routes/admin_.marketing.reviews'
 import { Route as AdminOrdersNewRouteImport } from './routes/admin_.orders_.new'
+import { Route as AdminProductsProductIdRouteImport } from './routes/admin_.products.$productId'
 import { Route as AdminSettingsDomainRouteImport } from './routes/admin_.settings_.domain'
 import { Route as AdminSettingsStaffRouteImport } from './routes/admin_.settings_.staff'
 import { Route as ApiAdminAnalyticsRouteImport } from './routes/api.admin.analytics'
@@ -256,6 +257,11 @@ const AdminOrdersNewRoute = AdminOrdersNewRouteImport.update({
   path: '/admin/orders/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminProductsProductIdRoute = AdminProductsProductIdRouteImport.update({
+  id: '/admin_/products/$productId',
+  path: '/admin/products/$productId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminSettingsDomainRoute = AdminSettingsDomainRouteImport.update({
   id: '/admin_/settings_/domain',
   path: '/admin/settings/domain',
@@ -324,6 +330,7 @@ export interface FileRoutesByFullPath {
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin/marketing/reviews': typeof AdminMarketingReviewsRoute
   '/admin/orders/new': typeof AdminOrdersNewRoute
+  '/admin/products/$productId': typeof AdminProductsProductIdRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
   '/admin/settings/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
@@ -371,6 +378,7 @@ export interface FileRoutesByTo {
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin/marketing/reviews': typeof AdminMarketingReviewsRoute
   '/admin/orders/new': typeof AdminOrdersNewRoute
+  '/admin/products/$productId': typeof AdminProductsProductIdRoute
   '/admin/settings/domain': typeof AdminSettingsDomainRoute
   '/admin/settings/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
@@ -419,6 +427,7 @@ export interface FileRoutesById {
   '/admin_/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
   '/admin_/marketing/reviews': typeof AdminMarketingReviewsRoute
   '/admin_/orders_/new': typeof AdminOrdersNewRoute
+  '/admin_/products/$productId': typeof AdminProductsProductIdRoute
   '/admin_/settings_/domain': typeof AdminSettingsDomainRoute
   '/admin_/settings_/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
@@ -468,6 +477,7 @@ export interface FileRouteTypes {
     | '/admin/marketing/abandoned-carts'
     | '/admin/marketing/reviews'
     | '/admin/orders/new'
+    | '/admin/products/$productId'
     | '/admin/settings/domain'
     | '/admin/settings/staff'
     | '/api/admin/analytics'
@@ -515,6 +525,7 @@ export interface FileRouteTypes {
     | '/admin/marketing/abandoned-carts'
     | '/admin/marketing/reviews'
     | '/admin/orders/new'
+    | '/admin/products/$productId'
     | '/admin/settings/domain'
     | '/admin/settings/staff'
     | '/api/admin/analytics'
@@ -562,6 +573,7 @@ export interface FileRouteTypes {
     | '/admin_/marketing/abandoned-carts'
     | '/admin_/marketing/reviews'
     | '/admin_/orders_/new'
+    | '/admin_/products/$productId'
     | '/admin_/settings_/domain'
     | '/admin_/settings_/staff'
     | '/api/admin/analytics'
@@ -610,6 +622,7 @@ export interface RootRouteChildren {
   AdminMarketingAbandonedCartsRoute: typeof AdminMarketingAbandonedCartsRoute
   AdminMarketingReviewsRoute: typeof AdminMarketingReviewsRoute
   AdminOrdersNewRoute: typeof AdminOrdersNewRoute
+  AdminProductsProductIdRoute: typeof AdminProductsProductIdRoute
   AdminSettingsDomainRoute: typeof AdminSettingsDomainRoute
   AdminSettingsStaffRoute: typeof AdminSettingsStaffRoute
   ApiAdminAnalyticsRoute: typeof ApiAdminAnalyticsRoute
@@ -899,6 +912,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminOrdersNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/products/$productId': {
+      id: '/admin_/products/$productId'
+      path: '/admin/products/$productId'
+      fullPath: '/admin/products/$productId'
+      preLoaderRoute: typeof AdminProductsProductIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/settings_/domain': {
       id: '/admin_/settings_/domain'
       path: '/admin/settings/domain'
@@ -978,6 +998,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminMarketingAbandonedCartsRoute: AdminMarketingAbandonedCartsRoute,
   AdminMarketingReviewsRoute: AdminMarketingReviewsRoute,
   AdminOrdersNewRoute: AdminOrdersNewRoute,
+  AdminProductsProductIdRoute: AdminProductsProductIdRoute,
   AdminSettingsDomainRoute: AdminSettingsDomainRoute,
   AdminSettingsStaffRoute: AdminSettingsStaffRoute,
   ApiAdminAnalyticsRoute: ApiAdminAnalyticsRoute,

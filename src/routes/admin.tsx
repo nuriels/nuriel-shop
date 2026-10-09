@@ -90,6 +90,8 @@ type Search = {
   ptab?: string | undefined;
   /** מוצרים וקטגוריות: הקטגוריה שנבחרה בעץ */
   pcat?: string | undefined;
+  /** חלק 36: /admin/products/$id — עריכת מוצר נפתחת מיד */
+  product?: string | undefined;
   /** מחירי לקוחות מיוחדים: תיק הלקוח הפתוח */
   pcust?: string | undefined;
   /** הזמנות: הזמנה לפתוח ישירות ("צפה בהזמנה" מלוח הבקרה) */
@@ -114,6 +116,7 @@ export const Route = createFileRoute("/admin")({
     const tab = pickString(search["tab"]);
     const ptab = pickString(search["ptab"]);
     const pcat = pickString(search["pcat"]);
+    const product = pickString(search["product"]);
     const pcust = pickString(search["pcust"]);
     const order = pickString(search["order"]);
     const ticket = pickString(search["ticket"]);
@@ -127,6 +130,7 @@ export const Route = createFileRoute("/admin")({
     if (pcust) result.pcust = pcust;
     if (ptab) result.ptab = ptab;
     if (pcat) result.pcat = pcat;
+    if (product && /^[0-9a-f-]{36}$/i.test(product)) result.product = product;
     return result;
   },
   component: AdminPage,
@@ -136,7 +140,7 @@ function AdminPage() {
   const { session, role, loading } = useAuthState();
   // הלשונית נשמרת בכתובת (?tab=orders): כל מעבר נרשם בהיסטוריה, כך ש"חזור"
   // בדפדפן מחזיר ללשונית הקודמת במקום לצאת מהפאנל
-  const { tab, ptab, pcat, pcust, order, ticket, compose, inbox } = Route.useSearch();
+  const { tab, ptab, pcat, pcust, order, ticket, compose, inbox, product } = Route.useSearch();
   const navigate = Route.useNavigate();
 
   const signOut = async () => {
@@ -405,6 +409,14 @@ function AdminPage() {
                   onTabChange={(next) =>
                     void navigate({
                       search: (prev) => ({ ...prev, ptab: next }),
+                      resetScroll: false,
+                    })
+                  }
+                  openProductId={product ?? null}
+                  onProductClosed={() =>
+                    void navigate({
+                      search: (prev) => ({ ...prev, product: undefined }),
+                      replace: true,
                       resetScroll: false,
                     })
                   }

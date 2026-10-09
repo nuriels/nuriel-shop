@@ -12,6 +12,43 @@ export const SEO_TITLE_RECOMMENDED = 60;
 export const SEO_DESCRIPTION_RECOMMENDED = 160;
 export const PROMO_TEXT_MAX = 600;
 
+/** חלק 36: מילות מפתח למוצר — כמו normalize_seo_keywords במסד */
+export const SEO_KEYWORDS_MAX = 500;
+export const SEO_KEYWORDS_COUNT = 30;
+export const SEO_KEYWORD_LENGTH = 60;
+
+/** "נעלי ריצה,  נעלי ריצה ; Nike" → ["נעלי ריצה", "Nike"] (בלי כפילויות, בסדר ההקלדה) */
+export function splitKeywords(value: string | null | undefined): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of String(value ?? "").split(/[,;،\n\r]+/)) {
+    const word = raw.replace(/\s+/g, " ").trim();
+    if (word === "" || seen.has(word.toLowerCase())) continue;
+    seen.add(word.toLowerCase());
+    out.push(word);
+  }
+  return out;
+}
+
+/** הצורה שנשמרת: "מילה, מילה" ("" = בלי מילות מפתח) */
+export function normalizeKeywords(value: string | null | undefined): string {
+  return splitKeywords(value).join(", ");
+}
+
+/** שגיאה ברשימת מילות המפתח (null = תקין) */
+export function keywordsProblem(value: string | null | undefined): string | null {
+  const words = splitKeywords(value);
+  const long = words.find((word) => word.length > SEO_KEYWORD_LENGTH);
+  if (long) return `מילת מפתח ארוכה מדי (עד ${SEO_KEYWORD_LENGTH} תווים): "${long.slice(0, 40)}…"`;
+  if (words.length > SEO_KEYWORDS_COUNT) {
+    return `יותר מדי מילות מפתח (${words.length}) — עד ${SEO_KEYWORDS_COUNT}`;
+  }
+  if (words.join(", ").length > SEO_KEYWORDS_MAX) {
+    return `מילות המפתח ארוכות מדי (עד ${SEO_KEYWORDS_MAX} תווים בסך הכל)`;
+  }
+  return null;
+}
+
 /** אותם פורמטים כמו ב-CHECK במסד: רק המזהה הרשמי — בלי שום תו אחר */
 export const PIXEL_ID_FORMAT = /^[0-9]{6,20}$/;
 export const GA_ID_FORMAT = /^((G|GT|AW)-[A-Z0-9]{4,16}|UA-[0-9]{4,10}-[0-9]{1,4})$/;

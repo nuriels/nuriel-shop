@@ -51,16 +51,38 @@ const PRODUCT_TABS: ProductsTab[] = ["catalog", "hidden", "drafts"];
  * הלשונית והקטגוריה יכולות להישלט מבחוץ (מהכתובת בפאנל הניהול), כדי ש"חזור"
  * בדפדפן יחזיר אליהן; בלי props הן נשמרות מקומית.
  */
+/**
+ * החלון מוציא בסגירה את רשומת ההיסטוריה שלו (useBackToClose → history.back,
+ * שמסתיים רק ב-popstate). מנקים את ?product= מהכתובת רק אחרי זה — אחרת
+ * ה"חזור" מחזיר את הכתובת הישנה והחלון נפתח שוב.
+ */
+function afterHistoryBack(run: () => void) {
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    window.removeEventListener("popstate", finish);
+    setTimeout(run, 0);
+  };
+  window.addEventListener("popstate", finish);
+  setTimeout(finish, 400);
+}
+
 export function AdminProductsPanel({
   tab: tabProp,
   onTabChange,
   category: categoryProp,
   onCategoryChange,
+  openProductId,
+  onProductClosed,
 }: {
   tab?: string | undefined;
   onTabChange?: (next: ProductsTab) => void;
   category?: string | null | undefined;
   onCategoryChange?: (next: string | null) => void;
+  /** כתובת ישירה /admin/products/$id — עריכת המוצר נפתחת מיד */
+  openProductId?: string | null | undefined;
+  onProductClosed?: () => void;
 } = {}) {
   const tiersEnabled = usePriceTiersEnabled();
   // חבילה בסיסית (חלק 13): עד 1,000 מוצרים — בהגעה למגבלה אין "מוצר חדש"
@@ -356,8 +378,30 @@ export function AdminProductsPanel({
     </div>
   );
 
+  const directProduct = openProductId
+    ? (products.find((product) => product.id === openProductId) ?? null)
+    : null;
+
   return (
     <section className="space-y-5">
+      {directProduct && (
+        <AdminProductDialog
+          key={directProduct.id}
+          product={directProduct}
+          onSaved={load}
+          autoOpen
+          hideTrigger
+          {...(onProductClosed ? { onClosed: () => afterHistoryBack(onProductClosed) } : {})}
+        />
+      )}
+      {openProductId && !loading && !directProduct && (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          המוצר לא נמצא בקטלוג (אולי נמחק).
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex size-11 items-center justify-center rounded-xl gradient-brand text-primary-foreground">

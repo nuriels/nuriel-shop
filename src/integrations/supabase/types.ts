@@ -1511,6 +1511,7 @@ export type Database = {
           variant_attributes: Json;
           seo_title: string | null;
           seo_description: string | null;
+          seo_keywords: string | null;
           show_in_zap: boolean;
           low_stock_alerted: boolean;
           is_featured: boolean;
@@ -1560,6 +1561,7 @@ export type Database = {
           variant_attributes?: Json;
           seo_title?: string | null;
           seo_description?: string | null;
+          seo_keywords?: string | null;
           show_in_zap?: boolean;
           low_stock_alerted?: boolean;
           is_featured?: boolean;
@@ -1609,6 +1611,7 @@ export type Database = {
           variant_attributes?: Json;
           seo_title?: string | null;
           seo_description?: string | null;
+          seo_keywords?: string | null;
           show_in_zap?: boolean;
           low_stock_alerted?: boolean;
           is_featured?: boolean;

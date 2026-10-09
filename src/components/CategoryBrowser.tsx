@@ -420,8 +420,17 @@ export function CategoryBrowser({
 
   return (
     <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start lg:gap-8">
-      <aside className="hidden lg:sticky lg:top-24 lg:block">
-        <div className="max-h-[calc(100vh-8rem)] overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-card">
+      {/*
+        תפריט הקטגוריות נצמד בגלילה (מחשב בלבד): מתחת לכותרת האתר (הגובה
+        האמיתי שלה — --site-header-h), רק בתוך הגריד של המוצרים (self-start +
+        items-start), כך שהוא נעצר בסוף רשימת המוצרים ולא עולה על הבאנר /
+        הפוטר. בטלפון התפריט מוסתר (סרגל ☰ במקומו) — ללא שינוי.
+      */}
+      <aside
+        className="hidden lg:sticky lg:top-[calc(var(--site-header-h,4.5rem)+1rem)] lg:block lg:self-start"
+        data-testid="category-sidebar"
+      >
+        <div className="max-h-[calc(100vh-var(--site-header-h,4.5rem)-2rem)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-3 shadow-card">
           <div className="mb-2 flex items-center justify-between gap-2 px-2">
             <h3 className="font-display text-lg text-foreground">קטגוריות</h3>
             {toolbar}

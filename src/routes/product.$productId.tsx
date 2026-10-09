@@ -92,6 +92,8 @@ export const Route = createFileRoute("/product/$productId")({
       meta: [
         { title: seo.title },
         { name: "description", content: seo.description },
+        // חלק 36: מילות המפתח/תגיות מעורך המוצר (רק כשמולאו)
+        ...(seo.keywords ? [{ name: "keywords", content: seo.keywords }] : []),
         { property: "og:title", content: seo.title },
         { property: "og:description", content: seo.description },
         { property: "og:type", content: "product" },

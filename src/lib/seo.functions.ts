@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { plainText } from "@/lib/marketing";
+import { normalizeKeywords, plainText } from "@/lib/marketing";
 import { categoryParentsFrom, categoryTrail, type CategoryParents } from "@/lib/seo-urls";
 
 /**
@@ -16,6 +16,8 @@ export type ProductSeo = {
   /** <title> — כותרת ה-SEO של המוצר, או "שם המוצר | שם החנות" */
   title: string;
   description: string;
+  /** חלק 36: מילות המפתח של המוצר ("מילה, מילה") — <meta name="keywords">; null = בלי */
+  keywords: string | null;
   image: string | null;
   /** חלק 21: כל התמונות של המוצר (הראשית ראשונה) — ל-JSON-LD */
   images: string[];
@@ -68,7 +70,7 @@ export const getProductSeo = createServerFn({ method: "GET" })
       // תמונות נוספות ותוקף המבצע — לסכמת המוצר (המוצר עצמו כבר נבדק ב-RPC)
       supabaseAdmin
         .from("global_products")
-        .select("images, sale_ends_at")
+        .select("images, sale_ends_at, seo_keywords")
         .eq("id", data.id)
         .maybeSingle(),
       // חלק 31: קטגוריות האב — לפירורי לחם היררכיים (בית ← ראשית ← משנה ← מוצר)
@@ -113,6 +115,7 @@ export const getProductSeo = createServerFn({ method: "GET" })
       name: product.name,
       title: product.seo_title?.trim() || `${product.name} | ${storeName}`,
       description,
+      keywords: normalizeKeywords(extra?.seo_keywords) || null,
       image: mainImage,
       images,
       saleEndsAt,

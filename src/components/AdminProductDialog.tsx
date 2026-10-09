@@ -48,8 +48,13 @@ import { SeoCounter } from "@/components/marketing/SeoCounter";
 import {
   SEO_DESCRIPTION_MAX,
   SEO_DESCRIPTION_RECOMMENDED,
+  SEO_KEYWORDS_COUNT,
+  SEO_KEYWORDS_MAX,
   SEO_TITLE_MAX,
   SEO_TITLE_RECOMMENDED,
+  keywordsProblem,
+  normalizeKeywords,
+  splitKeywords,
 } from "@/lib/marketing";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/legal/RichTextEditor";
@@ -163,6 +168,8 @@ type FormState = {
   /** SEO (חלק 14): כותרת ותיאור לגוגל — ריק = שם המוצר / התיאור */
   seoTitle: string;
   seoDescription: string;
+  /** מילות מפתח מופרדות בפסיקים (חלק 36) */
+  seoKeywords: string;
   /** להציג בזאפ השוואת מחירים */
   showInZap: boolean;
   /** חלק 20: "הקפץ למסך ראשי" — בבלוק "מוצרים נבחרים" במסך הבית */
@@ -216,6 +223,7 @@ function emptyForm(defaultCategory: string): FormState {
     variants: [],
     seoTitle: "",
     seoDescription: "",
+    seoKeywords: "",
     showInZap: true,
     isFeatured: false,
     stickerId: "",
@@ -267,6 +275,7 @@ function fromProduct(product: GlobalProduct): FormState {
     variants: [],
     seoTitle: product.seo_title ?? "",
     seoDescription: product.seo_description ?? "",
+    seoKeywords: product.seo_keywords ?? "",
     showInZap: product.show_in_zap ?? true,
     isFeatured: product.is_featured ?? false,
     stickerId: product.sticker_id ?? "",
@@ -811,6 +820,9 @@ export function AdminProductDialog({
         return "נדרשת כמות יחידות תקינה במארז";
       }
     }
+    // חלק 36: מילות מפתח — אותן מגבלות כמו במסד
+    const keywordsError = keywordsProblem(form.seoKeywords);
+    if (keywordsError) return keywordsError;
     return null;
   };
 
@@ -863,6 +875,7 @@ export function AdminProductDialog({
       order_bump_text: form.orderBumpText.trim() || null,
       seo_title: form.seoTitle.trim() || null,
       seo_description: form.seoDescription.trim() || null,
+      seo_keywords: normalizeKeywords(form.seoKeywords) || null,
       show_in_zap: form.showInZap,
       is_featured: form.isFeatured,
       sticker_id: form.stickerId || null,
@@ -1919,56 +1932,6 @@ export function AdminProductDialog({
               )}
             </div>
 
-            {/* SEO (חלק 14): מה שגוגל ושיתוף בווטסאפ מציגים לעמוד המוצר */}
-            <details className="group rounded-lg border border-border p-3">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium">
-                <span className="flex items-center gap-2">
-                  <Search className="size-4 text-muted-foreground" aria-hidden="true" />
-                  קידום בגוגל (SEO)
-                  {(form.seoTitle.trim() || form.seoDescription.trim()) && (
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
-                      מוגדר
-                    </span>
-                  )}
-                </span>
-                <span className="text-xs text-muted-foreground group-open:hidden">לא חובה</span>
-              </summary>
-              <div className="mt-3 space-y-3">
-                <p className="text-xs leading-5 text-muted-foreground">
-                  לכל מוצר יש עמוד משלו בגוגל. אם תשאירו ריק — הכותרת תהיה שם המוצר + שם החנות,
-                  והתיאור — תחילת תיאור המוצר.
-                </p>
-                <div className="space-y-1.5">
-                  <Label htmlFor="p-seo-title">כותרת לגוגל</Label>
-                  <Input
-                    id="p-seo-title"
-                    value={form.seoTitle}
-                    maxLength={SEO_TITLE_MAX}
-                    placeholder={
-                      form.name ? `${form.name} | שם החנות` : "למשל: חולצת כותנה לבנה במחיר מיוחד"
-                    }
-                    onChange={(e) => patch({ seoTitle: e.target.value })}
-                  />
-                  <SeoCounter value={form.seoTitle} recommended={SEO_TITLE_RECOMMENDED} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="p-seo-description">תיאור לגוגל</Label>
-                  <Textarea
-                    id="p-seo-description"
-                    rows={3}
-                    value={form.seoDescription}
-                    maxLength={SEO_DESCRIPTION_MAX}
-                    placeholder="משפט או שניים שמסבירים למה לקנות את המוצר אצלכם"
-                    onChange={(e) => patch({ seoDescription: e.target.value })}
-                  />
-                  <SeoCounter
-                    value={form.seoDescription}
-                    recommended={SEO_DESCRIPTION_RECOMMENDED}
-                  />
-                </div>
-              </div>
-            </details>
-
             <div className="space-y-2 rounded-lg border border-border p-3">
               <Label htmlFor="p-related">
                 מוצרים נלווים (Upsell) — "מוצרים נלווים שיכולים לעניין אותך"
@@ -1985,6 +1948,81 @@ export function AdminProductDialog({
                 max={12}
               />
             </div>
+
+            {/* SEO (חלק 14 + 36): מה שגוגל ושיתוף בווטסאפ מציגים לעמוד המוצר */}
+            <section
+              className="space-y-3 rounded-lg border border-border p-3"
+              aria-labelledby="p-seo-heading"
+              data-testid="product-seo-section"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h3 id="p-seo-heading" className="flex items-center gap-2 text-sm font-semibold">
+                  <Search className="size-4 text-muted-foreground" aria-hidden="true" />
+                  קידום אתרים (SEO)
+                </h3>
+                {form.seoTitle.trim() || form.seoDescription.trim() || form.seoKeywords.trim() ? (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                    מוגדר
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">לא חובה</span>
+                )}
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                לכל מוצר יש עמוד משלו בגוגל. אם תשאירו ריק — הכותרת תהיה שם המוצר + שם החנות,
+                והתיאור — תחילת תיאור המוצר.
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="p-seo-title">כותרת לקידום במנוע חיפוש</Label>
+                <Input
+                  id="p-seo-title"
+                  value={form.seoTitle}
+                  maxLength={SEO_TITLE_MAX}
+                  placeholder={
+                    form.name ? `${form.name} | שם החנות` : "למשל: חולצת כותנה לבנה במחיר מיוחד"
+                  }
+                  onChange={(e) => patch({ seoTitle: e.target.value })}
+                />
+                <SeoCounter value={form.seoTitle} recommended={SEO_TITLE_RECOMMENDED} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="p-seo-description">תיאור לקידום במנוע חיפוש</Label>
+                <Textarea
+                  id="p-seo-description"
+                  rows={3}
+                  value={form.seoDescription}
+                  maxLength={SEO_DESCRIPTION_MAX}
+                  placeholder="משפט או שניים שמסבירים למה לקנות את המוצר אצלכם"
+                  onChange={(e) => patch({ seoDescription: e.target.value })}
+                />
+                <SeoCounter value={form.seoDescription} recommended={SEO_DESCRIPTION_RECOMMENDED} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="p-seo-keywords">מילות מפתח/תגיות</Label>
+                <Input
+                  id="p-seo-keywords"
+                  value={form.seoKeywords}
+                  maxLength={SEO_KEYWORDS_MAX}
+                  placeholder="למשל: נעלי ריצה, נעלי ספורט, Nike"
+                  onChange={(e) => patch({ seoKeywords: e.target.value })}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  מופרדות בפסיקים. עד {SEO_KEYWORDS_COUNT} מילים — כפילויות מוסרות אוטומטית.
+                </p>
+                {splitKeywords(form.seoKeywords).length > 0 && (
+                  <ul className="flex flex-wrap gap-1.5" data-testid="product-seo-keywords-preview">
+                    {splitKeywords(form.seoKeywords).map((keyword) => (
+                      <li
+                        key={keyword.toLowerCase()}
+                        className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium"
+                      >
+                        {keyword}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
 
             <Button type="submit" className="w-full" size="lg" disabled={busy}>
               {busy && <Loader2 className="size-4 animate-spin" />}
