@@ -283,6 +283,35 @@ function RootTiles({
 }
 
 /**
+ * סרגל הקטגוריות במחשב (מוסתר בטלפון — שם יש סרגל ☰ בתוך CategoryBrowser).
+ * נצמד בגלילה מתחת לכותרת האתר (הגובה האמיתי שלה — --site-header-h) לכל
+ * אורך העמודה שהוא נמצא בה (self-start), ונעצר בסופה — לא עולה על הפוטר.
+ */
+export function CategorySidebar({
+  toolbar,
+  className,
+  ...nav
+}: NavProps & { toolbar?: React.ReactNode; className?: string }) {
+  return (
+    <aside
+      className={cn(
+        "hidden lg:sticky lg:top-[calc(var(--site-header-h,4.5rem)+1rem)] lg:block lg:self-start",
+        className,
+      )}
+      data-testid="category-sidebar"
+    >
+      <div className="max-h-[calc(100vh-var(--site-header-h,4.5rem)-2rem)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-3 shadow-card">
+        <div className="mb-2 flex items-center justify-between gap-2 px-2">
+          <h3 className="font-display text-lg text-foreground">קטגוריות</h3>
+          {toolbar}
+        </div>
+        <CategoryTreeNav {...nav} />
+      </div>
+    </aside>
+  );
+}
+
+/**
  * דפדוף בקטגוריות סביב רשימת מוצרים.
  * - "sidebar": סרגל עץ קבוע מימין במחשב, ומגירה מהצד בטלפון (הקטלוג, פאנל הניהול)
  * - "compact": כפתור שפותח את העץ בחלון קופץ (בתוך חלון "יצירת הזמנה" הצפוף)
@@ -291,10 +320,16 @@ export function CategoryBrowser({
   variant = "sidebar",
   showTiles = false,
   toolbar,
+  sidebar = true,
   children,
   ...nav
 }: NavProps & {
   variant?: "sidebar" | "compact";
+  /**
+   * false = בלי סרגל הצד במחשב (העמוד מציג אותו בעצמו, למשל בעמודה הימנית
+   * של עמוד הבית). בטלפון אין שינוי — סרגל ה-☰ נשאר.
+   */
+  sidebar?: boolean;
   /** אריחי קטגוריות ראשיות כשלא נבחרה קטגוריה */
   showTiles?: boolean;
   /** רכיב נוסף בשורת הכלים של הקטגוריות, למשל כפתור ניהול */
@@ -418,26 +453,20 @@ export function CategoryBrowser({
     );
   }
 
+  // חלק 36ב: העמוד מציג את סרגל הקטגוריות בעמודה משלו (CategorySidebar) —
+  // כאן רק הסרגל לטלפון, פירורי הלחם והתוכן
+  if (!sidebar) {
+    return (
+      <div className="space-y-4">
+        {header}
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start lg:gap-8">
-      {/*
-        תפריט הקטגוריות נצמד בגלילה (מחשב בלבד): מתחת לכותרת האתר (הגובה
-        האמיתי שלה — --site-header-h), רק בתוך הגריד של המוצרים (self-start +
-        items-start), כך שהוא נעצר בסוף רשימת המוצרים ולא עולה על הבאנר /
-        הפוטר. בטלפון התפריט מוסתר (סרגל ☰ במקומו) — ללא שינוי.
-      */}
-      <aside
-        className="hidden lg:sticky lg:top-[calc(var(--site-header-h,4.5rem)+1rem)] lg:block lg:self-start"
-        data-testid="category-sidebar"
-      >
-        <div className="max-h-[calc(100vh-var(--site-header-h,4.5rem)-2rem)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-3 shadow-card">
-          <div className="mb-2 flex items-center justify-between gap-2 px-2">
-            <h3 className="font-display text-lg text-foreground">קטגוריות</h3>
-            {toolbar}
-          </div>
-          <CategoryTreeNav {...nav} />
-        </div>
-      </aside>
+      <CategorySidebar {...nav} toolbar={toolbar} />
       <div className="min-w-0 space-y-4">
         {header}
         {children}
