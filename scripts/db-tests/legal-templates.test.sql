@@ -50,3 +50,23 @@ SELECT tests.check('legal: store owners / customers cannot run the bulk fill',
 
 -- ניקוי: החזרת חנות A לתבנית
 UPDATE public.site_settings SET terms_content = public.legal_default_html('terms') WHERE tenant_id = :A;
+
+-- ============================================================
+-- חלק 37ג: דריסה בכוח של התקנון בלבד (גם נוסח שנערך) — הפרטיות לא משתנה
+-- ============================================================
+UPDATE public.site_settings
+   SET terms_content = '<p>תקנון שנערך ע"י בעל החנות</p>', privacy_content = '<p>פרטיות שנערכה — לא לגעת</p>'
+ WHERE tenant_id = :A;
+UPDATE public.site_settings SET terms_content = '<p>עוד תקנון ישן</p>' WHERE tenant_id = :C;
+SELECT tests.check('legal force: edited terms in every store are overwritten (2 stores)',
+  $$SELECT public.legal_force_terms() >= 2$$);
+SELECT tests.check('legal force: all stores now have the full terms template',
+  $$SELECT bool_and(terms_content = public.legal_default_html('terms')) FROM public.site_settings$$);
+SELECT tests.check('legal force: privacy policy untouched',
+  $$SELECT privacy_content = '<p>פרטיות שנערכה — לא לגעת</p>' FROM public.site_settings WHERE tenant_id = '70000000-0000-0000-0000-00000000000a'$$);
+SELECT tests.check('legal force: second run changes nothing',
+  $$SELECT public.legal_force_terms() = 0$$);
+SELECT tests.check('legal force: store owners / customers cannot run it',
+  $$SELECT NOT has_function_privilege('authenticated', 'public.legal_force_terms()', 'EXECUTE')
+       AND NOT has_function_privilege('anon', 'public.legal_force_terms()', 'EXECUTE')$$);
+UPDATE public.site_settings SET privacy_content = public.legal_default_html('privacy') WHERE tenant_id = :A;
