@@ -1,5 +1,6 @@
 import { defaultPrivacyPolicy, defaultTermsOfService, type LegalBusinessInfo } from "@/lib/legal";
 import { countRedMarks, escapeHtml, plainTextToHtml, RED_MARK_CLASS } from "@/lib/rich-text";
+import { PRIVACY_TEMPLATE_TEXT, TERMS_TEMPLATE_TEXT } from "@/lib/legal-templates";
 
 /**
  * העמודים המשפטיים (חלק 16א): נוסחי ברירת המחדל של העורך בפאנל הניהול,
@@ -34,30 +35,51 @@ const red = (text: string) => `<span class="${RED_MARK_CLASS}">${text}</span>`;
 const item = (title: string, body: string) => `<p><strong>${title}</strong> ${body}</p>`;
 
 /**
- * חלק 37: התקנון ומדיניות הפרטיות — תבנית מלאה עם משתנים ({{store_name}} וכו'),
- * שמוחלפים בכל הצגה בפרטי החנות (fillLegalVariables). כך המסמך מיוחס רשמית
- * לבעל החנות, ומתעדכן לבד כשהוא משנה את פרטי העסק בהגדרות.
+ * חלק 37ב: נוסח רגיל (שורות) → HTML לעורך ולאתר. בלוק = שורות בין שורות ריקות.
+ * הבלוק הראשון — כותרת המסמך (h2); בלוק שהשורה הראשונה שלו קצרה ובלי סימן
+ * פיסוק בסופה — כותרת סעיף (h3); כל שורה אחרת — פסקה, כך ששבירות השורות
+ * נשמרות. רק &, < ו-> מוחלפים (גרשיים נשארים כמו שהם — כמו שהעורך שומר).
+ */
+export function legalTextToHtml(text: string): string {
+  const escape = (value: string) =>
+    value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const blocks = text
+    .replace(/\r\n?/g, "\n")
+    .split(/\n\s*\n/)
+    .map((block) =>
+      block
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== ""),
+    )
+    .filter((lines) => lines.length > 0);
+  return blocks
+    .map((lines, index) => {
+      if (index === 0 && lines.length === 1) return `<h2>${escape(lines[0]!)}</h2>`;
+      const [first, ...rest] = lines;
+      const isHeading = rest.length > 0 && first!.length <= 40 && !/[.:;,!?]$/.test(first!);
+      return [
+        isHeading ? `<h3>${escape(first!)}</h3>` : `<p>${escape(first!)}</p>`,
+        ...rest.map((line) => `<p>${escape(line)}</p>`),
+      ].join("");
+    })
+    .join("");
+}
+
+/**
+ * חלק 37 / 37ב: התקנון ומדיניות הפרטיות — התבנית המלאה (src/lib/legal-templates.ts)
+ * עם משתנים ({{store_name}} וכו'), שמוחלפים בכל הצגה בפרטי החנות
+ * (fillLegalVariables). כך המסמך מיוחס רשמית לבעל החנות, ומתעדכן לבד כשהוא
+ * משנה את פרטי העסק בהגדרות.
  *
  * ⚠ אותו נוסח בדיוק נמצא במסד (legal_default_html במיגרציה
- * 20261019440000_legal_templates.sql) — חנות חדשה מקבלת אותו כבר בהקמה.
+ * 20261019450000_legal_templates_full.sql) — חנות חדשה מקבלת אותו כבר בהקמה.
  * בדיקת יחידה מוודאת ששני העותקים זהים.
  */
-export const DEFAULT_TERMS_HTML = [
-  "<h2>תקנון אתר {{store_name}}</h2>",
-  '<p>הנך מתבקש לקרוא תקנון זה במלואו ובעיון, כתנאי מוקדם להתקשרות. החנות משמשת לרכישת מוצרים על ידי בני 18 ומעלה, בעלי דואר אלקטרוני וכתובת בישראל, וכרטיס אשראי תקף. רכישה מהווה הסכמה לתקנון. המחיר כולל מע"מ.</p>',
-  "<p><strong>בעל האתר:</strong> האתר והחנות מופעלים ומנוהלים על ידי {{store_name}} (ח.פ./ע.מ {{business_id}}), האחראי הבלעדי למוצרים, למכירות, לאספקה ולשירות. פלטפורמת המסחר שעליה פועל האתר משמשת ספקית טכנולוגיה בלבד ואינה צד לעסקאות באתר.</p>",
-  '<p><strong>רכישה וביטול:</strong> הרכישה הינה עד גמר המלאי. הלקוח רשאי לבטל את העיסקה בכפוף להוראות חוק הגנת הצרכן (14 יום מקבלת המוצר), בהודעה לכתובת הדוא"ל: {{store_email}}. בגין ביטול ינוכו 5% או 100 ₪ (הנמוך מביניהם). חובת החזרת המוצר חלה על הלקוח (באריזתו המקורית, שלם וללא נזק). הלקוח יחויב בדמי המשלוח אם המוצר כבר נשלח.</p>',
-  "<p><strong>אספקה ומשלוחים:</strong> אספקת המוצר לכתובת הלקוח עד 10 ימי עסקים (א'-ה'), לאחר אישור חברת האשראי. החנות אינה אחראית לאיחור בגין כוח עליון (מלחמה, שביתה, נזקי טבע).</p>",
-  '<p><strong>יצירת קשר:</strong> לבירורים ניתן לפנות טלפונית ל- {{store_phone}} או לדוא"ל {{store_email}}. אחריות ההתקנה חלה על הלקוח. התמונות להמחשה בלבד.</p>',
-].join("");
+export const DEFAULT_TERMS_HTML = legalTextToHtml(TERMS_TEMPLATE_TEXT);
 
 /** מדיניות פרטיות — תבנית עם משתנים (כמו התקנון) */
-export const DEFAULT_PRIVACY_HTML = [
-  "<h2>מדיניות פרטיות - {{store_name}}</h2>",
-  "<p>החברה מכירה בחשיבות השמירה על פרטיות המשתמשים באתר. שימושך וביצוע רכישה מהווים הסכמתך לשימוש במידע שייאסף.</p>",
-  "<p><strong>סליקה ואשראי:</strong> בעל העסק מתחייב כי פרטי האשראי של הלקוח לא יעברו לצד ג', למעט למסוף הסליקה ולחברת האשראי.</p>",
-  "<p><strong>מאגרי מידע:</strong> המידע שיימסר יישמר במאגרי המידע. החברה רשאית לעשות בו שימוש לצורך טיפול בהזמנות ושיפור השירות, וכן לפנות אליך בהצעות שיווקיות (דיוור ישיר). הינך רשאי בכל עת לפנות לשירות הלקוחות ב- {{store_email}} ולבקש הסרה מרשימת התפוצה.</p>",
-].join("");
+export const DEFAULT_PRIVACY_HTML = legalTextToHtml(PRIVACY_TEMPLATE_TEXT);
 
 /**
  * מדיניות ביטולים — לפי חוק הגנת הצרכן, התשמ"א-1981 ותקנות הגנת הצרכן
@@ -191,9 +213,10 @@ export function legalPageHtml(
 }
 
 /**
- * חלק 37: מה חסר כדי לעמוד בדרישות חברות הסליקה — פרטי העסק שמופיעים בתקנון
- * ובאתר (חוק הגנת הצרכן: שם, מספר עוסק, כתובת, טלפון, דוא"ל), ותקנון / מדיניות
- * פרטיות בלי מקומות שנשארו להשלמה. רשימה ריקה = הכל מוכן.
+ * חלק 37ב: מה חסר בפרטי העסק.
+ *  • contact — טלפון / אימייל: בלעדיהם התקנון (שמפנה אליהם) לא תקף → התראת חובה.
+ *  • recommended — שם העסק, ח.פ./ע.מ, כתובת (חוק הגנת הצרכן), ומקומות שנשארו
+ *    מסומנים באדום להשלמה בתקנון / במדיניות הפרטיות.
  */
 export function complianceGaps(
   settings:
@@ -203,21 +226,22 @@ export function complianceGaps(
       })
     | null
     | undefined,
-): string[] {
-  if (!settings) return [];
+): { contact: string[]; recommended: string[] } {
+  if (!settings) return { contact: [], recommended: [] };
   const has = (value: string | null | undefined) => (value ?? "").trim() !== "";
-  const gaps: string[] = [];
-  if (!has(settings.business_name)) gaps.push("שם העסק הרשמי");
-  if (!has(settings.business_tax_id)) gaps.push("מספר ח.פ. / ע.מ");
-  if (!has(settings.business_address)) gaps.push("כתובת העסק");
-  if (!has(settings.support_phone) && !has(settings.business_phone)) gaps.push("טלפון ליצירת קשר");
-  if (!has(settings.business_email)) gaps.push('דוא"ל ליצירת קשר');
+  const contact: string[] = [];
+  if (!has(settings.business_email)) contact.push("אימייל");
+  if (!has(settings.support_phone) && !has(settings.business_phone)) contact.push("טלפון");
+  const recommended: string[] = [];
+  if (!has(settings.business_name)) recommended.push("שם העסק הרשמי");
+  if (!has(settings.business_tax_id)) recommended.push("מספר ח.פ. / ע.מ");
+  if (!has(settings.business_address)) recommended.push("כתובת העסק");
   // נוסח ריק מוצג באתר כתבנית המלאה — חסר רק אם נשארו בו מקומות מסומנים באדום להשלמה
   if (countRedMarks(legalContentOrDefault("terms", settings.terms_content)) > 0) {
-    gaps.push("השלמת המקומות המסומנים באדום בתקנון");
+    recommended.push("השלמת המקומות המסומנים באדום בתקנון");
   }
   if (countRedMarks(legalContentOrDefault("privacy", settings.privacy_content)) > 0) {
-    gaps.push("השלמת המקומות המסומנים באדום במדיניות הפרטיות");
+    recommended.push("השלמת המקומות המסומנים באדום במדיניות הפרטיות");
   }
-  return gaps;
+  return { contact, recommended };
 }

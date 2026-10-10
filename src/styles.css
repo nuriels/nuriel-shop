@@ -382,6 +382,21 @@ html.a11y-focus :focus-visible {
   .legal-document strong {
     color: var(--color-foreground);
   }
+  /* חלק 37ב: כותרות הסעיפים ("רכישה רגילה", "ביטול הזמנה"...) — והפסקאות של
+     אותו סעיף צמודות אליהן; שבירת שורות טבעית לעברית */
+  .legal-document h3 {
+    margin-top: 1.75em;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-foreground);
+  }
+  .legal-document h3 + p,
+  .legal-document p + p {
+    margin-top: 0.4em;
+  }
+  .legal-document p {
+    text-wrap: pretty;
+  }
   /* העורך: מציין מקום כשהתוכן ריק */
   .rich-editor:empty::before {
     content: attr(data-placeholder);
