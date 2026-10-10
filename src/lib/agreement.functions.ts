@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { fillLegalVariables, legalVariablesFrom } from "@/lib/legal-content";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 /**
@@ -10,6 +11,17 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  */
 
 /** שליחת (או שליחה מחדש של) קישור החתימה ללקוח */
+const AGREEMENT_SETTINGS_COLUMNS =
+  "terms_content, business_name, site_title, business_email, support_phone, business_phone, business_tax_id, business_address" as const;
+
+/** התקנון לחתימה: הנוסח שנשמר (ריק = בלי תקנון) עם פרטי החנות במקום המשתנים */
+function agreementTerms(
+  settings: (Parameters<typeof legalVariablesFrom>[0] & { terms_content?: string | null }) | null,
+): string {
+  const terms = (settings?.terms_content ?? "").trim();
+  return terms === "" ? "" : fillLegalVariables(terms, legalVariablesFrom(settings));
+}
+
 export const sendAgreementLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { userId: string }) => {
@@ -75,7 +87,7 @@ export const loadAgreementForm = createServerFn({ method: "POST" })
         .maybeSingle(),
       supabaseAdmin
         .from("site_settings")
-        .select("terms_content, business_name, site_title")
+        .select(AGREEMENT_SETTINGS_COLUMNS)
         .eq("id", true)
         .maybeSingle(),
     ]);
@@ -91,7 +103,8 @@ export const loadAgreementForm = createServerFn({ method: "POST" })
       contactName: profile?.contact_name ?? "",
       phone: profile?.phone ?? "",
       companyName: settings?.business_name?.trim() || settings?.site_title || "",
-      terms: settings?.terms_content ?? "",
+      // חלק 37: התקנון עם פרטי החנות במקום המשתנים ({{store_name}} וכו')
+      terms: agreementTerms(settings),
     };
   });
 
@@ -133,7 +146,7 @@ export const submitAgreement = createServerFn({ method: "POST" })
 
     const { data: settings } = await supabaseAdmin
       .from("site_settings")
-      .select("terms_content")
+      .select(AGREEMENT_SETTINGS_COLUMNS)
       .eq("id", true)
       .maybeSingle();
 
@@ -163,7 +176,8 @@ export const submitAgreement = createServerFn({ method: "POST" })
             )
             .join("") +
           "</svg>",
-        terms_snapshot: settings?.terms_content ?? "",
+        // מה שהלקוח ראה וחתם עליו — עם פרטי החנות בפועל
+        terms_snapshot: agreementTerms(settings),
         signer_ip: ip,
         user_agent: userAgent,
       })

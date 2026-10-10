@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { InfoPage, LoadingLine } from "@/components/legal/InfoPage";
 import { RichContent } from "@/components/legal/RichContent";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { legalContentOrDefault } from "@/lib/legal-content";
+import { legalPageHtml } from "@/lib/legal-content";
 
 export const Route = createFileRoute("/privacy")({
   ssr: false,
@@ -18,9 +18,12 @@ function PrivacyPage() {
   return (
     <InfoPage title="מדיניות פרטיות" icon={<Lock aria-hidden="true" />}>
       <Card className="shadow-card">
-        <CardContent className="pt-5">
+        <CardContent className="px-5 pt-6 sm:px-8 sm:pb-8">
           {settings ? (
-            <RichContent content={legalContentOrDefault("privacy", settings.privacy_content)} />
+            <RichContent
+              variant="document"
+              content={legalPageHtml("privacy", settings.privacy_content, settings)}
+            />
           ) : (
             <LoadingLine />
           )}

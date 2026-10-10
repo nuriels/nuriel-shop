@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   Code2,
   ExternalLink,
@@ -16,14 +17,6 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +41,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/legal/RichTextEditor";
 import { refreshStorePages } from "@/hooks/useStorePages";
+import { useBackToClose } from "@/hooks/useBackToClose";
 import {
   PAGE_LIMITS,
   PAGE_TEMPLATES,
@@ -182,6 +176,22 @@ export function PagesPanel() {
       setBusyId(null);
     }
   };
+
+  // חלק 37: עריכה במסך מלא בתוך הפאנל (לא בחלון קופץ) — בלי נעילת גלילה ומלכודת
+  // פוקוס של חלון מודאלי, שחסמו בחירת טקסט בעכבר / בטלפון בטקסטים ארוכים
+  if (editing) {
+    return (
+      <PageEditorScreen
+        target={editing}
+        takenSlugs={slugs}
+        onClose={() => setEditing(null)}
+        onSaved={async () => {
+          setEditing(null);
+          await changed();
+        }}
+      />
+    );
+  }
 
   return (
     <section className="space-y-5" aria-labelledby="pages-title">
@@ -372,16 +382,6 @@ export function PagesPanel() {
         </Card>
       )}
 
-      <PageEditorDialog
-        target={editing}
-        takenSlugs={slugs}
-        onClose={() => setEditing(null)}
-        onSaved={async () => {
-          setEditing(null);
-          await changed();
-        }}
-      />
-
       <AlertDialog
         open={pendingDelete !== null}
         onOpenChange={(open) => !open && setPendingDelete(null)}
@@ -410,13 +410,13 @@ export function PagesPanel() {
 }
 
 /** יצירה / עריכה: כותרת, כתובת (נוצרת אוטומטית מהכותרת), פרסום ותוכן */
-function PageEditorDialog({
+function PageEditorScreen({
   target,
   takenSlugs,
   onClose,
   onSaved,
 }: {
-  target: EditorTarget | null;
+  target: EditorTarget;
   takenSlugs: string[];
   onClose: () => void;
   onSaved: () => Promise<void>;
@@ -428,15 +428,18 @@ function PageEditorDialog({
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const isNew = target?.id === null;
+  const isNew = target.id === null;
   // הכתובות של העמודים האחרים (בעמוד קיים — בלי הכתובת שלו עצמו)
   const otherSlugs = useMemo(
-    () => takenSlugs.filter((slug) => isNew || slug !== target?.draft.slug),
+    () => takenSlugs.filter((slug) => isNew || slug !== target.draft.slug),
     [isNew, takenSlugs, target],
   );
+  // "חזור" בדפדפן / בטלפון חוזר לרשימת העמודים (במקום לצאת מהפאנל)
+  useBackToClose(true, () => {
+    if (!busy) onClose();
+  });
 
   useEffect(() => {
-    if (!target) return;
     setDraft(target.draft);
     setSlugTouched(!isNew || target.draft.slug !== "");
     setHtmlMode(false);
@@ -470,7 +473,7 @@ function PageEditorDialog({
     }
     setBusy(true);
     try {
-      const saved = await savePage(target?.id ?? null, { ...draft, slug });
+      const saved = await savePage(target.id, { ...draft, slug });
       toast.success(
         isNew
           ? `העמוד "${saved.title}" נוצר${saved.is_published ? " ופורסם באתר" : " כטיוטה"}`
@@ -485,19 +488,29 @@ function PageEditorDialog({
   };
 
   return (
-    <Dialog open={target !== null} onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent
-        dir="rtl"
-        className="max-h-[92vh] overflow-y-auto text-right sm:max-w-3xl"
-        data-testid="page-editor"
-      >
-        <DialogHeader className="text-right">
-          <DialogTitle>{isNew ? "עמוד חדש" : "עריכת עמוד"}</DialogTitle>
-          <DialogDescription>
+    <section
+      dir="rtl"
+      aria-labelledby="page-editor-title"
+      className="space-y-5 text-right"
+      data-testid="page-editor"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h2 id="page-editor-title" className="flex items-center gap-2 text-2xl font-bold">
+            <FileText className="size-6 text-primary" aria-hidden="true" />
+            {isNew ? "עמוד חדש" : "עריכת עמוד"}
+          </h2>
+          <p className="text-sm text-muted-foreground">
             הכותרת מוצגת בראש העמוד וב&quot;מידע שימושי&quot; בתחתית האתר.
-          </DialogDescription>
-        </DialogHeader>
+          </p>
+        </div>
+        <Button variant="outline" onClick={onClose} disabled={busy}>
+          <ArrowRight className="size-4" aria-hidden="true" />
+          חזרה לרשימת העמודים
+        </Button>
+      </div>
 
+      <Card className="p-4 shadow-card sm:p-6">
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="page-title">כותרת העמוד</Label>
@@ -586,7 +599,8 @@ function PageEditorDialog({
                 value={draft.content_html}
                 onChange={(content_html) => patch({ content_html })}
                 ariaLabel="תוכן העמוד"
-                minHeight={260}
+                minHeight={320}
+                autoGrow
               />
             )}
             <p className={cn("text-xs", redMarks > 0 ? "text-red-600" : "text-muted-foreground")}>
@@ -608,29 +622,30 @@ function PageEditorDialog({
             </p>
           )}
         </div>
+      </Card>
 
-        <DialogFooter className="gap-2 sm:justify-start">
-          <Button onClick={() => void submit()} disabled={busy} data-testid="save-page">
-            {busy ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Save className="size-4" aria-hidden="true" />
-            )}
-            {isNew ? "יצירת העמוד" : "שמירה"}
-          </Button>
-          {!isNew && target && (
-            <Button variant="outline" asChild>
-              <a href={pagePath(target.draft.slug)} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="size-4" aria-hidden="true" />
-                צפייה באתר
-              </a>
-            </Button>
+      {/* שמירה — צמוד לתחתית המסך גם בעמוד ארוך */}
+      <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap gap-2 border-t border-border bg-background/95 px-1 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <Button onClick={() => void submit()} disabled={busy} data-testid="save-page">
+          {busy ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Save className="size-4" aria-hidden="true" />
           )}
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
-            ביטול
+          {isNew ? "יצירת העמוד" : "שמירה"}
+        </Button>
+        {!isNew && (
+          <Button variant="outline" asChild>
+            <a href={pagePath(target.draft.slug)} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="size-4" aria-hidden="true" />
+              צפייה באתר
+            </a>
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        )}
+        <Button variant="ghost" onClick={onClose} disabled={busy}>
+          ביטול
+        </Button>
+      </div>
+    </section>
   );
 }

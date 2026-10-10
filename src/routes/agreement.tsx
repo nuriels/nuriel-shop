@@ -5,6 +5,7 @@ import { Check, Eraser, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppFooter } from "@/components/AppFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { RichContent } from "@/components/legal/RichContent";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -224,10 +225,13 @@ function AgreementPage() {
 
                 <div className="space-y-2">
                   <h2 className="font-display text-lg text-foreground">תנאי השירות</h2>
-                  <div className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border p-4 text-sm leading-7">
-                    {form.terms.trim() === ""
-                      ? "טרם הוזנו תנאי שירות במערכת. יש לפנות אלינו לקבלת הנוסח לפני החתימה."
-                      : form.terms}
+                  <div className="max-h-72 overflow-y-auto rounded-lg border border-border p-4 text-sm leading-7">
+                    {form.terms.trim() === "" ? (
+                      "טרם הוזנו תנאי שירות במערכת. יש לפנות אלינו לקבלת הנוסח לפני החתימה."
+                    ) : (
+                      // חלק 37: התקנון נשמר כ-HTML (עורך הטקסט) — מוצג מעוצב ומנוקה
+                      <RichContent content={form.terms} />
+                    )}
                   </div>
                 </div>
 

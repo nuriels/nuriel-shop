@@ -310,6 +310,7 @@ function AdminPage() {
             <Tabs value={activeTab} dir="rtl" className="min-w-0">
               <TabsContent value="dashboard">
                 <AdminDashboard
+                  showCompliance={canOpenAdminTab(staffRole, "site")}
                   onOpenOrder={(orderId) =>
                     void navigate({
                       search: (prev) => ({ ...prev, tab: "orders", order: orderId }),

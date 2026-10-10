@@ -34,6 +34,7 @@ import {
 } from "@/lib/dashboard";
 import { ORDER_KIND_LABEL, ORDER_STATUS_BADGE, ORDER_STATUS_LABEL } from "@/lib/orders";
 import { cn } from "@/lib/utils";
+import { ComplianceAlert } from "@/components/ComplianceAlert";
 import {
   ANALYTICS_PERIODS,
   fetchStoreAnalytics,
@@ -52,10 +53,13 @@ const REFRESH_MS = 30_000;
 export function AdminDashboard({
   onOpenOrder,
   onOpenTab,
+  showCompliance = false,
 }: {
   /** "צפה בהזמנה" — מעבר לניהול ההזמנות עם ההזמנה פתוחה */
   onOpenOrder: (orderId: string) => void;
   onOpenTab: (tab: string) => void;
+  /** חלק 37: התראת פרטי העסק / תקנון — למי שמנהל את הגדרות החנות */
+  showCompliance?: boolean;
 }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -122,6 +126,8 @@ export function AdminDashboard({
           רענון
         </Button>
       </div>
+
+      {showCompliance && <ComplianceAlert onOpenTab={onOpenTab} />}
 
       {error && !data ? (
         <Card className="border-destructive/40">

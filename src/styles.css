@@ -362,6 +362,26 @@ html.a11y-focus :focus-visible {
     border-top-width: 1px;
     margin-block: 1.25em;
   }
+  /* חלק 37: מסמך משפטי ארוך באתר (תקנון / פרטיות / ביטולים) — טקסט מלא וקריא */
+  .legal-document {
+    font-size: 1rem;
+    line-height: 1.95;
+    white-space: normal;
+  }
+  .legal-document > h2:first-child {
+    margin-top: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.4;
+    padding-bottom: 0.6em;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .legal-document > * + * {
+    margin-top: 1em;
+  }
+  .legal-document strong {
+    color: var(--color-foreground);
+  }
   /* העורך: מציין מקום כשהתוכן ריק */
   .rich-editor:empty::before {
     content: attr(data-placeholder);
@@ -370,6 +390,17 @@ html.a11y-focus :focus-visible {
   }
   .rich-editor:focus {
     outline: none;
+  }
+  /* חלק 37: בחירת טקסט בגרירה / בלחיצה כפולה תמיד מותרת בעורך — גם אם רכיב
+     עוטף (חלון, כרטיס, גרירה) מבטל בחירה, וגם בספארי (שדורש את הקידומת) */
+  .rich-editor,
+  .rich-editor * {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .rich-editor {
+    cursor: text;
+    -webkit-touch-callout: default;
   }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { RichTextEditor } from "@/components/legal/RichTextEditor";
+import { LegalVariablesBox } from "@/components/legal/LegalVariablesBox";
 import { refreshSiteSettings, useSiteSettings } from "@/hooks/useSiteSettings";
 import {
   DEFAULT_LEGAL_HTML,
@@ -32,6 +33,7 @@ import {
   LEGAL_PAGES,
   LEGAL_RED_NOTE,
   legalContentOrDefault,
+  legalVariablesFrom,
   type LegalPageKey,
 } from "@/lib/legal-content";
 import { countRedMarks, sanitizeRichHtml, toRichHtml } from "@/lib/rich-text";
@@ -57,6 +59,20 @@ export function LegalPagesPanel() {
   const [replace, setReplace] = useState<{ key: LegalPageKey; html: string; label: string } | null>(
     null,
   );
+  // חלק 37: סרגל הכלים של העורך נצמד מתחת לסרגל "שמירת העמודים" (שגם הוא צמוד)
+  const sectionRef = useRef<HTMLElement>(null);
+  const saveBarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const section = sectionRef.current;
+    const bar = saveBarRef.current;
+    if (!section || !bar || typeof ResizeObserver === "undefined") return;
+    const update = () =>
+      section.style.setProperty("--editor-sticky-offset", `${bar.offsetHeight}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  });
 
   const savedOf = (from: typeof settings): Drafts => ({
     terms: legalContentOrDefault("terms", from?.terms_content),
@@ -122,8 +138,11 @@ export function LegalPagesPanel() {
   };
 
   return (
-    <section className="space-y-5">
-      <div className="sticky top-[var(--site-header-h,0px)] z-20 -mx-1 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border-b border-border bg-background/95 px-1 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <section ref={sectionRef} className="space-y-5">
+      <div
+        ref={saveBarRef}
+        className="sticky top-[var(--site-header-h,0px)] z-20 -mx-1 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border-b border-border bg-background/95 px-1 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+      >
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-xl font-bold text-foreground">
             <Scale className="size-5 text-primary" aria-hidden="true" />
@@ -268,10 +287,16 @@ export function LegalPagesPanel() {
                   <RichTextEditor
                     id={`legal-${page.key}`}
                     ariaLabel={page.title}
+                    autoGrow
                     value={drafts[page.key]}
                     onChange={(html) =>
                       setDrafts((current) => (current ? { ...current, [page.key]: html } : current))
                     }
+                  />
+                  <LegalVariablesBox
+                    editorId={`legal-${page.key}`}
+                    html={drafts[page.key]}
+                    values={legalVariablesFrom(settings)}
                   />
                   <p
                     className={

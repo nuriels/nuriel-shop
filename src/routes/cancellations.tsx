@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { InfoPage, LoadingLine } from "@/components/legal/InfoPage";
 import { RichContent } from "@/components/legal/RichContent";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { legalContentOrDefault } from "@/lib/legal-content";
+import { legalPageHtml } from "@/lib/legal-content";
 import {
   getCancellationCaptcha,
   submitCancellationRequest,
@@ -60,7 +60,12 @@ function CancellationsPage() {
         <CardContent>
           {settings ? (
             <RichContent
-              content={legalContentOrDefault("cancellation", settings.cancellation_policy_content)}
+              variant="document"
+              content={legalPageHtml(
+                "cancellation",
+                settings.cancellation_policy_content,
+                settings,
+              )}
             />
           ) : (
             <LoadingLine />

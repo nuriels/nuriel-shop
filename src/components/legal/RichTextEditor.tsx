@@ -173,6 +173,7 @@ export function RichTextEditor({
   placeholder = "כתבו כאן…",
   minHeight = 320,
   variant = "legal",
+  autoGrow = false,
 }: {
   id: string;
   /** HTML (או טקסט ישן — מומר אוטומטית) */
@@ -183,6 +184,11 @@ export function RichTextEditor({
   minHeight?: number;
   /** legal — עמודים משפטיים (H2/H3 + סימון באדום); product — תיאור מוצר (H3/H4 + צבעים) */
   variant?: RichEditorVariant;
+  /**
+   * חלק 37: טקסט ארוך (תקנון, עמודי תוכן) — העורך גדל עם הטקסט ונגלל עם העמוד
+   * (בלי גלילה פנימית), וסרגל הכלים נצמד מתחת לכותרת האתר
+   */
+  autoGrow?: boolean;
 }) {
   const isProduct = variant === "product";
   const headings = isProduct
@@ -237,7 +243,7 @@ export function RichTextEditor({
     } catch {
       block = "p";
     }
-    setActive({
+    const next: ActiveState = {
       bold: query("bold"),
       italic: query("italic"),
       underline: query("underline"),
@@ -246,7 +252,13 @@ export function RichTextEditor({
       red: closestRed(selection.anchorNode, editor) !== null,
       color: closestColor(selection.anchorNode, editor)?.key ?? null,
       block,
-    });
+    };
+    // רינדור רק כשמצב הכפתורים השתנה — לא בכל תזוזה של הבחירה בגרירה
+    setActive((current) =>
+      (Object.keys(next) as (keyof ActiveState)[]).every((key) => current[key] === next[key])
+        ? current
+        : next,
+    );
   }, []);
 
   useEffect(() => {
@@ -412,12 +424,18 @@ export function RichTextEditor({
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-input bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring">
+    // overflow-clip (ולא hidden) — כדי שסרגל הכלים יוכל להיצמד בגלילה
+    <div className="overflow-clip rounded-lg border border-input bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring">
       <div
         role="toolbar"
         aria-label={`עיצוב — ${ariaLabel}`}
         aria-controls={id}
-        className="flex flex-wrap items-center gap-0.5 border-b border-border bg-muted/40 p-1"
+        className={cn(
+          "flex flex-wrap items-center gap-0.5 border-b border-border bg-muted p-1",
+          // --editor-sticky-offset: פס נוסף שנצמד מעל (למשל סרגל "שמירה" של הלשונית)
+          autoGrow &&
+            "sticky top-[calc(var(--site-header-h,0px)+var(--editor-sticky-offset,0px))] z-10",
+        )}
       >
         <ToolButton label="מודגש (Ctrl+B)" pressed={active.bold} onClick={() => run("bold")}>
           <Bold />
@@ -591,7 +609,10 @@ export function RichTextEditor({
         suppressContentEditableWarning
         dir="rtl"
         data-placeholder={placeholder}
-        className="rich-editor rich-content max-h-[70vh] overflow-y-auto px-4 py-3 text-sm text-foreground"
+        className={cn(
+          "rich-editor rich-content px-4 py-3 text-sm text-foreground",
+          !autoGrow && "max-h-[70vh] overflow-y-auto",
+        )}
         style={{ minHeight }}
         onFocus={() => {
           try {

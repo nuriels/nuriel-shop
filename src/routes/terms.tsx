@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { InfoPage, LoadingLine } from "@/components/legal/InfoPage";
 import { RichContent } from "@/components/legal/RichContent";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { legalContentOrDefault } from "@/lib/legal-content";
+import { legalPageHtml } from "@/lib/legal-content";
 
 export const Route = createFileRoute("/terms")({
   ssr: false,
@@ -18,9 +18,12 @@ function TermsPage() {
   return (
     <InfoPage title="תקנון האתר" icon={<FileText aria-hidden="true" />}>
       <Card className="shadow-card">
-        <CardContent className="pt-5">
+        <CardContent className="px-5 pt-6 sm:px-8 sm:pb-8">
           {settings ? (
-            <RichContent content={legalContentOrDefault("terms", settings.terms_content)} />
+            <RichContent
+              variant="document"
+              content={legalPageHtml("terms", settings.terms_content, settings)}
+            />
           ) : (
             <LoadingLine />
           )}
