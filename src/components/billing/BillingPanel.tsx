@@ -641,16 +641,22 @@ function MyAddons({ billing }: { billing: StoreBilling }) {
                   "rounded-full px-2.5 py-0.5 text-xs font-semibold",
                   addon.active
                     ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
-                    : "bg-muted text-muted-foreground",
+                    : addon.pending
+                      ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+                      : "bg-muted text-muted-foreground",
                 )}
               >
                 {addon.active
                   ? addon.expiresAt
                     ? `פעיל עד ${formatDate(addon.expiresAt)}`
                     : "פעיל"
-                  : addon.endedReason === "canceled"
-                    ? "בוטל"
-                    : "הסתיים"}
+                  : addon.pending
+                    ? "ממתין לתשלום / לאישור"
+                    : addon.endedReason === "rejected"
+                      ? "הבקשה נדחתה"
+                      : addon.endedReason === "canceled"
+                        ? "בוטל"
+                        : "הסתיים"}
               </span>
             </li>
           ))}

@@ -4,11 +4,13 @@ import {
   isAddonName,
   parseAddonOffer,
   parsePlatformAddons,
+  parsePlatformAddonRequests,
   parseAddonPurchase,
   parseAddonsStore,
   type AddonOffer,
   type AddonPurchase,
   type AddonsStore,
+  type PlatformAddonRequest,
 } from "@/lib/addons";
 import type { AddonName } from "@/lib/subscription";
 
@@ -64,7 +66,11 @@ export const quoteAddon = createServerFn({ method: "POST" })
     return offer;
   });
 
-/** רכישת תוסף — הפיצ'ר נפתח מיד; החיוב נרשם כ"ממתין לתשלום" */
+/**
+ * חלק 38: "רכישת" תוסף = בקשה. התוסף נשמר "ממתין לתשלום / לאישור" (pending)
+ * ולא נפתח; מנהלי הפלטפורמה מקבלים מייל, גובים מחוץ למערכת, ורק הם מפעילים
+ * (platformApproveAddon). המסד אוכף: בעל החנות לא יכול להפעיל תוסף בעצמו.
+ */
 export const purchaseAddon = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { addon: string; expectedAmount: number }) => {
@@ -89,15 +95,14 @@ export const purchaseAddon = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     const purchase = parseAddonPurchase(raw);
 
-    const { currentTenantId, invalidateTenantCache } =
-      await import("@/integrations/supabase/tenant.server");
-    const tenantId = currentTenantId();
-    // הפיצ'ר נפתח מיד — גם במסכים שקוראים את המנוי מהמטמון של השרת
-    invalidateTenantCache(tenantId);
-
+    const { currentTenantId } = await import("@/integrations/supabase/tenant.server");
     const email = typeof context.claims["email"] === "string" ? context.claims["email"] : null;
     const { notifyPlatformOfAddonPurchase } = await import("@/lib/addons.server");
-    await notifyPlatformOfAddonPurchase({ tenantId, purchase, buyerEmail: email });
+    await notifyPlatformOfAddonPurchase({
+      tenantId: currentTenantId(),
+      purchase,
+      buyerEmail: email,
+    });
     return purchase;
   });
 
@@ -154,6 +159,53 @@ export const platformMarkBillingPaid = createServerFn({ method: "POST" })
       _id: data.billingId,
       _reference: data.reference || null,
     });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+// ------------------------------------------------------------
+// חלק 38: בקשות לתוספים — רק מנהל הפלטפורמה מאשר ומפעיל
+// ------------------------------------------------------------
+
+/** הבקשות הממתינות (וההחלטות של 30 הימים האחרונים) מכל החנויות */
+export const loadPlatformAddonRequests = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<PlatformAddonRequest[]> => {
+    const { data, error } = await context.supabase.rpc("platform_addon_requests");
+    if (error) throw new Error(error.message);
+    return parsePlatformAddonRequests(data);
+  });
+
+/** "אשר תשלום והפעל תוסף" — התוסף נפתח בחנות והחיוב מסומן "שולם" */
+export const platformApproveAddon = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { requestId: string; tenantId: string; reference?: string }) => ({
+    requestId: uuidOf(input?.requestId, "בקשה לא תקינה"),
+    tenantId: uuidOf(input?.tenantId, "חנות לא תקינה"),
+    reference: String(input?.reference ?? "")
+      .trim()
+      .slice(0, 120),
+  }))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc("platform_approve_addon", {
+      _id: data.requestId,
+      _reference: data.reference || null,
+    });
+    if (error) throw new Error(error.message);
+    // הפיצ'ר נפתח מיד — גם במסכים שקוראים את המנוי מהמטמון של השרת
+    const { invalidateTenantCache } = await import("@/integrations/supabase/tenant.server");
+    invalidateTenantCache(data.tenantId);
+    return { ok: true };
+  });
+
+/** דחיית בקשה (לא שולם / בוטל) — החיוב הממתין נמחק */
+export const platformRejectAddon = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { requestId: string }) => ({
+    requestId: uuidOf(input?.requestId, "בקשה לא תקינה"),
+  }))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc("platform_reject_addon", { _id: data.requestId });
     if (error) throw new Error(error.message);
     return { ok: true };
   });

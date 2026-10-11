@@ -1,6 +1,6 @@
 /**
- * רכישת תוסף (חלק 15) — צד שרת בלבד: מייל למנהלי הפלטפורמה שיש חיוב
- * "ממתין לתשלום" לגבייה, עם קישור לפאנל הפלטפורמה.
+ * רכישת תוסף (חלק 15 / 38) — צד שרת בלבד: מייל למנהלי הפלטפורמה שיש בקשה
+ * לתוסף "ממתינה לתשלום ולאישור", עם קישור ל"בקשות שדרוג" בפאנל הפלטפורמה.
  * כישלון בשליחה לא מבטל את הרכישה (היא כבר נשמרה) — רק נרשם בלוג.
  */
 
@@ -57,20 +57,21 @@ export async function notifyPlatformOfAddonPurchase(input: {
       purchase.expiresAt
         ? `בתוקף עד: ${formatDate(purchase.expiresAt)} (סוף תקופת המנוי)`
         : "תשלום חד-פעמי",
-      `נרכש ע"י: ${input.buyerEmail ?? targets.owner_email ?? "—"}`,
+      `התבקש ע"י: ${input.buyerEmail ?? targets.owner_email ?? "—"}`,
     ];
-    const url = platformUrl();
+    const base = platformUrl();
+    const url = base ? `${base}/upgrades` : null;
     const result = await sendEmail({
       to,
-      subject: `רכישת תוסף: ${purchase.title} — ${targets.store_name} (${formatShekels(purchase.amount)})`,
+      subject: `בקשה לתוסף (ממתין לתשלום): ${purchase.title} — ${targets.store_name} (${formatShekels(purchase.amount)})`,
       html: `<!doctype html>
 <html lang="he" dir="rtl">
   <body style="margin:0;padding:24px;background:#f3f5f3;font-family:Heebo,Arial,sans-serif;color:#12211F;">
     <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;padding:28px;border:1px solid #e2e8e2;">
-      <h1 style="font-size:20px;margin:0 0 12px;">נרכש תוסף — ממתין לגבייה</h1>
-      <p style="margin:0 0 14px;line-height:1.6;">התוסף כבר פעיל בחנות. החיוב נרשם בהיסטוריית המנוי כ"ממתין לתשלום" — אחרי הגבייה סמנו אותו "שולם" בפאנל הפלטפורמה.</p>
+      <h1 style="font-size:20px;margin:0 0 12px;">בקשה לתוסף — ממתין לתשלום ולאישור</h1>
+      <p style="margin:0 0 14px;line-height:1.6;">התוסף <strong>עוד לא פעיל</strong> בחנות. צרו קשר עם בעל החנות לגביית התשלום (קישור לתשלום באשראי או בביט), ואחרי שהתשלום התקבל לחצו "אשר תשלום והפעל תוסף" ב"בקשות שדרוג" בפאנל הפלטפורמה.</p>
       <p style="margin:0;line-height:1.9;">${rows.map(escapeHtml).join("<br />")}</p>
-      ${url ? emailActionButton("לפאנל הפלטפורמה", url) : ""}
+      ${url ? emailActionButton("לבקשות השדרוג בפאנל הפלטפורמה", url) : ""}
       <p style="margin:18px 0 0;color:#9ca3af;font-size:12px;">התראה אוטומטית מחנות התוספים.</p>
     </div>
   </body>

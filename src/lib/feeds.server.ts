@@ -3,8 +3,8 @@
  *  - /robots.txt  — מה גוגל סורק, וקישור למפת האתר
  *  - /sitemap.xml — דף הבית, עמודי החובה (אודות, צור קשר, תקנון, פרטיות,
  *                   ביטולים), קטגוריות ועמוד לכל מוצר — עם תמונת המוצר (חלק 21)
- *  - /zap.xml     — פיד המוצרים לזאפ השוואת מחירים (רק "הצג בזאפ", במלאי, עם מחיר).
- *                   חלק 15: נעול (403) עד שהחנות רוכשת את התוסף "חיבור לזאפ".
+ *  (חלק 38: פיד ה-XML לזאפ /zap.xml הוסר — במקומו עמודי HTML לסורקים של זאפ,
+ *   /zap ו-/zap/cat/{id}, ב-src/lib/zap-pages.server.ts)
  *
  * נקרא מ-src/server.ts (לפני האפליקציה), בתוך runWithTenant — supabaseAdmin
  * כבר מוגבל לחנות של הבקשה.
@@ -27,9 +27,9 @@ import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { plainText } from "@/lib/marketing";
 import { PORTAL_STORE_SLUG } from "@/lib/portal";
 
-export const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml", "/zap.xml"]);
+export const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml"]);
 
-type FeedProduct = {
+export type FeedProduct = {
   id: string;
   sku: string;
   name: string;
@@ -85,7 +85,12 @@ export function xmlEscape(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
-function textResponse(body: string, contentType: string, maxAge: number, status = 200): Response {
+export function textResponse(
+  body: string,
+  contentType: string,
+  maxAge: number,
+  status = 200,
+): Response {
   return new Response(body, {
     status,
     headers: {
@@ -95,7 +100,7 @@ function textResponse(body: string, contentType: string, maxAge: number, status 
   });
 }
 
-async function loadFeedProducts(): Promise<FeedProduct[]> {
+export async function loadFeedProducts(): Promise<FeedProduct[]> {
   const rows: FeedProduct[] = [];
   const PAGE = 1000;
   // עד 50,000 כתובות (המגבלה של קובץ sitemap אחד)
@@ -248,10 +253,10 @@ async function sitemapEntries(origin: string): Promise<SitemapEntry[]> {
 }
 
 // ------------------------------------------------------------
-// zap.xml
+// זאפ — פרטי החנות לעמודי האינדקס (חלק 38: /zap, src/lib/zap-pages.server.ts)
 // ------------------------------------------------------------
 
-type ZapStore = {
+export type ZapStore = {
   name: string;
   origin: string;
   deliveryDays: number;
@@ -260,70 +265,7 @@ type ZapStore = {
   vatMultiplier: number;
 };
 
-function israelDateTime(now: Date): { date: string; time: string } {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Jerusalem",
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    })
-      .formatToParts(now)
-      .map((part) => [part.type, part.value]),
-  );
-  return {
-    date: `${parts["day"]}/${parts["month"]}/${parts["year"]}`,
-    time: `${parts["hour"]}:${parts["minute"]}:${parts["second"]}`,
-  };
-}
-
-const money = (value: number) => (Math.round(value * 100) / 100).toFixed(2);
-
-/**
- * הפיד בתקן של זאפ: STORE ← PRODUCTS ← PRODUCT. המחיר — כולל מע"מ (כמו
- * שהצרכן משלם); דמי המשלוח — שיטת המשלוח הזולה של החנות (0 למוצר דיגיטלי
- * או מעל סף המשלוח החינם).
- */
-export function renderZapFeed(store: ZapStore, products: FeedProduct[], now = new Date()): string {
-  const { date, time } = israelDateTime(now);
-  const items = products
-    .filter((p) => p.show_in_zap && p.in_stock && p.price > 0)
-    .map((p, index) => {
-      const price = p.price * store.vatMultiplier;
-      // סף המשלוח החינם — לפי המחיר בקטלוג (כמו בקופה), לא לפי המחיר עם מע"מ
-      const shipping =
-        p.is_digital ||
-        (store.freeShippingThreshold !== null && p.price >= store.freeShippingThreshold)
-          ? 0
-          : store.shipmentCost;
-      const image = absoluteUrl(store.origin, p.image_url);
-      const fields: [string, string][] = [
-        ["PRODUCT_URL", `${store.origin}/product/${p.id}`],
-        ["PRODUCT_NAME", p.name],
-        ["MODEL", p.barcode ?? p.sku],
-        ["DETAILS", plainText(p.description, 1000)],
-        ["CATALOG_NUMBER", p.sku],
-        ["CURRENCY", "ILS"],
-        ["PRICE", money(price)],
-        ["SHIPMENT_COST", money(shipping)],
-        ["DELIVERY_TIME", String(p.is_digital ? 0 : store.deliveryDays)],
-        ["MANUFACTURER", ""],
-        ["WARRANTY", ""],
-        ["IMAGE", image ?? ""],
-        ["TAX", "1"],
-      ];
-      return `<PRODUCT NUM="${index + 1}">\n${fields
-        .map(([tag, value]) => `<${tag}>${xmlEscape(value)}</${tag}>`)
-        .join("\n")}\n</PRODUCT>`;
-    });
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<STORE URL="${xmlEscape(store.origin)}" DATE="${date}" TIME="${time}" NAME="${xmlEscape(store.name)}">\n<PRODUCTS>\n${items.join("\n")}\n</PRODUCTS>\n</STORE>\n`;
-}
-
-async function zapStore(origin: string): Promise<ZapStore> {
+export async function zapStore(origin: string): Promise<ZapStore> {
   const [{ data: settings }, { data: methods }] = await Promise.all([
     supabaseAdmin
       .from("site_settings")
@@ -382,17 +324,7 @@ export async function renderFeed(pathname: string, request: Request): Promise<Re
         3600,
       );
     }
-    // חלק 15: הפיד נפתח רק עם התוסף "חיבור לזאפ" (גם בפרימיום)
-    if (!zapFeedUnlocked()) {
-      return textResponse(
-        "Zap feed is not enabled for this store (add-on required)\n",
-        "text/plain; charset=utf-8",
-        0,
-        403,
-      );
-    }
-    const [store, products] = await Promise.all([zapStore(origin), loadFeedProducts()]);
-    return textResponse(renderZapFeed(store, products), "application/xml; charset=utf-8", 1800);
+    return textResponse("Not found\n", "text/plain; charset=utf-8", 0, 404);
   } catch (error) {
     console.error("[feeds] failed", pathname, error);
     return textResponse("Temporarily unavailable\n", "text/plain; charset=utf-8", 0, 503);

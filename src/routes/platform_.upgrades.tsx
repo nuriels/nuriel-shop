@@ -14,6 +14,7 @@ import {
   type PlatformUpgradeRequest,
 } from "@/lib/admin-seats";
 import { PlatformShell } from "@/components/platform/PlatformShell";
+import { AddonRequestsPanel } from "@/components/platform/AddonRequestsPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,7 +32,17 @@ export const Route = createFileRoute("/platform_/upgrades")({
 });
 
 function UpgradesPage() {
-  return <PlatformShell active="upgrades">{() => <UpgradeRequestsPanel />}</PlatformShell>;
+  // חלק 38: בקשות לתוספים (ממתינות לתשלום ולאישור) — בראש העמוד
+  return (
+    <PlatformShell active="upgrades">
+      {() => (
+        <div className="space-y-8">
+          <AddonRequestsPanel />
+          <UpgradeRequestsPanel />
+        </div>
+      )}
+    </PlatformShell>
+  );
 }
 
 const STATUS: Record<

@@ -49,7 +49,8 @@ import { cn } from "@/lib/utils";
  *
  * כרטיס לכל תוסף: בחבילת פרימיום (ובתקופת הניסיון) — כפתור ירוק "כלול
  * בחבילה שלך"; בחבילה הבסיסית — "רכש תוסף", שפותח חלון עם המחיר היחסי עד
- * סוף תקופת המנוי ואישור רכישה. הפיצ'ר נפתח מיד אחרי הרכישה.
+ * סוף תקופת המנוי ושליחת בקשה. חלק 38: הבקשה "ממתינה לתשלום / לאישור" —
+ * הפיצ'ר נפתח רק אחרי שמנהל הפלטפורמה מאשר את התשלום ומפעיל.
  * זאפ — כרטיס בולט נפרד: 250 ₪ חד-פעמי לכולם (גם בפרימיום).
  *
  * התשלום — ידני (חלק 28): הרכישה נרשמת ב"המנוי שלי" כממתינה לתשלום, הצוות
@@ -275,6 +276,9 @@ function AddonButton({
       </div>
     );
   }
+  if (state === "pending") {
+    return <PendingBadge offer={offer} />;
+  }
   if (state === "buy") {
     return (
       <Button type="button" size="lg" className="w-full font-bold" onClick={onBuy}>
@@ -298,6 +302,26 @@ function AddonButton({
         רכש תוסף
       </Button>
       {offer.reason && <p className="text-center text-xs text-muted-foreground">{offer.reason}</p>}
+    </div>
+  );
+}
+
+/** חלק 38: נשלחה בקשה — ממתין לתשלום ולאישור מנהל הפלטפורמה */
+function PendingBadge({ offer }: { offer: AddonOffer }) {
+  return (
+    <div
+      role="status"
+      data-testid={`addon-pending-${offer.addon}`}
+      className="flex min-h-11 w-full flex-col items-center justify-center gap-0.5 rounded-md border-2 border-amber-400 bg-amber-50 px-4 py-1.5 text-center text-sm font-bold text-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+    >
+      <span className="inline-flex items-center gap-2">
+        <Clock className="size-4" aria-hidden="true" />
+        ממתין לתשלום / לאישור
+      </span>
+      <span className="text-xs font-medium">
+        {offer.requestedAt ? `הבקשה נשלחה ב-${formatDate(offer.requestedAt)} · ` : ""}
+        ניצור איתכם קשר לתשלום
+      </span>
     </div>
   );
 }
@@ -376,7 +400,9 @@ function ZapCard({ offer, onBuy }: { offer: AddonOffer; onBuy: () => void }) {
                 </Button>
               </li>
               <li className="space-y-2">
-                <p className="font-semibold">2. מסרו לתמיכה של זאפ את קובץ המוצרים (XML)</p>
+                <p className="font-semibold">
+                  2. מסרו לתמיכה של זאפ את הקישור לעמוד האינדקס (קטגוריות ← מוצרים)
+                </p>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <code
                     dir="ltr"
@@ -428,6 +454,8 @@ function ZapCard({ offer, onBuy }: { offer: AddonOffer; onBuy: () => void }) {
               <Check className="size-4" aria-hidden="true" />
               התוסף פעיל
             </div>
+          ) : state === "pending" ? (
+            <PendingBadge offer={offer} />
           ) : (
             <Button
               type="button"
@@ -450,7 +478,7 @@ function ZapCard({ offer, onBuy }: { offer: AddonOffer; onBuy: () => void }) {
           )}
           {!owned && !comingSoon && (
             <p className="text-xs text-muted-foreground">
-              הקישור להרשמה לזאפ וקובץ המוצרים יופיעו כאן מיד אחרי הרכישה.
+              הקישור להרשמה לזאפ והקישור לעמוד האינדקס יופיעו כאן אחרי אישור התשלום והפעלת התוסף.
             </p>
           )}
         </div>
@@ -500,15 +528,18 @@ function PurchaseDialog({
     if (addon) void loadQuote();
   }, [addon, loadQuote]);
 
-  // הרכישה נרשמת "ממתין לתשלום" ב"המנוי שלי"; הצוות מתאם את הגבייה (חלק 28)
+  // חלק 38: הרכישה = בקשה "ממתינה לתשלום / לאישור". הצוות יוצר קשר לגבייה,
+  // ורק אחרי אישור התשלום ע"י מנהל הפלטפורמה התוסף מופעל
   const confirm = async () => {
     if (!fresh || fresh.amount === null) return;
     setBusy(true);
     setError(null);
     try {
       const result = await buy({ data: { addon: fresh.addon, expectedAmount: fresh.amount } });
-      toast.success(`התוסף "${result.title}" הופעל!`, {
-        description: "הפיצ'ר פתוח עכשיו בחנות. החיוב נוסף לחשבון המנוי.",
+      toast.success(`הבקשה לתוסף "${result.title}" נשלחה`, {
+        description:
+          "צוות הפלטפורמה ייצור איתכם קשר עם קישור לתשלום (אשראי או ביט). התוסף יופעל מיד אחרי אישור התשלום.",
+        duration: 8000,
       });
       await router.invalidate();
       onPurchased();
@@ -530,7 +561,7 @@ function PurchaseDialog({
         <DialogHeader className="text-right">
           <DialogTitle className="flex items-center gap-2">
             <Puzzle className="size-5 text-accent" aria-hidden="true" />
-            רכישת תוסף
+            בקשה לרכישת תוסף
           </DialogTitle>
           <DialogDescription>{shown?.title}</DialogDescription>
         </DialogHeader>
@@ -578,8 +609,12 @@ function PurchaseDialog({
 
             <ul className="space-y-1.5 text-xs leading-5 text-muted-foreground">
               <li className="flex gap-2">
-                <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
-                הפיצ'ר נפתח מיד אחרי האישור.
+                <Clock className="mt-0.5 size-3.5 shrink-0 text-amber-600" aria-hidden="true" />
+                <span>
+                  <strong className="text-foreground">התוסף לא נפתח מיד:</strong> הבקשה נשלחת לצוות
+                  הפלטפורמה, שייצור איתכם קשר עם קישור לתשלום (אשראי או ביט). התוסף יופעל מיד אחרי
+                  אישור התשלום.
+                </span>
               </li>
               {monthly && (
                 <li className="flex gap-2">
@@ -590,8 +625,7 @@ function PurchaseDialog({
               )}
               <li className="flex gap-2">
                 <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
-                החיוב נוסף ל&quot;המנוי שלי&quot; כממתין לתשלום, והצוות שלנו יתאם איתכם את הגבייה
-                (העברה בנקאית או בתיאום).
+                הבקשה והחיוב יופיעו ב&quot;המנוי שלי&quot; כממתינים לתשלום עד האישור.
               </li>
             </ul>
 
@@ -626,7 +660,7 @@ function PurchaseDialog({
                 ) : (
                   <ShoppingBag className="size-4" />
                 )}
-                {`אישור רכישה · ${formatShekels(fresh.amount)}`}
+                {`שליחת בקשה · ${formatShekels(fresh.amount)}`}
               </Button>
             </div>
           </div>

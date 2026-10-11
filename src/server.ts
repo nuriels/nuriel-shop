@@ -24,10 +24,12 @@ import {
   () => maybeCurrentTenant()?.id ?? null;
 
 // קבצים סטטיים (assets, favicon...) לא צריכים זיהוי חנות — כך גם ה-healthcheck
-// לא תלוי במסד. חוץ מ-robots.txt / sitemap.xml / zap.xml (חלק 14): הם נוצרים
-// לכל חנות מהמסד (src/lib/feeds.server.ts).
+// לא תלוי במסד. חוץ מ-robots.txt / sitemap.xml (חלק 14): הם נוצרים לכל חנות
+// מהמסד (src/lib/feeds.server.ts). חלק 38: /zap.xml הוסר — עמודי ה-HTML לזאפ
+// (/zap, /zap/cat/{id}) נוצרים ב-src/lib/zap-pages.server.ts.
 const STATIC_PATH = /^\/assets\/|\.[a-z0-9]{2,5}$/i;
-const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml", "/zap.xml"]);
+const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml"]);
+const isZapPage = (pathname: string) => pathname === "/zap" || pathname.startsWith("/zap/");
 // חלק 24: האייקונים ותמונת השיתוף (/pwa/…) נוצרים לפי החנות — לא קובץ סטטי בלי חנות
 const STORE_ASSET_PATH = /^\/pwa\//;
 // הזמנות ביט שלא שולמו תוך 24 שעות מבוטלות (המלאי חוזר) — בדיקה כל 5 דקות
@@ -121,6 +123,13 @@ export default {
     try {
       const host = requestHost(request);
       const pathname = new URL(request.url).pathname;
+      // חלק 38: פיד ה-XML לזאפ הוסר — הסורקים עוברים לעמודי ה-HTML (/zap)
+      if (pathname === "/zap.xml") {
+        return new Response("Gone — the Zap index moved to /zap\n", {
+          status: 410,
+          headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+        });
+      }
       if (
         STATIC_PATH.test(pathname) &&
         !FEED_PATHS.has(pathname) &&
@@ -138,6 +147,11 @@ export default {
       if (FEED_PATHS.has(pathname)) {
         const { renderFeed } = await import("./lib/feeds.server");
         return await runWithTenant(host, tenant, () => renderFeed(pathname, request));
+      }
+      // חלק 38: עמודי האינדקס לסורקים של זאפ — HTML נקי, בלי ה-Layout של החנות
+      if (isZapPage(pathname)) {
+        const { renderZapPage } = await import("./lib/zap-pages.server");
+        return await runWithTenant(host, tenant, () => renderZapPage(pathname, request));
       }
       return await runWithTenant(
         host,

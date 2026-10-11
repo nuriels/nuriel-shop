@@ -2796,6 +2796,9 @@ export type Database = {
       addon_purchase: { Args: { _addon: string; _expected?: number | null }; Returns: Json };
       platform_grant_addon: { Args: { _tenant: string; _addon: string }; Returns: Json };
       platform_cancel_addon: { Args: { _id: string }; Returns: Json };
+      platform_addon_requests: { Args: never; Returns: Json };
+      platform_approve_addon: { Args: { _id: string; _reference?: string | null }; Returns: Json };
+      platform_reject_addon: { Args: { _id: string }; Returns: Json };
       platform_mark_billing_paid: {
         Args: { _id: string; _reference?: string | null };
         Returns: undefined;

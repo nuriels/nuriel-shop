@@ -179,8 +179,12 @@ export function promoSeenKey(text: string, coupon: string | null): string {
 }
 
 /** הקישור לפיד של החנות לזאפ */
+/**
+ * חלק 38: עמוד האינדקס לסורקים של זאפ — HTML פשוט: קטגוריות → מוצרים
+ * (/zap → /zap/cat/{id} → /product/{id}). במקום קובץ ה-XML הקודם (/zap.xml).
+ */
 export function zapFeedUrl(origin: string): string {
-  return `${origin.replace(/\/$/, "")}/zap.xml`;
+  return `${origin.replace(/\/$/, "")}/zap`;
 }
 
 /** דף ההצטרפות של זאפ לבעלי חנויות */

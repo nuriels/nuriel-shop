@@ -420,7 +420,8 @@ export function MarketingPanel() {
             חיבור לזאפ השוואת מחירים
           </CardTitle>
           <CardDescription>
-            זאפ קורא את המוצרים שלכם מקובץ XML שמתעדכן לבד — מחירים, מלאי ותמונות תמיד מעודכנים.
+            הסורקים של זאפ עוברים על עמודי אינדקס פשוטים (קטגוריות ← מוצרים) שמתעדכנים לבד — מחירים
+            ומלאי תמיד מעודכנים.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5 pt-5">
@@ -455,7 +456,7 @@ export function MarketingPanel() {
                 2
               </span>
               <div className="min-w-0 flex-1 space-y-2">
-                <p className="font-semibold">מסרו לתמיכה של זאפ את הקישור לקובץ המוצרים</p>
+                <p className="font-semibold">מסרו לתמיכה של זאפ את הקישור לעמוד האינדקס</p>
                 {zapUnlocked ? (
                   <>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -474,21 +475,22 @@ export function MarketingPanel() {
                       className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                     >
                       <ExternalLink className="size-3.5" aria-hidden="true" />
-                      צפייה בקובץ
+                      צפייה בעמוד האינדקס
                     </a>
                   </>
                 ) : (
                   <div className="space-y-2 rounded-lg border border-dashed border-orange-300 bg-orange-50/60 p-3 text-sm dark:border-orange-800 dark:bg-orange-950/30">
                     <p className="flex flex-wrap items-center gap-2 font-semibold">
                       <Lock className="size-4 text-orange-700" aria-hidden="true" />
-                      הקישור לקובץ ייפתח עם התוסף "חיבור לזאפ"
+                      הקישור לעמוד האינדקס ייפתח עם התוסף "חיבור לזאפ"
                       <span className="rounded-full bg-orange-600 px-2 py-0.5 text-[11px] font-bold text-white">
                         {ZAP_ADDON_PRICE_LABEL}
                       </span>
                     </p>
                     <p className="text-xs leading-5 text-muted-foreground">
                       זאפ מאשר חנויות רק לאחר חיבור סליקת אשראי פעילה. אחרי רכישת התוסף יופיעו כאן
-                      הקישור להרשמה והקישור לקובץ — ובינתיים אפשר כבר לבחור אילו מוצרים יופיעו.
+                      הקישור להרשמה והקישור לעמוד האינדקס — ובינתיים אפשר כבר לבחור אילו מוצרים
+                      יופיעו.
                     </p>
                     <Link
                       to="/admin"

@@ -232,9 +232,9 @@ SELECT tests.run('billing: addons_store has no payments_ready',
   :OA, NULL, 1);
 SELECT tests.run('billing: buying an addon works without card clearing',
   $$SELECT public.addon_purchase('google_sso', NULL)$$, :OA);
-SELECT tests.check('billing: the addon is active and the charge is due (awaiting manual payment)',
+SELECT tests.check('billing: the addon request is pending (part 38) and the charge is due (awaiting manual payment)',
   $$SELECT EXISTS (SELECT 1 FROM public.tenant_addons WHERE tenant_id = '70000000-0000-0000-0000-00000000000a'
-                     AND addon_name = 'google_sso' AND status = 'active')
+                     AND addon_name = 'google_sso' AND status = 'pending')
        AND EXISTS (SELECT 1 FROM public.billing_history WHERE tenant_id = '70000000-0000-0000-0000-00000000000a'
                      AND kind = 'addon' AND addon_name = 'google_sso' AND payment_status = 'due' AND amount > 0)$$);
 SELECT tests.run('billing: platform admin records a bank transfer (platform_record_payment)',

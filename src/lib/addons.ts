@@ -48,7 +48,7 @@ export const ADDON_DEFAULTS: Record<
     includedInPremium: true,
   },
   zapier: {
-    title: "חיבור לזאפ (Zapier)",
+    title: "חיבור לזאפ — השוואת מחירים",
     billing: "one_time",
     price: 250,
     includedInPremium: false,
@@ -66,11 +66,11 @@ export const FEATURE_ADDON: Partial<Record<FeatureKey, AddonName>> = {
 /** הטקסט מתחת לכרטיס זאפ */
 /** הטקסט בכרטיס זאפ לפני הרכישה (חלק 16 — פתוח לרכישה) */
 export const ZAP_ADDON_NOTE =
-  "אתר זאפ מאשר חנויות רק לאחר חיבור סליקת אשראי פעילה אצל ספק סליקה. מיד אחרי הרכישה יופיעו כאן הקישור להרשמה לזאפ והקישור לקובץ ה-XML למסירה לתמיכה של זאפ.";
+  "אתר זאפ מאשר חנויות רק לאחר חיבור סליקת אשראי פעילה אצל ספק סליקה. אחרי אישור התשלום והפעלת התוסף יופיעו כאן הקישור להרשמה לזאפ והקישור לעמודי האינדקס של החנות — למסירה לתמיכה של זאפ.";
 
 /** כשזאפ סגור לרכישה (platform_addons.available = false) */
 export const ZAP_ADDON_NOTE_SOON =
-  "אתר זאפ מאשר חנויות רק לאחר חיבור סליקת אשראי פעילה. הפיצ'ר ייפתח לרכישה מיד עם השלמת חיבור הקופה. בינתיים, היכנסו להירשם בזאפ דרך הקישור: https://www.zap.co.il/joinzap.aspx. לאחר שנסדיר את האשראי והפיצ'ר ייפתח, תוכלו להעתיק את קובץ ה-XML לתמיכה של זאפ.";
+  "אתר זאפ מאשר חנויות רק לאחר חיבור סליקת אשראי פעילה. הפיצ'ר ייפתח לרכישה מיד עם השלמת חיבור הקופה. בינתיים, היכנסו להירשם בזאפ דרך הקישור: https://www.zap.co.il/joinzap.aspx. לאחר שנסדיר את האשראי והפיצ'ר ייפתח, תוכלו להעתיק את הקישור לעמודי האינדקס לתמיכה של זאפ.";
 
 export const ZAP_COMING_SOON = "בקרוב - ממתין לאישור חברות אשראי";
 
@@ -89,6 +89,12 @@ export type AddonOffer = {
   includedInPremium: boolean;
   /** כבר נרכש ופעיל */
   owned: boolean;
+  /** חלק 38: נשלחה בקשה — ממתינה לתשלום ולאישור מנהל הפלטפורמה (עוד לא פעיל) */
+  pending: boolean;
+  /** מתי נשלחה הבקשה הממתינה */
+  requestedAt: string | null;
+  /** הסכום לתשלום בבקשה הממתינה */
+  pendingAmount: number | null;
   /** עד מתי התוסף הפעיל בתוקף (null = לתמיד / לא נרכש) */
   expiresAt: string | null;
   canBuy: boolean;
@@ -114,6 +120,8 @@ export type AddonPurchase = {
   title: string;
   amount: number;
   expiresAt: string | null;
+  /** חלק 38: "pending" — הבקשה נשלחה; התוסף יופעל רק אחרי אישור מנהל הפלטפורמה */
+  status: "pending" | "active";
 };
 
 type Raw = Record<string, unknown>;
@@ -151,6 +159,9 @@ export function parseAddonOffer(raw: unknown): AddonOffer | null {
         ? row["included_in_premium"]
         : defaults.includedInPremium,
     owned: row["owned"] === true,
+    pending: row["pending"] === true,
+    requestedAt: strOrNull(row["requested_at"]),
+    pendingAmount: numOrNull(row["pending_amount"]),
     expiresAt: strOrNull(row["expires_at"]),
     canBuy: row["can_buy"] === true,
     reason: strOrNull(row["reason"]),
@@ -184,6 +195,8 @@ export function parseAddonPurchase(raw: unknown): AddonPurchase {
     title: str(row["title"]) || ADDON_DEFAULTS[addon].title,
     amount: numOrNull(row["amount"]) ?? 0,
     expiresAt: strOrNull(row["expires_at"]),
+    // חלק 38: רכישה = בקשה ממתינה; רק מנהל הפלטפורמה מפעיל
+    status: row["status"] === "active" ? "active" : "pending",
   };
 }
 
@@ -232,11 +245,12 @@ export function addonPriceLabel(offer: Pick<AddonOffer, "billing" | "price">): s
 }
 
 /** מצב הכפתור בכרטיס */
-export type AddonButtonState = "included" | "owned" | "buy" | "coming_soon" | "blocked";
+export type AddonButtonState = "included" | "owned" | "pending" | "buy" | "coming_soon" | "blocked";
 
 export function addonButtonState(offer: AddonOffer): AddonButtonState {
   if (!offer.available) return "coming_soon";
   if (offer.owned) return "owned";
+  if (offer.pending) return "pending";
   if (offer.included) return "included";
   if (offer.canBuy) return "buy";
   return "blocked";
@@ -252,14 +266,17 @@ export type PlatformAddonRow = {
   title: string;
   billing: "monthly" | "one_time";
   price: number;
-  status: "active" | "canceled";
+  status: "pending" | "active" | "canceled";
   active: boolean;
+  /** חלק 38: בקשה שממתינה לתשלום ולאישור מנהל הפלטפורמה */
+  pending: boolean;
+  approvedAt: string | null;
   expiresAt: string | null;
   amount: number;
   source: "purchase" | "grant";
   purchasedAt: string;
   canceledAt: string | null;
-  endedReason: "expired" | "canceled" | null;
+  endedReason: "expired" | "canceled" | "rejected" | null;
 };
 
 export function parsePlatformAddons(raw: unknown): PlatformAddonRow[] {
@@ -276,14 +293,82 @@ export function parsePlatformAddons(raw: unknown): PlatformAddonRow[] {
       title: String(row["title"] ?? addon),
       billing: row["billing"] === "one_time" ? "one_time" : "monthly",
       price: Number(row["price"] ?? 0) || 0,
-      status: row["status"] === "canceled" ? "canceled" : "active",
+      status:
+        row["status"] === "canceled"
+          ? "canceled"
+          : row["status"] === "pending"
+            ? "pending"
+            : "active",
       active: row["active"] === true,
+      pending: row["status"] === "pending",
+      approvedAt: typeof row["approved_at"] === "string" ? row["approved_at"] : null,
       expiresAt: typeof row["expires_at"] === "string" ? row["expires_at"] : null,
       amount: Number(row["amount"] ?? 0) || 0,
       source: row["source"] === "grant" ? "grant" : "purchase",
       purchasedAt: String(row["purchased_at"] ?? ""),
       canceledAt: typeof row["canceled_at"] === "string" ? row["canceled_at"] : null,
-      endedReason: ended === "expired" || ended === "canceled" ? ended : null,
+      endedReason:
+        ended === "expired" || ended === "canceled" || ended === "rejected" ? ended : null,
+    });
+  }
+  return rows;
+}
+
+// ------------------------------------------------------------
+// חלק 38: בקשות לתוספים — לוח הבקרה של מנהל הפלטפורמה
+// ------------------------------------------------------------
+
+export type PlatformAddonRequest = {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  ownerEmail: string | null;
+  requestedByEmail: string | null;
+  addon: AddonName;
+  title: string;
+  billing: "monthly" | "one_time";
+  status: "pending" | "active" | "canceled";
+  amount: number;
+  expiresAt: string | null;
+  requestedAt: string;
+  approvedAt: string | null;
+  approvedReference: string | null;
+  rejected: boolean;
+  billingStatus: "due" | "paid" | null;
+};
+
+export function parsePlatformAddonRequests(raw: unknown): PlatformAddonRequest[] {
+  if (!Array.isArray(raw)) return [];
+  const rows: PlatformAddonRequest[] = [];
+  for (const entry of raw) {
+    const row = obj(entry);
+    const addon = asAddonName(row["addon"]);
+    if (!addon) continue;
+    rows.push({
+      id: str(row["id"]),
+      tenantId: str(row["tenant_id"]),
+      tenantName: str(row["tenant_name"]),
+      tenantSlug: str(row["tenant_slug"]),
+      ownerEmail: strOrNull(row["owner_email"]),
+      requestedByEmail: strOrNull(row["requested_by_email"]),
+      addon,
+      title: str(row["title"]) || ADDON_DEFAULTS[addon].title,
+      billing: row["billing"] === "one_time" ? "one_time" : "monthly",
+      status:
+        row["status"] === "active"
+          ? "active"
+          : row["status"] === "pending"
+            ? "pending"
+            : "canceled",
+      amount: numOrNull(row["amount"]) ?? 0,
+      expiresAt: strOrNull(row["expires_at"]),
+      requestedAt: str(row["requested_at"]),
+      approvedAt: strOrNull(row["approved_at"]),
+      approvedReference: strOrNull(row["approved_reference"]),
+      rejected: row["ended_reason"] === "rejected",
+      billingStatus:
+        row["billing_status"] === "paid" ? "paid" : row["billing_status"] === "due" ? "due" : null,
     });
   }
   return rows;

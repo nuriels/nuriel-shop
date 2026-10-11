@@ -70,7 +70,7 @@ export function PlatformShell({
                   active={active === "upgrades"}
                   icon={<UserPlus className="size-4" />}
                 >
-                  בקשות שדרוג
+                  בקשות שדרוג ותוספים
                 </NavLink>
               </nav>
             )}

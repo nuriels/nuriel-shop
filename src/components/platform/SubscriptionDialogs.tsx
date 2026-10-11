@@ -546,9 +546,13 @@ export function BillingHistoryDialog({
                             ? addon.expiresAt
                               ? ` · פעיל עד ${formatDate(addon.expiresAt)}`
                               : " · פעיל ללא תפוגה"
-                            : addon.endedReason === "canceled"
-                              ? " · בוטל"
-                              : " · הסתיים"}
+                            : addon.pending
+                              ? ' · ממתין לתשלום ולאישור (ב"בקשות שדרוג")'
+                              : addon.endedReason === "rejected"
+                                ? " · הבקשה נדחתה"
+                                : addon.endedReason === "canceled"
+                                  ? " · בוטל"
+                                  : " · הסתיים"}
                         </p>
                       </div>
                       {addon.active && store && (
