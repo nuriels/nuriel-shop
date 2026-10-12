@@ -1,13 +1,15 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Clock,
   FileText,
   KeyRound,
+  Loader2,
   Minus,
   Package,
   Plus,
+  Share2,
   ShoppingBag,
   Trash2,
 } from "lucide-react";
@@ -51,6 +53,7 @@ import { ProductRecommendations } from "@/components/sales/ProductRecommendation
 import { useRestState } from "@/hooks/useRestState";
 import { REST_CHECKOUT_MESSAGE } from "@/lib/rest-window";
 import { FreeShippingBar } from "@/components/sales/FreeShippingBar";
+import { createSharedCart, sharedCartPath, shareLink } from "@/lib/shared-cart";
 import { CartGiftLines, PromotionHintLine } from "@/components/sales/CartGifts";
 
 /** מצב הסל: הזמנה עם מחירים, או בקשת הצעת מחיר (כשלמוצרים אין מחיר) */
@@ -370,8 +373,43 @@ export function OrderCartDrawer({
               אין צורך בהרשמה — אפשר להזמין כאורח
             </p>
           )}
+          {/* חלק 39: שיתוף העגלה בקישור — מי שפותח בוחר מה להוסיף לעגלה שלו */}
+          {items.length > 0 && <ShareCartButton items={items} />}
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/** חלק 39: "שיתוף העגלה" — יוצר קישור /cart/{code} ומשתף / מעתיק אותו */
+function ShareCartButton({ items }: { items: CartItem[] }) {
+  const [busy, setBusy] = useState(false);
+  const share = async () => {
+    setBusy(true);
+    try {
+      const code = await createSharedCart(items);
+      await shareLink(`${window.location.origin}${sharedCartPath(code)}`, "העגלה שלי");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "יצירת הקישור נכשלה");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className="w-full"
+      onClick={() => void share()}
+      disabled={busy}
+      data-testid="share-cart"
+    >
+      {busy ? (
+        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+      ) : (
+        <Share2 className="size-4" aria-hidden="true" />
+      )}
+      שיתוף העגלה בקישור
+    </Button>
   );
 }

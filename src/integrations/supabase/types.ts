@@ -2797,6 +2797,8 @@ export type Database = {
       platform_grant_addon: { Args: { _tenant: string; _addon: string }; Returns: Json };
       platform_cancel_addon: { Args: { _id: string }; Returns: Json };
       platform_addon_requests: { Args: never; Returns: Json };
+      create_shared_cart: { Args: { _items: Json }; Returns: string };
+      get_shared_cart: { Args: { _code: string }; Returns: Json };
       platform_approve_addon: { Args: { _id: string; _reference?: string | null }; Returns: Json };
       platform_reject_addon: { Args: { _id: string }; Returns: Json };
       platform_mark_billing_paid: {

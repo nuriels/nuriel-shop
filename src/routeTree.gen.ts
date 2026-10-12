@@ -37,6 +37,7 @@ import { Route as AdminDashboardRouteImport } from './routes/admin_.dashboard'
 import { Route as AdminOrdersRouteImport } from './routes/admin_.orders'
 import { Route as AdminPagesRouteImport } from './routes/admin_.pages'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
+import { Route as CartCodeRouteImport } from './routes/cart.$code'
 import { Route as CourierTokenRouteImport } from './routes/courier.$token'
 import { Route as PagesSlugRouteImport } from './routes/pages.$slug'
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
@@ -196,6 +197,11 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
   path: '/admin/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CartCodeRoute = CartCodeRouteImport.update({
+  id: '/cart/$code',
+  path: '/cart/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CourierTokenRoute = CourierTokenRouteImport.update({
   id: '/courier/$token',
   path: '/courier/$token',
@@ -318,6 +324,7 @@ export interface FileRoutesByFullPath {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pages': typeof AdminPagesRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/plans': typeof PlatformPlansRoute
@@ -366,6 +373,7 @@ export interface FileRoutesByTo {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pages': typeof AdminPagesRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/plans': typeof PlatformPlansRoute
@@ -415,6 +423,7 @@ export interface FileRoutesById {
   '/admin_/orders': typeof AdminOrdersRoute
   '/admin_/pages': typeof AdminPagesRoute
   '/admin_/settings': typeof AdminSettingsRoute
+  '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform_/plans': typeof PlatformPlansRoute
@@ -465,6 +474,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/pages'
     | '/admin/settings'
+    | '/cart/$code'
     | '/courier/$token'
     | '/pages/$slug'
     | '/platform/plans'
@@ -513,6 +523,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/pages'
     | '/admin/settings'
+    | '/cart/$code'
     | '/courier/$token'
     | '/pages/$slug'
     | '/platform/plans'
@@ -561,6 +572,7 @@ export interface FileRouteTypes {
     | '/admin_/orders'
     | '/admin_/pages'
     | '/admin_/settings'
+    | '/cart/$code'
     | '/courier/$token'
     | '/pages/$slug'
     | '/platform_/plans'
@@ -610,6 +622,7 @@ export interface RootRouteChildren {
   AdminOrdersRoute: typeof AdminOrdersRoute
   AdminPagesRoute: typeof AdminPagesRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
+  CartCodeRoute: typeof CartCodeRoute
   CourierTokenRoute: typeof CourierTokenRoute
   PagesSlugRoute: typeof PagesSlugRoute
   PlatformPlansRoute: typeof PlatformPlansRoute
@@ -828,6 +841,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/cart/$code': {
+      id: '/cart/$code'
+      path: '/cart/$code'
+      fullPath: '/cart/$code'
+      preLoaderRoute: typeof CartCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/courier/$token': {
       id: '/courier/$token'
       path: '/courier/$token'
@@ -986,6 +1006,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminOrdersRoute: AdminOrdersRoute,
   AdminPagesRoute: AdminPagesRoute,
   AdminSettingsRoute: AdminSettingsRoute,
+  CartCodeRoute: CartCodeRoute,
   CourierTokenRoute: CourierTokenRoute,
   PagesSlugRoute: PagesSlugRoute,
   PlatformPlansRoute: PlatformPlansRoute,

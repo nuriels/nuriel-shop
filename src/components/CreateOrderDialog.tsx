@@ -482,6 +482,7 @@ export function CreateOrderDialog({
                         addLabel="הוספה"
                         onAddToCart={handleAddFromCatalog}
                         emptyText="לא נמצאו מוצרים"
+                        productDialog
                       />
                     </div>
                   </CategoryBrowser>

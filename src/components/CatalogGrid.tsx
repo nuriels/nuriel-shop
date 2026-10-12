@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Flame, KeyRound, Package, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -222,6 +223,7 @@ export function CatalogGrid({
   addLabel = "הוספה לסל",
   onAddToCart,
   onOpenProduct,
+  productDialog = false,
 }: {
   products: CatalogItem[];
   emptyText?: string;
@@ -230,8 +232,14 @@ export function CatalogGrid({
   onAddToCart?: AddToCart | undefined;
   /** לחיצה על מוצר: ברירת מחדל — חלון פרטים; בעמוד מוצר — מעבר לעמוד שלו */
   onOpenProduct?: ((product: CatalogItem) => void) | undefined;
+  /**
+   * חלק 39: לחיצה על מוצר עוברת לעמוד המוצר (/product/{id}) — כתובת אמיתית
+   * לשיתוף, "חזור" מחזיר לקטלוג. true = חלון פרטים צף (חלון יצירת הזמנה בפאנל)
+   */
+  productDialog?: boolean;
 }) {
   const ratings = useRatingSummaries();
+  const navigate = useNavigate();
   const [details, setDetails] = useState<CatalogItem | null>(null);
   const [picking, setPicking] = useState<{
     item: CatalogItem;
@@ -259,7 +267,13 @@ export function CatalogGrid({
             canAdd={canAdd}
             addLabel={addLabel}
             onAddToCart={onAddToCart}
-            onOpen={() => (onOpenProduct ? onOpenProduct(product) : setDetails(product))}
+            onOpen={() =>
+              onOpenProduct
+                ? onOpenProduct(product)
+                : productDialog
+                  ? setDetails(product)
+                  : void navigate({ to: "/product/$productId", params: { productId: product.id } })
+            }
             onPick={(variant) => setPicking({ item: product, variant })}
             rating={ratings.get(product.id)}
           />

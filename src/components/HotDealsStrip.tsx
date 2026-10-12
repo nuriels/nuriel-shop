@@ -1,8 +1,8 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { VatNote } from "@/components/VatNote";
 import { Flame, Package, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ProductDetailDialog } from "@/components/ProductDetailDialog";
 import { QuantityDialog } from "@/components/QuantityDialog";
 import type { AddToCart } from "@/lib/cart";
 import {
@@ -26,7 +26,10 @@ export function HotDealsStrip({
   addLabel?: string;
   onAddToCart?: AddToCart | undefined;
 }) {
-  const [details, setDetails] = useState<CatalogItem | null>(null);
+  // חלק 39: לחיצה על מבצע עוברת לעמוד המוצר (כתובת לשיתוף)
+  const navigate = useNavigate();
+  const openProduct = (item: CatalogItem) =>
+    void navigate({ to: "/product/$productId", params: { productId: item.id } });
   const [picking, setPicking] = useState<CatalogItem | null>(null);
   if (items.length === 0) return null;
 
@@ -47,7 +50,7 @@ export function HotDealsStrip({
           >
             <button
               type="button"
-              onClick={() => setDetails(item)}
+              onClick={() => openProduct(item)}
               aria-label={`פרטים על ${item.name}`}
               className="relative flex h-28 cursor-pointer items-center justify-center bg-secondary/60 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
@@ -70,7 +73,7 @@ export function HotDealsStrip({
             <div className="flex flex-1 flex-col gap-1.5 p-3">
               <button
                 type="button"
-                onClick={() => setDetails(item)}
+                onClick={() => openProduct(item)}
                 title={item.name}
                 className="line-clamp-2 min-h-10 break-words rounded text-start text-sm font-bold leading-snug text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
@@ -127,17 +130,6 @@ export function HotDealsStrip({
           onAdd={(it, units, variant) => onAddToCart(it, units, { variant })}
         />
       )}
-
-      <ProductDetailDialog
-        product={details}
-        onOpenChange={(open) => {
-          if (!open) setDetails(null);
-        }}
-        canAdd={canAdd}
-        addLabel={addLabel}
-        onAddToCart={onAddToCart}
-        onShowProduct={setDetails}
-      />
     </section>
   );
 }

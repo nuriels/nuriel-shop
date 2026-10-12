@@ -290,10 +290,11 @@ export function ProductDetailView({
               <button
                 type="button"
                 onClick={() => void shareProduct(product)}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                data-testid="share-product"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <Link2 className="size-3.5" aria-hidden="true" />
-                שיתוף
+                <Link2 className="size-4" aria-hidden="true" />
+                שיתוף המוצר
               </button>
             </div>
             {title}
