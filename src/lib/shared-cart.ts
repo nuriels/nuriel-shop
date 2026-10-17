@@ -8,6 +8,44 @@ import type { CartItem } from "@/lib/orders";
 
 export type SharedCartLine = { productId: string; variantId: string | null; quantity: number };
 
+/** חלק 39ב: עגלה ששותפה (cart) או הצעת מחיר מהחנות (quote) */
+export type SharedCart = {
+  kind: "cart" | "quote";
+  lines: SharedCartLine[];
+  customerName: string | null;
+  note: string | null;
+  expiresAt: string | null;
+};
+
+type QuoteLine = { productId: string; variantId: string | null; quantity: number };
+
+/** חלק 39ב: הצעת מחיר מהקופה (צוות בלבד) → קוד קישור */
+export async function createQuote(input: {
+  lines: QuoteLine[];
+  customerName: string;
+  note: string;
+  validDays: number;
+}): Promise<string> {
+  const { data, error } = await supabase.rpc("create_quote", {
+    _items: linesPayload(input.lines),
+    _customer_name: input.customerName,
+    _note: input.note,
+    _valid_days: input.validDays,
+  });
+  if (error) throw new Error(error.message);
+  return String(data);
+}
+
+function linesPayload(lines: QuoteLine[]) {
+  return lines
+    .filter((line) => line.quantity > 0)
+    .map((line) => ({
+      product_id: line.productId,
+      ...(line.variantId ? { variant_id: line.variantId } : {}),
+      quantity: Math.round(line.quantity),
+    }));
+}
+
 export const SHARED_CART_CODE = /^[A-Za-z0-9]{8}$/;
 
 export function sharedCartPath(code: string): string {
@@ -16,22 +54,35 @@ export function sharedCartPath(code: string): string {
 
 /** שורות העגלה → קוד קישור (נשמר במסד) */
 export async function createSharedCart(items: CartItem[]): Promise<string> {
-  const payload = items
-    .filter((item) => item.quantity > 0)
-    .map((item) => ({
-      product_id: item.productId,
-      ...(item.variantId ? { variant_id: item.variantId } : {}),
-      quantity: Math.round(item.quantity),
-    }));
+  const payload = linesPayload(
+    items.map((item) => ({
+      productId: item.productId,
+      variantId: item.variantId ?? null,
+      quantity: item.quantity,
+    })),
+  );
   const { data, error } = await supabase.rpc("create_shared_cart", { _items: payload });
   if (error) throw new Error(error.message);
   return String(data);
 }
 
-/** התשובה מהמסד → שורות (null = הקישור לא קיים / פג תוקף) */
-export function parseSharedCart(raw: unknown): SharedCartLine[] | null {
+/** התשובה מהמסד → עגלה / הצעה (null = הקישור לא קיים / פג תוקף) */
+export function parseSharedCart(raw: unknown): SharedCart | null {
   if (!raw || typeof raw !== "object") return null;
-  const items = (raw as { items?: unknown }).items;
+  const record = raw as Record<string, unknown>;
+  const lines = parseLines(record["items"]);
+  if (!lines) return null;
+  const text = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
+  return {
+    kind: record["kind"] === "quote" ? "quote" : "cart",
+    lines,
+    customerName: text(record["customer_name"]),
+    note: text(record["note"]),
+    expiresAt: text(record["expires_at"]),
+  };
+}
+
+function parseLines(items: unknown): SharedCartLine[] | null {
   if (!Array.isArray(items)) return null;
   const lines: SharedCartLine[] = [];
   for (const entry of items) {
@@ -48,7 +99,7 @@ export function parseSharedCart(raw: unknown): SharedCartLine[] | null {
   return lines;
 }
 
-export async function loadSharedCart(code: string): Promise<SharedCartLine[] | null> {
+export async function loadSharedCart(code: string): Promise<SharedCart | null> {
   if (!SHARED_CART_CODE.test(code)) return null;
   const { data, error } = await supabase.rpc("get_shared_cart", { _code: code });
   if (error) throw new Error(error.message);

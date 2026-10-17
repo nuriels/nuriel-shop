@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   CheckCircle2,
   ClipboardList,
+  FileText,
   Loader2,
   Percent,
   Receipt,
@@ -27,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PosCustomerSection } from "@/components/pos/PosCustomerSection";
+import { PosQuoteDialog } from "@/components/pos/PosQuoteDialog";
 import {
   PosProductSection,
   type PosProductSectionHandle,
@@ -113,6 +115,8 @@ export function PosPanel({
   const [busy, setBusy] = useState(false);
   const [showProblems, setShowProblems] = useState(false);
   const [created, setCreated] = useState<CreatedSummary | null>(null);
+  // חלק 39ב: שליחת עגלת הקופה כהצעת מחיר
+  const [quoteOpen, setQuoteOpen] = useState(false);
   const productSection = useRef<PosProductSectionHandle>(null);
   /** הלקוח שהמחירון האישי שלו בטעינה — כדי שטעינה ישנה לא תדרוס לקוח שהוחלף */
   const pricingFor = useRef<string | null>(null);
@@ -681,6 +685,16 @@ export function PosPanel({
                 )}
                 {busy ? "יוצר הזמנה…" : `יצירת הזמנה · ${formatIls(vat.gross)}`}
               </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setQuoteOpen(true)}
+                disabled={lines.length === 0}
+                data-testid="pos-quote"
+              >
+                <FileText className="size-4" aria-hidden="true" />
+                שליחה כהצעת מחיר
+              </Button>
             </CardContent>
           </Card>
         </aside>
@@ -702,7 +716,25 @@ export function PosPanel({
           {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
           יצירת הזמנה
         </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="שליחה כהצעת מחיר"
+          onClick={() => setQuoteOpen(true)}
+          disabled={lines.length === 0}
+          data-testid="pos-quote-mobile"
+        >
+          <FileText className="size-4" aria-hidden="true" />
+        </Button>
       </div>
+
+      <PosQuoteDialog
+        open={quoteOpen}
+        onOpenChange={setQuoteOpen}
+        lines={lines}
+        customerName={customer?.name ?? form.name}
+        customerPhone={customer?.phone ?? form.phone}
+      />
 
       <Dialog
         open={created !== null}

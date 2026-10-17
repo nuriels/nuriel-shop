@@ -2798,6 +2798,10 @@ export type Database = {
       platform_cancel_addon: { Args: { _id: string }; Returns: Json };
       platform_addon_requests: { Args: never; Returns: Json };
       create_shared_cart: { Args: { _items: Json }; Returns: string };
+      create_quote: {
+        Args: { _items: Json; _customer_name?: string; _note?: string; _valid_days?: number };
+        Returns: string;
+      };
       get_shared_cart: { Args: { _code: string }; Returns: Json };
       platform_approve_addon: { Args: { _id: string; _reference?: string | null }; Returns: Json };
       platform_reject_addon: { Args: { _id: string }; Returns: Json };

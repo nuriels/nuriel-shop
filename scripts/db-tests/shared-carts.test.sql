@@ -36,6 +36,32 @@ UPDATE public.shared_carts SET expires_at = now() - interval '1 day' WHERE code 
 SELECT tests.check('shared cart: expired link → nothing',
   $$SELECT public.get_shared_cart(current_setting('tests.code')) IS NULL$$);
 
+-- חלק 39ב: הצעת מחיר מהצוות
+SELECT tests.run('quote: a guest cannot send a quote',
+  $$SELECT public.create_quote('[{"product_id":"8c000000-0000-0000-0000-000000000001","quantity":2}]'::jsonb, 'דנה', NULL, 7)$$,
+  NULL, 'permission denied');
+SELECT tests.run('quote: a non-staff user cannot send a quote',
+  $$SELECT public.create_quote('[{"product_id":"8c000000-0000-0000-0000-000000000001","quantity":2}]'::jsonb, 'דנה', NULL, 7)$$,
+  'a0000000-0000-0000-0000-0000000000d7', 'רק צוות החנות');
+SELECT tests.run('quote: bad validity rejected',
+  $$SELECT public.create_quote('[{"product_id":"8c000000-0000-0000-0000-000000000001","quantity":2}]'::jsonb, 'דנה', NULL, 0)$$,
+  'a0000000-0000-0000-0000-0000000000b1', 'תוקף');
+SELECT tests.run('quote: the store admin sends a quote',
+  $$SELECT set_config('tests.quote', public.create_quote('[{"product_id":"8c000000-0000-0000-0000-000000000001","quantity":2}]'::jsonb, '  דנה כהן ', 'כולל התקנה', 10), false)$$,
+  'a0000000-0000-0000-0000-0000000000b1');
+SELECT tests.check('quote: saved as a quote with name, note and validity',
+  $$SELECT kind = 'quote' AND customer_name = 'דנה כהן' AND note = 'כולל התקנה'
+       AND expires_at BETWEEN now() + interval '9 days 23 hours' AND now() + interval '10 days 1 hour'
+       AND created_by = 'a0000000-0000-0000-0000-0000000000b1'
+     FROM public.shared_carts WHERE code = current_setting('tests.quote')$$);
+SELECT tests.run('quote: the customer (a guest) opens it with the details',
+  $$SELECT 1 WHERE (SELECT q ->> 'kind' = 'quote' AND q ->> 'customer_name' = 'דנה כהן' AND q ->> 'note' = 'כולל התקנה'
+                      FROM (SELECT public.get_shared_cart(current_setting('tests.quote')) AS q) x)$$,
+  NULL, NULL, 1);
+SELECT tests.check('quote: a plain shared cart stays kind=cart',
+  $$SELECT bool_and(kind = 'cart') FROM public.shared_carts
+     WHERE tenant_id = '70000000-0000-0000-0000-00000000000b' AND code <> current_setting('tests.quote')$$);
+
 DELETE FROM public.shared_carts WHERE tenant_id = '70000000-0000-0000-0000-00000000000b';
 DELETE FROM public.global_products WHERE id IN ('8c000000-0000-0000-0000-000000000001', '8c000000-0000-0000-0000-000000000002');
 SELECT set_config('request.headers', '', false);

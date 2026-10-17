@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Link2Off, Loader2, ShoppingCart } from "lucide-react";
+import { FileText, Link2Off, Loader2, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppFooter } from "@/components/AppFooter";
@@ -22,7 +22,7 @@ import {
 } from "@/lib/catalog";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { trackAddToCart } from "@/lib/marketing";
-import { loadSharedCart, type SharedCartLine } from "@/lib/shared-cart";
+import { loadSharedCart, type SharedCart, type SharedCartLine } from "@/lib/shared-cart";
 import {
   hasVariants,
   variantAttributesOf,
@@ -38,7 +38,7 @@ import {
 export const Route = createFileRoute("/cart/$code")({
   ssr: false,
   head: () => ({
-    meta: [{ title: "עגלה ששותפה איתך" }, { name: "robots", content: "noindex" }],
+    meta: [{ title: "עגלה ששותפה איתך / הצעת מחיר" }, { name: "robots", content: "noindex" }],
   }),
   component: SharedCartPage,
 });
@@ -75,6 +75,7 @@ function SharedCartPage() {
   const { closed: restClosed } = useRestState();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [missing, setMissing] = useState(false);
+  const [shared, setShared] = useState<Omit<SharedCart, "lines"> | null>(null);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
@@ -86,8 +87,9 @@ function SharedCartPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const lines = await loadSharedCart(code);
-        if (!lines || lines.length === 0) {
+        const loaded = await loadSharedCart(code);
+        const lines = loaded?.lines ?? [];
+        if (!loaded || lines.length === 0) {
           if (!cancelled) setMissing(true);
           return;
         }
@@ -99,6 +101,7 @@ function SharedCartPage() {
         const byId = new Map(((data as CatalogItem[]) ?? []).map((p) => [p.id, p]));
         const resolved = lines.map((line) => resolveRow(line, byId));
         if (cancelled) return;
+        setShared(loaded);
         setRows(resolved);
         setSelected(Object.fromEntries(resolved.map((r) => [r.key, r.unavailable === null])));
         setQuantities(
@@ -126,6 +129,7 @@ function SharedCartPage() {
   const priceOf = (r: Row) => (r.variant ? r.variant.price : (r.product?.price ?? null));
   const total = chosen.reduce((sum, r) => sum + (priceOf(r) ?? 0) * (quantities[r.key] ?? 0), 0);
   const hasPrices = chosen.some((r) => priceOf(r) !== null);
+  const isQuote = shared?.kind === "quote";
 
   const addSelected = () => {
     if (restClosed) {
@@ -145,6 +149,12 @@ function SharedCartPage() {
     });
     for (const r of chosen) {
       trackAddToCart(r.product!.name, (priceOf(r) ?? 0) * (quantities[r.key] ?? 1));
+    }
+    // חלק 39ב: הצעת מחיר — "אשר והעבר לקופה"
+    if (isQuote) {
+      toast.success("ההצעה אושרה — המוצרים בעגלה שלך");
+      void navigate({ to: "/checkout" });
+      return;
     }
     toast.success(
       chosen.length === 1 ? "המוצר נוסף לעגלה שלך" : `${chosen.length} מוצרים נוספו לעגלה שלך`,
@@ -179,12 +189,35 @@ function SharedCartPage() {
           </p>
         ) : (
           <div className="space-y-4" data-testid="shared-cart">
-            <div>
-              <h1 className="font-display text-2xl font-bold">עגלה ששותפה איתך</h1>
-              <p className="text-sm text-muted-foreground">
-                סמנו את המוצרים שתרצו, עדכנו כמויות, והוסיפו לעגלה שלכם. המחירים לפי החשבון שלכם.
-              </p>
-            </div>
+            {isQuote ? (
+              <div className="space-y-2 rounded-xl border bg-card p-4" data-testid="quote-header">
+                <h1 className="flex items-center gap-2 font-display text-2xl font-bold">
+                  <FileText className="size-6 text-primary" aria-hidden="true" />
+                  הצעת מחיר{shared?.customerName ? ` עבור ${shared.customerName}` : ""}
+                </h1>
+                {shared?.note && (
+                  <p className="whitespace-pre-line text-sm" data-testid="quote-note">
+                    {shared.note}
+                  </p>
+                )}
+                {shared?.expiresAt && (
+                  <p className="text-sm text-muted-foreground">
+                    בתוקף עד{" "}
+                    {new Date(shared.expiresAt).toLocaleDateString("he-IL", {
+                      timeZone: "Asia/Jerusalem",
+                    })}{" "}
+                    · המחירים לפי החשבון שלכם בחנות
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <h1 className="font-display text-2xl font-bold">עגלה ששותפה איתך</h1>
+                <p className="text-sm text-muted-foreground">
+                  סמנו את המוצרים שתרצו, עדכנו כמויות, והוסיפו לעגלה שלכם. המחירים לפי החשבון שלכם.
+                </p>
+              </div>
+            )}
 
             {!canUseCart && (
               <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
@@ -303,9 +336,11 @@ function SharedCartPage() {
                     onClick={addSelected}
                   >
                     <ShoppingCart className="size-4" aria-hidden="true" />
-                    {chosen.length === 1
-                      ? "הוספת המוצר שנבחר לעגלה"
-                      : `הוספת ${chosen.length} המוצרים שנבחרו לעגלה`}
+                    {isQuote
+                      ? "אשר והעבר לקופה"
+                      : chosen.length === 1
+                        ? "הוספת המוצר שנבחר לעגלה"
+                        : `הוספת ${chosen.length} המוצרים שנבחרו לעגלה`}
                   </Button>
                 </div>
               )
