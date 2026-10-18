@@ -40,6 +40,7 @@ import { Route as AdminPagesRouteImport } from './routes/admin_.pages'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
 import { Route as CartCodeRouteImport } from './routes/cart.$code'
 import { Route as CourierTokenRouteImport } from './routes/courier.$token'
+import { Route as OwnerAgreementTokenRouteImport } from './routes/owner-agreement.$token'
 import { Route as PagesSlugRouteImport } from './routes/pages.$slug'
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
 import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
@@ -59,6 +60,7 @@ import { Route as ApiAdminAnalyticsRouteImport } from './routes/api.admin.analyt
 import { Route as ApiAdminTriggerAbandonedCartsRouteImport } from './routes/api.admin.trigger-abandoned-carts'
 import { Route as ApiUnsubscribeTokenRouteImport } from './routes/api.unsubscribe.$token'
 import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$orderId'
+import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -215,6 +217,11 @@ const CourierTokenRoute = CourierTokenRouteImport.update({
   path: '/courier/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OwnerAgreementTokenRoute = OwnerAgreementTokenRouteImport.update({
+  id: '/owner-agreement/$token',
+  path: '/owner-agreement/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PagesSlugRoute = PagesSlugRouteImport.update({
   id: '/pages/$slug',
   path: '/pages/$slug',
@@ -312,6 +319,12 @@ const CheckoutBitOrderIdRoute = CheckoutBitOrderIdRouteImport.update({
   path: '/checkout/bit/$orderId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlatformCustomersTenantIdRoute =
+  PlatformCustomersTenantIdRouteImport.update({
+    id: '/platform_/customers/$tenantId',
+    path: '/platform/customers/$tenantId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -345,6 +358,7 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AdminSettingsRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
@@ -364,6 +378,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
+  '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -397,6 +412,7 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AdminSettingsRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
@@ -416,6 +432,7 @@ export interface FileRoutesByTo {
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
+  '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -450,6 +467,7 @@ export interface FileRoutesById {
   '/admin_/settings': typeof AdminSettingsRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform_/plans': typeof PlatformPlansRoute
   '/platform_/support': typeof PlatformSupportRoute
@@ -469,6 +487,7 @@ export interface FileRoutesById {
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/checkout_/bit/$orderId': typeof CheckoutBitOrderIdRoute
+  '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -504,6 +523,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/cart/$code'
     | '/courier/$token'
+    | '/owner-agreement/$token'
     | '/pages/$slug'
     | '/platform/plans'
     | '/platform/support'
@@ -523,6 +543,7 @@ export interface FileRouteTypes {
     | '/api/admin/trigger-abandoned-carts'
     | '/api/unsubscribe/$token'
     | '/checkout/bit/$orderId'
+    | '/platform/customers/$tenantId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -556,6 +577,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/cart/$code'
     | '/courier/$token'
+    | '/owner-agreement/$token'
     | '/pages/$slug'
     | '/platform/plans'
     | '/platform/support'
@@ -575,6 +597,7 @@ export interface FileRouteTypes {
     | '/api/admin/trigger-abandoned-carts'
     | '/api/unsubscribe/$token'
     | '/checkout/bit/$orderId'
+    | '/platform/customers/$tenantId'
   id:
     | '__root__'
     | '/'
@@ -608,6 +631,7 @@ export interface FileRouteTypes {
     | '/admin_/settings'
     | '/cart/$code'
     | '/courier/$token'
+    | '/owner-agreement/$token'
     | '/pages/$slug'
     | '/platform_/plans'
     | '/platform_/support'
@@ -627,6 +651,7 @@ export interface FileRouteTypes {
     | '/api/admin/trigger-abandoned-carts'
     | '/api/unsubscribe/$token'
     | '/checkout_/bit/$orderId'
+    | '/platform_/customers/$tenantId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -661,6 +686,7 @@ export interface RootRouteChildren {
   AdminSettingsRoute: typeof AdminSettingsRoute
   CartCodeRoute: typeof CartCodeRoute
   CourierTokenRoute: typeof CourierTokenRoute
+  OwnerAgreementTokenRoute: typeof OwnerAgreementTokenRoute
   PagesSlugRoute: typeof PagesSlugRoute
   PlatformPlansRoute: typeof PlatformPlansRoute
   PlatformSupportRoute: typeof PlatformSupportRoute
@@ -680,6 +706,7 @@ export interface RootRouteChildren {
   ApiAdminTriggerAbandonedCartsRoute: typeof ApiAdminTriggerAbandonedCartsRoute
   ApiUnsubscribeTokenRoute: typeof ApiUnsubscribeTokenRoute
   CheckoutBitOrderIdRoute: typeof CheckoutBitOrderIdRoute
+  PlatformCustomersTenantIdRoute: typeof PlatformCustomersTenantIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -901,6 +928,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CourierTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/owner-agreement/$token': {
+      id: '/owner-agreement/$token'
+      path: '/owner-agreement/$token'
+      fullPath: '/owner-agreement/$token'
+      preLoaderRoute: typeof OwnerAgreementTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/pages/$slug': {
       id: '/pages/$slug'
       path: '/pages/$slug'
@@ -1034,6 +1068,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CheckoutBitOrderIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/platform_/customers/$tenantId': {
+      id: '/platform_/customers/$tenantId'
+      path: '/platform/customers/$tenantId'
+      fullPath: '/platform/customers/$tenantId'
+      preLoaderRoute: typeof PlatformCustomersTenantIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -1069,6 +1110,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminSettingsRoute: AdminSettingsRoute,
   CartCodeRoute: CartCodeRoute,
   CourierTokenRoute: CourierTokenRoute,
+  OwnerAgreementTokenRoute: OwnerAgreementTokenRoute,
   PagesSlugRoute: PagesSlugRoute,
   PlatformPlansRoute: PlatformPlansRoute,
   PlatformSupportRoute: PlatformSupportRoute,
@@ -1088,6 +1130,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminTriggerAbandonedCartsRoute: ApiAdminTriggerAbandonedCartsRoute,
   ApiUnsubscribeTokenRoute: ApiUnsubscribeTokenRoute,
   CheckoutBitOrderIdRoute: CheckoutBitOrderIdRoute,
+  PlatformCustomersTenantIdRoute: PlatformCustomersTenantIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

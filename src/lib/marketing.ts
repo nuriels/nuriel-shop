@@ -137,7 +137,7 @@ export function trackingHeadScripts(
 
 /** עמודים שבהם לא טוענים מעקב ולא פופ-אפ: אזורי הצוות, החשבון והקופה הפנימית */
 export const NO_MARKETING_PATHS =
-  /^\/(admin|admin-handoff|agent|warehouse|courier|platform|login|register|reset-password|locked|forbidden|account|orders|agreement|unsubscribe)(\/|$)/;
+  /^\/(admin|admin-handoff|agent|warehouse|courier|platform|login|register|reset-password|locked|forbidden|account|orders|agreement|owner-agreement|unsubscribe)(\/|$)/;
 
 type TrackWindow = Window & {
   fbq?: (...args: unknown[]) => void;

@@ -1154,6 +1154,144 @@ export type Database = {
         };
         Relationships: [];
       };
+      platform_agreement_versions: {
+        Row: {
+          id: string;
+          version: number;
+          title: string;
+          content: string;
+          is_current: boolean;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          version: number;
+          title: string;
+          content: string;
+          is_current?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: { is_current?: boolean };
+        Relationships: [];
+      };
+      platform_agreement_acceptances: {
+        Row: {
+          id: string;
+          tenant_id: string | null;
+          owner_email: string;
+          owner_user_id: string | null;
+          version_id: string;
+          version: number;
+          status: string;
+          token_hash: string | null;
+          token_expires_at: string | null;
+          sent_at: string | null;
+          signed_at: string | null;
+          signer_name: string | null;
+          signature_svg: string | null;
+          terms_snapshot: string | null;
+          content_sha256: string | null;
+          signer_ip: string | null;
+          signer_user_agent: string | null;
+          created_at: string;
+        };
+        Insert: {
+          tenant_id: string;
+          owner_email: string;
+          version_id: string;
+          version: number;
+          [key: string]: unknown;
+        };
+        Update: { status?: string; [key: string]: unknown };
+        Relationships: [];
+      };
+      platform_documents: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          kind: string;
+          title: string;
+          file_name: string;
+          mime_type: string;
+          size_bytes: number;
+          storage_path: string;
+          doc_date: string | null;
+          note: string | null;
+          billing_id: string | null;
+          acceptance_id: string | null;
+          version: number;
+          is_archived: boolean;
+          uploaded_by: string | null;
+          uploaded_by_email: string | null;
+          created_at: string;
+        };
+        Insert: {
+          tenant_id: string;
+          kind: string;
+          title: string;
+          file_name: string;
+          mime_type: string;
+          size_bytes: number;
+          storage_path: string;
+          doc_date?: string | null;
+          note?: string | null;
+          billing_id?: string | null;
+          acceptance_id?: string | null;
+          version?: number;
+          uploaded_by?: string | null;
+          uploaded_by_email?: string | null;
+        };
+        Update: { is_archived?: boolean };
+        Relationships: [];
+      };
+      platform_email_log: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          to_email: string;
+          subject: string;
+          kind: string;
+          status: string;
+          provider_message_id: string | null;
+          error: string | null;
+          acceptance_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          tenant_id: string;
+          to_email: string;
+          subject: string;
+          kind: string;
+          status: string;
+          provider_message_id?: string | null;
+          error?: string | null;
+          acceptance_id?: string | null;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      platform_audit_log: {
+        Row: {
+          id: number;
+          tenant_id: string | null;
+          actor_id: string | null;
+          actor_email: string | null;
+          action: string;
+          details: Json;
+          created_at: string;
+        };
+        Insert: {
+          tenant_id?: string | null;
+          actor_id?: string | null;
+          actor_email?: string | null;
+          action: string;
+          details?: Json;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       login_codes: {
         Row: {
           id: string;
@@ -2893,6 +3031,31 @@ export type Database = {
         Returns: Json;
       };
       marketing_unsubscribe: { Args: { _token: string }; Returns: string };
+      platform_agreement_issue: {
+        Args: {
+          _tenant: string;
+          _email: string;
+          _user: string;
+          _token_hash: string;
+          _expires: string;
+        };
+        Returns: Json;
+      };
+      platform_agreement_form: { Args: { _token_hash: string }; Returns: Json };
+      platform_agreement_sign: {
+        Args: {
+          _token_hash: string;
+          _signer_name: string;
+          _signature_svg: string;
+          _ip: string;
+          _user_agent: string;
+        };
+        Returns: Json;
+      };
+      platform_agreement_publish: {
+        Args: { _title: string; _content: string; _by: string };
+        Returns: number;
+      };
       create_quote: {
         Args: { _items: Json; _customer_name?: string; _note?: string; _valid_days?: number };
         Returns: string;

@@ -28,7 +28,7 @@ export const FORBIDDEN_PAGE: BlockedPage = {
  * ועמוד השליח (משלוחים שכבר יצאו לדרך מסתיימים גם כשהחנות נעולה)
  */
 export const SUSPENDED_ALLOWED_PATHS =
-  /^\/(admin|admin-handoff|courier|login|reset-password|locked|unsubscribe)(\/|$)/;
+  /^\/(admin|admin-handoff|courier|login|reset-password|locked|unsubscribe|owner-agreement)(\/|$)/;
 
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);

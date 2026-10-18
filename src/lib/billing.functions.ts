@@ -76,6 +76,13 @@ export const platformExtendTrial = createServerFn({ method: "POST" })
     // הנעילה / הפתיחה של החנות חלה מיד (בלי לחכות למטמון החנויות בשרת)
     const { invalidateTenantCache } = await import("@/integrations/supabase/tenant.server");
     invalidateTenantCache(data.tenantId);
+    const { recordPlatformAudit, actorOf } = await import("@/lib/platform-files.server");
+    await recordPlatformAudit({
+      tenantId: data.tenantId,
+      actor: actorOf(context),
+      action: "trial_extended",
+      details: { days: data.days },
+    });
     return parseSubscriptionState(state);
   });
 
@@ -132,6 +139,13 @@ export const platformRecordPayment = createServerFn({ method: "POST" })
       _note: data.note || null,
     });
     if (error) throw new Error(error.message);
+    const { recordPlatformAudit, actorOf } = await import("@/lib/platform-files.server");
+    await recordPlatformAudit({
+      tenantId: data.tenantId,
+      actor: actorOf(context),
+      action: "payment_recorded",
+      details: { plan: data.plan, amount: data.amount, months: data.months, method: data.method },
+    });
     return parseSubscriptionState(state);
   });
 

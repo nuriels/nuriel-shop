@@ -13,6 +13,7 @@ import {
   Trash2,
   UserPlus,
   Wallet,
+  FolderOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -292,6 +293,15 @@ export function StoresTable({
                         <LogIn className="size-4" />
                       )}
                       היכנס לניהול
+                    </Button>
+                    <Button size="sm" variant="outline" asChild>
+                      <Link
+                        to="/platform/customers/$tenantId"
+                        params={{ tenantId: store.id }}
+                        data-testid="customer-file-link"
+                      >
+                        <FolderOpen className="size-4" /> תיק לקוח
+                      </Link>
                     </Button>
                     {store.admins === 0 && (
                       <Button

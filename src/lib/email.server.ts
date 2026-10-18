@@ -215,6 +215,8 @@ export async function sendEmail(input: SendEmailInput): Promise<SendResult> {
  * כשיש logFor, או ישירות — כשמייל עבר כמה ניסיונות (מפתח החנות ואז מפתח
  * הפלטפורמה) ורק התוצאה הסופית נרשמת בתיק.
  */
+const SECRET_EMAIL_KINDS = new Set<string>(["password_reset", "temp_password", "password_changed"]);
+
 export async function recordCustomerEmail(
   input: Pick<SendEmailInput, "to" | "subject" | "html" | "logFor">,
   result: SendResult,
@@ -229,7 +231,10 @@ export async function recordCustomerEmail(
       to_email: input.to.join(", "),
       subject: input.subject,
       kind: input.logFor.kind,
-      html: input.html,
+      // מיילים עם סיסמה / קוד זמני לא נשמרים בגוף — רק העובדה שנשלחו
+      html: SECRET_EMAIL_KINDS.has(input.logFor.kind)
+        ? "<p>(תוכן המייל לא נשמר — הוא כולל פרטי כניסה)</p>"
+        : input.html,
       sent: result.sent,
       error: result.sent ? null : (result.reason ?? null),
       sent_by: sentBy,

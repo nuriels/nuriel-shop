@@ -195,6 +195,13 @@ export const platformApproveAddon = createServerFn({ method: "POST" })
     // הפיצ'ר נפתח מיד — גם במסכים שקוראים את המנוי מהמטמון של השרת
     const { invalidateTenantCache } = await import("@/integrations/supabase/tenant.server");
     invalidateTenantCache(data.tenantId);
+    const { recordPlatformAudit, actorOf } = await import("@/lib/platform-files.server");
+    await recordPlatformAudit({
+      tenantId: data.tenantId,
+      actor: actorOf(context),
+      action: "addon_approved",
+      details: { requestId: data.requestId },
+    });
     return { ok: true };
   });
 

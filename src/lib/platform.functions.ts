@@ -142,6 +142,14 @@ export const createStore = createServerFn({ method: "POST" })
       adminError = e instanceof Error ? e.message : String(e);
     }
 
+    // חלק 42: הסכם שירות לחתימה — לבעלים חדשים; כשל לא מפיל את ההקמה
+    const { issueOwnerAgreementSafe, actorOf } = await import("@/lib/platform-files.server");
+    await issueOwnerAgreementSafe({
+      tenantId: tenant.id,
+      ownerEmail: data.ownerEmail,
+      actor: actorOf(context),
+    });
+
     return {
       id: tenant.id,
       name: tenant.name,

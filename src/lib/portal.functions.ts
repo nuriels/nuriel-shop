@@ -458,6 +458,14 @@ export const createPortalStore = createServerFn({ method: "POST" })
       url: originForTenant(tenant),
       createdAt: tenant.created_at,
     };
+    // חלק 42: הסכם שירות לחתימה — רק לבעלים חדשים; כשל לא מפיל את הפתיחה
+    const { issueOwnerAgreementSafe } = await import("@/lib/platform-files.server");
+    await issueOwnerAgreementSafe({
+      tenantId: tenant.id,
+      ownerEmail: email,
+      ownerUserId: createdUserId,
+      actor: null,
+    });
     return { store };
   });
 

@@ -92,6 +92,14 @@ export const createStoreAdminHandoff = createServerFn({ method: "POST" })
     });
     if (error) throw new Error(error.message);
 
+    // חלק 42: כניסת מנהל-על לניהול החנות מתועדת בתיק הלקוח (בלי הקוד עצמו)
+    const { recordPlatformAudit, actorOf } = await import("@/lib/platform-files.server");
+    await recordPlatformAudit({
+      tenantId: tenant.id,
+      actor: actorOf(context),
+      action: "admin_entered_store",
+    });
+
     return {
       url: `${originForTenant(tenant)}/admin-handoff#code=${code}`,
       storeName: tenant.name,
