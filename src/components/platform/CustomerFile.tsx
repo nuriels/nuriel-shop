@@ -492,11 +492,17 @@ function DocumentsTab({
   const testid = kinds ? "invoices-list" : "documents-list";
 
   const open = async (id: string) => {
+    // החלון נפתח מיד (בתגובה ללחיצה) ורק אחר כך מקבל את הקישור החתום —
+    // אחרת חוסמי חלונות קופצים (ובעיקר Safari) חוסמים אותו
+    const tab = window.open("about:blank", "_blank");
+    if (tab) tab.opener = null;
     try {
       const { url } = await getUrl({ data: { documentId: id } });
-      window.open(url, "_blank", "noopener,noreferrer");
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
       await onChanged();
     } catch (e) {
+      tab?.close();
       toast.error(e instanceof Error ? e.message : "פתיחת המסמך נכשלה");
     }
   };
