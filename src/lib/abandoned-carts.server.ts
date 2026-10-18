@@ -8,6 +8,9 @@ import type { SendResult } from "@/lib/email.server";
  * חלק 27: סלים נטושים — מייל התזכורת ("שכחת משהו בעגלה?": המוצרים, הלוגו וכפתור שמשחזר
  * את הסל בקופה) משותף לשליחה הידנית מהניהול ולשליחה האוטומטית; והשליחה האוטומטית עצמה
  * (POST /api/admin/trigger-abandoned-carts): הסלים מעל 4 שעות בלי תזכורת — עד 25 בפעם.
+ *
+ * חלק 40 (חוק הספאם): התזכורת היא דיוור שיווקי — נשלחת רק למי שאישר דיוור
+ * (טוקן הסרה מ-marketing_send_token), עם "פרסומת" בנושא, פרטי העסק וקישור הסרה.
  */
 type ReminderItem = {
   name?: string | null;
@@ -28,10 +31,15 @@ export async function sendCartReminderEmail(input: {
   message: string;
   couponCode: string | null;
   couponLine: string;
+  /** טוקן ההסרה של הנמען — חובה: בלי הסכמה לדיוור לא שולחים */
+  unsubscribeToken: string;
 }): Promise<SendResult> {
   const { escapeHtml, emailActionButton, renderEmailHtml, sendEmail, textToEmailHtml } =
     await import("@/lib/email.server");
   const { tenantSiteOrigin } = await import("@/integrations/supabase/tenant.server");
+  const { marketingFooterHtml, unsubscribeHeaders } =
+    await import("@/lib/marketing-consent.server");
+  const { adSubject } = await import("@/lib/marketing-consent");
   const restoreUrl = `${tenantSiteOrigin()}/checkout?restore=${input.cart.restore_token}`;
 
   const items = (Array.isArray(input.cart.items) ? input.cart.items : []) as ReminderItem[];
@@ -70,12 +78,16 @@ export async function sendCartReminderEmail(input: {
       </table>
       <p style="margin-top:10px;"><strong>סה"כ בסל: ${money(Number(input.cart.total))}</strong></p>
       ${emailActionButton("לחץ כאן כדי להשלים את ההזמנה", restoreUrl)}
+      ${await marketingFooterHtml(input.unsubscribeToken)}
     `;
 
   return sendEmail({
     to: [input.cart.email],
-    subject: input.couponCode ? "שכחתם משהו בסל — ומחכה לכם הנחה 🎁" : "שכחת משהו בעגלה? 🛒",
+    subject: adSubject(
+      input.couponCode ? "שכחתם משהו בסל — ומחכה לכם הנחה 🎁" : "שכחת משהו בעגלה? 🛒",
+    ),
     html: await renderEmailHtml("הסל שלכם מחכה לכם", body),
+    headers: unsubscribeHeaders(input.unsubscribeToken),
   });
 }
 
@@ -133,12 +145,17 @@ export async function runAbandonedCartReminders(request: Request): Promise<Respo
       .eq("id", id)
       .maybeSingle();
     if (!cart || cart.status !== "open" || (cart.reminder_count ?? 0) > 0) continue;
+    // חלק 40: רק מי שאישר דיוור (נבדק שוב — אולי הסיר את עצמו בינתיים)
+    const { marketingSendToken } = await import("@/lib/marketing-consent.server");
+    const unsubscribeToken = await marketingSendToken(cart.email);
+    if (!unsubscribeToken) continue;
     try {
       const result = await sendCartReminderEmail({
         cart,
         message: DEFAULT_REMINDER_MESSAGE,
         couponCode: null,
         couponLine: "",
+        unsubscribeToken,
       });
       if (!result.sent) {
         failed += 1;

@@ -525,8 +525,9 @@ export function CreateOrderDialog({
                               variant="ghost"
                               className="size-6 text-destructive hover:text-destructive"
                               onClick={() => removeCartRow(index)}
+                              aria-label={`הסרת ${item.name} מההזמנה`}
                             >
-                              <Trash2 className="size-3.5" />
+                              <Trash2 className="size-3.5" aria-hidden="true" />
                             </Button>
                           </div>
                           <div className="flex items-center gap-1.5">
@@ -535,8 +536,9 @@ export function CreateOrderDialog({
                               variant="outline"
                               className="size-6"
                               onClick={() => changeCartQuantity(index, -1)}
+                              aria-label={`הפחתת כמות של ${item.name}`}
                             >
-                              <Minus className="size-3" />
+                              <Minus className="size-3" aria-hidden="true" />
                             </Button>
                             <Input
                               type="number"
@@ -552,8 +554,9 @@ export function CreateOrderDialog({
                               variant="outline"
                               className="size-6"
                               onClick={() => changeCartQuantity(index, 1)}
+                              aria-label={`הוספת כמות של ${item.name}`}
                             >
-                              <Plus className="size-3" />
+                              <Plus className="size-3" aria-hidden="true" />
                             </Button>
                             <Input
                               type="number"

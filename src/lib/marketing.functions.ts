@@ -81,6 +81,10 @@ export const saveAbandonedCart = createServerFn({ method: "POST" })
       name?: string;
       phone?: string;
       items: AbandonedCartLine[];
+      /** חלק 40: הלקוח סימן "אני מאשר/ת קבלת דיוור" בקופה */
+      marketingConsent?: boolean;
+      /** הלקוח סימן ואז ביטל את הסימון בקופה הזו — זה סירוב, מסירים */
+      withdrawConsent?: boolean;
     }) => {
       const session = uuidOf(input?.session, "עגלה לא תקינה");
       const email = String(input?.email ?? "")
@@ -106,6 +110,8 @@ export const saveAbandonedCart = createServerFn({ method: "POST" })
         name: String(input?.name ?? "").slice(0, 120),
         phone: String(input?.phone ?? "").slice(0, 30),
         items,
+        marketingConsent: input?.marketingConsent === true,
+        withdrawConsent: input?.marketingConsent !== true && input?.withdrawConsent === true,
       };
     },
   )
@@ -114,12 +120,31 @@ export const saveAbandonedCart = createServerFn({ method: "POST" })
     const ip = await requestIp();
     if (!allowAction(`cart-save:${ip}`, 60, 10 * 60 * 1000)) return { saved: false };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { marketingSendToken, recordMarketingConsent } =
+      await import("@/lib/marketing-consent.server");
+
+    // חלק 40 (חוק הספאם): העגלה נשמרת לתזכורת רק למי שאישר דיוור — עכשיו
+    // בתיבה בקופה, או קודם (הרשמה / "החשבון שלי") ולא הסיר את עצמו.
+    if (data.withdrawConsent) {
+      await recordMarketingConsent({ email: data.email, subscribed: false, source: "checkout" });
+    }
+    let allowed = !data.withdrawConsent && (await marketingSendToken(data.email)) !== null;
+    if (!allowed && data.marketingConsent) {
+      const consent = await recordMarketingConsent({
+        email: data.email,
+        subscribed: true,
+        source: "checkout",
+        name: data.name || null,
+      });
+      allowed = consent?.subscribed === true;
+    }
+    // בלי הסכמה: לא שומרים (ועגלה שנשמרה קודם באותה קופה — נמחקת)
     const { data: id, error } = await supabaseAdmin.rpc("save_abandoned_cart", {
       _session: data.session,
       _email: data.email,
       _name: data.name,
       _phone: data.phone,
-      _items: data.items,
+      _items: allowed ? data.items : [],
     });
     if (error) {
       console.error("[abandoned-cart] save failed", error.message);
@@ -210,6 +235,15 @@ export const sendCartReminder = createServerFn({ method: "POST" })
     if (!cart) throw new Error("העגלה לא נמצאה");
     if (cart.status === "recovered") throw new Error("הלקוח כבר השלים את ההזמנה");
 
+    // חלק 40 (חוק הספאם): תזכורת = דיוור שיווקי — רק למי שאישר קבלת דיוור
+    const { marketingSendToken } = await import("@/lib/marketing-consent.server");
+    const unsubscribeToken = await marketingSendToken(cart.email);
+    if (!unsubscribeToken) {
+      throw new Error(
+        "הלקוח לא אישר קבלת דיוור (או שהסיר את עצמו) — לפי חוק הספאם אסור לשלוח לו תזכורת",
+      );
+    }
+
     let couponLine = "";
     if (data.couponCode) {
       const { data: coupon } = await context.supabase
@@ -235,6 +269,7 @@ export const sendCartReminder = createServerFn({ method: "POST" })
       message: data.message,
       couponCode: data.couponCode,
       couponLine,
+      unsubscribeToken,
     });
     if (!result.sent) throw new Error(result.reason ?? "שליחת המייל נכשלה");
 

@@ -7,6 +7,7 @@ import { AccountNotice } from "@/components/AccountNotice";
 import { OnboardingGate } from "@/components/OnboardingGate";
 import { CustomerOrdersTab } from "@/components/account/CustomerOrdersTab";
 import { MyDetailsForm } from "@/components/account/MyDetailsForm";
+import { MarketingConsentCard } from "@/components/account/MarketingConsentCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -155,6 +156,7 @@ function AccountPage() {
                     onSaved={() => void refreshProfile()}
                   />
                 )}
+                <MarketingConsentCard />
               </TabsContent>
             </Tabs>
           </>

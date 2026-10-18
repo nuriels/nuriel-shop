@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as AccessibilityRouteImport } from './routes/accessibility'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminHandoffRouteImport } from './routes/admin-handoff'
@@ -45,6 +46,7 @@ import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
 import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrades'
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
 import { Route as PwaIconRouteImport } from './routes/pwa.$icon'
+import { Route as UnsubscribeTokenRouteImport } from './routes/unsubscribe.$token'
 import { Route as AdminInventoryLabelsRouteImport } from './routes/admin_.inventory_.labels'
 import { Route as AdminInventorySerialsRouteImport } from './routes/admin_.inventory_.serials'
 import { Route as AdminMarketingAbandonedCartsRouteImport } from './routes/admin_.marketing.abandoned-carts'
@@ -55,6 +57,7 @@ import { Route as AdminSettingsDomainRouteImport } from './routes/admin_.setting
 import { Route as AdminSettingsStaffRouteImport } from './routes/admin_.settings_.staff'
 import { Route as ApiAdminAnalyticsRouteImport } from './routes/api.admin.analytics'
 import { Route as ApiAdminTriggerAbandonedCartsRouteImport } from './routes/api.admin.trigger-abandoned-carts'
+import { Route as ApiUnsubscribeTokenRouteImport } from './routes/api.unsubscribe.$token'
 import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$orderId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -65,6 +68,11 @@ const IndexRoute = IndexRouteImport.update({
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccessibilityRoute = AccessibilityRouteImport.update({
+  id: '/accessibility',
+  path: '/accessibility',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountRoute = AccountRouteImport.update({
@@ -237,6 +245,11 @@ const PwaIconRoute = PwaIconRouteImport.update({
   path: '/pwa/$icon',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UnsubscribeTokenRoute = UnsubscribeTokenRouteImport.update({
+  id: '/unsubscribe/$token',
+  path: '/unsubscribe/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminInventoryLabelsRoute = AdminInventoryLabelsRouteImport.update({
   id: '/admin_/inventory_/labels',
   path: '/admin/inventory/labels',
@@ -289,6 +302,11 @@ const ApiAdminTriggerAbandonedCartsRoute =
     path: '/api/admin/trigger-abandoned-carts',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiUnsubscribeTokenRoute = ApiUnsubscribeTokenRouteImport.update({
+  id: '/api/unsubscribe/$token',
+  path: '/api/unsubscribe/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CheckoutBitOrderIdRoute = CheckoutBitOrderIdRouteImport.update({
   id: '/checkout_/bit/$orderId',
   path: '/checkout/bit/$orderId',
@@ -298,6 +316,7 @@ const CheckoutBitOrderIdRoute = CheckoutBitOrderIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/accessibility': typeof AccessibilityRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
   '/admin-handoff': typeof AdminHandoffRoute
@@ -332,6 +351,7 @@ export interface FileRoutesByFullPath {
   '/platform/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/inventory/serials': typeof AdminInventorySerialsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -342,11 +362,13 @@ export interface FileRoutesByFullPath {
   '/admin/settings/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
+  '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/accessibility': typeof AccessibilityRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
   '/admin-handoff': typeof AdminHandoffRoute
@@ -381,6 +403,7 @@ export interface FileRoutesByTo {
   '/platform/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/inventory/serials': typeof AdminInventorySerialsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -391,12 +414,14 @@ export interface FileRoutesByTo {
   '/admin/settings/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
+  '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/accessibility': typeof AccessibilityRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
   '/admin-handoff': typeof AdminHandoffRoute
@@ -431,6 +456,7 @@ export interface FileRoutesById {
   '/platform_/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/admin_/inventory_/labels': typeof AdminInventoryLabelsRoute
   '/admin_/inventory_/serials': typeof AdminInventorySerialsRoute
   '/admin_/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -441,6 +467,7 @@ export interface FileRoutesById {
   '/admin_/settings_/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
+  '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/checkout_/bit/$orderId': typeof CheckoutBitOrderIdRoute
 }
 export interface FileRouteTypes {
@@ -448,6 +475,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/about'
+    | '/accessibility'
     | '/account'
     | '/admin'
     | '/admin-handoff'
@@ -482,6 +510,7 @@ export interface FileRouteTypes {
     | '/platform/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/unsubscribe/$token'
     | '/admin/inventory/labels'
     | '/admin/inventory/serials'
     | '/admin/marketing/abandoned-carts'
@@ -492,11 +521,13 @@ export interface FileRouteTypes {
     | '/admin/settings/staff'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
+    | '/api/unsubscribe/$token'
     | '/checkout/bit/$orderId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/about'
+    | '/accessibility'
     | '/account'
     | '/admin'
     | '/admin-handoff'
@@ -531,6 +562,7 @@ export interface FileRouteTypes {
     | '/platform/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/unsubscribe/$token'
     | '/admin/inventory/labels'
     | '/admin/inventory/serials'
     | '/admin/marketing/abandoned-carts'
@@ -541,11 +573,13 @@ export interface FileRouteTypes {
     | '/admin/settings/staff'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
+    | '/api/unsubscribe/$token'
     | '/checkout/bit/$orderId'
   id:
     | '__root__'
     | '/'
     | '/about'
+    | '/accessibility'
     | '/account'
     | '/admin'
     | '/admin-handoff'
@@ -580,6 +614,7 @@ export interface FileRouteTypes {
     | '/platform_/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/unsubscribe/$token'
     | '/admin_/inventory_/labels'
     | '/admin_/inventory_/serials'
     | '/admin_/marketing/abandoned-carts'
@@ -590,12 +625,14 @@ export interface FileRouteTypes {
     | '/admin_/settings_/staff'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
+    | '/api/unsubscribe/$token'
     | '/checkout_/bit/$orderId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  AccessibilityRoute: typeof AccessibilityRoute
   AccountRoute: typeof AccountRoute
   AdminRoute: typeof AdminRoute
   AdminHandoffRoute: typeof AdminHandoffRoute
@@ -630,6 +667,7 @@ export interface RootRouteChildren {
   PlatformUpgradesRoute: typeof PlatformUpgradesRoute
   ProductProductIdRoute: typeof ProductProductIdRoute
   PwaIconRoute: typeof PwaIconRoute
+  UnsubscribeTokenRoute: typeof UnsubscribeTokenRoute
   AdminInventoryLabelsRoute: typeof AdminInventoryLabelsRoute
   AdminInventorySerialsRoute: typeof AdminInventorySerialsRoute
   AdminMarketingAbandonedCartsRoute: typeof AdminMarketingAbandonedCartsRoute
@@ -640,6 +678,7 @@ export interface RootRouteChildren {
   AdminSettingsStaffRoute: typeof AdminSettingsStaffRoute
   ApiAdminAnalyticsRoute: typeof ApiAdminAnalyticsRoute
   ApiAdminTriggerAbandonedCartsRoute: typeof ApiAdminTriggerAbandonedCartsRoute
+  ApiUnsubscribeTokenRoute: typeof ApiUnsubscribeTokenRoute
   CheckoutBitOrderIdRoute: typeof CheckoutBitOrderIdRoute
 }
 
@@ -657,6 +696,13 @@ declare module '@tanstack/react-router' {
       path: '/about'
       fullPath: '/about'
       preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accessibility': {
+      id: '/accessibility'
+      path: '/accessibility'
+      fullPath: '/accessibility'
+      preLoaderRoute: typeof AccessibilityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/account': {
@@ -897,6 +943,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PwaIconRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/unsubscribe/$token': {
+      id: '/unsubscribe/$token'
+      path: '/unsubscribe/$token'
+      fullPath: '/unsubscribe/$token'
+      preLoaderRoute: typeof UnsubscribeTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/inventory_/labels': {
       id: '/admin_/inventory_/labels'
       path: '/admin/inventory/labels'
@@ -967,6 +1020,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminTriggerAbandonedCartsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/unsubscribe/$token': {
+      id: '/api/unsubscribe/$token'
+      path: '/api/unsubscribe/$token'
+      fullPath: '/api/unsubscribe/$token'
+      preLoaderRoute: typeof ApiUnsubscribeTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/checkout_/bit/$orderId': {
       id: '/checkout_/bit/$orderId'
       path: '/checkout/bit/$orderId'
@@ -980,6 +1040,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  AccessibilityRoute: AccessibilityRoute,
   AccountRoute: AccountRoute,
   AdminRoute: AdminRoute,
   AdminHandoffRoute: AdminHandoffRoute,
@@ -1014,6 +1075,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformUpgradesRoute: PlatformUpgradesRoute,
   ProductProductIdRoute: ProductProductIdRoute,
   PwaIconRoute: PwaIconRoute,
+  UnsubscribeTokenRoute: UnsubscribeTokenRoute,
   AdminInventoryLabelsRoute: AdminInventoryLabelsRoute,
   AdminInventorySerialsRoute: AdminInventorySerialsRoute,
   AdminMarketingAbandonedCartsRoute: AdminMarketingAbandonedCartsRoute,
@@ -1024,6 +1086,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminSettingsStaffRoute: AdminSettingsStaffRoute,
   ApiAdminAnalyticsRoute: ApiAdminAnalyticsRoute,
   ApiAdminTriggerAbandonedCartsRoute: ApiAdminTriggerAbandonedCartsRoute,
+  ApiUnsubscribeTokenRoute: ApiUnsubscribeTokenRoute,
   CheckoutBitOrderIdRoute: CheckoutBitOrderIdRoute,
 }
 export const routeTree = rootRouteImport

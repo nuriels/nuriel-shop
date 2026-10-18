@@ -65,6 +65,8 @@ export type SendEmailInput = {
   replyTo?: string | null;
   /** חלק 17: מפתח וכתובת שולח של החנות עצמה (ברירת מחדל — מפתח הפלטפורמה) */
   transport?: EmailTransport;
+  /** חלק 40: כותרות נוספות (List-Unsubscribe במייל שיווקי) */
+  headers?: Record<string, string>;
 };
 
 export type SendResult = {
@@ -278,6 +280,9 @@ async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
         html: input.html,
         ...(replyTo ? { reply_to: replyTo } : {}),
         ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+        ...(input.headers && Object.keys(input.headers).length > 0
+          ? { headers: input.headers }
+          : {}),
       }),
     });
     if (!response.ok) {

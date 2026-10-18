@@ -86,10 +86,12 @@ export type MarketingSettings = {
   facebook_pixel_id: string | null;
   google_analytics_id: string | null;
   zap_delivery_days: number;
+  /** חלק 40: קופון במייל "ברוכים הבאים" למי שאישר דיוור בהרשמה */
+  welcome_coupon_code: string | null;
 };
 
 export const MARKETING_COLUMNS =
-  "seo_title, seo_description, promo_popup_enabled, promo_popup_text, promo_popup_coupon, facebook_pixel_id, google_analytics_id, zap_delivery_days" as const;
+  "seo_title, seo_description, promo_popup_enabled, promo_popup_text, promo_popup_coupon, facebook_pixel_id, google_analytics_id, zap_delivery_days, welcome_coupon_code" as const;
 
 export const EMPTY_MARKETING: MarketingSettings = {
   seo_title: "",
@@ -100,6 +102,7 @@ export const EMPTY_MARKETING: MarketingSettings = {
   facebook_pixel_id: null,
   google_analytics_id: null,
   zap_delivery_days: 3,
+  welcome_coupon_code: null,
 };
 
 /** מה שה-root מעביר לדפדפן (מ-getSiteSeo) */
@@ -134,7 +137,7 @@ export function trackingHeadScripts(
 
 /** עמודים שבהם לא טוענים מעקב ולא פופ-אפ: אזורי הצוות, החשבון והקופה הפנימית */
 export const NO_MARKETING_PATHS =
-  /^\/(admin|admin-handoff|agent|warehouse|courier|platform|login|register|reset-password|locked|forbidden|account|orders|agreement)(\/|$)/;
+  /^\/(admin|admin-handoff|agent|warehouse|courier|platform|login|register|reset-password|locked|forbidden|account|orders|agreement|unsubscribe)(\/|$)/;
 
 type TrackWindow = Window & {
   fbq?: (...args: unknown[]) => void;

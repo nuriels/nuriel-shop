@@ -110,6 +110,8 @@ export function AbandonedCartsPanel() {
   const [openValue, setOpenValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [reminding, setReminding] = useState<AbandonedCart | null>(null);
+  // חלק 40 (חוק הספאם): מי אישר דיוור — רק להם מותר לשלוח תזכורת
+  const [subscribed, setSubscribed] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,6 +125,19 @@ export function AbandonedCartsPanel() {
       supabase.from("abandoned_carts").select("status, total").limit(5000),
     ]);
     if (error) toast.error(error.message);
+    const emails = [
+      ...new Set(((data ?? []) as unknown as AbandonedCart[]).map((c) => c.email.toLowerCase())),
+    ];
+    if (emails.length > 0) {
+      const { data: consents } = await supabase
+        .from("marketing_consents")
+        .select("email")
+        .eq("subscribed", true)
+        .in("email", emails);
+      setSubscribed(new Set((consents ?? []).map((row) => row.email)));
+    } else {
+      setSubscribed(new Set());
+    }
     setCarts(
       ((data ?? []) as unknown as AbandonedCart[]).map((cart) => ({
         ...cart,
@@ -377,10 +392,19 @@ export function AbandonedCartsPanel() {
                           <X className="size-4" />
                           סגירה
                         </Button>
-                        <Button size="sm" onClick={() => setReminding(cart)}>
-                          <BellRing className="size-4" />
-                          שלח תזכורת
-                        </Button>
+                        {subscribed.has(cart.email.toLowerCase()) ? (
+                          <Button size="sm" onClick={() => setReminding(cart)}>
+                            <BellRing className="size-4" />
+                            שלח תזכורת
+                          </Button>
+                        ) : (
+                          <span
+                            className="self-center text-xs text-muted-foreground"
+                            data-testid="cart-no-consent"
+                          >
+                            הלקוח לא אישר דיוור — אסור לשלוח תזכורת (חוק הספאם)
+                          </span>
+                        )}
                       </>
                     )}
                     {cart.status === "dismissed" && (

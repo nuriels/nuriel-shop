@@ -43,6 +43,7 @@ import { useAuthState } from "@/hooks/useAuthState";
 import { useCart, clearStoredCartNow } from "@/hooks/useCart";
 import { useCategoryTree } from "@/hooks/useCategories";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
+import { marketingConsentText } from "@/lib/marketing-consent";
 import { clearStoredCart, useCartSync } from "@/hooks/useCartSync";
 import { formatIls, minimumQuantity, minOrderMessage, type CatalogItem } from "@/lib/catalog";
 import { addToCartItems, syncCartWithCatalog } from "@/lib/cart";
@@ -216,6 +217,9 @@ function CheckoutPage() {
   const [form, setForm] = useState<CheckoutForm>(EMPTY_CHECKOUT_FORM);
   const [attempted, setAttempted] = useState(false);
   const [saveToProfile, setSaveToProfile] = useState(true);
+  // חלק 40 (חוק הספאם): אישור דיוור — לא מסומן מראש; סימון ואז ביטול = סירוב
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const marketingWithdrawn = useRef(false);
   // חלק 17ב: "תשלום טלפוני מול נציג" / "תשלום בביט" — לפי מה שהחנות הפעילה
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodChoice>(DEFAULT_PAYMENT_METHOD);
   const [busy, setBusy] = useState(false);
@@ -599,10 +603,12 @@ function CheckoutPage() {
       form.customerName.trim(),
       form.customerPhone.trim(),
       items,
+      marketingOptIn,
     ]);
     if (signature === lastSavedCart.current) return;
     const timer = window.setTimeout(() => {
       lastSavedCart.current = signature;
+      // חלק 40: העגלה נשמרת לתזכורת רק אם הלקוח אישר דיוור (נבדק בשרת)
       void saveCartFn({
         data: {
           session: cartSession.current!,
@@ -610,6 +616,8 @@ function CheckoutPage() {
           name: form.customerName.trim(),
           phone: form.customerPhone.trim(),
           items,
+          marketingConsent: marketingOptIn,
+          withdrawConsent: !marketingOptIn && marketingWithdrawn.current,
         },
       }).catch(() => undefined);
     }, 2000);
@@ -623,6 +631,7 @@ function CheckoutPage() {
     placed,
     isStaff,
     saveCartFn,
+    marketingOptIn,
   ]);
 
   // ---------- הטופס ----------
@@ -805,6 +814,22 @@ function CheckoutPage() {
       }
       // Pixel / GA: רכישה (רק הזמנה עם מחירים)
       if (!result.isQuote) trackPurchase(result.orderNumber, grandTotal);
+      // חלק 40: אישור הדיוור נרשם גם אם ההזמנה נשלחה לפני שהעגלה נשמרה
+      // (השרת לא שומר עגלה נטושה אחרי הזמנה — רק את ההסכמה)
+      const optInEmail = (details.customer_email || form.customerEmail || session?.user.email || "")
+        .trim()
+        .toLowerCase();
+      if (marketingOptIn && EMAIL_FORMAT.test(optInEmail)) {
+        void saveCartFn({
+          data: {
+            session: randomUuid(),
+            email: optInEmail,
+            name: form.customerName.trim(),
+            items: [],
+            marketingConsent: true,
+          },
+        }).catch(() => undefined);
+      }
       // עגלה חדשה מעכשיו — ההזמנה סגרה את העגלה הנטושה (במסד, לפי האימייל)
       const fresh = randomUuid();
       cartSession.current = fresh;
@@ -1415,6 +1440,28 @@ function CheckoutPage() {
                         className="mt-0.5"
                       />
                       <span>לשמור את הפרטים באזור האישי — הם ימולאו לבד בפעם הבאה</span>
+                    </label>
+                  )}
+                  {/* חלק 40: אישור דיוור — רשות, לא מסומן מראש, נפרד מהתקנון */}
+                  {!isStaff && (
+                    <label className="flex items-start gap-2 text-sm text-foreground">
+                      <Checkbox
+                        checked={marketingOptIn}
+                        onCheckedChange={(value) => {
+                          const next = value === true;
+                          if (!next && marketingOptIn) marketingWithdrawn.current = true;
+                          setMarketingOptIn(next);
+                        }}
+                        className="mt-0.5"
+                        data-testid="checkout-marketing-optin"
+                      />
+                      <span>
+                        {marketingConsentText(
+                          settings?.business_name?.trim() || settings?.site_title?.trim() || "",
+                          "checkout",
+                        )}{" "}
+                        <span className="text-muted-foreground">(לא חובה)</span>
+                      </span>
                     </label>
                   )}
                   <div className="space-y-1">

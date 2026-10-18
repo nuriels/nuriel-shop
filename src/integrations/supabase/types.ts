@@ -1076,6 +1076,84 @@ export type Database = {
         Update: { user_id?: string; created_at?: string };
         Relationships: [];
       };
+      marketing_consents: {
+        Row: {
+          consent_text: string | null;
+          consented_at: string | null;
+          created_at: string;
+          email: string;
+          id: string;
+          source: string;
+          subscribed: boolean;
+          tenant_id: string;
+          unsubscribe_token: string;
+          unsubscribed_at: string | null;
+          updated_at: string;
+          user_id: string | null;
+          welcome_sent_at: string | null;
+        };
+        Insert: {
+          consent_text?: string | null;
+          consented_at?: string | null;
+          created_at?: string;
+          email: string;
+          id?: string;
+          source: string;
+          subscribed: boolean;
+          tenant_id?: string;
+          unsubscribe_token?: string;
+          unsubscribed_at?: string | null;
+          updated_at?: string;
+          user_id?: string | null;
+          welcome_sent_at?: string | null;
+        };
+        Update: {
+          consent_text?: string | null;
+          consented_at?: string | null;
+          created_at?: string;
+          email?: string;
+          id?: string;
+          source?: string;
+          subscribed?: boolean;
+          tenant_id?: string;
+          unsubscribe_token?: string;
+          unsubscribed_at?: string | null;
+          updated_at?: string;
+          user_id?: string | null;
+          welcome_sent_at?: string | null;
+        };
+        Relationships: [];
+      };
+      marketing_consent_events: {
+        Row: {
+          consent_text: string | null;
+          created_at: string;
+          email: string;
+          id: number;
+          source: string;
+          subscribed: boolean;
+          tenant_id: string;
+        };
+        Insert: {
+          consent_text?: string | null;
+          created_at?: string;
+          email: string;
+          id?: never;
+          source: string;
+          subscribed: boolean;
+          tenant_id?: string;
+        };
+        Update: {
+          consent_text?: string | null;
+          created_at?: string;
+          email?: string;
+          id?: never;
+          source?: string;
+          subscribed?: boolean;
+          tenant_id?: string;
+        };
+        Relationships: [];
+      };
       login_codes: {
         Row: {
           id: string;
@@ -2438,6 +2516,7 @@ export type Database = {
           facebook_pixel_id: string | null;
           google_analytics_id: string | null;
           zap_delivery_days: number;
+          welcome_coupon_code: string | null;
           cancellation_policy_content: string;
           custom_domain: string | null;
           payment_phone_enabled: boolean;
@@ -2496,6 +2575,7 @@ export type Database = {
           facebook_pixel_id?: string | null;
           google_analytics_id?: string | null;
           zap_delivery_days?: number;
+          welcome_coupon_code?: string | null;
           cancellation_policy_content?: string;
           custom_domain?: string | null;
           payment_phone_enabled?: boolean;
@@ -2554,6 +2634,7 @@ export type Database = {
           facebook_pixel_id?: string | null;
           google_analytics_id?: string | null;
           zap_delivery_days?: number;
+          welcome_coupon_code?: string | null;
           cancellation_policy_content?: string;
           custom_domain?: string | null;
           payment_phone_enabled?: boolean;
@@ -2798,6 +2879,20 @@ export type Database = {
       platform_cancel_addon: { Args: { _id: string }; Returns: Json };
       platform_addon_requests: { Args: never; Returns: Json };
       create_shared_cart: { Args: { _items: Json }; Returns: string };
+      marketing_claim_welcome: { Args: { _email: string }; Returns: string };
+      marketing_release_welcome: { Args: { _email: string }; Returns: undefined };
+      marketing_send_token: { Args: { _email: string }; Returns: string };
+      marketing_set_consent: {
+        Args: {
+          _email: string;
+          _subscribed: boolean;
+          _source: string;
+          _consent_text?: string;
+          _user_id?: string;
+        };
+        Returns: Json;
+      };
+      marketing_unsubscribe: { Args: { _token: string }; Returns: string };
       create_quote: {
         Args: { _items: Json; _customer_name?: string; _note?: string; _valid_days?: number };
         Returns: string;

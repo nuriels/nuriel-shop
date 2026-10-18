@@ -538,6 +538,8 @@ export const registerCustomer = createServerFn({ method: "POST" })
       phone: string;
       /** קישור הזמנה ממנהל/סוכן — החשבון נפתח מאושר, עם קבוצת המחיר והמטפל שבהזמנה */
       inviteToken?: string;
+      /** חלק 40: הלקוח סימן "אני מאשר/ת קבלת דיוור" (לא מסומן מראש) */
+      marketingOptIn?: boolean;
     }) => {
       const email = String(input?.email ?? "")
         .trim()
@@ -557,7 +559,13 @@ export const registerCustomer = createServerFn({ method: "POST" })
         if (value === "") throw new Error("נא למלא את כל פרטי העסק");
       }
       const inviteToken = String(input?.inviteToken ?? "").trim();
-      return { email, password, ...fields, inviteToken: inviteToken || null };
+      return {
+        email,
+        password,
+        ...fields,
+        inviteToken: inviteToken || null,
+        marketingOptIn: input?.marketingOptIn === true,
+      };
     },
   )
   .handler(async ({ data }) => {
@@ -648,6 +656,19 @@ export const registerCustomer = createServerFn({ method: "POST" })
       throw new Error(profileError.message);
     }
     if (invite) await invites.markInviteUser(invite.id, created.user.id);
+
+    // חלק 40: אישור דיוור — נרשם עם הנוסח שהוצג, ואם החנות הגדירה קופון
+    // "ברוכים הבאים" — הוא נשלח במייל (כשל לא מבטל את ההרשמה)
+    if (data.marketingOptIn) {
+      const { recordMarketingConsent } = await import("@/lib/marketing-consent.server");
+      await recordMarketingConsent({
+        email: data.email,
+        subscribed: true,
+        source: "register",
+        userId: created.user.id,
+        name: data.contactName,
+      }).catch((error: unknown) => console.error("[register] marketing consent failed", error));
+    }
 
     // טופס ההצטרפות לחתימה נשלח מיד; כשל בשליחה לא מבטל את ההרשמה
     const { sendAgreementEmail } = await import("@/lib/agreement.server");

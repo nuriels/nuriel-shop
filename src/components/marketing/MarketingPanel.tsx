@@ -9,6 +9,7 @@ import {
   Gift,
   Loader2,
   Lock,
+  MailPlus,
   Megaphone,
   Puzzle,
   Save,
@@ -180,6 +181,7 @@ export function MarketingPanel() {
       facebook_pixel_id: pixel || null,
       google_analytics_id: ga || null,
       zap_delivery_days: days,
+      welcome_coupon_code: form.welcome_coupon_code || null,
     };
     const { error } = await supabase.from("site_settings").update(values).eq("id", true);
     setBusy(false);
@@ -200,12 +202,14 @@ export function MarketingPanel() {
   const popupCoupon = form.promo_popup_coupon ?? NO_COUPON;
   const couponOptions = useMemo(() => {
     const list = [...coupons];
-    if (form.promo_popup_coupon && !list.some((c) => c.code === form.promo_popup_coupon)) {
-      // קוד שנבחר בעבר וכבר לא פעיל — נשאר ברשימה כדי שיראו מה מוגדר
-      list.unshift({ code: form.promo_popup_coupon, id: form.promo_popup_coupon } as Coupon);
+    for (const chosen of [form.promo_popup_coupon, form.welcome_coupon_code]) {
+      if (chosen && !list.some((c) => c.code === chosen)) {
+        // קוד שנבחר בעבר וכבר לא פעיל — נשאר ברשימה כדי שיראו מה מוגדר
+        list.unshift({ code: chosen, id: chosen } as Coupon);
+      }
     }
     return list;
-  }, [coupons, form.promo_popup_coupon]);
+  }, [coupons, form.promo_popup_coupon, form.welcome_coupon_code]);
 
   if (saved === null) {
     return <p className="text-sm text-muted-foreground">טוען הגדרות…</p>;
@@ -362,6 +366,50 @@ export function MarketingPanel() {
               הלקוח רואה את הקוד עם כפתור "העתקה". קופונים — בלשונית "קופונים".
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ---------- חלק 40: קופון ברוכים הבאים לנרשמים לדיוור ---------- */}
+      <Card data-testid="welcome-coupon-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <MailPlus className="size-5 text-accent" aria-hidden="true" />
+            קופון ברוכים הבאים לנרשמים לדיוור
+          </CardTitle>
+          <CardDescription>
+            לקוח שנרשם לאתר וסימן "אני מאשר/ת לקבל דיוור" (או הצטרף לדיוור ב"החשבון שלי") מקבל מייל
+            אחד עם הקופון. לפי חוק הספאם: המייל נשלח רק למי שאישר בעצמו, עם המילה "פרסומת" בנושא,
+            פרטי העסק וקישור הסרה. בלי קופון — לא נשלח מייל ברוכים הבאים.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label>הקופון שיישלח</Label>
+          <Select
+            value={form.welcome_coupon_code ?? NO_COUPON}
+            onValueChange={(value) =>
+              patch({ welcome_coupon_code: value === NO_COUPON ? null : value })
+            }
+            dir="rtl"
+          >
+            <SelectTrigger data-testid="welcome-coupon-select">
+              <SelectValue placeholder="בלי קופון (לא נשלח מייל)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_COUPON}>בלי קופון (לא נשלח מייל)</SelectItem>
+              {couponOptions.map((c) => (
+                <SelectItem key={c.code} value={c.code}>
+                  {c.code}
+                  {c.discount_type
+                    ? ` — ${couponLabel(c.discount_type, c.discount_value)}`
+                    : " (לא פעיל)"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            מומלץ קופון ייעודי (למשל WELCOME10) עם מגבלת שימושים או תוקף. קופונים — בלשונית
+            "קופונים".
+          </p>
         </CardContent>
       </Card>
 

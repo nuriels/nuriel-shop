@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { OPEN_COOKIE_SETTINGS_EVENT } from "@/components/marketing/TrackingConsent";
 import { APP_VERSION, DEFAULT_STORE_NAME } from "@/lib/branding";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useStorePages } from "@/hooks/useStorePages";
@@ -65,6 +66,18 @@ export function AppFooter() {
             >
               ביטול עסקה
             </Link>
+            {/* חלק 40: הצהרת נגישות (תקנה 35) והגדרות עוגיות */}
+            <Link to="/accessibility" className="hover:text-accent">
+              הצהרת נגישות
+            </Link>
+            <button
+              type="button"
+              className="text-start hover:text-accent"
+              onClick={() => window.dispatchEvent(new Event(OPEN_COOKIE_SETTINGS_EVENT))}
+              data-testid="footer-cookie-settings"
+            >
+              הגדרות עוגיות
+            </button>
           </nav>
 
           {pages && pages.length > 0 && (

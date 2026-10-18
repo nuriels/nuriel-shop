@@ -11,6 +11,14 @@ INSERT INTO public.abandoned_carts (id, tenant_id, session_key, email, items, it
   ('ac000000-0000-0000-0000-000000000004', '70000000-0000-0000-0000-00000000000a', gen_random_uuid(), 'recovered@test.local', '[{"name":"יין","quantity":1,"unit_price":50}]', 1, 50, 'recovered', 0),
   ('ac000000-0000-0000-0000-000000000005', '70000000-0000-0000-0000-00000000000a', gen_random_uuid(), 'old@test.local', '[{"name":"יין","quantity":2,"unit_price":50}]', 2, 100, 'open', 0),
   ('ac000000-0000-0000-0000-000000000006', '70000000-0000-0000-0000-00000000000b', gen_random_uuid(), 'b@test.local', '[{"name":"יין","quantity":1,"unit_price":50}]', 1, 50, 'open', 0);
+-- חלק 40: תזכורת רק למי שאישר דיוור — כולם מנויים חוץ מ-fresh (שלא משנה כאן)
+INSERT INTO public.marketing_consents (tenant_id, email, subscribed, source, consented_at) VALUES
+  ('70000000-0000-0000-0000-00000000000a', 'due@test.local', true, 'checkout', now()),
+  ('70000000-0000-0000-0000-00000000000a', 'reminded@test.local', true, 'checkout', now()),
+  ('70000000-0000-0000-0000-00000000000a', 'recovered@test.local', true, 'checkout', now()),
+  ('70000000-0000-0000-0000-00000000000a', 'old@test.local', true, 'checkout', now()),
+  ('70000000-0000-0000-0000-00000000000b', 'b@test.local', true, 'checkout', now())
+ON CONFLICT DO NOTHING;
 SET session_replication_role = replica;
 UPDATE public.abandoned_carts SET updated_at = now() - interval '5 hours' WHERE id IN ('ac000000-0000-0000-0000-000000000001', 'ac000000-0000-0000-0000-000000000003', 'ac000000-0000-0000-0000-000000000004');
 UPDATE public.abandoned_carts SET updated_at = now() - interval '1 hour' WHERE id = 'ac000000-0000-0000-0000-000000000002';
@@ -36,3 +44,4 @@ SELECT tests.run('guest: no permission', $$SELECT * FROM public.abandoned_carts_
 
 SELECT set_config('request.headers', '', false);
 DELETE FROM public.abandoned_carts WHERE id::text LIKE 'ac000000-%';
+DELETE FROM public.marketing_consents WHERE email IN ('due@test.local', 'reminded@test.local', 'recovered@test.local', 'old@test.local', 'b@test.local');

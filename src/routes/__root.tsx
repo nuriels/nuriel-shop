@@ -22,7 +22,7 @@ import { RestBanner } from "@/components/RestBanner";
 import { RestStateProvider } from "@/components/RestStateProvider";
 import { MarketingLayer } from "@/components/marketing/MarketingLayer";
 import { CartProvider } from "@/hooks/useCart";
-import { NO_MARKETING_PATHS, trackingHeadScripts } from "@/lib/marketing";
+import { TrackingConsent } from "@/components/marketing/TrackingConsent";
 import { canonicalUrl } from "@/lib/seo-urls";
 
 function NotFoundComponent() {
@@ -113,9 +113,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     // צבע המותג של החנות → משתני העיצוב (כותרת, פוטר, כפתורים ראשיים)
     const brandColor = normalizeBrandColor(loaderData?.brandColor);
     const brandCss = brandThemeCss(brandColor);
-    // Facebook Pixel / Google Analytics — רק בעמודי החנות (לא בפאנלים ובחשבון)
+    // חלק 40: Facebook Pixel / Google Analytics לא נטענים כאן (ב-SSR) — רק
+    // בדפדפן, אחרי שהגולש אישר עוגיות (TrackingConsent)
     const path = matches[matches.length - 1]?.pathname ?? "/";
-    const tracking = NO_MARKETING_PATHS.test(path) ? [] : trackingHeadScripts(loaderData?.tracking);
     // חלק 31: כתובת קנונית אחת לכל עמוד ציבורי — מהכתובת הרשמית של החנות (דומיין
     // אישי פעיל, אחרת הסאב-דומיין), לא מהדומיין שממנו נכנסו. נוצרת בשרת (SSR).
     // עמוד מוצר ועמוד תוכן מוסיפים אותה בעצמם (רק כשהעמוד באמת קיים); אזורים
@@ -162,7 +162,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         // צבע שורת הדפדפן בטלפון
         ...(brandColor ? [{ name: "theme-color", content: brandColor }] : []),
       ],
-      scripts: tracking,
       links: [
         { rel: "stylesheet", href: appCss },
         ...(canonical ? [{ rel: "canonical", href: canonical }] : []),
@@ -202,6 +201,22 @@ function RootShell({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
+        {/* חלק 40: נגישות — "דלג לתוכן" (מופיע בלחיצת Tab הראשונה) */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:right-3 focus:top-3 focus:z-[100] focus:rounded-md focus:bg-card focus:px-4 focus:py-2 focus:text-foreground focus:shadow-lg focus:ring-2 focus:ring-ring"
+          onClick={(event) => {
+            const main = document.querySelector("main");
+            if (!main) return;
+            event.preventDefault();
+            if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
+            main.focus();
+            main.scrollIntoView();
+          }}
+          data-testid="skip-link"
+        >
+          דלג לתוכן הראשי
+        </a>
         {children}
         <Scripts />
       </body>
@@ -235,6 +250,8 @@ function RootComponent() {
           tracking={site?.tracking ?? null}
           sabbath={site?.sabbath === true}
         />
+        {/* חלק 40: Pixel / Analytics רק אחרי הסכמה לעוגיות */}
+        <TrackingConsent tracking={site?.tracking ?? null} />
       </CartProvider>
       <AccessibilityWidget />
       <Toaster position="top-center" />

@@ -13,6 +13,7 @@ import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useServerFn } from "@tanstack/react-start";
 import { useSubscription } from "@/hooks/useSubscription";
 import { registerCustomer } from "@/lib/admin.functions";
+import { marketingConsentText } from "@/lib/marketing-consent";
 import { checkCustomerInvite } from "@/lib/invite.functions";
 import { GoogleSignInButton, OrDivider } from "@/components/GoogleSignInButton";
 import { Mail } from "lucide-react";
@@ -52,6 +53,8 @@ function RegisterPage() {
   const [contactName, setContactName] = useState("");
   const [phone, setPhone] = useState("");
   const [agreed, setAgreed] = useState(false);
+  // חלק 40: אישור דיוור — רשות, לא מסומן מראש
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const sellsAlcohol = settings?.sells_alcohol ?? true;
@@ -104,6 +107,7 @@ function RegisterPage() {
           taxId,
           contactName,
           phone,
+          marketingOptIn,
           ...(invite.status === "valid" && inviteToken ? { inviteToken } : {}),
         },
       });
@@ -286,6 +290,22 @@ function RegisterPage() {
                       מדיניות הפרטיות
                     </Link>
                     .
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2 text-sm text-foreground">
+                  <Checkbox
+                    checked={marketingOptIn}
+                    onCheckedChange={(v) => setMarketingOptIn(v === true)}
+                    className="mt-0.5"
+                    data-testid="register-marketing-optin"
+                  />
+                  <span>
+                    {marketingConsentText(
+                      settings?.business_name?.trim() || settings?.site_title?.trim() || "",
+                      "register",
+                    )}{" "}
+                    <span className="text-muted-foreground">(לא חובה)</span>
                   </span>
                 </label>
 
