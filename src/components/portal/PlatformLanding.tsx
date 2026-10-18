@@ -161,7 +161,11 @@ export function PlatformLanding({ siteName }: { siteName: string }) {
               </ul>
             </div>
 
-            <StorePreview baseDomain={baseDomain} />
+            {/* הדמיית החנות + כרטיס "חנות לדוגמה" (חנות אמיתית, לצפייה כלקוח) */}
+            <div className="flex flex-col gap-12">
+              <StorePreview baseDomain={baseDomain} />
+              <DemoStoreCard />
+            </div>
           </div>
         </section>
 
@@ -259,6 +263,48 @@ export function PlatformLanding({ siteName }: { siteName: string }) {
   );
 }
 
+/** כתובת החנות לדוגמה — נפתחת בלשונית חדשה כמו אצל כל לקוח (בלי התחברות) */
+const DEMO_STORE_URL = "https://nuriel-shop.nuri1.fit/";
+
+/**
+ * כרטיס "חנות לדוגמה" — באותו עיצוב של הדמיית החנות. קישור רגיל לאתר החנות:
+ * לשונית חדשה, בלי להעביר התחברות או הרשאות (noopener / noreferrer), ולא
+ * לפאנל הניהול.
+ */
+function DemoStoreCard() {
+  return (
+    <div
+      className="mx-auto w-full max-w-md rounded-2xl bg-card p-5 text-card-foreground shadow-2xl shadow-black/40 ring-1 ring-black/5"
+      data-testid="demo-store-card"
+    >
+      <div className="flex items-center gap-3">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground shadow-md">
+          <Store className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1 text-right">
+          <h2 className="font-display text-lg font-bold">חנות לדוגמה</h2>
+          <p className="text-sm text-muted-foreground">כך נראית חנות אמיתית על הפלטפורמה</p>
+        </div>
+      </div>
+      <Button
+        asChild
+        size="lg"
+        className="mt-4 w-full bg-primary font-bold text-primary-foreground hover:bg-primary/90"
+      >
+        <a
+          href={DEMO_STORE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="demo-store-link"
+        >
+          לצפייה בחנות
+          <ArrowLeft className="size-4" aria-hidden="true" />
+        </a>
+      </Button>
+    </div>
+  );
+}
+
 /** הדמיה של חנות + נתון מלוח הבקרה (ב-Hero) — רק עיצוב, בלי נתונים אמיתיים */
 function StorePreview({ baseDomain }: { baseDomain: string }) {
   const products = [
@@ -288,7 +334,7 @@ function StorePreview({ baseDomain }: { baseDomain: string }) {
         {/* החנות */}
         <div className="space-y-3 p-4">
           <div className="flex items-center justify-between">
-            <span className="font-display text-base font-bold">הקפה של דנה</span>
+            <span className="font-display text-base font-bold">חנות התכשיטים של שיראל</span>
             <span className="flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground">
               <ShoppingBag className="size-3" />
               העגלה (2)

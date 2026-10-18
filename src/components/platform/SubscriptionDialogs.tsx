@@ -18,9 +18,11 @@ import {
   BILLING_METHOD_LABELS,
   PAYMENT_METHOD_LABELS,
   PLAN_LABELS,
+  EXTEND_MAX_DAYS,
   formatDate,
   formatShekels,
   planBadge,
+  planExtension,
   remainingLabel,
   subscriptionStateFrom,
   ADDON_NAMES,
@@ -117,21 +119,47 @@ export function ExtendTrialDialog({
   onDone: (store: Store, state: SubscriptionState) => void;
 }) {
   const extend = useServerFn(platformExtendTrial);
+  const [mode, setMode] = useState<"days" | "date">("days");
   const [days, setDays] = useState("14");
+  const [date, setDate] = useState("");
+  // שלב האישור: מציגים את התאריך החדש לפני השמירה
+  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const state = store ? storeSubscription(store) : null;
   const trial = state?.plan === "trial";
 
   useEffect(() => {
-    if (store) setDays("14");
+    if (store) {
+      setMode("days");
+      setDays("14");
+      setDate("");
+      setConfirming(false);
+    }
   }, [store]);
 
-  const submit = async (event: FormEvent) => {
+  const plan = state
+    ? planExtension(
+        state.endsAt,
+        new Date(),
+        mode === "days" ? { mode, days: Number(days) } : { mode, date },
+      )
+    : null;
+
+  const review = (event: FormEvent) => {
     event.preventDefault();
-    if (!store) return;
+    if (!plan) return;
+    if (!plan.ok) {
+      toast.error(plan.error);
+      return;
+    }
+    setConfirming(true);
+  };
+
+  const save = async () => {
+    if (!store || !plan?.ok) return;
     setBusy(true);
     try {
-      const next = await extend({ data: { tenantId: store.id, days: Number(days) } });
+      const next = await extend({ data: { tenantId: store.id, days: plan.days } });
       toast.success(`"${store.name}" — ${remainingLabel(next)} (עד ${formatDate(next.endsAt)})`);
       onDone(store, next);
       onClose();
@@ -142,66 +170,150 @@ export function ExtendTrialDialog({
     }
   };
 
+  const chip = (active: boolean) =>
+    cn(
+      "rounded-full border px-3 py-1 text-xs font-medium",
+      active ? "border-primary bg-primary text-primary-foreground" : "hover:bg-secondary",
+    );
+
   return (
     <Dialog open={store !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent dir="rtl" className="sm:max-w-md">
+      <DialogContent dir="rtl" className="sm:max-w-md" data-testid="extend-trial-dialog">
         <DialogHeader className="text-right sm:text-right">
           <DialogTitle className="flex items-center gap-2">
             <CalendarPlus className="size-5 text-primary" aria-hidden="true" />
             {trial ? "הארכת ניסיון" : "הארכת התקופה"} — {store?.name}
           </DialogTitle>
           <DialogDescription>
-            {state
-              ? `${PLAN_LABELS[state.plan]} · ${remainingLabel(state)}${state.endsAt ? ` (עד ${formatDate(state.endsAt)})` : ""}. הימים נוספים מהיום או מסוף התקופה — המאוחר מביניהם.`
-              : ""}
+            {state ? `${PLAN_LABELS[state.plan]} · ${remainingLabel(state)}` : ""}. ההארכה לא משנה
+            חבילה, לא מחייבת ולא מוסיפה הרשאות.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="extend-days">כמה ימים להוסיף</Label>
-            <Input
-              id="extend-days"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={365}
-              required
-              value={days}
-              onChange={(event) => setDays(event.target.value)}
-              className="w-32"
-            />
-            <div className="flex flex-wrap gap-2 pt-1">
-              {[7, 14, 30, 60].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setDays(String(n))}
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-xs font-medium",
-                    days === String(n)
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "hover:bg-secondary",
-                  )}
-                >
-                  +{n} ימים
-                </button>
-              ))}
+
+        <p
+          className="rounded-lg bg-secondary/60 px-3 py-2 text-sm"
+          data-testid="extend-current-end"
+        >
+          {trial ? "סיום הניסיון הנוכחי" : "סוף התקופה הנוכחית"}:{" "}
+          <span className="font-bold">{state?.endsAt ? formatDate(state.endsAt) : "—"}</span>
+        </p>
+
+        {confirming && plan?.ok ? (
+          <div className="space-y-4" data-testid="extend-confirm">
+            <div className="space-y-1 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+              <p>
+                התאריך החדש:{" "}
+                <span className="font-bold" data-testid="extend-new-end">
+                  {formatDate(plan.newEnd)}
+                </span>
+              </p>
+              <p className="text-muted-foreground">
+                תוספת של {plan.days} {plan.days === 1 ? "יום" : "ימים"} (מ-{formatDate(plan.from)})
+              </p>
             </div>
+            <DialogFooter className="gap-2 sm:justify-start">
+              <Button type="button" onClick={() => void save()} disabled={busy}>
+                {busy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <CalendarPlus className="size-4" />
+                )}
+                אישור והארכה
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirming(false)}
+                disabled={busy}
+              >
+                חזרה לעריכה
+              </Button>
+            </DialogFooter>
           </div>
-          <DialogFooter className="gap-2 sm:justify-start">
-            <Button type="submit" disabled={busy}>
-              {busy ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <CalendarPlus className="size-4" />
-              )}
-              הארכה
-            </Button>
-            <Button type="button" variant="outline" onClick={onClose}>
-              ביטול
-            </Button>
-          </DialogFooter>
-        </form>
+        ) : (
+          <form onSubmit={review} className="space-y-4">
+            <div className="flex gap-2" role="radiogroup" aria-label="אופן ההארכה">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={mode === "days"}
+                className={chip(mode === "days")}
+                onClick={() => setMode("days")}
+              >
+                הוספת ימים
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={mode === "date"}
+                className={chip(mode === "date")}
+                onClick={() => setMode("date")}
+                data-testid="extend-mode-date"
+              >
+                בחירת תאריך סיום
+              </button>
+            </div>
+
+            {mode === "days" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="extend-days">כמה ימים להוסיף</Label>
+                <Input
+                  id="extend-days"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={EXTEND_MAX_DAYS}
+                  required
+                  value={days}
+                  onChange={(event) => setDays(event.target.value)}
+                  className="w-32"
+                />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {[7, 14, 30, 60].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setDays(String(n))}
+                      className={chip(days === String(n))}
+                    >
+                      +{n} ימים
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label htmlFor="extend-date">תאריך סיום חדש</Label>
+                <Input
+                  id="extend-date"
+                  type="date"
+                  required
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  className="w-48"
+                />
+              </div>
+            )}
+
+            {plan && (
+              <p
+                className={cn("text-sm", plan.ok ? "text-muted-foreground" : "text-destructive")}
+                role={plan.ok ? undefined : "alert"}
+              >
+                {plan.ok ? `התאריך החדש יהיה: ${formatDate(plan.newEnd)}` : plan.error}
+              </p>
+            )}
+
+            <DialogFooter className="gap-2 sm:justify-start">
+              <Button type="submit" disabled={!plan?.ok} data-testid="extend-review">
+                המשך לאישור
+              </Button>
+              <Button type="button" variant="outline" onClick={onClose}>
+                ביטול
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );

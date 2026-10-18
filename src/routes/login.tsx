@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
-import { KeyRound, Mail } from "lucide-react";
+import { ArrowLeft, KeyRound, Mail } from "lucide-react";
 import { cleanAscii, supabase } from "@/integrations/supabase/client";
 import { loginWithIdentifier } from "@/lib/auth.functions";
 import { AppFooter } from "@/components/AppFooter";
@@ -122,6 +122,18 @@ function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader role={null} email={null} />
+      {/* חזרה לעמוד הראשי (כרטיסי החנויות) — קישור רגיל, עובד גם בכניסה ישירה בלי היסטוריה */}
+      <div className="mx-auto flex w-full max-w-6xl justify-end px-4 pt-4">
+        <Button
+          asChild
+          className="bg-blue-600 text-white shadow-sm hover:bg-blue-700 focus-visible:ring-blue-500"
+        >
+          <Link to="/" data-testid="login-back-home">
+            חזרה לעמוד הראשי
+            <ArrowLeft className="size-4" aria-hidden="true" />
+          </Link>
+        </Button>
+      </div>
       <div className="flex w-full flex-1 items-center justify-center px-4 py-10">
         <div className="w-full max-w-md">
           <Card className="border-border shadow-soft">

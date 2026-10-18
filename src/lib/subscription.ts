@@ -394,3 +394,66 @@ export function planBadge(state: Pick<SubscriptionState, "plan" | "active">): {
 export function endingSoon(state: Pick<SubscriptionState, "daysLeft" | "active">): boolean {
   return state.active && state.daysLeft !== null && state.daysLeft <= 3;
 }
+
+// ------------------------------------------------------------
+// הארכת ניסיון / תקופה (מנהל-על) — חישוב מקדים לתצוגה ולאישור
+// ------------------------------------------------------------
+
+export const EXTEND_MAX_DAYS = 365;
+
+/** חצות ביום הנתון (YYYY-MM-DD) לפי שעון ישראל */
+function israelMidnight(date: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return null;
+  const utc = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (Number.isNaN(utc)) return null;
+  const zone = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jerusalem",
+    timeZoneName: "shortOffset",
+  })
+    .formatToParts(new Date(utc + 12 * 60 * 60 * 1000))
+    .find((part) => part.type === "timeZoneName")?.value;
+  const offset = /GMT([+-]\d+)(?::(\d+))?/.exec(zone ?? "");
+  const minutes = offset
+    ? Number(offset[1]) * 60 + Math.sign(Number(offset[1])) * Number(offset[2] ?? 0)
+    : 0;
+  return utc - minutes * 60 * 1000;
+}
+
+export type ExtensionPlan =
+  { ok: true; days: number; from: string; newEnd: string } | { ok: false; error: string };
+
+/**
+ * כמו platform_extend_trial במסד: הימים נוספים מהמאוחר מבין "עכשיו" וסוף
+ * התקופה הנוכחית. בבחירת תאריך — מחשבים כמה ימים צריך כדי להגיע אליו.
+ */
+export function planExtension(
+  endsAt: string | null,
+  now: Date,
+  input: { mode: "days"; days: number } | { mode: "date"; date: string },
+): ExtensionPlan {
+  const fromMs = Math.max(endsAt ? Date.parse(endsAt) : now.getTime(), now.getTime());
+  let days: number;
+  if (input.mode === "days") {
+    days = Math.floor(Number(input.days));
+    if (!Number.isFinite(days) || days < 1 || days > EXTEND_MAX_DAYS) {
+      return { ok: false, error: `מספר הימים: 1 עד ${EXTEND_MAX_DAYS}` };
+    }
+  } else {
+    const target = israelMidnight(input.date);
+    if (target === null) return { ok: false, error: "בחרו תאריך" };
+    days = Math.ceil((target - fromMs) / DAY_MS);
+    if (days < 1) {
+      return { ok: false, error: "בחרו תאריך מאוחר מסוף התקופה הנוכחית" };
+    }
+    if (days > EXTEND_MAX_DAYS) {
+      return { ok: false, error: `אפשר להאריך עד ${EXTEND_MAX_DAYS} ימים בפעם אחת` };
+    }
+  }
+  return {
+    ok: true,
+    days,
+    from: new Date(fromMs).toISOString(),
+    newEnd: new Date(fromMs + days * DAY_MS).toISOString(),
+  };
+}

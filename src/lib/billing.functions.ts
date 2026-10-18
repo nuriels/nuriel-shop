@@ -73,6 +73,9 @@ export const platformExtendTrial = createServerFn({ method: "POST" })
       _days: data.days,
     });
     if (error) throw new Error(error.message);
+    // הנעילה / הפתיחה של החנות חלה מיד (בלי לחכות למטמון החנויות בשרת)
+    const { invalidateTenantCache } = await import("@/integrations/supabase/tenant.server");
+    invalidateTenantCache(data.tenantId);
     return parseSubscriptionState(state);
   });
 
