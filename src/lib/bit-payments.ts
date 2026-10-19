@@ -14,7 +14,7 @@ import { attachmentBytesMatch, attachmentExtension, cleanAttachmentName } from "
 // ------------------------------------------------------------
 
 /** offline = תשלום טלפוני מול נציג | bit = העברה בביט | credit_card = הזמנות ישנות (Hyp הוסר בחלק 28) */
-export type PaymentMethod = "offline" | "credit_card" | "bit";
+export type PaymentMethod = "offline" | "credit_card" | "bit" | "grow";
 
 /**
  * awaiting = ממתינה לתשלום (pending_payment) · awaiting_verification = ממתינה
@@ -27,6 +27,7 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   offline: "תשלום טלפוני מול נציג",
   credit_card: "תשלום באשראי",
   bit: "תשלום בביט",
+  grow: "תשלום מקוון (אשראי / ביט)",
 };
 
 /** כמה זמן יש ללקוח להעביר בביט ולשלוח אסמכתא (כמו במסד) */
@@ -44,7 +45,13 @@ export function paymentStatusLabel(
     case "awaiting_verification":
       return "ממתינה לאישור תשלום (ביט)";
     case "paid":
-      return bit ? "שולמה בביט" : method === "credit_card" ? "שולמה באשראי" : "שולמה";
+      return bit
+        ? "שולמה בביט"
+        : method === "credit_card"
+          ? "שולמה באשראי"
+          : method === "grow"
+            ? "שולמה אונליין"
+            : "שולמה";
     case "expired":
       return "לא שולמה בזמן";
     case "rejected":

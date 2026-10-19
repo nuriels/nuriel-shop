@@ -61,6 +61,10 @@ export type PreparedOrderEmail = {
     bitReceipt: boolean;
     /** חלק 32: הזמנה מהקופה המהירה — אמצעי התשלום שנרשם בקופה (null = לא מהקופה) */
     posMethod: string | null;
+    /** חלק 43: תשלום מקוון דרך Grow — מספר אישור, כרטיס (מותג ····4 ספרות) ותשלומים */
+    growAsmachta: string | null;
+    growCard: string | null;
+    growInstallments: number | null;
   };
   /** מסמך ה-PDF (אישור הזמנה / בקשה להצעת מחיר) */
   attachments: EmailAttachment[];
@@ -92,7 +96,7 @@ export async function prepareOrderEmail(orderId: string): Promise<PreparedOrderE
   const { data: payment } = await supabaseAdmin
     .from("orders")
     .select(
-      "payment_method, payment_status, bit_transaction_id, bit_receipt_url, pos_payment_method",
+      "payment_method, payment_status, bit_transaction_id, bit_receipt_url, pos_payment_method, grow_asmachta, grow_card, grow_installments",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -278,6 +282,9 @@ export async function prepareOrderEmail(orderId: string): Promise<PreparedOrderE
       bitReference: payment?.bit_transaction_id ?? null,
       bitReceipt: Boolean(payment?.bit_receipt_url),
       posMethod: payment?.pos_payment_method ?? null,
+      growAsmachta: payment?.grow_asmachta ?? null,
+      growCard: payment?.grow_card ?? null,
+      growInstallments: payment?.grow_installments ?? null,
     },
     attachments: [{ filename: pdf.filename, content: pdf.base64 }],
     cart: {

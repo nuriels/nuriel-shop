@@ -42,6 +42,11 @@ services:
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-}
       # סוד לחתימת קודי הכניסה למייל (HMAC). ריק = נגזר ממפתח ה-service role
       LOGIN_CODE_SECRET: ${LOGIN_CODE_SECRET:-}
+      # סליקה דרך Grow (חלק 43): מפתח הצפנת פרטי המסוף של החנויות (AES-256-GCM).
+      # סוד! נוצר פעם אחת ע"י setup-selfhost.sh. אם יאבד — צריך להזין מחדש את פרטי המסופים.
+      GROW_SECRETS_KEY: ${GROW_SECRETS_KEY:-}
+      # כתובת ה-API של Grow בייצור (נמסרת ע"י Grow ביום המעבר; סנדבוקס מובנה בקוד)
+      GROW_API_URL: ${GROW_API_URL:-}
       # כתובת חנות ברירת המחדל — לקישורים במיילים (איפוס סיסמה, הזמנות)
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
       # דומיין בסיס לחנויות בתת-דומיין: shop2.<TENANT_BASE_DOMAIN>

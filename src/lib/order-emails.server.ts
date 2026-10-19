@@ -79,6 +79,23 @@ export async function sendOrderEmailsInternal(
         <p style="margin:0 0 4px;font-weight:bold;color:#92400e;">💳 תשלום בביט — ממתין לאישור שלכם</p>
         <p style="margin:0;">${proof || "הלקוח דיווח על העברה"}. בדקו שהכסף התקבל באפליקציית ביט ואשרו את התשלום בפאנל — רק אז ההזמנה יוצאת לטיפול.</p>
       </div>${adminLink}`;
+    } else if (payment.method === "grow") {
+      // חלק 43: תשלום מקוון דרך Grow — אישור התשלום לבעל החנות
+      const details = [
+        payment.growAsmachta
+          ? `מספר אישור: <span dir="ltr">${escapeHtml(payment.growAsmachta)}</span>`
+          : "",
+        payment.growCard ? `כרטיס: <span dir="ltr">${escapeHtml(payment.growCard)}</span>` : "",
+        payment.growInstallments && payment.growInstallments > 1
+          ? `${payment.growInstallments} תשלומים`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      paymentHtml = `<div style="margin-top:12px;padding:10px 12px;border:2px solid #16a34a;border-radius:8px;background:#f0fdf4;">
+        <p style="margin:0 0 4px;font-weight:bold;color:#166534;">💳 שולם אונליין (Grow)</p>
+        <p style="margin:0;">${details || "התשלום התקבל"}. הכסף נכנס למסוף שלכם בחברת הסליקה — אפשר לאמת שם לפי מספר האישור.</p>
+      </div>`;
     } else if (payment.method === "credit_card" && payment.status === "paid") {
       paymentHtml = `<p><strong>אמצעי תשלום:</strong> אשראי — שולם</p>`;
     } else {

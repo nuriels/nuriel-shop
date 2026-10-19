@@ -97,6 +97,17 @@ write_app_env() {
   if [[ -z "$resend_key" && -f "$APP_DIR/.env" ]]; then
     resend_key=$(grep '^RESEND_API_KEY=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/^"//; s/"$//' || true)
   fi
+  # מפתח הצפנת פרטי הסליקה (חלק 43): נוצר פעם אחת ונשמר בין הרצות. אם יוחלף —
+  # פרטי המסופים השמורים לא ייפתחו וצריך להזין אותם מחדש, לכן לעולם לא דורסים.
+  local grow_key="${GROW_SECRETS_KEY:-}" grow_url="${GROW_API_URL:-}"
+  if [[ -f "$APP_DIR/.env" ]]; then
+    [[ -z "$grow_key" ]] && grow_key=$(grep '^GROW_SECRETS_KEY=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/^"//; s/"$//' || true)
+    [[ -z "$grow_url" ]] && grow_url=$(grep '^GROW_API_URL=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/^"//; s/"$//' || true)
+  fi
+  if [[ -z "$grow_key" ]]; then
+    grow_key=$(openssl rand -base64 32 | tr -d '\n')
+    GROW_KEY_CREATED=1
+  fi
   log "כותב את קבצי הסביבה של האפליקציה"
   umask 077
   # docker compose קורא את הקובץ הזה אוטומטית (משתני ${...} ב-docker-compose.yml)
@@ -109,6 +120,9 @@ SUPABASE_PUBLISHABLE_KEY=${anon}
 SUPABASE_SERVICE_ROLE_KEY=${service}
 # מיילים (Resend) — מפתח אחד לכל החנויות. ריק = ההזמנות נקלטות אבל מיילים לא נשלחים
 RESEND_API_KEY=${resend_key}
+# סליקה דרך Grow: מפתח הצפנת פרטי המסופים (סוד — לשמור גיבוי נפרד; אם יאבד צריך להזין פרטי מסופים מחדש)
+GROW_SECRETS_KEY=${grow_key}
+GROW_API_URL=${grow_url}
 # השולח: "שם החנות <כתובת>" — הכתובת על דומיין מאומת ב-Resend
 EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-orders@${TENANT_BASE_DOMAIN}}
 # כתובת חנות ברירת המחדל — לקישורים במיילים
@@ -128,6 +142,9 @@ services:
     ports:
       - "127.0.0.1:${APP_PORT}:3000"
 EOF
+  if [[ "${GROW_KEY_CREATED:-}" == 1 ]]; then
+    echo "  ✓ נוצר מפתח הצפנה לסליקה (GROW_SECRETS_KEY) ב-$APP_DIR/.env — לשמור עותק גיבוי נפרד"
+  fi
   if [[ -n "$resend_key" ]]; then
     echo "  ✓ $APP_DIR/.env + docker-compose.override.yml (RESEND_API_KEY מולא)"
   else

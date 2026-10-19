@@ -48,7 +48,7 @@ function cleanPayload(input: unknown): CheckoutPayload {
       result[key] = typeof value === "string" && UUID.test(value) ? value : "";
     } else if (key === "payment_method") {
       // חלק 16ב / 17ב: בקשה בלבד — המסד מחליט לפי מה שזמין בחנות
-      result[key] = value === "bit" ? "bit" : "offline";
+      result[key] = value === "bit" ? "bit" : value === "grow" ? "grow" : "offline";
     } else if (key === "coupon_code") {
       // קוד הקופון — רק התווים המותרים; התנאים וההנחה נקבעים במסד
       result[key] =
@@ -137,9 +137,11 @@ export const placeGuestOrder = createServerFn({ method: "POST" })
       .eq("id", created.id)
       .maybeSingle();
     const bit = paymentRow?.payment_method === "bit" && paymentRow.payment_status === "awaiting";
+    // חלק 43: תשלום מקוון דרך Grow — המיילים יוצאים אחרי שההתראה מ-Grow מאשרת את התשלום
+    const grow = paymentRow?.payment_method === "grow" && paymentRow.payment_status === "awaiting";
 
     // מיילים ברקע — האורח מקבל את מסך האישור מיד, בלי לחכות להפקת ה-PDF
-    if (!bit) {
+    if (!bit && !grow) {
       const { sendOrderEmailsInternal } = await import("@/lib/order-emails.server");
       void sendOrderEmailsInternal(created.id, null).catch((emailError: unknown) => {
         console.error("[checkout] guest order emails failed", created.order_number, emailError);
@@ -149,6 +151,7 @@ export const placeGuestOrder = createServerFn({ method: "POST" })
     return {
       /** חלק 17ב: ההזמנה ממתינה לתשלום בביט → /checkout/bit/<orderId> */
       bit,
+      grow,
       orderId: created.id,
       orderNumber: created.order_number,
       kind: created.kind as "order" | "quote",

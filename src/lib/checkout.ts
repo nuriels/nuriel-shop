@@ -154,7 +154,7 @@ export type CheckoutPayload = {
  * "תשלום טלפוני מול נציג" (בלי חיוב באתר) או "תשלום בביט" (חלק 17ב — ההזמנה
  * נשמרת ואז עוברים לעמוד התשלום בביט)
  */
-export type PaymentMethodChoice = "offline" | "bit";
+export type PaymentMethodChoice = "offline" | "bit" | "grow";
 
 export function checkoutPayload(
   form: CheckoutForm,

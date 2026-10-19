@@ -309,7 +309,7 @@ export type OrderRow = OrderContactFields & {
   /** חלק 33: העובד שהקליד את ההזמנה (קופה / הזמנה שנפתחה ללקוח מהניהול) */
   created_by_staff_id?: string | null;
   /** אמצעי התשלום ומצבו (חלק 17ב): offline (טלפוני) / bit; credit_card — הזמנות ישנות בלבד */
-  payment_method?: "offline" | "credit_card" | "bit";
+  payment_method?: "offline" | "credit_card" | "bit" | "grow";
   payment_status?:
     "not_required" | "awaiting" | "awaiting_verification" | "paid" | "expired" | "rejected";
   paid_at?: string | null;
@@ -318,6 +318,11 @@ export type OrderRow = OrderContactFields & {
   bit_receipt_url?: string | null;
   payment_reported_at?: string | null;
   payment_due_at?: string | null;
+  /** חלק 43: תשלום מקוון דרך Grow — מספר אישור, מזהה עסקה, כרטיס (מותג ····4 ספרות), תשלומים */
+  grow_asmachta?: string | null;
+  grow_transaction_id?: string | null;
+  grow_card?: string | null;
+  grow_installments?: number | null;
   order_items: OrderItemRow[];
 };
 
@@ -328,6 +333,7 @@ export const ORDER_SELECT_COLUMNS =
   "delivery_attempts, last_delivery_failure_note, last_delivery_failure_at, shipped_at, delivered_at, " +
   "payment_method, payment_status, paid_at, order_source, pos_payment_method, created_by_staff_id, " +
   "bit_transaction_id, bit_receipt_url, payment_reported_at, payment_due_at, " +
+  "grow_asmachta, grow_transaction_id, grow_card, grow_installments, " +
   `${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ${ORDER_COUPON_COLUMNS}, ` +
   "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit, is_gift, " +
   "is_digital, item_status, digital_license_key, license_sent_at, license_sent_to, variant_label, " +

@@ -32,6 +32,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { platformBillingHistory } from "@/lib/billing.functions";
 import {
+  getGrowSettings,
+  saveGrowSettings,
+  testGrowConnection,
+  type GrowSettings,
+} from "@/lib/platform-grow.functions";
+import {
   MAX_DOC_BYTES,
   PLATFORM_DOCS_BUCKET,
   archiveDocument,
@@ -92,6 +98,15 @@ const AUDIT_LABELS: Record<string, string> = {
   payment_recorded: "תועד תשלום",
   addon_approved: "אושר תוסף",
   admin_entered_store: "מנהל-על נכנס לניהול החנות",
+  grow_credentials_saved: "הוזנו פרטי מסוף Grow",
+  grow_credentials_replaced: "הוחלפו פרטי מסוף Grow",
+  grow_settings_changed: "שונו הגדרות הסליקה",
+  grow_enabled: "הסליקה הופעלה לחנות",
+  grow_disabled: "הסליקה כובתה לחנות",
+  grow_connection_tested: "נבדק החיבור ל-Grow",
+  grow_payment_received: "התקבל תשלום דרך Grow",
+  grow_payment_after_cancel: "תשלום Grow הגיע אחרי שההזמנה בוטלה (דורש טיפול ידני)",
+  grow_webhook_rejected: "התראת Grow נדחתה (טוקן / סכום לא תואמים)",
 };
 
 const dateTime = (iso: string | null) =>
@@ -165,6 +180,9 @@ export function CustomerFile({ tenantId }: { tenantId: string }) {
           </TabsTrigger>
           <TabsTrigger value="emails" data-testid="tab-emails">
             מיילים
+          </TabsTrigger>
+          <TabsTrigger value="grow" data-testid="tab-grow">
+            סליקה
           </TabsTrigger>
           <TabsTrigger value="subscription" data-testid="tab-subscription">
             מנוי וניסיון
@@ -252,6 +270,9 @@ export function CustomerFile({ tenantId }: { tenantId: string }) {
               ))}
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="grow">
+          <GrowTab tenantId={tenantId} onChanged={refresh} />
         </TabsContent>
         <TabsContent value="subscription">
           <SubscriptionTab tenantId={tenantId} />
@@ -784,6 +805,217 @@ function SubscriptionTab({ tenantId }: { tenantId: string }) {
             </div>
           </div>
         ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------- סליקה (Grow)
+const GROW_TYPES: { id: number; label: string }[] = [
+  { id: 1, label: "כרטיס אשראי" },
+  { id: 6, label: "Bit" },
+  { id: 13, label: "Apple Pay" },
+  { id: 14, label: "Google Pay" },
+];
+
+function GrowTab({ tenantId, onChanged }: { tenantId: string; onChanged: () => Promise<void> }) {
+  const loadSettings = useServerFn(getGrowSettings);
+  const save = useServerFn(saveGrowSettings);
+  const test = useServerFn(testGrowConnection);
+  const [settings, setSettings] = useState<GrowSettings | null>(null);
+  const [userId, setUserId] = useState("");
+  const [pageCode, setPageCode] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [sandbox, setSandbox] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [maxPayments, setMaxPayments] = useState(1);
+  const [types, setTypes] = useState<number[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const apply = useCallback((next: GrowSettings) => {
+    setSettings(next);
+    setSandbox(next.sandbox);
+    setEnabled(next.enabled);
+    setMaxPayments(next.maxPayments);
+    setTypes(next.transactionTypes);
+  }, []);
+
+  useEffect(() => {
+    loadSettings({ data: { tenantId } })
+      .then(apply)
+      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : "הטעינה נכשלה"));
+  }, [loadSettings, tenantId, apply]);
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const next = await save({
+        data: {
+          tenantId,
+          userId,
+          pageCode,
+          apiKey,
+          sandbox,
+          enabled,
+          maxPayments,
+          transactionTypes: types,
+        },
+      });
+      apply(next);
+      // הפרטים נמחקים מהמסך מיד אחרי השמירה — לא נשארים בדפדפן
+      setUserId("");
+      setPageCode("");
+      setApiKey("");
+      toast.success("נשמר");
+      await onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "השמירה נכשלה");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!settings) return <Loader2 className="size-4 animate-spin" aria-label="טוען" />;
+  const saved = settings.configured;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">סליקה דרך Grow (מסוף פרטי של הלקוח)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4" data-testid="grow-tab">
+        <p className="text-xs text-muted-foreground">
+          הפרטים נשמרים מוצפנים בשרת ולא מוצגים שוב לאף אחד — גם לא לך. להחלפה מקלידים מחדש. הלקוח
+          (בעל החנות) לא רואה את המסך הזה. עד שמסמנים "פעיל", הסליקה לא מופיעה בחנות.
+        </p>
+        <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="grow-status">
+          <Badge variant={saved ? "default" : "secondary"}>
+            {saved ? "פרטי מסוף נשמרו ✓" : "פרטי מסוף לא הוגדרו"}
+          </Badge>
+          {saved && settings.hasApiKey && <Badge variant="secondary">apiKey נשמר ✓</Badge>}
+          <Badge variant={settings.enabled ? "default" : "outline"}>
+            {settings.enabled ? "פעיל בחנות" : "כבוי"}
+          </Badge>
+          {settings.updatedAt && (
+            <span className="text-xs text-muted-foreground">
+              עודכן {dateTime(settings.updatedAt)}
+            </span>
+          )}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            ["userId", userId, setUserId, "grow-user-id"],
+            ["pageCode", pageCode, setPageCode, "grow-page-code"],
+            ["apiKey (אם נדרש)", apiKey, setApiKey, "grow-api-key"],
+          ].map(([label, value, setter, testid]) => (
+            <div key={testid as string} className="space-y-1">
+              <Label htmlFor={testid as string}>{label as string}</Label>
+              <Input
+                id={testid as string}
+                type="password"
+                dir="ltr"
+                autoComplete="new-password"
+                spellCheck={false}
+                value={value as string}
+                onChange={(e) => (setter as (v: string) => void)(e.target.value)}
+                placeholder={saved ? "•••••• נשמר — להחלפה הקלד מחדש" : ""}
+                data-testid={testid as string}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={sandbox}
+              onChange={(e) => setSandbox(e.target.checked)}
+              data-testid="grow-sandbox"
+            />
+            סביבת בדיקות (sandbox) — לא לייצור
+          </label>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              data-testid="grow-enabled"
+            />
+            פעיל — להציג תשלום מקוון בקופה של החנות
+          </label>
+          <div className="space-y-1">
+            <Label htmlFor="grow-max">מספר תשלומים מקסימלי</Label>
+            <select
+              id="grow-max"
+              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+              value={maxPayments}
+              onChange={(e) => setMaxPayments(Number(e.target.value))}
+              data-testid="grow-max-payments"
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? "ללא תשלומים" : `עד ${n}`}
+                </option>
+              ))}
+            </select>
+          </div>
+          <fieldset className="space-y-1 text-sm">
+            <legend className="text-sm font-medium">אמצעי תשלום (ריק = הכל)</legend>
+            <div className="flex flex-wrap gap-3">
+              {GROW_TYPES.map((t) => (
+                <label key={t.id} className="flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={types.includes(t.id)}
+                    onChange={(e) =>
+                      setTypes(
+                        e.target.checked ? [...types, t.id] : types.filter((x) => x !== t.id),
+                      )
+                    }
+                  />
+                  {t.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button disabled={busy} onClick={() => void submit()} data-testid="grow-save">
+            {busy && <Loader2 className="size-4 animate-spin" />} שמירה
+          </Button>
+          <Button
+            variant="outline"
+            disabled={busy || !saved}
+            data-testid="grow-test"
+            onClick={() => {
+              setBusy(true);
+              setTestResult(null);
+              test({ data: { tenantId } })
+                .then(setTestResult)
+                .catch((e: unknown) =>
+                  setTestResult({
+                    ok: false,
+                    message: e instanceof Error ? e.message : "הבדיקה נכשלה",
+                  }),
+                )
+                .finally(() => setBusy(false));
+            }}
+          >
+            בדיקת חיבור (ללא חיוב)
+          </Button>
+          {testResult && (
+            <span
+              className={testResult.ok ? "text-sm text-green-700" : "text-sm text-destructive"}
+              data-testid="grow-test-result"
+              role="status"
+            >
+              {testResult.message}
+            </span>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

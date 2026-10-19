@@ -59,7 +59,9 @@ import { Route as AdminSettingsStaffRouteImport } from './routes/admin_.settings
 import { Route as ApiAdminAnalyticsRouteImport } from './routes/api.admin.analytics'
 import { Route as ApiAdminTriggerAbandonedCartsRouteImport } from './routes/api.admin.trigger-abandoned-carts'
 import { Route as ApiUnsubscribeTokenRouteImport } from './routes/api.unsubscribe.$token'
+import { Route as ApiWebhooksGrowRouteImport } from './routes/api.webhooks.grow'
 import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$orderId'
+import { Route as CheckoutGrowOrderIdRouteImport } from './routes/checkout_.grow.$orderId'
 import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -314,9 +316,19 @@ const ApiUnsubscribeTokenRoute = ApiUnsubscribeTokenRouteImport.update({
   path: '/api/unsubscribe/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiWebhooksGrowRoute = ApiWebhooksGrowRouteImport.update({
+  id: '/api/webhooks/grow',
+  path: '/api/webhooks/grow',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CheckoutBitOrderIdRoute = CheckoutBitOrderIdRouteImport.update({
   id: '/checkout_/bit/$orderId',
   path: '/checkout/bit/$orderId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutGrowOrderIdRoute = CheckoutGrowOrderIdRouteImport.update({
+  id: '/checkout_/grow/$orderId',
+  path: '/checkout/grow/$orderId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlatformCustomersTenantIdRoute =
@@ -377,7 +389,9 @@ export interface FileRoutesByFullPath {
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
+  '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
+  '/checkout/grow/$orderId': typeof CheckoutGrowOrderIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
 }
 export interface FileRoutesByTo {
@@ -431,7 +445,9 @@ export interface FileRoutesByTo {
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
+  '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
+  '/checkout/grow/$orderId': typeof CheckoutGrowOrderIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
 }
 export interface FileRoutesById {
@@ -486,7 +502,9 @@ export interface FileRoutesById {
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
   '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
+  '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout_/bit/$orderId': typeof CheckoutBitOrderIdRoute
+  '/checkout_/grow/$orderId': typeof CheckoutGrowOrderIdRoute
   '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
 }
 export interface FileRouteTypes {
@@ -542,7 +560,9 @@ export interface FileRouteTypes {
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
     | '/api/unsubscribe/$token'
+    | '/api/webhooks/grow'
     | '/checkout/bit/$orderId'
+    | '/checkout/grow/$orderId'
     | '/platform/customers/$tenantId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -596,7 +616,9 @@ export interface FileRouteTypes {
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
     | '/api/unsubscribe/$token'
+    | '/api/webhooks/grow'
     | '/checkout/bit/$orderId'
+    | '/checkout/grow/$orderId'
     | '/platform/customers/$tenantId'
   id:
     | '__root__'
@@ -650,7 +672,9 @@ export interface FileRouteTypes {
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
     | '/api/unsubscribe/$token'
+    | '/api/webhooks/grow'
     | '/checkout_/bit/$orderId'
+    | '/checkout_/grow/$orderId'
     | '/platform_/customers/$tenantId'
   fileRoutesById: FileRoutesById
 }
@@ -705,7 +729,9 @@ export interface RootRouteChildren {
   ApiAdminAnalyticsRoute: typeof ApiAdminAnalyticsRoute
   ApiAdminTriggerAbandonedCartsRoute: typeof ApiAdminTriggerAbandonedCartsRoute
   ApiUnsubscribeTokenRoute: typeof ApiUnsubscribeTokenRoute
+  ApiWebhooksGrowRoute: typeof ApiWebhooksGrowRoute
   CheckoutBitOrderIdRoute: typeof CheckoutBitOrderIdRoute
+  CheckoutGrowOrderIdRoute: typeof CheckoutGrowOrderIdRoute
   PlatformCustomersTenantIdRoute: typeof PlatformCustomersTenantIdRoute
 }
 
@@ -1061,11 +1087,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUnsubscribeTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/webhooks/grow': {
+      id: '/api/webhooks/grow'
+      path: '/api/webhooks/grow'
+      fullPath: '/api/webhooks/grow'
+      preLoaderRoute: typeof ApiWebhooksGrowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/checkout_/bit/$orderId': {
       id: '/checkout_/bit/$orderId'
       path: '/checkout/bit/$orderId'
       fullPath: '/checkout/bit/$orderId'
       preLoaderRoute: typeof CheckoutBitOrderIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkout_/grow/$orderId': {
+      id: '/checkout_/grow/$orderId'
+      path: '/checkout/grow/$orderId'
+      fullPath: '/checkout/grow/$orderId'
+      preLoaderRoute: typeof CheckoutGrowOrderIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/platform_/customers/$tenantId': {
@@ -1129,7 +1169,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminAnalyticsRoute: ApiAdminAnalyticsRoute,
   ApiAdminTriggerAbandonedCartsRoute: ApiAdminTriggerAbandonedCartsRoute,
   ApiUnsubscribeTokenRoute: ApiUnsubscribeTokenRoute,
+  ApiWebhooksGrowRoute: ApiWebhooksGrowRoute,
   CheckoutBitOrderIdRoute: CheckoutBitOrderIdRoute,
+  CheckoutGrowOrderIdRoute: CheckoutGrowOrderIdRoute,
   PlatformCustomersTenantIdRoute: PlatformCustomersTenantIdRoute,
 }
 export const routeTree = rootRouteImport

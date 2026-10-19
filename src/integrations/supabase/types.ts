@@ -2099,7 +2099,7 @@ export type Database = {
           coupon_discount_value: number | null;
           coupon_min_order: number | null;
           discount_amount: number;
-          payment_method: "offline" | "credit_card" | "bit";
+          payment_method: "offline" | "credit_card" | "bit" | "grow";
           payment_status:
             "not_required" | "awaiting" | "awaiting_verification" | "paid" | "expired" | "rejected";
           payment_due_at: string | null;
@@ -2176,7 +2176,7 @@ export type Database = {
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;
           discount_amount?: number;
-          payment_method?: "offline" | "credit_card" | "bit";
+          payment_method?: "offline" | "credit_card" | "bit" | "grow";
           payment_status?:
             "not_required" | "awaiting" | "awaiting_verification" | "paid" | "expired" | "rejected";
           payment_due_at?: string | null;
@@ -2253,7 +2253,7 @@ export type Database = {
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;
           discount_amount?: number;
-          payment_method?: "offline" | "credit_card" | "bit";
+          payment_method?: "offline" | "credit_card" | "bit" | "grow";
           payment_status?:
             "not_required" | "awaiting" | "awaiting_verification" | "paid" | "expired" | "rejected";
           payment_due_at?: string | null;

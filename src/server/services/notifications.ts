@@ -332,7 +332,16 @@ function customerTotalsHtml(prepared: PreparedOrderEmail): string {
 /** "אמצעי תשלום" ללקוח (חלק 17ב): טלפוני / ביט (ממתין לאישור) / אשראי */
 function customerPaymentHtml(prepared: PreparedOrderEmail): string {
   if (prepared.isQuote) return "";
-  const { method, status, bitReference, bitReceipt, posMethod } = prepared.payment;
+  const {
+    method,
+    status,
+    bitReference,
+    bitReceipt,
+    posMethod,
+    growAsmachta,
+    growCard,
+    growInstallments,
+  } = prepared.payment;
   const box = (title: string, body: string, accent: string, background: string) =>
     `<div style="margin:0 0 16px;padding:12px 14px;border:1px solid ${accent};border-radius:10px;background:${background};">
       <p style="margin:0 0 6px;font-weight:bold;color:#12211F;">${title}</p>
@@ -383,6 +392,23 @@ function customerPaymentHtml(prepared: PreparedOrderEmail): string {
           "#fcd34d",
           "#fffbeb",
         );
+  }
+  if (method === "grow" && status === "paid") {
+    // חלק 43: תשלום מקוון דרך Grow — אישור התשלום; החשבונית / הקבלה נשלחת מחברת הסליקה
+    const details = [
+      growAsmachta ? `מספר אישור: <span dir="ltr">${escapeHtml(growAsmachta)}</span>` : "",
+      growCard ? `כרטיס: <span dir="ltr">${escapeHtml(growCard)}</span>` : "",
+      growInstallments && growInstallments > 1 ? `${growInstallments} תשלומים` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return box(
+      "💳 שולם באמצעות תשלום מקוון",
+      `<p style="margin:0 0 4px;">התשלום התקבל — תודה! ${details}</p>
+       <p style="margin:0;color:#6b7280;font-size:13px;">חשבונית / קבלה על התשלום נשלחת אליכם מחברת הסליקה.</p>`,
+      "#86efac",
+      "#f0fdf4",
+    );
   }
   if (method === "credit_card" && status === "paid") {
     return box("💳 תשלום באשראי", `<p style="margin:0;">התשלום התקבל.</p>`, "#86efac", "#f0fdf4");

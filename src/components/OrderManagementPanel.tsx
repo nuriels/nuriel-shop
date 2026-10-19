@@ -33,6 +33,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { PaymentBadge } from "@/components/orders/PaymentBadge";
 import { BitPaymentReview } from "@/components/orders/BitPaymentReview";
+import { GrowPaymentInfo } from "@/components/orders/GrowPaymentInfo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -777,6 +778,9 @@ export function OrderManagementPanel({
                           canReview={isAdminScope}
                           onChanged={() => void load()}
                         />
+
+                        {/* חלק 43: תשלום מקוון (Grow) — אישור התשלום */}
+                        <GrowPaymentInfo order={order} />
 
                         <OrderContactBlock order={order} />
 
