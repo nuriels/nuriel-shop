@@ -1154,6 +1154,80 @@ export type Database = {
         };
         Relationships: [];
       };
+      tenant_grow_credentials: {
+        Row: {
+          tenant_id: string;
+          user_id_enc: string;
+          page_code_enc: string;
+          api_key_enc: string | null;
+          sandbox: boolean;
+          enabled: boolean;
+          max_payments: number;
+          transaction_types: number[] | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          tenant_id: string;
+          user_id_enc: string;
+          page_code_enc: string;
+          api_key_enc?: string | null;
+          sandbox?: boolean;
+          enabled?: boolean;
+          max_payments?: number;
+          transaction_types?: number[] | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          tenant_id?: string;
+          user_id_enc?: string;
+          page_code_enc?: string;
+          api_key_enc?: string | null;
+          sandbox?: boolean;
+          enabled?: boolean;
+          max_payments?: number;
+          transaction_types?: number[] | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      grow_payment_processes: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          order_id: string;
+          process_id: string;
+          process_token_hash: string;
+          amount: number;
+          sandbox: boolean;
+          status: string;
+          asmachta: string | null;
+          transaction_id: string | null;
+          created_at: string;
+          paid_at: string | null;
+        };
+        Insert: {
+          tenant_id: string;
+          order_id: string;
+          process_id: string;
+          process_token_hash: string;
+          amount: number;
+          sandbox?: boolean;
+          status?: string;
+          asmachta?: string | null;
+          transaction_id?: string | null;
+          paid_at?: string | null;
+        };
+        Update: {
+          status?: string;
+          asmachta?: string | null;
+          transaction_id?: string | null;
+          paid_at?: string | null;
+        };
+        Relationships: [];
+      };
       platform_agreement_versions: {
         Row: {
           id: string;
@@ -2031,6 +2105,10 @@ export type Database = {
           payment_due_at: string | null;
           paid_at: string | null;
           bit_transaction_id: string | null;
+          grow_asmachta: string | null;
+          grow_transaction_id: string | null;
+          grow_card: string | null;
+          grow_installments: number | null;
           order_source: string;
           created_by_staff_id: string | null;
           manual_discount_type: string | null;
@@ -2104,6 +2182,10 @@ export type Database = {
           payment_due_at?: string | null;
           paid_at?: string | null;
           bit_transaction_id?: string | null;
+          grow_asmachta?: string | null;
+          grow_transaction_id?: string | null;
+          grow_card?: string | null;
+          grow_installments?: number | null;
           order_source?: string;
           created_by_staff_id?: string | null;
           manual_discount_type?: string | null;
@@ -2177,6 +2259,10 @@ export type Database = {
           payment_due_at?: string | null;
           paid_at?: string | null;
           bit_transaction_id?: string | null;
+          grow_asmachta?: string | null;
+          grow_transaction_id?: string | null;
+          grow_card?: string | null;
+          grow_installments?: number | null;
           order_source?: string;
           created_by_staff_id?: string | null;
           manual_discount_type?: string | null;
@@ -3031,6 +3117,22 @@ export type Database = {
         Returns: Json;
       };
       marketing_unsubscribe: { Args: { _token: string }; Returns: string };
+      grow_mark_paid: {
+        Args: {
+          _process_id: string;
+          _sandbox: boolean;
+          _token_hash: string;
+          _sum: number;
+          _status_code: string;
+          _asmachta: string;
+          _transaction_id: string;
+          _card_brand: string;
+          _card_suffix: string;
+          _installments: number;
+        };
+        Returns: Json;
+      };
+      grow_payments_active: { Args: { _tenant: string }; Returns: boolean };
       platform_agreement_issue: {
         Args: {
           _tenant: string;
