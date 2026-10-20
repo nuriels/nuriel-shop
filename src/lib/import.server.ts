@@ -109,10 +109,10 @@ function metaMap(html: string): Map<string, string[]> {
   return map;
 }
 
-type JsonObject = Record<string, unknown>;
+export type JsonObject = Record<string, unknown>;
 
 /** כל האובייקטים בבלוקי JSON-LD (כולל @graph ו-offers) */
-function jsonLdNodes(html: string): JsonObject[] {
+export function jsonLdNodes(html: string): JsonObject[] {
   const nodes: JsonObject[] = [];
   const walk = (value: unknown, depth: number): void => {
     if (depth > 6 || value === null || typeof value !== "object") return;
@@ -138,7 +138,7 @@ function jsonLdNodes(html: string): JsonObject[] {
   return nodes;
 }
 
-function isProductNode(node: JsonObject): boolean {
+export function isProductNode(node: JsonObject): boolean {
   const type = node["@type"];
   const types = Array.isArray(type) ? type : [type];
   return types.some((t) => t === "Product" || t === "ProductGroup" || t === "IndividualProduct");
@@ -410,7 +410,7 @@ function extractSpecs(html: string, product: JsonObject | null): ScrapedSpec[] {
 const BOILERPLATE =
   /smarter shopping|better living|directly from china suppliers|aliexpress\.com|enjoy\s*✓?\s*free shipping|shop with confidence/i;
 
-function parsePrice(value: unknown): number | null {
+export function parsePrice(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) && value > 0 ? value : null;
   if (typeof value !== "string") return null;
   let text = value.replace(/[^\d.,]/g, "");
@@ -421,7 +421,7 @@ function parsePrice(value: unknown): number | null {
   return Number.isFinite(n) && n > 0 && n < 10_000_000 ? Math.round(n * 100) / 100 : null;
 }
 
-function offerOf(product: JsonObject | null): JsonObject | null {
+export function offerOf(product: JsonObject | null): JsonObject | null {
   const offers = product?.["offers"];
   const list = Array.isArray(offers) ? offers : offers ? [offers] : [];
   for (const item of list) {

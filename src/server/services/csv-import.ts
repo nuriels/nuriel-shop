@@ -150,7 +150,20 @@ export async function importCsvBatch(
   summary.total = prepared.rows.length;
   summary.skipped = prepared.skipped.slice(0, IMPORT_MAX_LISTED);
   if (prepared.rows.length === 0) return summary;
+  return runImport(prepared.rows, supabase, summary);
+}
 
+/**
+ * המשך המנה: הורדת התמונות + יצירה במסד. משותף ל-CSV ולסריקת אתר מקור (חלק 44) —
+ * אותם בדיקות כפילות (ברקוד / מק"ט), אותה הורדת תמונות בטוחה ואותה יצירת קטגוריות.
+ */
+async function runImport(
+  rows: ImportRow[],
+  supabase: SupabaseClient<Database>,
+  summary: ImportSummary,
+): Promise<ImportSummary> {
+  const tenantId = currentTenantId();
+  const prepared = { rows };
   // 1) שורות שייכשלו בכל מקרה — בלי הורדת תמונות
   const blocked = await rowsThatWillFail(prepared.rows);
 
@@ -232,4 +245,18 @@ export async function importCsvBatch(
     .sort((a, b) => a.row - b.row)
     .slice(0, IMPORT_MAX_LISTED);
   return summary;
+}
+
+/** חלק 44: הוספת מוצרים שאושרו מסריקת אתר מקור — באותו מנגנון של ייבוא CSV */
+export async function importRows(
+  rows: ImportRow[],
+  supabase: SupabaseClient<Database>,
+): Promise<ImportSummary> {
+  if (rows.length > BATCH_MAX_PRODUCTS) {
+    throw new Error(`עד ${BATCH_MAX_PRODUCTS} מוצרים בכל מנה`);
+  }
+  const summary = emptyImportSummary();
+  summary.total = rows.length;
+  if (rows.length === 0) return summary;
+  return runImport(rows, supabase, summary);
 }

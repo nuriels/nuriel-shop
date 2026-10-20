@@ -60,7 +60,7 @@ function siteOf(host: string): string {
   return labels.slice(-size).join(".");
 }
 
-function requestPage(url: URL, timeoutMs: number, cookie: string): Promise<PageHop> {
+function requestPage(url: URL, timeoutMs: number, cookie: string, json: boolean): Promise<PageHop> {
   return new Promise<PageHop>((resolve, reject) => {
     let settled = false;
     const finish = (error: unknown, value?: PageHop) => {
@@ -75,7 +75,12 @@ function requestPage(url: URL, timeoutMs: number, cookie: string): Promise<PageH
       url,
       {
         method: "GET",
-        headers: cookie ? { ...PAGE_HEADERS, Cookie: cookie } : PAGE_HEADERS,
+        headers: {
+          ...PAGE_HEADERS,
+          // חלק 44: נקודות JSON ציבוריות של חנויות (Shopify / WooCommerce)
+          ...(json ? { Accept: "application/json,text/plain;q=0.8" } : {}),
+          ...(cookie ? { Cookie: cookie } : {}),
+        },
         lookup: safeLookup,
         agent: false,
         timeout: timeoutMs,
@@ -96,7 +101,10 @@ function requestPage(url: URL, timeoutMs: number, cookie: string): Promise<PageH
           return;
         }
         const contentType = String(response.headers["content-type"] ?? "").toLowerCase();
-        if (contentType !== "" && !/html|xml|text\/plain/.test(contentType)) {
+        if (
+          contentType !== "" &&
+          !(json ? /json|html|xml|text\/plain/ : /html|xml|text\/plain/).test(contentType)
+        ) {
           response.resume();
           finish(
             contentType.startsWith("image/")
@@ -160,7 +168,10 @@ function decodeHtml(body: Buffer, contentType: string): string {
 }
 
 /** הורדת עמוד אחד (עם הפניות) — מחזיר את ה-HTML ואת הכתובת הסופית */
-export async function fetchRemotePage(rawUrl: string): Promise<FetchedPage> {
+export async function fetchRemotePage(
+  rawUrl: string,
+  options: { json?: boolean } = {},
+): Promise<FetchedPage> {
   const stopAt = Date.now() + PAGE_FETCH_TIMEOUT_MS;
   let url = assertFetchableUrl(rawUrl);
   // עוגיות לפי אתר: site → (שם → "שם=ערך")
@@ -173,6 +184,7 @@ export async function fetchRemotePage(rawUrl: string): Promise<FetchedPage> {
       url,
       remaining,
       cookies ? [...cookies.values()].join("; ") : "",
+      options.json === true,
     );
     if ("body" in result) {
       return { html: decodeHtml(result.body, result.contentType), finalUrl: url.toString() };

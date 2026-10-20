@@ -25,6 +25,7 @@ import { AdminProductDialog, type ProductDraft } from "@/components/AdminProduct
 import { ScanIntakeDialog } from "@/components/ScanIntakeDialog";
 import { ProductImportDialog } from "@/components/products/ProductImportDialog";
 import { ProductUrlImportDialog } from "@/components/products/ProductUrlImportDialog";
+import { SourceScanPanel } from "@/components/products/SourceScanPanel";
 import { ProductGrid } from "@/components/ProductGrid";
 import { usePriceTiersEnabled } from "@/hooks/usePriceTiers";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -42,9 +43,9 @@ import { useCategoryTree } from "@/hooks/useCategories";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { compareProductOrder, groupBySubcategory } from "@/lib/catalog-sections";
 
-type ProductsTab = "catalog" | "hidden" | "drafts";
+type ProductsTab = "catalog" | "hidden" | "drafts" | "scan";
 
-const PRODUCT_TABS: ProductsTab[] = ["catalog", "hidden", "drafts"];
+const PRODUCT_TABS: ProductsTab[] = ["catalog", "hidden", "drafts", "scan"];
 
 /**
  * ניהול קטלוג המוצרים — אדמין בלבד: קטלוג, מוצרים מוסתרים וטיוטות שלא נשמרו.
@@ -427,7 +428,7 @@ export function AdminProductsPanel({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {tab !== "drafts" && (
+          {tab !== "drafts" && tab !== "scan" && (
             <>
               <Input
                 value={term}
@@ -487,6 +488,9 @@ export function AdminProductsPanel({
           <TabsTrigger value="catalog">בקטלוג ({visibleProducts.length})</TabsTrigger>
           <TabsTrigger value="hidden">מוסתרים ({hiddenProducts.length})</TabsTrigger>
           <TabsTrigger value="drafts">טיוטות ({drafts.length})</TabsTrigger>
+          <TabsTrigger value="scan" data-testid="tab-source-scan">
+            סריקת אתר מקור
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="catalog" className="mt-5">
@@ -569,6 +573,11 @@ export function AdminProductsPanel({
             }
             footer={footer}
           />
+        </TabsContent>
+
+        {/* חלק 44: סריקת אתר מקור — השוואה לקטלוג ואישור ידני של הוספה / עדכון */}
+        <TabsContent value="scan" className="mt-5">
+          <SourceScanPanel onApplied={load} />
         </TabsContent>
 
         <TabsContent value="drafts" className="mt-5 space-y-3">

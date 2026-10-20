@@ -314,6 +314,52 @@ html.a11y-focus :focus-visible {
 }
 
 /* ============================================================
+   חלק 44: "מבצעים חמים" — רצועה נעה בהדרגה (marquee)
+   תנועת transform בלבד (GPU, בלי קפיצות); עוצרת מעל הרצועה / במיקוד מקלדת /
+   במגע, וממשיכה מאותה נקודה. למי שביקש פחות תנועה — גלילה ידנית בלי אנימציה.
+   ============================================================ */
+.hot-marquee {
+  position: relative;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+}
+.hot-marquee[data-animate="false"] {
+  overflow-x: auto;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+@keyframes hot-marquee-move {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(calc(var(--hot-shift, 0px) * -1), 0, 0);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hot-marquee[data-animate="true"] .hot-track {
+    animation: hot-marquee-move var(--hot-duration, 40s) linear infinite;
+    will-change: transform;
+  }
+  .hot-marquee[data-animate="true"]:hover .hot-track,
+  .hot-marquee[data-animate="true"]:focus-within .hot-track,
+  .hot-marquee[data-animate="true"][data-paused="true"] .hot-track {
+    animation-play-state: paused;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hot-marquee {
+    overflow-x: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .hot-marquee .hot-copy-2 {
+    display: none;
+  }
+}
+
+/* ============================================================
    טקסט עשיר — העמודים המשפטיים (חלק 16א) ועורך הטקסט בפאנל
    ============================================================ */
 @layer components {
