@@ -32,6 +32,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { SeoCounter } from "@/components/marketing/SeoCounter";
+import { GoogleVerifyGuide } from "@/components/marketing/GoogleVerifyGuide";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ADDON_DEFAULTS, addonPriceLabel } from "@/lib/addons";
@@ -478,6 +479,9 @@ export function MarketingPanel() {
           <CardTitle className="flex items-center gap-2 text-lg">
             <Search className="size-5 text-primary" aria-hidden="true" />
             אימות בעלות ב-Google Search Console
+            <span className="ms-auto">
+              <GoogleVerifyGuide origin={origin} />
+            </span>
           </CardTitle>
           <CardDescription>
             כל חנות מאמתת את הדומיין שלה בנפרד. בחרו בגוגל את שיטת האימות, העתיקו לכאן את מה שהיא

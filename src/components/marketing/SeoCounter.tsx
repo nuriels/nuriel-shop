@@ -14,7 +14,11 @@ export function SeoCounter({ value, recommended }: { value: string; recommended:
         over ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
       )}
     >
-      <span>{over ? `גוגל מציג בערך ${recommended} תווים — השאר יקוצר` : `מומלץ עד ${recommended} תווים`}</span>
+      <span>
+        {over
+          ? `גוגל מציג בערך ${recommended} תווים — השאר יקוצר`
+          : `מומלץ עד ${recommended} תווים`}
+      </span>
       <span dir="ltr" className="numeric">
         {length}/{recommended}
       </span>
