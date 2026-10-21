@@ -337,10 +337,23 @@ html.a11y-focus :focus-visible {
     transform: translate3d(calc(var(--hot-shift, 0px) * -1), 0, 0);
   }
 }
+/* באתר מימין לשמאל (RTL) התוכן יושב בצד ימין ונמשך שמאלה — לכן הרצועה זזה ימינה, כדי
+   שההעתק השני ייכנס מצד שמאל ולא יישאר רווח ריק (בכיוון הנגדי הצד הימני נשאר ריק) */
+@keyframes hot-marquee-move-rtl {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(var(--hot-shift, 0px), 0, 0);
+  }
+}
 @media (prefers-reduced-motion: no-preference) {
   .hot-marquee[data-animate="true"] .hot-track {
     animation: hot-marquee-move var(--hot-duration, 40s) linear infinite;
     will-change: transform;
+  }
+  [dir="rtl"] .hot-marquee[data-animate="true"] .hot-track {
+    animation-name: hot-marquee-move-rtl;
   }
   .hot-marquee[data-animate="true"]:hover .hot-track,
   .hot-marquee[data-animate="true"]:focus-within .hot-track,
