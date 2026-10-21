@@ -349,7 +349,18 @@ const SKIP_PATH =
   /\/(cart|checkout|account|login|register|wishlist|blog|news|contact|about|terms|privacy|cancellations|sitemap|admin|wp-admin|search|tag)(\/|$)/i;
 const PRICE_ANCHOR = /^(.{2,200}?)\s+[-–—]\s+([\d.,]+)\s*(?:₪|ש"ח|ש״ח)\s*$/;
 
+/** גיבוי: קישור שהטקסט שלו הוא שם + מחיר (בכל סדר), גם אם הכתובת לא נראית כמו עמוד מוצר */
+const LOOSE_PRICE = /(\d[\d.,]*)\s*(?:₪|ש"ח|ש״ח)|(?:₪|ש"ח|ש״ח)\s*(\d[\d.,]*)/;
+
+/** טקסטים של באנרים / תפריטים עם סכום ₪ שאינם מוצר */
+const PROMO_WORDS = /משלוח|חינם|הנחה|קופון|מעל|מינימום|עד \d|תשלומים/;
+
 type PageLinks = {
+  loose: Record<string, { name: string; price: number | null }>;
+  linkCount: number;
+  /** קישורים שזוהו כמוצר לפי הכתובת (ולא רק לפי טקסט שם-מחיר) */
+  pathProducts: number;
+  samples: string[];
   products: string[];
   listings: string[];
   hints: Record<string, { name: string; price: number | null }>;
@@ -360,6 +371,10 @@ export function extractLinks(html: string, pageUrl: string): PageLinks {
   const products = new Set<string>();
   const listings = new Set<string>();
   const hints: PageLinks["hints"] = {};
+  const loose: PageLinks["loose"] = {};
+  const samples: string[] = [];
+  let linkCount = 0;
+  let pathProducts = 0;
   let next: string | null = null;
   const rel = /<link\b[^>]*rel=["']next["'][^>]*href=["']([^"']+)["']/i.exec(html);
   if (rel?.[1]) next = absoluteUrl(rel[1], pageUrl);
@@ -370,11 +385,21 @@ export function extractLinks(html: string, pageUrl: string): PageLinks {
     if (!url || !sameSite(url, pageUrl)) continue;
     const path = new URL(url).pathname;
     if (SKIP_PATH.test(path)) continue;
+    linkCount += 1;
+    if (samples.length < 5) samples.push(path.length > 60 ? `${path.slice(0, 59)}…` : path);
     const text = htmlToText(match[2] ?? "")
       .replace(/\s+/g, " ")
       .trim();
     const priced = PRICE_ANCHOR.exec(text);
+    const looseMatch = LOOSE_PRICE.exec(text);
+    if (looseMatch && !priced) {
+      const name = clipText(text.replace(LOOSE_PRICE, "").replace(/[-–—:|]+\s*$/, ""), 200);
+      const price = parsePrice(looseMatch[1] ?? looseMatch[2]);
+      if (name.length >= 3 && price !== null && price > 0 && !PROMO_WORDS.test(name))
+        loose[url] = { name, price };
+    }
     if (priced || PRODUCT_PATH.test(path)) {
+      if (PRODUCT_PATH.test(path)) pathProducts += 1;
       products.add(url);
       if (priced) {
         hints[url] = { name: clipText(priced[1]!, 200), price: parsePrice(priced[2]) };
@@ -384,7 +409,16 @@ export function extractLinks(html: string, pageUrl: string): PageLinks {
     }
     if (!next && /rel=["']next["']/i.test(match[1] ?? "")) next = url;
   }
-  return { products: [...products], listings: [...listings], hints, next };
+  return {
+    products: [...products],
+    listings: [...listings],
+    hints,
+    next,
+    loose,
+    linkCount,
+    pathProducts,
+    samples,
+  };
 }
 
 // ---------------------------------------------------------------- גילוי
@@ -515,6 +549,10 @@ export async function discoverSource(rawUrl: string): Promise<SourceDiscovery> {
   ];
   let pages = 0;
   let failures = 0;
+  const looseAll: PageLinks["loose"] = {};
+  let totalLinks = 0;
+  let pathProductLinks = 0;
+  let firstSamples: string[] = [];
   while (queue.length > 0) {
     const item = queue.shift()!;
     if (Date.now() > deadline) {
@@ -543,6 +581,10 @@ export async function discoverSource(rawUrl: string): Promise<SourceDiscovery> {
       }
     }
     const found = extractLinks(page, item.url);
+    Object.assign(looseAll, found.loose);
+    totalLinks += found.linkCount;
+    pathProductLinks += found.pathProducts;
+    if (pages === 1) firstSamples = found.samples;
     for (const url of found.products) productUrls.add(url);
     Object.assign(hints, found.hints);
     if (found.next && !seenListings.has(found.next) && item.depth < 2) {
@@ -564,6 +606,22 @@ export async function discoverSource(rawUrl: string): Promise<SourceDiscovery> {
   }
   if (single && !inline.has(single.url) && looksSingle) inline.set(single.url, single);
 
+  // גיבוי: לא זוהה שום מוצר לפי הכתובות — לוקחים קישורים שמוצגים עם שם ומחיר
+  if (inline.size === 0 && pathProductLinks === 0) {
+    const entries = Object.entries(looseAll)
+      .filter(([url]) => !productUrls.has(url))
+      .slice(0, SCAN_MAX_PRODUCTS);
+    if (entries.length > 0) {
+      for (const [url, hint] of entries) {
+        productUrls.add(url);
+        hints[url] = hint;
+      }
+      result.notes.push(
+        "הכתובות באתר לא נראות כמו עמודי מוצר, ולכן נקראו קישורים שמוצגים עם שם ומחיר — כדאי לבדוק את הדוח בקפידה",
+      );
+    }
+  }
+
   const pageUrls = [...productUrls].filter((url) => !inline.has(url));
   const total = pageUrls.length + inline.size;
   if (total > SCAN_MAX_PRODUCTS) {
@@ -584,6 +642,13 @@ export async function discoverSource(rawUrl: string): Promise<SourceDiscovery> {
     result.platform = "none";
     result.notes.push(
       "לא נמצאו מוצרים שאפשר לקרוא בכתובת הזו. ייתכן שהאתר טוען את המוצרים רק בדפדפן (JavaScript), דורש התחברות או חוסם סריקה. אפשר לנסות כתובת של קטגוריה או של עמוד מוצר, או לייבא מקובץ CSV.",
+    );
+    const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1];
+    const shell = /<div[^>]+id=["'](?:root|app|__next|__nuxt)["']/i.test(html) && totalLinks < 5;
+    result.notes.push(
+      `האבחון: נקרא עמוד "${clipText(htmlToText(title ?? ""), 80) || "ללא כותרת"}", נבדקו ${pages} עמודי רשימה, נמצאו ${totalLinks} קישורים פנימיים` +
+        (firstSamples.length > 0 ? ` (למשל: ${firstSamples.join(" , ")})` : "") +
+        (shell ? ". נראה שהאתר נבנה ב-JavaScript ולכן התוכן לא נראה בלי דפדפן" : ""),
     );
   }
   return result;

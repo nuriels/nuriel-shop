@@ -204,7 +204,7 @@ export function SourceScanPanel({ onApplied }: { onApplied: () => void | Promise
 
       if (products.length === 0) {
         setError(
-          found.notes[0] ??
+          (found.notes.length > 0 ? found.notes.join(" ") : null) ??
             "לא נמצאו מוצרים שאפשר לקרוא בכתובת הזו. אפשר לנסות כתובת של קטגוריה או של עמוד מוצר.",
         );
         setPhase("error");
