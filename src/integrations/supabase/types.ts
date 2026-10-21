@@ -2739,6 +2739,8 @@ export type Database = {
           promo_popup_coupon: string | null;
           facebook_pixel_id: string | null;
           google_analytics_id: string | null;
+          google_site_verification: string | null;
+          google_verification_file: string | null;
           zap_delivery_days: number;
           welcome_coupon_code: string | null;
           cancellation_policy_content: string;
@@ -2798,6 +2800,8 @@ export type Database = {
           promo_popup_coupon?: string | null;
           facebook_pixel_id?: string | null;
           google_analytics_id?: string | null;
+          google_site_verification?: string | null;
+          google_verification_file?: string | null;
           zap_delivery_days?: number;
           welcome_coupon_code?: string | null;
           cancellation_policy_content?: string;
@@ -2857,6 +2861,8 @@ export type Database = {
           promo_popup_coupon?: string | null;
           facebook_pixel_id?: string | null;
           google_analytics_id?: string | null;
+          google_site_verification?: string | null;
+          google_verification_file?: string | null;
           zap_delivery_days?: number;
           welcome_coupon_code?: string | null;
           cancellation_policy_content?: string;

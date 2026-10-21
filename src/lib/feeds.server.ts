@@ -24,7 +24,7 @@ import {
 } from "@/integrations/supabase/tenant.server";
 import { isLocalOrigin } from "@/lib/seo-urls";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
-import { plainText } from "@/lib/marketing";
+import { GOOGLE_FILE_FORMAT, googleVerificationFileBody, plainText } from "@/lib/marketing";
 import { PORTAL_STORE_SLUG } from "@/lib/portal";
 
 export const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml"]);
@@ -329,4 +329,24 @@ export async function renderFeed(pathname: string, request: Request): Promise<Re
     console.error("[feeds] failed", pathname, error);
     return textResponse("Temporarily unavailable\n", "text/plain; charset=utf-8", 0, 503);
   }
+}
+
+/**
+ * אימות בעלות ב-Google Search Console בשיטת קובץ HTML. הקובץ מוגש רק לחנות שהגדירה
+ * את שמו (site_settings.google_verification_file) — לכל חנות הקובץ שלה, ושאר החנויות
+ * מקבלות 404 רגיל (null → האפליקציה מטפלת). נקרא בתוך runWithTenant.
+ */
+export async function renderGoogleVerification(pathname: string): Promise<Response | null> {
+  const fileName = pathname.replace(/^\//, "");
+  if (!GOOGLE_FILE_FORMAT.test(fileName) || isPlatformRequest()) return null;
+  const { data } = await supabaseAdmin
+    .from("site_settings")
+    .select("google_verification_file")
+    .eq("id", true)
+    .maybeSingle();
+  if (data?.google_verification_file !== fileName) return null;
+  return new Response(googleVerificationFileBody(fileName), {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
+  });
 }

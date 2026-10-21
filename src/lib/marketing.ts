@@ -63,6 +63,43 @@ export function normalizeGaId(value: unknown): string {
     .toUpperCase();
 }
 
+/** אימות בעלות ב-Google Search Console — פורמטים (חייבים להתאים ל-CHECK במסד) */
+export const GOOGLE_META_FORMAT = /^[A-Za-z0-9_-]{20,100}$/;
+export const GOOGLE_FILE_FORMAT = /^google[0-9a-f]{8,32}\.html$/;
+
+/** מקבל את כל המטא תג (<meta name="google-site-verification" content="…">) או רק את הערך */
+export function normalizeGoogleMeta(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  const inTag = /content\s*=\s*["']([^"']*)["']/i.exec(raw);
+  return (inTag ? inTag[1]! : raw).replace(/\s+/g, "");
+}
+
+/** מקבל שם קובץ, נתיב או כתובת מלאה — ומחזיר רק את שם הקובץ */
+export function normalizeGoogleFile(value: unknown): string {
+  const raw = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  const found = /google[0-9a-f]{8,32}\.html/.exec(raw);
+  return found ? found[0] : raw.replace(/\s+/g, "");
+}
+
+export function googleMetaProblem(value: string): string | null {
+  if (value === "") return null;
+  return GOOGLE_META_FORMAT.test(value)
+    ? null
+    : "הדביקו את המטא תג כפי ש-Google נתנה, או רק את הערך שבתוך content";
+}
+
+export function googleFileProblem(value: string): string | null {
+  if (value === "") return null;
+  return GOOGLE_FILE_FORMAT.test(value) ? null : "שם הקובץ נראה כך: google6900fd33bb82a196.html";
+}
+
+/** תוכן קובץ האימות ש-Google מצפה לו */
+export function googleVerificationFileBody(fileName: string): string {
+  return `google-site-verification: ${fileName}`;
+}
+
 export function pixelIdProblem(value: string): string | null {
   if (value === "") return null;
   return PIXEL_ID_FORMAT.test(value)
@@ -85,13 +122,16 @@ export type MarketingSettings = {
   promo_popup_coupon: string | null;
   facebook_pixel_id: string | null;
   google_analytics_id: string | null;
+  /** אימות Google Search Console: מטא תג וקובץ HTML (לכל חנות בנפרד) */
+  google_site_verification: string | null;
+  google_verification_file: string | null;
   zap_delivery_days: number;
   /** חלק 40: קופון במייל "ברוכים הבאים" למי שאישר דיוור בהרשמה */
   welcome_coupon_code: string | null;
 };
 
 export const MARKETING_COLUMNS =
-  "seo_title, seo_description, promo_popup_enabled, promo_popup_text, promo_popup_coupon, facebook_pixel_id, google_analytics_id, zap_delivery_days, welcome_coupon_code" as const;
+  "seo_title, seo_description, promo_popup_enabled, promo_popup_text, promo_popup_coupon, facebook_pixel_id, google_analytics_id, google_site_verification, google_verification_file, zap_delivery_days, welcome_coupon_code" as const;
 
 export const EMPTY_MARKETING: MarketingSettings = {
   seo_title: "",
@@ -101,6 +141,8 @@ export const EMPTY_MARKETING: MarketingSettings = {
   promo_popup_coupon: null,
   facebook_pixel_id: null,
   google_analytics_id: null,
+  google_site_verification: null,
+  google_verification_file: null,
   zap_delivery_days: 3,
   welcome_coupon_code: null,
 };

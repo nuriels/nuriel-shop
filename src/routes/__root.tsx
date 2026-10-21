@@ -137,6 +137,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         // מה שמוצג בשיתוף קישור (ווטסאפ / רשתות) ובתוצאות חיפוש
         { title },
         { name: "description", content: description },
+        // אימות בעלות ב-Google Search Console (שיווק ואינטגרציות) — לכל חנות בנפרד
+        ...(loaderData?.googleVerification
+          ? [{ name: "google-site-verification", content: loaderData.googleVerification }]
+          : []),
         { property: "og:title", content: title },
         { property: "og:description", content: description },
         { property: "og:site_name", content: siteName },

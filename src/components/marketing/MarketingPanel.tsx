@@ -47,6 +47,11 @@ import {
   SEO_TITLE_RECOMMENDED,
   ZAP_JOIN_URL,
   gaIdProblem,
+  googleFileProblem,
+  googleMetaProblem,
+  googleVerificationFileBody,
+  normalizeGoogleFile,
+  normalizeGoogleMeta,
   normalizeGaId,
   normalizePixelId,
   pixelIdProblem,
@@ -65,6 +70,7 @@ function same(a: MarketingSettings, b: MarketingSettings): boolean {
 
 /** הודעה ברורה במקום שם ה-constraint מהמסד */
 function friendlyError(message: string): string {
+  if (/google_verification_check/.test(message)) return "פרטי האימות של Google לא בפורמט הנכון";
   if (/tracking_check/.test(message)) return "מזהה ה-Pixel או ה-Google Analytics לא בפורמט הנכון";
   if (/promo_popup_check/.test(message)) return "פופ-אפ פעיל חייב טקסט (עד 600 תווים)";
   if (/seo_check/.test(message)) return "כותרת SEO עד 120 תווים, תיאור עד 320";
@@ -156,10 +162,14 @@ export function MarketingPanel() {
   const ga = normalizeGaId(form.google_analytics_id);
   const pixelProblem = pixelIdProblem(pixel);
   const gaProblem = gaIdProblem(ga);
+  const googleMeta = normalizeGoogleMeta(form.google_site_verification);
+  const googleFile = normalizeGoogleFile(form.google_verification_file);
+  const googleMetaErr = googleMetaProblem(googleMeta);
+  const googleFileErr = googleFileProblem(googleFile);
 
   const save = async () => {
-    if (pixelProblem || gaProblem) {
-      toast.error(pixelProblem ?? gaProblem ?? "");
+    if (pixelProblem || gaProblem || googleMetaErr || googleFileErr) {
+      toast.error(pixelProblem ?? gaProblem ?? googleMetaErr ?? googleFileErr ?? "");
       return;
     }
     if (form.promo_popup_enabled && form.promo_popup_text.trim() === "") {
@@ -180,6 +190,8 @@ export function MarketingPanel() {
       promo_popup_coupon: form.promo_popup_coupon || null,
       facebook_pixel_id: pixel || null,
       google_analytics_id: ga || null,
+      google_site_verification: googleMeta || null,
+      google_verification_file: googleFile || null,
       zap_delivery_days: days,
       welcome_coupon_code: form.welcome_coupon_code || null,
     };
@@ -456,6 +468,68 @@ export function MarketingPanel() {
             <p className={cn("text-xs", gaProblem ? "text-destructive" : "text-muted-foreground")}>
               {gaProblem ?? "מ-Google Analytics ← ניהול ← Data Streams ← מזהה המדידה"}
             </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ---------- אימות בעלות ב-Google Search Console (לכל חנות בנפרד) ---------- */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Search className="size-5 text-primary" aria-hidden="true" />
+            אימות בעלות ב-Google Search Console
+          </CardTitle>
+          <CardDescription>
+            כל חנות מאמתת את הדומיין שלה בנפרד. בחרו בגוגל את שיטת האימות, העתיקו לכאן את מה שהיא
+            נותנת, שמרו, ואז לחצו &quot;אמת&quot; בגוגל. אחרי האימות אל תמחקו את הערכים.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="mk-gsc-meta">שיטה 1: תג HTML (מטא תג)</Label>
+            <Textarea
+              id="mk-gsc-meta"
+              dir="ltr"
+              rows={3}
+              value={form.google_site_verification ?? ""}
+              placeholder='<meta name="google-site-verification" content="..." />'
+              aria-invalid={googleMetaErr ? true : undefined}
+              onChange={(e) => patch({ google_site_verification: e.target.value || null })}
+            />
+            <p
+              className={cn(
+                "text-xs",
+                googleMetaErr ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {googleMetaErr ??
+                "אפשר להדביק את כל התג או רק את הערך שב-content. התג נכנס אוטומטית ל-<head> של החנות."}
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mk-gsc-file">שיטה 2: קובץ HTML</Label>
+            <Input
+              id="mk-gsc-file"
+              dir="ltr"
+              value={form.google_verification_file ?? ""}
+              placeholder="google6900fd33bb82a196.html"
+              aria-invalid={googleFileErr ? true : undefined}
+              onChange={(e) => patch({ google_verification_file: e.target.value || null })}
+            />
+            <p
+              className={cn(
+                "text-xs",
+                googleFileErr ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {googleFileErr ??
+                "מספיק להקליד את שם הקובץ — אין צורך להעלות אותו, האתר מגיש אותו בעצמו בשורש הדומיין."}
+            </p>
+            {googleFile !== "" && !googleFileErr && (
+              <p className="text-xs text-muted-foreground" dir="ltr">
+                {origin}/{googleFile} → {googleVerificationFileBody(googleFile)}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

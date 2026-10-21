@@ -1,3 +1,4 @@
+import { GOOGLE_META_FORMAT } from "@/lib/marketing";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Json, TenantPlan, TenantStatus } from "@/integrations/supabase/types";
@@ -268,6 +269,7 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     seoTitle: "",
     seoDescription: "",
     tracking: null,
+    googleVerification: null,
     promo: null,
     schema: null,
     shareImage: null,
@@ -282,7 +284,7 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
   const { data } = await supabaseAdmin
     .from("site_settings")
     .select(
-      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, facebook_pixel_id, google_analytics_id, promo_popup_enabled, promo_popup_text, promo_popup_coupon, logo_path, business_phone, support_phone, business_email, business_address, business_hours, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url",
+      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, facebook_pixel_id, google_analytics_id, google_site_verification, promo_popup_enabled, promo_popup_text, promo_popup_coupon, logo_path, business_phone, support_phone, business_email, business_address, business_hours, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url",
     )
     .eq("id", true)
     .maybeSingle();
@@ -333,6 +335,9 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     seoTitle: data?.seo_title?.trim() ?? "",
     seoDescription: data?.seo_description?.trim() ?? "",
     tracking: pixelId || gaId ? { pixelId, gaId } : null,
+    googleVerification: GOOGLE_META_FORMAT.test(data?.google_site_verification ?? "")
+      ? (data?.google_site_verification ?? null)
+      : null,
     promo:
       data?.promo_popup_enabled && promoText !== "" && !isPortal
         ? { text: promoText, coupon: data.promo_popup_coupon ?? null }

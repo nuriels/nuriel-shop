@@ -29,6 +29,8 @@ import {
 // (/zap, /zap/cat/{id}) נוצרים ב-src/lib/zap-pages.server.ts.
 const STATIC_PATH = /^\/assets\/|\.[a-z0-9]{2,5}$/i;
 const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml"]);
+// אימות Google Search Console בשיטת קובץ HTML: googleXXXX.html בשורש הדומיין של החנות
+const GOOGLE_VERIFY_PATH = /^\/google[0-9a-f]{8,32}\.html$/;
 const isZapPage = (pathname: string) => pathname === "/zap" || pathname.startsWith("/zap/");
 // חלק 24: האייקונים ותמונת השיתוף (/pwa/…) נוצרים לפי החנות — לא קובץ סטטי בלי חנות
 const STORE_ASSET_PATH = /^\/pwa\//;
@@ -133,6 +135,7 @@ export default {
       if (
         STATIC_PATH.test(pathname) &&
         !FEED_PATHS.has(pathname) &&
+        !GOOGLE_VERIFY_PATH.test(pathname) &&
         !STORE_ASSET_PATH.test(pathname)
       ) {
         return await runWithTenant(host, null, () => handle(request, env, ctx));
@@ -147,6 +150,13 @@ export default {
       if (FEED_PATHS.has(pathname)) {
         const { renderFeed } = await import("./lib/feeds.server");
         return await runWithTenant(host, tenant, () => renderFeed(pathname, request));
+      }
+      if (GOOGLE_VERIFY_PATH.test(pathname)) {
+        const { renderGoogleVerification } = await import("./lib/feeds.server");
+        const verification = await runWithTenant(host, tenant, () =>
+          renderGoogleVerification(pathname),
+        );
+        if (verification) return verification;
       }
       // חלק 38: עמודי האינדקס לסורקים של זאפ — HTML נקי, בלי ה-Layout של החנות
       if (isZapPage(pathname)) {
