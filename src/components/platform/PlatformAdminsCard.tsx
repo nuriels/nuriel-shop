@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-type PlatformAdmin = { user_id: string; email: string; created_at: string };
+type PlatformAdmin = { user_id: string; email: string; created_at: string; is_primary: boolean };
 
 /**
  * מנהלי-על של הפלטפורמה: הוספה לפי אימייל של חשבון קיים, והסרה.
@@ -82,6 +82,11 @@ export function PlatformAdminsCard({ currentUserId }: { currentUserId: string })
             <li key={admin.user_id} className="flex items-center justify-between gap-3 px-3 py-2">
               <div className="text-sm">
                 <span dir="ltr">{admin.email}</span>
+                {admin.is_primary && (
+                  <Badge variant="outline" className="ms-2">
+                    ראשי
+                  </Badge>
+                )}
                 {admin.user_id === currentUserId && (
                   <Badge variant="secondary" className="ms-2">
                     אני
@@ -92,8 +97,16 @@ export function PlatformAdminsCard({ currentUserId }: { currentUserId: string })
                 size="sm"
                 variant="ghost"
                 className="text-destructive hover:text-destructive"
-                disabled={busy || admin.user_id === currentUserId || admins.length <= 1}
-                title={admin.user_id === currentUserId ? "אי אפשר להסיר את עצמך" : undefined}
+                disabled={
+                  busy || admin.user_id === currentUserId || admin.is_primary || admins.length <= 1
+                }
+                title={
+                  admin.is_primary
+                    ? "מנהל-העל הראשי מוגן ולא ניתן להסרה"
+                    : admin.user_id === currentUserId
+                      ? "אי אפשר להסיר את עצמך"
+                      : undefined
+                }
                 onClick={() => setToRemove(admin)}
               >
                 <Trash2 className="size-4" /> הסרה

@@ -3195,8 +3195,9 @@ export type Database = {
       support_notify_targets: { Args: { _ticket: string }; Returns: Json };
       platform_list_admins: {
         Args: Record<string, never>;
-        Returns: { user_id: string; email: string; created_at: string }[];
+        Returns: { user_id: string; email: string; created_at: string; is_primary: boolean }[];
       };
+      primary_platform_admin: { Args: never; Returns: string };
       platform_add_admin: { Args: { _email: string }; Returns: string };
       platform_remove_admin: { Args: { _user_id: string }; Returns: undefined };
       tenant_is_active: { Args: { _tenant: string }; Returns: boolean };
