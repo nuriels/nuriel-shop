@@ -36,6 +36,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -112,13 +113,16 @@ export function CouponsPanel() {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<Coupon | "new" | null>(null);
   const [deleting, setDeleting] = useState<Coupon | null>(null);
+  const [welcomeCode, setWelcomeCode] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data, error }, { data: usageRows }] = await Promise.all([
+    const [{ data, error }, { data: usageRows }, { data: welcome }] = await Promise.all([
       supabase.from("coupons").select(COUPON_COLUMNS).order("created_at", { ascending: false }),
       supabase.rpc("coupon_usage"),
+      supabase.from("site_settings").select("welcome_coupon_code").eq("id", true).maybeSingle(),
     ]);
+    setWelcomeCode(welcome?.welcome_coupon_code ?? null);
     if (error) toast.error(error.message);
     setCoupons(
       ((data ?? []) as Coupon[]).map((c) => ({
@@ -266,6 +270,11 @@ export function CouponsPanel() {
                       <Badge variant="outline" className={STATUS_STYLE[status]}>
                         {COUPON_STATUS_LABELS[status]}
                       </Badge>
+                      {welcomeCode === coupon.code && (
+                        <Badge variant="outline" data-testid="coupon-welcome-badge">
+                          נשלח לנרשמים חדשים
+                        </Badge>
+                      )}
                       <Switch
                         checked={coupon.is_active}
                         onCheckedChange={(next) => void toggle(coupon, next)}
@@ -451,12 +460,33 @@ function CouponDialog({
   const [form, setForm] = useState<CouponForm>(() => formOf(coupon));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // קופון "ברוכים הבאים" הנוכחי של החנות (site_settings.welcome_coupon_code) — נשמר שם, לא בקופון
+  const [welcomeCode, setWelcomeCode] = useState<string | null>(null);
+  const [sendWelcome, setSendWelcome] = useState(false);
+  // התיבה נפתחת רק אחרי שנטענה ההגדרה הנוכחית — כדי שהטעינה לא תדרוס סימון של המנהל
+  const [welcomeReady, setWelcomeReady] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setForm(formOf(coupon));
-      setError(null);
-    }
+    if (!open) return;
+    setForm(formOf(coupon));
+    setError(null);
+    setWelcomeReady(false);
+    let cancelled = false;
+    void supabase
+      .from("site_settings")
+      .select("welcome_coupon_code")
+      .eq("id", true)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const current = data?.welcome_coupon_code ?? null;
+        setWelcomeCode(current);
+        setSendWelcome(current !== null && coupon !== null && current === coupon.code);
+        setWelcomeReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, coupon]);
 
   const patch = (next: Partial<CouponForm>) => setForm((current) => ({ ...current, ...next }));
@@ -522,6 +552,25 @@ function CouponDialog({
       return;
     }
     toast.success(coupon ? "הקופון עודכן" : `הקופון ${code} נוצר`);
+    // "שליחה ללקוח חדש לאחר הרשמה": קובע את קופון ה"ברוכים הבאים" של החנות (השדה
+    // הקיים welcome_coupon_code בלבד). לא נוגע בחוקי המימוש, בהנחה או בתוקף.
+    const wasWelcome = coupon !== null && welcomeCode === coupon.code;
+    if (sendWelcome && welcomeCode !== code) {
+      const { error: welcomeError } = await supabase
+        .from("site_settings")
+        .update({ welcome_coupon_code: code })
+        .eq("id", true);
+      if (welcomeError)
+        toast.error(`הקופון נשמר, אבל ההגדרה "שליחה לנרשמים" לא: ${welcomeError.message}`);
+      else toast.success("הקופון יישלח ללקוחות חדשים שנרשמו ואישרו דיוור");
+    } else if (!sendWelcome && wasWelcome) {
+      const { error: welcomeError } = await supabase
+        .from("site_settings")
+        .update({ welcome_coupon_code: null })
+        .eq("id", true);
+      if (welcomeError)
+        toast.error(`הקופון נשמר, אבל ביטול השליחה לנרשמים נכשל: ${welcomeError.message}`);
+    }
     onSaved();
   };
 
@@ -717,6 +766,34 @@ function CouponDialog({
               />
             </label>
           )}
+
+          <label className="flex items-start gap-3 rounded-lg border p-3">
+            <Checkbox
+              checked={sendWelcome}
+              disabled={!welcomeReady}
+              onCheckedChange={(v) => setSendWelcome(v === true)}
+              className="mt-0.5"
+              data-testid="coupon-send-welcome"
+              aria-label="שליחת הקופון ללקוח חדש לאחר הרשמה"
+            />
+            <span className="space-y-0.5">
+              <span className="block text-sm font-medium">שליחת הקופון ללקוח חדש לאחר הרשמה</span>
+              <span className="block text-xs text-muted-foreground">
+                לקוח שנרשם לאתר ואישר דיוור מקבל מייל אחד עם הקופון (לא בכל התחברות). הקופון חייב
+                להיות פעיל ובתוקף. קופון אחד בחנות נשלח כך בכל פעם.
+              </span>
+              {sendWelcome &&
+                welcomeCode !== null &&
+                welcomeCode !== normalizeCouponCode(form.code) && (
+                  <span
+                    className="block text-xs font-medium text-amber-700"
+                    data-testid="coupon-welcome-replace"
+                  >
+                    הקופון {welcomeCode} ייפסק להישלח ויוחלף בקופון הזה.
+                  </span>
+                )}
+            </span>
+          </label>
 
           <label className="flex items-center justify-between gap-2 rounded-lg border p-3">
             <span className="text-sm font-medium">הקופון פעיל</span>

@@ -2775,6 +2775,10 @@ export type Database = {
           desktop_banner_active: boolean;
           desktop_banner_image_url: string | null;
           desktop_banner_link: string | null;
+          announcement_coupon_code: string | null;
+          announcement_enabled: boolean;
+          announcement_style: string;
+          announcement_text: string;
           banner_interval_seconds: number;
           business_hours: string;
         };
@@ -2837,6 +2841,10 @@ export type Database = {
           desktop_banner_active?: boolean;
           desktop_banner_image_url?: string | null;
           desktop_banner_link?: string | null;
+          announcement_coupon_code?: string | null;
+          announcement_enabled?: boolean;
+          announcement_style?: string;
+          announcement_text?: string;
           banner_interval_seconds?: number;
           business_hours?: string;
         };
@@ -2899,6 +2907,10 @@ export type Database = {
           desktop_banner_active?: boolean;
           desktop_banner_image_url?: string | null;
           desktop_banner_link?: string | null;
+          announcement_coupon_code?: string | null;
+          announcement_enabled?: boolean;
+          announcement_style?: string;
+          announcement_text?: string;
           banner_interval_seconds?: number;
           business_hours?: string;
         };
@@ -3136,6 +3148,8 @@ export type Database = {
       platform_cancel_addon: { Args: { _id: string }; Returns: Json };
       platform_addon_requests: { Args: never; Returns: Json };
       create_shared_cart: { Args: { _items: Json }; Returns: string };
+      coupon_email_claim: { Args: { _email: string; _code: string }; Returns: boolean };
+      coupon_email_release: { Args: { _email: string; _code: string }; Returns: undefined };
       marketing_claim_welcome: { Args: { _email: string }; Returns: string };
       marketing_release_welcome: { Args: { _email: string }; Returns: undefined };
       marketing_send_token: { Args: { _email: string }; Returns: string };

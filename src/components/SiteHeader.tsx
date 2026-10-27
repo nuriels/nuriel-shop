@@ -28,6 +28,7 @@ import { useCanGoBack } from "@/hooks/useBackToClose";
 import type { UserRole } from "@/hooks/useAuthState";
 import logo from "@/assets/logo";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { AnnouncementTicker, useAnnouncement } from "@/components/AnnouncementTicker";
 import { useStorefrontFrame } from "@/components/layout/storefront-frame";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +66,7 @@ export function SiteHeader({
 
   // הגובה האמיתי של הכותרת (משתנה כשהיא נשברת לשתי שורות בטלפון) — כדי שאלמנטים
   // "דביקים" מתחתיה (תפריט הניהול, פס השמירה בהגדרות) ייעצרו בדיוק מתחתיה
+  const announcement = useAnnouncement();
   const headerRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const el = headerRef.current;
@@ -190,6 +192,13 @@ export function SiteHeader({
 
         {search && <HeaderSearch />}
 
+        {/* פס הודעות זז — בשטח הפנוי בכותרת (מחשב) */}
+        {announcement && wide === true && (
+          <div className="hidden min-w-0 flex-1 lg:block" data-announcement-slot>
+            <AnnouncementTicker content={announcement} />
+          </div>
+        )}
+
         <div className="flex flex-1 items-center justify-end gap-2">
           {onOpenCart && (
             <Button
@@ -257,6 +266,12 @@ export function SiteHeader({
           )}
         </div>
       </div>
+      {/* בנייד אין שטח פנוי בכותרת — פס דק מתחתיה */}
+      {announcement && wide === true && (
+        <div className="px-3 pb-2 lg:hidden" data-announcement-mobile>
+          <AnnouncementTicker content={announcement} />
+        </div>
+      )}
     </header>
   );
 }

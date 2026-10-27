@@ -193,3 +193,34 @@ export async function sendWelcomeCouponEmail(
   }
   return { sent: true };
 }
+
+/** מייל "הקופון שלכם" מהחלון הקופץ (ביקשו לקבל במייל) — דרך אותו מנגנון דיוור */
+export async function sendCouponEmail(
+  email: string,
+  coupon: { code: string; label: string; conditions: string },
+  token: string,
+): Promise<boolean> {
+  const { escapeHtml, emailActionButton, renderEmailHtml, sendEmail } =
+    await import("@/lib/email.server");
+  const contact = await storeContact();
+  const storeName = contact.name || "החנות";
+  const body = `
+      <p>שלום,</p>
+      <p>ביקשת לקבל את הקופון שלנו להזמנה ראשונה ב${escapeHtml(storeName)}:</p>
+      <div style="margin:18px 0;padding:14px 16px;border:2px dashed #16a34a;border-radius:10px;background:#f0fdf4;text-align:center;">
+        <p style="margin:0 0 6px;font-weight:bold;color:#166534;">🎁 ${escapeHtml(coupon.label)}</p>
+        <p style="margin:0;font-size:22px;font-weight:bold;letter-spacing:2px;color:#14532d;" dir="ltr">${escapeHtml(coupon.code)}</p>
+        ${coupon.conditions ? `<p style="margin:6px 0 0;font-size:12px;color:#166534;">${escapeHtml(coupon.conditions)}</p>` : ""}
+      </div>
+      <p>מקלידים את הקוד בקופה, בשדה "קוד קופון".</p>
+      ${emailActionButton("לחנות", tenantSiteOrigin())}
+      ${await marketingFooterHtml(token)}
+    `;
+  const result = await sendEmail({
+    to: [email],
+    subject: adSubject(`הקופון שלכם ל${storeName} — ${coupon.label} 🎁`),
+    html: await renderEmailHtml(`הקופון שלכם ל${storeName}`, body),
+    headers: unsubscribeHeaders(token),
+  });
+  return result.sent;
+}

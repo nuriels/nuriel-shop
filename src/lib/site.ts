@@ -105,6 +105,14 @@ export type SiteSettings = {
    * מ"עיצוב מסך הבית" (saveBannerInterval), לא מטופס הגדרות האתר.
    */
   banner_interval_seconds: number;
+  /**
+   * פס הודעות זז בכותרת (נשמר רק מ"עיצוב מסך הבית" — saveAnnouncement):
+   * טקסט חופשי ו/או קופון להקפצה, בצבע זהב או שחור.
+   */
+  announcement_enabled: boolean;
+  announcement_text: string;
+  announcement_coupon_code: string | null;
+  announcement_style: "gold" | "black";
 };
 
 /** העמודים המשפטיים — נשמרים בנפרד (saveLegalTexts), לא מטופס הגדרות האתר */
@@ -121,6 +129,10 @@ export const SITE_FORM_EXCLUDED_KEYS = [
   "logo_path",
   "brand_color",
   "banner_interval_seconds",
+  "announcement_enabled",
+  "announcement_text",
+  "announcement_coupon_code",
+  "announcement_style",
   "price_tiers_enabled",
   "terms_content",
   "privacy_content",
@@ -172,7 +184,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link, minimum_order_amount, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url, banner_interval_seconds" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link, minimum_order_amount, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url, banner_interval_seconds, announcement_enabled, announcement_text, announcement_coupon_code, announcement_style" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -201,6 +213,10 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
       shabbat_message: row.shabbat_message ?? null,
       shabbat_image_url: row.shabbat_image_url ?? null,
       banner_interval_seconds: normalizeBannerInterval(row.banner_interval_seconds),
+      announcement_enabled: row.announcement_enabled === true,
+      announcement_text: row.announcement_text ?? "",
+      announcement_coupon_code: row.announcement_coupon_code ?? null,
+      announcement_style: row.announcement_style === "black" ? "black" : "gold",
     };
   }
   return {
@@ -245,6 +261,10 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     shabbat_message: null,
     shabbat_image_url: null,
     banner_interval_seconds: BANNER_INTERVAL.default,
+    announcement_enabled: false,
+    announcement_text: "",
+    announcement_coupon_code: null,
+    announcement_style: "gold",
   };
 }
 
@@ -561,4 +581,34 @@ export async function uploadProductImage(file: File): Promise<ProductImageUpload
   if (error) throw error;
   const { data } = supabase.storage.from(PRODUCT_IMAGES_BUCKET).getPublicUrl(path);
   return { url: data.publicUrl, originalBytes, compressedBytes };
+}
+
+export type AnnouncementSettings = Pick<
+  SiteSettings,
+  "announcement_enabled" | "announcement_text" | "announcement_coupon_code" | "announcement_style"
+>;
+
+export const ANNOUNCEMENT_TEXT_MAX = 200;
+
+/** שמירת פס ההודעות — רק ארבעת השדות שלו (המסד בודק שוב) */
+export async function saveAnnouncement(value: AnnouncementSettings): Promise<AnnouncementSettings> {
+  const text = value.announcement_text.trim();
+  if (text.length > ANNOUNCEMENT_TEXT_MAX)
+    throw new Error(`הטקסט ארוך מדי (עד ${ANNOUNCEMENT_TEXT_MAX} תווים)`);
+  if (value.announcement_enabled && text === "" && !value.announcement_coupon_code) {
+    throw new Error("כדי להציג את הפס יש לכתוב טקסט או לבחור קופון");
+  }
+  const { data, error } = await supabase
+    .from("site_settings")
+    .update({
+      announcement_enabled: value.announcement_enabled,
+      announcement_text: text,
+      announcement_coupon_code: value.announcement_coupon_code || null,
+      announcement_style: value.announcement_style === "black" ? "black" : "gold",
+    })
+    .eq("id", true)
+    .select("announcement_enabled, announcement_text, announcement_coupon_code, announcement_style")
+    .single();
+  if (error) throw new Error(error.message);
+  return { ...data, announcement_style: data.announcement_style === "black" ? "black" : "gold" };
 }
