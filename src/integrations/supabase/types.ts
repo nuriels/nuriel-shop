@@ -107,6 +107,9 @@ export type Database = {
           description: string | null;
           min_order_total: number | null;
           max_uses: number | null;
+          max_uses_per_customer: number | null;
+          audience: string;
+          exclude_sale_items: boolean;
           starts_at: string | null;
           expires_at: string | null;
           created_by: string | null;
@@ -123,6 +126,9 @@ export type Database = {
           description?: string | null;
           min_order_total?: number | null;
           max_uses?: number | null;
+          max_uses_per_customer?: number | null;
+          audience?: string;
+          exclude_sale_items?: boolean;
           starts_at?: string | null;
           expires_at?: string | null;
           created_by?: string | null;
@@ -139,6 +145,9 @@ export type Database = {
           description?: string | null;
           min_order_total?: number | null;
           max_uses?: number | null;
+          max_uses_per_customer?: number | null;
+          audience?: string;
+          exclude_sale_items?: boolean;
           starts_at?: string | null;
           expires_at?: string | null;
           created_by?: string | null;
@@ -1928,6 +1937,7 @@ export type Database = {
           id: string;
           is_deposit: boolean;
           is_gift: boolean;
+          on_sale: boolean;
           promotion_id: string | null;
           order_id: string;
           product_barcode: string | null;
@@ -1962,6 +1972,7 @@ export type Database = {
           id?: string;
           is_deposit?: boolean;
           is_gift?: boolean;
+          on_sale?: boolean;
           promotion_id?: string | null;
           order_id: string;
           product_barcode?: string | null;
@@ -1996,6 +2007,7 @@ export type Database = {
           id?: string;
           is_deposit?: boolean;
           is_gift?: boolean;
+          on_sale?: boolean;
           promotion_id?: string | null;
           order_id?: string;
           product_barcode?: string | null;
@@ -2098,6 +2110,7 @@ export type Database = {
           coupon_discount_type: string | null;
           coupon_discount_value: number | null;
           coupon_min_order: number | null;
+          coupon_exclude_sale: boolean | null;
           discount_amount: number;
           payment_method: "offline" | "credit_card" | "bit" | "grow";
           payment_status:
@@ -2175,6 +2188,7 @@ export type Database = {
           coupon_discount_type?: string | null;
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;
+          coupon_exclude_sale?: boolean | null;
           discount_amount?: number;
           payment_method?: "offline" | "credit_card" | "bit" | "grow";
           payment_status?:
@@ -2252,6 +2266,7 @@ export type Database = {
           coupon_discount_type?: string | null;
           coupon_discount_value?: number | null;
           coupon_min_order?: number | null;
+          coupon_exclude_sale?: boolean | null;
           discount_amount?: number;
           payment_method?: "offline" | "credit_card" | "bit" | "grow";
           payment_status?:
@@ -3387,7 +3402,13 @@ export type Database = {
         Returns: Json;
       };
       check_coupon: {
-        Args: { _code: string; _subtotal?: number | null };
+        Args: {
+          _code: string;
+          _subtotal?: number | null;
+          _customer?: string | null;
+          _email?: string | null;
+          _is_guest?: boolean | null;
+        };
         Returns: Json;
       };
       coupon_usage: {

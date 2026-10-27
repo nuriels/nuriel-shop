@@ -62,6 +62,14 @@ export function CouponBox({
             מוצרים כדי ליהנות מההנחה.
           </p>
         )}
+        {/* בלי כפל מבצעים: מסבירים למה ההנחה קטנה מהצפוי / לא חלה */}
+        {applied.excludeSaleItems && (applied.saleProductIds ?? []).length > 0 && (
+          <p className="text-xs text-muted-foreground" data-testid="coupon-sale-note">
+            {discount > 0
+              ? "ההנחה לא חלה על מוצרים שכבר במבצע."
+              : "הקופון לא חל על מוצרים שכבר במבצע — אין בסל מוצרים שההנחה חלה עליהם."}
+          </p>
+        )}
       </div>
     );
   }

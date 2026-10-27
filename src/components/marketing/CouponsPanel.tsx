@@ -37,6 +37,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  COUPON_AUDIENCE_LABELS,
+  type CouponAudience,
   COUPON_COLUMNS,
   COUPON_STATUS_LABELS,
   couponCodeProblem,
@@ -278,6 +287,28 @@ export function CouponsPanel() {
                         </span>
                       )}
                     </dd>
+                    {coupon.max_uses_per_customer !== null && (
+                      <>
+                        <dt className="text-muted-foreground">לכל לקוח</dt>
+                        <dd className="font-semibold">
+                          {coupon.max_uses_per_customer === 1
+                            ? "פעם אחת"
+                            : `עד ${coupon.max_uses_per_customer} פעמים`}
+                        </dd>
+                      </>
+                    )}
+                    {coupon.audience !== "all" && (
+                      <>
+                        <dt className="text-muted-foreground">מיועד ל</dt>
+                        <dd className="font-semibold">{COUPON_AUDIENCE_LABELS[coupon.audience]}</dd>
+                      </>
+                    )}
+                    {coupon.exclude_sale_items && (
+                      <>
+                        <dt className="text-muted-foreground">מוצרים במבצע</dt>
+                        <dd className="font-semibold">בלי כפל מבצעים</dd>
+                      </>
+                    )}
                     {coupon.min_order_total !== null && (
                       <>
                         <dt className="text-muted-foreground">מינימום הזמנה</dt>
@@ -363,6 +394,11 @@ type CouponForm = {
   description: string;
   minOrder: string;
   maxUses: string;
+  /** שימושים לכל לקוח (ריק = ללא הגבלה) */
+  maxPerCustomer: string;
+  audience: CouponAudience;
+  /** false = הקופון חל גם על מוצרים שכבר במבצע (כפל מבצעים) */
+  excludeSale: boolean;
   startsAt: string;
   expiresAt: string;
   active: boolean;
@@ -377,6 +413,10 @@ function formOf(coupon: Coupon | null): CouponForm {
         description: coupon.description ?? "",
         minOrder: coupon.min_order_total !== null ? String(coupon.min_order_total) : "",
         maxUses: coupon.max_uses !== null ? String(coupon.max_uses) : "",
+        maxPerCustomer:
+          coupon.max_uses_per_customer !== null ? String(coupon.max_uses_per_customer) : "",
+        audience: coupon.audience,
+        excludeSale: coupon.exclude_sale_items,
         startsAt: toLocalInput(coupon.starts_at),
         expiresAt: toLocalInput(coupon.expires_at),
         active: coupon.is_active,
@@ -388,6 +428,9 @@ function formOf(coupon: Coupon | null): CouponForm {
         description: "",
         minOrder: "",
         maxUses: "",
+        maxPerCustomer: "",
+        audience: "all",
+        excludeSale: false,
         startsAt: "",
         expiresAt: "",
         active: true,
@@ -437,6 +480,13 @@ function CouponDialog({
     if (maxUses !== null && (!Number.isInteger(maxUses) || maxUses < 1)) {
       return setError("מספר שימושים: מספר שלם חיובי, או ריק (ללא הגבלה)");
     }
+    const maxPerCustomer = form.maxPerCustomer.trim() === "" ? null : Number(form.maxPerCustomer);
+    if (
+      maxPerCustomer !== null &&
+      (!Number.isInteger(maxPerCustomer) || maxPerCustomer < 1 || maxPerCustomer > 1000)
+    ) {
+      return setError("שימושים לכל לקוח: מספר שלם בין 1 ל-1,000, או ריק (ללא הגבלה)");
+    }
     const startsAt = fromLocalInput(form.startsAt);
     const expiresAt = fromLocalInput(form.expiresAt);
     if (startsAt && expiresAt && Date.parse(expiresAt) <= Date.parse(startsAt)) {
@@ -452,6 +502,9 @@ function CouponDialog({
       description: form.description.trim() || null,
       min_order_total: minOrder,
       max_uses: maxUses,
+      max_uses_per_customer: maxPerCustomer,
+      audience: form.audience,
+      exclude_sale_items: form.excludeSale,
       starts_at: startsAt,
       expires_at: expiresAt,
       is_active: form.active,
@@ -609,6 +662,61 @@ function CouponDialog({
               onChange={(e) => patch({ maxUses: e.target.value })}
             />
           </div>
+
+          {/* כללי שימוש: כמה פעמים לכל לקוח, למי מיועד, וכפל מבצעים */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="cp-per-customer">כמה פעמים כל לקוח יכול להשתמש (לא חובה)</Label>
+              <Input
+                id="cp-per-customer"
+                inputMode="numeric"
+                dir="ltr"
+                value={form.maxPerCustomer}
+                placeholder="ללא הגבלה"
+                data-testid="coupon-per-customer"
+                onChange={(e) => patch({ maxPerCustomer: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                לפי החשבון או כתובת המייל — גם קונה בלי הרשמה נספר.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cp-audience">למי הקופון מיועד</Label>
+              <Select
+                value={form.audience}
+                onValueChange={(next) => patch({ audience: next as CouponAudience })}
+              >
+                <SelectTrigger id="cp-audience" data-testid="coupon-audience">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent dir="rtl">
+                  {(Object.keys(COUPON_AUDIENCE_LABELS) as CouponAudience[]).map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {COUPON_AUDIENCE_LABELS[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {form.type !== "free_shipping" && (
+            <label className="flex items-start justify-between gap-3 rounded-lg border p-3">
+              <span className="space-y-0.5">
+                <span className="block text-sm font-medium">
+                  לכלול גם מוצרים שכבר במבצע (כפל מבצעים)
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  כבוי — ההנחה חלה רק על מוצרים שאינם במבצע (מחיר מבצע או "מבצע חם").
+                </span>
+              </span>
+              <Switch
+                checked={!form.excludeSale}
+                onCheckedChange={(v) => patch({ excludeSale: !v })}
+                data-testid="coupon-stack-sales"
+              />
+            </label>
+          )}
 
           <label className="flex items-center justify-between gap-2 rounded-lg border p-3">
             <span className="text-sm font-medium">הקופון פעיל</span>

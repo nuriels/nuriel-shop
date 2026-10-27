@@ -98,7 +98,12 @@ import {
 } from "@/lib/bit-payments";
 import { sendOrderEmails } from "@/lib/email.functions";
 import { checkCoupon, restoreAbandonedCart, saveAbandonedCart } from "@/lib/marketing.functions";
-import { couponDiscount, normalizeCouponCode, type AppliedCoupon } from "@/lib/coupons";
+import {
+  couponDiscount,
+  couponEligibleSubtotal,
+  normalizeCouponCode,
+  type AppliedCoupon,
+} from "@/lib/coupons";
 import { trackPurchase } from "@/lib/marketing";
 import { CouponBox } from "@/components/checkout/CouponBox";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
@@ -437,7 +442,15 @@ function CheckoutPage() {
   // ---------- הסכומים, מתנות, משלוח חינם, מוצר קופה ----------
   // הנחת קופון — על סכום המוצרים (בלי משלוח / פיקדון / מתנות), כמו במסד
   const discount =
-    kind === "order" && coupon ? couponDiscount(coupon, productsSubtotal, shippingAmount) : 0;
+    kind === "order" && coupon
+      ? couponDiscount(
+          coupon,
+          productsSubtotal,
+          shippingAmount,
+          // בלי כפל מבצעים — ההנחה רק על המוצרים שאינם במבצע (כמו במסד)
+          couponEligibleSubtotal(coupon, cart),
+        )
+      : 0;
   const vat = calculateVat(cartTotal(cart) + shippingAmount - discount, {
     pricesIncludeVat: settings?.prices_include_vat ?? true,
     vatRate: Number(settings?.vat_rate ?? DEFAULT_VAT_RATE),
@@ -507,13 +520,23 @@ function CheckoutPage() {
       setCouponBusy(true);
       setCouponError(null);
       try {
-        const result = await checkCouponFn({ data: { code, subtotal: cartSubtotal(cart) } });
+        const result = await checkCouponFn({
+          data: {
+            code,
+            subtotal: cartSubtotal(cart),
+            // לבדיקת "שימושים ללקוח" לקונה בלי הרשמה (לקוח מחובר מזוהה לפי החשבון)
+            email: form.customerEmail,
+            productIds: [...new Set(cart.map((item) => item.productId))],
+          },
+        });
         setCoupon({
           code: result.code,
           discountType: result.discountType,
           discountValue: result.discountValue,
           minOrderTotal: result.minOrderTotal,
           description: result.description,
+          excludeSaleItems: result.excludeSaleItems ?? false,
+          saleProductIds: result.saleProductIds ?? [],
         });
         if (!quiet) toast.success(`הקופון ${result.code} הוחל — ${result.label}`);
       } catch (thrown) {
@@ -525,7 +548,7 @@ function CheckoutPage() {
         setCouponBusy(false);
       }
     },
-    [cart, checkCouponFn],
+    [cart, checkCouponFn, form.customerEmail],
   );
 
   // ?coupon=CODE בכתובת — מוחל לבד (פעם אחת, כשיש סל)

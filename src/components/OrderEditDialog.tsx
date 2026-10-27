@@ -37,6 +37,8 @@ type Draft = {
   removed: boolean;
   /** שורת פיקדון / מתנה — לא נספרת לסף המשלוח החינם */
   extra: boolean;
+  /** נמכר במבצע — קופון "בלי כפל מבצעים" לא חל עליו */
+  onSale: boolean;
 };
 
 /**
@@ -72,6 +74,7 @@ export function OrderEditDialog({
         unitPrice: Number(item.unit_price),
         removed: false,
         extra: item.is_deposit || item.is_gift === true,
+        onSale: item.on_sale === true,
       })),
     );
   }, [order]);
@@ -89,6 +92,10 @@ export function OrderEditDialog({
   const productsTotal = drafts
     .filter((d) => !d.removed && !d.extra)
     .reduce((sum, d) => sum + d.quantity * d.unitPrice, 0);
+  // קופון "בלי כפל מבצעים" — ההנחה רק על השורות שלא נמכרו במבצע
+  const nonSaleTotal = drafts
+    .filter((d) => !d.removed && !d.extra && !d.onSale)
+    .reduce((sum, d) => sum + d.quantity * d.unitPrice, 0);
   const threshold = order.shipping_free_threshold ?? null;
   const shippingCharge =
     isQuote && !convertToOrder
@@ -104,7 +111,7 @@ export function OrderEditDialog({
   const couponDiscount =
     isQuote && !convertToOrder
       ? 0
-      : orderCouponDiscount(order, productsTotal, Number(order.shipping_price ?? 0));
+      : orderCouponDiscount(order, productsTotal, Number(order.shipping_price ?? 0), nonSaleTotal);
   // חלק 32: הנחה ידנית מהקופה — אחרי הקופון, על המוצרים בלבד (כמו במסד)
   const manualDiscount =
     isQuote && !convertToOrder

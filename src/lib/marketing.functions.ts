@@ -32,12 +32,27 @@ function uuidOf(value: unknown, message: string): string {
 // ============================================================
 
 export const checkCoupon = createServerFn({ method: "POST" })
-  .inputValidator((input: { code: string; subtotal: number }) => {
-    const code = normalizeCouponCode(input?.code);
-    if (code.length < 3 || code.length > 32) throw new Error("קוד הקופון לא תקין");
-    const subtotal = Number(input?.subtotal);
-    return { code, subtotal: Number.isFinite(subtotal) && subtotal >= 0 ? subtotal : null };
-  })
+  .inputValidator(
+    (input: { code: string; subtotal: number; email?: string | null; productIds?: string[] }) => {
+      const code = normalizeCouponCode(input?.code);
+      if (code.length < 3 || code.length > 32) throw new Error("קוד הקופון לא תקין");
+      const subtotal = Number(input?.subtotal);
+      const email = String(input?.email ?? "")
+        .trim()
+        .toLowerCase()
+        .slice(0, 254);
+      const productIds = (Array.isArray(input?.productIds) ? input.productIds : [])
+        .map((id) => String(id).toLowerCase())
+        .filter((id) => UUID.test(id))
+        .slice(0, 200);
+      return {
+        code,
+        subtotal: Number.isFinite(subtotal) && subtotal >= 0 ? subtotal : null,
+        email: /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? email : null,
+        productIds,
+      };
+    },
+  )
   .handler(async ({ data }): Promise<AppliedCoupon & { label: string }> => {
     const { allowAction, requestIp } = await import("@/lib/rate-limit.server");
     const ip = await requestIp();
@@ -45,20 +60,62 @@ export const checkCoupon = createServerFn({ method: "POST" })
       throw new Error("יותר מדי ניסיונות — נסו שוב בעוד כמה דקות");
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // מי הקונה: לקוח מחובר (לפי הטוקן — לא לפי מה שהדפדפן אומר) או אורח. משמש רק
+    // לבדיקה המקדימה; האכיפה עצמה במסד ביצירת ההזמנה (orders_apply_coupon)
+    let customerId: string | null = null;
+    try {
+      const { getRequest } = await import("@tanstack/react-start/server");
+      const auth = getRequest()?.headers.get("authorization") ?? "";
+      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+      if (token.split(".").length === 3) {
+        const { data: user } = await supabaseAdmin.auth.getUser(token);
+        customerId = user?.user?.id ?? null;
+      }
+    } catch {
+      customerId = null;
+    }
     const { data: coupon, error } = await supabaseAdmin.rpc("check_coupon", {
       _code: data.code,
       _subtotal: data.subtotal,
+      _customer: customerId,
+      _email: data.email,
+      _is_guest: customerId === null,
     });
     if (error) throw new Error(error.message);
     const row = (coupon ?? {}) as Record<string, unknown>;
-    const discountType: CouponType = row["discount_type"] === "fixed" ? "fixed" : "percent";
+    const discountType: CouponType =
+      row["discount_type"] === "fixed" || row["discount_type"] === "free_shipping"
+        ? row["discount_type"]
+        : "percent";
     const discountValue = Number(row["discount_value"] ?? 0);
+    const excludeSaleItems = row["exclude_sale_items"] === true;
+    // בלי כפל מבצעים: אילו מהמוצרים בסל במבצע עכשיו (מחיר מבצע בתוקף / "מבצע חם") —
+    // כמו order_items.on_sale במסד
+    let saleProductIds: string[] = [];
+    if (excludeSaleItems && data.productIds.length > 0) {
+      const { data: products } = await supabaseAdmin
+        .from("global_products")
+        .select("id, is_promo, sale_price, sale_starts_at, sale_ends_at")
+        .in("id", data.productIds);
+      const now = Date.now();
+      saleProductIds = (products ?? [])
+        .filter(
+          (p) =>
+            p.is_promo === true ||
+            (p.sale_price !== null &&
+              (!p.sale_starts_at || Date.parse(p.sale_starts_at) <= now) &&
+              (!p.sale_ends_at || Date.parse(p.sale_ends_at) >= now)),
+        )
+        .map((p) => p.id);
+    }
     return {
       code: String(row["code"] ?? data.code),
       discountType,
       discountValue,
       minOrderTotal: row["min_order_total"] == null ? null : Number(row["min_order_total"]),
       description: typeof row["description"] === "string" ? row["description"] : null,
+      excludeSaleItems,
+      saleProductIds,
       label: couponLabel(discountType, discountValue),
     };
   });

@@ -244,6 +244,8 @@ export type OrderItemRow = {
   is_deposit: boolean;
   /** מתנה מהטבת עגלה (במחיר 0) */
   is_gift?: boolean;
+  /** נמכר במבצע (צילום ברגע ההזמנה) — קופון "בלי כפל מבצעים" לא חל עליו */
+  on_sale?: boolean;
   /** מוצר דיגיטלי (רישיון / קוד) */
   is_digital?: boolean;
   /** ממתין לשליח / ממתין להזנת רישיון / נמסר במייל ... */
@@ -335,7 +337,7 @@ export const ORDER_SELECT_COLUMNS =
   "bit_transaction_id, bit_receipt_url, payment_reported_at, payment_due_at, " +
   "grow_asmachta, grow_transaction_id, grow_card, grow_installments, " +
   `${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ${ORDER_COUPON_COLUMNS}, ` +
-  "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit, is_gift, " +
+  "order_items (id, product_id, quantity, unit_price, product_name, product_sku, product_barcode, product_image_url, is_deposit, is_gift, on_sale, " +
   "is_digital, item_status, digital_license_key, license_sent_at, license_sent_to, variant_label, " +
   "serial_number, warranty_until, serial_required)";
 

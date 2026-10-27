@@ -7,6 +7,15 @@ import { manualDiscountLabel } from "@/lib/pos";
 
 export type CouponType = "percent" | "fixed" | "free_shipping";
 
+/** למי הקופון מיועד: כולם / לקוחות רשומים בלבד / קנייה בלי הרשמה בלבד */
+export type CouponAudience = "all" | "registered" | "guests";
+
+export const COUPON_AUDIENCE_LABELS: Record<CouponAudience, string> = {
+  all: "כולם",
+  registered: "לקוחות רשומים בלבד",
+  guests: "קנייה בלי הרשמה בלבד",
+};
+
 export type Coupon = {
   id: string;
   code: string;
@@ -16,13 +25,18 @@ export type Coupon = {
   description: string | null;
   min_order_total: number | null;
   max_uses: number | null;
+  /** שימושים מקסימליים לכל לקוח (חשבון או מייל); null = ללא הגבלה */
+  max_uses_per_customer: number | null;
+  audience: CouponAudience;
+  /** true = ההנחה לא חלה על מוצרים שכבר במבצע (בלי כפל מבצעים) */
+  exclude_sale_items: boolean;
   starts_at: string | null;
   expires_at: string | null;
   created_at: string;
 };
 
 export const COUPON_COLUMNS =
-  "id, code, discount_type, discount_value, is_active, description, min_order_total, max_uses, starts_at, expires_at, created_at" as const;
+  "id, code, discount_type, discount_value, is_active, description, min_order_total, max_uses, max_uses_per_customer, audience, exclude_sale_items, starts_at, expires_at, created_at" as const;
 
 /** הקופון שהלקוח הקליד ואומת בשרת — מה שהקופה צריכה כדי להציג את ההנחה */
 export type AppliedCoupon = {
@@ -31,7 +45,25 @@ export type AppliedCoupon = {
   discountValue: number;
   minOrderTotal: number | null;
   description: string | null;
+  /** בלי כפל מבצעים — ההנחה רק על מוצרים שאינם במבצע */
+  excludeSaleItems?: boolean;
+  /** המוצרים בסל שנחשבים "במבצע" (כשהקופון לא חל עליהם) */
+  saleProductIds?: string[];
 };
+
+/**
+ * סכום המוצרים שהקופון חל עליו: כל המוצרים, או — בקופון "בלי כפל מבצעים" — בלי
+ * המוצרים שבמבצע. זהה לחישוב במסד (order_items.on_sale).
+ */
+export function couponEligibleSubtotal(
+  coupon: Pick<AppliedCoupon, "excludeSaleItems" | "saleProductIds">,
+  items: { productId: string; price: number; quantity: number }[],
+): number {
+  const sale = new Set(coupon.excludeSaleItems ? (coupon.saleProductIds ?? []) : []);
+  return items
+    .filter((item) => !sale.has(item.productId))
+    .reduce((sum, item) => sum + item.price * item.quantity, 0);
+}
 
 /** אותו פורמט כמו ב-CHECK במסד: אותיות אנגליות גדולות, ספרות, מקף וקו תחתון */
 export const COUPON_CODE_FORMAT = /^[A-Z0-9][A-Z0-9_-]{2,31}$/;
@@ -63,15 +95,18 @@ export function couponDiscount(
   productsSubtotal: number,
   /** חלק 24: דמי המשלוח — בקופון "משלוח חינם" זו ההנחה */
   shippingAmount = 0,
+  /** הסכום שהקופון חל עליו (בלי כפל מבצעים — בלי מוצרי המבצע); ברירת מחדל: כל המוצרים */
+  eligibleSubtotal = productsSubtotal,
 ): number {
   if (coupon.minOrderTotal !== null && productsSubtotal < coupon.minOrderTotal) return 0;
   if (coupon.discountType === "free_shipping") return Math.max(0, round2(shippingAmount));
   if (!Number.isFinite(productsSubtotal) || productsSubtotal <= 0) return 0;
+  const base = Math.max(0, Math.min(eligibleSubtotal, productsSubtotal));
   const raw =
     coupon.discountType === "percent"
-      ? round2((productsSubtotal * coupon.discountValue) / 100)
+      ? round2((base * coupon.discountValue) / 100)
       : coupon.discountValue;
-  return Math.max(0, Math.min(raw, round2(productsSubtotal)));
+  return Math.max(0, Math.min(raw, round2(base)));
 }
 
 /** "10% הנחה" / "₪20 הנחה" */
@@ -86,7 +121,7 @@ export function couponLabel(type: CouponType, value: number): string {
  * (חלק 14) וההנחה הידנית מהקופה המהירה (חלק 32). discount_amount = שתיהן.
  */
 export const ORDER_COUPON_COLUMNS =
-  "coupon_code, coupon_discount_type, coupon_discount_value, coupon_min_order, discount_amount, manual_discount_type, manual_discount_value, manual_discount_amount" as const;
+  "coupon_code, coupon_discount_type, coupon_discount_value, coupon_min_order, coupon_exclude_sale, discount_amount, manual_discount_type, manual_discount_value, manual_discount_amount" as const;
 
 export type OrderCouponFields = {
   coupon_code?: string | null;
@@ -94,6 +129,8 @@ export type OrderCouponFields = {
   coupon_discount_type?: string | null;
   coupon_discount_value?: number | string | null;
   coupon_min_order?: number | string | null;
+  /** בלי כפל מבצעים — ההנחה רק על שורות שלא נמכרו במבצע (order_items.on_sale) */
+  coupon_exclude_sale?: boolean | null;
   /** כל ההנחה שהופחתה (קופון + הנחה ידנית) — כבר מופחתת ב-total */
   discount_amount?: number | string | null;
   /** חלק 32: הנחה ידנית מהקופה ('percent' / 'fixed') והסכום שחושב במסד */
@@ -107,6 +144,8 @@ export function orderCouponDiscount(
   order: OrderCouponFields,
   productsSubtotal: number,
   shippingAmount = 0,
+  /** סכום המוצרים שלא נמכרו במבצע — לקופון "בלי כפל מבצעים" */
+  nonSaleSubtotal = productsSubtotal,
 ): number {
   if (!order.coupon_code || !order.coupon_discount_type) return 0;
   return couponDiscount(
@@ -120,6 +159,7 @@ export function orderCouponDiscount(
     },
     productsSubtotal,
     shippingAmount,
+    order.coupon_exclude_sale ? nonSaleSubtotal : productsSubtotal,
   );
 }
 
