@@ -176,6 +176,39 @@ export function inStockFirst<T extends { is_out_of_stock: boolean }>(items: T[])
   return [...available, ...items.filter((item) => item.is_out_of_stock)];
 }
 
+/** מיון הקטלוג ללקוח: ברירת מחדל (הסדר הקיים) או לפי מחיר */
+export type CatalogSort = "default" | "price_desc" | "price_asc";
+
+export function parseCatalogSort(value: unknown): CatalogSort {
+  return value === "price_desc" || value === "price_asc" ? value : "default";
+}
+
+/**
+ * מיון לפי מחיר בלי לשבור את הכלל הקיים: מה שאזל נשאר תמיד בסוף (כמו inStockFirst),
+ * ומוצר בלי מחיר (מחיר לפי הצעה) — בסוף הקבוצה שלו. מחירים שווים — לפי הסדר הקיים.
+ */
+export function sortCatalog<T extends { price: number | null; is_out_of_stock: boolean }>(
+  items: T[],
+  sort: CatalogSort,
+): T[] {
+  if (sort === "default") return items;
+  const direction = sort === "price_desc" ? -1 : 1;
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const stock = Number(a.item.is_out_of_stock) - Number(b.item.is_out_of_stock);
+      if (stock !== 0) return stock;
+      const pa = a.item.price;
+      const pb = b.item.price;
+      if (pa === null || pb === null) {
+        if (pa === pb) return a.index - b.index;
+        return pa === null ? 1 : -1;
+      }
+      return pa === pb ? a.index - b.index : (pa - pb) * direction;
+    })
+    .map(({ item }) => item);
+}
+
 /** מוצר נחשב "חדש באתר" בחודש הראשון שלו */
 export const NEW_PRODUCT_DAYS = 30;
 

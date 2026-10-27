@@ -13,8 +13,13 @@ import {
   type CatalogItem,
 } from "@/lib/catalog";
 import { ProductSticker } from "@/components/products/ProductSticker";
+import { useStorefrontWide } from "@/components/layout/storefront-frame";
+import { cn } from "@/lib/utils";
 
-/** רוחב כרטיס (w-44) + רווח (gap-3), ומהירות התנועה בפיקסלים לשנייה — איטית ונעימה */
+/**
+ * רוחב כרטיס ברירת מחדל (w-44) — עד שנמדד הרוחב האמיתי (במסך רחב הכרטיס גדל ל-w-52);
+ * רווח (gap-3), ומהירות התנועה בפיקסלים לשנייה — איטית ונעימה
+ */
 const CARD_W = 176;
 const CARD_GAP = 12;
 const SPEED_PX_PER_S = 36;
@@ -43,14 +48,22 @@ export function HotDealsStrip({
   const openProduct = (item: CatalogItem) =>
     void navigate({ to: "/product/$productId", params: { productId: item.id } });
   const [picking, setPicking] = useState<CatalogItem | null>(null);
+  // במסגרת הרחבה של החנות, במסך רחב (2xl+) — כרטיסים ותמונות גדולים יותר
+  const wide = useStorefrontWide();
 
-  // האם התוכן רחב מהמסך — רק אז יש תנועה (נמדד גם בשינוי גודל / סיבוב מסך)
+  // האם התוכן רחב מהמסך — רק אז יש תנועה (נמדד גם בשינוי גודל / סיבוב מסך). רוחב
+  // הכרטיס נמדד מהכרטיס עצמו, כך שהלולאה נשארת רציפה בכל גודל כרטיס
   const boxRef = useRef<HTMLDivElement>(null);
   const [boxWidth, setBoxWidth] = useState(0);
+  const [cardWidth, setCardWidth] = useState(CARD_W);
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
-    const measure = () => setBoxWidth(el.clientWidth);
+    const measure = () => {
+      setBoxWidth(el.clientWidth);
+      const card = el.querySelector<HTMLElement>('[data-testid="hot-deal-card"]');
+      if (card && card.offsetWidth > 0) setCardWidth(card.offsetWidth);
+    };
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
@@ -74,7 +87,7 @@ export function HotDealsStrip({
   };
 
   if (items.length === 0) return null;
-  const copyWidth = items.length * CARD_W + (items.length - 1) * CARD_GAP;
+  const copyWidth = items.length * cardWidth + (items.length - 1) * CARD_GAP;
   const animate = boxWidth > 0 && copyWidth > boxWidth + 8;
   const shift = copyWidth + CARD_GAP;
 
@@ -85,14 +98,20 @@ export function HotDealsStrip({
         key={item.id}
         data-testid="hot-deal-card"
         data-product-id={item.id}
-        className="flex w-44 shrink-0 snap-start flex-col overflow-hidden rounded-lg border border-border bg-card shadow-card"
+        className={cn(
+          "flex w-44 shrink-0 snap-start flex-col overflow-hidden rounded-lg border border-border bg-card shadow-card",
+          wide && "2xl:w-52",
+        )}
       >
         <button
           type="button"
           onClick={() => openProduct(item)}
           tabIndex={decorative ? -1 : undefined}
           aria-label={`פרטים על ${item.name}`}
-          className="relative flex h-28 cursor-pointer items-center justify-center bg-secondary/60 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          className={cn(
+            "relative flex h-28 cursor-pointer items-center justify-center bg-secondary/60 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+            wide && "2xl:h-36",
+          )}
         >
           {item.image_url ? (
             <img

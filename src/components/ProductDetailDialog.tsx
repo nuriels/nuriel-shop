@@ -251,7 +251,8 @@ export function ProductDetailView({
             alt={product.name}
             index={activeImage}
             onIndexChange={showImage}
-            className={isPage ? "h-72 sm:h-96" : "h-64 sm:h-80"}
+            // עמוד המוצר במסגרת הרחבה: במחשב (xl+) העמודה רחבה יותר — התמונה גבוהה יותר
+            className={isPage ? "h-72 sm:h-96 xl:h-[30rem] 2xl:h-[34rem]" : "h-64 sm:h-80"}
           >
             <ProductSticker sticker={product.sticker} />
             {product.is_out_of_stock && (

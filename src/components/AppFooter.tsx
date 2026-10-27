@@ -3,9 +3,13 @@ import { OPEN_COOKIE_SETTINGS_EVENT } from "@/components/marketing/TrackingConse
 import { APP_VERSION, DEFAULT_STORE_NAME } from "@/lib/branding";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useStorePages } from "@/hooks/useStorePages";
+import { useStorefrontFrame } from "@/components/layout/storefront-frame";
+import { cn } from "@/lib/utils";
 
-export function AppFooter() {
+/** wide — המסגרת הרחבה של חזית החנות, מיושרת לכותרת ולתוכן */
+export function AppFooter({ wide = false }: { wide?: boolean } = {}) {
   const { settings } = useSiteSettings();
+  const frame = useStorefrontFrame(wide);
   const title =
     settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME;
   const year = new Date().getFullYear();
@@ -15,7 +19,12 @@ export function AppFooter() {
 
   return (
     <footer className="surface-cellar mt-10 w-full">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 text-sm text-primary-foreground/75 sm:flex-row sm:items-start sm:justify-between">
+      <div
+        className={cn(
+          "mx-auto flex flex-col gap-4 px-4 py-8 text-sm text-primary-foreground/75 sm:flex-row sm:items-start sm:justify-between",
+          frame,
+        )}
+      >
         <div className="space-y-1">
           <p className="font-display text-base text-primary-foreground">{title}</p>
           {settings?.business_address && <p>{settings.business_address}</p>}
@@ -102,7 +111,12 @@ export function AppFooter() {
       </div>
 
       <div className="border-t border-white/10">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3 text-xs text-primary-foreground/55">
+        <div
+          className={cn(
+            "mx-auto flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-xs text-primary-foreground/55",
+            frame,
+          )}
+        >
           <span>
             © {year} {title}. כל הזכויות שמורות.
           </span>

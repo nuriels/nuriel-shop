@@ -23,10 +23,19 @@ import { RatingInline } from "@/components/reviews/RatingInline";
 import { useRatingSummaries } from "@/hooks/useRatingSummaries";
 import type { RatingSummary } from "@/lib/reviews";
 import { cn } from "@/lib/utils";
+import { useStorefrontWide } from "@/components/layout/storefront-frame";
 
 function ProductImage({ item }: { item: CatalogItem }) {
+  // במסגרת הרחבה של החנות, במחשב (xl+): גובה התמונה לפי רוחב הכרטיס (4:3) — הכרטיס
+  // גדל, והתמונה גדלה איתו. בטאבלט ובטלפון — כמו קודם
+  const wide = useStorefrontWide();
   return (
-    <div className="relative flex h-32 items-center justify-center bg-secondary/60 p-2 sm:h-44 sm:p-3">
+    <div
+      className={cn(
+        "relative flex h-32 items-center justify-center bg-secondary/60 p-2 sm:h-44 sm:p-3",
+        wide && "xl:aspect-[4/3] xl:h-auto",
+      )}
+    >
       {item.image_url ? (
         <img
           src={item.image_url}
@@ -240,6 +249,7 @@ export function CatalogGrid({
 }) {
   const ratings = useRatingSummaries();
   const navigate = useNavigate();
+  const wide = useStorefrontWide();
   const [details, setDetails] = useState<CatalogItem | null>(null);
   const [picking, setPicking] = useState<{
     item: CatalogItem;
@@ -259,7 +269,15 @@ export function CatalogGrid({
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+      <div
+        className={cn(
+          "grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4",
+          // במסגרת הרחבה, במחשב (xl+): כמה עמודות שנכנסות ברוחב הפנוי (גם כשיש באנר
+          // צדדי) — כל כרטיס לפחות 14rem, ובמסך רחב (2xl+) לפחות 15.5rem. הכרטיסים גדלים
+          wide &&
+            "xl:grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))]",
+        )}
+      >
         {products.map((product) => (
           <CatalogCard
             key={product.id}

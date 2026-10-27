@@ -29,7 +29,8 @@ export function CategoryLanding({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
+      {/* מסך רחב (2xl+): 5 ריבועים בשורה — במסגרת הרחבה ריבוע ב-4 עמודות כבר ענק */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
         {categories.map((node) => (
           <button
             key={node.name}

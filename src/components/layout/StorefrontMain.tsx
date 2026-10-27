@@ -1,19 +1,11 @@
 import type { MouseEvent, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { useSiteSettings } from "@/hooks/useSiteSettings";
+import {
+  StorefrontWideContext,
+  storefrontFrameClass,
+  useSideBanner,
+} from "@/components/layout/storefront-frame";
 import { cn } from "@/lib/utils";
-
-type SideBanner = { imageUrl: string; link: string | null };
-
-/** הבאנר הצדדי מהגדרות האתר — רק כשהוא פעיל ויש לו תמונה */
-function useSideBanner(): SideBanner | null {
-  const { settings } = useSiteSettings();
-  if (!settings?.desktop_banner_active || !settings.desktop_banner_image_url) return null;
-  return {
-    imageUrl: settings.desktop_banner_image_url,
-    link: settings.desktop_banner_link,
-  };
-}
 
 /** קישור פנימי באתר ("/…", לא "//…") — מעבר בתוך האפליקציה, בלי טעינה מחדש */
 const isInternal = (link: string) => link.startsWith("/") && !link.startsWith("//");
@@ -23,7 +15,7 @@ const isInternal = (link: string) => link.startsWith("/") && !link.startsWith("/
  * (מתחת לכותרת האתר). מוצג רק במסכים גדולים (lg ומעלה); בנייד ובטאבלט
  * לא מוצג בכלל (hidden), כדי לא להעמיס על המסך הקטן.
  */
-function DesktopSideBanner({ banner }: { banner: SideBanner }) {
+function DesktopSideBanner({ banner }: { banner: NonNullable<ReturnType<typeof useSideBanner>> }) {
   const router = useRouter();
   const image = (
     <img
@@ -70,6 +62,8 @@ function DesktopSideBanner({ banner }: { banner: SideBanner }) {
  * שהתוכן לא נדחס. בלי באנר — בדיוק כמו קודם.
  *
  * className — ל-<main> (רווחים מלמעלה / למטה); contentClassName — לתוכן עצמו.
+ * width="wide" — המסגרת הרחבה של חזית החנות (storefront-frame.ts): מתרחבת במסך רחב,
+ * מיושרת לכותרת ולפוטר (SiteHeader / AppFooter עם wide), והרשתות שבתוכה גדלות איתה.
  */
 export function StorefrontMain({
   children,
@@ -80,31 +74,40 @@ export function StorefrontMain({
   children: ReactNode;
   className?: string;
   contentClassName?: string;
-  /** רוחב התוכן בלי הבאנר (כמו קודם בכל עמוד) */
-  width?: "5xl" | "6xl";
+  /** רוחב התוכן בלי הבאנר (כמו קודם בכל עמוד), או המסגרת הרחבה של החנות */
+  width?: "5xl" | "6xl" | "wide";
 }) {
   const banner = useSideBanner();
+  const wide = width === "wide";
   return (
     <main
       data-storefront-main
       data-has-side-banner={banner ? "true" : undefined}
       className={cn(
         "mx-auto w-full flex-1 px-3 sm:px-4",
-        width === "5xl" ? "max-w-5xl" : "max-w-6xl",
-        // + רוחב הבאנר (12rem) והרווח (1.5rem) — רק כשהוא מוצג
-        banner &&
-          (width === "5xl" ? "lg:max-w-[calc(64rem+13.5rem)]" : "lg:max-w-[calc(72rem+13.5rem)]"),
+        wide
+          ? storefrontFrameClass(banner !== null)
+          : cn(
+              width === "5xl" ? "max-w-5xl" : "max-w-6xl",
+              // + רוחב הבאנר (12rem) והרווח (1.5rem) — רק כשהוא מוצג
+              banner &&
+                (width === "5xl"
+                  ? "lg:max-w-[calc(64rem+13.5rem)]"
+                  : "lg:max-w-[calc(72rem+13.5rem)]"),
+            ),
         className,
       )}
     >
-      {banner ? (
-        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_12rem] lg:items-start lg:gap-6">
-          <div className={cn("min-w-0", contentClassName)}>{children}</div>
-          <DesktopSideBanner banner={banner} />
-        </div>
-      ) : (
-        <div className={contentClassName}>{children}</div>
-      )}
+      <StorefrontWideContext.Provider value={wide}>
+        {banner ? (
+          <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_12rem] lg:items-start lg:gap-6">
+            <div className={cn("min-w-0", contentClassName)}>{children}</div>
+            <DesktopSideBanner banner={banner} />
+          </div>
+        ) : (
+          <div className={contentClassName}>{children}</div>
+        )}
+      </StorefrontWideContext.Provider>
     </main>
   );
 }

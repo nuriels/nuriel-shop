@@ -1,11 +1,18 @@
-import { useEffect, useRef } from "react";
-import { Link, useLoaderData, useRouter } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  Link,
+  useLoaderData,
+  useNavigate,
+  useRouter,
+  useRouterState,
+} from "@tanstack/react-router";
 import {
   ChevronRight,
   ClipboardList,
   LayoutDashboard,
   LogOut,
   Receipt,
+  Search,
   ShieldCheck,
   ShoppingCart,
   Store,
@@ -21,6 +28,8 @@ import { useCanGoBack } from "@/hooks/useBackToClose";
 import type { UserRole } from "@/hooks/useAuthState";
 import logo from "@/assets/logo";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { useStorefrontFrame } from "@/components/layout/storefront-frame";
+import { cn } from "@/lib/utils";
 
 /**
  * כותרת האתר: פס "מרתף" כהה שמחזיק את הלוגו, הניווט וסל ההזמנה.
@@ -32,14 +41,21 @@ export function SiteHeader({
   onSignOut,
   cartCount,
   onOpenCart,
+  wide = false,
+  search = false,
 }: {
   role: UserRole | null;
   email: string | null;
   onSignOut?: () => void;
   cartCount?: number;
   onOpenCart?: () => void;
+  /** המסגרת הרחבה של חזית החנות — מיושרת לתוכן (StorefrontMain width="wide") */
+  wide?: boolean;
+  /** שורת חיפוש בכותרת (במחשב, lg+) — בחזית החנות */
+  search?: boolean;
 }) {
   const { settings, logoUrl } = useSiteSettings();
+  const frame = useStorefrontFrame(wide);
   const site = useLoaderData({ from: "__root__" });
   const router = useRouter();
   const canGoBack = useCanGoBack();
@@ -67,7 +83,7 @@ export function SiteHeader({
 
   return (
     <header ref={headerRef} className="surface-cellar sticky top-0 z-30 shadow-soft">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+      <div className={cn("mx-auto flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3", frame)}>
         {canGoBack && (
           // חזרה למסך הקודם באתר (לשונית / קטגוריה / חלון) — בלי רענון ובלי לאבד מה שנעשה
           <button
@@ -172,6 +188,8 @@ export function SiteHeader({
           )}
         </nav>
 
+        {search && <HeaderSearch />}
+
         <div className="flex flex-1 items-center justify-end gap-2">
           {onOpenCart && (
             <Button
@@ -240,5 +258,80 @@ export function SiteHeader({
         </div>
       </div>
     </header>
+  );
+}
+
+/**
+ * חיפוש בכותרת (במחשב). עובד על אותו חיפוש של הקטלוג (?q= בעמוד הבית): בעמוד הבית
+ * הקטלוג מסתנן תוך כדי הקלדה; Enter (מכל עמוד) עובר לתוצאות בקטלוג.
+ */
+function HeaderSearch() {
+  const navigate = useNavigate();
+  const location = useRouterState({ select: (state) => state.location });
+  const onHome = location.pathname === "/";
+  const rawQuery = (location.search as { q?: unknown }).q;
+  const urlQuery = onHome && typeof rawQuery === "string" ? rawQuery : "";
+  const [value, setValue] = useState(urlQuery);
+  const lastQuery = useRef(urlQuery);
+
+  // שינוי מבחוץ (שורת החיפוש שבקטלוג / חזור בדפדפן) — מתעדכן גם כאן
+  useEffect(() => {
+    if (urlQuery === lastQuery.current) return;
+    lastQuery.current = urlQuery;
+    setValue(urlQuery);
+  }, [urlQuery]);
+
+  // בעמוד הבית — סינון תוך כדי הקלדה (אחרי רגע קצר, כדי לא לעדכן בכל אות)
+  useEffect(() => {
+    if (!onHome) return;
+    const next = value.trim() === "" ? "" : value;
+    if (next === lastQuery.current) return;
+    const timer = window.setTimeout(() => {
+      lastQuery.current = next;
+      void navigate({
+        to: "/",
+        search: (prev) => ({ ...prev, q: next === "" ? undefined : next }),
+        replace: true,
+        resetScroll: false,
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [value, onHome, navigate]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const query = value.trim();
+    lastQuery.current = query;
+    await navigate({
+      to: "/",
+      search: (prev) => ({ ...(onHome ? prev : {}), q: query === "" ? undefined : query }),
+      resetScroll: false,
+    });
+    // לתוצאות — אזור הקטלוג (מתחת לבאנרים ולמבצעים)
+    window.requestAnimationFrame(() =>
+      document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
+
+  return (
+    <form
+      role="search"
+      onSubmit={(event) => void submit(event)}
+      className="relative hidden min-w-48 max-w-md flex-1 lg:block"
+      data-testid="header-search"
+    >
+      <Search
+        className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <input
+        type="search"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        placeholder="חיפוש מוצר לפי שם, מקט או ברקוד"
+        aria-label="חיפוש מוצרים בחנות"
+        className="h-10 w-full rounded-md border border-white/20 bg-white pl-3 pr-9 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      />
+    </form>
   );
 }

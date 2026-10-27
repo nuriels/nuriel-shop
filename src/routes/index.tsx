@@ -24,6 +24,13 @@ import { CategoryLanding } from "@/components/CategoryLanding";
 import { OrderCartDrawer, type CartMode } from "@/components/OrderCartDrawer";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useAuthState } from "@/hooks/useAuthState";
 import { useCartSync } from "@/hooks/useCartSync";
@@ -31,7 +38,15 @@ import { useCart } from "@/hooks/useCart";
 import { useCustomerProfile } from "@/hooks/useCustomerProfile";
 import { useCategoryTree } from "@/hooks/useCategories";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { inStockFirst, isNewProduct, minOrderMessage, type CatalogItem } from "@/lib/catalog";
+import {
+  inStockFirst,
+  isNewProduct,
+  minOrderMessage,
+  parseCatalogSort,
+  sortCatalog,
+  type CatalogItem,
+  type CatalogSort,
+} from "@/lib/catalog";
 import { featuredBlock, homepageCategories } from "@/lib/homepage";
 import {
   breadcrumbJsonLd,
@@ -62,6 +77,10 @@ type CatalogSearch = {
   view?: "new" | "promo" | undefined;
   /** ?cart=open — פותח את סל הקניות (קישור "עגלת קניות" ממפת האתר) */
   cart?: "open" | undefined;
+  /** חיפוש — משותף לשורת החיפוש בכותרת (במחשב) ולשורה שבקטלוג */
+  q?: string | undefined;
+  /** מיון לפי מחיר (בלי — הסדר הקיים) */
+  sort?: "price_desc" | "price_asc" | undefined;
 };
 
 export const Route = createFileRoute("/")({
@@ -85,6 +104,11 @@ export const Route = createFileRoute("/")({
     }
     if (search["view"] === "new" || search["view"] === "promo") result.view = search["view"];
     if (search["cart"] === "open") result.cart = "open";
+    if (typeof search["q"] === "string" && search["q"].trim() !== "") {
+      result.q = search["q"].slice(0, 120);
+    }
+    const sort = parseCatalogSort(search["sort"]);
+    if (sort !== "default") result.sort = sort;
     return result;
   },
   // חלק 21: תגיות לפי העמוד — נוצרות בשרת (גם כשהתוכן עצמו נטען בדפדפן), כך
@@ -198,7 +222,36 @@ function StoreCatalog() {
     });
     return () => cancelAnimationFrame(frame);
   }, [category]);
-  const [term, setTerm] = useState("");
+  // החיפוש: מקומי לשדה (הקלדה חלקה), ומסונכרן לכתובת (?q=) — כך שגם שורת החיפוש
+  // בכותרת וגם שורת החיפוש בקטלוג עובדות על אותו חיפוש
+  const urlQuery = search.q ?? "";
+  const [term, setTerm] = useState(urlQuery);
+  const lastUrlQuery = useRef(urlQuery);
+  useEffect(() => {
+    if (urlQuery === lastUrlQuery.current) return;
+    lastUrlQuery.current = urlQuery;
+    setTerm(urlQuery);
+  }, [urlQuery]);
+  useEffect(() => {
+    const next = term.trim() === "" ? "" : term;
+    if (next === lastUrlQuery.current) return;
+    const timer = window.setTimeout(() => {
+      lastUrlQuery.current = next;
+      void navigate({
+        search: (prev) => ({ ...prev, q: next === "" ? undefined : next }),
+        replace: true,
+        resetScroll: false,
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [term, navigate]);
+  const sort: CatalogSort = search.sort ?? "default";
+  const setSort = (next: CatalogSort) =>
+    void navigate({
+      search: (prev) => ({ ...prev, sort: next === "default" ? undefined : next }),
+      replace: true,
+      resetScroll: false,
+    });
   // הסל משותף לכל העמודים (קטלוג → קופה) ונשמר בדפדפן — גם לאורח
   const { cart, setCart, ready: cartReady } = useCart();
   const [cartOpen, setCartOpen] = useState(false);
@@ -323,10 +376,15 @@ function StoreCatalog() {
   // הלשוניות מסננות את אותה רשימה מסוננת (חיפוש + קטגוריה) — כך שחיפוש
   // בתוך "מבצעים חמים" עובד כמו שמצפים
   const visible = useMemo(() => {
-    if (view === "promo") return filtered.filter((p) => p.is_promo || p.original_price !== null);
-    if (view === "new") return filtered.filter(isNewProduct);
-    return filtered;
-  }, [filtered, view]);
+    const inView =
+      view === "promo"
+        ? filtered.filter((p) => p.is_promo || p.original_price !== null)
+        : view === "new"
+          ? filtered.filter(isNewProduct)
+          : filtered;
+    // מיון לפי מחיר — בתוך הקטגוריה / תת-הקטגוריה; מה שאזל נשאר בסוף
+    return sortCatalog(inView, sort);
+  }, [filtered, view, sort]);
 
   /**
    * מחירון פתוח לכולם: אורחים, לקוחות שממתינים לאישור ולקוחות בלי קבוצת
@@ -537,6 +595,8 @@ function StoreCatalog() {
           onSignOut={signOut}
           cartCount={cartItemCount}
           {...(canUseCart ? { onOpenCart: () => setCartOpen(true) } : {})}
+          wide
+          search
         />
 
         {/* חלק 22: בלי "הבלוק הכחול" (שם החנות, "להזמנה מהקטלוג" וסטטיסטיקות) — זה
@@ -550,6 +610,7 @@ function StoreCatalog() {
             (מבצעים חמים, מוצרים נבחרים, הקטלוג). בטלפון — כמו קודם: עמודה אחת,
             וסרגל ☰ קטגוריות בראש הקטלוג. */}
         <StorefrontMain
+          width="wide"
           className="pb-8 pt-4 sm:pt-6"
           contentClassName="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start lg:gap-8"
         >
@@ -657,19 +718,38 @@ function StoreCatalog() {
                   />
                 ) : (
                   <>
-                    <Tabs
-                      value={view}
-                      onValueChange={(next) => setView(next as typeof view)}
-                      dir="rtl"
-                    >
-                      <TabsList className="flex-wrap">
-                        <TabsTrigger value="all">
-                          {category ? "הכל" : "כל המוצרים"} ({tabCounts.all})
-                        </TabsTrigger>
-                        <TabsTrigger value="new">חדש באתר ({tabCounts.new})</TabsTrigger>
-                        <TabsTrigger value="promo">מבצעים חמים ({tabCounts.promo})</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Tabs
+                        value={view}
+                        onValueChange={(next) => setView(next as typeof view)}
+                        dir="rtl"
+                      >
+                        <TabsList className="flex-wrap">
+                          <TabsTrigger value="all">
+                            {category ? "הכל" : "כל המוצרים"} ({tabCounts.all})
+                          </TabsTrigger>
+                          <TabsTrigger value="new">חדש באתר ({tabCounts.new})</TabsTrigger>
+                          <TabsTrigger value="promo">מבצעים חמים ({tabCounts.promo})</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                      {/* מיון לפי מחיר — רק כשיש מחירים (בחנות "הצעת מחיר" אין מה למיין) */}
+                      {hasPrices && (
+                        <Select value={sort} onValueChange={(next) => setSort(next as CatalogSort)}>
+                          <SelectTrigger
+                            className="w-48 bg-card"
+                            aria-label="מיון המוצרים"
+                            data-testid="catalog-sort"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent dir="rtl">
+                            <SelectItem value="default">מיון: ברירת מחדל</SelectItem>
+                            <SelectItem value="price_desc">מחיר: מהיקר לזול</SelectItem>
+                            <SelectItem value="price_asc">מחיר: מהזול ליקר</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
 
                     <CatalogSections
                       sections={groupBySubcategory(categoryTree, category, visible)}
@@ -712,7 +792,7 @@ function StoreCatalog() {
           />
         )}
 
-        <AppFooter />
+        <AppFooter wide />
       </div>
     </StorefrontSalesProvider>
   );

@@ -238,9 +238,10 @@ function ProductPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <SiteHeader role={role} email={session?.user.email ?? null} onSignOut={signOut} />
-      {/* חלק 19: Grid עם באנר צדדי (רק במחשב, כשהוא פעיל) */}
-      <StorefrontMain width="5xl" className="py-5 sm:py-8" contentClassName="space-y-4">
+      <SiteHeader role={role} email={session?.user.email ?? null} onSignOut={signOut} wide search />
+      {/* חלק 19: Grid עם באנר צדדי (רק במחשב, כשהוא פעיל). המסגרת הרחבה — מיושרת
+          לכותרת ולפוטר, כמו בקטלוג */}
+      <StorefrontMain width="wide" className="py-5 sm:py-8" contentClassName="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Link
             to="/"
@@ -319,7 +320,7 @@ function ProductPage() {
           </Card>
         )}
       </StorefrontMain>
-      <AppFooter />
+      <AppFooter wide />
     </div>
   );
 }
