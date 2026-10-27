@@ -21,6 +21,12 @@ export function storefrontFrameClass(hasSideBanner: boolean): string {
   );
 }
 
+/**
+ * פאנל הניהול של החנות: אותה התרחבות במסך רחב (בלי באנר צדדי — הוא לא מוצג בפאנל),
+ * ועד xl כמו קודם (max-w-7xl). הכותרת והפוטר בפאנל מקבלים את אותה מסגרת.
+ */
+export const PANEL_FRAME = "max-w-7xl xl:max-w-[min(110rem,calc(100vw-3rem))]";
+
 type SideBanner = { imageUrl: string; link: string | null };
 
 /** הבאנר הצדדי מהגדרות האתר — רק כשהוא פעיל ויש לו תמונה */
@@ -33,9 +39,13 @@ export function useSideBanner(): SideBanner | null {
   };
 }
 
-/** המחלקה של מסגרת הכותרת / הפוטר: רחבה בעמודי החנות, max-w-6xl בכל השאר */
-export function useStorefrontFrame(wide: boolean): string {
+/**
+ * המחלקה של מסגרת הכותרת / הפוטר: רחבה בעמודי החנות (true), מסגרת הפאנל ("panel"),
+ * max-w-6xl בכל השאר
+ */
+export function useStorefrontFrame(wide: boolean | "panel"): string {
   const banner = useSideBanner();
+  if (wide === "panel") return PANEL_FRAME;
   return wide ? storefrontFrameClass(banner !== null) : "max-w-6xl";
 }
 

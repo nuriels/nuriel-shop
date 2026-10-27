@@ -7,7 +7,7 @@ import { useStorefrontFrame } from "@/components/layout/storefront-frame";
 import { cn } from "@/lib/utils";
 
 /** wide — המסגרת הרחבה של חזית החנות, מיושרת לכותרת ולתוכן */
-export function AppFooter({ wide = false }: { wide?: boolean } = {}) {
+export function AppFooter({ wide = false }: { wide?: boolean | "panel" } = {}) {
   const { settings } = useSiteSettings();
   const frame = useStorefrontFrame(wide);
   const title =

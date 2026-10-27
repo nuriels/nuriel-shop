@@ -50,6 +50,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthState } from "@/hooks/useAuthState";
 import { useSubscription } from "@/hooks/useSubscription";
+import { PANEL_FRAME } from "@/components/layout/storefront-frame";
+import { cn } from "@/lib/utils";
 import { PLAN_LABELS, endingSoon, remainingLabel } from "@/lib/subscription";
 import { usePlanCatalog } from "@/hooks/usePlanCatalog";
 import type { PlanCatalog } from "@/lib/plan-catalog";
@@ -223,8 +225,14 @@ function AdminPage() {
     <div className="flex min-h-screen flex-col bg-background">
       <GodModeBanner role={role} />
       {isAdmin && site?.sabbath && <SabbathStaffBanner isAdmin />}
-      <SiteHeader role={role} email={session?.user.email ?? null} onSignOut={signOut} />
-      <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 px-3 py-6 sm:px-4">
+      <SiteHeader
+        role={role}
+        email={session?.user.email ?? null}
+        onSignOut={signOut}
+        wide="panel"
+      />
+      {/* מסגרת הפאנל: מתרחבת במסך רחב, מיושרת לכותרת ולפוטר (storefront-frame.ts) */}
+      <main className={cn("mx-auto w-full flex-1 space-y-6 px-3 py-6 sm:px-4", PANEL_FRAME)}>
         {hostMode.lock === "suspended" && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
             <p className="font-semibold text-destructive">האתר נעול זמנית ללקוחות</p>
@@ -520,7 +528,7 @@ function AdminPage() {
           </div>
         )}
       </main>
-      <AppFooter />
+      <AppFooter wide="panel" />
     </div>
   );
 }

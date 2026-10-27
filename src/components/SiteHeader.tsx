@@ -50,7 +50,7 @@ export function SiteHeader({
   cartCount?: number;
   onOpenCart?: () => void;
   /** המסגרת הרחבה של חזית החנות — מיושרת לתוכן (StorefrontMain width="wide") */
-  wide?: boolean;
+  wide?: boolean | "panel";
   /** שורת חיפוש בכותרת (במחשב, lg+) — בחזית החנות */
   search?: boolean;
 }) {
