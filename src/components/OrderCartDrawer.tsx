@@ -38,6 +38,8 @@ import {
   type CartItem,
 } from "@/lib/orders";
 import { calculateVat, DEFAULT_VAT_RATE, vatTotalCaption } from "@/lib/vat";
+import { FirstOrderOfferCard } from "@/components/checkout/FirstOrderOfferCard";
+import { useFirstOrderApproval, useFirstOrderOffer } from "@/hooks/useFirstOrderOffer";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useBackToClose } from "@/hooks/useBackToClose";
 import {
@@ -101,6 +103,9 @@ export function OrderCartDrawer({
 
   const priced = mode === "order";
   const isQuote = !priced;
+  // קופון להזמנה ראשונה: הצעה לאישור / הודעה על הנחה אוטומטית (לקוח שכבר הזמין לא מקבל)
+  const { offer: firstOrder } = useFirstOrderOffer(null, priced && open && items.length > 0);
+  const [firstOrderApproved, setFirstOrderApproved] = useFirstOrderApproval();
   const shipping = priced
     ? freeShippingProgress(cartSubtotal(items), settings?.free_shipping_threshold)
     : null;
@@ -299,6 +304,16 @@ export function OrderCartDrawer({
         </div>
 
         <div className="space-y-3 border-t border-border p-4">
+          {priced && items.length > 0 && firstOrder && (
+            <FirstOrderOfferCard
+              offer={firstOrder}
+              approved={firstOrderApproved === firstOrder.code}
+              applied={false}
+              context="cart"
+              onApprove={() => setFirstOrderApproved(firstOrder.code)}
+              onUndo={() => setFirstOrderApproved(null)}
+            />
+          )}
           {priced && items.length > 0 && (
             <div className="space-y-1.5 text-sm">
               {vat.showBreakdown && (

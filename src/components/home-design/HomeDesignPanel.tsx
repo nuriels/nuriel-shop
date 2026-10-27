@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
 import {
+  ArrowDown,
+  ArrowUp,
   Clock,
+  Plus,
+  Trash2,
   Megaphone as MegaphoneIcon,
   ImagePlus,
   LayoutTemplate,
@@ -20,7 +24,13 @@ import {
   useBannersEditor,
 } from "@/components/HomeBannersPanel";
 import { SideBannerCard } from "@/components/marketing/SideBannerCard";
-import { AnnouncementTicker, type AnnouncementContent } from "@/components/AnnouncementTicker";
+import {
+  AnnouncementTicker,
+  freeShippingText,
+  type AnnouncementContent,
+  type TickerItem,
+} from "@/components/AnnouncementTicker";
+import { BannerLinkPicker } from "@/components/home-design/BannerLinkPicker";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -38,9 +48,15 @@ import { Button } from "@/components/ui/button";
 import { refreshSiteSettings, useSiteSettings } from "@/hooks/useSiteSettings";
 import { textColorOn, normalizeBrandColor } from "@/lib/brand-theme";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
-import type { BannerDevice } from "@/lib/banners";
+import { isValidBannerLink, type BannerDevice } from "@/lib/banners";
 import {
+  ANNOUNCEMENT_INTERVAL,
+  ANNOUNCEMENT_MAX_ITEMS,
   ANNOUNCEMENT_TEXT_MAX,
+  announcementItemEmpty,
+  newAnnouncementItem,
+  normalizeAnnouncementInterval,
+  type AnnouncementItem,
   BANNER_INTERVAL,
   normalizeBannerInterval,
   resolveSiteLogoUrl,
@@ -119,7 +135,7 @@ function useBrandingEditor() {
 
 const NO_COUPON = "__none__";
 
-/** פס ההודעות בכותרת (טקסט / קופון / צבע) — נשמר בנפרד */
+/** פס ההודעות בכותרת (רשימת הודעות / מצב / צבע) — נשמר בנפרד */
 function useAnnouncementEditor() {
   const { settings } = useSiteSettings();
   const [saved, setSaved] = useState<AnnouncementSettings | null>(null);
@@ -131,8 +147,9 @@ function useAnnouncementEditor() {
     if (!settings || saved) return;
     const current: AnnouncementSettings = {
       announcement_enabled: settings.announcement_enabled,
-      announcement_text: settings.announcement_text,
-      announcement_coupon_code: settings.announcement_coupon_code,
+      announcement_items: settings.announcement_items,
+      announcement_mode: settings.announcement_mode,
+      announcement_interval_seconds: settings.announcement_interval_seconds,
       announcement_style: settings.announcement_style,
     };
     setSaved(current);
@@ -148,15 +165,53 @@ function useAnnouncementEditor() {
       .then(({ data }) => setCoupons((data ?? []) as Coupon[]));
   }, []);
 
-  const dirty =
-    !!form &&
-    !!saved &&
-    (form.announcement_enabled !== saved.announcement_enabled ||
-      form.announcement_text.trim() !== saved.announcement_text ||
-      form.announcement_coupon_code !== saved.announcement_coupon_code ||
-      form.announcement_style !== saved.announcement_style);
+  const comparable = (value: AnnouncementSettings) =>
+    JSON.stringify({
+      ...value,
+      announcement_items: value.announcement_items.filter((item) => !announcementItemEmpty(item)),
+    });
+  const dirty = !!form && !!saved && comparable(form) !== comparable(saved);
   const patch = (next: Partial<AnnouncementSettings>) =>
     setForm((current) => (current ? { ...current, ...next } : current));
+  const patchItem = (id: string, next: Partial<AnnouncementItem>) =>
+    setForm((current) =>
+      current
+        ? {
+            ...current,
+            announcement_items: current.announcement_items.map((item) =>
+              item.id === id ? { ...item, ...next } : item,
+            ),
+          }
+        : current,
+    );
+  const moveItem = (id: string, direction: -1 | 1) =>
+    setForm((current) => {
+      if (!current) return current;
+      const list = [...current.announcement_items];
+      const from = list.findIndex((item) => item.id === id);
+      const to = from + direction;
+      const moving = list[from];
+      const other = list[to];
+      if (!moving || !other) return current;
+      list[from] = other;
+      list[to] = moving;
+      return { ...current, announcement_items: list };
+    });
+  const addItem = () =>
+    setForm((current) =>
+      current && current.announcement_items.length < ANNOUNCEMENT_MAX_ITEMS
+        ? { ...current, announcement_items: [...current.announcement_items, newAnnouncementItem()] }
+        : current,
+    );
+  const removeItem = (id: string) =>
+    setForm((current) =>
+      current
+        ? {
+            ...current,
+            announcement_items: current.announcement_items.filter((item) => item.id !== id),
+          }
+        : current,
+    );
 
   const save = async () => {
     if (!form) return;
@@ -176,24 +231,45 @@ function useAnnouncementEditor() {
     }
   };
 
-  // התוכן לתצוגה מקדימה (גם לפני שמירה) — הקופון לפי הרשימה שנטענה
+  // התוכן לתצוגה מקדימה (גם לפני שמירה): אותם כללים כמו באתר, הקופון לפי הרשימה שנטענה
+  const threshold = settings?.free_shipping_threshold ?? null;
   const preview = useMemo<AnnouncementContent | null>(() => {
     if (!form?.announcement_enabled) return null;
-    const chosen = coupons.find((c) => c.code === form.announcement_coupon_code);
-    const text = form.announcement_text.trim();
-    if (text === "" && !chosen) return null;
+    const items: TickerItem[] = [];
+    for (const item of form.announcement_items) {
+      if (!item.active) continue;
+      if (item.ends_at && Date.parse(item.ends_at) <= Date.now()) continue;
+      const chosen = item.coupon_code
+        ? coupons.find((c) => c.code === item.coupon_code)
+        : undefined;
+      let text = item.text.trim();
+      if (item.kind === "free_shipping") {
+        if (threshold === null || !(threshold > 0)) continue;
+        text = freeShippingText(threshold);
+      }
+      if (text === "" && !chosen) continue;
+      items.push({
+        id: item.id,
+        text,
+        link: item.link_url && isValidBannerLink(item.link_url) ? item.link_url : null,
+        icon: item.kind === "free_shipping" ? "truck" : chosen ? "gift" : "megaphone",
+        coupon: chosen
+          ? {
+              code: chosen.code,
+              label: couponLabel(chosen.discount_type, chosen.discount_value),
+              conditions: "",
+            }
+          : null,
+      });
+    }
+    if (items.length === 0) return null;
     return {
-      text,
+      items,
       style: form.announcement_style,
-      coupon: chosen
-        ? {
-            code: chosen.code,
-            label: couponLabel(chosen.discount_type, chosen.discount_value),
-            conditions: "",
-          }
-        : null,
+      mode: form.announcement_mode,
+      intervalSeconds: form.announcement_interval_seconds,
     };
-  }, [form, coupons]);
+  }, [form, coupons, threshold]);
 
   return {
     form,
@@ -201,8 +277,13 @@ function useAnnouncementEditor() {
     dirty,
     saving,
     patch,
+    patchItem,
+    moveItem,
+    addItem,
+    removeItem,
     save,
     preview,
+    threshold,
     discard: () => saved && setForm(saved),
   };
 }
@@ -728,8 +809,7 @@ function AnnouncementCard({ editor }: { editor: ReturnType<typeof useAnnouncemen
       </Card>
     );
   }
-  const code = form.announcement_coupon_code;
-  const options = code && !editor.coupons.some((c) => c.code === code) ? [code] : [];
+  const items = form.announcement_items;
   return (
     <Card className="shadow-card" data-announcement-card>
       <CardHeader>
@@ -738,8 +818,8 @@ function AnnouncementCard({ editor }: { editor: ReturnType<typeof useAnnouncemen
           פס הודעות בכותרת
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          כתב נע בשטח הפנוי שליד החיפוש בכותרת האתר — למשל "משלוח חינם בקנייה מעל ₪1,000", או קופון
-          להקפצה עם כפתור העתקה. בנייד מוצג כפס דק מתחת לכותרת.
+          עד {ANNOUNCEMENT_MAX_ITEMS} הודעות בשטח הפנוי שליד החיפוש בכותרת — למשל "משלוח חינם בקנייה
+          מעל ₪1,000" או קופון להקפצה. ההודעות מתחלפות אוטומטית; בנייד הפס מוצג מתחת לכותרת.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -753,48 +833,87 @@ function AnnouncementCard({ editor }: { editor: ReturnType<typeof useAnnouncemen
           />
         </label>
 
-        <div className="space-y-2">
-          <Label htmlFor="announcement-text">הטקסט</Label>
-          <Input
-            id="announcement-text"
-            value={form.announcement_text}
-            maxLength={ANNOUNCEMENT_TEXT_MAX}
-            placeholder="משלוח חינם בקנייה מעל ₪1,000"
-            onChange={(event) => editor.patch({ announcement_text: event.target.value })}
-          />
+        <div className="space-y-3">
+          {items.map((item, index) => (
+            <AnnouncementItemEditor
+              key={item.id}
+              item={item}
+              index={index}
+              total={items.length}
+              coupons={editor.coupons}
+              threshold={editor.threshold}
+              onChange={(next) => editor.patchItem(item.id, next)}
+              onMove={(direction) => editor.moveItem(item.id, direction)}
+              onRemove={() => editor.removeItem(item.id)}
+            />
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={items.length >= ANNOUNCEMENT_MAX_ITEMS}
+            onClick={editor.addItem}
+            data-announcement-add
+          >
+            <Plus className="size-4" />
+            {items.length === 0 ? "הוספת הודעה ראשונה" : "הוספת הודעה"}
+            <span className="text-xs text-muted-foreground">
+              ({items.length}/{ANNOUNCEMENT_MAX_ITEMS})
+            </span>
+          </Button>
         </div>
 
-        <div className="space-y-2">
-          <Label>קופון להקפצה (לא חובה)</Label>
-          <Select
-            value={code ?? NO_COUPON}
-            onValueChange={(value) =>
-              editor.patch({ announcement_coupon_code: value === NO_COUPON ? null : value })
-            }
-            dir="rtl"
-          >
-            <SelectTrigger data-testid="announcement-coupon-select">
-              <SelectValue placeholder="בלי קופון" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NO_COUPON}>בלי קופון</SelectItem>
-              {editor.coupons.map((c) => (
-                <SelectItem key={c.code} value={c.code}>
-                  {c.code} — {couponLabel(c.discount_type, c.discount_value)}
-                </SelectItem>
-              ))}
-              {options.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c} (לא פעיל)
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            הקופון מוצג באתר רק כשהוא עובד לכולם: פעיל, בתוקף ולא נוצל עד הסוף. קופון ללקוחות רשומים
-            בלבד לא יוצג.
-          </p>
-        </div>
+        <fieldset className="space-y-2">
+          <legend className="mb-1 text-sm font-medium">אופן ההצגה</legend>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="אופן ההצגה">
+            {(
+              [
+                ["rotate", "מתחלף למעלה", "הודעה אחת בכל פעם, מתחלפת בתנועה למעלה"],
+                ["marquee", "גלילה רציפה", "כל ההודעות בכתב זז אחד"],
+              ] as const
+            ).map(([value, label, hint]) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={form.announcement_mode === value}
+                data-mode-option={value}
+                onClick={() => editor.patch({ announcement_mode: value })}
+                className={`rounded-lg border-2 p-2.5 text-start ${
+                  form.announcement_mode === value ? "border-accent bg-accent/5" : "border-border"
+                }`}
+              >
+                <span className="block text-sm font-bold">{label}</span>
+                <span className="block text-xs text-muted-foreground">{hint}</span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        {form.announcement_mode === "rotate" && (
+          <div className="space-y-1.5">
+            <Label htmlFor="announcement-interval">זמן ההחלפה בין הודעות (שניות)</Label>
+            <Input
+              id="announcement-interval"
+              type="number"
+              inputMode="numeric"
+              min={ANNOUNCEMENT_INTERVAL.min}
+              max={ANNOUNCEMENT_INTERVAL.max}
+              className="w-28"
+              value={form.announcement_interval_seconds}
+              onChange={(event) =>
+                editor.patch({
+                  announcement_interval_seconds: normalizeAnnouncementInterval(event.target.value),
+                })
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              {ANNOUNCEMENT_INTERVAL.min}–{ANNOUNCEMENT_INTERVAL.max} שניות (ברירת מחדל{" "}
+              {ANNOUNCEMENT_INTERVAL.default}). ההחלפה נעצרת בריחוף עם העכבר, ולמבקרים יש כפתור
+              עצירה.
+            </p>
+          </div>
+        )}
 
         <fieldset className="space-y-2">
           <legend className="mb-1 text-sm font-medium">צבע הכתב</legend>
@@ -834,5 +953,188 @@ function AnnouncementCard({ editor }: { editor: ReturnType<typeof useAnnouncemen
         />
       </CardContent>
     </Card>
+  );
+}
+
+const toLocalInput = (iso: string | null): string => {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+function AnnouncementItemEditor({
+  item,
+  index,
+  total,
+  coupons,
+  threshold,
+  onChange,
+  onMove,
+  onRemove,
+}: {
+  item: AnnouncementItem;
+  index: number;
+  total: number;
+  coupons: Coupon[];
+  threshold: number | null;
+  onChange: (next: Partial<AnnouncementItem>) => void;
+  onMove: (direction: -1 | 1) => void;
+  onRemove: () => void;
+}) {
+  const code = item.coupon_code;
+  const extra = code && !coupons.some((c) => c.code === code) ? [code] : [];
+  const free = item.kind === "free_shipping";
+  const ended = !!item.ends_at && Date.parse(item.ends_at) <= Date.now();
+  return (
+    <div
+      className={`space-y-3 rounded-lg border p-3 ${item.active ? "border-border" : "border-dashed bg-muted/30"}`}
+      data-announcement-item-editor
+      data-active={item.active}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold">
+          הודעה {index + 1}
+          {total > 1 && <span className="font-normal text-muted-foreground"> מתוך {total}</span>}
+          {ended && (
+            <span className="ms-2 text-xs font-normal text-amber-700">(פג תוקף — לא מוצגת)</span>
+          )}
+        </p>
+        <div className="flex items-center gap-1">
+          <label className="me-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            פעילה
+            <Switch
+              checked={item.active}
+              onCheckedChange={(value) => onChange({ active: value })}
+              aria-label={`הצגת הודעה ${index + 1}`}
+            />
+          </label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={index === 0}
+            onClick={() => onMove(-1)}
+            aria-label="הזזה למעלה בסדר ההצגה"
+          >
+            <ArrowUp className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={index === total - 1}
+            onClick={() => onMove(1)}
+            aria-label="הזזה למטה בסדר ההצגה"
+          >
+            <ArrowDown className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="text-destructive hover:text-destructive"
+            onClick={onRemove}
+            aria-label={`מחיקת הודעה ${index + 1}`}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-[11rem_minmax(0,1fr)]">
+        <div className="space-y-1.5">
+          <Label>סוג ההודעה</Label>
+          <Select
+            value={item.kind}
+            onValueChange={(value) =>
+              onChange({ kind: value === "free_shipping" ? "free_shipping" : "text" })
+            }
+            dir="rtl"
+          >
+            <SelectTrigger aria-label="סוג ההודעה" data-kind-select>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="text">טקסט חופשי</SelectItem>
+              <SelectItem value="free_shipping">משלוח חינם (אוטומטי)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`ann-text-${item.id}`}>הטקסט</Label>
+          {free ? (
+            <p
+              id={`ann-text-${item.id}`}
+              className="flex min-h-10 items-center rounded-md bg-secondary/60 px-3 text-sm"
+              data-free-shipping-preview
+            >
+              {threshold !== null && threshold > 0
+                ? freeShippingText(threshold)
+                : 'לא מוגדר סכום למשלוח חינם — ההודעה לא תוצג. מגדירים אותו ב"הגדרות אתר" (חוקי סל).'}
+            </p>
+          ) : (
+            <Input
+              id={`ann-text-${item.id}`}
+              value={item.text}
+              maxLength={ANNOUNCEMENT_TEXT_MAX}
+              placeholder="משלוח חינם בקנייה מעל ₪1,000"
+              onChange={(event) => onChange({ text: event.target.value })}
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label>קופון להקפצה (לא חובה)</Label>
+          <Select
+            value={code ?? NO_COUPON}
+            onValueChange={(value) => onChange({ coupon_code: value === NO_COUPON ? null : value })}
+            dir="rtl"
+          >
+            <SelectTrigger aria-label="קופון להקפצה" data-testid="announcement-coupon-select">
+              <SelectValue placeholder="בלי קופון" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_COUPON}>בלי קופון</SelectItem>
+              {coupons.map((c) => (
+                <SelectItem key={c.code} value={c.code}>
+                  {c.code} — {couponLabel(c.discount_type, c.discount_value)}
+                </SelectItem>
+              ))}
+              {extra.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c} (לא פעיל)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`ann-end-${item.id}`}>תאריך סיום (לא חובה)</Label>
+          <Input
+            id={`ann-end-${item.id}`}
+            type="datetime-local"
+            value={toLocalInput(item.ends_at)}
+            onChange={(event) =>
+              onChange({
+                ends_at: event.target.value ? new Date(event.target.value).toISOString() : null,
+              })
+            }
+          />
+        </div>
+      </div>
+      <BannerLinkPicker
+        label="קישור בלחיצה על ההודעה (לא חובה)"
+        value={item.link_url}
+        onChange={(next) => onChange({ link_url: next })}
+      />
+      <p className="text-xs text-muted-foreground">
+        הקופון מוצג באתר רק כשהוא עובד לכולם: פעיל, בתוקף ולא נוצל עד הסוף. הודעה שהגיע תאריך הסיום
+        שלה נעלמת לבד.
+      </p>
+    </div>
   );
 }

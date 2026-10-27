@@ -106,6 +106,8 @@ import {
 } from "@/lib/coupons";
 import { trackPurchase } from "@/lib/marketing";
 import { CouponBox } from "@/components/checkout/CouponBox";
+import { FirstOrderOfferCard } from "@/components/checkout/FirstOrderOfferCard";
+import { useFirstOrderApproval, useFirstOrderOffer } from "@/hooks/useFirstOrderOffer";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { useSubscription } from "@/hooks/useSubscription";
 import type { CatalogVariant } from "@/lib/variants";
@@ -558,6 +560,53 @@ function CheckoutPage() {
     autoCoupon.current = true;
     void applyCoupon(search.coupon, true);
   }, [search.coupon, cartReady, cart.length, placed, applyCoupon]);
+
+  // ---------- קופון להזמנה ראשונה ----------
+  // הצעה (הלקוח מאשר בסל / כאן) או אוטומטי (מוחל לבד). הכלל נאכף במסד ביצירת ההזמנה.
+  const { offer: firstOrder, loaded: firstOrderLoaded } = useFirstOrderOffer(
+    form.customerEmail,
+    kind === "order" && !placed,
+  );
+  const [firstOrderApproved, setFirstOrderApproved] = useFirstOrderApproval();
+  const firstOrderDismissed = useRef(false);
+  const firstOrderTried = useRef<string | null>(null);
+  const firstOrderApplied = useRef<string | null>(null);
+  useEffect(() => {
+    if (!firstOrder || kind !== "order" || placed || !cartReady || cart.length === 0) return;
+    if (coupon || couponBusy || firstOrderDismissed.current) return;
+    // קופון מקישור / משחזור עגלה — הם מטפלים בקופון בעצמם
+    if (search.coupon || search.restore) return;
+    const wanted = firstOrder.mode === "auto" || firstOrderApproved === firstOrder.code;
+    if (!wanted) return;
+    if (firstOrder.minOrderTotal && cartSubtotal(cart) < firstOrder.minOrderTotal) return;
+    const key = `${firstOrder.code}|${form.customerEmail.trim().toLowerCase()}`;
+    if (firstOrderTried.current === key) return;
+    firstOrderTried.current = key;
+    firstOrderApplied.current = firstOrder.code;
+    void applyCoupon(firstOrder.code, true);
+  }, [
+    firstOrder,
+    firstOrderApproved,
+    kind,
+    placed,
+    cartReady,
+    cart,
+    coupon,
+    couponBusy,
+    search.coupon,
+    search.restore,
+    form.customerEmail,
+    applyCoupon,
+  ]);
+  // הלקוח התגלה כלקוח חוזר (לפי האימייל) — מסירים הנחת "הזמנה ראשונה" שהוחלה לבד
+  useEffect(() => {
+    if (!firstOrderLoaded || firstOrder) return;
+    if (coupon && firstOrderApplied.current === coupon.code) {
+      setCoupon(null);
+      firstOrderApplied.current = null;
+      toast.info("הנחת ההזמנה הראשונה לא חלה — כבר קיימת הזמנה על כתובת האימייל הזו");
+    }
+  }, [firstOrder, firstOrderLoaded, coupon]);
 
   // ---------- קישור שחזור ממייל התזכורת: הסל, הפרטים והקופון חוזרים ----------
   useEffect(() => {
@@ -1661,17 +1710,39 @@ function CheckoutPage() {
                   discount={coupon && discount > 0 ? { code: coupon.code, amount: discount } : null}
                   couponSlot={
                     kind === "order" ? (
-                      <CouponBox
-                        applied={coupon}
-                        discount={discount}
-                        busy={couponBusy}
-                        error={couponError}
-                        onApply={(code) => void applyCoupon(code)}
-                        onRemove={() => {
-                          setCoupon(null);
-                          setCouponError(null);
-                        }}
-                      />
+                      <div className="space-y-3">
+                        {firstOrder && (!coupon || coupon.code === firstOrder.code) && (
+                          <FirstOrderOfferCard
+                            offer={firstOrder}
+                            approved={firstOrderApproved === firstOrder.code}
+                            applied={coupon?.code === firstOrder.code}
+                            busy={couponBusy}
+                            context="checkout"
+                            onApprove={() => {
+                              firstOrderDismissed.current = false;
+                              firstOrderTried.current = null;
+                              setFirstOrderApproved(firstOrder.code);
+                              void applyCoupon(firstOrder.code);
+                            }}
+                          />
+                        )}
+                        <CouponBox
+                          applied={coupon}
+                          discount={discount}
+                          busy={couponBusy}
+                          error={couponError}
+                          onApply={(code) => void applyCoupon(code)}
+                          onRemove={() => {
+                            // הלקוח הסיר את קופון ההזמנה הראשונה — לא מחילים אותו שוב לבד
+                            if (firstOrder && coupon?.code === firstOrder.code) {
+                              firstOrderDismissed.current = true;
+                              setFirstOrderApproved(null);
+                            }
+                            setCoupon(null);
+                            setCouponError(null);
+                          }}
+                        />
+                      </div>
                     ) : null
                   }
                 />

@@ -30,13 +30,22 @@ export type Coupon = {
   audience: CouponAudience;
   /** true = ההנחה לא חלה על מוצרים שכבר במבצע (בלי כפל מבצעים) */
   exclude_sale_items: boolean;
+  /** none / offer (הצעה לאישור הלקוח) / auto (מוחל לבד) — תקף רק בהזמנה ראשונה */
+  first_order_mode: FirstOrderMode;
   starts_at: string | null;
   expires_at: string | null;
   created_at: string;
 };
 
+export type FirstOrderMode = "none" | "offer" | "auto";
+export const FIRST_ORDER_LABELS: Record<FirstOrderMode, string> = {
+  none: "בלי — הקופון תקף בכל הזמנה",
+  offer: "הצעה ללקוח — מוצגת בסל ובקופה, והלקוח מאשר",
+  auto: "אוטומטי — מוחל לבד בהזמנה הראשונה",
+};
+
 export const COUPON_COLUMNS =
-  "id, code, discount_type, discount_value, is_active, description, min_order_total, max_uses, max_uses_per_customer, audience, exclude_sale_items, starts_at, expires_at, created_at" as const;
+  "id, code, discount_type, discount_value, is_active, description, min_order_total, max_uses, max_uses_per_customer, audience, exclude_sale_items, first_order_mode, starts_at, expires_at, created_at" as const;
 
 /** הקופון שהלקוח הקליד ואומת בשרת — מה שהקופה צריכה כדי להציג את ההנחה */
 export type AppliedCoupon = {

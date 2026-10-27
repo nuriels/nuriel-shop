@@ -110,6 +110,7 @@ export type Database = {
           max_uses_per_customer: number | null;
           audience: string;
           exclude_sale_items: boolean;
+          first_order_mode: string;
           starts_at: string | null;
           expires_at: string | null;
           created_by: string | null;
@@ -129,6 +130,7 @@ export type Database = {
           max_uses_per_customer?: number | null;
           audience?: string;
           exclude_sale_items?: boolean;
+          first_order_mode?: string;
           starts_at?: string | null;
           expires_at?: string | null;
           created_by?: string | null;
@@ -148,6 +150,7 @@ export type Database = {
           max_uses_per_customer?: number | null;
           audience?: string;
           exclude_sale_items?: boolean;
+          first_order_mode?: string;
           starts_at?: string | null;
           expires_at?: string | null;
           created_by?: string | null;
@@ -2777,6 +2780,9 @@ export type Database = {
           desktop_banner_link: string | null;
           announcement_coupon_code: string | null;
           announcement_enabled: boolean;
+          announcement_interval_seconds: number;
+          announcement_items: Json;
+          announcement_mode: string;
           announcement_style: string;
           announcement_text: string;
           banner_interval_seconds: number;
@@ -2843,6 +2849,9 @@ export type Database = {
           desktop_banner_link?: string | null;
           announcement_coupon_code?: string | null;
           announcement_enabled?: boolean;
+          announcement_interval_seconds?: number;
+          announcement_items?: Json;
+          announcement_mode?: string;
           announcement_style?: string;
           announcement_text?: string;
           banner_interval_seconds?: number;
@@ -2909,6 +2918,9 @@ export type Database = {
           desktop_banner_link?: string | null;
           announcement_coupon_code?: string | null;
           announcement_enabled?: boolean;
+          announcement_interval_seconds?: number;
+          announcement_items?: Json;
+          announcement_mode?: string;
           announcement_style?: string;
           announcement_text?: string;
           banner_interval_seconds?: number;
@@ -3148,6 +3160,10 @@ export type Database = {
       platform_cancel_addon: { Args: { _id: string }; Returns: Json };
       platform_addon_requests: { Args: never; Returns: Json };
       create_shared_cart: { Args: { _items: Json }; Returns: string };
+      first_order_offer: {
+        Args: { _customer: string | null; _email: string | null; _is_guest: boolean };
+        Returns: Json;
+      };
       coupon_email_claim: { Args: { _email: string; _code: string }; Returns: boolean };
       coupon_email_release: { Args: { _email: string; _code: string }; Returns: undefined };
       marketing_claim_welcome: { Args: { _email: string }; Returns: string };

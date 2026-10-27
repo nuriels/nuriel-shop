@@ -110,9 +110,21 @@ export type SiteSettings = {
    * טקסט חופשי ו/או קופון להקפצה, בצבע זהב או שחור.
    */
   announcement_enabled: boolean;
-  announcement_text: string;
-  announcement_coupon_code: string | null;
+  announcement_items: AnnouncementItem[];
+  announcement_mode: "rotate" | "marquee";
+  announcement_interval_seconds: number;
   announcement_style: "gold" | "black";
+};
+
+/** הודעה אחת בפס (עד 5): טקסט / משלוח חינם אוטומטי, קופון, קישור ותאריך סיום */
+export type AnnouncementItem = {
+  id: string;
+  kind: "text" | "free_shipping";
+  text: string;
+  coupon_code: string | null;
+  link_url: string | null;
+  ends_at: string | null;
+  active: boolean;
 };
 
 /** העמודים המשפטיים — נשמרים בנפרד (saveLegalTexts), לא מטופס הגדרות האתר */
@@ -130,8 +142,9 @@ export const SITE_FORM_EXCLUDED_KEYS = [
   "brand_color",
   "banner_interval_seconds",
   "announcement_enabled",
-  "announcement_text",
-  "announcement_coupon_code",
+  "announcement_items",
+  "announcement_mode",
+  "announcement_interval_seconds",
   "announcement_style",
   "price_tiers_enabled",
   "terms_content",
@@ -184,7 +197,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link, minimum_order_amount, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url, banner_interval_seconds, announcement_enabled, announcement_text, announcement_coupon_code, announcement_style" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link, minimum_order_amount, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url, banner_interval_seconds, announcement_enabled, announcement_items, announcement_mode, announcement_interval_seconds, announcement_style" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -214,8 +227,11 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
       shabbat_image_url: row.shabbat_image_url ?? null,
       banner_interval_seconds: normalizeBannerInterval(row.banner_interval_seconds),
       announcement_enabled: row.announcement_enabled === true,
-      announcement_text: row.announcement_text ?? "",
-      announcement_coupon_code: row.announcement_coupon_code ?? null,
+      announcement_items: parseAnnouncementItems(row.announcement_items),
+      announcement_mode: row.announcement_mode === "marquee" ? "marquee" : "rotate",
+      announcement_interval_seconds: normalizeAnnouncementInterval(
+        row.announcement_interval_seconds,
+      ),
       announcement_style: row.announcement_style === "black" ? "black" : "gold",
     };
   }
@@ -262,8 +278,9 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     shabbat_image_url: null,
     banner_interval_seconds: BANNER_INTERVAL.default,
     announcement_enabled: false,
-    announcement_text: "",
-    announcement_coupon_code: null,
+    announcement_items: [],
+    announcement_mode: "rotate",
+    announcement_interval_seconds: ANNOUNCEMENT_INTERVAL.default,
     announcement_style: "gold",
   };
 }
@@ -583,32 +600,109 @@ export async function uploadProductImage(file: File): Promise<ProductImageUpload
   return { url: data.publicUrl, originalBytes, compressedBytes };
 }
 
+export const ANNOUNCEMENT_TEXT_MAX = 200;
+export const ANNOUNCEMENT_MAX_ITEMS = 5;
+export const ANNOUNCEMENT_INTERVAL = { min: 3, max: 10, default: 5 } as const;
+
+export function normalizeAnnouncementInterval(value: unknown): number {
+  const seconds = Math.round(Number(value));
+  if (!Number.isFinite(seconds) || seconds === 0) return ANNOUNCEMENT_INTERVAL.default;
+  return Math.min(ANNOUNCEMENT_INTERVAL.max, Math.max(ANNOUNCEMENT_INTERVAL.min, seconds));
+}
+
+/** רשימת ההודעות מהמסד (jsonb) → מערך תקין; ערכים שבורים מדולגים */
+export function parseAnnouncementItems(value: unknown): AnnouncementItem[] {
+  if (!Array.isArray(value)) return [];
+  const items: AnnouncementItem[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const r = raw as Record<string, unknown>;
+    items.push({
+      id: typeof r["id"] === "string" && r["id"] !== "" ? r["id"] : `m${items.length}`,
+      kind: r["kind"] === "free_shipping" ? "free_shipping" : "text",
+      text: typeof r["text"] === "string" ? r["text"] : "",
+      coupon_code:
+        typeof r["coupon_code"] === "string" && r["coupon_code"] ? r["coupon_code"] : null,
+      link_url: typeof r["link_url"] === "string" && r["link_url"] ? r["link_url"] : null,
+      ends_at: typeof r["ends_at"] === "string" && r["ends_at"] ? r["ends_at"] : null,
+      active: r["active"] !== false,
+    });
+  }
+  return items.slice(0, ANNOUNCEMENT_MAX_ITEMS);
+}
+
+export function newAnnouncementItem(): AnnouncementItem {
+  return {
+    id: `m${Date.now().toString(36)}${Math.round(Math.random() * 1e4)}`,
+    kind: "text",
+    text: "",
+    coupon_code: null,
+    link_url: null,
+    ends_at: null,
+    active: true,
+  };
+}
+
 export type AnnouncementSettings = Pick<
   SiteSettings,
-  "announcement_enabled" | "announcement_text" | "announcement_coupon_code" | "announcement_style"
+  | "announcement_enabled"
+  | "announcement_items"
+  | "announcement_mode"
+  | "announcement_interval_seconds"
+  | "announcement_style"
 >;
 
-export const ANNOUNCEMENT_TEXT_MAX = 200;
+/** הודעה בלי שום תוכן (לא טקסט, לא קופון, לא משלוח חינם) — לא נשמרת */
+export function announcementItemEmpty(item: AnnouncementItem): boolean {
+  return item.kind === "text" && item.text.trim() === "" && !item.coupon_code;
+}
 
-/** שמירת פס ההודעות — רק ארבעת השדות שלו (המסד בודק שוב) */
+/** שמירת פס ההודעות — רק השדות שלו (המסד בודק שוב כל הודעה) */
 export async function saveAnnouncement(value: AnnouncementSettings): Promise<AnnouncementSettings> {
-  const text = value.announcement_text.trim();
-  if (text.length > ANNOUNCEMENT_TEXT_MAX)
-    throw new Error(`הטקסט ארוך מדי (עד ${ANNOUNCEMENT_TEXT_MAX} תווים)`);
-  if (value.announcement_enabled && text === "" && !value.announcement_coupon_code) {
-    throw new Error("כדי להציג את הפס יש לכתוב טקסט או לבחור קופון");
+  const items = value.announcement_items.filter((item) => !announcementItemEmpty(item));
+  for (const item of items) {
+    if (item.text.trim().length > ANNOUNCEMENT_TEXT_MAX) {
+      throw new Error(`הטקסט ארוך מדי (עד ${ANNOUNCEMENT_TEXT_MAX} תווים)`);
+    }
+    if (item.link_url && !/^(https?:\/\/\S+|\/([^/\s]\S*)?)$/.test(item.link_url.trim())) {
+      throw new Error("הקישור בהודעה חייב להתחיל ב-/ (עמוד באתר) או ב-https://");
+    }
+  }
+  if (value.announcement_enabled && !items.some((item) => item.active)) {
+    throw new Error("כדי להציג את הפס יש להוסיף לפחות הודעה פעילה אחת");
   }
   const { data, error } = await supabase
     .from("site_settings")
     .update({
       announcement_enabled: value.announcement_enabled,
-      announcement_text: text,
-      announcement_coupon_code: value.announcement_coupon_code || null,
+      announcement_items: items.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        text: item.kind === "free_shipping" ? "" : item.text.trim(),
+        coupon_code: item.coupon_code || null,
+        link_url: item.link_url?.trim() || null,
+        ends_at: item.ends_at || null,
+        active: item.active,
+      })),
+      announcement_mode: value.announcement_mode === "marquee" ? "marquee" : "rotate",
+      announcement_interval_seconds: normalizeAnnouncementInterval(
+        value.announcement_interval_seconds,
+      ),
       announcement_style: value.announcement_style === "black" ? "black" : "gold",
     })
     .eq("id", true)
-    .select("announcement_enabled, announcement_text, announcement_coupon_code, announcement_style")
+    .select(
+      "announcement_enabled, announcement_items, announcement_mode, announcement_interval_seconds, announcement_style",
+    )
     .single();
   if (error) throw new Error(error.message);
-  return { ...data, announcement_style: data.announcement_style === "black" ? "black" : "gold" };
+  return {
+    announcement_enabled: data.announcement_enabled,
+    announcement_items: parseAnnouncementItems(data.announcement_items),
+    announcement_mode: data.announcement_mode === "marquee" ? "marquee" : "rotate",
+    announcement_interval_seconds: normalizeAnnouncementInterval(
+      data.announcement_interval_seconds,
+    ),
+    announcement_style: data.announcement_style === "black" ? "black" : "gold",
+  };
 }

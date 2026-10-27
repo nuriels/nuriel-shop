@@ -49,6 +49,8 @@ import {
   type CouponAudience,
   COUPON_COLUMNS,
   COUPON_STATUS_LABELS,
+  FIRST_ORDER_LABELS,
+  type FirstOrderMode,
   couponCodeProblem,
   couponLabel,
   couponStatus,
@@ -270,6 +272,11 @@ export function CouponsPanel() {
                       <Badge variant="outline" className={STATUS_STYLE[status]}>
                         {COUPON_STATUS_LABELS[status]}
                       </Badge>
+                      {coupon.first_order_mode !== "none" && (
+                        <Badge variant="outline" data-testid="coupon-first-order-badge">
+                          הזמנה ראשונה: {coupon.first_order_mode === "auto" ? "אוטומטי" : "הצעה"}
+                        </Badge>
+                      )}
                       {welcomeCode === coupon.code && (
                         <Badge variant="outline" data-testid="coupon-welcome-badge">
                           נשלח לנרשמים חדשים
@@ -408,6 +415,8 @@ type CouponForm = {
   audience: CouponAudience;
   /** false = הקופון חל גם על מוצרים שכבר במבצע (כפל מבצעים) */
   excludeSale: boolean;
+  /** קופון להזמנה ראשונה: none / offer (הצעה לאישור) / auto (מוחל לבד) */
+  firstOrder: FirstOrderMode;
   startsAt: string;
   expiresAt: string;
   active: boolean;
@@ -426,6 +435,7 @@ function formOf(coupon: Coupon | null): CouponForm {
           coupon.max_uses_per_customer !== null ? String(coupon.max_uses_per_customer) : "",
         audience: coupon.audience,
         excludeSale: coupon.exclude_sale_items,
+        firstOrder: coupon.first_order_mode ?? "none",
         startsAt: toLocalInput(coupon.starts_at),
         expiresAt: toLocalInput(coupon.expires_at),
         active: coupon.is_active,
@@ -440,6 +450,7 @@ function formOf(coupon: Coupon | null): CouponForm {
         maxPerCustomer: "",
         audience: "all",
         excludeSale: false,
+        firstOrder: "none",
         startsAt: "",
         expiresAt: "",
         active: true,
@@ -465,6 +476,10 @@ function CouponDialog({
   const [sendWelcome, setSendWelcome] = useState(false);
   // התיבה נפתחת רק אחרי שנטענה ההגדרה הנוכחית — כדי שהטעינה לא תדרוס סימון של המנהל
   const [welcomeReady, setWelcomeReady] = useState(false);
+  // הקופון הנוכחי של החנות להזמנה ראשונה (קופון אחד בלבד) — כדי להזהיר שהחדש מחליף אותו
+  const [firstOrderHolder, setFirstOrderHolder] = useState<{ id: string; code: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -472,6 +487,12 @@ function CouponDialog({
     setError(null);
     setWelcomeReady(false);
     let cancelled = false;
+    void supabase
+      .from("coupons")
+      .select("id, code")
+      .neq("first_order_mode", "none")
+      .maybeSingle()
+      .then(({ data }) => !cancelled && setFirstOrderHolder(data ?? null));
     void supabase
       .from("site_settings")
       .select("welcome_coupon_code")
@@ -535,10 +556,23 @@ function CouponDialog({
       max_uses_per_customer: maxPerCustomer,
       audience: form.audience,
       exclude_sale_items: form.excludeSale,
+      first_order_mode: form.firstOrder,
       starts_at: startsAt,
       expires_at: expiresAt,
       is_active: form.active,
     };
+    // קופון אחד בחנות להזמנה ראשונה — מבטלים את הקודם לפני שמסמנים את זה
+    if (form.firstOrder !== "none" && firstOrderHolder && firstOrderHolder.id !== coupon?.id) {
+      const { error: clearError } = await supabase
+        .from("coupons")
+        .update({ first_order_mode: "none" })
+        .eq("id", firstOrderHolder.id);
+      if (clearError) {
+        setBusy(false);
+        setError(`לא הצלחנו לבטל את קופון ההזמנה הראשונה הקודם: ${clearError.message}`);
+        return;
+      }
+    }
     const { error: saveError } = coupon
       ? await supabase.from("coupons").update(values).eq("id", coupon.id)
       : await supabase.from("coupons").insert(values);
@@ -766,6 +800,42 @@ function CouponDialog({
               />
             </label>
           )}
+
+          <div className="space-y-1.5 rounded-lg border p-3" data-testid="coupon-first-order">
+            <Label htmlFor="cp-first-order" className="text-sm font-medium">
+              קופון להזמנה ראשונה
+            </Label>
+            <Select
+              value={form.firstOrder}
+              onValueChange={(v) => patch({ firstOrder: v as FirstOrderMode })}
+            >
+              <SelectTrigger id="cp-first-order" data-testid="coupon-first-order-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent dir="rtl">
+                {(Object.keys(FIRST_ORDER_LABELS) as FirstOrderMode[]).map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {FIRST_ORDER_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              הקופון תקף רק ללקוח (חשבון או אימייל) שעוד לא הזמין בחנות — הכלל נאכף גם בשרת. הצעה:
+              הלקוח רואה בסל ובקופה "יש לך קופון להזמנה ראשונה" ומאשר. אוטומטי: ההנחה מוחלת לבד
+              בקופה.
+            </p>
+            {form.firstOrder !== "none" &&
+              firstOrderHolder &&
+              firstOrderHolder.id !== coupon?.id && (
+                <p
+                  className="text-xs font-medium text-amber-700"
+                  data-testid="coupon-first-order-replace"
+                >
+                  הקופון {firstOrderHolder.code} יפסיק להיות קופון הזמנה ראשונה ויוחלף בקופון הזה.
+                </p>
+              )}
+          </div>
 
           <label className="flex items-start gap-3 rounded-lg border p-3">
             <Checkbox
