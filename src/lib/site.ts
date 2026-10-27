@@ -100,6 +100,11 @@ export type SiteSettings = {
   /** חלק 35ב: הברכה בשבת (ריק = "שבת שלום") ותמונת השבת */
   shabbat_message: string | null;
   shabbat_image_url: string | null;
+  /**
+   * כל כמה שניות מתחלפים הבאנרים במסך הבית (3–15, ברירת מחדל 5). נשמר רק
+   * מ"עיצוב מסך הבית" (saveBannerInterval), לא מטופס הגדרות האתר.
+   */
+  banner_interval_seconds: number;
 };
 
 /** העמודים המשפטיים — נשמרים בנפרד (saveLegalTexts), לא מטופס הגדרות האתר */
@@ -110,6 +115,12 @@ export type LegalTexts = Pick<
 
 /** השדות שלא נשמרים מטופס הגדרות האתר (ולכן גם לא נחשבים "שינוי שלא נשמר" שם) */
 export const SITE_FORM_EXCLUDED_KEYS = [
+  // המיתוג נשמר רק מ"עיצוב מסך הבית" (saveBranding) — כך שמירת הגדרות האתר לא
+  // דורסת לוגו / צבע / כותרת ששונו שם בינתיים
+  "site_title",
+  "logo_path",
+  "brand_color",
+  "banner_interval_seconds",
   "price_tiers_enabled",
   "terms_content",
   "privacy_content",
@@ -161,7 +172,7 @@ export type EmailSettings = {
 };
 
 const SITE_SETTINGS_COLUMNS =
-  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link, minimum_order_amount, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url" as const;
+  "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link, minimum_order_amount, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url, banner_interval_seconds" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
   const { data } = await supabase
@@ -189,6 +200,7 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
       holidays: Array.isArray(row.holidays) ? (row.holidays as Json) : [],
       shabbat_message: row.shabbat_message ?? null,
       shabbat_image_url: row.shabbat_image_url ?? null,
+      banner_interval_seconds: normalizeBannerInterval(row.banner_interval_seconds),
     };
   }
   return {
@@ -232,6 +244,7 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     holidays: [],
     shabbat_message: null,
     shabbat_image_url: null,
+    banner_interval_seconds: BANNER_INTERVAL.default,
   };
 }
 
@@ -333,15 +346,58 @@ export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
   // כדי ששמירת הגדרות האתר לא תדרוס נוסח שנשמר שם בינתיים.
   const editable: Partial<SiteSettings> = { ...settings };
   for (const key of SITE_FORM_EXCLUDED_KEYS) delete editable[key];
+  // המיתוג (כותרת, לוגו, צבע) — רק מ"עיצוב מסך הבית" (saveBranding)
   const { error } = await supabase
     .from("site_settings")
     .update({
       ...editable,
-      brand_color: normalizeBrandColor(settings.brand_color),
       business_hours: settings.business_hours.trim(),
     })
     .eq("id", true);
   if (error) throw error;
+}
+
+export type BrandingSettings = Pick<SiteSettings, "site_title" | "logo_path" | "brand_color">;
+
+/**
+ * שמירת המיתוג מ"עיצוב מסך הבית": רק כותרת האתר, הלוגו וצבע המותג — שאר
+ * ההגדרות לא נשלחות ולכן לא נדרסות. ה-RLS מגביל את העדכון לשורת החנות הנוכחית.
+ */
+export async function saveBranding(branding: BrandingSettings): Promise<BrandingSettings> {
+  const title = branding.site_title.trim();
+  if (title === "") throw new Error("יש להזין את שם החנות (כותרת האתר)");
+  const { data, error } = await supabase
+    .from("site_settings")
+    .update({
+      site_title: title,
+      logo_path: branding.logo_path,
+      brand_color: normalizeBrandColor(branding.brand_color),
+    })
+    .eq("id", true)
+    .select("site_title, logo_path, brand_color")
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/** זמן ההחלפה בין הבאנרים — זהה למגבלה במסד */
+export const BANNER_INTERVAL = { min: 3, max: 15, default: 5 } as const;
+
+export function normalizeBannerInterval(value: unknown): number {
+  const seconds = Math.round(Number(value));
+  if (!Number.isFinite(seconds) || seconds === 0) return BANNER_INTERVAL.default;
+  return Math.min(BANNER_INTERVAL.max, Math.max(BANNER_INTERVAL.min, seconds));
+}
+
+export async function saveBannerInterval(seconds: number): Promise<number> {
+  const { data, error } = await supabase
+    .from("site_settings")
+    .update({ banner_interval_seconds: normalizeBannerInterval(seconds) })
+    .eq("id", true)
+    .select("banner_interval_seconds")
+    .single();
+  if (error) throw new Error(error.message);
+  return data.banner_interval_seconds;
 }
 
 /** חלק 35: שמירת שבת וחג אוטומטית — נשמר מהכרטיס שלו (הרשימה נבדקת וממוינת במסד) */

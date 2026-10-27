@@ -641,7 +641,11 @@ function StoreCatalog() {
             {/* חלק 35ב: בשבת / בחג — כרטיס הברכה (תמונה + "שבת שלום" / "חג סוכות שמח") */}
             <RestGreetingCard />
 
-            <HomeBanner slides={banners.top} label="באנר עליון" />
+            <HomeBanner
+              slides={banners.top}
+              label="באנר עליון"
+              intervalSeconds={settings?.banner_interval_seconds}
+            />
 
             <HotDealsStrip
               items={promoItems}
@@ -774,7 +778,11 @@ function StoreCatalog() {
               </CategoryBrowser>
             </section>
 
-            <HomeBanner slides={banners.bottom} label="באנר תחתון" />
+            <HomeBanner
+              slides={banners.bottom}
+              label="באנר תחתון"
+              intervalSeconds={settings?.banner_interval_seconds}
+            />
           </div>
         </StorefrontMain>
 

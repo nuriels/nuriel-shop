@@ -4,9 +4,8 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { BannerLinkPicker } from "@/components/home-design/BannerLinkPicker";
 import { refreshSiteSettings, useSiteSettings } from "@/hooks/useSiteSettings";
 import {
   saveSideBanner,
@@ -25,7 +24,7 @@ const fromSettings = (settings: SideBannerSettings): Form => ({
 });
 
 /**
- * "באנרים ופרסומים" בהגדרות החנות (חלק 19): באנר צדדי למסכי מחשב.
+ * באנר צדדי למסכי מחשב (חלק 19) — היום ב"עיצוב מסך הבית" (מבצעים ופרסומות).
  * מעלים תמונה (נדחסת ל-WebP ועולה ל-Storage של החנות, כמו הלוגו), מגדירים
  * קישור (למשל לעמוד המבצעים) ומדליקים / מכבים. באתר הוא מוצג בעמודה השמאלית
  * רק במסכים גדולים (lg ומעלה), נשאר במקום בזמן הגלילה, ומוסתר לגמרי בנייד
@@ -85,7 +84,6 @@ export function SideBannerCard() {
   const save = async () => {
     if (linkProblem) {
       toast.error(linkProblem);
-      document.getElementById("side-banner-link")?.focus();
       return;
     }
     if (form.active && form.imageUrl === "") {
@@ -116,7 +114,7 @@ export function SideBannerCard() {
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
         <CardTitle className="flex items-center gap-2 text-base">
           <Megaphone className="size-4" aria-hidden="true" />
-          באנרים ופרסומים
+          באנר צדדי (מחשב)
         </CardTitle>
         <Badge variant={saved.active ? "default" : "outline"} className="gap-1">
           <Monitor className="size-3.5" aria-hidden="true" />
@@ -191,18 +189,11 @@ export function SideBannerCard() {
               JPG / PNG / WEBP עד 15MB — התמונה נדחסת אוטומטית לטעינה מהירה.
             </p>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="side-banner-link">קישור (לא חובה)</Label>
-              <Input
-                id="side-banner-link"
-                dir="ltr"
-                inputMode="url"
-                maxLength={2000}
-                placeholder="/?category=מבצעים  או  https://…"
-                className="text-right"
-                aria-invalid={linkProblem !== null}
-                value={form.link}
-                onChange={(event) => patch({ link: event.target.value })}
+            <div className="space-y-1.5" id="side-banner-link">
+              <BannerLinkPicker
+                label="קישור (לא חובה)"
+                value={form.link || null}
+                onChange={(next) => patch({ link: next ?? "" })}
               />
               {linkProblem ? (
                 <p role="alert" className="text-xs font-medium text-destructive">
@@ -210,8 +201,7 @@ export function SideBannerCard() {
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  לאן הלקוח מגיע בלחיצה — עמוד באתר (מתחיל ב-/) או כתובת מלאה. ריק = הבאנר בלי
-                  קישור.
+                  לאן הלקוח מגיע בלחיצה — מוצר, קטגוריה, עמוד באתר (מתחיל ב-/) או כתובת מלאה.
                 </p>
               )}
             </div>

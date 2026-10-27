@@ -19,6 +19,11 @@ export type BannerSlide = {
   show_mobile: boolean;
   link_url: string | null;
   alt_text: string;
+  /** false = נשמר אבל לא מוצג באתר (מושבת זמנית) */
+  is_active: boolean;
+  /** תמונה שמוצגת לפני שהסרטון נטען ובמקומו אם הטעינה נכשלת */
+  desktop_poster_url: string | null;
+  mobile_poster_url: string | null;
 };
 
 export type BannerSet = Record<BannerPlacement, BannerSlide[]>;
@@ -33,10 +38,13 @@ export function bannerMediaKind(url: string | null | undefined): BannerMediaKind
   return "image";
 }
 
-/** מגבלות העלאה: הסרטון עד 5 שניות — בדיוק זמן ההחלפה בין הבאנרים */
-export const BANNER_LIMITS = { imageMb: 20, gifMb: 8, videoMb: 15, videoSeconds: 5 } as const;
+/**
+ * מגבלות העלאה. סרטון: עד 15 שניות ו-15MB — הבאנר מחכה שהסרטון יסתיים לפני
+ * ההחלפה. השרת מקבל קבצים גדולים יותר (nginx ‏100MB), כך שהמגבלה כאן היא שלנו.
+ */
+export const BANNER_LIMITS = { imageMb: 20, gifMb: 8, videoMb: 15, videoSeconds: 15 } as const;
 export const BANNER_ACCEPT = "image/*,video/mp4,video/webm";
-/** סבילות קטנה: מקודדים מייצרים לרוב 5.03 שניות לסרטון של "5 שניות" */
+/** סבילות קטנה: מקודדים מייצרים לרוב 15.03 שניות לסרטון של "15 שניות" */
 const VIDEO_SECONDS_TOLERANCE = 0.25;
 
 export const BANNER_PLACEMENT_LABEL: Record<BannerPlacement, string> = {
@@ -111,15 +119,20 @@ export function emptySlide(placement: BannerPlacement): BannerSlide {
     show_mobile: true,
     link_url: null,
     alt_text: "",
+    is_active: true,
+    desktop_poster_url: null,
+    mobile_poster_url: null,
   };
 }
 
-/** השקופיות שיוצגו בפועל במכשיר: מסומנות להצגה בו ויש להן תמונה למכשיר הזה */
+/** השקופיות שיוצגו בפועל במכשיר: פעילות, מסומנות להצגה בו ויש להן תמונה למכשיר הזה */
 export function slidesFor(slides: BannerSlide[], device: BannerDevice): BannerSlide[] {
-  return slides.filter((slide) =>
-    device === "desktop"
-      ? slide.show_desktop && !!slide.desktop_image_url
-      : slide.show_mobile && !!slide.mobile_image_url,
+  return slides.filter(
+    (slide) =>
+      slide.is_active &&
+      (device === "desktop"
+        ? slide.show_desktop && !!slide.desktop_image_url
+        : slide.show_mobile && !!slide.mobile_image_url),
   );
 }
 
@@ -130,7 +143,7 @@ export async function loadHomeBanners(force = false): Promise<BannerSet> {
   const { data, error } = await supabase
     .from("home_banner_slides")
     .select(
-      "placement, position, desktop_image_url, desktop_width, desktop_height, mobile_image_url, mobile_width, mobile_height, show_desktop, show_mobile, link_url, alt_text",
+      "placement, position, desktop_image_url, desktop_width, desktop_height, mobile_image_url, mobile_width, mobile_height, show_desktop, show_mobile, link_url, alt_text, is_active, desktop_poster_url, mobile_poster_url",
     )
     .order("placement")
     .order("position");
@@ -138,13 +151,24 @@ export async function loadHomeBanners(force = false): Promise<BannerSet> {
   const set: BannerSet = { top: [], bottom: [] };
   for (const row of data ?? []) {
     const placement = row.placement === "bottom" ? "bottom" : "top";
-    set[placement].push({ ...row, placement, key: newBannerKey() });
+    set[placement].push({
+      ...row,
+      placement,
+      key: newBannerKey(),
+      // שורה בלי השדות החדשים — פעילה ובלי פוסטר, בדיוק כמו קודם
+      is_active: row.is_active !== false,
+      desktop_poster_url: row.desktop_poster_url ?? null,
+      mobile_poster_url: row.mobile_poster_url ?? null,
+    });
   }
   cache = set;
   return set;
 }
 
-/** שמירה אטומית של כל הבאנרים (מה שבמסך הניהול = מה שמוצג באתר) */
+/**
+ * שמירה אטומית של כל הבאנרים של החנות (מה שבמסך הניהול = מה שמוצג באתר).
+ * לשמירת מיקום אחד בלבד — שולחים את המיקום השני כפי שהוא שמור (ראו HomeDesignPanel).
+ */
 export async function saveHomeBanners(set: BannerSet): Promise<void> {
   const rows = (["top", "bottom"] as const).flatMap((placement) =>
     set[placement].map((slide, position) => ({
@@ -160,6 +184,9 @@ export async function saveHomeBanners(set: BannerSet): Promise<void> {
       show_mobile: slide.show_mobile,
       link_url: slide.link_url?.trim() || null,
       alt_text: slide.alt_text.trim(),
+      is_active: slide.is_active,
+      desktop_poster_url: slide.desktop_poster_url,
+      mobile_poster_url: slide.mobile_poster_url,
     })),
   );
   const { error } = await supabase.rpc("replace_home_banners", { _slides: rows });
@@ -167,7 +194,13 @@ export async function saveHomeBanners(set: BannerSet): Promise<void> {
   cache = null;
 }
 
-export type BannerUpload = { url: string; width: number | null; height: number | null };
+export type BannerUpload = {
+  url: string;
+  width: number | null;
+  height: number | null;
+  /** לסרטון: פוסטר שנוצר אוטומטית מתוך הסרטון (null = לא הצלחנו ליצור) */
+  poster?: string | null;
+};
 
 function readImageSize(file: Blob): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
@@ -229,7 +262,7 @@ export async function uploadBannerImage(file: File, device: BannerDevice): Promi
       info.duration > BANNER_LIMITS.videoSeconds + VIDEO_SECONDS_TOLERANCE
     ) {
       throw new Error(
-        `הסרטון ארוך מדי (${Number.isFinite(info.duration) ? info.duration.toFixed(1) : "?"} שניות) — עד ${BANNER_LIMITS.videoSeconds} שניות, כמו זמן ההחלפה בין הבאנרים`,
+        `הסרטון ארוך מדי (${Number.isFinite(info.duration) ? info.duration.toFixed(1) : "?"} שניות) — עד ${BANNER_LIMITS.videoSeconds} שניות`,
       );
     }
     upload = {
@@ -263,15 +296,84 @@ export async function uploadBannerImage(file: File, device: BannerDevice): Promi
     };
   }
 
-  const path = `${await tenantStoragePrefix()}/site/banners/${device}-${Date.now()}-${Math.round(Math.random() * 1e6)}.${upload.extension}`;
-  const { error } = await supabase.storage.from(BRANDING_BUCKET).upload(path, upload.file, {
+  const url = await storeBannerFile(device, upload.file, upload.extension, upload.type);
+  if (!isVideo) return { url, width: upload.width, height: upload.height };
+  // פוסטר אוטומטי מתוך הסרטון — אם לא מצליחים, הסרטון עדיין נשמר (אפשר להעלות פוסטר ידנית)
+  const frame = await captureVideoFrame(file).catch(() => null);
+  const poster = frame ? await uploadBannerPoster(frame, device).catch(() => null) : null;
+  return { url, width: upload.width, height: upload.height, poster };
+}
+
+/** העלאה לתיקיית הבאנרים של החנות בדלי branding (<tenant>/site/banners/...) */
+async function storeBannerFile(
+  device: BannerDevice,
+  file: Blob,
+  extension: string,
+  type: string,
+  kind = "",
+): Promise<string> {
+  const path = `${await tenantStoragePrefix()}/site/banners/${device}${kind}-${Date.now()}-${Math.round(Math.random() * 1e6)}.${extension}`;
+  const { error } = await supabase.storage.from(BRANDING_BUCKET).upload(path, file, {
     upsert: false,
-    contentType: upload.type,
+    contentType: type,
     cacheControl: "31536000",
   });
   if (error) throw error;
-  const { data } = supabase.storage.from(BRANDING_BUCKET).getPublicUrl(path);
-  return { url: data.publicUrl, width: upload.width, height: upload.height };
+  return supabase.storage.from(BRANDING_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+/** תמונת פוסטר לסרטון: נדחסת כמו תמונת באנר רגילה ועולה לאותה תיקייה */
+export async function uploadBannerPoster(file: Blob, device: BannerDevice): Promise<string> {
+  if (!file.type.startsWith("image/") || file.type === "image/gif") {
+    throw new Error("הפוסטר צריך להיות תמונה (JPG / PNG / WEBP)");
+  }
+  if (file.size > BANNER_LIMITS.imageMb * 1024 * 1024) {
+    throw new Error(`גודל התמונה המקסימלי הוא ${BANNER_LIMITS.imageMb}MB`);
+  }
+  const source = file instanceof File ? file : new File([file], "poster", { type: file.type });
+  const compressed =
+    device === "desktop"
+      ? await compressDesktopBannerImage(source)
+      : await compressMobileBannerImage(source);
+  return storeBannerFile(
+    device,
+    compressed.file,
+    compressed.extension,
+    compressed.file.type,
+    "-poster",
+  );
+}
+
+/** פריים מתוך הסרטון (בשנייה הראשונה) כתמונה — לפוסטר אוטומטי */
+function captureVideoFrame(file: Blob): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    const done = (blob: Blob | null) => {
+      window.clearTimeout(timer);
+      URL.revokeObjectURL(url);
+      resolve(blob);
+    };
+    const timer = window.setTimeout(() => done(null), 15000);
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.onloadedmetadata = () => {
+      video.currentTime = Math.min(0.5, (video.duration || 1) / 2);
+    };
+    video.onseeked = () => {
+      if (!video.videoWidth || !video.videoHeight) return done(null);
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext("2d");
+      if (!context) return done(null);
+      context.drawImage(video, 0, 0);
+      canvas.toBlob((blob) => done(blob), "image/jpeg", 0.85);
+    };
+    video.onerror = () => done(null);
+    video.src = url;
+  });
 }
 
 /** מחיקת קבצי באנר שכבר לא בשימוש (אחרי שמירה). שגיאה כאן לא מפילה את השמירה. */
@@ -293,8 +395,54 @@ export async function removeBannerFiles(urls: string[]): Promise<void> {
 export function bannerUrls(set: BannerSet): Set<string> {
   const urls = new Set<string>();
   for (const slide of [...set.top, ...set.bottom]) {
-    if (slide.desktop_image_url) urls.add(slide.desktop_image_url);
-    if (slide.mobile_image_url) urls.add(slide.mobile_image_url);
+    for (const url of [
+      slide.desktop_image_url,
+      slide.mobile_image_url,
+      slide.desktop_poster_url,
+      slide.mobile_poster_url,
+    ]) {
+      if (url) urls.add(url);
+    }
   }
   return urls;
+}
+
+/** הפוסטר של המכשיר (רק לסרטון) */
+export function posterFor(slide: BannerSlide, device: BannerDevice): string | null {
+  return device === "desktop" ? slide.desktop_poster_url : slide.mobile_poster_url;
+}
+
+// ---------- קישורים: מוצר / קטגוריה / עמוד באתר / כתובת חיצונית ----------
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const PRODUCT_LINK = new RegExp(`^/product/(${UUID})$`, "i");
+
+export function productLink(productId: string): string {
+  return `/product/${productId}`;
+}
+
+export function categoryLink(category: string): string {
+  return `/?category=${encodeURIComponent(category)}`;
+}
+
+export type BannerLinkTarget =
+  | { kind: "none" }
+  | { kind: "product"; productId: string }
+  | { kind: "category"; category: string }
+  | { kind: "url"; url: string };
+
+/** מה הקישור השמור מייצג — כדי להציג אותו בבורר בצורה נוחה */
+export function parseBannerLink(link: string | null | undefined): BannerLinkTarget {
+  const value = (link ?? "").trim();
+  if (value === "") return { kind: "none" };
+  const product = PRODUCT_LINK.exec(value);
+  if (product?.[1]) return { kind: "product", productId: product[1].toLowerCase() };
+  if (value.startsWith("/?category=") && !value.slice(11).includes("&")) {
+    try {
+      const category = decodeURIComponent(value.slice("/?category=".length));
+      if (category.trim() !== "") return { kind: "category", category };
+    } catch {
+      // קידוד שבור — מציגים כקישור רגיל
+    }
+  }
+  return { kind: "url", url: value };
 }

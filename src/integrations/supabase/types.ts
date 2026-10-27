@@ -2563,6 +2563,9 @@ export type Database = {
         Row: {
           tenant_id: string;
           alt_text: string;
+          desktop_poster_url: string | null;
+          is_active: boolean;
+          mobile_poster_url: string | null;
           created_at: string;
           desktop_height: number | null;
           desktop_image_url: string | null;
@@ -2581,6 +2584,9 @@ export type Database = {
         Insert: {
           tenant_id?: string;
           alt_text?: string;
+          desktop_poster_url?: string | null;
+          is_active?: boolean;
+          mobile_poster_url?: string | null;
           created_at?: string;
           desktop_height?: number | null;
           desktop_image_url?: string | null;
@@ -2599,6 +2605,9 @@ export type Database = {
         Update: {
           tenant_id?: string;
           alt_text?: string;
+          desktop_poster_url?: string | null;
+          is_active?: boolean;
+          mobile_poster_url?: string | null;
           created_at?: string;
           desktop_height?: number | null;
           desktop_image_url?: string | null;
@@ -2766,6 +2775,7 @@ export type Database = {
           desktop_banner_active: boolean;
           desktop_banner_image_url: string | null;
           desktop_banner_link: string | null;
+          banner_interval_seconds: number;
           business_hours: string;
         };
         Insert: {
@@ -2827,6 +2837,7 @@ export type Database = {
           desktop_banner_active?: boolean;
           desktop_banner_image_url?: string | null;
           desktop_banner_link?: string | null;
+          banner_interval_seconds?: number;
           business_hours?: string;
         };
         Update: {
@@ -2888,6 +2899,7 @@ export type Database = {
           desktop_banner_active?: boolean;
           desktop_banner_image_url?: string | null;
           desktop_banner_link?: string | null;
+          banner_interval_seconds?: number;
           business_hours?: string;
         };
         Relationships: [];

@@ -28,3 +28,11 @@ INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_app
   ('70000000-0000-0000-0000-00000000000b', 'a0000000-0000-0000-0000-0000000000b1', 'admin1.b@test.local', 'admin1_b', 'admin', true),
   ('70000000-0000-0000-0000-00000000000b', 'a0000000-0000-0000-0000-0000000000b2', 'admin2.b@test.local', 'admin2_b', 'admin', true)
 ON CONFLICT DO NOTHING;
+-- באנרים ומיתוג "קיימים" (במבנה שלפני 20261019560000) — לבדיקה שהמיגרציה שומרת עליהם
+INSERT INTO public.home_banner_slides (id, tenant_id, placement, position, desktop_image_url, mobile_image_url, link_url, alt_text) VALUES
+  ('b5000000-0000-0000-0000-00000000000a', '70000000-0000-0000-0000-00000000000a', 'top', 0, 'https://cdn.test/a-top.webp', NULL, '/?category=sale', 'באנר A'),
+  ('b5000000-0000-0000-0000-0000000000b1', '70000000-0000-0000-0000-00000000000b', 'top', 0, 'https://cdn.test/b-top.webp', 'https://cdn.test/b-top-m.webp', NULL, 'באנר B'),
+  ('b5000000-0000-0000-0000-0000000000b2', '70000000-0000-0000-0000-00000000000b', 'bottom', 0, 'https://cdn.test/b-bottom.mp4', NULL, 'https://example.com', 'סרטון B')
+ON CONFLICT (id) DO NOTHING;
+UPDATE public.site_settings SET logo_path = '70000000-0000-0000-0000-00000000000b/site/logo-1.png', brand_color = '#1e3a8a', site_title = 'חנות B'
+ WHERE tenant_id = '70000000-0000-0000-0000-00000000000b';

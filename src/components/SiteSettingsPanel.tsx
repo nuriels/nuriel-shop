@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { ExternalLink, Loader2, Save, Scale } from "lucide-react";
+import { ArrowLeft, ExternalLink, LayoutTemplate, Loader2, Save, Scale } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,13 +12,10 @@ import { useSiteSettings, refreshSiteSettings } from "@/hooks/useSiteSettings";
 import {
   labelSizeProblem,
   saveSiteSettings,
-  uploadSiteLogo,
-  resolveSiteLogoUrl,
   SITE_FORM_EXCLUDED_KEYS,
   type SiteSettings,
 } from "@/lib/site";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
-import { BrandColorField } from "@/components/BrandColorField";
 import { SabbathModeCard } from "@/components/SabbathModeCard";
 import { ShabbatScheduleCard } from "@/components/ShabbatScheduleCard";
 import { LabelSizeCard } from "@/components/delivery/LabelSizeCard";
@@ -39,12 +36,14 @@ function sameSettings(a: SiteSettings, b: SiteSettings): boolean {
   );
 }
 
-/** ניהול תוכן האתר, מיתוג ופרטי העסק (משפיע על עמודי אודות/תנאים/פרטיות) */
-export function SiteSettingsPanel() {
+/**
+ * ניהול תוכן האתר ופרטי העסק (משפיע על עמודי אודות/תנאים/פרטיות). המיתוג (כותרת,
+ * לוגו, צבע) והבאנרים מנוהלים ב"עיצוב מסך הבית" — כאן רק הפניה לשם.
+ */
+export function SiteSettingsPanel({ onOpenHomeDesign }: { onOpenHomeDesign?: () => void }) {
   const { settings } = useSiteSettings();
   const router = useRouter();
   const [form, setForm] = useState<SiteSettings | null>(settings);
-  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   // פרטי החיוב מול הפלטפורמה — רק לרמז ("מוגדר אצלך עוסק פטור"), לא משנה כלום לבד
   const billingSaysExempt = useLegalIdentity()?.businessType === "exempt";
@@ -63,19 +62,6 @@ export function SiteSettingsPanel() {
   const patch = (next: Partial<SiteSettings>) =>
     setForm((current) => (current ? { ...current, ...next } : current));
 
-  const uploadLogo = async (file: File | undefined) => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      const path = await uploadSiteLogo(file);
-      patch({ logo_path: path });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "העלאת הלוגו נכשלה");
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const save = async () => {
     const labelProblem = labelSizeProblem(form.label_width_mm, form.label_height_mm);
     if (labelProblem) {
@@ -87,7 +73,7 @@ export function SiteSettingsPanel() {
       await saveSiteSettings(form);
       // מה שנשמר בפועל (למשל צבע מנורמל) — מכאן והלאה זה הבסיס להשוואה
       setForm(await refreshSiteSettings());
-      // צבע המותג ושם החנות נטענים ב-root (גם ל-SSR) — מרעננים כדי שיחולו מיד
+      // ההגדרות נטענות ב-root (גם ל-SSR) — מרעננים כדי שיחולו מיד
       await router.invalidate();
       toast.success("ההגדרות נשמרו");
     } catch (error) {
@@ -104,7 +90,7 @@ export function SiteSettingsPanel() {
         <div className="min-w-0">
           <h2 className="text-xl font-bold text-foreground">הגדרות אתר ותוכן</h2>
           <p className="text-sm text-muted-foreground">
-            מצב שבת, מיתוג וצבע החנות, פרטי העסק ושעות הפעילות, תצוגת מע״מ, מדבקות משלוח ועמוד אודות
+            מצב שבת, פרטי העסק ושעות הפעילות, תצוגת מע״מ, מדבקות משלוח ועמוד אודות
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -140,44 +126,25 @@ export function SiteSettingsPanel() {
         shabbatImageUrl={form.shabbat_image_url}
       />
 
-      <Card className="shadow-card">
-        <CardHeader>
-          <CardTitle className="text-base">מיתוג</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="s-title">כותרת האתר</Label>
-            <Input
-              id="s-title"
-              value={form.site_title}
-              onChange={(e) => patch({ site_title: e.target.value })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s-logo">לוגו</Label>
-            <div className="flex items-center gap-3">
-              {form.logo_path && (
-                <img
-                  src={resolveSiteLogoUrl(form.logo_path) ?? ""}
-                  alt="לוגו"
-                  className="h-12 w-auto rounded border border-border bg-card p-1"
-                />
-              )}
-              <Input
-                id="s-logo"
-                type="file"
-                accept="image/*"
-                disabled={uploading}
-                onChange={(e) => void uploadLogo(e.target.files?.[0])}
-              />
-              {uploading && <Loader2 className="size-4 animate-spin" />}
+      {/* המיתוג והבאנרים עברו ל"עיצוב מסך הבית" — עורך אחד לאותם נתונים */}
+      <Card className="border-primary/30 bg-primary/5 shadow-card" data-moved-to-home-design>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+          <div className="flex min-w-0 items-start gap-3">
+            <LayoutTemplate className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
+            <div className="space-y-1 text-sm">
+              <p className="font-bold text-foreground">המיתוג והבאנרים עברו ל"עיצוב מסך הבית"</p>
+              <p className="text-muted-foreground">
+                כותרת האתר, הלוגו, צבע המותג, הבאנר העליון, התחתון והצדדי — כולם מנוהלים עכשיו במקום
+                אחד, עם תצוגה מקדימה למחשב ולנייד. ההגדרות הקיימות נשמרו.
+              </p>
             </div>
           </div>
-          <BrandColorField
-            value={form.brand_color}
-            onChange={(next) => patch({ brand_color: next })}
-            storeName={form.business_name.trim() || form.site_title || DEFAULT_STORE_NAME}
-          />
+          {onOpenHomeDesign && (
+            <Button type="button" variant="outline" onClick={onOpenHomeDesign}>
+              מעבר לעיצוב מסך הבית
+              <ArrowLeft className="size-4" aria-hidden="true" />
+            </Button>
+          )}
         </CardContent>
       </Card>
 

@@ -15,12 +15,11 @@ import { AdminProductsPanel } from "@/components/AdminProductsPanel";
 import { CategoryManagementPanel } from "@/components/CategoryManagerDialog";
 import { PendingProductsPanel } from "@/components/PendingProductsPanel";
 import { SiteSettingsPanel } from "@/components/SiteSettingsPanel";
-import { SideBannerCard } from "@/components/marketing/SideBannerCard";
 import { CartPromotionsPanel } from "@/components/sales/CartPromotionsPanel";
 import { CouponsPanel } from "@/components/marketing/CouponsPanel";
 import { AbandonedCartsPanel } from "@/components/marketing/AbandonedCartsPanel";
 import { MarketingPanel } from "@/components/marketing/MarketingPanel";
-import { HomeBannersPanel } from "@/components/HomeBannersPanel";
+import { HomeDesignPanel } from "@/components/home-design/HomeDesignPanel";
 import { StockCountPanel } from "@/components/StockCountPanel";
 import { PosPanel } from "@/components/pos/PosPanel";
 import { BarcodeLabelsPanel } from "@/components/labels/BarcodeLabelsPanel";
@@ -455,8 +454,9 @@ function AdminPage() {
               <TabsContent value="pending">
                 <PendingProductsPanel />
               </TabsContent>
+              {/* עיצוב מסך הבית: מיתוג, באנר עליון / תחתון / צדדי, תצוגה מקדימה */}
               <TabsContent value="home">
-                <HomeBannersPanel />
+                <HomeDesignPanel />
               </TabsContent>
               <TabsContent value="promotions">
                 <CartPromotionsPanel />
@@ -475,9 +475,8 @@ function AdminPage() {
                 <ShippingMethodsPanel />
               </TabsContent>
               <TabsContent value="site" className="space-y-6">
-                <SiteSettingsPanel />
-                {/* חלק 19: באנר צדדי למסכי מחשב */}
-                <SideBannerCard />
+                {/* המיתוג והבאנר הצדדי עברו ל"עיצוב מסך הבית" — כאן רק הפניה */}
+                <SiteSettingsPanel onOpenHomeDesign={() => goTab("home")} />
                 {/* חלק 30: דומיין אישי (המנגנון המלא — לשונית "דומיין פרטי") */}
                 <CustomDomainSettingsCard onOpenDomainTab={() => goTab("domain")} />
                 {/* חלק 17ב: אמצעי התשלום בקופה — טלפוני מול נציג / ביט */}

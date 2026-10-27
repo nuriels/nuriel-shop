@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import {
+  BANNER_LIMITS,
   bannerMediaKind,
   isValidBannerLink,
+  posterFor,
   slidesFor,
   type BannerDevice,
   type BannerSlide,
 } from "@/lib/banners";
+import { BANNER_INTERVAL } from "@/lib/site";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 /** GIF שקוף של פיקסל אחד — מקור "ריק" למכשיר שלא אמור להוריד את התמונה */
@@ -15,8 +18,9 @@ const BLANK_IMAGE =
 /** אותה נקודת שבירה כמו md של Tailwind */
 const DESKTOP_QUERY = "(min-width: 768px)";
 const MOBILE_QUERY = "(max-width: 767.98px)";
-const AUTOPLAY_MS = 5000;
 const SWIPE_THRESHOLD = 40;
+/** סרטון שלא הסתיים (נתקע ברשת) — עוברים הלאה אחרי האורך המקסימלי + מרווח */
+const VIDEO_FALLBACK_MS = (BANNER_LIMITS.videoSeconds + 5) * 1000;
 
 function aspectFor(slides: BannerSlide[], device: BannerDevice): string {
   const first = slides[0];
@@ -31,7 +35,15 @@ function aspectFor(slides: BannerSlide[], device: BannerDevice): string {
  * רק את התמונות שלו: ה-<picture> של כל גרסה מפנה את המכשיר השני לתמונה ריקה,
  * כך שהנייד לא טוען תמונת מחשב כבדה והמחשב לא מותח תמונת נייד צרה.
  */
-export function HomeBanner({ slides, label }: { slides: BannerSlide[]; label: string }) {
+export function HomeBanner({
+  slides,
+  label,
+  intervalSeconds,
+}: {
+  slides: BannerSlide[];
+  label: string;
+  intervalSeconds?: number | undefined;
+}) {
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   const desktop = useMemo(() => slidesFor(slides, "desktop"), [slides]);
   const mobile = useMemo(() => slidesFor(slides, "mobile"), [slides]);
@@ -45,13 +57,21 @@ export function HomeBanner({ slides, label }: { slides: BannerSlide[]; label: st
             device="desktop"
             active={isDesktop}
             label={label}
+            intervalSeconds={intervalSeconds}
             guard
           />
         </div>
       )}
       {mobile.length > 0 && (
         <div className="md:hidden">
-          <BannerCarousel slides={mobile} device="mobile" active={!isDesktop} label={label} guard />
+          <BannerCarousel
+            slides={mobile}
+            device="mobile"
+            active={!isDesktop}
+            label={label}
+            intervalSeconds={intervalSeconds}
+            guard
+          />
         </div>
       )}
     </>
@@ -64,10 +84,13 @@ export function BannerCarousel({
   label,
   active = true,
   guard = false,
+  intervalSeconds = BANNER_INTERVAL.default,
 }: {
   slides: BannerSlide[];
   device: BannerDevice;
   label: string;
+  /** כל כמה שניות מתחלפת תמונה (סרטון — עד שהוא מסתיים) */
+  intervalSeconds?: number | undefined;
   /** false = הגרסה מוסתרת כרגע (המכשיר השני) — לא מחליפים תמונות ברקע */
   active?: boolean;
   /** מוסיף מקור ריק למכשיר השני (בחזית האתר). בתצוגה המקדימה — כבוי */
@@ -78,6 +101,10 @@ export function BannerCarousel({
   const [paused, setPaused] = useState(false);
   const [hovering, setHovering] = useState(false);
   const [mounted, setMounted] = useState<Set<number>>(() => new Set([0]));
+  // סרטונים שלא נטענו — מוצג הפוסטר והבאנר מתחלף לפי הזמן הרגיל
+  const [failed, setFailed] = useState<Set<string>>(() => new Set());
+  // קול רק אחרי לחיצה מפורשת, ורק לסרטון שמוצג עכשיו
+  const [soundOn, setSoundOn] = useState(false);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const pointerStart = useRef<number | null>(null);
 
@@ -92,18 +119,54 @@ export function BannerCarousel({
     });
   }, [current, count]);
 
+  // מעבר לבאנר אחר — חוזרים לשקט
+  useEffect(() => {
+    setSoundOn(false);
+  }, [current]);
+
+  const currentSlide = slides[current];
+  const currentSrc = currentSlide
+    ? device === "desktop"
+      ? currentSlide.desktop_image_url
+      : currentSlide.mobile_image_url
+    : null;
+  const currentIsVideo =
+    !!currentSlide && bannerMediaKind(currentSrc) === "video" && !failed.has(currentSlide.key);
   const autoplay = active && count > 1 && !paused && !hovering && !reducedMotion;
+  // סרטון מתחלף כשהוא מסתיים (onEnded); הטיימר כאן רק לגיבוי אם הוא נתקע
+  const delay = currentIsVideo
+    ? VIDEO_FALLBACK_MS
+    : Math.max(BANNER_INTERVAL.min, intervalSeconds) * 1000;
   useEffect(() => {
     if (!autoplay) return;
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") setIndex((value) => (value + 1) % count);
-    }, AUTOPLAY_MS);
+    }, delay);
     return () => window.clearInterval(timer);
-  }, [autoplay, count, current]);
+  }, [autoplay, count, current, delay]);
 
   if (count === 0) return null;
 
   const go = (target: number) => setIndex(((target % count) + count) % count);
+  const markFailed = (key: string) =>
+    setFailed((previous) => (previous.has(key) ? previous : new Set([...previous, key])));
+  const showSound = currentIsVideo && active && !reducedMotion;
+  const soundButton = showSound ? (
+    <button
+      type="button"
+      onClick={() => setSoundOn((value) => !value)}
+      aria-label={soundOn ? "השתקת הסרטון" : "הפעלת קול"}
+      aria-pressed={soundOn}
+      data-banner-sound
+      className="absolute bottom-1.5 right-2 z-10 flex size-8 items-center justify-center rounded-full bg-black/35 text-white/95 hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      {soundOn ? (
+        <Volume2 className="pointer-events-none size-4" />
+      ) : (
+        <VolumeX className="pointer-events-none size-4" />
+      )}
+    </button>
+  ) : null;
 
   return (
     <section
@@ -136,7 +199,14 @@ export function BannerCarousel({
             device={device}
             guard={guard}
             eager={slideIndex === 0}
-            playing={visible && !reducedMotion}
+            playing={visible && active && !reducedMotion}
+            muted={!(visible && soundOn)}
+            // באנר יחיד / עצירה (ריחוף, כפתור) — הסרטון חוזר על עצמו; אחרת מסתיים ועובר הלאה
+            loop={!autoplay}
+            onEnded={() => {
+              if (visible && autoplay) go(slideIndex + 1);
+            }}
+            onFailed={() => markFailed(slide.key)}
           />
         );
         // הגנה כפולה: גם אם נכנס למסד קישור לא תקין, הוא לא הופך ללחיץ
@@ -208,6 +278,7 @@ export function BannerCarousel({
                 />
               ))}
             </div>
+            {soundButton}
             <button
               type="button"
               onClick={() => setPaused((value) => !value)}
@@ -224,6 +295,7 @@ export function BannerCarousel({
           </div>
         </>
       )}
+      {count === 1 && soundButton}
     </section>
   );
 }
@@ -234,6 +306,10 @@ function SlideImage({
   guard,
   eager,
   playing,
+  muted,
+  loop,
+  onEnded,
+  onFailed,
 }: {
   slide: BannerSlide;
   device: BannerDevice;
@@ -241,6 +317,10 @@ function SlideImage({
   eager: boolean;
   /** הבאנר מוצג עכשיו — רק אז סרטון מתנגן */
   playing: boolean;
+  muted: boolean;
+  loop: boolean;
+  onEnded: () => void;
+  onFailed: () => void;
 }) {
   const src = device === "desktop" ? slide.desktop_image_url : slide.mobile_image_url;
   if (!src) return null;
@@ -248,10 +328,15 @@ function SlideImage({
     return (
       <SlideVideo
         src={src}
+        poster={posterFor(slide, device)}
         label={slide.alt_text}
         device={device}
         guard={guard}
         playing={playing}
+        muted={muted}
+        loop={loop}
+        onEnded={onEnded}
+        onFailed={onFailed}
       />
     );
   }
@@ -276,23 +361,36 @@ function SlideImage({
 }
 
 /**
- * באנר וידאו: בלי קול (דפדפנים מאפשרים ניגון אוטומטי רק כך), בלולאה, ומתנגן רק
- * כשהבאנר מוצג. במכשיר הלא נכון (סרטון מחשב בטלפון) הקובץ לא נטען בכלל.
+ * באנר וידאו: מתנגן בלי קול (דפדפנים מאפשרים ניגון אוטומטי רק כך) — הקול רק
+ * בלחיצה על "הפעלת קול". מתנגן רק כשהבאנר מוצג; סרטון שלא מוצג לא נטען בכלל
+ * (preload="none" — רואים רק את הפוסטר). במכשיר הלא נכון (סרטון מחשב בטלפון)
+ * הקובץ לא נטען בכלל. אם הטעינה נכשלת — מוצג הפוסטר במקום.
  */
 function SlideVideo({
   src,
+  poster,
   label,
   device,
   guard,
   playing,
+  muted,
+  loop,
+  onEnded,
+  onFailed,
 }: {
   src: string;
+  poster: string | null;
   label: string;
   device: BannerDevice;
   guard: boolean;
   playing: boolean;
+  muted: boolean;
+  loop: boolean;
+  onEnded: () => void;
+  onFailed: () => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
+  const [broken, setBroken] = useState(false);
   const onDevice = useMediaQuery(device === "desktop" ? DESKTOP_QUERY : MOBILE_QUERY);
   const show = !guard || onDevice;
   useEffect(() => {
@@ -305,20 +403,43 @@ function SlideVideo({
     } else {
       video.pause();
     }
-  }, [playing, show]);
+  }, [playing, show, broken]);
+  useEffect(() => {
+    const video = ref.current;
+    if (video) video.muted = muted;
+  }, [muted, show, broken]);
   if (!show) return null;
+  if (broken) {
+    return poster ? (
+      <img
+        src={poster}
+        alt={label}
+        className="size-full select-none object-cover"
+        draggable={false}
+        data-banner-poster-fallback
+      />
+    ) : (
+      <div role="img" aria-label={label || undefined} className="size-full bg-secondary" />
+    );
+  }
   return (
     <video
       ref={ref}
       src={src}
+      poster={poster ?? undefined}
       aria-label={label || undefined}
       className="size-full select-none object-cover"
       muted
-      loop
+      loop={loop}
       playsInline
       autoPlay={playing}
-      preload={playing ? "auto" : "metadata"}
+      preload={playing ? "auto" : "none"}
       disablePictureInPicture
+      onEnded={onEnded}
+      onError={() => {
+        setBroken(true);
+        onFailed();
+      }}
     />
   );
 }
