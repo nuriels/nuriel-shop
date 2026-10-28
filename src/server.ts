@@ -28,7 +28,7 @@ import {
 // מהמסד (src/lib/feeds.server.ts). חלק 38: /zap.xml הוסר — עמודי ה-HTML לזאפ
 // (/zap, /zap/cat/{id}) נוצרים ב-src/lib/zap-pages.server.ts.
 const STATIC_PATH = /^\/assets\/|\.[a-z0-9]{2,5}$/i;
-const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml"]);
+const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml", "/llms.txt"]);
 // אימות Google Search Console בשיטת קובץ HTML: googleXXXX.html בשורש הדומיין של החנות
 const GOOGLE_VERIFY_PATH = /^\/google[0-9a-f]{8,32}\.html$/;
 const isZapPage = (pathname: string) => pathname === "/zap" || pathname.startsWith("/zap/");

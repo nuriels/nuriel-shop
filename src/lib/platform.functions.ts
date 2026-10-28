@@ -254,6 +254,7 @@ export const PLATFORM_SITE_NAME = "מערכת ניהול אתר אינטרנט";
  * - subscription: מנוי החנות (חלק 13) — חבילה, תפוגה ופיצ'רים. משמש לנעילת
  *   פיצ'רים במסכים (האכיפה עצמה גם במסד). null בדומיין הפלטפורמה.
  * - seoTitle / seoDescription: כותרת ותיאור לגוגל ולשיתוף (חלק 14; ריק = שם העסק).
+ * - seoKeywords: מילות מפתח של החנות (<meta name="keywords">; ריק = בלי התג).
  * - tracking: מזהי Facebook Pixel / Google Analytics — נכנסים ל-<head>.
  * - promo: פופ-אפ המבצעים בכניסה לאתר (null = כבוי).
  */
@@ -268,6 +269,7 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     subscription: null,
     seoTitle: "",
     seoDescription: "",
+    seoKeywords: "",
     tracking: null,
     googleVerification: null,
     promo: null,
@@ -284,7 +286,7 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
   const { data } = await supabaseAdmin
     .from("site_settings")
     .select(
-      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, facebook_pixel_id, google_analytics_id, google_site_verification, promo_popup_enabled, promo_popup_text, promo_popup_coupon, logo_path, business_phone, support_phone, business_email, business_address, business_hours, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url",
+      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, seo_keywords, facebook_pixel_id, google_analytics_id, google_site_verification, promo_popup_enabled, promo_popup_text, promo_popup_coupon, logo_path, business_phone, support_phone, business_email, business_address, business_hours, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url",
     )
     .eq("id", true)
     .maybeSingle();
@@ -334,6 +336,7 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     subscription: tenant.subscription,
     seoTitle: data?.seo_title?.trim() ?? "",
     seoDescription: data?.seo_description?.trim() ?? "",
+    seoKeywords: data?.seo_keywords?.trim() ?? "",
     tracking: pixelId || gaId ? { pixelId, gaId } : null,
     googleVerification: GOOGLE_META_FORMAT.test(data?.google_site_verification ?? "")
       ? (data?.google_site_verification ?? null)

@@ -117,6 +117,10 @@ export function gaIdProblem(value: string): string | null {
 export type MarketingSettings = {
   seo_title: string;
   seo_description: string;
+  /** מילות מפתח של החנות ("מילה, מילה") — <meta name="keywords"> */
+  seo_keywords: string;
+  /** /llms.txt — תקציר החנות לכלי בינה מלאכותית, נוצר אוטומטית מנתוני החנות */
+  llms_txt_enabled: boolean;
   promo_popup_enabled: boolean;
   promo_popup_text: string;
   promo_popup_coupon: string | null;
@@ -131,11 +135,13 @@ export type MarketingSettings = {
 };
 
 export const MARKETING_COLUMNS =
-  "seo_title, seo_description, promo_popup_enabled, promo_popup_text, promo_popup_coupon, facebook_pixel_id, google_analytics_id, google_site_verification, google_verification_file, zap_delivery_days, welcome_coupon_code" as const;
+  "seo_title, seo_description, seo_keywords, llms_txt_enabled, promo_popup_enabled, promo_popup_text, promo_popup_coupon, facebook_pixel_id, google_analytics_id, google_site_verification, google_verification_file, zap_delivery_days, welcome_coupon_code" as const;
 
 export const EMPTY_MARKETING: MarketingSettings = {
   seo_title: "",
   seo_description: "",
+  seo_keywords: "",
+  llms_txt_enabled: false,
   promo_popup_enabled: false,
   promo_popup_text: "",
   promo_popup_coupon: null,

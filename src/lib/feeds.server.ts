@@ -1,6 +1,7 @@
 /**
  * קבצים "חיים" לכל חנות (חלק 14) — נוצרים מהמסד בכל בקשה (עם מטמון קצר):
  *  - /robots.txt  — מה גוגל סורק, וקישור למפת האתר
+ *  - /llms.txt    — תקציר החנות לכלי בינה מלאכותית (אופציונלי: site_settings.llms_txt_enabled)
  *  - /sitemap.xml — דף הבית, עמודי החובה (אודות, צור קשר, תקנון, פרטיות,
  *                   ביטולים), קטגוריות ועמוד לכל מוצר — עם תמונת המוצר (חלק 21)
  *  (חלק 38: פיד ה-XML לזאפ /zap.xml הוסר — במקומו עמודי HTML לסורקים של זאפ,
@@ -27,7 +28,7 @@ import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { GOOGLE_FILE_FORMAT, googleVerificationFileBody, plainText } from "@/lib/marketing";
 import { PORTAL_STORE_SLUG } from "@/lib/portal";
 
-export const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml"]);
+export const FEED_PATHS = new Set(["/robots.txt", "/sitemap.xml", "/llms.txt"]);
 
 export type FeedProduct = {
   id: string;
@@ -118,6 +119,39 @@ export async function loadFeedProducts(): Promise<FeedProduct[]> {
   return rows;
 }
 
+/** מה שמפת האתר צריכה מכל מוצר — בלי תיאור (HTML של עד 20,000 תווים) ובלי חישובי מלאי */
+export type SitemapProduct = {
+  id: string;
+  category: string;
+  image_url: string | null;
+  updated_at: string;
+};
+
+/**
+ * מוצרי החנות הגלויים למפת האתר. שאילתה קלה (4 עמודות) במקום ה-RPC של הפיד, שמחזיר
+ * לכל מוצר גם את התיאור המלא וחישובי מלאי — בקטלוג גדול זה אלפי תיאורים בכל בקשה של
+ * גוגל. הסדר לפי id (יציב) כדי שדפדוף לא יכפיל / ידלג על מוצרים. חנות מושעית /
+ * שהמנוי שלה פג כבר נחסמת ב-renderFeed (open=false), כמו תנאי ה-RPC.
+ */
+export async function loadSitemapProducts(): Promise<SitemapProduct[]> {
+  const rows: SitemapProduct[] = [];
+  const PAGE = 1000;
+  // עד 50,000 כתובות (המגבלה של קובץ sitemap אחד)
+  for (let from = 0; from < 50_000; from += PAGE) {
+    const { data, error } = await supabaseAdmin
+      .from("global_products")
+      .select("id, category, image_url, updated_at")
+      .eq("is_hidden", false)
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    const page = (data ?? []) as SitemapProduct[];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return rows;
+}
+
 function absoluteUrl(origin: string, url: string | null): string | null {
   if (!url) return null;
   if (/^https?:\/\//i.test(url)) return url;
@@ -146,6 +180,11 @@ const PRIVATE_PATHS = [
   "/locked",
   "/forbidden",
   "/_serverFn/",
+  // קישורי API (הסרה מדיוור, webhooks), שחזור עגלה, וחיפוש פנימי — לא לאינדוקס
+  "/api/",
+  "/cart/",
+  "/*?q=",
+  "/*&q=",
 ];
 
 export function renderRobots(origin: string, open: boolean): string {
@@ -197,7 +236,7 @@ async function sitemapEntries(origin: string): Promise<SitemapEntry[]> {
   if (tenant?.slug === PORTAL_STORE_SLUG) return [{ loc: `${origin}/`, priority: "1.0" }];
 
   const [products, { data: categories }, { data: pages }] = await Promise.all([
-    loadFeedProducts(),
+    loadSitemapProducts(),
     supabaseAdmin.from("categories").select("name, parent_name"),
     // חלק 30: עמודי התוכן שפורסמו
     supabaseAdmin
@@ -306,6 +345,161 @@ export function zapFeedUnlocked(): boolean {
   return maybeCurrentTenant()?.subscription.features.zapFeed === true;
 }
 
+/**
+ * מטמון קצר בשרת לכל חנות: מפת האתר נבנית מכל הקטלוג, וגוגל (ובוטים אחרים) מבקשים
+ * אותה שוב ושוב. 5 דקות — מוצר חדש / שינוי סטטוס מופיעים במפה תוך 5 דקות. בקשות
+ * במקביל חולקות אותה בנייה, ואם הבנייה נכשלת מוגשת הגרסה האחרונה התקינה (במקום 503).
+ */
+const SITEMAP_TTL_MS = Number(process.env["SITEMAP_TTL_MS"]) || 5 * 60 * 1000;
+const sitemapCache = new Map<string, { body: string; at: number }>();
+const sitemapBuilds = new Map<string, Promise<string>>();
+
+export function clearSitemapCache(): void {
+  sitemapCache.clear();
+  sitemapBuilds.clear();
+}
+
+async function cachedFeed(
+  kind: string,
+  origin: string,
+  make: () => Promise<string>,
+): Promise<string> {
+  const key = `${kind}|${maybeCurrentTenant()?.id ?? "none"}|${origin}`;
+  const cached = sitemapCache.get(key);
+  if (cached && Date.now() - cached.at < SITEMAP_TTL_MS) return cached.body;
+  let build = sitemapBuilds.get(key);
+  if (!build) {
+    build = make()
+      .then((body) => {
+        sitemapCache.set(key, { body, at: Date.now() });
+        return body;
+      })
+      .finally(() => sitemapBuilds.delete(key));
+    sitemapBuilds.set(key, build);
+  }
+  try {
+    return await build;
+  } catch (error) {
+    if (cached) return cached.body;
+    throw error;
+  }
+}
+
+const cachedSitemap = (origin: string) =>
+  cachedFeed("sitemap", origin, async () => renderSitemap(await sitemapEntries(origin)));
+
+// ------------------------------------------------------------
+// llms.txt — תקציר החנות לכלי בינה מלאכותית (llmstxt.org)
+// ------------------------------------------------------------
+
+export type LlmsInput = {
+  origin: string;
+  name: string;
+  description: string;
+  keywords: string;
+  pages: { slug: string; title: string }[];
+  categories: string[];
+  products: { id: string; name: string; category: string }[];
+};
+
+/** שם בתוך קישור Markdown — בלי תווים שמשבשים אותו */
+const mdText = (value: string) =>
+  value
+    .replace(/[[\]\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const LLMS_FIXED_PAGES: [string, string][] = [
+  ["/about", "אודות"],
+  ["/contact", "צור קשר"],
+  ["/terms", "תקנון"],
+  ["/privacy", "מדיניות פרטיות"],
+  ["/cancellations", "ביטול עסקה"],
+];
+
+export function renderLlmsTxt(input: LlmsInput): string {
+  const lines = [`# ${mdText(input.name)}`, ""];
+  if (input.description) lines.push(`> ${mdText(input.description)}`, "");
+  if (input.keywords) lines.push(`מילות מפתח: ${mdText(input.keywords)}`, "");
+  lines.push("## עמודי האתר");
+  lines.push(`- [דף הבית](${input.origin}/)`);
+  for (const [path, title] of LLMS_FIXED_PAGES) lines.push(`- [${title}](${input.origin}${path})`);
+  for (const page of input.pages) {
+    lines.push(
+      `- [${mdText(page.title) || page.slug}](${input.origin}/pages/${encodeURIComponent(page.slug)})`,
+    );
+  }
+  if (input.categories.length > 0) {
+    lines.push("", "## קטגוריות");
+    for (const name of input.categories) {
+      lines.push(`- [${mdText(name)}](${input.origin}/?category=${encodeURIComponent(name)})`);
+    }
+  }
+  if (input.products.length > 0) {
+    lines.push("", "## מוצרים");
+    for (const product of input.products) {
+      lines.push(
+        `- [${mdText(product.name)}](${input.origin}/product/${product.id}): ${mdText(product.category)}`,
+      );
+    }
+  }
+  lines.push("", `מפת האתר: ${input.origin}/sitemap.xml`, "");
+  return lines.join("\n");
+}
+
+const LLMS_PRODUCT_LIMIT = 100;
+
+/** null = הפיצ'ר כבוי בחנות (→ 404) */
+async function llmsTxt(origin: string): Promise<string | null> {
+  const [{ data: settings }, { data: categories }, { data: pages }, { data: products }] =
+    await Promise.all([
+      supabaseAdmin
+        .from("site_settings")
+        .select("business_name, seo_title, seo_description, seo_keywords, llms_txt_enabled")
+        .eq("id", true)
+        .maybeSingle(),
+      supabaseAdmin.from("categories").select("name, parent_name"),
+      supabaseAdmin
+        .from("pages")
+        .select("slug, title")
+        .eq("is_published", true)
+        .order("sort_order"),
+      supabaseAdmin
+        .from("global_products")
+        .select("id, name, category")
+        .eq("is_hidden", false)
+        .order("updated_at", { ascending: false })
+        .limit(LLMS_PRODUCT_LIMIT),
+    ]);
+  if (settings?.llms_txt_enabled !== true) return null;
+  const list = products ?? [];
+  // קטגוריות שיש בהן מוצרים (כולל קטגוריות-אב) — כמו במפת האתר
+  const all = await loadSitemapProducts();
+  const parentOf = new Map((categories ?? []).map((c) => [c.name, c.parent_name ?? null]));
+  const withProducts = new Set<string>();
+  for (const product of all) {
+    let name: string | null = product.category;
+    let guard = 0;
+    while (name && !withProducts.has(name) && guard++ < 10) {
+      withProducts.add(name);
+      name = parentOf.get(name) ?? null;
+    }
+  }
+  return renderLlmsTxt({
+    origin,
+    name:
+      settings.business_name?.trim() ||
+      settings.seo_title?.trim() ||
+      maybeCurrentTenant()?.name ||
+      DEFAULT_STORE_NAME,
+    description: settings.seo_description?.trim() ?? "",
+    keywords: settings.seo_keywords?.trim() ?? "",
+    pages: pages ?? [],
+    categories: [...withProducts].sort((a, b) => a.localeCompare(b, "he")),
+    products: list,
+  });
+}
+
 export async function renderFeed(pathname: string, request: Request): Promise<Response> {
   const origin = feedOrigin(request);
   // דומיין פאנל הפלטפורמה / חנות נעולה — לא לסריקה
@@ -318,11 +512,12 @@ export async function renderFeed(pathname: string, request: Request): Promise<Re
 
   try {
     if (pathname === "/sitemap.xml") {
-      return textResponse(
-        renderSitemap(await sitemapEntries(origin)),
-        "application/xml; charset=utf-8",
-        3600,
-      );
+      return textResponse(await cachedSitemap(origin), "application/xml; charset=utf-8", 3600);
+    }
+    if (pathname === "/llms.txt" && maybeCurrentTenant()?.slug !== PORTAL_STORE_SLUG) {
+      const body = await cachedFeed("llms", origin, async () => (await llmsTxt(origin)) ?? "");
+      // גוף ריק = הפיצ'ר כבוי בחנות הזו
+      if (body !== "") return textResponse(body, "text/plain; charset=utf-8", 3600);
     }
     return textResponse("Not found\n", "text/plain; charset=utf-8", 0, 404);
   } catch (error) {

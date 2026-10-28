@@ -2761,6 +2761,8 @@ export type Database = {
           label_height_mm: number;
           seo_title: string;
           seo_description: string;
+          seo_keywords: string;
+          llms_txt_enabled: boolean;
           promo_popup_enabled: boolean;
           promo_popup_text: string;
           promo_popup_coupon: string | null;
@@ -2830,6 +2832,8 @@ export type Database = {
           label_height_mm?: number;
           seo_title?: string;
           seo_description?: string;
+          seo_keywords?: string;
+          llms_txt_enabled?: boolean;
           promo_popup_enabled?: boolean;
           promo_popup_text?: string;
           promo_popup_coupon?: string | null;
@@ -2899,6 +2903,8 @@ export type Database = {
           label_height_mm?: number;
           seo_title?: string;
           seo_description?: string;
+          seo_keywords?: string;
+          llms_txt_enabled?: boolean;
           promo_popup_enabled?: boolean;
           promo_popup_text?: string;
           promo_popup_coupon?: string | null;

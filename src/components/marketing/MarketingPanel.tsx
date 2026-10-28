@@ -44,6 +44,8 @@ import {
   PROMO_TEXT_MAX,
   SEO_DESCRIPTION_MAX,
   SEO_DESCRIPTION_RECOMMENDED,
+  SEO_KEYWORDS_COUNT,
+  SEO_KEYWORDS_MAX,
   SEO_TITLE_MAX,
   SEO_TITLE_RECOMMENDED,
   ZAP_JOIN_URL,
@@ -51,9 +53,11 @@ import {
   googleFileProblem,
   googleMetaProblem,
   googleVerificationFileBody,
+  keywordsProblem,
   normalizeGoogleFile,
   normalizeGoogleMeta,
   normalizeGaId,
+  normalizeKeywords,
   normalizePixelId,
   pixelIdProblem,
   zapFeedUrl,
@@ -74,6 +78,7 @@ function friendlyError(message: string): string {
   if (/google_verification_check/.test(message)) return "פרטי האימות של Google לא בפורמט הנכון";
   if (/tracking_check/.test(message)) return "מזהה ה-Pixel או ה-Google Analytics לא בפורמט הנכון";
   if (/promo_popup_check/.test(message)) return "פופ-אפ פעיל חייב טקסט (עד 600 תווים)";
+  if (/seo_keywords_check/.test(message)) return "מילות המפתח ארוכות מדי (עד 500 תווים)";
   if (/seo_check/.test(message)) return "כותרת SEO עד 120 תווים, תיאור עד 320";
   if (/zap_delivery_days/.test(message)) return "זמן אספקה לזאפ: 0 עד 60 ימים";
   return message;
@@ -167,10 +172,11 @@ export function MarketingPanel() {
   const googleFile = normalizeGoogleFile(form.google_verification_file);
   const googleMetaErr = googleMetaProblem(googleMeta);
   const googleFileErr = googleFileProblem(googleFile);
+  const keywordsErr = keywordsProblem(form.seo_keywords);
 
   const save = async () => {
-    if (pixelProblem || gaProblem || googleMetaErr || googleFileErr) {
-      toast.error(pixelProblem ?? gaProblem ?? googleMetaErr ?? googleFileErr ?? "");
+    if (pixelProblem || gaProblem || googleMetaErr || googleFileErr || keywordsErr) {
+      toast.error(pixelProblem ?? gaProblem ?? googleMetaErr ?? googleFileErr ?? keywordsErr ?? "");
       return;
     }
     if (form.promo_popup_enabled && form.promo_popup_text.trim() === "") {
@@ -186,6 +192,8 @@ export function MarketingPanel() {
     const values: MarketingSettings = {
       seo_title: form.seo_title.trim(),
       seo_description: form.seo_description.trim(),
+      seo_keywords: normalizeKeywords(form.seo_keywords),
+      llms_txt_enabled: form.llms_txt_enabled,
       promo_popup_enabled: form.promo_popup_enabled,
       promo_popup_text: form.promo_popup_text.trim(),
       promo_popup_coupon: form.promo_popup_coupon || null,
@@ -287,6 +295,27 @@ export function MarketingPanel() {
             />
             <SeoCounter value={form.seo_description} recommended={SEO_DESCRIPTION_RECOMMENDED} />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mk-seo-keywords">מילות מפתח לקידום במנוע חיפוש</Label>
+            <Textarea
+              id="mk-seo-keywords"
+              rows={2}
+              value={form.seo_keywords}
+              maxLength={SEO_KEYWORDS_MAX}
+              aria-invalid={keywordsErr !== null}
+              placeholder="למשל: חנות מחשבים, מחשבים נייחים, מחשב נייד, ציוד היקפי"
+              onChange={(e) => patch({ seo_keywords: e.target.value })}
+            />
+            <p
+              className={cn(
+                "text-[11px]",
+                keywordsErr ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {keywordsErr ??
+                `מופרדות בפסיקים, עד ${SEO_KEYWORDS_COUNT} מילים. כפילויות מוסרות אוטומטית. גוגל כבר לא נותנת להן משקל בדירוג, אבל כלי חיפוש ובינה מלאכותית אחרים עדיין קוראים אותן.`}
+            </p>
+          </div>
           {/* תצוגה מקדימה בסגנון תוצאת חיפוש */}
           <div className="rounded-xl border bg-card p-4 shadow-sm" aria-label="תצוגה מקדימה בגוגל">
             <p className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
@@ -314,6 +343,32 @@ export function MarketingPanel() {
             </a>
             <span>· אפשר להגיש אותה ב-Google Search Console</span>
           </div>
+          <label className="flex items-start justify-between gap-3 rounded-lg border p-3">
+            <span className="space-y-1">
+              <span className="block text-sm font-medium">קידום בכלי בינה מלאכותית (llms.txt)</span>
+              <span className="block text-xs leading-5 text-muted-foreground">
+                כשמופעל, החנות מפרסמת קובץ <bdi dir="ltr">/llms.txt</bdi> שנוצר אוטומטית מנתוני
+                החנות (שם, תיאור, מילות מפתח, קטגוריות, עמודי תוכן ומוצרים). הוא מתעדכן לבד כשמשנים
+                את החנות, ואין צורך לערוך אותו. כשכבוי, הכתובת מחזירה &quot;לא נמצא&quot;.
+              </span>
+              {form.llms_txt_enabled && (
+                <a
+                  href={`${origin}/llms.txt`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block text-xs font-medium text-primary hover:underline"
+                  dir="ltr"
+                >
+                  {origin}/llms.txt
+                </a>
+              )}
+            </span>
+            <Switch
+              checked={form.llms_txt_enabled}
+              onCheckedChange={(v) => patch({ llms_txt_enabled: v })}
+              aria-label="הפעלת llms.txt"
+            />
+          </label>
         </CardContent>
       </Card>
 
