@@ -392,7 +392,7 @@ psql_db -c "
   SELECT t.id, u.id, u.email, 'admin', true, false
     FROM auth.users u, public.tenants t
    WHERE u.email = '$ADMIN_EMAIL' AND t.is_default
-  ON CONFLICT (user_id) DO UPDATE SET role = 'admin', is_approved = true, is_blocked = false;"
+  ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = 'admin', is_approved = true, is_blocked = false;"
 
 # מנהל הפלטפורמה — רק אם כבר יש לו חשבון (נוצר למעלה או התחבר פעם אחת)
 log "מנהל הפלטפורמה: $PLATFORM_ADMIN_EMAIL"
