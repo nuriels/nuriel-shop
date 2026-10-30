@@ -66,3 +66,19 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Verified on the real local Supabase | rollback → store API 200, Stage 1c tables still 401 for anon, booking RPCs 404; re-apply → booking RPCs answer again |
 | Tests | `scripts/db-tests/hospitality-booking.test.sql` (210 assertions), `scripts/db-tests/hospitality/concurrency/run.sh` (22 checks with real parallel sessions), `rollback-check.sh` (M4 → M3 → M2 → M1, refusals, re-apply), `e2e/tests/hospitality-api.spec.ts` (booking through PostgREST, 5 parallel guests, manage link, approval, cancellation) |
 | Production | nothing to configure in this stage. At go-live: `btree_gist` is part of the Supabase image; the sweep / outbox worker schedule comes with Stage 2 |
+
+## 20261101130000_hosp_billing_admin.sql — Stage 1e (hospitality)
+
+| | |
+|---|---|
+| Adds | `plans` (platform catalogue, no `tenant_id`, no API access; four unpublished placeholders — trial 20 units / 14 days, basic 5, pro 20, enterprise unlimited — **no prices** until approved, Stage 11); `subscriptions` (one per Hospitality site: plan, status trialing / active / past_due / canceled / expired, trial end, period end, extra units); `policy_versions` (append-only history of every policy version) |
+| Separation | nothing references `tenant_subscriptions`, `tenant_addons`, `platform_plans` or Grow; Ecommerce plan / seat / feature functions unchanged (body hashes tested); a Hospitality site gets no Ecommerce subscription row |
+| Entitlements | `entitlements(site)`: plan, status, active, unit limit (+ extra units), units used, features. Active = site not suspended and: trialing before the trial end / active before the period end (or none) / past_due within 7 days after the period end. A site without a subscription row behaves as the trial from its opening day. New sites get the trial automatically (trigger on the site settings row) |
+| Unit limit | trigger on `units` (insert, activation, bundle → unit): counts active units that are not whole-property bundles, under a per-site advisory lock (5 parallel inserts with one place left → exactly one). Inactive subscription → no new units. Downgrading below the usage keeps existing units and blocks new ones |
+| Inactive subscription | no new guest requests (`_public_tenant` checks it); existing bookings, manage links and owner actions continue |
+| Functions | owner / manager: `my_entitlements()` (read-only); platform admin only: `admin_plans()`, `admin_set_subscription()` (audited in `platform_audit_log` with the previous state), `admin_site_stats()`, `admin_overview()` — counts, sums and plan data only, no guest names, emails or phones (tested) |
+| Policy history and booking terms | see `stage-1-plan.md` §A12.1 — every version recorded; the accepted terms of a booking cannot be changed by anyone (trigger) |
+| Owner recipients | `_owner_emails` replaced: the owner-account fallback only applies when there is no notification / contact / opening email, and only to this site's protected, unblocked owner with a verified, active account email (§A12.3) |
+| Rollback | `supabase/rollbacks/20261101130000_hosp_billing_admin.down.sql` — refuses while a subscription was changed by the platform or a policy has history beyond version 1; drops the tables, triggers and functions; restores the Stage 1d `_public_tenant` and `_owner_emails` |
+| Tests | `scripts/db-tests/hospitality-billing.test.sql` (83 assertions), concurrency scenarios 18–20 (same-site lock waits, other site not blocked, unit limit under parallel inserts), `rollback-check.sh` (M5 → M1, refusals, re-apply), RLS coverage for tables without `tenant_id`, API E2E (owner plan, platform-only statistics) |
+| Production | nothing to configure; plan values and prices are placeholders until approved |

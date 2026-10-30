@@ -1,6 +1,6 @@
 # Nuriel Hospitality — product plan and Stage 1 (backend foundation)
 
-Status: **approved plan; implementation in progress.** Stages 1a–1d (migrations 1–4) implemented on this branch — see `docs/hospitality/migrations.md`. Later steps await approval.
+Status: **approved plan; implementation in progress.** Stages 1a–1e (migrations 1–5) implemented on this branch — see `docs/hospitality/migrations.md`. Later steps await approval.
 Branch: `hospitality/stage-1` (based on `hospitality/stage-0`). No merge to `main`,
 no production deployment, no production credentials, no migrations yet.
 
@@ -993,6 +993,72 @@ Still open:
    - approval to start the separate track P1/P2 for Ecommerce after Stage 1.
 
 ---
+
+## A12. Stage 1d–1e follow-ups (round 6)
+
+### A12.1 Cancellation-policy versions (implemented in 1e)
+- Owners edit a policy in place; every rule change raises `version` (1c). Migration 5 adds
+  `policy_versions`: one append-only row per version (rules, name, default flag, who, when),
+  written by a trigger, never editable or deletable (only with the site itself).
+- Every booking stores its own snapshot (rules, version, absolute schedule) and the guest's
+  acceptance (hash of that snapshot). A database trigger refuses any change to the snapshot's
+  policy id, version, name, rules, time zone or check-in time, to the acceptance, or a switch of
+  the booking to another policy. Only these may change: the schedule / total / deposit when the
+  owner moves the dates (the **same** rules re-applied), the removal of IP and browser on
+  anonymisation, and `policy_id → NULL` if a policy is deleted (the snapshot stays).
+- Tests: editing a policy leaves every existing booking byte-identical (hash) with the same
+  cancellation fee; each booking's rules equal the recorded version it references; several
+  policies and the default switch; tampering is refused.
+
+### A12.2 Booking lock per site (implemented in 1d, verified in 1e)
+- Every inventory-changing function takes an advisory lock keyed by the site id. Bookings of
+  the same site run one after another; different sites never wait for each other
+  (parallel-session test: 89 ms while another site held its lock for 2 s).
+- The `EXCLUDE` constraint on `unit_occupancy` remains the final authority (also tested with
+  raw inserts that skip the lock).
+
+### A12.3 Owner notification recipients (exact rule, 1e)
+Owner emails go to the first that exists:
+1. the business's notification recipients (`settings.notification_emails`);
+2. the business contact email (`settings.contact_email`);
+3. the owner email given when the site was opened (`tenants.owner_email`);
+4. **only if none of the above exists:** the current email of the site owner's account —
+   the protected admin of **this** site, not blocked, with a **verified** email, not banned
+   and not deleted. Managers, the platform admin and owners of other sites are never used.
+
+If nothing qualifies, no owner row is queued (the owner still sees the request in the
+dashboard). Nothing is sent before the outbox worker (Stage 2).
+
+### A12.4 Manage-link recovery ("send me my link again") — Stage 4 design
+- **Storage:** only the SHA-256 of the token is stored (as today); the raw token exists only
+  in the outbox payload until the email is sent, then it is removed (as today).
+- **One active link per booking:** issuing a new link replaces the hash, so every older link
+  stops working immediately (revocation). The owner can also revoke a link from the booking
+  page (Stage 2).
+- **Who can get a new link:**
+  - a logged-in guest whose **verified** account email matches the booking's guest email
+    (or whose guest card is already linked) gets it from "my bookings";
+  - otherwise, on the site: booking number + the email used for the booking → the new
+    link is **emailed to that address only**, never shown in the response. The answer is
+    the same whether or not the details matched (no enumeration). Rate-limited per IP,
+    per booking and per email; a booking can be re-issued at most a few times a day.
+- **Function (to add in Stage 4):** `request_manage_link(_number, _email)` (public,
+  `request_tenant()`), writes a `manage_link_issued` history event and an outbox row with a
+  dedupe key per hour.
+- The link keeps expiring 30 days after check-out (D16).
+
+### A12.5 Coupon usage count — current rule and recommendation (decision needed)
+- **Current rule (1d, pinned by a test in 1e):** a use is counted when the booking or
+  request is created (under a row lock, respecting `usage_limit`) and is **never released**
+  — not when the owner declines, not when a request expires, not on cancellation.
+- **Effect:** a declined or expired request uses up a coupon (a one-use coupon can be lost
+  to a request the owner never accepted); contact flooding is limited by the open-request
+  cap, but a limited coupon can still be drained by requests that are declined.
+- **Recommendation:** release the use automatically when a booking ends **without having
+  been confirmed** (declined, expired, request withdrawn by the guest); keep it counted
+  after a confirmed booking is cancelled (the guest did redeem it; the owner can grant a new
+  code). Record a history event for each release.
+- **Not changed yet** — awaiting approval of the business rule.
 
 # Part B — Stage 1: backend foundation (implementation-ready)
 

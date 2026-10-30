@@ -419,3 +419,38 @@ test("the guest asks to cancel with the manage link; the owner approves; the fee
     sql(`SELECT count(*) FROM hospitality.unit_occupancy WHERE booking_id = '${bookingId}'`),
   ).toBe("0");
 });
+
+test("plans and statistics: the owner sees their plan; only the platform admin sees statistics, without guest data", async () => {
+  const mine = await rest("rpc/my_entitlements", {
+    method: "POST",
+    token: tokens.ownerA,
+    site: siteA,
+    body: {},
+  });
+  expect(mine.status, message(mine)).toBe(200);
+  expect(mine.json).toMatchObject({
+    plan: "trial",
+    status: "trialing",
+    active: true,
+    units_used: 1,
+  });
+  const ownerStats = await rest("rpc/admin_site_stats", {
+    method: "POST",
+    token: tokens.ownerA,
+    site: siteA,
+    body: {},
+  });
+  expect(ownerStats.status).toBeGreaterThanOrEqual(400);
+  expect(message(ownerStats)).toContain("רק מנהל הפלטפורמה");
+  expect((await rest("rpc/admin_overview", { method: "POST", body: {} })).status).toBe(401);
+
+  const platform = await signIn(USERS.platform.email, USERS.platform.password);
+  const overview = await rest("rpc/admin_overview", { method: "POST", token: platform, body: {} });
+  expect(overview.status, message(overview)).toBe(200);
+  expect((overview.json as { sites: number }).sites).toBeGreaterThanOrEqual(2);
+  const stats = await rest("rpc/admin_site_stats", { method: "POST", token: platform, body: {} });
+  expect(stats.status, message(stats)).toBe(200);
+  const rows = stats.json as { tenant_id: string; plan: string; units_active: number }[];
+  expect(rows.find((r) => r.tenant_id === siteA)).toMatchObject({ plan: "trial", units_active: 1 });
+  expect(message(stats) + message(overview)).not.toContain("h1d.guest");
+});

@@ -82,10 +82,20 @@ DO $t$
 DECLARE _bad text;
 BEGIN
   SELECT string_agg(name, ', ' ORDER BY name) INTO _bad
-    FROM hosp_tables WHERE NOT (has_tenant AND rls AND isolation AND flag_gate) OR anon_access;
+    FROM hosp_tables WHERE has_tenant AND (NOT (rls AND isolation AND flag_gate) OR anon_access);
   INSERT INTO tests.results (name, ok, detail)
-  VALUES ('tenant isolation coverage (hospitality): every table has tenant_id, RLS, tenant_isolation, backend_enabled and no anon access',
+  VALUES ('tenant isolation coverage (hospitality): every table with tenant_id has RLS, tenant_isolation, backend_enabled and no anon access',
           _bad IS NULL, COALESCE('missing: ' || _bad, 'ok'));
+  -- platform catalogues without tenant_id (e.g. plans): RLS on and no API access at all
+  SELECT string_agg(name, ', ' ORDER BY name) INTO _bad
+    FROM hosp_tables h
+   WHERE NOT h.has_tenant
+     AND (NOT h.rls OR h.anon_access
+          OR has_table_privilege('authenticated', h.oid, 'SELECT') OR has_table_privilege('authenticated', h.oid, 'INSERT')
+          OR has_table_privilege('authenticated', h.oid, 'UPDATE') OR has_table_privilege('authenticated', h.oid, 'DELETE'));
+  INSERT INTO tests.results (name, ok, detail)
+  VALUES ('tenant isolation coverage (hospitality): tables without tenant_id are closed to the API (functions only)',
+          _bad IS NULL, COALESCE('open: ' || _bad, 'ok'));
 END $t$;
 
 SELECT tests.check('tenant isolation coverage (hospitality): no view in the schema bypasses RLS',

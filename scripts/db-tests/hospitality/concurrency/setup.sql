@@ -12,6 +12,8 @@ SELECT hospitality.admin_create_site('conc-site', 'בדיקות מקביליות
 SELECT public.platform_set_flag('hospitality_backend_enabled', true), public.platform_set_flag('hospitality_booking_enabled', true);
 SELECT public.platform_set_flag('hospitality_backend_enabled', true, (SELECT id FROM public.tenants WHERE slug = 'conc-site')),
        public.platform_set_flag('hospitality_booking_enabled', true, (SELECT id FROM public.tenants WHERE slug = 'conc-site'));
+-- 32 units: the unlimited plan (the trial plan allows 20)
+SELECT hospitality.admin_set_subscription((SELECT id FROM public.tenants WHERE slug = 'conc-site'), 'enterprise', 'active');
 SELECT set_config('request.jwt.claim.sub', '', false);
 
 INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_approved)
@@ -62,3 +64,23 @@ CREATE OR REPLACE FUNCTION conc.manual(_unit uuid, _in integer, _out integer, _n
                                             _full_name => _name, _phone => '0599999999', _terms_explained => true);
 $$;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA conc TO anon, authenticated, service_role;
+
+-- a second site (same owner account) for the cross-site lock and the unit-limit scenarios:
+-- basic plan (5 units) with 4 units already
+SELECT set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-0000000000f0', false);
+SELECT hospitality.admin_create_site('conc-site-2', 'בדיקות מקביליות 2', 'conc.owner@test.local');
+SELECT public.platform_set_flag('hospitality_backend_enabled', true, (SELECT id FROM public.tenants WHERE slug = 'conc-site-2')),
+       public.platform_set_flag('hospitality_booking_enabled', true, (SELECT id FROM public.tenants WHERE slug = 'conc-site-2'));
+SELECT hospitality.admin_set_subscription((SELECT id FROM public.tenants WHERE slug = 'conc-site-2'), 'basic', 'active');
+SELECT set_config('request.jwt.claim.sub', '', false);
+INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_approved)
+SELECT id, 'c0000000-0000-0000-0000-0000000000a1', 'conc.owner@test.local', 'conc_owner_2', 'admin', true FROM public.tenants WHERE slug = 'conc-site-2';
+INSERT INTO hospitality.properties (id, tenant_id, name, slug, status)
+SELECT 'c1000000-0000-0000-0000-000000000002', id, 'מתחם 2', 'p2', 'active' FROM public.tenants WHERE slug = 'conc-site-2';
+INSERT INTO hospitality.units (id, tenant_id, property_id, kind, name, slug, capacity, base_occupancy, base_price)
+SELECT ('c2100000-0000-0000-0000-0000000000' || lpad(n::text, 2, '0'))::uuid, t.id, 'c1000000-0000-0000-0000-000000000002',
+       'unit', 'יחידה ' || n, 'v' || n, 4, 2, 500
+  FROM public.tenants t, generate_series(1, 4) n WHERE t.slug = 'conc-site-2';
+CREATE OR REPLACE FUNCTION conc.unit2(_n integer) RETURNS uuid LANGUAGE sql IMMUTABLE AS $$
+  SELECT ('c2100000-0000-0000-0000-0000000000' || lpad(_n::text, 2, '0'))::uuid $$;
+GRANT EXECUTE ON FUNCTION conc.unit2(integer) TO anon, authenticated, service_role;

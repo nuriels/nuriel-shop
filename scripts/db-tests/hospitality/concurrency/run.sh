@@ -217,6 +217,29 @@ check "17 expiry releases the dates atomically: a request during the sweep waits
            WHERE b.idempotency_key = 'c17-key-old' AND e.to_status = 'expired') = 1
      AND (SELECT count(*) FROM hospitality.unit_occupancy WHERE unit_id = conc.unit(18)) = 1"
 
+# ---- 18/19. the booking lock is per site ----
+SITE2=$(q "SELECT id FROM public.tenants WHERE slug = 'conc-site-2'")
+as_guest2() { echo "SET ROLE anon; SELECT set_config('request.headers', '{\"x-tenant-id\": \"$SITE2\"}', false);"; }
+held c18 "$(as_guest) BEGIN; SELECT conc.req(conc.unit(19), 190, 191, 'c18a@example.com', 'c18-key-a'); SELECT pg_sleep(2); COMMIT;" \
+         "$(as_guest) SELECT conc.req(conc.unit(20), 190, 191, 'c18b@example.com', 'c18-key-b');"
+check "18 same site: a second booking (other unit) waits for the first transaction, then succeeds" \
+  "SELECT $(rc c18 a) = 0 AND $(rc c18 b) = 0 AND $(waited c18 && echo true || echo false)"
+held c19 "$(as_guest) BEGIN; SELECT conc.req(conc.unit(25), 200, 201, 'c19a@example.com', 'c19-key-a'); SELECT pg_sleep(2); COMMIT;" \
+         "$(as_guest2) SELECT conc.req(conc.unit2(1), 200, 201, 'c19b@example.com', 'c19-key-b');"
+check "19 different sites: a booking on site 2 is not blocked by an open booking transaction on site 1 ($(cat "$TMP/c19/b.ms") ms)" \
+  "SELECT $(rc c19 a) = 0 AND $(rc c19 b) = 0 AND $(cat "$TMP/c19/b.ms") < 1000"
+
+# ---- 20. unit limit under concurrent inserts (basic plan: 5, already 4) ----
+args=()
+for n in $(seq 1 5); do
+  args+=("$(as_staff $OWNER | sed "s/$SITE/$SITE2/") INSERT INTO hospitality.units (tenant_id, property_id, name, slug)
+            VALUES ('$SITE2', 'c1000000-0000-0000-0000-000000000002', 'מקבילית $n', 'par$n');")
+done
+parallel c20 "${args[@]}"
+check "20 5 parallel unit inserts with one place left → exactly one succeeds, 4 are refused by the plan limit" \
+  "SELECT $(ok_count c20) = 1 AND $(err_count c20 'מגבלת היחידות') = 4
+     AND (SELECT count(*) FROM hospitality.units WHERE tenant_id = '$SITE2' AND is_active AND kind <> 'whole_property') = 5"
+
 # ---- final invariants ----
 check "invariant: no two occupancy rows overlap on any physical unit" \
   "SELECT NOT EXISTS (SELECT 1 FROM hospitality.unit_occupancy a JOIN hospitality.unit_occupancy b
