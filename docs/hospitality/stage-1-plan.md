@@ -30,6 +30,7 @@ copied).
 | D8 | Manual bookings may be **confirmed immediately** (availability-checked, saved, dates held, on the calendar at once, optional guest email) | A5 |
 | D9 | Booking **without an account**; later login with Google/email; past bookings linked only after **verified** identity | A4 Stage 6, B7 |
 | D10 | Dedicated tests for concurrency, whole property, expiry, manual vs site, email failure/duplicates, cancellation, request flooding, guest without account, cross-business access | B12 |
+| D11 | **Owner-defined cancellation & deposit policies** (free-cancellation window, deadline, non-refundable deposit, % or fixed fees, tiers, no-show, per unit / per booking type); shown and accepted before booking; snapshotted per booking; refund **calculated** now, paid out only in the payments stage | A8 |
 
 ## A1. Vision
 
@@ -107,7 +108,7 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   videos from computer or phone, cover, order, alt text, demo flag); pricing
   (weekday/weekend, seasons, holidays, min nights); blocks; bookings list & detail;
   **"הוספת הזמנה"** (manual booking); booking modification/cancellation; guests (CRM:
-  history, notes, export/anonymise); booking emails (owner + guest) via the **outbox worker** (retries, idempotency, delivery status on the booking page, resend); cancellation-request handling; demo-image indicator.
+  history, notes, export/anonymise); booking emails (owner + guest) via the **outbox worker** (retries, idempotency, delivery status on the booking page, resend); cancellation-request handling (with the calculated fee and override); **cancellation & deposit policy editor** (templates, tiers, per unit / per rate rule, live example "if a guest cancels on date X → refund Y"); demo-image indicator.
 - **Dashboard widgets** (all derived by queries, no extra tables): pending approvals with
   deadline, today's arrivals/departures, occupancy (today/7/30 days), free units,
   month revenue (from bookings), recent bookings, recent guests, pending actions
@@ -294,6 +295,9 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   client behind `src/platform/payments/grow` (adapter, no Ecommerce change), give
   Hospitality its own `payments` table and its **own webhook route**; Ecommerce keeps its
   route and tables.
+- **Refunds from cancellation policies (D11):** `cancellation_outcome.refund_due`
+  (calculated since Stage 1) becomes an actual refund through the provider, or a "refund
+  manually" task for cash or transfer payments.
 - **Tables:** `payments` (booking, kind deposit|balance|full|refund, method, amount,
   provider reference, status).
 - **Depends on:** 1, 4 (public flow), 2 (owner screens). Requires separate approval.
@@ -405,9 +409,11 @@ sends is used for deadlines, prices or availability.
   - The owner is notified and approves → `cancelled`: dates released, fee recorded, guest
     email. Or declines → back to `confirmed`, with a guest email that includes the
     reason.
-- **Automatic cancellation:** only if the snapshotted policy allows it (e.g. free
-  cancellation more than N days before arrival, `policies.guest_auto_cancel`). Then
-  `request_cancellation` goes straight to `cancelled` and releases the dates.
+- **Automatic cancellation:** only if the snapshotted policy's automatic rule allows it
+  (`within_free_window` or `always`, A8). Then `request_cancellation` goes straight to
+  `cancelled` and releases the dates. The fee is always computed by
+  `cancellation_quote` at the DB time of the request and frozen in
+  `cancellation_outcome`.
 - **Owner cancellation:** `cancel_booking` by the owner, with the fee taken from the
   snapshot.
 - **History:** every action writes `booking_events` (actor, from/to status, changed
@@ -465,6 +471,124 @@ declined, cancelled, no_show, checked_out: terminal
 > - a new `cancel_requested` status;
 > - manual bookings default to `confirmed`;
 > - emails go through an outbox.
+
+## A8. Cancellation and deposit policies (D11)
+
+### Goal
+Every business defines its own policy in a simple form. There is **no single built-in
+policy**; the system only offers editable starting templates (e.g. "flexible",
+"moderate", "strict").
+
+Example (one possible policy, not a default rule):
+- up to 3 days before arrival → full refund;
+- less than 3 days → the deposit is not refunded;
+- no-show → as the owner defines.
+
+### What a policy contains
+| Element | Options |
+|---|---|
+| Deposit | none / percent of total / fixed amount; due at booking or at approval (collected in Stage 8) |
+| Free-cancellation deadline | N days before arrival, at a time of day (default: check-in time), in the business's timezone — or "no free cancellation" |
+| Tiers after the deadline | ordered list, each "from N days before arrival": fee = none / percent of total / percent of deposit / fixed amount / **deposit forfeited** / full amount |
+| No-show | fee = deposit forfeited / percent / fixed / full amount |
+| Automatic cancellation | `never` (owner approves every request — default) / `within_free_window` (guest cancels instantly while the refund is full) / `always` (instant at any time, fee per tier) |
+| Owner override | owner may waive or reduce a fee on a specific booking (reason required, logged) |
+| Guest-facing text | optional free text shown under the generated summary |
+
+Validation (server and DB):
+- tiers are strictly ordered by days;
+- percentages are 0–100;
+- fixed amounts are ≥ 0;
+- a fee can never exceed the booking total;
+- exactly one default policy per business.
+
+### Which policy applies (precedence)
+1. **Manual booking:** the policy the owner picked in "הוספת הזמנה".
+2. **Pricing rule:** a season or holiday rule with a policy that covers any night of the
+   stay. If several qualify, the highest-priority rule wins. This covers booking types
+   such as "holiday bookings are non-refundable".
+3. **Unit policy** (`units.policy_id`).
+4. **Business default policy.**
+
+The resolved policy is shown in the quote, so the guest sees the policy that will apply
+before sending.
+
+### Shown to the guest before sending
+- The quote returns a **concrete schedule** in plain Hebrew, computed for the chosen
+  dates. Example: "ביטול עד יום ב׳ 9.11 בשעה 15:00 — החזר מלא של המקדמה (₪500). מ-9.11
+  15:00 ועד ההגעה — המקדמה אינה מוחזרת. אי הגעה — חיוב מלא".
+- An explicit checkbox "קראתי ואני מאשר/ת את תנאי הביטול" is required by the server; the
+  request is rejected without it.
+- **Acceptance record** on the booking (`policy_acceptance`):
+  - accepted at (DB time);
+  - channel (site / manage link / owner-on-phone);
+  - hash of the exact snapshot shown;
+  - language;
+  - IP and user agent (kept for audit, erased by guest anonymisation).
+- A `booking_events` entry is written for the acceptance.
+- **Manual bookings:** the owner confirms "התנאים הוסברו ללקוח"; the channel is recorded
+  as `owner_phone`.
+
+### Snapshot at booking time
+`bookings.policy_snapshot` stores:
+- the policy id and version;
+- every rule as it was;
+- the deposit amount;
+- the **absolute schedule**: each tier's start and end as `timestamptz`, computed from the
+  dates, check-in time and timezone, with its fee and refund amounts.
+
+Effects:
+- **Later policy edits:** they create a new policy version and never touch existing
+  bookings.
+- **Date changes:** when an owner changes the dates (`modify_booking`), the **same
+  rules** are re-applied to the new dates. The new schedule is snapshotted and the change
+  is logged; the original rules are never replaced by the current policy.
+
+### Cancellation flow
+1. **The guest requests a cancellation** (manage link or "my bookings") →
+   `cancellation_quote(booking)` computes the outcome at the current **DB time**: the
+   tier, fee, amount paid and refund due. The guest sees the result before confirming.
+2. **Automatic, or awaiting approval:**
+   - if the policy's automatic rule allows it → the booking goes straight to `cancelled`;
+   - otherwise → `cancel_requested` and the dates stay held.
+   - The computation is frozen in `cancellation_outcome`: tier, fee, refund due,
+     computed-at, and who requested.
+3. **The owner sees** the request together with the calculation and the tier that
+   applied, and can:
+   - approve as calculated;
+   - approve with a reduced or waived fee (a reason is required);
+   - decline with a reason.
+4. **Timing:** the fee is determined by the **time of the guest's request**, not by when
+   the owner answers. A request made before the deadline keeps the full refund even if
+   the owner approves later.
+5. **No-show:** `mark_no_show` applies the no-show rule from the snapshot.
+6. **History:** every step goes to `booking_events`. The guest and the owner get the
+   emails listed in A5.
+
+### Payments boundary
+- **Stage 1 stores and calculates only:**
+  - the deposit due (`deposit_amount`);
+  - `amount_paid` (manual entry later; 0 until payments exist);
+  - `cancellation_outcome.refund_due`.
+- No refunds are executed and Grow is not changed.
+- **Stage 8** turns `refund_due` into an actual refund through the provider (a `payments`
+  row of kind `refund`), or into a "refund manually" task for cash or transfer payments.
+
+### Is the existing model enough?
+Mostly. **No new table is needed**, but these changes are:
+- **`policies`:** changes from "one per business" to **several named policies per
+  business** with `is_default`, `version`, deposit fields, tiers (JSON validated by schema
+  and CHECKs), no-show rule, automatic-cancellation rule and guest text. Editing creates a
+  new version: the old row is archived, never updated in place, so snapshots stay
+  traceable.
+- **`units.policy_id`** and **`rate_rules.policy_id`** (nullable) — for different units
+  and booking types.
+- **`bookings`:**
+  - `policy_snapshot` (already planned) — now holding the absolute schedule;
+  - new: `deposit_amount`, `amount_paid`, `policy_acceptance`, `cancellation_outcome`,
+    `fee_override` (amount + reason + actor).
+- The earlier `policies.guest_auto_cancel` is replaced by the automatic-cancellation rule
+  above.
 
 ## A6. Consistency check — findings and conflicts
 
@@ -642,7 +766,7 @@ through DEFINER RPCs).
 | # | Table | Purpose | Stage |
 |---|---|---|---|
 | 1 | `settings` | business profile & booking settings: name, contact phone/email, WhatsApp, address, check-in/out, booking mode (request/instant), approval window, payment hold minutes, weekend nights, currency, timezone, guest retention, notification recipients | 1 |
-| 2 | `policies` | cancellation tiers, payment mode (full/deposit/on arrival), deposit %, house rules; snapshotted onto bookings | 1 |
+| 2 | `policies` | **several named, versioned policies per business** (one default): deposit (none / % / fixed), free-cancellation deadline, fee tiers (% of total / % of deposit / fixed / deposit forfeited / full), no-show rule, automatic-cancellation rule, guest text, house rules; resolved per booking (manual choice → rate rule → unit → default) and snapshotted (A8) | 1 |
 | 3 | `properties` | a compound/site (name, slug, description, address, map coordinates, status) | 1 |
 | 4 | `units` | rooms/zimmers/whole-property bundles: kind, name, slug, description, capacity, base occupancy, child age, bedrooms, bathrooms, base & extra-person prices, min nights, floor/ceiling, active, sort, SEO fields | 1 |
 | 5 | `unit_members` | whole-property ↔ member units | 1 |
@@ -677,8 +801,12 @@ New columns:
   - `approval_window_minutes` — default 720 (12 h), bounded;
   - `approval_reminder_pct` — default 50;
   - `max_open_requests` — default 2.
-- `policies`: `guest_auto_cancel` — rule for automatic cancellation without owner
-  approval, default off.
+- `policies`: becomes several named, versioned policies per business with an
+  automatic-cancellation rule (`never` default / `within_free_window` / `always`) — see
+  A8. `units.policy_id` and `rate_rules.policy_id` are added (nullable).
+- `bookings` (A8): `deposit_amount`, `amount_paid`, `policy_acceptance`,
+  `cancellation_outcome`, `fee_override`; `policy_snapshot` now holds the absolute
+  schedule.
 - `guests`: `email_normalized`, `phone_normalized` (for the cap and for verified
   linking); `user_id` is linked only through verified claim.
 - `bookings`:
@@ -719,12 +847,21 @@ all fit the existing model.
   `confirm_payment` before inserting; reads treat expired holds as free; idempotent sweep
   `expire_holds()` (`FOR UPDATE SKIP LOCKED`, one event per booking).
 - RPCs:
-  - **public / guest:** `quote`, `request_booking` (idempotent, `request_tenant()`,
-    open-request cap under a per-contact advisory lock), `request_cancellation`,
-    `get_booking_by_token`, `claim_guest_bookings` (verified email only), `my_bookings`;
-  - **owner:** `create_manual_booking` (default `confirmed`), `approve_booking`,
-    `decline_booking`, `modify_booking` (revision check), `cancel_booking`,
-    `approve_cancellation`, `decline_cancellation`,
+  - **public / guest:**
+    - `quote` (includes the resolved policy and its concrete schedule);
+    - `request_booking` (idempotent, `request_tenant()`, open-request cap under a
+      per-contact advisory lock, **requires policy acceptance**, writes the snapshot and
+      the acceptance record);
+    - `cancellation_quote`, `request_cancellation`;
+    - `get_booking_by_token`, `claim_guest_bookings` (verified email only),
+      `my_bookings`;
+  - **owner:**
+    - `create_manual_booking` (default `confirmed`, owner picks the policy, records
+      phone acceptance), `approve_booking`, `decline_booking`, `modify_booking`
+      (revision check, schedule re-applied);
+    - `cancel_booking`, `approve_cancellation` (optional fee override with reason),
+      `decline_cancellation`;
+    - `save_policy` (new version, validation), `set_default_policy`;
     `mark_checked_in|checked_out|no_show`;
   - **system:** `expire_holds` (also enqueues reminders), `confirm_payment` (status only;
     no provider in Stage 1);
@@ -861,6 +998,25 @@ shared `types.ts`, Dockerfile, deployment.
   | logged-in guest tries another business's booking (by id, token or other site) | denied / not found | 1 + 6 |
   | staff member of another tenant books as a guest | works via `request_tenant()`, sees nothing else | 1 |
   | stale calendar edit (old revision) | refused, data unchanged | 1 + 3 |
+
+- **Cancellation & deposit policy tests (D11):**
+
+  | Scenario | Expected | Stage |
+  |---|---|---|
+  | policy validation (unordered tiers, % > 100, negative or > total fee, two defaults) | rejected by server and DB | 1 |
+  | example policy "3 days → full refund, then deposit forfeited" | refund = deposit at deadline − 1 s; 0 at deadline + 1 s | 1 |
+  | percent / fixed / deposit-forfeit / full-amount tiers and multi-tier schedules | correct fee and refund in every tier | 1 |
+  | deadline at check-in time in Asia/Jerusalem, incl. DST change week | boundaries exact in local time | 1 |
+  | precedence: manual choice → rate rule (holiday) → unit → default | the expected policy is snapshotted | 1 |
+  | owner edits the policy after a booking | old booking keeps its snapshot and fee; new bookings use the new version | 1 |
+  | request without policy acceptance | rejected; acceptance record and event written when accepted | 1 + 4 |
+  | quote schedule shown to the guest equals the fee computed at cancellation | identical amounts (same function) | 1 + 4 |
+  | automatic rule `never` / `within_free_window` / `always` | `cancel_requested` vs immediate `cancelled` as defined | 1 |
+  | request before the deadline, owner approves after it | fee from the request time (full refund) | 1 |
+  | owner fee override | allowed with reason, logged with actor | 1 |
+  | `modify_booking` to new dates | same rules re-applied to new dates, change logged | 1 |
+  | no-show | no-show rule from the snapshot applied | 1 |
+  | refunds | only `refund_due` calculated; no provider call (Grow untouched) | 1 (8 executes) |
 - Vitest: architecture rules, server-function ownership, dispatcher decision table,
   validators.
 - E2E: existing 33 unchanged + gate tests (Ecommerce host unaffected; Hospitality host
