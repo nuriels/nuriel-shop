@@ -15,7 +15,7 @@ createServer((req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify(calls));
     }
-    calls.push({ method: req.method, url: req.url, body: body.slice(0, 2000), at: Date.now() });
+    calls.push({ method: req.method, url: req.url, body: body.slice(0, 50000), at: Date.now() });
     if (req.url?.startsWith("/emails")) {
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ id: `mock-${calls.length}` }));

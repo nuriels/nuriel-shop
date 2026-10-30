@@ -12,6 +12,8 @@
 | `bun run test:unit` | Vitest — לוגיקה טהורה (הרשאות, קופונים, מע"מ, מנויים, SEO, זיהוי דומיין) | — |
 | `bun run test:scripts` | סקריפטי הבדיקה הישנים (`scripts/*-check.ts`) | — |
 | `bun run test:db` | בדיקות SQL: כל המיגרציות מאפס על Postgres 16 מקומי + קבצי `scripts/db-tests/*.test.sql` | `postgresql-16` |
+| `bun run test:db:rollback` | Rollback של המיגרציה החדשה על מסד נפרד (`rollback_test`): הגנת ה-rollback, החזרה למצב הקודם בדיוק, והרצה מחדש | `postgresql-16` |
+| `bun run db:classify` | מחולל מחדש את `docs/architecture/db-classification.md` ואת בדיקת הכיסוי (אחרי `test:db`) | `postgresql-16` |
 | `bun run e2e:up` | Supabase מקומי ב-Docker + כל המיגרציות + נתוני בדיקה | Docker |
 | `bun run test:e2e` | Playwright — Regression לחנויות (בונה ומריץ את האפליקציה מול ה-Supabase המקומי) | `e2e:up` |
 | `bun run e2e:down` | עצירה ומחיקה של ה-Supabase המקומי | — |
@@ -33,6 +35,13 @@
 עתידיות): RLS מופעל, ומדיניות `tenant_isolation` מסוג RESTRICTIVE או שאין ל-API
 גישה לטבלה בכלל. החריגים (טבלאות פאנל הפלטפורמה) מתועדים בקובץ.
 
+`db-classification.test.sql` (נוצר ע"י `bun run db:classify`): כל טבלה וכל פונקציה
+ב-`public` משויכת למנוע (ecommerce / platform / platform-admin / shared-utility).
+אובייקט חדש שלא סווג מכשיל את הבדיקה.
+
+`platform-products-flags.test.sql` (Hospitality 1a): `site_type`, תפקידים לפי מוצר,
+דגלי פיצ'רים, ה-seed הקיים של Ecommerce זהה לחלוטין, seed משותף.
+
 ## E2E — מה מכוסה
 
 סביבה: `kobi.shop.localhost` (חנות A — חנות ברירת המחדל מהמיגרציות),
@@ -47,6 +56,7 @@
 | `admin.spec.ts` | פאנל ניהול החנות: כל האזורים, מוצרים, צילום התפריט, לקוח לא נכנס |
 | `platform.spec.ts` | פאנל הפלטפורמה: חנויות + הקמת חנות, אורח, בעל חנות אינו מנהל פלטפורמה, `/platform` חסום בדומיין חנות (403) |
 | `isolation.spec.ts` | כל חנות רואה רק את המוצרים שלה (ממשק, API ישיר עם טוקן, sitemap) |
+| `auth-regression.spec.ts` | התחברות בקוד למייל (משתמש קיים, משתמש חדש = לקוח ממתין כמו היום, קוד שגוי), פתיחת חנות דרך הפורטל (חנות + בעלים מוגן + seed), כפתור Google מבקש חזרה לכתובת של אותה חנות, ושרת ההתחברות מקבל רק כתובות חזרה מורשות (GitHub מקומית; Google ב-CI — דורש גישה ל-Google) |
 | `seo.spec.ts` | `robots.txt` (צילום מדויק), `sitemap.xml` (רשימת הכתובות), `llms.txt`, meta / OG / canonical / JSON-LD ב-SSR |
 
 ### צילומי מסך

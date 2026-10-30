@@ -1,6 +1,6 @@
 # Nuriel Hospitality — product plan and Stage 1 (backend foundation)
 
-Status: **proposal, awaiting approval.** Nothing in this document is implemented.
+Status: **approved plan; implementation in progress.** Stage 1a (migration 1) implemented on this branch — see `docs/hospitality/migrations.md`. Later steps await approval.
 Branch: `hospitality/stage-1` (based on `hospitality/stage-0`). No merge to `main`,
 no production deployment, no production credentials, no migrations yet.
 
