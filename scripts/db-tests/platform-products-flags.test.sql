@@ -11,7 +11,8 @@
 
 -- ---------- site_type ----------
 SELECT tests.check('site_type: every existing store is ecommerce',
-  $$SELECT NOT EXISTS (SELECT 1 FROM public.tenants WHERE site_type <> 'ecommerce' AND id::text NOT LIKE '71a00000-%')$$);
+  $$SELECT bool_and(site_type = 'ecommerce') AND count(*) = 5
+      FROM public.tenants WHERE slug IN ('kobi', 'nuriel-app2', 'store-a', 'store-b', 'store-c')$$);
 SELECT tests.check('site_type: column is NOT NULL with default ecommerce',
   $$SELECT is_nullable = 'NO' AND column_default LIKE '''ecommerce''%'
       FROM information_schema.columns
@@ -90,8 +91,7 @@ SELECT tests.check('current_site_type: unknown site → NULL', $$SELECT public.c
 SELECT set_config('request.headers', '', false);
 
 -- ---------- Roles per product ----------
-SELECT tests.check('product roles: Ecommerce registers no roles in this migration (no restriction)',
-  $$SELECT NOT EXISTS (SELECT 1 FROM public.platform_product_roles WHERE product = 'ecommerce')$$);
+-- (Ecommerce registers its roles in 20261101100000 — checked in ecommerce-engine-guard.test.sql)
 INSERT INTO auth.users (id, email) VALUES
   ('a0000000-0000-0000-0000-0000000001a1', 'role1@test.local'),
   ('a0000000-0000-0000-0000-0000000001a2', 'role2@test.local'),

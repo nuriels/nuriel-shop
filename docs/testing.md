@@ -12,7 +12,7 @@
 | `bun run test:unit` | Vitest — לוגיקה טהורה (הרשאות, קופונים, מע"מ, מנויים, SEO, זיהוי דומיין) | — |
 | `bun run test:scripts` | סקריפטי הבדיקה הישנים (`scripts/*-check.ts`) | — |
 | `bun run test:db` | בדיקות SQL: כל המיגרציות מאפס על Postgres 16 מקומי + קבצי `scripts/db-tests/*.test.sql` | `postgresql-16` |
-| `bun run test:db:rollback` | Rollback של המיגרציה החדשה על מסד נפרד (`rollback_test`): הגנת ה-rollback, החזרה למצב הקודם בדיוק, והרצה מחדש | `postgresql-16` |
+| `bun run test:db:rollback` | Rollback של מיגרציות Hospitality Stage 1 (בסדר הפוך) על מסד נפרד (`rollback_test`): הגנת ה-rollback, החזרה למצב הקודם בדיוק, והרצה מחדש | `postgresql-16` |
 | `bun run db:classify` | מחולל מחדש את `docs/architecture/db-classification.md` ואת בדיקת הכיסוי (אחרי `test:db`) | `postgresql-16` |
 | `bun run e2e:up` | Supabase מקומי ב-Docker + כל המיגרציות + נתוני בדיקה | Docker |
 | `bun run test:e2e` | Playwright — Regression לחנויות (בונה ומריץ את האפליקציה מול ה-Supabase המקומי) | `e2e:up` |
@@ -38,6 +38,10 @@
 `db-classification.test.sql` (נוצר ע"י `bun run db:classify`): כל טבלה וכל פונקציה
 ב-`public` משויכת למנוע (ecommerce / platform / platform-admin / shared-utility).
 אובייקט חדש שלא סווג מכשיל את הבדיקה.
+
+`ecommerce-engine-guard.test.sql` (Hospitality 1b): תפקידי Ecommerce רשומים בדיוק
+לפי ה-CHECK, הגנת כתיבה על 40 הטבלאות (owner, service_role, הוספה מרובת שורות,
+העברת שורה), חנויות עובדות כמו קודם, product-images חסום לאתר אירוח.
 
 `platform-products-flags.test.sql` (Hospitality 1a): `site_type`, תפקידים לפי מוצר,
 דגלי פיצ'רים, ה-seed הקיים של Ecommerce זהה לחלוטין, seed משותף.

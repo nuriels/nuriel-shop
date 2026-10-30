@@ -1,6 +1,6 @@
 # Nuriel Hospitality — product plan and Stage 1 (backend foundation)
 
-Status: **approved plan; implementation in progress.** Stage 1a (migration 1) implemented on this branch — see `docs/hospitality/migrations.md`. Later steps await approval.
+Status: **approved plan; implementation in progress.** Stages 1a and 1b (migrations 1–2) implemented on this branch — see `docs/hospitality/migrations.md`. Later steps await approval.
 Branch: `hospitality/stage-1` (based on `hospitality/stage-0`). No merge to `main`,
 no production deployment, no production credentials, no migrations yet.
 
@@ -1100,8 +1100,10 @@ local/CI expose the schema in the generated (gitignored) config.
 - 350 public functions (291 SECURITY DEFINER; 113 anon, 247 authenticated) — classified
   in `docs/architecture/db-classification.md` (step 1a) with a coverage test.
 - 52 browser files call Supabase directly → DB-level protection required.
-- **Protection:** edge gate; dispatcher; statement-level `AFTER INSERT` and
-  `AFTER UPDATE OF tenant_id` guards on the 40 Ecommerce tables (reject non-Ecommerce
+- **Protection:** edge gate; dispatcher; statement-level `AFTER INSERT` guards and
+  row-level `BEFORE UPDATE OF tenant_id … WHEN (tenant changed)` guards on the 40
+  Ecommerce tables (implemented in 1b; PostgreSQL forbids transition tables with a
+  column list) (reject non-Ecommerce
   tenants; covers PostgREST, DEFINER RPCs, service_role); product-role rule on
   `user_roles` (`platform_product_roles`); RESTRICTIVE storage policy for
   `product-images`; reverse check on Hospitality objects.
