@@ -259,7 +259,7 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   production config before Stage 6 (no change now).
 - **Duplicate accounts:** the existing `email_has_other_account` hook already prevents
   two auth accounts for one email — reused unchanged.
-- **Site address (see A9):** automatic `stay-<digits>` address at creation, changeable later in "כתובת האתר" with a 301 redirect from the old address. It reuses reuse `tenants.slug` (UNIQUE), `platform_slug_problem`,
+- **Site address (see A9):** automatic `stay-<digits>` address at creation, changeable later in "כתובת האתר" with a 301 redirect from the old address. It reuses `tenants.slug` (UNIQUE), `platform_slug_problem`,
   `platform_reserved_slugs`, `checkStoreSlug`: availability check before save, reserved
   names, and the UNIQUE constraint makes concurrent claims safe (one insert wins).
   Routing via `tenant_for_host()` (unchanged).
