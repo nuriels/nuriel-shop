@@ -1408,3 +1408,73 @@ benchmark · 1c migration 3 + RLS tests · 1d migration 4 + booking/concurrency 
 Hospitality engine modules and owner/public server functions (no UI), tenant fields,
 ESLint + architecture test, Vitest · 1g E2E gate tests, docs, full suite, CI,
 completion report.
+
+## B15. Verification requirements (round 4) — before and during implementation
+
+### Google OAuth
+- **Same-origin return only (verified in code):** every `redirectTo` is
+  `window.location.origin` + a fixed path (`GoogleSignInButton.tsx`; callers pass only
+  `/login?google=1`, `/?portal_google=1`, `/checkout`). No request parameter can choose
+  the return address, so the application has no open redirect.
+- **Server-side allow-list:** GoTrue accepts only `SITE_URL/**` and
+  `https://*.nuri1.fit/**`. An external host falls back to `SITE_URL`.
+  - Tested locally with the Google provider enabled using fake credentials: the
+    `/authorize` state token must carry the allowed address for store subdomains and
+    must **not** carry an external address.
+- **Different store subdomains:** E2E checks that the Google button on
+  `kobi.shop.localhost` and on `store-b.shop.localhost` each requests its own origin as
+  the return address. The full Google round-trip can't run without real Google
+  credentials. It stays a manual step in the installation runbook.
+- **Security finding (existing behaviour, no change now):**
+  - the allow-list trusts **every** `*.nuri1.fit` subdomain, including stores opened by
+    anyone;
+  - supabase-js uses the default **implicit** flow, where tokens arrive in the URL
+    fragment.
+  
+  A crafted login link could therefore return a victim's tokens to another store's
+  address, where third-party scripts allowed on stores (Meta Pixel / GA) could see the
+  full URL before supabase-js clears it.
+  
+  Recommended hardening, as a separate approved change for both products:
+  - switch the browser client to `flowType: 'pkce'` (the code is useless without the
+    verifier stored on the original site);
+  - or validate on return that the session was started on this host.
+  
+  The Google OAuth settings are **not** changed in this stage.
+
+### Guests vs owners vs Ecommerce members (tested at RPC, RLS and server level — never UI-only)
+| Test | Layer | Stage |
+|---|---|---|
+| A guest (auth user without a `user_roles` row) gets no `hospitality.can()` permission and cannot call owner RPCs | RLS + RPC | 1c/1d |
+| A guest RPC uses `request_tenant()` + `auth.uid()`; another business's booking (by id, token or site) is not found | RPC | 1d |
+| An Ecommerce member (admin/customer of store A) books as a guest at Hospitality B; no Ecommerce data of A is visible on B, and no Hospitality data of B is visible on A | RLS + RPC + E2E | 1d + 6 |
+| A guest never gets a `user_roles` row (product-role rule: Hospitality accepts only `admin`) | DB trigger | 1a (rule) / 1c (Hospitality roles) |
+| Server functions of one engine called on the other engine's host → 404 | dispatcher | 1f |
+| Ecommerce RPCs cannot write rows for a Hospitality tenant | write guards | 1b |
+
+### Ecommerce protection and regression
+- Every platform change keeps the existing behaviour by default. In 1a:
+  - `site_type` defaults to `ecommerce`;
+  - the role rule is inactive for products without registered roles;
+  - the seed trigger runs exactly as before for Ecommerce;
+  - flags are off.
+- **New regression tests added in 1a**, on top of the existing 33 E2E tests and the SQL
+  suite:
+  - **Store opening through the portal:** email code → name + address → store created
+    with an owner `admin` row, seed rows and a trial subscription.
+  - **Email-code login:** the code is read from the mocked email; login works; a new
+    email creates a user plus a pending Ecommerce customer, exactly as today.
+  - **Google login:** the start request uses the current store's origin; an external
+    return address is rejected by the local GoTrue.
+  - **Permissions:** customer vs owner vs another store's owner (existing tests, kept).
+- No change in Stage 1a requires any production configuration.
+
+### Testing and deployment
+- **Local tests:**
+  - every migration runs on the local SQL runner (twice, plus over existing data);
+  - every migration also runs on the **separate local Supabase** (`e2e/scripts/supabase-up.sh`,
+    the same images as production), followed by the full E2E suite.
+- **Proof for Ecommerce:** after each step the full Stage 0 suite runs. Its result is in
+  every step report.
+- **Installation and rollback:** A11 and the runbook stay **documentation only** until
+  you explicitly approve a deployment.
