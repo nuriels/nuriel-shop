@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality Stage 1 נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_booking (1d): הגנה (נעצר כשיש הזמנות / אורחים / חסימות / מיילים),
+#     rollback → טבלאות 12–18 והפונקציות נעלמו, ההגדרות חוזרות למצב של 1c
 #   • hosp_schema (1c): הגנות (נעצר כשיש אתר אירוח / אובייקטים של מיגרציה מאוחרת),
 #     rollback → הטבלאות, הפונקציות, הדלי והרישומים נעלמו, הסכמה עצמה נשארת ריקה
 #   • ecommerce_engine_guard (1b): rollback → הטריגרים, המדיניות ורישום התפקידים נעלמו,
@@ -19,6 +21,7 @@ PSQL=(psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollbac
 M1=20261101090000_platform_products_flags
 M2=20261101100000_ecommerce_engine_guard
 M3=20261101110000_hosp_schema
+M4=20261101120000_hosp_booking
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -34,6 +37,35 @@ psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
 "${PSQL[@]}" -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do "${PSQL[@]}" -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }; done
 q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id, 'rb-row', 'pickup', 0 FROM public.tenants WHERE is_default" >/dev/null
+
+# ---------- 1d ----------
+echo "rollback guard: $M4 refuses while bookings exist"
+q "INSERT INTO public.tenants (id, slug, name, site_type) VALUES ('71d00000-0000-0000-0000-000000000001', 'rb-stay-1d', 'x', 'hospitality')" >/dev/null
+q "INSERT INTO hospitality.settings (tenant_id) VALUES ('71d00000-0000-0000-0000-000000000001')" >/dev/null
+q "INSERT INTO hospitality.guests (tenant_id, full_name, email) VALUES ('71d00000-0000-0000-0000-000000000001', 'rb guest', 'rb@example.com')" >/dev/null
+if down "$M4" 2>/dev/null; then
+  echo "  FAIL rollback ran although guest data exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" "SELECT EXISTS (SELECT 1 FROM hospitality.guests WHERE email = 'rb@example.com')"
+q "DELETE FROM public.tenants WHERE id = '71d00000-0000-0000-0000-000000000001'" >/dev/null
+
+echo "rollback: $M4"
+down "$M4"
+expect "booking tables removed (12–18)" \
+  "SELECT NOT EXISTS (SELECT 1 FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relname IN
+     ('guests','bookings','booking_nights','booking_events','blocks','unit_occupancy','notifications'))"
+expect "booking functions removed, Stage 1c functions kept" \
+  "SELECT NOT EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace
+       AND proname IN ('quote','request_booking','expire_holds','claim_notifications','_quote','policy_schedule','normalize_email'))
+     AND EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace AND proname = 'admin_create_site')"
+expect "settings back to the Stage 1c shape (no counter, retention 36 not null, table-level update)" \
+  "SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'settings'
+                        AND column_name = 'last_booking_number')
+     AND (SELECT is_nullable = 'NO' AND column_default = '36' FROM information_schema.columns
+           WHERE table_schema = 'hospitality' AND table_name = 'settings' AND column_name = 'guest_retention_months')
+     AND has_table_privilege('authenticated', 'hospitality.settings', 'UPDATE')"
+expect "Stage 1c tables untouched (11)" \
+  "SELECT count(*) = 11 FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r'"
 
 # ---------- 1c ----------
 echo "rollback guard: $M3 refuses while a Hospitality site exists"
@@ -113,10 +145,11 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1, $M2, $M3"
+echo "re-apply: $M1, $M2, $M3, $M4"
 up "$M1"
 up "$M2"
 up "$M3"
+up "$M4"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -125,11 +158,15 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 11 tables, RLS on all, role admin, 5 flags off" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 11
+expect "Hospitality schema back: 18 tables, RLS on all, role admin, 5 flags off" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 18
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
       AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 5"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
+expect "booking engine back: EXCLUDE constraint, deferred integrity checks, guest functions" \
+  "SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unit_occupancy_no_overlap')
+     AND (SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%consistency' AND tgdeferrable) = 3
+     AND has_function_privilege('anon', 'hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)', 'EXECUTE')"
 
 "${PSQL[@]}" -d postgres -c "DROP DATABASE rollback_test" >/dev/null 2>&1 || true
 echo "rollback check passed"

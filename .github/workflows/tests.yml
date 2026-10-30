@@ -65,6 +65,8 @@ jobs:
         run: bash scripts/db-tests/run.sh
       - name: migration rollback check
         run: bash scripts/db-tests/rollback-check.sh
+      - name: booking concurrency (parallel sessions)
+        run: bash scripts/db-tests/hospitality/concurrency/run.sh
 
   e2e:
     name: E2E regression (Playwright + local Supabase)

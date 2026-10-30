@@ -2,10 +2,11 @@ import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
 import { STORE_A, supabaseEnv, USERS } from "./helpers";
 
-// Hospitality Stage 1c through the real local Supabase API (PostgREST + Storage +
-// GoTrue tokens): the exposed `hospitality` schema, RLS per site, feature flag,
-// product roles and the hosp-media bucket. API only — there is no Hospitality UI yet.
-// Disposable data: two sites and four users, removed before and after the run.
+// Hospitality Stages 1c–1d through the real local Supabase API (PostgREST + Storage +
+// GoTrue tokens): the exposed `hospitality` schema, RLS per site, feature flags,
+// product roles, the hosp-media bucket and the booking engine (guest request without an
+// account, parallel requests, manage link, owner approval, cancellation request).
+// API only — there is no Hospitality UI yet. Disposable data, removed before and after.
 
 test.describe.configure({ mode: "serial" });
 
@@ -43,7 +44,8 @@ function cleanup() {
   }
   sql(`DELETE FROM auth.users WHERE email IN ('${Object.values(EMAILS).join("','")}')`);
   sql(
-    `UPDATE public.platform_feature_flags SET enabled = false WHERE key = 'hospitality_backend_enabled'`,
+    `UPDATE public.platform_feature_flags SET enabled = false
+      WHERE key IN ('hospitality_backend_enabled', 'hospitality_booking_enabled')`,
   );
 }
 
@@ -276,4 +278,144 @@ test("hosp-media: the owner uploads into its own site folder only; public read w
     },
   });
   expect(removed.status).toBe(200);
+});
+
+/** a date N days from today, YYYY-MM-DD */
+const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+const message = (r: Rest) => JSON.stringify(r.json);
+let bookingId = "";
+let manageToken = "";
+
+test("a guest books without an account; of 5 parallel requests for the same dates exactly one wins", async () => {
+  sql(`UPDATE public.platform_feature_flags SET enabled = true WHERE key = 'hospitality_booking_enabled';
+       INSERT INTO public.tenant_feature_flags (tenant_id, key, enabled)
+       VALUES ('${siteA}', 'hospitality_booking_enabled', true);
+       UPDATE hospitality.properties SET status = 'active' WHERE tenant_id = '${siteA}'`);
+  const unit = sql(`SELECT id FROM hospitality.units WHERE tenant_id = '${siteA}'`);
+  const stay = { _unit_id: unit, _check_in: day(40), _check_out: day(42) };
+  const quote = await rest("rpc/quote", { method: "POST", site: siteA, body: stay });
+  expect(quote.status, message(quote)).toBe(200);
+  const q = quote.json as { available: boolean; policy_hash: string; total: number };
+  expect(q.available).toBe(true);
+
+  const attempts = await Promise.all(
+    [1, 2, 3, 4, 5].map((n) =>
+      rest("rpc/request_booking", {
+        method: "POST",
+        site: siteA,
+        body: {
+          ...stay,
+          _full_name: `אורח ${n}`,
+          _email: `h1d.guest${n}@e2e.test`,
+          _phone: `05011100${n}0`,
+          _idempotency_key: `h1d-parallel-${n}-${Date.now()}`,
+          _policy_accepted: true,
+          _policy_hash: q.policy_hash,
+        },
+      }),
+    ),
+  );
+  const won = attempts.filter((r) => r.status === 200);
+  const lost = attempts.filter((r) => r.status !== 200);
+  expect(won).toHaveLength(1);
+  expect(lost).toHaveLength(4);
+  for (const r of lost) expect(message(r)).toContain("כבר לא פנויים");
+  const winner = won[0]!.json as { booking_id: string; status: string; manage_token: string };
+  expect(winner.status).toBe("pending_approval");
+  bookingId = winner.booking_id;
+  manageToken = winner.manage_token;
+  expect(sql(`SELECT count(*) FROM hospitality.unit_occupancy WHERE unit_id = '${unit}'`)).toBe(
+    "1",
+  );
+  expect(
+    sql(`SELECT count(*) FROM hospitality.notifications WHERE booking_id = '${bookingId}'`),
+  ).toBe("2");
+
+  // the manage link works on this site only, and shows no internal data
+  const view = await rest("rpc/get_booking_by_token", {
+    method: "POST",
+    site: siteA,
+    body: { _token: manageToken },
+  });
+  expect(view.status).toBe(200);
+  expect((view.json as { id: string }).id).toBe(bookingId);
+  expect(view.json).not.toHaveProperty("notes");
+  const elsewhere = await rest("rpc/get_booking_by_token", {
+    method: "POST",
+    site: siteB,
+    body: { _token: manageToken },
+  });
+  expect(elsewhere.status).toBeGreaterThanOrEqual(400);
+  expect(message(elsewhere)).toContain("ההזמנה לא נמצאה");
+  // no account and no membership was created for the guest
+  expect(sql(`SELECT count(*) FROM public.user_roles WHERE email LIKE 'h1d.guest%'`)).toBe("0");
+});
+
+test("only the site's owner approves; tables stay closed to guests", async () => {
+  for (const [token, site] of [
+    [tokens.ownerB, siteA],
+    [tokens.guest, siteA],
+    [tokens.ownerB, siteB],
+  ] as const) {
+    const denied = await rest("rpc/approve_booking", {
+      method: "POST",
+      token,
+      site,
+      body: { _booking_id: bookingId },
+    });
+    expect(denied.status, message(denied)).toBeGreaterThanOrEqual(400);
+  }
+  const approved = await rest("rpc/approve_booking", {
+    method: "POST",
+    token: tokens.ownerA,
+    site: siteA,
+    body: { _booking_id: bookingId },
+  });
+  expect(approved.status, message(approved)).toBe(200);
+  expect((approved.json as { status: string }).status).toBe("confirmed");
+  const ownerRows = await rest("bookings?select=status", { token: tokens.ownerA, site: siteA });
+  expect(ownerRows).toEqual({ status: 200, json: [{ status: "confirmed" }] });
+  expect(await rest("bookings?select=id", { token: tokens.guest, site: siteA })).toEqual({
+    status: 200,
+    json: [],
+  });
+  expect((await rest("bookings?select=id", { site: siteA })).status).toBe(401);
+  const write = await rest(`bookings?id=eq.${bookingId}`, {
+    method: "PATCH",
+    token: tokens.ownerA,
+    site: siteA,
+    body: { total: 1 },
+  });
+  expect(write.status).toBeGreaterThanOrEqual(400);
+});
+
+test("the guest asks to cancel with the manage link; the owner approves; the fee is the one quoted", async () => {
+  const quote = await rest("rpc/cancellation_quote", {
+    method: "POST",
+    site: siteA,
+    body: { _token: manageToken },
+  });
+  expect(quote.status, message(quote)).toBe(200);
+  const fee = (quote.json as { fee: number }).fee;
+  const requested = await rest("rpc/request_cancellation", {
+    method: "POST",
+    site: siteA,
+    body: { _token: manageToken, _reason: "שינוי תוכניות" },
+  });
+  expect(requested.status, message(requested)).toBe(200);
+  expect((requested.json as { status: string }).status).toBe("cancel_requested");
+  const approved = await rest("rpc/approve_cancellation", {
+    method: "POST",
+    token: tokens.ownerA,
+    site: siteA,
+    body: { _booking_id: bookingId },
+  });
+  expect(approved.status, message(approved)).toBe(200);
+  expect((approved.json as { final_fee: number }).final_fee).toBe(fee);
+  expect(sql(`SELECT status FROM hospitality.bookings WHERE id = '${bookingId}'`)).toBe(
+    "cancelled",
+  );
+  expect(
+    sql(`SELECT count(*) FROM hospitality.unit_occupancy WHERE booking_id = '${bookingId}'`),
+  ).toBe("0");
 });

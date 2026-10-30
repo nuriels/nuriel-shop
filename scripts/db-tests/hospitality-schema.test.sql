@@ -61,9 +61,9 @@ INSERT INTO hc_tables VALUES
   ('unit_members', 'catalog'), ('unit_beds', 'catalog'), ('amenities', 'catalog'),
   ('unit_amenities', 'catalog'), ('media', 'media'), ('rate_rules', 'pricing'), ('promotions', 'pricing');
 
-SELECT tests.check('schema: the hospitality schema holds exactly the 11 Stage 1c tables',
-  $$SELECT array_agg(c.relname::text ORDER BY c.relname) = (SELECT array_agg(name ORDER BY name) FROM hc_tables)
-      FROM pg_class c WHERE c.relnamespace = 'hospitality'::regnamespace AND c.relkind = 'r'$$);
+SELECT tests.check('schema: the hospitality schema holds the 11 Stage 1c tables (later stages add their own)',
+  $$SELECT count(*) = 11 FROM pg_class c JOIN hc_tables t ON t.name = c.relname
+     WHERE c.relnamespace = 'hospitality'::regnamespace AND c.relkind = 'r'$$);
 SELECT tests.check('schema: RLS is enabled on every Hospitality table',
   $$SELECT bool_and(c.relrowsecurity) FROM pg_class c JOIN hc_tables t ON t.name = c.relname
      WHERE c.relnamespace = 'hospitality'::regnamespace$$);
@@ -107,9 +107,12 @@ SELECT tests.check('schema: every Hospitality table references public.tenants wi
 SELECT tests.check('schema: no Hospitality function is executable by PUBLIC',
   $$SELECT NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace
       AND (p.proacl IS NULL OR EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0)))$$);
-SELECT tests.check('schema: anon can execute only request_tenant()',
+SELECT tests.check('schema: of the Stage 1c functions anon can execute only request_tenant()',
   $$SELECT array_agg(p.proname::text) = ARRAY['request_tenant'] FROM pg_proc p
-     WHERE p.pronamespace = 'hospitality'::regnamespace AND has_function_privilege('anon', p.oid, 'EXECUTE')$$);
+     WHERE p.pronamespace = 'hospitality'::regnamespace AND has_function_privilege('anon', p.oid, 'EXECUTE')
+       AND p.proname IN ('flag', 'flag_for', 'permissions', 'can', 'request_tenant', 'tenant_guard', 'touch_updated_at',
+                         'settings_validate', 'policies_validate', 'policies_default_guard', 'unit_members_validate',
+                         'units_membership_guard', 'admin_create_site')$$);
 SELECT tests.check('schema: every SECURITY DEFINER function pins search_path to empty',
   $$SELECT NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace
       AND p.prosecdef AND NOT ('search_path=""' = ANY (COALESCE(p.proconfig, '{}'))))$$);

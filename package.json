@@ -16,6 +16,7 @@
     "test:unit": "vitest run",
     "test:db": "bash scripts/db-tests/run.sh",
     "test:db:rollback": "bash scripts/db-tests/rollback-check.sh",
+    "test:db:concurrency": "bash scripts/db-tests/hospitality/concurrency/run.sh",
     "db:classify": "node scripts/db-classification.mjs",
     "test:scripts": "bash scripts/run-checks.sh",
     "e2e:up": "bash e2e/scripts/supabase-up.sh",
