@@ -16,6 +16,21 @@ copied).
 
 # Part A — Product vision and roadmap
 
+## A0. Approved product decisions (round 3)
+
+| # | Decision | Where designed |
+|---|---|---|
+| D1 | Owner approval window **12 h** by default, editable in business settings; reminder at **50 %** of the window; on timeout → `expired`, dates released, guest notified, everything in history; DB clock only | A5, B7 |
+| D2 | Max **2 open requests per contact per business** (configurable); enforced in the DB, race-safe | A5, B7 |
+| D3 | Demo images only from sources allowing commercial use, with documented source and licence, marked "demo" until replaced | A4 Stage 4 |
+| D4 | No Realtime infrastructure now: auto-refresh every 30–60 s, immediate refresh after own actions, refresh on tab focus, no duplicates/stale edits; Realtime later via a platform adapter | A4 Stage 3, B6 |
+| D5 | Guests can **request** cancellation from the site; owner approves/declines under the snapshotted policy; dates released only on approval (or automatic cancellation if the policy allows it) | A5, B7 |
+| D6 | Fixed Nuriel credit in every Hospitality site footer: "כל הזכויות שמורות לנוריאל מחשבים" → `https://nuriel-app2.nuri1.fit`; styling adapts, removal impossible | A4 Stage 4 |
+| D7 | Reliable email on top of the existing Nuriel email infrastructure: outbox, status, retries, no duplicates, error log, visibility; an email failure never undoes a saved booking | A5, B6 |
+| D8 | Manual bookings may be **confirmed immediately** (availability-checked, saved, dates held, on the calendar at once, optional guest email) | A5 |
+| D9 | Booking **without an account**; later login with Google/email; past bookings linked only after **verified** identity | A4 Stage 6, B7 |
+| D10 | Dedicated tests for concurrency, whole property, expiry, manual vs site, email failure/duplicates, cancellation, request flooding, guest without account, cross-business access | B12 |
+
 ## A1. Vision
 
 Nuriel Hospitality is a complete SaaS for accommodation businesses (zimmers, multi-unit
@@ -75,7 +90,7 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   guard, Hospitality schema (core tables), booking engine RPCs (quote, request, manual
   booking, approve/decline, modify, cancel, check-in/out, hold expiry), owner server
   functions (no UI), platform engine dispatcher, architecture tests.
-- **Tables:** 19 (B6).
+- **Tables:** 20 (B6), including the `notifications` outbox (filled and tested, not sent).
 - **Screens:** none.
 - **Reuses:** tenants, auth, user_roles, current_tenant_id, platform admin, flags
   pattern, storage, rate limiting, test infrastructure.
@@ -92,7 +107,7 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   videos from computer or phone, cover, order, alt text, demo flag); pricing
   (weekday/weekend, seasons, holidays, min nights); blocks; bookings list & detail;
   **"הוספת הזמנה"** (manual booking); booking modification/cancellation; guests (CRM:
-  history, notes, export/anonymise); booking emails (owner + guest).
+  history, notes, export/anonymise); booking emails (owner + guest) via the **outbox worker** (retries, idempotency, delivery status on the booking page, resend); cancellation-request handling; demo-image indicator.
 - **Dashboard widgets** (all derived by queries, no extra tables): pending approvals with
   deadline, today's arrivals/departures, occupancy (today/7/30 days), free units,
   month revenue (from bookings), recent bookings, recent guests, pending actions
@@ -121,11 +136,21 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
 - **Data:** one RPC `calendar(from, to, unit_ids?)` returning units, bookings, blocks,
   occupancy rows and arrivals/departures in one round trip; all writes go through the
   booking engine RPCs, so the board can never diverge from the DB.
-- **"Real time":** the production stack has **no Supabase Realtime container** (7
-  containers: db, kong, auth, rest, storage, meta, studio). The board refetches on focus,
-  on an interval (e.g. 30 s) and after every own action; conflicts are impossible because
-  every write is validated by the exclusion constraint. Adding Realtime later is an
-  infrastructure decision (A7).
+- **Freshness without Realtime (D4):** the production stack has **no Supabase Realtime
+  container** (7 containers: db, kong, auth, rest, storage, meta, studio), and none is
+  added now. The board uses the existing TanStack Query:
+  - auto-refresh every 30–60 s (configurable), paused while the tab is hidden;
+  - immediate refresh on tab focus and after every own action (mutation invalidates the
+    calendar query);
+  - one query key per visible range, so there are no duplicate requests or rows;
+  - **no stale edits:** every booking carries a `revision`, and modify / approve / cancel
+    send the revision they saw. If it changed, the RPC refuses with "ההזמנה עודכנה —
+    מרעננים", and the board refreshes;
+  - every write is validated by the exclusion constraint, so a stale screen can never
+    create a double booking.
+  
+  Future Realtime goes through `src/platform/realtime/` (subscribe-to-changes interface)
+  and only replaces the polling trigger — the booking engine does not change.
 - **Tables:** none new.
 - **Tests:** RPC tests (range edges, half-open ranges, whole-property fan-out), visual
   E2E of the board, performance (50 units × 90 days).
@@ -136,10 +161,14 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   Modern, Romantic — each a different layout, not only colours); **section registry**
   (hero with image/video, availability & booking bar, about, units, unit page, gallery,
   videos, amenities, experiences, prices & promotions, reviews/testimonials, location &
-  map, FAQ, contact, WhatsApp); public booking flow (A5); built-in footer
-  **"כל הזכויות שמורות לנוריאל מחשבים"** linking to `https://nuriel-app2.nuri1.fit`
-  (rendered by every theme, not editable by the owner); **demo media pack**;
-  **Nofei Dorit showcase tenant** seeded with demo data.
+  map, FAQ, contact, WhatsApp); public booking flow (A5); **Nuriel credit (D6)**;
+  **demo media pack (D3)**; **Nofei Dorit showcase tenant** seeded with demo data.
+- **Nuriel credit (D6):** "כל הזכויות שמורות לנוריאל מחשבים" linking to
+  `https://nuriel-app2.nuri1.fit`. It is a platform branding component
+  (`src/platform/branding/credit`) that the Hospitality renderer places **outside** the
+  editable sections, so the site document and the editor cannot remove it. Themes may
+  style it (colour, alignment, size within limits) through tokens. A test renders every
+  theme × page and fails if the credit or the active link is missing.
 - **Site content model:** one versioned **site document** (JSON validated by Zod schemas
   from the section registry): pages → ordered sections (type, hidden flag, content,
   media references by id), theme key + tokens (colours, approved fonts, button/card/
@@ -147,12 +176,22 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   availability, reviews) is **never copied** into the document; sections reference it.
 - **Tables:** `site_versions` (one mutable draft per tenant + immutable published
   versions). The public site renders the latest published version (one indexed read).
-- **Demo media pack:** curated photos (zimmers, rooms, interiors, pools, views, compounds)
-  under a licence that allows commercial use (e.g. Unsplash / Pexels licence), stored in a
-  platform storage bucket with a **licence manifest in code** (source, author, licence).
-  Media rows created from the pack carry `is_demo = true`; the site shows a "תמונה
-  להמחשה" tag until replaced. (Stock sites are blocked from the development sandbox; the
-  pack is assembled with your approval of the images and licences.)
+- **Demo media pack (D3):**
+  - **Content:** curated high-quality photos of zimmers, rooms and interiors, pools,
+    views and compounds.
+  - **Licences:** only from sources whose licence allows commercial use (e.g. the
+    Unsplash / Pexels licences, or purchased stock). No image without a recorded
+    licence.
+  - **Licence manifest in code** (`website/demo-media/manifest.json`): file, source URL,
+    author, licence name + URL, date retrieved, approved-by.
+  - **Storage:** a platform storage bucket.
+  - **Licence test:** a CI test fails if a demo file has no manifest entry or uses a
+    licence outside the allow-list.
+  - **Marking:** media rows copied from the pack carry `is_demo = true`. The site shows a
+    small "תמונה להמחשה" tag, and the owner dashboard lists the demo images still in
+    use.
+  - **Approval:** images are selected with your approval. Stock sites are blocked from
+    this development sandbox.
 - **Server functions / RPCs:** `site.getPublished` (SSR), public `quote`, public
   `requestBooking`, `units.publicList`, `availability.publicMonth` (free/busy only).
 - **Reuses:** SSR + head management (TanStack Start), `brand-theme.ts` contrast checks via
@@ -185,11 +224,21 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
 - **Depends on:** 4.
 
 ### Stage 6 — Guest accounts, addresses, domains, onboarding
+- **Booking without an account (D9):** the public flow (Stage 4) needs only name, phone
+  and email. Each booking email contains a **"manage my booking" link** with a single-use,
+  expiring token (only its hash is stored). It lets the guest view the booking and
+  request cancellation without an account.
 - **Guest login:** Supabase Auth (shared): Google and email code (existing
   `login-code.functions.ts`), through a Hospitality guest login screen. A guest is **not**
   a `public.user_roles` member; the per-tenant guest record links to `auth.users` via
   `guests.user_id`. One auth account can book at many businesses; each business only sees
   its own `guests` row. "My bookings" lists bookings of the current site only.
+- **Linking past bookings only after verification (D9):** `claim_guest_bookings()` links
+  this site's `guests` rows to the logged-in user only when the auth account's email is
+  **verified** (Google identity or confirmed email-code login) and equals the guest's
+  normalised email. A typed email alone never links anything. Phone numbers are not used
+  for linking (no verified phone login exists). Every link is recorded in
+  `booking_events`.
 - **Three identity classes kept apart:** platform admins (`platform_admins`); business
   owners/managers (`public.user_roles` role `admin` on a Hospitality tenant); guests
   (`auth.users` + `hospitality.guests`, no membership).
@@ -282,62 +331,140 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
 
 ## A5. Booking process (end-to-end)
 
+All times come from the **database clock** (`now()` inside the RPC); nothing the browser
+sends is used for deadlines, prices or availability.
+
 ### Public request (default mode `request`)
-1. Guest picks check-in/out, unit, guests → `quote` (server-side price, min nights,
-   capacity, availability; expired holds treated as free).
-2. Guest enters details (name, phone, email; marketing consent separate, unchecked) and
-   submits → `request_booking` (captcha + rate limit per IP/email/phone; idempotency key).
-3. In one transaction: price recomputed and locked per night; booking inserted with
-   status **`pending_approval`** and `hold_expires_at = now() + approval window`
-   (business setting, e.g. 24 h); occupancy rows inserted → the **dates are held** and the
-   exclusion constraint guarantees no double booking, also under concurrent requests.
-4. Emails (async after commit, logged): owner — full details + approve/decline link;
-   guest — "הבקשה התקבלה וממתינה לאישור בעל העסק" (explicitly *not* a confirmation).
-5. Owner approves → `confirmed` (or `pending_payment` when a deposit is required, Stage 8)
-   → guest confirmation email. Owner declines → `declined`, dates released → guest email.
-6. **Owner does not respond in time:** at `hold_expires_at` the request becomes
-   `expired` (lazy expiry in every booking transaction + idempotent sweep), dates are
-   released, guest and owner are notified. Optional setting: reminder to the owner at
-   50 % of the window.
-7. **Abandoned / spam protection:** captcha, rate limits, max open requests per
-   email/phone per site, short approval window, owner can decline/block a contact.
-8. Mode `instant` (setting): step 3 creates `confirmed` (or `pending_payment` with a
-   payment hold) immediately.
+1. **Quote:** the guest picks check-in/out, unit and guests → `quote`. The server checks
+   price, minimum nights, capacity and availability, and treats expired holds as free.
+2. **Submit:** the guest enters name, phone and email → `request_booking`. No account is
+   needed. Marketing consent is separate and unchecked. The call is protected by captcha,
+   a rate limit and an idempotency key.
+3. **Save and hold (one transaction):**
+   - an advisory lock is taken per normalised contact (email and phone);
+   - the **open-request cap (D2)** is checked;
+   - the price is recomputed and locked per night;
+   - the booking is inserted as **`pending_approval`** with
+     `hold_expires_at = now() + settings.approval_window` (**12 h** default, D1);
+   - occupancy rows are inserted → the **dates are held**, and the exclusion constraint
+     prevents double booking, also for concurrent requests;
+   - the booking event is written;
+   - the owner's "new request" email and the guest's "received, awaiting approval" email
+     are **enqueued in the outbox in the same transaction (D7)**.
+4. **Emails** are sent by the outbox worker after commit:
+   - **owner:** full details plus approve/decline links;
+   - **guest:** "הבקשה התקבלה וממתינה לאישור בעל העסק" — explicitly *not* a confirmation.
+     It also contains the "manage my booking" link.
+5. **Reminder (D1):** at 50 % of the window, the sweep enqueues one owner reminder. The
+   dedupe key `booking:<id>:approval_reminder` makes sure it is sent only once.
+6. **Owner decision:**
+   - **approve:** → `confirmed` (or `pending_payment` when a deposit is required, Stage 8),
+     and the guest gets a confirmation email;
+   - **decline:** → `declined`, the dates are released, and the guest gets an email.
+7. **Timeout (D1):** at `hold_expires_at` the booking becomes `expired`, through lazy
+   expiry inside every booking transaction and through the idempotent sweep:
+   - the dates are released in the same transaction;
+   - the guest gets "the request expired" and the owner gets an FYI;
+   - all of it is written to the booking history.
+8. **Open-request cap (D2):**
+   - "open" means `pending_approval` and `pending_payment`;
+   - the cap is counted per business per normalised email **or** normalised phone;
+   - default 2, `settings.max_open_requests`;
+   - it is checked under a per-contact advisory transaction lock, so parallel requests
+     from the same contact are serialised and cannot exceed the cap.
+9. **Other spam protection:** captcha, rate limits per IP, the short approval window, and
+   the owner can decline a request and block the contact.
+10. **Mode `instant`** (setting): step 3 creates `confirmed` immediately (or
+    `pending_payment` with a payment hold).
 
-### Manual booking ("הוספת הזמנה")
-- Owner chooses unit (or whole property), dates, guest name + phone (+ email optional),
-  price (calculated suggestion or **manual override**), notes, source
-  (`phone` / `walk_in` / `owner` / `external` + free-text channel), status
-  (`confirmed` or `pending_approval` with optional deadline), and whether to email the
-  guest.
-- Same RPC path as public bookings (`create_manual_booking`): same validation, same
-  occupancy and exclusion constraint → appears immediately on the calendar and blocks
-  dates according to its status; manual price stored as locked nights with
-  `rule_applied = 'manual'`.
+### Manual booking ("הוספת הזמנה", D8)
+- **Input:** the owner chooses a unit (or whole property), dates, guest name and phone
+  (email optional), price (calculated suggestion or **manual override**), notes and
+  source (`phone` / `walk_in` / `owner` / `external` + free-text channel).
+- **Status:** **`confirmed` (default)** or `pending_approval`. The approval workflow is
+  not required for manual bookings.
+- **Same engine:** `create_manual_booking` uses the same availability validation,
+  occupancy and exclusion constraint as site bookings. The booking appears on the calendar
+  immediately and holds the dates according to its status.
+- **Manual price:** stored as locked nights with `rule_applied = 'manual'`.
+- **Guest email:** sent only if the owner ticks "שלח אישור ללקוח" (enqueued in the
+  outbox).
 
-### Change and cancellation
-- `modify_booking` (dates, unit, guests, price) runs in one transaction: old occupancy
-  removed, new occupancy inserted → exclusion check; price recomputed or manual;
-  event recorded with before/after.
-- `cancel_booking` (owner or guest when allowed): fee from the policy snapshot; dates
-  released; emails.
-- Every action writes `booking_events` (actor, from/to status, changed fields, note).
+### Change and cancellation (D5)
+- **Change:** `modify_booking` (dates, unit, guests, price, with the expected
+  `revision`) runs in one transaction:
+  - the old occupancy is removed and the new occupancy inserted, then checked against the
+    exclusion constraint;
+  - the price is recomputed or set manually;
+  - an event with before/after values is written.
+- **Guest cancellation request:**
+  - The guest uses "manage my booking" (token link) or "my bookings" (logged in).
+  - Before confirming, the guest sees the **policy snapshot taken at booking time** (tiers
+    and computed fee).
+  - `request_cancellation` → status `cancel_requested`. **The dates stay held.**
+  - The owner is notified and approves → `cancelled`: dates released, fee recorded, guest
+    email. Or declines → back to `confirmed`, with a guest email that includes the
+    reason.
+- **Automatic cancellation:** only if the snapshotted policy allows it (e.g. free
+  cancellation more than N days before arrival, `policies.guest_auto_cancel`). Then
+  `request_cancellation` goes straight to `cancelled` and releases the dates.
+- **Owner cancellation:** `cancel_booking` by the owner, with the fee taken from the
+  snapshot.
+- **History:** every action writes `booking_events` (actor, from/to status, changed
+  fields, note).
 
 ### Statuses
 ```
 pending_approval → confirmed | pending_payment | declined | cancelled | expired
 pending_payment  → confirmed | cancelled | expired
-confirmed        → checked_in | cancelled | no_show
+confirmed        → checked_in | cancel_requested | cancelled | no_show
+cancel_requested → cancelled | confirmed
 checked_in       → checked_out
 expired          → confirmed     (owner re-approves / late payment, only if dates free)
 declined, cancelled, no_show, checked_out: terminal
 ```
-Inventory-holding statuses: `pending_approval` and `pending_payment` (until
-`hold_expires_at`), `confirmed`, `checked_in`.
+**Inventory-holding statuses:**
+- `pending_approval` and `pending_payment`, until `hold_expires_at`;
+- `confirmed`;
+- `cancel_requested`;
+- `checked_in`.
 
-> Change from the previous plan: requests now **hold dates** while awaiting approval (your
-> requirement). The risks of holding (fake requests blocking dates) are handled by the
-> approval window, captcha, rate limits and open-request caps above.
+### Notifications (D7)
+| Event | Owner | Guest |
+|---|---|---|
+| new request | ✓ (with approve/decline links) | ✓ "received, awaiting approval" |
+| approval reminder (50 %) | ✓ | — |
+| approved / confirmed | — | ✓ confirmation |
+| declined | — | ✓ |
+| expired (no answer) | ✓ FYI | ✓ "request expired" |
+| cancellation requested | ✓ | ✓ "received" |
+| cancellation approved / declined | — | ✓ |
+| cancelled by owner | — | ✓ |
+| manual booking | — | ✓ only if the owner chose to send |
+
+**Reliability:**
+- **Outbox in the same transaction:** a row in `notifications` is written together with
+  the booking change, so a committed booking always has its emails queued, and a rolled
+  back change never sends anything.
+- **Worker:** sends through the **existing** `email.server.ts` transport (tenant sender /
+  Resend). It claims rows with `FOR UPDATE SKIP LOCKED`.
+- **Statuses:** `queued → sending → sent | failed | dead`.
+- **Retries:** exponential backoff (e.g. 1 m, 5 m, 30 m, 2 h, 12 h), then `dead` with the
+  last error stored.
+- **No duplicates:**
+  - a unique `dedupe_key` per (booking, event, recipient) is enforced in the database;
+  - the notification id is sent as Resend's `Idempotency-Key` header, so a retry after an
+    unknown outcome does not send twice.
+- **An email failure never touches the booking:** sending happens after commit, in a
+  separate step.
+- **Visibility:** the owner booking page shows each email and its status (sent / failed /
+  retrying), and the owner can resend.
+
+> Changes from the previous plan:
+> - requests hold dates while awaiting approval (12 h default);
+> - a new `cancel_requested` status;
+> - manual bookings default to `confirmed`;
+> - emails go through an outbox.
 
 ## A6. Consistency check — findings and conflicts
 
@@ -358,16 +485,26 @@ No requirement conflicts with the separation principle once these adapters exist
 
 ## A7. Open questions and decisions
 
-1. Approval window default (e.g. 24 h) and whether it is per business only or also per
-   unit; reminder to the owner.
-2. Max open requests per guest contact (e.g. 2 per site).
-3. Demo media: approve the image source(s) and licence (Unsplash/Pexels or purchased).
-4. Realtime calendar: stay with refetch (recommended) or add the Realtime container later.
-5. Video limits: allowed upload size, and whether to rely on YouTube/Vimeo embeds for
-   long videos.
-6. Guest self-service cancellation: allowed by default, or owner-only?
-7. Footer text is fixed in every theme — confirm it must not be removable by any plan.
-8. Payments (Stage 8) and Hospitality pricing (Stage 11) require separate approvals.
+Resolved (A0):
+- approval window: 12 h + reminder (D1);
+- open-request cap: 2 (D2);
+- demo media rules (D3);
+- calendar refresh: polling (D4);
+- guest cancellation: by request (D5);
+- footer: fixed (D6);
+- emails: outbox (D7);
+- manual bookings: confirmed (D8);
+- booking without an account (D9).
+
+Still open:
+1. Demo media: approve the concrete image source(s) and licence (Unsplash / Pexels /
+   purchased) before Stage 4.
+2. Video limits: allowed upload size (to verify the storage limit on the server), and
+   whether long videos use YouTube/Vimeo embeds.
+3. Approval window bounds the owner may choose (proposal: 1–48 h). Is the window
+   per business only, or also per unit (proposal: per business)?
+4. Expiry of the "manage my booking" link (proposal: valid until 30 days after check-out).
+5. Payments (Stage 8) and Hospitality pricing (Stage 11) require separate approvals.
 
 ---
 
@@ -497,7 +634,7 @@ Env kill-switch `HOSPITALITY_ENGINE` (unset in production).
 
 ## B6. Data model — complete and minimal
 
-Final Hospitality model: **22 tables**. Stage 1 creates 19; Stages 4, 8 and 9 add one each.
+Final Hospitality model: **23 tables**. Stage 1 creates 20; Stages 4, 8 and 9 add one each.
 All: `tenant_id` → `public.tenants`, composite `(tenant_id, id)` FKs, timestamps, RLS,
 RESTRICTIVE `tenant_isolation` + `backend_enabled`, no `anon` grants (public access only
 through DEFINER RPCs).
@@ -521,11 +658,38 @@ through DEFINER RPCs).
 | 15 | `booking_events` | append-only history: status changes, field changes (before/after), emails sent, actor | 1 |
 | 16 | `blocks` | owner blocks with reason and release | 1 |
 | 17 | `unit_occupancy` | internal: physical unit × night range for live bookings/blocks; `EXCLUDE` constraint | 1 |
-| 18 | `plans` | Hospitality plans & limits (unpublished placeholders) | 1 |
-| 19 | `subscriptions` | Hospitality subscription per tenant | 1 |
-| 20 | `site_versions` | site document: one mutable draft per tenant + immutable published versions (content, sections, theme tokens, per-page SEO) | 4 |
-| 21 | `payments` | deposits, balances, refunds, manual payments; provider reference | 8 |
-| 22 | `reviews` | verified reviews and testimonials, moderation, replies, report fields | 9 |
+| 18 | `notifications` | email outbox + delivery log: booking, event, recipient, `dedupe_key` (unique), status, attempts, next attempt, last error, provider message id, sent at | 1 |
+| 19 | `plans` | Hospitality plans & limits (unpublished placeholders) | 1 |
+| 20 | `subscriptions` | Hospitality subscription per tenant | 1 |
+| 21 | `site_versions` | site document: one mutable draft per tenant + immutable published versions (content, sections, theme tokens, per-page SEO) | 4 |
+| 22 | `payments` | deposits, balances, refunds, manual payments; provider reference | 8 |
+| 23 | `reviews` | verified reviews and testimonials, moderation, replies, report fields | 9 |
+
+**Changes required by the round-3 decisions:**
+
+New table:
+- `notifications` (outbox, D7). The existing email layer sends synchronously and has no
+  retry or outbox. The outbox is Hospitality-owned, so the engine stays extractable; it
+  sends through the shared transport adapter.
+
+New columns:
+- `settings`:
+  - `approval_window_minutes` — default 720 (12 h), bounded;
+  - `approval_reminder_pct` — default 50;
+  - `max_open_requests` — default 2.
+- `policies`: `guest_auto_cancel` — rule for automatic cancellation without owner
+  approval, default off.
+- `guests`: `email_normalized`, `phone_normalized` (for the cap and for verified
+  linking); `user_id` is linked only through verified claim.
+- `bookings`:
+  - `revision` — optimistic concurrency for stale screens;
+  - `manage_token_hash` + `manage_token_expires_at` — guest access without an account;
+  - `cancellation_requested_at`, `cancellation_reason`;
+  - status value `cancel_requested`.
+
+Model changes not needed: the reminder (outbox dedupe key), "awaiting cancellation"
+(status), contact flooding (advisory lock + count) and calendar freshness (`revision`)
+all fit the existing model.
 
 **Deliberately not tables:**
 - calendar → RPC over bookings/blocks/occupancy;
@@ -544,7 +708,7 @@ through DEFINER RPCs).
 - `reviews` moved to Stage 9, because it needs completed stays.
 - New in this model: `media` gains video and embed support, `guests.user_id` is added,
   and `bookings.source` and channel are added.
-- The total stays at 19 tables in Stage 1.
+- Stage 1 now has 20 tables: the 19 above plus the `notifications` outbox (round 3).
 
 ## B7. Booking engine (Stage 1 scope)
 - Statuses and transitions as in A5, enforced by a trigger.
@@ -554,16 +718,26 @@ through DEFINER RPCs).
   Lazy expiry inside `request_booking`, `create_manual_booking`, `approve`, `modify`,
   `confirm_payment` before inserting; reads treat expired holds as free; idempotent sweep
   `expire_holds()` (`FOR UPDATE SKIP LOCKED`, one event per booking).
-- RPCs: `quote`, `request_booking` (public, idempotent, `request_tenant()`),
-  `create_manual_booking`, `approve_booking`, `decline_booking`, `modify_booking`,
-  `cancel_booking`, `mark_checked_in|checked_out|no_show`, `expire_holds`,
-  `confirm_payment` (status only; no provider in Stage 1).
+- RPCs:
+  - **public / guest:** `quote`, `request_booking` (idempotent, `request_tenant()`,
+    open-request cap under a per-contact advisory lock), `request_cancellation`,
+    `get_booking_by_token`, `claim_guest_bookings` (verified email only), `my_bookings`;
+  - **owner:** `create_manual_booking` (default `confirmed`), `approve_booking`,
+    `decline_booking`, `modify_booking` (revision check), `cancel_booking`,
+    `approve_cancellation`, `decline_cancellation`,
+    `mark_checked_in|checked_out|no_show`;
+  - **system:** `expire_holds` (also enqueues reminders), `confirm_payment` (status only;
+    no provider in Stage 1);
+  - **outbox:** `claim_notifications(batch)`, `mark_notification(id, result)`.
+- Every state-changing RPC enqueues its notifications in the same transaction. The
+  sending worker itself is Stage 2. In Stage 1 the outbox is filled and tested, but
+  nothing is sent.
 - Pricing per night: promotion > holiday > unit season > property season > weekend >
   weekday > base; occupancy extras; min nights = max of applicable rules; floor/ceiling.
 - Privacy: `export_guest`, `anonymize_guest` (blocked with live/future bookings),
   `apply_retention` (only when a period is configured; NULL default); no ID documents.
-- Emails are **not** sent in Stage 1 (Stage 2); RPCs record events that the email layer
-  will consume.
+- Emails are **not** sent in Stage 1; the outbox rows are created and tested, and the
+  worker and templates come in Stage 2.
 
 ## B8. Whole property — concurrency scenarios
 (1) whole vs member same dates → one wins; (2) members A and B succeed, then whole fails;
@@ -574,7 +748,13 @@ through DEFINER RPCs).
 (sequential + concurrent) → one booking; (9) block vs pending whole booking → one wins;
 (10) price change after booking → locked nights unchanged;
 (11) manual booking vs public request on the same dates → one wins;
-(12) `modify_booking` into occupied dates → refused, original booking intact.
+(12) `modify_booking` into occupied dates → refused, original booking intact;
+(13) 5 parallel requests from the same contact with cap 2 → exactly 2 accepted;
+(14) two owners/tabs modifying the same booking with the same revision → one succeeds,
+the other gets "updated, refresh";
+(15) cancellation approval racing a new booking for the same dates → the new booking
+succeeds only after the cancellation commits;
+(16) two workers claiming the same outbox rows → each notification is sent once.
 Runner: two `psql` sessions with explicit ordering (`scripts/db-tests/hospitality/concurrency/`).
 
 ## B9. RLS and permissions
@@ -592,8 +772,8 @@ Runner: two `psql` sessions with explicit ordering (`scripts/db-tests/hospitalit
 | 1 | `20261101090000_platform_products_flags.sql` | platform | `tenants.site_type` (default `ecommerce`, immutable), `current_site_type()`, `platform_product_roles` + `user_roles` trigger, flags tables + functions, `platform_seed_tenant_shared()`, `WHEN (NEW.site_type='ecommerce')` on existing seed trigger |
 | 2 | `20261101100000_ecommerce_engine_guard.sql` | ecommerce | Ecommerce roles registration, write guards on 40 tables, `product-images` storage guard |
 | 3 | `20261101110000_hosp_schema.sql` | hospitality | schema + grants, flag keys, `flag()`, `can()`, `request_tenant()`, tables 1–11, RLS, `hosp-media` bucket, `admin_create_site()` |
-| 4 | `20261101120000_hosp_booking.sql` | hospitality | `btree_gist`, tables 12–17, EXCLUDE, state machine, booking RPCs, expiry, privacy RPCs |
-| 5 | `20261101130000_hosp_billing_admin.sql` | hospitality | tables 18–19, entitlements, unit limit, Hospitality admin stats functions |
+| 4 | `20261101120000_hosp_booking.sql` | hospitality | `btree_gist`, tables 12–18 (incl. `notifications` outbox), EXCLUDE, state machine incl. `cancel_requested`, booking/guest/outbox RPCs, expiry + reminders, open-request cap, privacy RPCs |
+| 5 | `20261101130000_hosp_billing_admin.sql` | hospitality | tables 19–20, entitlements, unit limit, Hospitality admin stats functions |
 
 Each with a rollback (never dropping the schema itself). Platform migrations do not
 reference engines; Ecommerce does not reference Hospitality; Hospitality references
@@ -616,6 +796,8 @@ src/
     consent/        tracking-consent.tsx   (adapter → existing consent behaviour)     [7]
     payments/grow/  client.server.ts       (adapter → neutral parts of grow.server)   [8]
     domains/        slug.ts custom-domain.ts (adapters → existing functions)          [6]
+    branding/       credit.tsx             (fixed Nuriel footer credit, D6)               [4]
+    realtime/       subscribe.ts           (interface only; polling now, Realtime later)  [3]
     auth/ users/ tenant-membership/ billing/                       (later, as code moves)
   engines/
     ecommerce/engine.ts                  thin descriptor (no code moved)
@@ -660,7 +842,25 @@ shared `types.ts`, Dockerfile, deployment.
   whole property; `request_tenant()` for guests who are members elsewhere; privacy;
   entitlements; admin functions gated; DB classification coverage; RLS coverage extended
   to the `hospitality` schema.
-- Concurrency: the 12 scenarios in B8.
+- Concurrency: the 16 scenarios in B8.
+- **Dedicated booking & security tests (D10):**
+
+  | Scenario | Expected | Stage |
+  |---|---|---|
+  | two parallel bookings for the same unit/dates | exactly one succeeds, the other gets "no longer available" | 1 (SQL) + 4 (E2E) |
+  | whole property vs a member unit (both orders, parallel) | one succeeds | 1 |
+  | request expiry after 12 h (DB clock simulated) | `expired`, dates free, guest + owner notifications queued, events written | 1 |
+  | reminder at 50 % of the window | exactly one reminder queued, even if the sweep runs repeatedly | 1 |
+  | manual booking vs site request on the same dates | one wins; manual booking `confirmed` and on the calendar at once | 1 + 3 |
+  | email failure after a saved booking | booking stays saved; notification `failed` → retried → `sent`/`dead`; error recorded | 1 (outbox) + 2 (worker, mocked Resend) |
+  | duplicate send attempts (retry, double worker, double click) | one email per dedupe key; Resend idempotency header sent | 1 + 2 |
+  | cancellation request → approval → availability returns | dates held while `cancel_requested`, free after approval; auto-cancel only when the policy allows | 1 |
+  | many requests from one contact (sequential and parallel) | capped at `max_open_requests` | 1 |
+  | guest without an account | booking via token link works; token expiry and wrong token rejected | 1 + 4 |
+  | linking past bookings | only with a verified email; typed email alone links nothing | 1 + 6 |
+  | logged-in guest tries another business's booking (by id, token or other site) | denied / not found | 1 + 6 |
+  | staff member of another tenant books as a guest | works via `request_tenant()`, sees nothing else | 1 |
+  | stale calendar edit (old revision) | refused, data unchanged | 1 + 3 |
 - Vitest: architecture rules, server-function ownership, dispatcher decision table,
   validators.
 - E2E: existing 33 unchanged + gate tests (Ecommerce host unaffected; Hospitality host
