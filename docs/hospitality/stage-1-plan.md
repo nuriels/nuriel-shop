@@ -31,6 +31,10 @@ copied).
 | D9 | Booking **without an account**; later login with Google/email; past bookings linked only after **verified** identity | A4 Stage 6, B7 |
 | D10 | Dedicated tests for concurrency, whole property, expiry, manual vs site, email failure/duplicates, cancellation, request flooding, guest without account, cross-business access | B12 |
 | D11 | **Owner-defined cancellation & deposit policies** (free-cancellation window, deadline, non-refundable deposit, % or fixed fees, tiers, no-show, per unit / per booking type); shown and accepted before booking; snapshotted per booking; refund **calculated** now, paid out only in the payments stage | A8 |
+| D12 | Automatic cancellation default: **`never`** (owner approves every cancellation; `within_free_window` / `always` are opt-in) | A8 |
+| D13 | Free-cancellation deadline time: the business's **check-in time** (business timezone), not midnight | A8 |
+| D14 | The fee is determined by the **time of the guest's cancellation request** (DB clock), not by the owner's response time | A8 |
+| D15 | **Simplified opening of a business** (Ecommerce and Hospitality): automatic unique address, no domain choice or technical terms at sign-up, address change later in "כתובת האתר" with old-address redirect, celebratory first-entry screen, short setup checklist with progress | A9 |
 
 ## A1. Vision
 
@@ -255,7 +259,7 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   production config before Stage 6 (no change now).
 - **Duplicate accounts:** the existing `email_has_other_account` hook already prevents
   two auth accounts for one email — reused unchanged.
-- **Site address:** reuse `tenants.slug` (UNIQUE), `platform_slug_problem`,
+- **Site address (see A9):** automatic `stay-<digits>` address at creation, changeable later in "כתובת האתר" with a 301 redirect from the old address. It reuses reuse `tenants.slug` (UNIQUE), `platform_slug_problem`,
   `platform_reserved_slugs`, `checkStoreSlug`: availability check before save, reserved
   names, and the UNIQUE constraint makes concurrent claims safe (one insert wins).
   Routing via `tenant_for_host()` (unchanged).
@@ -590,6 +594,145 @@ Mostly. **No new table is needed**, but these changes are:
 - The earlier `policies.guest_auto_cancel` is replaced by the automatic-cancellation rule
   above.
 
+## A9. Simplified business opening (D15) — Ecommerce and Hospitality
+
+### A9.1 Current Ecommerce flow (verified in code)
+| Step | Today | Code |
+|---|---|---|
+| Entry | Nuriel landing page = the portal store `nuriel-app2` | `PlatformLanding`, `PortalOnboarding.tsx`, `PORTAL_STORE_SLUG` |
+| Identity | email code (`issue_login_code` / `consume_login_code`) or Google → signed portal token | `requestPortalCode`, `verifyPortalCode`, `portalFromGoogle` |
+| Name + **address** | the user types a store name **and an English address**; `checkPortalSlug` checks format / reserved / taken and suggests `name-2` | `checkPortalSlug`, `tenant_slug_problem`, `platform_reserved_slugs` |
+| Creation | auth user created without a password (if new) → `portal_create_store` (tenant + owner `admin` row, protected) → seed trigger (settings, shipping, 14-day trial); user rolled back if the store fails; rate limit 5/h per IP; max stores per account | `createPortalStore`, `portal_create_store` |
+| Uniqueness | `tenants.slug` UNIQUE + format CHECK → concurrent claims safe | migrations |
+| HTTPS | **a certificate is issued per store host** by the server agent (HTTP-01; DNS `*.nuri1.fit` points to the server, but there is no wildcard certificate). The portal waits for it (`getPortalStoreStatus`) | `deploy/ssl/store-certs.sh`, `tenant_ssl` |
+| First entry | one-time handoff code → `https://<slug>.nuri1.fit/admin-handoff#code=…` → logged in → `/admin` | `enterPortalStore`, `admin-handoff.tsx` |
+| After entry | the admin panel opens directly; a notice asks to complete business details for the legal pages | `admin_.dashboard`, `AccountNotice` |
+| Change address later | **not possible** (no rename function); only a custom domain (`/admin?tab=domain`) | `custom-domain.functions.ts` |
+| Welcome / checklist | **none** | — |
+
+Frictions:
+- the user must invent an English address during sign-up;
+- "address" and "domain" concepts appear too early;
+- there is no guidance after the first entry.
+
+### A9.2 Proposed flow
+1. **Landing:** the user chooses "חנות אינטרנטית" or "אתר צימרים ואירוח". The
+   Hospitality option stays hidden until `hospitality_onboarding_enabled`.
+2. **Identity:** unchanged — email code or Google.
+3. **Business details:** only the business name, plus the business type when relevant.
+   **No address field, and no "domain" or "subdomain" wording.**
+4. **Creation:** the server allocates the address automatically (A9.3), creates the
+   tenant, the owner and the engine's starting configuration, and issues the
+   certificate (existing agent). The waiting screen says "מכינים את האתר שלך…", not
+   "SSL".
+5. **First entry** through the existing handoff → **celebratory welcome screen** (A9.5).
+6. **Setup checklist** in the dashboard with progress; everything else is completed
+   later from the management area.
+7. **"כתובת האתר"** settings: choose a nicer address any time (A9.4); custom domain stays
+   where it is today.
+
+### A9.3 Automatic address allocation (shared platform)
+- **Format by product:**
+  - Ecommerce: `shop-<5 digits>`;
+  - Hospitality: `stay-<5 digits>`;
+  - the prefix is supplied by the engine descriptor, the allocation logic is shared.
+- **One DB function** `platform_allocate_slug(prefix)`, called inside tenant creation:
+  - picks a random number and attempts the insert;
+  - on a unique violation, retries with a new number (bounded attempts), widening to 6
+    digits if 5 are crowded.
+  - Concurrency safety comes from the existing UNIQUE constraint, not from a prior
+    check, so parallel sign-ups can never get the same address.
+- **Excluded:** reserved names (`platform_reserved_slugs`, `api-*`), existing slugs,
+  and **addresses kept for redirects** (A9.4).
+- **Available immediately:** routing via `tenant_for_host()`, no change. The address
+  works as soon as the certificate agent has issued it, as today.
+- **Optional later infra improvement (not part of this plan):** a wildcard certificate
+  `*.nuri1.fit` (DNS-01) would make every new or changed address secure instantly and
+  remove the waiting step.
+
+### A9.4 Changing the address later ("כתובת האתר")
+- **The screen:** shows the current address and a field for a new one, with a live check
+  (format / reserved / taken) and **suggestions** when taken. Suggestions are based on the
+  business name transliterated to English, plus variants such as `-zimmer`, `-galil` or
+  numbers. Plain language only.
+- **Atomic change:** `platform_change_slug(tenant, new_slug)` in one transaction:
+  - the new address is checked and claimed through the UNIQUE constraint;
+  - the old address is written to **`platform_slug_history`** (old slug, tenant, changed
+    at, redirect until);
+  - the change is logged in `platform_audit_log`.
+  
+  The **same tenant** is kept: no data moves and nothing is lost.
+- **Redirect from the old address:**
+  - `tenant_for_host()` does not resolve history entries to a tenant;
+  - instead, the edge (`server.ts`) answers requests to an old address with a
+    **301 redirect** to the same path on the new address;
+  - this keeps links and SEO, and search engines transfer the ranking to the new
+    address.
+  - The old host must keep its certificate: the certificate agent's target list includes
+    history entries until `redirect_until`. This is a small extension of the existing
+    agent query, done in the same stage.
+- **Reuse rules:**
+  - an old address stays reserved for the redirect period (proposal: 12 months) and
+    can't be taken by another business;
+  - the same business can take it back at any time;
+  - a business may change its address a limited number of times (proposal: 3 per 30
+    days) to prevent abuse.
+- **After the change:**
+  - sitemap, canonical URLs and email links use the new address automatically (they are
+    built from the tenant origin);
+  - a custom domain, if connected, stays the primary address.
+
+### A9.5 Welcome screen and setup checklist (shared component, engine-specific content)
+- **Welcome screen** (first entry of the owner, once per owner per business):
+  - "מזל טוב! העסק שלך נפתח בהצלחה 🎉";
+  - "האתר שלך מוכן. עכשיו אפשר להתחיל להוסיף את התוכן שלך ולהתאים אותו לעסק.";
+  - the business name and the allocated address (as a link, not called a "domain");
+  - buttons "צפייה באתר" and "בואו נתחיל";
+  - the first steps of the checklist;
+  - it can be reopened from the help centre.
+- **Setup checklist** (a dashboard card with a progress bar):
+  - steps marked done automatically from real data;
+  - "ready to publish" shown when the required steps are done;
+  - optional steps can be dismissed.
+- **Engine-specific steps** (supplied by each engine through the contract
+  `engine.onboardingSteps(tenant)`):
+  - **Ecommerce:** business details (needed for legal pages), first product, shipping
+    methods, payments (Grow/Bit/offline), store design (logo/colours/banners), address.
+  - **Hospitality:** business details & contact, first unit, photos, prices, availability
+    / blocks, cancellation policy, booking mode, site design, address.
+- **Storage:** one platform table **`platform_tenant_onboarding`** (tenant, user,
+  welcome_seen_at, dismissed_steps). Step completion is **computed** from engine data,
+  never stored, so it cannot go stale.
+
+### A9.6 Shared vs engine-specific
+| Shared platform (`src/platform/onboarding`, `src/platform/addresses`) | Ecommerce | Hospitality |
+|---|---|---|
+| identity (email code / Google), portal token, rate limits | starting configuration (existing seed: settings, shipping, trial) | starting configuration (`admin_create_site` / `engine.provision`: settings, default policy, plans) |
+| tenant + owner creation, `platform_allocate_slug`, `platform_change_slug`, `platform_slug_history`, redirect at the edge, certificate targets | `shop-` prefix, onboarding steps provider (`src/engines/ecommerce/onboarding.ts`, new file reading existing data) | `stay-` prefix, onboarding steps provider (`src/engines/hospitality/onboarding/`) |
+| welcome screen, checklist UI, `platform_tenant_onboarding` | store-design wording | site/units wording |
+
+- The current flow keeps working until the new one is approved and enabled.
+- **No mass refactor:** the portal functions are already platform code (B2 ownership).
+  They gain an engine choice and lose the address field.
+- `portal_create_store` keeps its behaviour for Ecommerce. Only the address input
+  becomes server-allocated.
+
+### A9.7 When to implement
+| Part | Track / stage | Notes |
+|---|---|---|
+| Engine contract `prefix`, `provision`, `onboardingSteps` | Hospitality Stage 1f (contract only) | no behaviour change |
+| **P1 — Ecommerce opening improvement**: automatic address in the portal, plain-language waiting screen, welcome screen, Ecommerce checklist | **separate platform/Ecommerce track after Stage 1**, own plan + approval | touches the portal (platform) and adds one Ecommerce adapter file; Ecommerce business logic untouched; full Stage 0 regression |
+| **P2 — "כתובת האתר"** (change, suggestions, history, 301 redirect, certificate targets) | same track, after P1 | needs a small certificate-agent extension (server script) — infra change approved separately |
+| Hospitality opening (landing option, `stay-` address, welcome + Hospitality checklist) | Hospitality Stage 6 (checklist steps grow with Stages 2–5) | behind `hospitality_onboarding_enabled` |
+| Wildcard certificate (instant addresses) | optional infra decision | not required |
+
+New platform tables (track P1/P2, **not** Stage 1):
+- `platform_slug_history`;
+- `platform_tenant_onboarding`.
+
+Stage 1 is unchanged: still 20 tables in the `hospitality` schema plus the platform
+objects already listed.
+
 ## A6. Consistency check — findings and conflicts
 
 | Finding | Impact | Resolution |
@@ -629,6 +772,12 @@ Still open:
    per business only, or also per unit (proposal: per business)?
 4. Expiry of the "manage my booking" link (proposal: valid until 30 days after check-out).
 5. Payments (Stage 8) and Hospitality pricing (Stage 11) require separate approvals.
+6. Business opening (A9):
+   - automatic address format (`shop-12345` / `stay-12345`);
+   - redirect period for old addresses (proposal: 12 months);
+   - address-change limit (proposal: 3 per 30 days);
+   - whether to adopt a wildcard certificate later;
+   - approval to start the separate track P1/P2 for Ecommerce after Stage 1.
 
 ---
 
@@ -933,6 +1082,8 @@ src/
     consent/        tracking-consent.tsx   (adapter → existing consent behaviour)     [7]
     payments/grow/  client.server.ts       (adapter → neutral parts of grow.server)   [8]
     domains/        slug.ts custom-domain.ts (adapters → existing functions)          [6]
+    addresses/      allocate.ts change.ts redirect.ts (auto address, "כתובת האתר")  [P2]
+    onboarding/     welcome.tsx checklist.tsx (shared UI; steps from engines)     [P1]
     branding/       credit.tsx             (fixed Nuriel footer credit, D6)               [4]
     realtime/       subscribe.ts           (interface only; polling now, Realtime later)  [3]
     auth/ users/ tenant-membership/ billing/                       (later, as code moves)
