@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "hospitality-expert": {
+      "source": "personamanagmentlayer/pcl",
+      "sourceType": "github",
+      "skillPath": "stdlib/domains/hospitality-expert/SKILL.md",
+      "computedHash": "20c8e4b59383c3b462f723d830943bd56c390251c882f0cdacd3ac1d02198b61"
+    }
+  }
+}
