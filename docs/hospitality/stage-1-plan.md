@@ -1,6 +1,8 @@
 # Hospitality — Stage 1 plan (backend foundation)
 
-Status: **proposal, awaiting approval.** Nothing in this document is implemented.
+Status: **final proposal, awaiting approval.** Nothing in this document is implemented.
+Database decision: dedicated `hospitality` schema (§3). Visual reference for the future
+guest site: Nofei Dorit mockup (kept outside the repository).
 Branch: `hospitality/stage-1` (based on `hospitality/stage-0`). No merge to `main`,
 no production deployment, no production credentials.
 
@@ -148,12 +150,46 @@ interface EngineDescriptor {
 | Future extraction | must list tables by prefix; risk of missed objects | move the schema (plus the documented platform contract) — clean boundary |
 | Risk | lowest operational risk now | one production configuration step **before the Hospitality API goes live** (not needed while flags are off); Stage 0 RLS coverage test extended to the new schema |
 
-**Recommendation: B (`hospitality` schema)** — it matches the separable-product
-requirement (own types, own dump, one-switch disable) at the cost of one documented
-API configuration step at go-live. If you prefer zero infrastructure configuration,
-A remains fully viable; the rest of this plan is identical except naming
-(`hospitality.bookings` ⇔ `public.hosp_bookings`). **Decision required.**
-Below, tables are written as `hospitality.<name>`.
+**Decision: B — dedicated `hospitality` schema** (approved direction, verified below).
+Tables are written as `hospitality.<name>`.
+
+### 3.1 Verification against our self-hosted Supabase (prototype, local only)
+Production (per `deploy/DEPLOY.md`, `deploy/setup-selfhost.sh`) is the official
+Supabase Docker stack, compose project `kobi` (`kobi-rest` = PostgREST, Kong on
+`127.0.0.1:8300`), secrets in `/root/kobi-supabase/docker/.env`, migrations applied
+with `psql`. A prototype schema (table + RLS + grants + RPC) was tested on the
+disposable local Supabase CLI stack (same images) and then dropped. Production was not
+touched.
+
+| Check | Result |
+|---|---|
+| Schema not exposed | PostgREST rejects it (`PGRST106 Invalid schema`) — this is production's state today, so Hospitality is unreachable through the API until deliberately exposed |
+| Exposure | `PGRST_DB_SCHEMAS` (prod: `docker/.env`; local: `[api] schemas` in `config.toml`) + PostgREST restart/reload |
+| supabase-js | `client.schema('hospitality').from(...)` / `.rpc(...)` work with the user JWT and `x-tenant-id` |
+| RLS | owner A sees only A's rows; cross-tenant read returns `[]`; cross-tenant insert → `42501 … tenant_isolation`; anon without grant → `42501 permission denied` |
+| Cross-schema references | FK to `public.tenants`, calls to `public.current_tenant_id()` / `public.is_admin()` work |
+| Generated types | `supabase gen types typescript --schema hospitality` produces Hospitality-only types (no Ecommerce tables) |
+| Backup / extraction | `pg_dump -n hospitality` produces a self-contained dump; its only external references are FKs to `public.tenants` (the documented platform contract) |
+| Rollback | `DROP SCHEMA hospitality CASCADE` removes everything; Ecommerce data untouched |
+| **Critical finding** | if a schema listed in `PGRST_DB_SCHEMAS` does **not exist**, PostgREST cannot load its schema cache and **the whole API returns 503 (Ecommerce included)** |
+
+### 3.2 Rules derived from the verification
+1. **Order at go-live:** run the Hospitality migrations first, then add `hospitality`
+   to `PGRST_DB_SCHEMAS` and reload PostgREST. Never the reverse.
+2. **Rollbacks never drop the schema itself**: the down-migrations drop Hospitality
+   objects and revoke grants but keep an empty `hospitality` schema, so an exposed
+   configuration can never point to a missing schema. Dropping the schema requires
+   removing it from `PGRST_DB_SCHEMAS` first (documented runbook).
+3. Until go-live, production keeps `PGRST_DB_SCHEMAS` unchanged; the server-side
+   Hospitality code is also behind `HOSPITALITY_ENGINE` and the DB flags.
+4. Local/CI: `e2e/scripts/supabase-up.sh` adds `hospitality` to the generated
+   (gitignored) local `config.toml` after the migrations exist; the SQL runner
+   (`run.sh`) needs no change beyond including the Hospitality test folder.
+5. SECURITY DEFINER functions in `hospitality` use `SET search_path = ''` and fully
+   qualified names.
+6. Production configuration change needed **only when Hospitality goes live**: one
+   line in `/root/kobi-supabase/docker/.env` (`PGRST_DB_SCHEMAS=…,hospitality`) and a
+   restart of `kobi-rest`. Storage (`hosp-media` bucket) and Auth need no configuration.
 
 Ecommerce stays in `public` (no move in Stage 1). Platform objects stay in `public`
 and are prefixed `platform_` where new.
@@ -490,7 +526,8 @@ Ecommerce module. The architecture test proves it on every CI run.
 | Dispatcher misclassifies an Ecommerce function | Ecommerce = default owner; Ecommerce tenants always pass; full E2E + ownership test | remove the middleware line in `start.ts` |
 | Write guards slow Ecommerce writes | statement-level; UPDATE only `OF tenant_id`; measured (§4.3) | rollback file 2 |
 | Seed trigger `WHEN` clause | function body unchanged; equivalence test | rollback file 1 restores the trigger |
-| Option B needs API schema exposure | needed only at Hospitality go-live; documented; Ecommerce unaffected | revoke schema usage / drop schema |
+| Exposed schema missing → whole API 503 (verified) | migrations before exposure; down-migrations keep an empty schema; runbook in §3.2 | remove from `PGRST_DB_SCHEMAS` before any schema drop |
+| Schema exposure is a production config step | needed only at Hospitality go-live; one line + `kobi-rest` restart | revert the line |
 | `btree_gist` unavailable | standard Supabase extension; checked first | migration 4 aborts transactionally |
 | Server deployed before migrations | `siteType` falls back to `ecommerce`; flags read as off | n/a |
 | Parallel changes on `main` | merge `main` into the branch (no rebase) and rerun all tests | — |
