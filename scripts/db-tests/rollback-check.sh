@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality Stage 1 נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_schema (1c): הגנות (נעצר כשיש אתר אירוח / אובייקטים של מיגרציה מאוחרת),
+#     rollback → הטבלאות, הפונקציות, הדלי והרישומים נעלמו, הסכמה עצמה נשארת ריקה
 #   • ecommerce_engine_guard (1b): rollback → הטריגרים, המדיניות ורישום התפקידים נעלמו,
 #     הנתונים במקומם
 #   • platform_products_flags (1a): הגנה (נעצר כשיש אתר שאינו ecommerce),
@@ -16,6 +18,7 @@ PORT=${PGPORT:-5499}
 PSQL=(psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_test)
 M1=20261101090000_platform_products_flags
 M2=20261101100000_ecommerce_engine_guard
+M3=20261101110000_hosp_schema
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -31,6 +34,45 @@ psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
 "${PSQL[@]}" -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do "${PSQL[@]}" -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }; done
 q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id, 'rb-row', 'pickup', 0 FROM public.tenants WHERE is_default" >/dev/null
+
+# ---------- 1c ----------
+echo "rollback guard: $M3 refuses while a Hospitality site exists"
+q "INSERT INTO public.tenants (id, slug, name, site_type) VALUES ('71c00000-0000-0000-0000-000000000001', 'rb-stay-1c', 'x', 'hospitality')" >/dev/null
+q "INSERT INTO hospitality.amenities (tenant_id, name) VALUES ('71c00000-0000-0000-0000-000000000001', 'rb-amenity')" >/dev/null
+if down "$M3" 2>/dev/null; then
+  echo "  FAIL rollback ran although a Hospitality site exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT EXISTS (SELECT 1 FROM hospitality.amenities WHERE name = 'rb-amenity')"
+q "DELETE FROM public.tenants WHERE id = '71c00000-0000-0000-0000-000000000001'" >/dev/null
+expect "deleting the site removed its Hospitality rows (cascade)" \
+  "SELECT NOT EXISTS (SELECT 1 FROM hospitality.amenities)"
+
+echo "rollback guard: $M3 refuses while objects of a later migration remain in the schema"
+q "CREATE TABLE hospitality.rb_later (x int)" >/dev/null
+if down "$M3" 2>/dev/null; then
+  echo "  FAIL rollback ran although a later object exists"; exit 1
+fi
+expect "nothing was removed" "SELECT to_regclass('hospitality.units') IS NOT NULL"
+q "DROP TABLE hospitality.rb_later" >/dev/null
+
+echo "rollback: $M3"
+down "$M3"
+expect "Hospitality tables and functions removed" \
+  "SELECT NOT EXISTS (SELECT 1 FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace)
+      AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace)"
+expect "the schema itself is kept (an exposed but missing schema breaks the whole API)" \
+  "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'hospitality')"
+expect "hosp-media bucket and its policies removed" \
+  "SELECT NOT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media')
+      AND NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname LIKE 'hosp media%')"
+expect "Hospitality roles and flag keys unregistered" \
+  "SELECT NOT EXISTS (SELECT 1 FROM public.platform_product_roles WHERE product = 'hospitality')
+      AND NOT EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key LIKE 'hospitality%')"
+expect "Ecommerce guard (1b) untouched: 80 triggers, 5 roles" \
+  "SELECT (SELECT count(*) FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')) = 80
+      AND (SELECT count(*) FROM public.platform_product_roles WHERE product = 'ecommerce') = 5"
+expect "store data untouched" "SELECT EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- 1b ----------
 echo "rollback: $M2"
@@ -71,9 +113,10 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1, $M2"
+echo "re-apply: $M1, $M2, $M3"
 up "$M1"
 up "$M2"
+up "$M3"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -82,6 +125,11 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
+expect "Hospitality schema back: 11 tables, RLS on all, role admin, 5 flags off" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 11
+      AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
+      AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 5"
+expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
 
 "${PSQL[@]}" -d postgres -c "DROP DATABASE rollback_test" >/dev/null 2>&1 || true
 echo "rollback check passed"

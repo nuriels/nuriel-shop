@@ -14,7 +14,7 @@
 | `bun run test:db` | בדיקות SQL: כל המיגרציות מאפס על Postgres 16 מקומי + קבצי `scripts/db-tests/*.test.sql` | `postgresql-16` |
 | `bun run test:db:rollback` | Rollback של מיגרציות Hospitality Stage 1 (בסדר הפוך) על מסד נפרד (`rollback_test`): הגנת ה-rollback, החזרה למצב הקודם בדיוק, והרצה מחדש | `postgresql-16` |
 | `bun run db:classify` | מחולל מחדש את `docs/architecture/db-classification.md` ואת בדיקת הכיסוי (אחרי `test:db`) | `postgresql-16` |
-| `bun run e2e:up` | Supabase מקומי ב-Docker + כל המיגרציות + נתוני בדיקה | Docker |
+| `bun run e2e:up` | Supabase מקומי ב-Docker + כל המיגרציות + נתוני בדיקה; הסכמה `hospitality` חשופה ב-API המקומי (כמו `PGRST_DB_SCHEMAS` בשרת בעתיד) | Docker |
 | `bun run test:e2e` | Playwright — Regression לחנויות (בונה ומריץ את האפליקציה מול ה-Supabase המקומי) | `e2e:up` |
 | `bun run e2e:down` | עצירה ומחיקה של ה-Supabase המקומי | — |
 
@@ -62,6 +62,7 @@
 | `isolation.spec.ts` | כל חנות רואה רק את המוצרים שלה (ממשק, API ישיר עם טוקן, sitemap) |
 | `auth-regression.spec.ts` | התחברות בקוד למייל (משתמש קיים, משתמש חדש = לקוח ממתין כמו היום, קוד שגוי), פתיחת חנות דרך הפורטל (חנות + בעלים מוגן + seed), כפתור Google מבקש חזרה לכתובת של אותה חנות, ושרת ההתחברות מקבל רק כתובות חזרה מורשות (GitHub מקומית; Google ב-CI — דורש גישה ל-Google) |
 | `seo.spec.ts` | `robots.txt` (צילום מדויק), `sitemap.xml` (רשימת הכתובות), `llms.txt`, meta / OG / canonical / JSON-LD ב-SSR |
+| `hospitality-api.spec.ts` | Hospitality (שלב 1c) דרך ה-API האמיתי בלבד (אין עדיין ממשק): סכמת `hospitality` חשופה וסגורה ל-anon, הדגל כבוי = אין נתונים, כל בעל אתר רואה וכותב רק לאתר שלו, אורח / בעל חנות לא מקבלים כלום, אורח לא נרשם כלקוח באתר אירוח, דלי `hosp-media` (העלאה לתיקיית האתר בלבד, קריאה ציבורית, מחיקה). משתמשים אמיתיים (Admin API + התחברות ב-GoTrue); הנתונים נמחקים לפני ואחרי |
 
 ### צילומי מסך
 

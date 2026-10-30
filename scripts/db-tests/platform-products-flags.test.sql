@@ -103,8 +103,9 @@ INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_app
 SELECT tests.check('product roles: Ecommerce store still accepts all of its roles',
   $$SELECT EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = 'a0000000-0000-0000-0000-0000000001a1' AND role = 'cashier')$$);
 
--- a product that registered roles accepts only them (simulates Hospitality's own migration)
-INSERT INTO public.platform_product_roles (product, role) VALUES ('hospitality', 'admin') ON CONFLICT DO NOTHING;
+-- a product that registered roles accepts only them (Hospitality registers 'admin' in migration 3)
+SELECT tests.check('product roles: Hospitality registers exactly one role (admin)',
+  $$SELECT array_agg(role) = ARRAY['admin'] FROM public.platform_product_roles WHERE product = 'hospitality'$$);
 DO $t$
 DECLARE err text;
 BEGIN
@@ -140,7 +141,6 @@ INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_app
   ('71a00000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-0000000001a2', 'role2@test.local', 'role2_agent', 'agent', true);
 SELECT tests.check('product roles: a hospitality registration does not restrict Ecommerce stores',
   $$SELECT EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = 'a0000000-0000-0000-0000-0000000001a2' AND role = 'agent')$$);
-DELETE FROM public.platform_product_roles WHERE product = 'hospitality';
 SELECT tests.run('product roles: table not readable through the API',
   $$SELECT * FROM public.platform_product_roles$$, :OWNER_A, 'permission denied');
 

@@ -40,6 +40,9 @@ client_id = "e2e-fake-github-client"
 secret = "e2e-fake-secret-not-real"
 TOML
 fi
+# סכמת Hospitality חשופה ב-API (כמו PGRST_DB_SCHEMAS בשרת — רק אחרי שהמיגרציה שיצרה
+# אותה קיימת; כאן המיגרציות רצות לפני שה-API עולה). הגישה עדיין רק לפי RLS והדגלים.
+sed -i 's|^schemas = \["public", "graphql_public"\]|schemas = ["public", "graphql_public", "hospitality"]|' "$CONFIG"
 cp -r "$ROOT/supabase/migrations" "$WORK/supabase/migrations"
 
 "${SUPABASE[@]}" stop --no-backup >/dev/null 2>&1 || true

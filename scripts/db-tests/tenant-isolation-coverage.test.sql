@@ -52,3 +52,45 @@ BEGIN
 END $t$;
 
 DROP TABLE tenant_tables;
+
+-- ============================================================
+-- Hospitality (שלב 1c): כל טבלה בסכמה hospitality — בלי חריגים:
+--   • tenant_id, RLS מופעל;
+--   • RESTRICTIVE tenant_isolation + RESTRICTIVE backend_enabled (דגל);
+--   • אין שום הרשאה ל-anon (גישה ציבורית רק דרך פונקציות DEFINER).
+-- רץ אוטומטית גם על טבלאות שיתווספו בשלבים הבאים.
+-- ============================================================
+CREATE TEMP TABLE hosp_tables AS
+SELECT c.oid, c.relname AS name, c.relrowsecurity AS rls,
+       EXISTS (SELECT 1 FROM pg_attribute a
+                WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped) AS has_tenant,
+       EXISTS (SELECT 1 FROM pg_policies p
+                WHERE p.schemaname = 'hospitality' AND p.tablename = c.relname
+                  AND p.policyname = 'tenant_isolation' AND p.permissive = 'RESTRICTIVE') AS isolation,
+       EXISTS (SELECT 1 FROM pg_policies p
+                WHERE p.schemaname = 'hospitality' AND p.tablename = c.relname
+                  AND p.policyname = 'backend_enabled' AND p.permissive = 'RESTRICTIVE') AS flag_gate,
+       (has_table_privilege('anon', c.oid, 'SELECT') OR has_table_privilege('anon', c.oid, 'INSERT')
+        OR has_table_privilege('anon', c.oid, 'UPDATE') OR has_table_privilege('anon', c.oid, 'DELETE')) AS anon_access
+  FROM pg_class c
+ WHERE c.relnamespace = 'hospitality'::regnamespace AND c.relkind IN ('r', 'p');
+
+SELECT tests.check('tenant isolation coverage (hospitality): tables were found',
+  $$SELECT count(*) >= 11 FROM hosp_tables$$);
+
+DO $t$
+DECLARE _bad text;
+BEGIN
+  SELECT string_agg(name, ', ' ORDER BY name) INTO _bad
+    FROM hosp_tables WHERE NOT (has_tenant AND rls AND isolation AND flag_gate) OR anon_access;
+  INSERT INTO tests.results (name, ok, detail)
+  VALUES ('tenant isolation coverage (hospitality): every table has tenant_id, RLS, tenant_isolation, backend_enabled and no anon access',
+          _bad IS NULL, COALESCE('missing: ' || _bad, 'ok'));
+END $t$;
+
+SELECT tests.check('tenant isolation coverage (hospitality): no view in the schema bypasses RLS',
+  $$SELECT NOT EXISTS (SELECT 1 FROM pg_class c WHERE c.relnamespace = 'hospitality'::regnamespace
+      AND c.relkind IN ('v', 'm')
+      AND NOT COALESCE('security_invoker=true' = ANY (c.reloptions), false))$$);
+
+DROP TABLE hosp_tables;
