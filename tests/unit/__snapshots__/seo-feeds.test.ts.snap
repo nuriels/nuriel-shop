@@ -1,0 +1,67 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`JSON-LD > matches the breadcrumb baseline 1`] = `
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "item": "https://kobi.example.com/",
+      "name": "בית",
+      "position": 1,
+    },
+    {
+      "@type": "ListItem",
+      "item": "https://kobi.example.com/?category=יינות",
+      "name": "יינות",
+      "position": 2,
+    },
+  ],
+}
+`;
+
+exports[`robots.txt > matches the baseline for an open store 1`] = `
+"User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin-handoff
+Disallow: /agent
+Disallow: /warehouse
+Disallow: /courier/
+Disallow: /checkout
+Disallow: /payment
+Disallow: /account
+Disallow: /orders
+Disallow: /agreement
+Disallow: /login
+Disallow: /register
+Disallow: /reset-password
+Disallow: /locked
+Disallow: /forbidden
+Disallow: /_serverFn/
+Disallow: /api/
+Disallow: /cart/
+Disallow: /*?q=
+Disallow: /*&q=
+
+Sitemap: https://kobi.example.com/sitemap.xml
+"
+`;
+
+exports[`sitemap.xml > matches the baseline (with and without images) 1`] = `
+"<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url><loc>https://kobi.example.com/</loc><priority>1.0</priority></url>
+  <url><loc>https://kobi.example.com/product/1?a=1&amp;b=2</loc><lastmod>2026-01-02</lastmod><priority>0.8</priority><image:image><image:loc>https://cdn.example.com/p.webp</image:loc></image:image></url>
+</urlset>
+"
+`;
+
+exports[`sitemap.xml > matches the baseline (with and without images) 2`] = `
+"<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://kobi.example.com/</loc></url>
+</urlset>
+"
+`;

@@ -10,7 +10,15 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "start": "node .output/server/index.mjs"
+    "start": "node .output/server/index.mjs",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:db": "bash scripts/db-tests/run.sh",
+    "test:scripts": "bash scripts/run-checks.sh",
+    "e2e:up": "bash e2e/scripts/supabase-up.sh",
+    "e2e:down": "bash e2e/scripts/supabase-down.sh",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts"
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -79,6 +87,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@playwright/test": "1.63.0",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
@@ -94,6 +103,7 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "8.1.5"
+    "vite": "8.1.5",
+    "vitest": "5.0.5"
   }
 }

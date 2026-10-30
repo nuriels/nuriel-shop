@@ -1,0 +1,24 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin-handoff
+Disallow: /agent
+Disallow: /warehouse
+Disallow: /courier/
+Disallow: /checkout
+Disallow: /payment
+Disallow: /account
+Disallow: /orders
+Disallow: /agreement
+Disallow: /login
+Disallow: /register
+Disallow: /reset-password
+Disallow: /locked
+Disallow: /forbidden
+Disallow: /_serverFn/
+Disallow: /api/
+Disallow: /cart/
+Disallow: /*?q=
+Disallow: /*&q=
+
+Sitemap: https://kobi.shop.localhost/sitemap.xml

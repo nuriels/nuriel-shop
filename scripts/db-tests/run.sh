@@ -40,10 +40,12 @@ run_tests() { # run_tests <label>
   "${PSQL[@]}" -d shop_test -f "$HERE/fixtures.sql" >/dev/null
   "${PSQL[@]}" -d shop_test -f "$HERE/test-helpers.sql" >/dev/null
   for t in "$HERE"/*.test.sql; do "${PSQL[@]}" -d shop_test -f "$t" >/dev/null; done
-  local failed total
+  local failed total unique
   total=$("${PSQL[@]}" -d shop_test -tAc "select count(*) from tests.results")
   failed=$("${PSQL[@]}" -d shop_test -tAc "select count(*) from tests.results where not ok")
-  echo "[$1] $((total - failed))/$total passed"
+  # מספר הבדיקות הייחודיות (שם בדיקה) — לעומת מספר הבדיקות (assertions) שרצו במעבר הזה
+  unique=$("${PSQL[@]}" -d shop_test -tAc "select count(distinct name) from tests.results")
+  echo "[$1] $((total - failed))/$total assertions passed ($unique unique test names, $failed failed)"
   if [ "$failed" != "0" ]; then
     "${PSQL[@]}" -d shop_test -c "select name, detail from tests.results where not ok order by id"
     exit 1

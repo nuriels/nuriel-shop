@@ -1,0 +1,103 @@
+# ============================================================
+# בדיקות (שלב 0) — רץ על ענפי הפיתוח ועל Pull Requests.
+# • אין כאן שום סוד ושום חיבור ל-Production: המסד הוא Postgres / Supabase
+#   מקומי וחד-פעמי בתוך ה-runner, והמיילים / התשלומים מדומים.
+# • לא בונה ולא דוחף Docker, ולא נוגע בפריסה (Coolify).
+# ============================================================
+name: tests
+
+on:
+  push:
+    branches: ["hospitality/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: typecheck · lint · unit · build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - name: typecheck (app + tests)
+        run: bun run typecheck
+      - name: lint new test code (strict)
+        run: npx eslint tests e2e vitest.config.ts
+      - name: lint whole repo (report only — 28 known formatting errors, see docs/testing.md)
+        continue-on-error: true
+        run: bun run lint
+      - name: unit tests (Vitest)
+        run: bun run test:unit
+      - name: legacy check scripts
+        run: bun run test:scripts
+      - name: build
+        env:
+          VITE_SUPABASE_URL: http://127.0.0.1:54321
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-build-only-placeholder
+        run: bun run build
+
+  db:
+    name: SQL tests (local Postgres 16)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: install PostgreSQL 16
+        run: |
+          if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then
+            sudo apt-get update && sudo apt-get install -y postgresql-16
+          fi
+      - name: SQL tests
+        run: bash scripts/db-tests/run.sh
+
+  e2e:
+    name: E2E regression (Playwright + local Supabase)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - name: install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: start local Supabase (all migrations + test seed)
+        run: bun run e2e:up
+      - name: build the app against the local Supabase
+        run: |
+          set -a; . e2e/.env.e2e; set +a
+          bun run build
+      - name: E2E tests
+        env:
+          E2E_SKIP_BUILD: "1"
+        run: bun run test:e2e
+      - name: upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+      - name: stop local Supabase
+        if: always()
+        run: bun run e2e:down || true
