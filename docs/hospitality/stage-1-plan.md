@@ -35,6 +35,9 @@ copied).
 | D13 | Free-cancellation deadline time: the business's **check-in time** (business timezone), not midnight | A8 |
 | D14 | The fee is determined by the **time of the guest's cancellation request** (DB clock), not by the owner's response time | A8 |
 | D15 | **Simplified opening of a business** (Ecommerce and Hospitality): automatic unique address, no domain choice or technical terms at sign-up, address change later in "כתובת האתר" with old-address redirect, celebratory first-entry screen, short setup checklist with progress | A9 |
+| D16 | "Manage my booking" link valid until **30 days after check-out** | A5, B7 |
+| D17 | **Reuse the existing Google login, email-code login and email API** — no new Auth system, Google provider, OTP mechanism or email system; Hospitality adds only guest-specific rules on top of the shared primitives | A10 |
+| D18 | Final installation on the **existing Nuriel server and Supabase stack** following a step-by-step runbook (no new server or project) | A11 |
 
 ## A1. Vision
 
@@ -733,6 +736,216 @@ New platform tables (track P1/P2, **not** Stage 1):
 Stage 1 is unchanged: still 20 tables in the `hospitality` schema plus the platform
 objects already listed.
 
+## A10. Authentication and email — existing infrastructure and reuse (D17)
+
+### A10.1 What exists today (verified in code and deploy scripts)
+
+**One auth server for all stores.**
+- Self-hosted GoTrue in the `kobi` Supabase stack.
+- The API is `https://api-kobi.nuri1.fit`; every store (subdomain or custom domain)
+  talks to it.
+- `auth.users` is global: one account per email, across all stores.
+
+**Google login.**
+| Piece | Where | What it does |
+|---|---|---|
+| Google provider | `deploy/setup-selfhost.sh` §3ב (compose override of the auth service) | `GOTRUE_EXTERNAL_GOOGLE_ENABLED`, `GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID/SECRET`, callback `GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI = ${API_URL}/auth/v1/callback`. **One Google OAuth client for all stores** — only the API callback is registered at Google. |
+| Allowed return addresses | `setup-selfhost.sh`: `ADDITIONAL_REDIRECT_URLS = ${SITE_URL}/**,https://*.${TENANT_BASE_DOMAIN}/**` | the wildcard is what lets **every new store on `*.nuri1.fit` use Google automatically**, with no per-store configuration |
+| Start | `src/components/GoogleSignInButton.tsx` | `supabase.auth.signInWithOAuth({ provider: "google", redirectTo: window.location.origin + "/login?google=1", queryParams: { prompt: "select_account" } })` — returns to **the same store address** |
+| Return | `src/routes/login.tsx` (effect on `?google=1`) | supabase-js reads the session from the URL; `getSession()`; errors shown; navigate to `/` |
+| No duplicate accounts | `supabase/migrations/20261005090000_google_login.sql` (`email_has_other_account` + identity hook) | GoTrue attaches Google to an existing account with the same email; a second account for the same email is blocked |
+| Feature gate | `login.tsx`: `useSubscription().can("googleLogin")` | Google button shown per **Ecommerce plan / add-on** (`google_sso`) |
+| First sign-in (Ecommerce rule) | `src/hooks/useAuthState.ts` (insert into `user_roles` role `customer`, `is_approved=false`) | a new Google user becomes a **pending Ecommerce customer** of that store |
+
+**Email-code login (OTP).** File: `src/lib/login-code.functions.ts`.
+| Piece | What it does |
+|---|---|
+| `requestLoginCode` (server fn) | rate limit 10 / 15 min per IP; 6-digit code; DB stores only an **HMAC of tenant + email + code** (`LOGIN_CODE_SECRET`, fallback service key) via RPC `issue_login_code` (table `login_codes`, tenant-scoped, 10 min, 30 s resend); email sent with `sendEmail` from the store sender (`storeSender`); same answer for unknown emails |
+| `verifyLoginCode` (server fn) | rate limit 30 / 15 min; RPC `consume_login_code` (5 attempts); **Ecommerce rules**: an account that belongs to another store is refused, and an unknown email gets a new auth user (`auth.admin.createUser`, email confirmed) |
+| Session | `src/lib/session.server.ts` `sessionForEmail()` — `generateLink` + `verifyOtp` with the public key → access + refresh tokens returned to the browser → `supabase.auth.setSession()` (`login.tsx` `applySession`) |
+
+**Other existing pieces.**
+| Piece | Where | Notes |
+|---|---|---|
+| Password login | `src/lib/auth.functions.ts` `loginWithIdentifier` | email/username + password for staff and customers |
+| Portal login (business owners) | `src/lib/portal.functions.ts` (`requestPortalCode`, `verifyPortalCode`, `portalFromGoogle`) | same `issue_login_code` / `consume_login_code` primitives with a **different HMAC context**, plus a signed portal token |
+| Handoff into a store | `enterPortalStore` → `/admin-handoff#code=…` (`src/routes/admin-handoff.tsx`, `handoff.functions.ts`, table `platform_admin_handoffs` kinds `platform_admin` / `store_owner`) | one-time 2-minute code; also used by the store switcher (`store-switcher.functions.ts`) |
+| Session storage | `src/integrations/supabase/client.ts` (`persistSession`, `autoRefreshToken`) | **per origin** — logging in on one store does not log in on another |
+| Session to server | `auth-attacher.ts` (global function middleware adds the bearer token); `auth-middleware.ts` `requireSupabaseAuth` | — |
+| Tenant identification | browser: `getTenantId()` → RPC `tenant_for_host(window.location.hostname)`, sent as `x-tenant-id` on every Supabase request; server: `tenant.server.ts` per request; DB: `current_tenant_id()` | — |
+| Multi-store accounts | `user_roles (tenant_id, user_id)` many-to-many for staff; customers limited to one store (`user_roles_membership_guard`) | — |
+
+### A10.2 Findings that affect Hospitality
+1. **Google return addresses:** every `*.nuri1.fit` address (incl. `stay-12345`) is
+   already allowed, so **no configuration change** is needed for Hospitality
+   subdomains.
+   - **Custom domains are not in the allow-list.** This is the same limitation the
+     Ecommerce stores have today.
+   - Rather than adding every domain to GoTrue (that needs a restart for each one), the
+     plan is: on a custom domain, start Google on the business's `*.nuri1.fit` address and
+     return through the **existing one-time handoff** (a new handoff kind, `guest`).
+   - This is planned for Stage 6 and needs no change now.
+2. **Ecommerce rules must not run for Hospitality guests:**
+   - `useAuthState` would insert an Ecommerce `customer` row, which the product-role
+     rule would reject for a Hospitality tenant.
+   - `verifyLoginCode` refuses members of other stores.
+   
+   Therefore Hospitality screens never use `useAuthState` or `verifyLoginCode`. They use
+   the **same primitives** with guest rules (A10.3).
+3. **Google button gate:** today it is driven by the Ecommerce subscription. For
+   Hospitality it comes from the Hospitality entitlement.
+4. **Email logging:** `sendEmail({ logFor })` writes to `customer_emails`, which is an
+   Ecommerce table. Hospitality never passes `logFor`; its outbox is its log.
+5. **Sessions are per site,** so a guest logged in on one business is not logged in on
+   another. This is acceptable and also stronger isolation.
+
+### A10.3 How Hospitality reuses it
+**Business owners and managers** — exactly the existing mechanisms, no change:
+- the portal (email code / Google);
+- the handoff into the site;
+- password / email code on the site;
+- the store switcher for owners of several businesses (Ecommerce and Hospitality under
+  one account, as separate tenants);
+- membership `user_roles` role `admin`.
+
+**Guests**, through a thin platform adapter `src/platform/auth/`:
+
+| Adapter | Wraps (unchanged) |
+|---|---|
+| `email-code.server.ts` | `issue_login_code` / `consume_login_code` + the same HMAC secret + `sendEmail` + `sessionForEmail` |
+| `google.ts` | `signInWithOAuth` with the same provider and callback |
+| `session.ts` | supabase-js session (`setSession`, `getSession`) |
+
+The guest login screens are Hospitality code (`guest-portal/`), with guest rules:
+- **No membership:** a guest is never written to `user_roles`. An unknown email gets an
+  auth user, created exactly as today.
+- **Members of other stores can log in as guests:** a store member signing in here is
+  allowed, because guest access is decided by `request_tenant()` + `auth.uid()`, not by
+  membership.
+- **Visibility:** each business sees only its own `hospitality.guests` and bookings (RLS
+  + RPC filters).
+- **Linking past bookings:** only through a verified email (Google identity or a
+  consumed email code). This is the same proof the existing system relies on.
+
+**Booking without an account:** name, phone and email plus the "manage my booking" token
+(valid until 30 days after check-out, D16). No auth user is created unless the guest
+chooses to log in.
+
+**Permissions kept apart:**
+| Identity | How it is recognised |
+|---|---|
+| Platform admins | `platform_admins` |
+| Business owners and managers | `user_roles` on the Hospitality tenant, used by `hospitality.can()` |
+| Guests | `auth.uid()` + `hospitality.guests.user_id`, with no staff rights anywhere |
+
+**Changes to existing infrastructure:**
+| Change | When | Effect on existing stores |
+|---|---|---|
+| None to GoTrue, the Google client, OTP tables, HMAC secret or email code | — | none |
+| New adapters in `src/platform/auth/` call the existing RPCs and helpers | Stage 6 | none (new files) |
+| Optional later: `login-code.functions.ts` can use the same adapter internally | separate approval | none if done (refactor only) |
+| Handoff kind `guest` for Google on custom domains | Stage 6 | additive enum value |
+
+### A10.4 Email API — reuse
+- **Existing implementation:** `src/lib/email.server.ts`.
+  - `sendEmail()` calls the **Resend REST API** (`resendApiUrl()` / `RESEND_API_URL`)
+    with the platform key `RESEND_API_KEY`, or with the **business's own Resend key**
+    (`transport` from `tenant_email_secrets`, Ecommerce part 17).
+  - The sender comes from `storeSender()`: business name `<orders@nuri1.fit>` or the
+    business's own verified address (`email-sender.ts`, `email_settings`).
+  - It supports `headers` and returns `{ sent, id, reason }`. The function never throws
+    for transport errors.
+  - Templates use `renderEmailHtml()` / `escapeHtml()`.
+- **Hospitality uses it as is** through `src/platform/notifications/email.ts`:
+  - the outbox worker calls `sendEmail()` with `headers: { "Idempotency-Key":
+    <notification id> }`, and stores the result (`id`, `reason`);
+  - Hospitality templates (request, confirmation, decline, expiry, cancellation request /
+    approval / decline, owner reminder, guest login code) are Hospitality files that
+    render through the shared `renderEmailHtml`.
+- **No new key, no new provider, no second email system.** The login-code email for
+  guests is sent by the same `sendEmail` used by the existing login codes.
+
+## A11. Future installation on the existing server — runbook outline (D18)
+
+Prepared now, executed only after development, regression and your approval. Nothing is
+changed on the server before that.
+
+**0. Pre-flight**
+- Full DB backup with the existing `deploy/backup-daily.sh`, plus a manual `pg_dump`.
+- Note the current commit and image.
+- Maintenance window agreed.
+- `main` merged with the approved branches; CI green; Stage 0 regression green on the
+  release commit.
+
+**1. Database migrations** (`psql` into `kobi-db`, in timestamp order, as today):
+1. platform → ecommerce guard → `hosp_*`.
+2. Each migration is transactional. Stop on the first error and use rollback files in
+   reverse order.
+3. Verify:
+   - the SQL checks (schema present, RLS on, flags all `false`, Ecommerce tenants
+     `site_type = 'ecommerce'`);
+   - the classification and coverage queries.
+
+**2. Expose the schema to the API** — only after step 1 succeeded:
+- `/root/kobi-supabase/docker/.env`: `PGRST_DB_SCHEMAS=public,storage,graphql_public,hospitality`;
+- restart `kobi-rest`;
+- verify an Ecommerce REST call returns 200 and `hospitality` returns permission errors
+  for anon (not `PGRST106`).
+
+**3. Supabase settings**
+- **Auth:** no change (the Google provider and `*.nuri1.fit` redirect wildcard already
+  exist).
+- **Storage:** the `hosp-media` bucket is created by migration. Check the storage
+  container's file-size limit against the approved video limit.
+- **Realtime:** not needed.
+
+**4. Application environment** (`docker-compose.override.yml` / `.env` of the app):
+- `HOSPITALITY_ENGINE` **left unset (off)** for the first deployment.
+- No other new variables: email (`RESEND_API_KEY`, `EMAIL_FROM_ADDRESS`), login codes
+  (`LOGIN_CODE_SECRET`), domains (`TENANT_BASE_DOMAIN`) and Grow are reused.
+
+**5. Build and deploy** with the existing Dockerfile / Coolify flow (no Dockerfile
+change). Health check `/robots.txt`.
+
+**6. Smoke tests**
+- **Ecommerce:** home, product, login (password / code / Google), cart → checkout
+  (offline), admin, platform panel, `sitemap.xml`, `robots.txt`.
+- **Logs:** no 5xx.
+
+**7. Enable Hospitality gradually**
+1. Set `HOSPITALITY_ENGINE=on` and redeploy.
+2. Platform admin creates the Nofei Dorit showcase / a test business (`stay-…`).
+3. Enable flags for that tenant only. The certificate agent issues its address as for
+   any store.
+4. Run the Hospitality smoke tests:
+   - owner login;
+   - unit;
+   - request booking;
+   - emails sent (outbox `sent`);
+   - approval;
+   - calendar;
+   - cancellation request.
+5. Only then enable `hospitality_onboarding_enabled` (landing-page option).
+
+**8. Monitoring for 48 h**
+- outbox `failed` / `dead` counts;
+- 5xx;
+- slow queries;
+- certificate agent log.
+
+**Rollback** (any step):
+- **Application:** previous image / commit, or set `HOSPITALITY_ENGINE` off. This is
+  enough for any app-level problem.
+- **Flags:** set to `false` (instant, no deploy).
+- **API exposure:** remove `hospitality` from `PGRST_DB_SCHEMAS` and restart
+  `kobi-rest`. **Always before** dropping the schema.
+- **Database:** rollback files 5 → 1. Hospitality objects are new, so Ecommerce data is
+  untouched. The empty schema is kept unless exposure was removed first.
+- **Last resort:** restore the step-0 backup.
+
+The detailed runbook (exact commands, expected outputs, checklists) is delivered at the
+end of development as `docs/hospitality/runbook-install.md`.
+
 ## A6. Consistency check — findings and conflicts
 
 | Finding | Impact | Resolution |
@@ -770,7 +983,7 @@ Still open:
    whether long videos use YouTube/Vimeo embeds.
 3. Approval window bounds the owner may choose (proposal: 1–48 h). Is the window
    per business only, or also per unit (proposal: per business)?
-4. Expiry of the "manage my booking" link (proposal: valid until 30 days after check-out).
+4. ~~Expiry of the "manage my booking" link~~ — decided: 30 days after check-out (D16).
 5. Payments (Stage 8) and Hospitality pricing (Stage 11) require separate approvals.
 6. Business opening (A9):
    - automatic address format (`shop-12345` / `stay-12345`);
