@@ -1,0 +1,10 @@
+https://kobi.shop.localhost/
+https://kobi.shop.localhost/?category=%D7%99%D7%99%D7%A0%D7%95%D7%AA%20%D7%91%D7%93%D7%99%D7%A7%D7%94
+https://kobi.shop.localhost/about
+https://kobi.shop.localhost/cancellations
+https://kobi.shop.localhost/contact
+https://kobi.shop.localhost/privacy
+https://kobi.shop.localhost/product/e2e0a000-0000-0000-0000-000000000001
+https://kobi.shop.localhost/product/e2e0a000-0000-0000-0000-000000000002
+https://kobi.shop.localhost/sitemap
+https://kobi.shop.localhost/terms
