@@ -42,6 +42,10 @@ const MOBILE_SITES = { phone: "h2c-units-m" } as const;
 type SiteKey = keyof typeof DESKTOP_SITES | keyof typeof MOBILE_SITES;
 
 const ids: Partial<Record<SiteKey, string>> = {};
+// a retry re-creates the sites: new addresses, because the server remembers an address's site
+// for 15 seconds (it would still point at the site deleted a moment ago)
+let suffix = "";
+const slugOf = (base: string) => `${base}${suffix}`;
 const url = (slug: string, path = "") => `http://${hostOf(slug)}:${PORT}${path}`;
 let storeHash = "";
 
@@ -53,13 +57,20 @@ const storeDataHash = () =>
             JOIN public.tenants t ON t.id = s.tenant_id WHERE t.site_type = 'ecommerce')))`);
 
 function sitesFor(project: string): Record<string, string> {
-  return project === "mobile" ? MOBILE_SITES : DESKTOP_SITES;
+  const base: Record<string, string> = project === "mobile" ? MOBILE_SITES : DESKTOP_SITES;
+  return Object.fromEntries(Object.entries(base).map(([k, v]) => [k, slugOf(v)]));
 }
 
+/** כל האתרים של הקובץ הזה (גם של ניסיון קודם) */
 function cleanup(project: string) {
-  for (const slug of Object.values(sitesFor(project))) {
-    const id = sql(`SELECT id FROM public.tenants WHERE slug = '${slug}'`);
-    if (id) asPlatform(`SELECT public.platform_delete_tenant('${id}', '${slug}')`);
+  const prefixes = Object.values(project === "mobile" ? MOBILE_SITES : DESKTOP_SITES);
+  for (const row of sql(`SELECT id || '|' || slug FROM public.tenants
+                          WHERE slug ~ '^h2c-units' AND site_type = 'hospitality'`)
+    .split("\n")
+    .filter(Boolean)) {
+    const [id, slug] = row.split("|") as [string, string];
+    if (prefixes.some((p) => slug === p || slug.startsWith(`${p}-r`)))
+      asPlatform(`SELECT public.platform_delete_tenant('${id}', '${slug}')`);
   }
 }
 
@@ -96,6 +107,7 @@ const textbox = (page: Page, name: string) =>
 
 test.beforeAll(async ({ request }, testInfo) => {
   const project = testInfo.project.name;
+  suffix = testInfo.retry > 0 ? `-r${testInfo.retry}` : "";
   cleanup(project);
   storeHash = storeDataHash();
   for (const u of [OWNER, MANAGER, OTHER]) await ensureUser(request, u);
@@ -130,7 +142,7 @@ test("empty state: explains how to start, six kinds of place, accessible", async
   request,
 }) => {
   test.skip(test.info().project.name === "mobile", "desktop flow");
-  await openUnits(page, request, DESKTOP_SITES.main);
+  await openUnits(page, request, slugOf(DESKTOP_SITES.main));
   await expect(page.getByRole("heading", { name: "בואו נקים את מקום האירוח שלכם" })).toBeVisible();
   await expect(page.getByRole("list", { name: "שלבי ההקמה" }).getByRole("listitem")).toHaveCount(3);
   const choices = page.getByRole("group", { name: "מה אתם משכירים?" }).getByRole("radio");
@@ -148,7 +160,7 @@ test("first run — a zimmer complex: the place and its units in one go, then th
   request,
 }) => {
   test.skip(test.info().project.name === "mobile", "desktop flow");
-  await openUnits(page, request, DESKTOP_SITES.main);
+  await openUnits(page, request, slugOf(DESKTOP_SITES.main));
   await page.locator('label[data-business-type="zimmer_complex"]').click();
   await page.getByRole("button", { name: "המשך" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "מתחם צימרים" })).toBeVisible();
@@ -180,7 +192,7 @@ test("first run — a zimmer complex: the place and its units in one go, then th
            FROM hospitality.units WHERE tenant_id = '${site}'`),
   ).toBe("צימר הגפן:zimmer:unit:2,צימר האלון:zimmer:unit:2,סוויטת הנוף:zimmer:unit:4");
   // logged, and visible to the owner in "recent activity"
-  await page.goto(url(DESKTOP_SITES.main, "/manage/team"));
+  await page.goto(url(slugOf(DESKTOP_SITES.main), "/manage/team"));
   await expect(page.getByRole("list", { name: "פעילות אחרונה" })).toContainText(
     "הוסיף/ה את היחידה סוויטת הנוף",
   );
@@ -211,7 +223,7 @@ test("first run for every other kind of place (single zimmer, villa, apartments,
     },
   ] as const;
   for (const c of cases) {
-    await openUnits(page, request, DESKTOP_SITES[c.key]);
+    await openUnits(page, request, slugOf(DESKTOP_SITES[c.key]));
     await page.locator(`label[data-business-type="${c.type}"]`).click();
     await page.getByRole("button", { name: "המשך" }).click();
     await page.getByRole("textbox", { name: c.nameLabel }).fill(c.name);
@@ -257,7 +269,7 @@ test("first run for every other kind of place (single zimmer, villa, apartments,
     },
   ] as const;
   for (const c of multi) {
-    await openUnits(page, request, DESKTOP_SITES[c.key]);
+    await openUnits(page, request, slugOf(DESKTOP_SITES[c.key]));
     await page.locator(`label[data-business-type="${c.type}"]`).click();
     await page.getByRole("button", { name: "המשך" }).click();
     await page.getByRole("textbox", { name: c.nameLabel }).fill(`מקום ${c.key}`);
@@ -285,7 +297,7 @@ test("list: add a second property, add a unit to it, edit property and unit — 
   request,
 }) => {
   test.skip(test.info().project.name === "mobile", "desktop flow");
-  await openUnits(page, request, DESKTOP_SITES.main);
+  await openUnits(page, request, slugOf(DESKTOP_SITES.main));
   // a second property
   await page.getByRole("button", { name: "הוספת מתחם" }).click();
   await expect(sheet(page)).toBeVisible();
@@ -356,7 +368,7 @@ test("validation: Hebrew messages next to the field, nothing saved; the server r
   request,
 }) => {
   test.skip(test.info().project.name === "mobile", "desktop flow");
-  await openUnits(page, request, DESKTOP_SITES.main);
+  await openUnits(page, request, slugOf(DESKTOP_SITES.main));
   const before = sql(`SELECT count(*) FROM hospitality.units WHERE tenant_id = '${ids.main}'`);
   await page.getByRole("button", { name: "הוספת יחידה", exact: true }).click();
   await textbox(page, "שם היחידה").fill("");
@@ -384,19 +396,25 @@ test("validation: Hebrew messages next to the field, nothing saved; the server r
   const propertyId = sql(
     `SELECT id FROM hospitality.properties WHERE name = 'צימרי הגליל' AND tenant_id = '${ids.main}'`,
   );
-  const bad = await catalogFn(request, DESKTOP_SITES.main, "hospitalityCreateUnit", token, {
+  const bad = await catalogFn(request, slugOf(DESKTOP_SITES.main), "hospitalityCreateUnit", token, {
     propertyId,
     data: { name: "x", unit_type: "zimmer", capacity: 2, base_occupancy: 3 },
   });
   expect(await bad.text()).toContain("מספר האורחים הכלולים במחיר לא יכול להיות גדול");
-  const price = await catalogFn(request, DESKTOP_SITES.main, "hospitalityCreateUnit", token, {
-    propertyId,
-    data: { name: "x", unit_type: "zimmer", base_price: 1 },
-  });
+  const price = await catalogFn(
+    request,
+    slugOf(DESKTOP_SITES.main),
+    "hospitalityCreateUnit",
+    token,
+    {
+      propertyId,
+      data: { name: "x", unit_type: "zimmer", base_price: 1 },
+    },
+  );
   expect(await price.text()).toContain("שדה לא מוכר: base_price");
   const archived = await catalogFn(
     request,
-    DESKTOP_SITES.main,
+    slugOf(DESKTOP_SITES.main),
     "hospitalityUpdateProperty",
     token,
     {
@@ -420,8 +438,8 @@ test("updated in the meantime: two browsers on the same unit — merged, nothing
   const b = await browser.newContext();
   const pa = await a.newPage();
   const pb = await b.newPage();
-  await openUnits(pa, request, DESKTOP_SITES.main);
-  await openUnits(pb, request, DESKTOP_SITES.main);
+  await openUnits(pa, request, slugOf(DESKTOP_SITES.main));
+  await openUnits(pb, request, slugOf(DESKTOP_SITES.main));
   for (const p of [pa, pb])
     await unitRow(p, "צימר הגפן")
       .getByRole("button", { name: /^עריכה של צימר הגפן/ })
@@ -455,7 +473,7 @@ test("a manager: sees the list, adds and edits — no owner-only actions here", 
   request,
 }) => {
   test.skip(test.info().project.name === "mobile", "desktop flow");
-  await openUnits(page, request, DESKTOP_SITES.main, MANAGER);
+  await openUnits(page, request, slugOf(DESKTOP_SITES.main), MANAGER);
   await expect(page.getByText("מנהל/ת", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "צימרי הגליל" })).toBeVisible();
   await page
@@ -483,7 +501,7 @@ test("plan limit: at the limit the add button is disabled with the reason; the s
   const propertyId = sql(`SELECT id FROM hospitality.properties WHERE tenant_id = '${site}'`);
   sql(`INSERT INTO hospitality.units (tenant_id, property_id, kind, unit_type, name, slug)
        SELECT '${site}', '${propertyId}', 'room', 'room', 'חדר ' || g, 'r' || g FROM generate_series(1, 20) g`);
-  await openUnits(page, request, DESKTOP_SITES.limit);
+  await openUnits(page, request, slugOf(DESKTOP_SITES.limit));
   await expect(page.getByTestId("units-limit")).toHaveText("20 מתוך 20 יחידות פעילות בחבילה");
   await expect(page.getByRole("button", { name: "הוספת יחידה", exact: true })).toBeDisabled();
   await expect(
@@ -491,7 +509,7 @@ test("plan limit: at the limit the add button is disabled with the reason; the s
   ).toBeVisible();
   const res = await catalogFn(
     request,
-    DESKTOP_SITES.limit,
+    slugOf(DESKTOP_SITES.limit),
     "hospitalityCreateUnit",
     await accessToken(request, OWNER),
     {
@@ -507,7 +525,7 @@ test("direct calls: outsiders are refused; a site's owner reaches only its own s
   request,
 }) => {
   test.skip(test.info().project.name === "mobile", "API checks once");
-  const slug = DESKTOP_SITES.main;
+  const slug = slugOf(DESKTOP_SITES.main);
   const propertyId = sql(
     `SELECT id FROM hospitality.properties WHERE name = 'צימרי הגליל' AND tenant_id = '${ids.main}'`,
   );
@@ -529,7 +547,7 @@ test("direct calls: outsiders are refused; a site's owner reaches only its own s
   // the other site's owner on its own site: this site's property does not exist there
   const foreign = await catalogFn(
     request,
-    DESKTOP_SITES.foreign,
+    slugOf(DESKTOP_SITES.foreign),
     "hospitalityCreateUnit",
     callers["otherSiteOwner"],
     {
@@ -548,7 +566,7 @@ test("@mobile phone: empty state, first run, list and the edit sheet from the bo
   test.skip(test.info().project.name !== "mobile", "phone only");
   const noSideways = () =>
     page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
-  await openUnits(page, request, MOBILE_SITES.phone);
+  await openUnits(page, request, slugOf(MOBILE_SITES.phone));
   await expect(page.getByRole("heading", { name: "בואו נקים את מקום האירוח שלכם" })).toBeVisible();
   expect(await noSideways()).toBe(true);
   await expectAccessible(page, "phone empty state");
@@ -607,7 +625,8 @@ test("closing the management flag closes the units page and functions", async ({
         WHERE tenant_id = '${ids.foreign}' AND key = 'hospitality_management_enabled'`);
   await expect
     .poll(
-      async () => (await hostGet(request, hostOf(DESKTOP_SITES.foreign), "/manage/units")).status(),
+      async () =>
+        (await hostGet(request, hostOf(slugOf(DESKTOP_SITES.foreign)), "/manage/units")).status(),
       {
         timeout: 20_000,
       },
@@ -615,7 +634,7 @@ test("closing the management flag closes the units page and functions", async ({
     .toBe(404);
   const res = await catalogFn(
     request,
-    DESKTOP_SITES.foreign,
+    slugOf(DESKTOP_SITES.foreign),
     "hospitalityCatalog",
     await accessToken(request, OTHER),
     undefined,

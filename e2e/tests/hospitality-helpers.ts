@@ -90,6 +90,9 @@ export async function enterViaHandoff(page: Page, siteUrl: string, siteId: strin
 
 /** בדיקת נגישות axe (WCAG 2.1 AA) — אין הפרות */
 export async function expectAccessible(page: Page, label: string) {
+  // הודעה קופצת (Sonner) נכנסת ויוצאת בשקיפות חלקית — axe היה מודד ניגודיות של טקסט
+  // באמצע האנימציה. מחכים שההודעות ייעלמו (עד 10 שניות), ורק אז בודקים.
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 10_000 });
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
