@@ -904,8 +904,17 @@ changed on the server before that.
 - No other new variables: email (`RESEND_API_KEY`, `EMAIL_FROM_ADDRESS`), login codes
   (`LOGIN_CODE_SECRET`), domains (`TENANT_BASE_DOMAIN`) and Grow are reused.
 
-**5. Build and deploy** with the existing Dockerfile / Coolify flow (no Dockerfile
-change). Health check `/robots.txt`.
+**5. Build and deploy** with the existing Dockerfile / Coolify flow. Health check: see the
+**required upgrade** below — `/robots.txt` alone is not enough.
+
+> **Required before Production (decided at the Stage 2a approval):** the Docker / Coolify
+> health check only fetches `/robots.txt`, which is served without the TanStack Start SSR
+> handler. In Stage 2a a broken build (handler failing at start-up) still passed it while
+> every page and server function returned 500 (`docs/hospitality/stage-2-plan.md` §5,
+> build fix). Before go-live the health check must also prove the SSR handler is up (for
+> example a light SSR page or an internal readiness route that goes through the handler),
+> be tested against a deliberately broken build, and be approved as a deployment change
+> (`Dockerfile` `HEALTHCHECK` and `docker-compose.yml` `healthcheck`).
 
 **6. Smoke tests**
 - **Ecommerce:** home, product, login (password / code / Google), cart → checkout

@@ -431,6 +431,15 @@ Nothing is enabled globally; flags are set per site, and only in local / E2E dat
   server then failed at start-up. `vite.config.ts` now keeps that runtime in one chunk
   (`_tanstack-start-runtime.mjs`). No Docker or deployment file changed.
 
+### Tracked requirements (from the Stage 2a approval)
+1. **Health check before Production:** the Docker / Coolify health check must be upgraded
+   so it also proves the SSR handler is up, not only `/robots.txt` (runbook:
+   `stage-1-plan.md` §A11 step 5). Not changed yet — deployment change, separate approval.
+2. **Migration order:** every new migration gets a timestamp later than the previous one
+   (after migration 7 `20261101150000`), with a rollback file, and is added to
+   `rollback-check.sh` in reverse order. 2b adds an automated check (§7) so a wrong
+   timestamp fails CI.
+
 ## 5a. Decisions needed (original proposal, kept for reference)
 
 | # | Decision | Recommendation |
