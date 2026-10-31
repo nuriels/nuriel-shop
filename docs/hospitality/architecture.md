@@ -76,8 +76,10 @@ src/
       engine.ts config.ts access.server.ts edge/gate.ts types/{domain,management}.ts validation/input.ts
       server/public.functions.ts guest.functions.ts owner.functions.ts rpc.server.ts index.ts
       api/management.functions.ts   client-callable server functions (outside server/: import protection) [2a]
-      management/                   owner area (Stage 2): shell/, login/, dashboard/, lib/, route-guard.ts  [2a]
-  routes/manage.tsx manage.index.tsx manage_.login.tsx   thin route adapters (Hospitality code)       [2a]
+      api/settings.functions.ts     business settings: view / save with revision                          [2b.2]
+      server/manage.server.ts       management call: area enabled + signed-in user + the user's token     [2b.2]
+      management/                   owner area (Stage 2): shell/, login/, dashboard/, settings/, lib/, route-guard.ts
+  routes/manage.tsx manage.index.tsx manage_.login.tsx manage.settings.tsx   thin route adapters
 ```
 
 Stage 2a existing-file changes (approved, Hospitality-only branches): `src/routes/__root.tsx`

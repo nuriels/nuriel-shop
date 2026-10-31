@@ -9,7 +9,7 @@ export interface NavItem {
   key: NavKey;
   label: string;
   /** נתיב של מסך קיים; בלי נתיב = עוד לא נבנה ("בקרוב") */
-  to?: "/manage";
+  to?: "/manage" | "/manage/settings";
   /** בניווט התחתון בטלפון (השאר תחת "עוד") */
   primary?: boolean;
   permission?: string;
@@ -22,7 +22,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: "pricing", label: "מחירים", permission: "pricing" },
   { key: "guests", label: "אורחים", permission: "guests" },
   { key: "emails", label: "מיילים", permission: "bookings" },
-  { key: "settings", label: "הגדרות העסק", permission: "settings" },
+  { key: "settings", label: "הגדרות העסק", to: "/manage/settings", permission: "settings" },
   { key: "team", label: "צוות ניהול", permission: "staff.managers" },
 ];
 

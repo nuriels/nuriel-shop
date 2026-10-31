@@ -1,6 +1,18 @@
 # Hospitality Stage 2b — Business settings and team (detailed plan)
 
-Status: **approved (D-2b-1 … D-2b-6). 2b.1 (database) implemented — awaiting review; 2b.2+ not started.**
+Status: **approved (D-2b-1 … D-2b-6). 2b.1 (database, `d119a02`) approved; 2b.2 (settings screen) implemented — awaiting review; 2b.3+ not started.**
+
+### 2b.2 — as implemented
+- The settings screen shows **only the sections and fields the user may edit**
+  (`settings_view.editable`, decided by the database): owner — five sections; manager —
+  three (no notification recipients, no guest-data retention). Approved change from the
+  plan, which showed owner fields read-only to managers.
+- Enforcement is in the database (`update_settings`); the server function validates the
+  input shape and values (same Hebrew messages) and refuses locked / unknown fields.
+- "Updated in the meantime": the save returns the latest values; the form keeps the user's
+  edits in fields the other user did not change, takes the other user's value where both
+  changed a field (and says so), and saves only after a new click.
+- Leaving with unsaved changes asks first (router blocker + browser unload).
 
 ### 2b.1 — as implemented (differences from the plan)
 - The "updated in the meantime" check uses a new `settings.revision` counter instead of

@@ -5,10 +5,17 @@ export interface ChecklistStep {
   key: ChecklistKey;
   title: string;
   hint: string;
+  /** המסך שבו משלימים את הצעד (כשכבר קיים) */
+  to?: "/manage/settings";
 }
 
 export const CHECKLIST_STEPS: readonly ChecklistStep[] = [
-  { key: "business", title: "פרטי העסק", hint: "שם העסק וטלפון או מייל ליצירת קשר" },
+  {
+    key: "business",
+    title: "פרטי העסק",
+    hint: "שם העסק וטלפון או מייל ליצירת קשר",
+    to: "/manage/settings",
+  },
   { key: "units", title: "יחידת אירוח ראשונה", hint: "צימר, סוויטה או חדר — עם מספר אורחים" },
   { key: "photos", title: "תמונות", hint: "תמונה אחת לפחות של המקום (לא תמונת הדגמה)" },
   { key: "prices", title: "מחירים", hint: "מחיר ללילה ליחידה פעילה" },

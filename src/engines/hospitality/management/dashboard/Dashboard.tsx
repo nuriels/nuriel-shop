@@ -1,5 +1,6 @@
 // לוח הבקרה — שלב 2a: רשימת ההקמה, מצב האתר, והחבילה (לבעלים). המספרים
 // (הגעות, תפוסה, הכנסות) יתווספו בשלב 2k.
+import { Link } from "@tanstack/react-router";
 import { CheckCircle2, Circle, Globe, Lock } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Progress } from "@/platform/ui";
 import { CHECKLIST_STEPS, checklistProgress } from "../lib/checklist";
@@ -63,7 +64,15 @@ function SetupChecklist() {
                   </p>
                   <p className="text-sm text-muted-foreground">{step.hint}</p>
                 </div>
-                {!done && (
+                {!done && step.to && (
+                  <Link
+                    to={step.to}
+                    className="flex min-h-11 shrink-0 items-center rounded-md px-3 text-sm font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    להשלמה<span className="sr-only"> — {step.title}</span>
+                  </Link>
+                )}
+                {!done && !step.to && (
                   <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary-foreground">
                     המסך בקרוב
                   </span>
