@@ -44,6 +44,7 @@ import { Route as CourierTokenRouteImport } from './routes/courier.$token'
 import { Route as ManageIndexRouteImport } from './routes/manage.index'
 import { Route as ManageSettingsRouteImport } from './routes/manage.settings'
 import { Route as ManageTeamRouteImport } from './routes/manage.team'
+import { Route as ManageUnitsRouteImport } from './routes/manage.units'
 import { Route as ManageLoginRouteImport } from './routes/manage_.login'
 import { Route as OwnerAgreementTokenRouteImport } from './routes/owner-agreement.$token'
 import { Route as PagesSlugRouteImport } from './routes/pages.$slug'
@@ -244,6 +245,11 @@ const ManageTeamRoute = ManageTeamRouteImport.update({
   path: '/team',
   getParentRoute: () => ManageRoute,
 } as any)
+const ManageUnitsRoute = ManageUnitsRouteImport.update({
+  id: '/units',
+  path: '/units',
+  getParentRoute: () => ManageRoute,
+} as any)
 const ManageLoginRoute = ManageLoginRouteImport.update({
   id: '/manage_/login',
   path: '/manage/login',
@@ -403,6 +409,7 @@ export interface FileRoutesByFullPath {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
+  '/manage/units': typeof ManageUnitsRoute
   '/manage/login': typeof ManageLoginRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
@@ -463,6 +470,7 @@ export interface FileRoutesByTo {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
+  '/manage/units': typeof ManageUnitsRoute
   '/manage/login': typeof ManageLoginRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
@@ -525,6 +533,7 @@ export interface FileRoutesById {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
+  '/manage/units': typeof ManageUnitsRoute
   '/manage_/login': typeof ManageLoginRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
@@ -588,6 +597,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/settings'
     | '/manage/team'
+    | '/manage/units'
     | '/manage/login'
     | '/owner-agreement/$token'
     | '/pages/$slug'
@@ -648,6 +658,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/settings'
     | '/manage/team'
+    | '/manage/units'
     | '/manage/login'
     | '/owner-agreement/$token'
     | '/pages/$slug'
@@ -709,6 +720,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/settings'
     | '/manage/team'
+    | '/manage/units'
     | '/manage_/login'
     | '/owner-agreement/$token'
     | '/pages/$slug'
@@ -1042,6 +1054,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageTeamRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/units': {
+      id: '/manage/units'
+      path: '/units'
+      fullPath: '/manage/units'
+      preLoaderRoute: typeof ManageUnitsRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage_/login': {
       id: '/manage_/login'
       path: '/manage/login'
@@ -1216,12 +1235,14 @@ declare module '@tanstack/react-router' {
 interface ManageRouteChildren {
   ManageSettingsRoute: typeof ManageSettingsRoute
   ManageTeamRoute: typeof ManageTeamRoute
+  ManageUnitsRoute: typeof ManageUnitsRoute
   ManageIndexRoute: typeof ManageIndexRoute
 }
 
 const ManageRouteChildren: ManageRouteChildren = {
   ManageSettingsRoute: ManageSettingsRoute,
   ManageTeamRoute: ManageTeamRoute,
+  ManageUnitsRoute: ManageUnitsRoute,
   ManageIndexRoute: ManageIndexRoute,
 }
 

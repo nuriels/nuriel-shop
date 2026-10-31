@@ -33,6 +33,7 @@ const FILES = {
   settings: "src/engines/hospitality/api/settings.functions.ts",
   team: "src/engines/hospitality/api/team.functions.ts",
   owner: "src/engines/hospitality/server/owner.functions.ts",
+  catalog: "src/engines/hospitality/api/catalog.functions.ts",
 } as const;
 
 let SLUG_A = "h2b-int-a";
@@ -183,6 +184,8 @@ test("permission matrix: every management function × every kind of account", as
     team: {},
     activity: {},
     entitlements: {},
+    catalogView: {},
+    catalogCreateProperty: {},
     addManager: {},
     removeManager: {},
   };
@@ -196,6 +199,9 @@ test("permission matrix: every management function × every kind of account", as
     expected["team"]![who] = may(owners);
     expected["activity"]![who] = may(owners);
     expected["entitlements"]![who] = may(staff);
+    // properties and units (2c.2): owner and managers alike
+    expected["catalogView"]![who] = may(staff);
+    expected["catalogCreateProperty"]![who] = may(staff);
     // mutations of the team: run for the owner only on a temporary addition (below)
     expected["addManager"]![who] = may(["owner"]);
     expected["removeManager"]![who] = may(["owner"]);
@@ -226,6 +232,10 @@ test("permission matrix: every management function × every kind of account", as
     observed["team"]![who] = await call("team", "hospitalityTeam", { method: "GET" });
     observed["activity"]![who] = await call("team", "hospitalityTeamActivity", { method: "GET" });
     observed["entitlements"]![who] = await call("owner", "hospitalityMyEntitlements");
+    observed["catalogView"]![who] = await call("catalog", "hospitalityCatalog", { method: "GET" });
+    observed["catalogCreateProperty"]![who] = await call("catalog", "hospitalityCreateProperty", {
+      data: { data: { name: `מתחם של ${who}`, property_type: "other" } },
+    });
     if (who === "platformAdmin") {
       observed["addManager"]![who] = R; // not exercised (see above)
       observed["removeManager"]![who] = R;
@@ -253,6 +263,16 @@ test("permission matrix: every management function × every kind of account", as
   expect(
     sql(`SELECT notification_emails::text FROM hospitality.settings WHERE tenant_id = '${siteA}'`),
   ).toBe("{owner@int.test}");
+  // properties: only staff created one (platform admin, manager, shared manager, owner)
+  expect(
+    sql(
+      `SELECT string_agg(name, ',' ORDER BY name) FROM hospitality.properties WHERE tenant_id = '${siteA}'`,
+    ),
+  ).toBe(
+    ["מתחם של owner", "מתחם של manager", "מתחם של platformAdmin", "מתחם של sharedManager"]
+      .sort()
+      .join(","),
+  );
 });
 
 test("between sites: a site's owner has no power on another site; Hospitality functions do not exist on a store", async ({
@@ -401,6 +421,7 @@ for (const who of ["owner", "manager"] as const) {
       { path: "/manage", heading: "שלום, צימרים בגליל" },
       { path: "/manage/settings", heading: "הגדרות העסק" },
       { path: "/manage/team", heading: "צוות ניהול" },
+      { path: "/manage/units", heading: "יחידות ומתחמים" },
     ];
     for (const [i, screen] of screens.entries()) {
       if (i === 0) await loadSession(page, session, screen.path);

@@ -43,7 +43,7 @@ import {
   visibleSections,
   type FormValues,
 } from "./model";
-import { DaysField, EmailListField, SelectField, TextField } from "./fields";
+import { DaysField, EmailListField, SelectField, TextField } from "../lib/fields";
 
 interface Notice {
   remoteChanged: SettingsKey[];

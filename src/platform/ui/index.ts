@@ -37,5 +37,6 @@ export {
 export { Skeleton } from "@/components/ui/skeleton";
 export { Toaster } from "@/components/ui/sonner";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+export { Textarea } from "@/components/ui/textarea";
 export { cn } from "@/lib/utils";
 export { useIsMobile } from "@/hooks/use-mobile";

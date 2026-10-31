@@ -352,7 +352,7 @@ function AddManagerSheet(props: {
       }}
     >
       <SheetContent side={isMobile ? "bottom" : "left"} className="max-h-[90dvh] overflow-y-auto">
-        <SheetHeader className="text-start">
+        <SheetHeader className="ps-10 text-start sm:text-start">
           <SheetTitle>{added ? "המנהל נוסף" : "הוספת מנהל"}</SheetTitle>
           <SheetDescription>
             {added

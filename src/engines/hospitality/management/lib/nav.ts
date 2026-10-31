@@ -9,7 +9,7 @@ export interface NavItem {
   key: NavKey;
   label: string;
   /** נתיב של מסך קיים; בלי נתיב = עוד לא נבנה ("בקרוב") */
-  to?: "/manage" | "/manage/settings" | "/manage/team";
+  to?: "/manage" | "/manage/settings" | "/manage/team" | "/manage/units";
   /** בניווט התחתון בטלפון (השאר תחת "עוד") */
   primary?: boolean;
   permission?: string;
@@ -18,7 +18,7 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: "dashboard", label: "לוח בקרה", to: "/manage", primary: true },
   { key: "bookings", label: "הזמנות", primary: true, permission: "bookings" },
-  { key: "units", label: "יחידות", primary: true, permission: "catalog" },
+  { key: "units", label: "יחידות", to: "/manage/units", primary: true, permission: "catalog" },
   { key: "pricing", label: "מחירים", permission: "pricing" },
   { key: "guests", label: "אורחים", permission: "guests" },
   { key: "emails", label: "מיילים", permission: "bookings" },

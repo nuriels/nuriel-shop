@@ -26,6 +26,30 @@ export function activityText(entry: ActivityEntry): string {
         ? `${actor} עדכן/ה את ההגדרות: ${fields.join(", ")}`
         : `${actor} עדכן/ה את ההגדרות`;
     }
+    case "catalog.property_created":
+      return `${actor} הוסיף/ה את המתחם ${target}`;
+    case "catalog.property_updated":
+      return `${actor} עדכן/ה את המתחם ${target}`;
+    case "catalog.property_archived":
+      return `${actor} העביר/ה לארכיון את המתחם ${target}`;
+    case "catalog.property_deleted":
+      return `${actor} מחק/ה את המתחם ${target}`;
+    case "catalog.unit_created":
+      return `${actor} הוסיף/ה את היחידה ${target}`;
+    case "catalog.unit_updated":
+      return `${actor} עדכן/ה את היחידה ${target}`;
+    case "catalog.unit_activated":
+      return `${actor} הפעיל/ה את היחידה ${target}`;
+    case "catalog.unit_deactivated":
+      return `${actor} השבית/ה את היחידה ${target}`;
+    case "catalog.unit_deleted":
+      return `${actor} מחק/ה את היחידה ${target}`;
+    case "catalog.whole_property_enabled":
+      return `${actor} הפעיל/ה השכרה של כל המתחם ${target}`;
+    case "catalog.whole_property_disabled":
+      return `${actor} כיבה/תה השכרה של כל המתחם ${target}`;
+    case "catalog.reordered":
+      return `${actor} שינה/תה את סדר התצוגה`;
     default:
       return `${actor}: ${entry.action}`;
   }

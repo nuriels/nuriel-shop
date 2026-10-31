@@ -87,7 +87,13 @@ test("Hospitality SSR: meta tags carry the business name, never the store defaul
   request,
 }) => {
   test.skip(test.info().project.name === "mobile", "HTTP checks once");
-  for (const path of ["/manage/login", "/manage", "/manage/settings", "/manage/team"]) {
+  for (const path of [
+    "/manage/login",
+    "/manage",
+    "/manage/settings",
+    "/manage/team",
+    "/manage/units",
+  ]) {
     const html = await ssr(request, HOST, path);
     expect(meta(html, "name", "description"), path).toEqual([NAME]);
     expect(meta(html, "property", "og:title"), path).toEqual([NAME]);

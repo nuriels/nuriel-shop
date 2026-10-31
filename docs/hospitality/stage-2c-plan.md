@@ -1,6 +1,28 @@
 # Hospitality Stage 2c — Properties and units (detailed plan)
 
-Status: **approved (D-2c-1 … D-2c-6). 2c.1 (database) implemented — awaiting review; 2c.2+ not started.**
+Status: **approved (D-2c-1 … D-2c-6). 2c.1 (database, `0efc471`) approved; 2c.2 (screens) implemented — awaiting review; 2c.3 and 2c.4 not started.**
+
+### 2c.2 — as implemented
+- `/manage/units` ("יחידות" in the navigation, owner and managers): without a property —
+  an empty state that explains the three steps and asks "מה אתם משכירים?" (six choices:
+  צימר בודד, מתחם צימרים, דירות נופש, וילה / בית שלם, מלון בוטיק, משהו אחר), then one
+  short form; with properties — a list grouped by property (type, address, draft badge,
+  units with type, guests, rooms, inactive badge, and what is still missing to take bookings:
+  price, photos), the plan's unit limit, "הוספת יחידה" / "הוספת מתחם".
+- Create and edit of properties and units in sheets (bottom on phones), only through the
+  server functions (`api/catalog.functions.ts` → the migration 10 functions): Hebrew
+  messages next to the field and from the server, "updated in the meantime" merge (as in
+  settings), a question before closing with unsaved changes. Brought forward from 2c.3 at
+  the approval: editing the unit's details in a sheet. Still in 2c.3: a full unit page,
+  "the whole property" switch and members, reorder, activate / deactivate, archive / delete
+  (owner).
+- First run: one server function creates the place and its units in order; if a unit is
+  refused (e.g. the plan limit) it stops and says how many were added and why.
+- `kind` is set once at creation (a "room" type → `room`, otherwise `unit`) and never
+  changed by the screen; the booking engine treats both the same.
+- Recent activity (team screen) now names catalog changes in Hebrew.
+- Small fix found while reviewing screenshots: the sheet header's close button overlapped the
+  title (also in the 2b.3 "add manager" sheet) — fixed in both.
 
 ### 2c.1 — as implemented (differences from the plan)
 - C5 was already half-covered by the Stage 1 trigger `unit_members_occupancy_guard`

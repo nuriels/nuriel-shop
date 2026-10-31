@@ -5,4 +5,5 @@ export const manageKeys = {
   settings: ["hospitality", "manage", "settings"] as const,
   team: ["hospitality", "manage", "team"] as const,
   activity: ["hospitality", "manage", "activity"] as const,
+  catalog: ["hospitality", "manage", "catalog"] as const,
 };
