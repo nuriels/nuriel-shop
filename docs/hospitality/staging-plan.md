@@ -34,6 +34,24 @@ creates a fully separate stack from parameters (`PROJECT`, `SB_DIR`, `KONG_HTTP_
 | Engine | `HOSPITALITY_ENGINE=on`; flags enabled only for the demo sites | off |
 | Data | demo sites only (e.g. "צימר לדוגמה", "מתחם לדוגמה"), test accounts | real |
 
+## 2a. Isolation from Production — point by point
+
+| Area | Staging | How it is kept apart |
+|---|---|---|
+| Database | its own Postgres container and volume (`nuriel-stg-db`) | different compose project, port bound to 127.0.0.1, different superuser password; no replication, no dump / restore from Production |
+| Files (Storage) | its own Storage container and volume | separate buckets on a separate volume; the Production backup script is not pointed at it |
+| Keys and secrets | new JWT secret, anon / service keys (`deploy/gen-keys.mjs`), new `LOGIN_CODE_SECRET`, `GROW_SECRETS_KEY` | its own `.env` under `/root/nuriel-stg-supabase` and `/root/nuriel-stg-git`; a Production token is invalid on Staging and vice versa (different JWT secret) |
+| Emails | the local Resend-compatible catcher (`RESEND_API_URL` → 127.0.0.1) | no Resend key on Staging at all → nothing can reach a real inbox |
+| Payments | none / Grow sandbox | no Production Grow credentials |
+| Network | its own Docker network (compose project) | containers of the two environments are not on a shared network; Staging talks only to its own Kong |
+| Domains | `stg`, `api-stg`, `*.stg` | separate vhosts / Coolify resources; Production vhosts untouched |
+| Accounts | Staging super-admin and test accounts | created in Staging only; Production accounts do not exist there |
+| Super-admin panel | links only (`platform-admin-hospitality-plan.md`) | the Production panel never reads Staging's data |
+
+**Read-only check first:** `sudo bash deploy/staging/infra-check.sh` prints the proxy, RAM,
+disk, ports, domains, certificates and whether the Staging names resolve — and changes
+nothing.
+
 ## 3. Reverse proxy, TLS and access
 
 First a **read-only check** of who owns ports 80/443 today (Nginx as in `DEPLOY.md`, or
