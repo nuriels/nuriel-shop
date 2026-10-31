@@ -90,3 +90,20 @@ No new database access paths are needed for this; only screens.
 | P-A2 | Staging addresses | server environment variables, never hard-coded in the bundle |
 | P-A3 | When | after 2c (or between 2c steps), as one small separately approved step |
 | P-A4 | Staging management | in Staging's own `/platform` (separate database and accounts), not from Production |
+
+## 6. Stage 11 scope added in round 7 (approved 31/10/2026 — roadmap D27)
+
+Not part of the first step (§3) or the dashboard (§4); built in roadmap Stage 11, each part
+with its own plan and approval. Original requirement: the Hospitality group of the
+platform admin (spec #1 part 2, #23 part 5) — reviews, customers and an availability board.
+
+| Area | What the platform admin gets | Separation and permissions |
+|---|---|---|
+| Reviews | a cross-site queue of reported reviews; hide / restore with a reason (Stage 9 data) | every action in the platform action log; owners keep moderating their own site |
+| Customers (guests) | find a guest **within one chosen site**; contact masked by default; full details only when explicitly opened with a reason | each opening logged; no merging of guest records across sites (identity only through a verified auth account); export / anonymise stay owner rights per site unless decided otherwise |
+| Global availability board | read-only board per chosen site (or a short list of sites), the same `calendar` read as the owner's board (3a) | `is_platform_admin()` on every call; one site id per call; changes only through the existing handoff into the site's own management |
+
+Common rules: everything through Hospitality database functions that require a platform
+admin (as in §2); no Ecommerce table or function; tests per role (platform admin, owner,
+manager, other site, anonymous). Open: whether "customers" also means business owners
+(register in `requirements-traceability.md`).

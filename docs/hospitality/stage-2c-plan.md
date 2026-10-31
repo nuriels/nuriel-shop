@@ -48,8 +48,8 @@ Migration: **10** (`20261101180000_hosp_catalog`) — 9 went to R-1.
 The owner (and managers) describe **what they rent**: one or more *properties* (מתחם /
 נכס) and the *units* in them (צימר, סוויטה, חדר, דירה, וילה…), with type, name,
 description and capacity — and whether a multi-unit property can also be rented **as a
-whole**. Prices (2f), beds and amenities (2d), photos (2e) and availability (2g) come later
-and plug into the same records.
+whole**. Prices (2f), beds and amenities (2d), photos (2e) and availability (3a — 2g was merged into the
+calendar board, roadmap D19) come later and plug into the same records.
 
 The database model already exists since Stage 1c (`properties`, `units`, `unit_members`,
 unit limit, booking engine on physical units). 2c **does not rewrite it**: it adds two
@@ -88,7 +88,8 @@ site (tenant)
 - **Hotel "room types"** (sell "Deluxe double ×6" and assign a room later) is the one
   future need that adds something: a `unit_categories` table and a nullable
   `units.category_id` (additive migration, existing rows untouched). Not in 2c —
-  recommended for the hotel stage (decision D-2c-5).
+  recommended for the hotel stage (decision D-2c-5). **Round 7 (D24):** the room-types
+  design is closed before 2h — roadmap `stage-1-plan.md` A4 "Hotel room types (RT)".
 
 ## 2. Gaps found in the current database (verified)
 
@@ -246,5 +247,5 @@ Each step committed separately; stop after each for approval.
 | D-2c-2 | New owner-only permission `catalog.owner` for archive / permanent delete | **yes** (manager: everything else) |
 | D-2c-3 | Property and unit type lists as in §1 | **yes** (labels only; can grow later) |
 | D-2c-4 | Show future sections (beds, photos, prices) on the unit page as "בקרוב", or hide them | **hide** until their stage — fewer dead ends for non-technical owners |
-| D-2c-5 | Hotel room types (`unit_categories`, book by type) | **not in 2c**; additive later, no rewrite |
+| D-2c-5 | Hotel room types (`unit_categories`, book by type) | **not in 2c**; additive later, no rewrite — round 7 (D24): design closed before 2h, stage decided then (roadmap "Hotel room types (RT)") |
 | D-2c-6 | Base price on the unit form in 2c or only in 2f | **2f** (pricing screen with rules); the checklist keeps pointing to it |

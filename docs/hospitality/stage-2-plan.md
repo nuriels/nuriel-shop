@@ -1,6 +1,10 @@
 # Nuriel Hospitality — Stage 2 plan: owner management system
 
-Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, `6b279f4`) implemented and approved; R-1 fixed before 2c (migration 9); 2c approved (`stage-2c-plan.md`), 2c.1 (database, migration 10, `0efc471`) approved, 2c.2 (screens) implemented — awaiting review.** Open items after 2b: §7.
+Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, `6b279f4`) implemented and approved; R-1 fixed before 2c (migration 9); 2c approved (`stage-2c-plan.md`), 2c.1 (database, migration 10, `0efc471`) approved, 2c.2 (screens) implemented; P0 local preview kit (`238995e`) approved. Next: 2c.3 — after approval.** Open items: §7.
+**Round 7 (31/10/2026, after the requirements audit — roadmap D19–D30):** approved order
+2c.3 → 2c.4 → 2d → 2e → 2f → **3a** → 2h → 2i → **3b** → 2j → 2k; 2g merged into 3a; 2d and
+2e scopes extended (§3); house rules at property level (2d). Every requirement and its
+state: `requirements-traceability.md`.
 Branch: `hospitality/stage-2`, created from `hospitality/stage-1` at `0f59e85` (Stage 1 unchanged).
 Builds on Stage 1 (migrations 1–6, engine layer 1f). Product roadmap: `stage-1-plan.md` A4
 "Stage 2"; engine rules: `architecture.md`.
@@ -10,26 +14,50 @@ Builds on Stage 1 (migrations 1–6, engine layer 1f). Product roadmap: `stage-1
 ## 0. Summary
 
 Stage 2 turns the Stage 1 backend into a working management area for the business owner,
-at `https://<site>/manage` on Hospitality sites only. It is split into **11 sub-stages**.
-Each one is small, ships its own migration (if any), server functions, screens and tests,
-and passes the full Ecommerce regression before it is reported.
+at `https://<site>/manage` on Hospitality sites only. It was split into **11 sub-stages**;
+round 7 (D19) brought the calendar board (Stage 3) forward as **3a** and **3b** inside this
+order and merged 2g into 3a. Each sub-stage is small, ships its own migration (if any),
+server functions, screens and tests, extends the preview kit (§2.6), and passes the full
+Ecommerce regression before it is reported.
 
 | # | Sub-stage | Main output | Migration |
 |---|---|---|---|
-| **2a** | Foundation: access, shell, login, seat limit, security fixes | `/manage` opens on a Hospitality site; mobile/RTL shell; setup checklist | 7 |
-| 2b | Business settings and team | business details, check-in/out, booking rules, notification emails; managers and seats | — (uses 7) |
-| 2c | Properties and units | create / edit / order / activate units; whole-property units; unit-limit UX | 8 (small) |
-| 2d | Unit details: beds and amenities | beds per room; amenity catalogue with Hebrew presets | — |
-| 2e | Photos and media | upload (phone/computer), compress, cover, order, alt text, video, delete | 9 (small) |
-| 2f | Pricing, rate rules and cancellation policies | base / weekend / seasons / holidays; price preview; policy editor with live example | — |
-| 2g | Availability blocks | block / release dates per unit, conflicts explained | — |
-| 2h | Bookings — view and decide | list, search, detail, approve / decline, check-in / out | 10 |
+| **2a** ✓ | Foundation: access, shell, login, seat limit, security fixes | `/manage` opens on a Hospitality site; mobile/RTL shell; setup checklist | 7 ✓ |
+| 2b ✓ | Business settings and team | business details, check-in/out, booking rules, notification emails; managers and seats | 8 ✓ (R-1: 9 ✓) |
+| 2c | Properties and units (2c.1 ✓ 2c.2 ✓; 2c.3, 2c.4 next) | create / edit / order / activate units; whole-property units; unit-limit UX | 10 ✓ |
+| 2d | **Unit and property details** (extended — D20, D21) | beds per room; amenity catalogue + custom, private / shared; parking; bathrooms + separate toilets; max adults / children; map location; guest info (public + private arrival info); property-level house rules snapshotted per booking; action log for beds and amenities | next free number (expected 11) — additive |
+| 2e | **Photos and galleries** (extended) | upload (phone / computer), link import with a server copy, real content checks, SSRF protection, galleries (site / property / unit), cover / order / delete / replace, ALT, video, optimisation, storage usage | expected 12 |
+| 2f | Pricing, rate rules and cancellation policies | base / weekend / seasons / holidays; price preview; policy editor with live example (house rules moved to 2d) | — |
+| ~~2g~~ | ~~Availability blocks~~ — **merged into 3a** | — | — |
+| **3a** | **Calendar board I** (D19) | month / week board of all units + per-unit view; bookings and blocks coloured by status; whole property; filters; automatic refresh; block / release from the board; built for many units | expected 13 |
+| (RT) | Hotel room types — **design closed before 2h**; implementation stage decided then (recommended here) | room type → physical rooms; a specific room per booking; room move | if approved |
+| 2h | Bookings — view and decide | list, search, detail, approve / decline, check-in / out | expected 14 |
 | 2i | Bookings — change, cancel, manual booking | modify, cancel, cancellation requests, "הוספת הזמנה" | — |
-| 2j | Guests and privacy | guest list (masked), guest card, notes, export / anonymise | 11 (small) |
-| 2k | Emails: outbox worker, status, retry, dashboard widgets | emails actually leave through the Nuriel email API (locally mocked); retry / resend; full dashboard | 12 |
+| **3b** | **Calendar board II** (D19) | day view; arrivals / departures; actions from the board; manual booking by selecting a date range; performance tests | — (or small) |
+| 2j | Guests and privacy | guest list (masked), guest card, notes, export / anonymise | expected 15 |
+| 2k | Emails: outbox worker, status, retry, dashboard widgets | emails actually leave through the Nuriel email API (locally mocked); retry / resend; full dashboard | expected 16 |
 
-**Recommended first sub-stage: 2a** (§3). Every other screen depends on it, and it fixes
-the backend gaps listed in §1 before any UI relies on them.
+**Approved order (D29, 31/10/2026):** 2c.3 → 2c.4 → 2d → 2e → 2f → 3a → 2h → 2i → 3b → 2j →
+2k. Gates: **before 2d** its detailed plan must contain every approved field and behaviour
+(§3 "2d"); **before 2h** the hotel room types design is closed (roadmap "Hotel room types
+(RT)"). Migration numbers are expectations — each sub-stage takes the next free number
+with a later timestamp (tracked requirement 2).
+
+**Dependencies (why this order works):**
+| Sub-stage | Needs | Reason |
+|---|---|---|
+| 2c.3 | 2c.1, 2c.2 | functions and list exist; adds the unit and property pages |
+| 2c.4 | 2c.3 | dashboard card and checklist link point to those pages |
+| 2d | 2c.3 | its sections live on the unit and property pages; its detailed plan holds every D20 / D21 item |
+| 2e | 2c.3 (2d recommended) | galleries hang on the site, the property and each unit |
+| 2f | 2c | prices and policies per unit |
+| 3a | 2c (placed after 2f — D29) | rows are the units; reads bookings already created by the engine; blocks move to functions here |
+| RT gate | 3a | room-types design closed (and, if approved, built) before the booking screens |
+| 2h | RT gate | list / card / actions show the room type and the assigned room |
+| 2i | 2h | modify / cancel / manual booking from the booking card |
+| 3b | 3a, 2h, 2i | the board's actions and manual booking by range reuse their functions and forms |
+| 2j | 2h | the guest card links to the guest's bookings |
+| 2k | 2h, 2i | emails and dashboard widgets for real booking events |
 
 ---
 
@@ -156,7 +184,8 @@ The architecture test and ESLint allow-list list exactly these files.
 - **SQL** (`scripts/db-tests/hospitality-*.test.sql`): every new RPC / policy — allowed
   role, refused roles (manager where owner-only, Ecommerce member, other site, guest,
   anonymous), flag off, inactive subscription, input limits.
-- **Concurrency** where a limit or lock is involved (seats in 2a; cover in 2e).
+- **Concurrency** where a limit or lock is involved (seats in 2a; cover in 2e; blocks vs
+  booking requests in 3a; room assignment in RT).
 - **Vitest:** validation, formatting, masking, navigation model, architecture boundaries
   (route adapters, adapter allow-list).
 - **E2E (Playwright, local Supabase):** desktop + `@mobile` project for each screen's main
@@ -166,6 +195,24 @@ The architecture test and ESLint allow-list list exactly these files.
   whole-repo lint still 28 known errors, CI green.
 - No new dev dependencies unless approved (component behaviour is covered by Playwright;
   optional `@axe-core/playwright` for accessibility — decision D-7).
+- **Preview kit (since P0, `docs/hospitality/preview.md`):** every sub-stage extends the
+  three demo sites **only through the real functions** (each user's own token, fictional
+  `@demo.test` accounts, local-only guard), adds a recorded chapter to
+  `e2e/preview/walkthrough.spec.ts` (desktop + phone, every step asserted, screenshots and
+  MP4) and is part of the CI `hospitality-preview` artifact. Dates are relative to the run
+  day, so the board always looks like a working business.
+
+  | Sub-stage | Added to the preview |
+  |---|---|
+  | 2c.3 – 2c.4 | "כל המתחם" with its units, reordering, an inactive room, an archived property (owner), the dashboard units card |
+  | 2d | beds per room (villa: 4 bedrooms with labels; hotel: double / twin), amenities private and shared + one custom, parking, location from a pasted link, guest info, house rules; a booking created afterwards keeps the rules snapshot |
+  | 2e | images generated locally (marked demo; no stock photos until a licence source is approved) uploaded through the real path; a link import from a local image server; refused imports (private address, wrong type) shown |
+  | 2f | weekend / season / holiday prices, three policy templates, price preview |
+  | 3a | bookings in every state (pending, confirmed, staying now, cancelled) and blocks, created through the booking engine; a whole-property booking; month / week board on desktop and phone; block → release |
+  | RT (if approved) | hotel room types with assigned rooms and a room move |
+  | 2h – 2i | a guest request through the public booking function, approval on the phone, a manual booking, a modification, a cancellation request with the calculated fee |
+  | 3b | day view, arrivals / departures, actions from the board, manual booking by range |
+  | 2j – 2k | guest cards; emails in the local mail mock and on the email screen; dashboard numbers matching the demo data |
 
 ---
 
@@ -262,33 +309,158 @@ enforced in the database (UI only explains).
 **Tests / acceptance:** SQL for reorder; E2E create property → unit → edit → reorder →
 deactivate; at the limit "הוספת יחידה" is disabled and a direct call is refused.
 
-### 2d — Unit details: beds and amenities
-**Functionality:** beds per room (type, quantity, room label); amenities per unit /
-property from the site's catalogue; "הוסף מהרשימה" inserts Hebrew presets (Wi-Fi, ג'קוזי,
-בריכה, מטבחון, חניה, מיזוג…) on demand; custom amenities.
-**DB / API:** existing `unit_beds`, `amenities`, `unit_amenities` (RLS). Presets are code,
-not a migration.
-**Files:** `management/catalog/{BedsEditor,AmenitiesPicker}.tsx`, `catalog/amenity-presets.ts`,
-server functions in `catalog.functions.ts`.
-**Tests / acceptance:** Vitest (presets valid against DB checks); E2E add beds and
-amenities, reload, remove.
+### 2d — Unit and property details (scope approved 31/10/2026 — D20, D21)
+**Binding scope.** The 2d detailed plan (`stage-2d-plan.md`: exact migration, functions,
+screens) is written and approved before 2d starts, and must contain **every item below**
+(requirement ids in `requirements-traceability.md`). The screens build on the unit and
+property pages delivered in 2c.3.
 
-### 2e — Photos and media
-**Functionality:** upload images from phone camera / gallery or computer (compressed in the
-browser before upload), short videos (≤ 50 MB, mp4 / webm / mov), YouTube / Vimeo links;
-assign to site / property / unit; set cover; drag to order; alt text (with a hint); delete
-(file and record); demo badge.
-**DB / API:** `media` table and `hosp-media` bucket; migration 11: `set_media_cover`,
-`reorder_media` (G10). **First task: verify G12** on the real Storage API; if the header
+**Unit page**
+1. **Beds per room** — rows of room label (optional: "חדר הורים", "חדר ילדים", "סלון"), bed
+   type and quantity. Types (existing `unit_beds` check): זוגית (double), קווין (queen),
+   קינג (king), יחיד (single), ספה נפתחת (sofa bed), קומותיים (bunk), עריסה (crib), מזרן
+   (mattress). Order of rows; "ישנים עד N" shown; a warning (not a block) when the sleeping
+   places are fewer than the maximum guests.
+2. **Rooms** — bedrooms (exists), bathrooms ("חדרי רחצה", exists) and **separate toilets**
+   ("שירותים נפרדים", new: 0–50, default 0).
+3. **Guests** — total maximum (exists, `capacity`), guests included in the price (exists),
+   child age (exists), **max adults** and **max children** (new, optional, each ≤ the
+   total; empty = only the total applies). Enforced by the booking engine — quote,
+   request, manual booking and modify — with Hebrew messages.
+4. **Amenities in the unit (private)** — from the catalogue (item 11), each with an optional
+   note (≤ 120 chars, e.g. "ג'קוזי מחומם").
+
+**Property page**
+5. **Amenities in the property (shared)** — same catalogue and notes; the site will show
+   both groups ("ביחידה" / "במתחם"). Existing model: `unit_amenities` holds exactly one of
+   unit / property.
+6. **Parking** (structured, property level; replaces the "חניה" amenity preset): availability
+   none / free / paid; type private / shared (required unless none); number of spaces
+   (optional, 0–500); fee note (paid only, short text); guest instructions (≤ 1,000 chars,
+   public — the screen warns not to write codes there; codes belong to item 9).
+7. **Location on the map** — paste a map link (Google Maps / Waze / OpenStreetMap / `geo:`)
+   or type coordinates; parsed in the browser and validated on the server; stored in the
+   existing `latitude` / `longitude`; preview links "פתיחה ב-Google Maps / Waze". **No
+   external map service and no server request to the link** (short links that need
+   resolving get a "copy the coordinates" hint).
+8. **Useful guest info (public)** — ≤ 4,000 chars: directions, the area, what to bring;
+   shown on the site (Stage 4) and in the booking confirmation.
+9. **Private arrival info (sensitive)** — entry code, gate code, Wi-Fi network and password,
+   key / arrival instructions:
+   - stored apart from public data, with its own access rules; never returned by public
+     functions, sitemaps, SEO data or the booking snapshot; never in a URL;
+   - staff with the catalogue or bookings permission can see and edit it;
+   - an **authorised guest** (manage-my-booking link, later the signed-in guest who owns the
+     booking) gets it only when the booking is confirmed or checked in, inside a time
+     window before arrival (proposal: from 48 h before check-in until check-out — open
+     decision). 2d delivers the storage, the guest access function and its tests; the guest
+     screen comes with Stage 4 / 6;
+   - changes are logged **without the values** ("קוד השער עודכן");
+   - per-unit values (a door code per zimmer) — open decision (recommended in 2d).
+10. **House rules (property level, separate from the cancellation policy — D21):**
+    - smoking: forbidden / outside only / allowed;
+    - pets: not allowed / on request / allowed — with a conditions text;
+    - parties and events: not allowed / on request / allowed;
+    - quiet hours: from–to (optional);
+    - check-in / check-out times: shown from the business settings;
+    - the owner's own rules: a list (up to 20 × 200 chars).
+    - **Snapshot:** every new booking stores the rules that applied
+      (`bookings.house_rules_snapshot`, new nullable column), written by `request_booking`
+      and `create_manual_booking`; a modification keeps the original snapshot; shown on the
+      booking card (2h) and to the guest (Stage 4 / 6).
+    - Unit-level exceptions — later (open decision; the model leaves room for them).
+    - `policies.house_rules` (Stage 1) is no longer edited or shown; the column stays.
+
+**Amenity catalogue**
+11. **Presets** (code, Hebrew, grouped), added to the site's catalogue on demand ("הוספה
+    מהרשימה"):
+    - בחדר: Wi-Fi, מיזוג, טלוויזיה;
+    - מטבח: מטבחון, מקרר, מיקרוגל, מכונת קפה;
+    - בחוץ: מרפסת, חצר, נוף, פינת מנגל;
+    - בריכה וספא: בריכה, ג'קוזי;
+    - שירותים: ארוחת בוקר (note: "כלולה" / "בתוספת תשלום");
+    - נגישות: נגישות (with a details note).
+12. **Custom amenities** — the owner's own name, a category, an icon from a fixed set.
+
+**Writes and action log**
+13. Beds, amenities and every new field are written **only through database functions**
+    (as settings in 2b and the catalogue in 2c): direct staff writes to `unit_beds`,
+    `amenities` and `unit_amenities` are revoked; every change goes to the action log
+    (`audit_log`) with Hebrew labels; revision check where two people may edit the same
+    record.
+
+**DB / API — one additive migration** (next free number, expected 11), tested on the local
+Postgres (SQL ×3, concurrency where relevant, rollback check including the new migration),
+no production change:
+- new columns (nullable or neutral defaults; existing rows unchanged): `units`:
+  `separate_toilets`, `max_adults`, `max_children`; `properties`: parking fields, public
+  guest info, house-rules fields (or a `property_house_rules` table — decided in the
+  detailed plan); `bookings.house_rules_snapshot`;
+- a separate table for private arrival info (property, optional unit) with its own RLS;
+- functions: `property_create` / `property_update` accept location, parking, guest info and
+  house rules; `unit_create` / `unit_update` accept toilets and the guest limits; new bed
+  and amenity functions; booking engine: guest-limit checks and the house-rules snapshot;
+  the guest access function for private arrival info;
+- nothing dropped or renamed; rollback file; added to `rollback-check.sh`.
+
+**Screens:** unit page sections "חדרים ומיטות", "אורחים", "מתקנים ביחידה"; property page
+sections "מתקנים במתחם", "חניה", "מיקום", "מידע לאורחים", "מידע פרטי להגעה", "כללי המקום" —
+phone first, sticky save bar, Hebrew errors next to the field.
+
+**Tests / acceptance:**
+- SQL: every function × owner / manager / other site / guest / anonymous; limits and
+  validation; action-log rows (private values never logged); private arrival info never
+  returned by public functions and returned to an authorised guest only in the allowed
+  state and window; the house-rules snapshot on new bookings (and unchanged after a
+  policy or rules edit); guest-limit checks in quote / request / manual booking / modify;
+  direct writes refused.
+- Vitest: presets valid against the database checks; map-link parser (Google Maps, Waze,
+  OpenStreetMap, `geo:`, plain coordinates, invalid input); validation.
+- E2E (desktop + phone): beds, amenities (private, shared, custom), parking, location from
+  a pasted link, guest info, private info, house rules — reload shows the values; manager
+  vs owner; axe; preview-kit chapter (§2.6).
+
+### 2e — Photos and galleries (must include — owner requirements of 31/10/2026 + audit)
+**Must include** (requirement ids in `requirements-traceability.md`; every item is in the
+2e detailed plan and its tests):
+1. **Upload** from the computer and from the phone (camera / gallery), compressed in the
+   browser before upload.
+2. **Link import:** paste an image link → the **server** downloads it and stores an
+   **independent copy** in Supabase Storage (`hosp-media`); never hotlink — pages show only
+   stored copies (details in the owner requirements below).
+3. **Storage:** `hosp-media`, path always `<tenant>/<uuid>.<ext>`, RLS + the `media`
+   permission; every image belongs to the site, a property or a unit.
+4. **Galleries:** one for the site, one per property, one per unit (`media.owner_kind`).
+5. **Cover** (one per gallery, atomic), **reorder** (atomic), **delete** (record and stored
+   object), **replace** (the new file keeps the position, the cover flag and the ALT text;
+   the old object is deleted).
+6. **Real checks:** type by content (magic bytes), size, decode + re-encode (strips
+   metadata, defeats polyglots); no SVG, no executables.
+7. **Download security (SSRF):** as in the owner requirements below; reuse of
+   `image-fetch.ts` through `src/platform/media/`.
+8. **Optimisation:** resized variants for the site (several widths) in a modern format
+   (e.g. WebP) and thumbnails for the management gallery; exact sizes, and whether the
+   original is kept, decided in the detailed plan.
+9. **ALT text** with a hint; **video** (≤ 50 MB, mp4 / webm / mov) and YouTube / Vimeo
+   links; **demo badge** (`is_demo` with a licence reference — existing check).
+10. **Storage usage per site:** stored bytes (incl. variants) measured and shown to the
+    owner; a plan limit and its enforcement are an open decision (Stage 11 / plans).
+**DB / API:** `media` table and `hosp-media` bucket; migration (expected 12):
+`set_media_cover`, `reorder_media` (G10), replace / delete functions, the link-import
+record. **First task: verify G12** on the real Storage API; if the header
 does not reach Postgres, use the fallback (signed upload URL issued after a permission
 check, path always `<tenant>/<uuid>.<ext>`).
-**Files:** `src/platform/media/image.ts`, `management/media/{MediaLibrary,UploadButton,MediaCard,AltTextSheet}.tsx`,
+**Files:** `src/platform/media/image.ts`, `src/platform/media/` link-import adapter,
+`management/media/{MediaLibrary,UploadButton,LinkImport,MediaCard,AltTextSheet}.tsx`,
 `server/manage/media.functions.ts`.
 **Security:** `media` permission; path prefix = site id (policy); size and MIME limits
 from the bucket; no executable or SVG uploads; delete only the site's own objects.
-**Tests / acceptance:** SQL for cover / reorder; concurrency for parallel "set cover";
-E2E upload image (desktop + mobile), set cover, reorder, delete — the file is gone from
-storage; upload to another site's path refused.
+**Tests / acceptance:** SQL for cover / reorder / replace / delete; concurrency for
+parallel "set cover"; SSRF suite (private / loopback / link-local / metadata addresses,
+redirect to a private address, DNS rebinding, oversize, slow response, wrong type, polyglot,
+SVG); E2E upload image (desktop + mobile), link import from a local test image server, set
+cover, reorder, replace, delete — the file is gone from storage; upload to another site's
+path refused; preview-kit chapter (§2.6).
 
 **Owner requirements (approved 31/10/2026 — binding for 2e; 2e not started):**
 - Upload from the computer (and phone camera / gallery).
@@ -323,21 +495,78 @@ default policy, per unit; live example "אם אורח מבטל ב-X — מקבל
 **Files:** `management/pricing/{RatesEditor,SeasonForm,PricePreview}.tsx`,
 `management/policies/{PolicyEditor,PolicyExample,PolicyHistory}.tsx`,
 `server/manage/{pricing,policies}.functions.ts`, `validation/pricing.ts`.
-**Note:** promotions and coupons UI stays in Stage 7 (roadmap) — decision D-5.
+**Note:** promotions and coupons UI stays in Stage 7 (roadmap) — decision D-5. House rules
+are **not** part of the policy editor: they are managed at property level in 2d (D21); the
+Stage 1 field `policies.house_rules` is not shown.
 **Tests / acceptance:** Vitest for the example calculator vs `policy_schedule`; E2E create
 season → preview shows the season price; edit a policy → a new version, existing
 bookings keep their snapshot.
 
-### 2g — Availability blocks
-**Functionality:** block dates for a unit (reason optional), list upcoming blocks, release
-a block; conflicts with bookings explained ("יש הזמנה בתאריכים האלה"); whole-property
-units show member effects. (The full calendar board is Stage 3.)
-**DB / API:** existing `blocks` (insert / release), exclusion constraint, triggers.
-**Files:** `management/blocks/{BlockList,BlockForm}.tsx`, `server/manage/blocks.functions.ts`.
-**Tests / acceptance:** E2E block → the same dates are refused for a manual booking (2i
-test reuses it) and quote shows unavailable; release → available again.
+### ~~2g — Availability blocks~~ → merged into 3a (D19, 31/10/2026)
+Everything 2g planned — block dates for a unit (reason optional), list upcoming blocks,
+release a block, conflicts explained ("יש הזמנה בתאריכים האלה"), whole-property effects —
+is part of **3a**, from the board and from a list. Its acceptance test stays: block → the
+same dates are refused for a manual booking (2i reuses it) and the quote shows unavailable;
+release → available again.
+
+### 3a — Calendar board I (after 2f — D19)
+**Goal:** the owner's central daily **work tool** — fast and convenient, not just a nice
+view — for a single zimmer, a compound with many units and a hotel with many rooms.
+Roadmap: `stage-1-plan.md` A4 Stage 3.
+
+**Functionality**
+- **Month and week views:** units as rows (grouped by property; by room type once RT
+  exists), dates as columns; sticky unit column and date header; today marker; weekend
+  shading (the business's weekend nights); previous / next / "היום".
+- **Per-unit view:** one unit's month — on the board and as an "יומן" tab on the unit page.
+- **Bookings as bars** across their nights; colours by status with a legend: ממתינה
+  לאישור, מאושרת, שוהים עכשיו, חסום (hatched); cancelled hidden by default (filter);
+  declined / expired not shown. Free / occupied / blocked readable at a glance (also
+  without colour — pattern and text for accessibility).
+- **Whole property:** its row shows the members' occupancy, and member rows show the
+  whole-property booking (dimmed, "דרך כל המתחם").
+- **Filters:** property, unit type, status; search by booking number or guest name
+  (masked contact) → jump to the dates.
+- **Click a booking** → summary panel (dates, unit, guests, status, total, source);
+  read-only until 2h adds the actions. **Click a block** → details + release.
+- **Block dates from the board:** select a range on a unit row (drag on desktop; tap start +
+  tap end on the phone; keyboard alternative) → "חסימת תאריכים" (reason optional); conflicts
+  explained in Hebrew; also from a list "חסימות קרובות".
+- **Automatic refresh (D4):** every 30–60 s while the page is visible, on tab focus and
+  after every own action; a cheap change check, so data is downloaded only when something
+  changed; a stale screen can never write a conflict (exclusion constraint + revision).
+- **Phone:** agenda by default (day by day: arrivals, departures, staying, blocks) plus the
+  per-unit month grid; the full board scrolls horizontally with the unit column fixed.
+
+**Scale and speed (designed in from the start)**
+- One read call per visible range: `calendar(from, to, unit_ids?)` returns units, bookings,
+  blocks and whole-property links overlapping the range — only what the cells need, no
+  contact details.
+- `calendar_stamp(from, to)` (or a version in the response) for the change check.
+- Ranges bounded: week 7–14 days, month view ≤ 6 weeks; rows virtualised (only visible rows
+  rendered); bars computed once per load.
+- Indexes checked with EXPLAIN on realistic volumes (existing `bookings_unit_idx`,
+  `unit_occupancy` GiST).
+- **Acceptance targets** (local measurement; confirmed in the 3a detailed plan): 300 units ×
+  42 days with ~5,000 bookings — database read ≤ 300 ms, first render ≤ 1 s, smooth
+  scrolling; phone: 30 units smooth.
+
+**DB / API** (migration, expected 13): `calendar`, `calendar_stamp`; `block_create`,
+`block_update`, `block_release` (DEFINER, `bookings` permission, action log, Hebrew
+messages); direct staff writes to `blocks` revoked (audit finding A-1, §7).
+**Files:** `management/calendar/{Board,MonthGrid,WeekGrid,UnitCalendar,Agenda,BookingBar,BlockSheet,Legend,Filters}.tsx`,
+`api/calendar.functions.ts`, route `manage.calendar.tsx` ("יומן" in the navigation).
+**Tests / acceptance:** SQL (range edges, half-open nights, whole-property fan-out,
+isolation, no contact data in board rows, block functions × roles, action log);
+concurrency (block vs booking request on the same nights; two blocks at once); performance
+script (seeded 300 units); E2E desktop + phone (month / week, per unit, filters, block →
+quote unavailable → release); axe; preview-kit chapter (§2.6).
+**Depends on:** 2c (units); placed after 2f by the approved order (D29).
 
 ### 2h — Bookings: view and decide
+**Gate (D24, D29):** the hotel room types design (roadmap "Hotel room types (RT)") is
+closed before 2h starts; if RT is implemented first, the list, card and actions show the
+room type and the assigned room (with "room move").
 **Functionality:** list with tabs (ממתינות לאישור · קרובות · שוהים עכשיו · עבר · בוטלו),
 search by name / phone / booking number, approval countdown; booking card: dates, unit,
 guests, price breakdown per night, policy snapshot, history timeline, email status (safe);
@@ -366,6 +595,27 @@ expected.
 **Tests / acceptance:** E2E manual booking (desktop + mobile) → on the list, dates held;
 double booking refused with a clear message; modify; cancel with fee; approve a
 cancellation with a reduced fee. Concurrency already covered by Stage 1 tests.
+**Note:** the "הוספת הזמנה" form is built so that 3b can open it prefilled (unit and dates)
+from a range selected on the board.
+
+### 3b — Calendar board II (after 2h and 2i — D19)
+**Functionality**
+- **Day view:** all units for one day — arriving, leaving, staying, free, blocked.
+- **Arrivals and departures:** markers on the board and lists for today / tomorrow, with
+  check-in / check-out actions.
+- **Actions from the board** through the 2h / 2i functions (each sends the `revision` it
+  saw): approve / decline, check-in / check-out / no-show, cancel, open the full booking
+  card; date or unit changes through the card's modify sheet (no drag-to-move).
+- **Manual booking by selecting a date range** on a unit row → the 2i "הוספת הזמנה" form
+  prefilled (unit, dates); availability and price rechecked by the engine.
+- Room types (if RT is implemented): rows grouped by type; "room move" from the card.
+**DB / API:** reuses 3a, 2h and 2i functions; a small migration only if the detailed plan
+finds a gap.
+**Tests / acceptance:** E2E desktop + phone (day view, arrivals / departures, approve from
+the board, manual booking by range → appears at once, stale revision → "ההזמנה עודכנה —
+מרעננים"); performance as in 3a plus action round-trips; full regression; preview-kit
+chapter (§2.6).
+**Depends on:** 3a, 2h, 2i (and RT if implemented before 2h).
 
 ### 2j — Guests and privacy
 **Functionality:** guest list (name, masked contact, number of stays, last stay), search;
@@ -484,11 +734,28 @@ Nothing is enabled globally; flags are set per site, and only in local / E2E dat
 
 ---
 
+## 5b. Round 7 decisions (approved 31/10/2026 — after the requirements audit)
+
+Full text in the roadmap (`stage-1-plan.md` A0, D19–D30); what they change here:
+
+| Decision | Effect on this plan |
+|---|---|
+| D19 calendar 3a / 3b | 3a after 2f (absorbs 2g), 3b after 2h + 2i — §0, §3 |
+| D20 2d scope | §3 "2d" items 1–13; one additive migration tested locally with rollback |
+| D21 house rules, private arrival info | §3 "2d" items 9–10; 2f no longer touches house rules |
+| D24 hotel room types | gate before 2h; optional sub-stage RT between 3a and 2h (§0) |
+| D29 order | §0 |
+| D30 traceability | every sub-stage report updates `requirements-traceability.md` |
+
 ## 6. Out of scope for Stage 2
-Calendar board (Stage 3); public website and guest booking UI (Stage 4); guest accounts
-and Google login (Stage 6, after the OAuth fix); promotions / coupons UI and SEO (Stage 7);
-payments (Stage 8); production enablement, server configuration, deployment, merge to
-`main`.
+Public website and guest booking UI (Stage 4 — with multi-language infrastructure, theme
+choice at creation, Premium themes, house rules and private arrival info for authorised
+guests); guest accounts and Google login (Stage 6, after the OAuth fix); promotions /
+coupons UI and SEO incl. VacationRental (Stage 7); payments (Stage 8); platform-admin
+reviews, customers and global board (Stage 11); iCal sync (Stage 12); WhatsApp messaging
+(Stage 13); production enablement, server configuration, deployment, merge to `main`.
+The calendar board is **no longer** out of scope: it is built as 3a / 3b inside this order
+(D19).
 
 ## 7. Open items after Stage 2b (nothing may be lost)
 
@@ -533,5 +800,16 @@ Status at the end of 2b (`hospitality/stage-2`). "Where" names the stage that ow
 |---|---|---|
 | F-1 | A removed manager keeps a valid session token until it expires; every management request is refused at once (checked per request in the database), nothing else on the site is reachable | documented behaviour |
 | F-2 | Action log has no retention / export yet (append-only; rows go with the site) | 2j (privacy) |
-| F-3 | Checklist steps "units", "photos", "prices", "policy" have no link yet — their screens arrive in 2c–2f | 2c–2f |
+| F-3 | Checklist steps "units", "photos", "prices", "policy" have no link yet — their screens arrive in 2c–2f | units 2c.4 · photos 2e · prices and policy 2f |
+
+**Found by the requirements audit (31/10/2026 — `requirements-traceability.md`)**
+| # | Item | Where |
+|---|---|---|
+| A-1 | Blocks are written directly to the table by staff (RLS) — no action-log entry, technical messages possible | 3a: `block_create` / `block_release` functions, direct writes revoked |
+| A-2 | `policies.house_rules` superseded by property-level house rules (D21) | 2d (column kept, not edited) |
+| A-3 | Property coordinates exist in the database but no function or screen accepts them | 2d (map link / coordinates); public map provider: Stage 4 |
+| A-4 | Storage usage per site is not measured; no plan limit (original spec #1 part 12) | 2e measures; limit — open decision (Stage 11) |
+| A-5 | Hotel room types had no stage (D-2c-5) | design gate before 2h (D24) |
+| A-6 | Beds and amenities are written directly by staff (no action log) | 2d (functions + log) |
+| R-2 | Ecommerce SQL test `analytics.test.sql` fails only during the first minute of a month (seen in CI #33, passed on re-run); not Hospitality | separate small fix of an Ecommerce test file — needs explicit approval |
 

@@ -1,6 +1,10 @@
 # Nuriel Hospitality — product plan and Stage 1 (backend foundation)
 
 Status: **approved plan; implementation in progress.** Stages 1a–1f implemented on this branch (migrations 1–6, engine layer) — see `docs/hospitality/migrations.md` and `docs/hospitality/architecture.md`. Later steps await approval.
+**Roadmap round 7 (31/10/2026):** after the requirements audit (original spec + Skill vs code and
+plans) — decisions D19–D30 (A0), calendar brought forward as 3a / 3b, 2d / 2e scope extended,
+house rules at property level, new future stages 12 (iCal) and 13 (guest messaging), hotel room
+types checkpoint. Permanent reference: `docs/hospitality/requirements-traceability.md` (A13).
 Branch: `hospitality/stage-1` (based on `hospitality/stage-0`). No merge to `main`,
 no production deployment, no production credentials, no migrations yet.
 
@@ -39,6 +43,24 @@ copied).
 | D17 | **Reuse the existing Google login, email-code login and email API** — no new Auth system, Google provider, OTP mechanism or email system; Hospitality adds only guest-specific rules on top of the shared primitives | A10 |
 | D18 | Final installation on the **existing Nuriel server and Supabase stack** following a step-by-step runbook (no new server or project) | A11 |
 
+Round 7 — after the requirements audit (approved 31/10/2026; full audit and requirement ids:
+`requirements-traceability.md`):
+
+| # | Decision | Where designed |
+|---|---|---|
+| D19 | **Calendar brought forward and split:** **3a** right after 2f (replaces 2g) — month / week board of all units, per-unit view, bookings and blocks coloured by status, whole property, filters, automatic refresh, block / release from the board; **3b** after 2h + 2i — day view, arrivals / departures, actions from the board, manual booking by selecting a date range, performance tests. A central, fast **work tool**, designed from the start for a hotel with many rooms and a compound with many units | A4 Stage 3; `stage-2-plan.md` 3a / 3b |
+| D20 | **2d scope extended** (all approved): beds per room (type, quantity); amenity catalogue (Wi-Fi, מיזוג, מטבחון, מקרר, מיקרוגל, מכונת קפה, טלוויזיה, מרפסת, חצר, נוף, מנגל, ארוחת בוקר, בריכה, ג'קוזי, נגישות) + custom amenities; private (unit) vs shared (property); parking (none / free / paid, private / shared, spaces, guest instructions); bathrooms + separate toilets; max adults and max children per unit in addition to the total; map location from a pasted link or coordinates (no external map service now); useful guest info; beds and amenities changes in the action log. Data-model changes **additive only**, migration tested on local Postgres with a rollback check; no production change | `stage-2-plan.md` 2d |
+| D21 | **House rules separate from the cancellation policy**, at **property level** (unit exceptions later): smoking, pets (or allowed on conditions), parties, quiet hours, check-in / check-out times, owner's own rules; **snapshotted with each booking**. **Sensitive arrival info** (entry code, gate code, Wi-Fi password) is never shown on the public site — only to an authorised guest, according to the booking's state | `stage-2-plan.md` 2d; A4 Stage 4 / 6 |
+| D22 | **Multi-language infrastructure designed in Stage 4**; launch in Hebrew only | A4 Stage 4 |
+| D23 | **Theme choice at site creation** in Stage 4; **Premium themes** as part of the theme system | A4 Stage 4 (pricing: Stage 11) |
+| D24 | **Hotel room types:** a model with a room type → several physical rooms and a **specific room assigned to each booking** (not only a unit name). The design is closed **before the advanced booking system (2h)**; its implementation stage is decided then | A4 "Hotel room types (RT)" |
+| D25 | **VacationRental / Google structured data** check in Stage 7 | A4 Stage 7 |
+| D26 | **WhatsApp** → a future stage of guest messaging and communication | A4 Stage 13 |
+| D27 | **Stage 11 adds** reviews management, customers and a global availability board for platform admins, with a permission design and separation between sites | A4 Stage 11; `platform-admin-hospitality-plan.md` §6 |
+| D28 | **iCal sync with Booking.com and Airbnb** — a future stage; **requirements documented only** (import / export, double-booking prevention, sync frequency, conflicts, booking source); no integration or development now | A4 Stage 12 |
+| D29 | **Planning order:** 2c.3 → 2c.4 → 2d → 2e → 2f → 3a → 2h → 2i → 3b → 2j → 2k. Before 2d: its specification must contain every approved field and behaviour (D20, D21). Before 2h: the hotel room types design is closed (D24) | `stage-2-plan.md` §0 |
+| D30 | **No requirement may be lost:** `requirements-traceability.md` is the permanent reference (original spec + Skill vs code and plans); every stage report updates it; a requirement is never deleted — only its status / stage changes, with the date and reason | A13 |
+
 ## A1. Vision
 
 Nuriel Hospitality is a complete SaaS for accommodation businesses (zimmers, multi-unit
@@ -75,19 +97,23 @@ Four separate things (never mixed in code or data):
 
 | # | Requirement | Stage |
 |---|---|---|
-| 1 | Data model, isolation, flags, booking core, manual bookings (backend) | **1** |
-| 2 | Owner management: settings, properties, units, media (images + video), pricing, blocks, bookings, manual booking UI, guests, dashboard, booking emails | 2 |
-| 3 | Calendar / availability board (day, week, month) | 3 |
-| 4 | Public website engine: themes, sections, SSR site, booking flow, demo media, Nuriel footer, Nofei Dorit showcase tenant | 4 |
+| 1 | Data model, isolation, flags, booking core, manual bookings (backend) | **1** ✓ |
+| 2 | Owner management: settings, team, properties, units, **unit and property details** (beds per room, amenities private / shared + custom, parking, bathrooms + separate toilets, max adults / children, map location, guest info, **house rules at property level** — D20, D21), media (images + video, **link import with a server copy** — 2e), pricing and policies, bookings, manual booking UI, guests, dashboard, booking emails | 2 (2a–2k) |
+| 3 | Calendar / availability board — **brought forward (D19)**: **3a** (month / week, all units + per unit, blocks from the board) right after 2f; **3b** (day view, arrivals / departures, actions, manual booking by range, performance) after 2h + 2i | 3a, 3b (inside the Stage 2 order) |
+| 4 | Public website engine: themes (**choice at site creation**, **Premium** tier — D23), sections, SSR site, booking flow, demo media, Nuriel footer, Nofei Dorit showcase tenant, **multi-language infrastructure** (Hebrew at launch — D22), house rules and guest info on the site, private arrival info only for an authorised guest (D21) | 4 |
 | 5 | Visual editor (click-to-edit, media, sections, colours, fonts, draft/publish, versions, preview) | 5 |
 | 6 | Guest accounts (Google / email code), "my bookings"; site address at creation; custom domains; Nuriel landing-page option (behind flag) | 6 |
-| 7 | SEO & marketing: per-page meta, sitemap, robots, OG, schema.org, GA / Meta Pixel with consent, coupons & promotions UI | 7 |
+| 7 | SEO & marketing: per-page meta, sitemap, robots, OG, schema.org (**VacationRental check** — D25), GA / Meta Pixel with consent, coupons & promotions UI | 7 |
 | 8 | Payments: full / deposit / on arrival via the shared Grow adapter | 8 |
 | 9 | Reviews & reputation (verified reviews, owner testimonials, replies) | 9 |
 | 10 | Help centre (guides from real screens, screenshots, in-screen tips) | 10 |
-| 11 | Super-admin Hospitality section, Hospitality plans activation, reports | 11 |
+| 11 | Super-admin Hospitality section, Hospitality plans activation, reports; **reviews, customers and a global availability board** with permissions and site separation (D27); Premium-theme and storage entitlements | 11 |
+| 12 | **Channel sync (iCal) with Booking.com / Airbnb** — requirements documented only (D28) | 12 (future, separate approval) |
+| 13 | **Guest messaging and communication (WhatsApp)** (D26) | 13 (future, separate approval) |
+| RT | **Hotel room types** — room type → several physical rooms, a specific room per booking (D24) | design closed before 2h; stage decided then |
 
 Every stage: own tests + full Ecommerce regression (Stage 0 suite) + report + approval.
+Every stage report also updates `requirements-traceability.md` (D30).
 
 ## A4. Stages in detail
 
@@ -116,6 +142,14 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   (weekday/weekend, seasons, holidays, min nights); blocks; bookings list & detail;
   **"הוספת הזמנה"** (manual booking); booking modification/cancellation; guests (CRM:
   history, notes, export/anonymise); booking emails (owner + guest) via the **outbox worker** (retries, idempotency, delivery status on the booking page, resend); cancellation-request handling (with the calculated fee and override); **cancellation & deposit policy editor** (templates, tiers, per unit / per rate rule, live example "if a guest cancels on date X → refund Y"); demo-image indicator.
+- **Order and scope after round 7 (D19–D21, D29):** detailed sub-stages in `stage-2-plan.md`;
+  approved order 2c.3 → 2c.4 → 2d → 2e → 2f → **3a** → 2h → 2i → **3b** → 2j → 2k (blocks —
+  formerly 2g — are part of 3a). 2d adds the unit and property details (beds per room,
+  amenity catalogue + custom, private / shared, parking, bathrooms + separate toilets, max
+  adults / children, map location, guest info, private arrival info) and **property-level
+  house rules snapshotted with each booking**; the policy editor (2f) no longer edits house
+  rules. 2e adds link import with a server copy, real content checks, SSRF protection,
+  replace, optimisation and storage-usage measurement.
 - **Dashboard widgets** (all derived by queries, no extra tables): pending approvals with
   deadline, today's arrivals/departures, occupancy (today/7/30 days), free units,
   month revenue (from bookings), recent bookings, recent guests, pending actions
@@ -134,16 +168,36 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   Resend), permission tests (owner/manager only).
 - **Depends on:** 1.
 
-### Stage 3 — Calendar & availability board
-- **Builds:** professional board: units as rows, dates as columns; day/week/month;
-  bookings as blocks spanning nights; colours by status (pending approval, confirmed,
-  checked-in/staying, cancelled — shown faded/hidden by filter, blocked); click → booking
-  drawer; drag-free creation (select a range → "הוספת הזמנה" / "חסימה"); filters by unit /
-  property / status; arrivals & departures markers; month navigation; whole-property rows
-  show member occupancy.
+### Stage 3 — Calendar & availability board (brought forward: 3a / 3b — D19)
+- **Place in the order (D19, D29):** no longer after the whole of Stage 2. **3a** is built
+  right after 2f (it absorbs 2g, availability blocks); **3b** right after 2h + 2i. Detailed
+  sub-stage specs: `stage-2-plan.md` §3 "3a" and "3b".
+- **Purpose:** the owner's **central daily work tool** — fast and convenient, not just a nice
+  view — for a single zimmer, a compound with many units and a hotel with many rooms.
+- **Builds — 3a (after 2f):** professional board: units as rows (grouped by property; by
+  room type once RT exists), dates as columns; **month and week** views; **per-unit view**
+  (also on the unit page); bookings as bars spanning nights; colours by status (pending
+  approval, confirmed, checked-in / staying, cancelled — hidden by default, blocked); free /
+  occupied / blocked at a glance; whole-property rows show member occupancy (and members
+  show the whole-property booking); filters by property / unit type / status; month
+  navigation and "today"; automatic refresh; **block / release dates from the board**
+  (select a range on a unit row); click a booking → summary (read-only until 2h).
+- **Builds — 3b (after 2h + 2i):** **day view**; **arrivals & departures** (markers and
+  lists); **actions from the board** (approve / decline, check-in / check-out / no-show,
+  cancel, open the full card) through the 2h / 2i functions; **manual booking by selecting a
+  date range** ("הוספת הזמנה" prefilled); performance tests.
+- **Scale and speed (designed in from 3a):** one read call per visible range; a cheap
+  change check so the automatic refresh downloads data only when something changed;
+  bounded ranges (week 7–14 days, month view ≤ 6 weeks); virtualised rows (only visible
+  rows are rendered); sticky unit column and date header; indexes verified with EXPLAIN on
+  realistic volumes. Acceptance targets (local measurement, confirmed in the 3a detailed
+  plan): 300 units × 42 days with ~5,000 bookings — database read ≤ 300 ms, first render
+  ≤ 1 s, smooth scrolling; phone: agenda view by default plus a per-unit month grid.
 - **Data:** one RPC `calendar(from, to, unit_ids?)` returning units, bookings, blocks,
-  occupancy rows and arrivals/departures in one round trip; all writes go through the
-  booking engine RPCs, so the board can never diverge from the DB.
+  occupancy rows and arrivals/departures in one round trip, plus `calendar_stamp(from, to)`
+  for the change check; blocks are written through `block_create` / `block_release`
+  (DEFINER, action log) instead of direct table writes; all writes go through the booking
+  engine RPCs, so the board can never diverge from the DB.
 - **Freshness without Realtime (D4):** the production stack has **no Supabase Realtime
   container** (7 containers: db, kong, auth, rest, storage, meta, studio), and none is
   added now. The board uses the existing TanStack Query:
@@ -160,9 +214,12 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   Future Realtime goes through `src/platform/realtime/` (subscribe-to-changes interface)
   and only replaces the polling trigger — the booking engine does not change.
 - **Tables:** none new.
-- **Tests:** RPC tests (range edges, half-open ranges, whole-property fan-out), visual
-  E2E of the board, performance (50 units × 90 days).
-- **Depends on:** 1, 2.
+- **Tests:** RPC tests (range edges, half-open ranges, whole-property fan-out, isolation,
+  no contact data in board rows), block functions × roles + action log, concurrency (block
+  vs booking request on the same nights), visual E2E of the board (desktop + phone),
+  performance (300 units × 42 days; the earlier 50 units × 90 days kept as a second case).
+- **Depends on:** 3a — 1, 2c (units), placed after 2f (D29); 3b — 3a, 2h, 2i (and RT if it
+  is implemented before 2h).
 
 ### Stage 4 — Public website engine (themes) and booking flow
 - **Builds:** SSR public site on the Hospitality host; **theme library** (Luxury, Nature,
@@ -182,6 +239,35 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   media references by id), theme key + tokens (colours, approved fonts, button/card/
   gallery styles), header/footer settings, per-page SEO. Business data (units, prices,
   availability, reviews) is **never copied** into the document; sections reference it.
+- **Multi-language infrastructure (D22) — launch in Hebrew only:**
+  - the site document holds content per locale (Hebrew required, others optional); public
+    UI strings come from a per-locale catalogue (no hard-coded strings in themes);
+  - non-default locales under `/<locale>/…`; `lang` and `dir` per locale — every theme
+    must render RTL and LTR;
+  - translations of business texts (property / unit names and descriptions, house rules,
+    guest info) — per-field translation model chosen in the Stage 4 detailed plan;
+  - guest emails in the guest's language (the acceptance record already stores it);
+    hreflang and per-locale sitemaps in Stage 7;
+  - adding a language later = translations + a setting, no code change. The owner area
+    stays Hebrew unless decided otherwise.
+- **Theme choice at site creation (D23):** gallery "בחרו את העיצוב לאתר שלכם" — image,
+  full preview, desktop / mobile toggle, a demo site with sample content per theme, select
+  button. It follows the simplified opening (D15): shown after the business is opened
+  (welcome flow / checklist step), with a default theme preselected by business type; the
+  theme can be changed later without losing content (Stage 5 `switchTheme`).
+- **Premium themes (D23):** each theme in the registry carries `tier: free | premium`;
+  premium availability comes from the plan's features (prices decided in Stage 11); all
+  themes are free at launch.
+- **House rules and guest info on the site (D21):** the unit / property pages show the
+  property-level house rules and the public guest info; the booking flow shows the house
+  rules next to the cancellation terms before sending (the same text is snapshotted with
+  the booking). **Private arrival info** (entry / gate code, Wi-Fi password) is never on the
+  public site, in sitemaps or in SEO data — only on the manage-my-booking page of an
+  authorised guest (and later "my bookings", Stage 6), when the booking is confirmed or
+  checked-in and inside the visibility window (default proposed in 2d).
+- **Map:** the location section uses the property coordinates entered in 2d; the map
+  provider (e.g. OpenStreetMap or Google; keys, privacy, cost) is decided in the Stage 4
+  plan — until then "open in Google Maps / Waze" links.
 - **Tables:** `site_versions` (one mutable draft per tenant + immutable published
   versions). The public site renders the latest published version (one indexed read).
 - **Demo media pack (D3):**
@@ -284,6 +370,11 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   `AggregateRating` only from verified reviews — Google's current guidance re-checked
   before implementation), indexing toggle, Google Analytics / Meta Pixel ids, Google
   site verification; promotions & coupons UI; video/image SEO (alt, VideoObject).
+- **VacationRental and structured data for Google (D25, original spec #1 part 10):** before
+  implementation, check Google's current VacationRental structured-data requirements and
+  eligibility, and use it for vacation-rental units where the site qualifies; otherwise
+  `LodgingBusiness` / `Hotel` / `Accommodation` / `HotelRoom`. Validated with Google's
+  Rich Results Test on demo sites; hreflang for the locales of D22.
 - **Reuses:** shared `public.site_settings` columns already holding GA id, Pixel id,
   Google verification (product-neutral) via a platform marketing adapter;
   `TrackingConsent` cookie-consent behaviour (tracking only after consent) via a platform
@@ -337,8 +428,92 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
 - **Builds:** platform overview composed from engine admin providers; Hospitality
   section (sites, owners, units, bookings, subscriptions, revenue reports); Hospitality
   plans & limits activation (prices only after approval).
-- **Tables:** `plans`, `subscriptions` (Stage 1).
-- **Depends on:** 1, 8.
+- **Added in round 7 (D27; original spec #1 part 2, #23 part 5):**
+  - **Reviews management:** a cross-site queue of reported reviews; hide / restore with a
+    reason; every action in the platform action log. Owners keep moderating their own site
+    (Stage 9).
+  - **Customers (guests):** platform admins can find a guest **within one chosen site**;
+    contact masked by default; full details only when explicitly opened, with a reason,
+    and every opening logged; guest records are never merged across sites (identity is
+    linked only through a verified auth account — D9); export / anonymise stay owner rights
+    per site (D-3) unless decided otherwise.
+  - **Global availability board:** read-only, per chosen site (or a short list of sites),
+    using the same `calendar` read with a platform-admin check; changes only through the
+    existing handoff into the site's own management.
+  - **Permissions and separation:** every call checks `is_platform_admin()` and is scoped to
+    one site id; no cross-site joins of personal data; tests per role (platform admin,
+    owner, manager, other site, anonymous).
+  - **Entitlements:** Premium themes (D23) and the storage limit (pending decision) through
+    the plan's features.
+- **Tables:** `plans`, `subscriptions` (Stage 1); a platform-admin access log if the
+  existing action log does not fit (decided in the Stage 11 plan).
+- **Depends on:** 1, 8 (and 3a for the board, 9 for reviews).
+
+### Stage 12 — Channel sync (iCal) with Booking.com and Airbnb (future — D28)
+**Requirements only. No integration and no development until this stage is approved.**
+- **Export:** a secret iCal feed per unit (and per whole-property unit) for each channel,
+  e.g. `https://<site>/ical/<token>.ics`; read-only; lists occupied and blocked nights
+  (pending holds included, so channels cannot sell held dates); **no guest names or
+  contact details**; tokens can be rotated.
+- **Import:** per unit, one or more external calendar URLs with a channel label
+  (Booking.com, Airbnb, other); fetched by the server with the same SSRF protections as the
+  2e link import (platform downloader), with size and time limits; each event (UID, start,
+  end) becomes an external occupancy — a booking with `source = 'external'` and
+  `channel = 'booking.com' | 'airbnb' | …`, or an external block — held by the same
+  exclusion constraint as every other booking.
+- **Double-booking prevention:** our availability is exported and the channels' bookings
+  are imported into the same engine; the residual risk (iCal is not real-time) is shown to
+  the owner, with a recommended short interval.
+- **Sync frequency:** scheduled every N minutes (proposal 15–30, within the providers'
+  limits); "סנכרן עכשיו" button; last sync time and errors on screen; backoff after
+  errors.
+- **Conflicts:** an imported event that overlaps an existing booking or block is **not**
+  written; it goes to a conflicts list, and the owner is notified (email + dashboard) with
+  suggested actions. A changed or removed external event updates or releases only its own
+  external occupancy (with history). Nuriel bookings are never changed automatically.
+- **Booking source:** bookings and blocks carry `source` and `channel`; the board shows a
+  channel badge; reports by source.
+- **Mapping:** one external listing ↔ one unit (or one whole-property unit), validated.
+- **Security:** secret tokens, no personal data in exports, rate limits, action log.
+- **Tests:** parser fixtures (Booking.com / Airbnb samples, all-day dates, time zones),
+  overlap and conflict scenarios, removed events, SSRF, concurrency between an import and a
+  site request.
+- **Depends on:** 1, 3a (display), 2k (owner notifications); independent of the public
+  site. Order relative to Stage 4 decided when it is approved.
+
+### Stage 13 — Guest messaging and communication (WhatsApp) (future — D26)
+- **Today:** WhatsApp number in the business settings (2b); click-to-chat button on the
+  site (Stage 4, `wa.me` link, no API).
+- **Future stage:** booking messages by WhatsApp (request received, confirmed, reminder
+  before arrival, private arrival info inside its window, cancellation) through an official
+  WhatsApp Business provider, behind a platform adapter
+  (`src/platform/notifications/whatsapp`) and the same outbox (a channel per message);
+  approved message templates; guest opt-in / opt-out; per-business or platform sender;
+  delivery status; email stays the fallback. A two-way inbox is a later decision.
+- **Open:** provider, costs, sender model (decided when the stage is planned).
+- **Depends on:** 2k (outbox worker), Stage 4 / 6 (guest contact and consent). Separate
+  approval.
+
+### Hotel room types (RT) — design checkpoint (D24)
+- **Need** (Skill: room type, room assignment at check-in; owner decision D24): a hotel
+  sells a **room type** ("דלקס זוגי × 6") and every booking holds **one specific physical
+  room**, which can be reassigned. A unit name alone is not enough.
+- **Proposed model (additive):**
+  - `unit_categories` (room type: name, description, default capacity / guests, beds and
+    amenities defaults, photos) and `units.category_id` (nullable — zimmers and villas need
+    no type);
+  - bookings keep `unit_id` = the assigned physical room, so the exclusion constraint keeps
+    protecting every room and the whole-property logic is unchanged;
+  - booking **by type**: inside the same transaction and lock, the engine picks a free room
+    of that type (deterministic rule, e.g. sort order); availability per type = number of
+    free rooms;
+  - **room move:** the owner reassigns a booking to another free room (same or another
+    type) — revision check, booking history, price unchanged unless the owner decides;
+  - pricing at type level (rate rules scoped to a type) — to decide in the RT plan;
+  - the board (3a / 3b) groups rows by type; the public site (Stage 4) sells by type.
+- **Decision before 2h (D24, D29):** the design above is closed before 2h. Recommended
+  implementation: a small sub-stage **RT between 3a and 2h**, so that the booking screens
+  (2h / 2i), the board (3b) and the public site are built with room types from the start.
 
 ## A5. Booking process (end-to-end)
 
@@ -501,6 +676,11 @@ Example (one possible policy, not a default rule):
 | Automatic cancellation | `never` (owner approves every request — default) / `within_free_window` (guest cancels instantly while the refund is full) / `always` (instant at any time, fee per tier) |
 | Owner override | owner may waive or reduce a fee on a specific booking (reason required, logged) |
 | Guest-facing text | optional free text shown under the generated summary |
+
+> **House rules are not part of the cancellation policy (D21, round 7).** They are managed
+> at property level (2d) and snapshotted with each booking separately from the policy. The
+> Stage 1 column `policies.house_rules` stays (additive rule — nothing is dropped) but is no
+> longer edited or shown.
 
 Validation (server and DB):
 - tiers are strictly ordered by days;
@@ -959,7 +1139,7 @@ end of development as `docs/hospitality/runbook-install.md`.
 
 | Finding | Impact | Resolution |
 |---|---|---|
-| No Supabase Realtime in production | "real-time" calendar | refetch/polling + DB-validated writes (Stage 3); Realtime is an optional infra decision |
+| No Supabase Realtime in production | "real-time" calendar | refetch/polling + DB-validated writes (Stage 3 — built as 3a / 3b, D19); Realtime is an optional infra decision |
 | `current_tenant_id()` returns NULL for members of other tenants | logged-in guests who are staff elsewhere | guest RPCs use `hospitality.request_tenant()` + `auth.uid()` (designed in Stage 1) |
 | Grow webhook bound to Ecommerce orders | Hospitality payments | platform Grow client adapter + Hospitality's own table and webhook (Stage 8) |
 | Ecommerce footer links to `nuriel-shop.co.il` | branding | Hospitality themes render their own footer with `https://nuriel-app2.nuri1.fit`; Ecommerce unchanged |
@@ -990,8 +1170,8 @@ Still open:
    purchased) before Stage 4.
 2. Video limits: allowed upload size (to verify the storage limit on the server), and
    whether long videos use YouTube/Vimeo embeds.
-3. Approval window bounds the owner may choose (proposal: 1–48 h). Is the window
-   per business only, or also per unit (proposal: per business)?
+3. ~~Approval window bounds~~ — implemented as proposed: 1–48 h, per business (settings,
+   Stage 1 + 2b).
 4. ~~Expiry of the "manage my booking" link~~ — decided: 30 days after check-out (D16).
 5. Payments (Stage 8) and Hospitality pricing (Stage 11) require separate approvals.
 6. Business opening (A9):
@@ -1000,6 +1180,26 @@ Still open:
    - address-change limit (proposal: 3 per 30 days);
    - whether to adopt a wildcard certificate later;
    - approval to start the separate track P1/P2 for Ecommerce after Stage 1.
+
+Opened in round 7 (31/10/2026) — the full register with ids and recommendations is in
+`requirements-traceability.md` §8:
+7. Hotel room types (RT): implementation stage (recommended: between 3a and 2h) and price
+   level (type or room) — to close before 2h (D24).
+8. Private arrival info: per-unit values (a door code per zimmer) in 2d, and the default
+   visibility window (proposal: from 48 h before check-in until check-out); whether codes
+   may be sent by email (2k) or WhatsApp (Stage 13).
+9. House rules: when to allow unit-level exceptions; check-in / check-out times per
+   property (today per business).
+10. Storage: plan limit per site (original spec #1 part 12) — usage measured from 2e;
+    limits and enforcement stage.
+11. Multi-language: the second language and whether business texts are translated by the
+    owner; whether the owner area is ever translated.
+12. Public map provider (Stage 4).
+13. Stage 11 "customers": guests across sites (as designed) or also business owners.
+14. iCal (Stage 12): its order relative to Stage 4 and the default sync interval.
+15. WhatsApp (Stage 13): provider, costs, sender model.
+16. Paid extras (breakfast, early check-in…) as priced add-ons — not in any stage; today
+    breakfast is an amenity with a note.
 
 ---
 
@@ -1068,6 +1268,40 @@ dashboard). Nothing is sent before the outbox worker (Stage 2).
   `bookings.promotion_released_at` marks the release, the state machine allows each
   transition once, and each release / re-consumption writes a history event. Tested with
   repeated sweeps, a decline racing the sweep, and two sweeps plus a lazy expiry in parallel.
+
+## A13. Requirements audit and round-7 decisions (31/10/2026)
+
+After P0 (local preview kit) the original Hospitality specification was re-read in full and
+compared with the code, the migrations, the plans and the preview data:
+- **Sources:** the owner's original messages (#1 project kick-off, #23 extended spec, #179
+  vision, decisions #134, #188, #206, #221, #234) and the `hospitality-expert` Skill
+  (domain knowledge — not the source of truth for the architecture; kept locally, not in
+  the repository).
+- **Result:** most original requirements of the owner area exist in the database / engine
+  (tested); most screens are still ahead. Original requirements that had no stage —
+  multi-language, theme choice at creation, Premium themes, hotel room types, VacationRental,
+  WhatsApp, platform-admin reviews / customers / global board, map location entry, storage
+  limit — now have a stage or are in the open-decision register. New requirements
+  (parking, separate toilets, max adults / children, detailed amenities, guest info, image
+  link import) are marked as new, never as original.
+- **Permanent reference:** `docs/hospitality/requirements-traceability.md` — every
+  requirement with an id, its source, its state in the code, its stage and what is
+  missing; updated by every stage report (D30).
+
+| Decision | Documented in |
+|---|---|
+| D19 calendar 3a / 3b | A4 Stage 3; `stage-2-plan.md` §0, §3 "3a" / "3b" |
+| D20 2d scope | `stage-2-plan.md` §3 "2d" |
+| D21 house rules, private arrival info | `stage-2-plan.md` §3 "2d"; A8 note; A4 Stage 4 |
+| D22 multi-language | A4 Stage 4 |
+| D23 theme choice, Premium | A4 Stage 4, Stage 11 |
+| D24 hotel room types | A4 "Hotel room types (RT)"; `stage-2c-plan.md` D-2c-5 |
+| D25 VacationRental | A4 Stage 7 |
+| D26 WhatsApp | A4 Stage 13 |
+| D27 Stage 11 additions | A4 Stage 11; `platform-admin-hospitality-plan.md` §6 |
+| D28 iCal | A4 Stage 12 |
+| D29 order | `stage-2-plan.md` §0 |
+| D30 traceability | `requirements-traceability.md` |
 
 # Part B — Stage 1: backend foundation (implementation-ready)
 
