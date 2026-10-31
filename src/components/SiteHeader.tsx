@@ -31,6 +31,7 @@ import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { AnnouncementTicker, useAnnouncement } from "@/components/AnnouncementTicker";
 import { useStorefrontFrame } from "@/components/layout/storefront-frame";
 import { cn } from "@/lib/utils";
+import { storeNames } from "@/lib/store-identity";
 
 /**
  * כותרת האתר: פס "מרתף" כהה שמחזיק את הלוגו, הניווט וסל ההזמנה.
@@ -60,7 +61,10 @@ export function SiteHeader({
   const site = useLoaderData({ from: "__root__" });
   const router = useRouter();
   const canGoBack = useCanGoBack();
-  const title = settings?.site_title?.trim() || site?.siteName || DEFAULT_STORE_NAME;
+  // הכותרת הגלויה: שם התצוגה של החנות (כמו קודם), אחריו שם העסק
+  const title = settings
+    ? storeNames(settings).displayName
+    : site?.displayName || site?.siteName || DEFAULT_STORE_NAME;
   // הלוגו המובנה שייך לחנות הראשית; חנות בלי לוגו מקבלת את האות הראשונה של שמה
   const logoSrc = logoUrl ?? (site?.isDefaultStore ? logo.url : null);
 

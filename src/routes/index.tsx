@@ -152,6 +152,7 @@ export const Route = createFileRoute("/")({
           children: jsonLdText(
             storeJsonLd({
               name: siteName,
+              alternateName: site.alternateName ?? null,
               url: schema.url,
               description: site.seoDescription || null,
               logoUrl: schema.logoUrl,
@@ -181,6 +182,7 @@ function Index() {
 }
 
 function StoreCatalog() {
+  const site = useLoaderData({ from: "__root__" });
   const { session, role, loading, refreshRole } = useAuthState();
   const { settings } = useSiteSettings();
   const { loading: profileLoading, refresh: refreshProfile } = useCustomerProfile(
@@ -601,8 +603,8 @@ function StoreCatalog() {
 
         {/* חלק 22: בלי "הבלוק הכחול" (שם החנות, "להזמנה מהקטלוג" וסטטיסטיקות) — זה
             נראה כמו לוח בקרה ולא כמו חנות. העמוד נפתח ישר בבאנרים. הכותרת הראשית
-            (h1) נשארת לגוגל ולקוראי מסך, בלי תצוגה. */}
-        <h1 className="sr-only">{settings?.site_title?.trim() || DEFAULT_STORE_NAME}</h1>
+            (h1) נשארת לגוגל ולקוראי מסך, בלי תצוגה — השם מזהות החנות, כמו ב-title. */}
+        <h1 className="sr-only">{site?.siteName || DEFAULT_STORE_NAME}</h1>
 
         {/* חלק 19: Grid עם באנר צדדי (רק במחשב, כשהוא פעיל).
             חלק 36ב: במחשב העמוד מחולק לשתי עמודות — מימין רק תפריט הקטגוריות,

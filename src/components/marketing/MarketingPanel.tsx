@@ -36,6 +36,7 @@ import { GoogleVerifyGuide } from "@/components/marketing/GoogleVerifyGuide";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ADDON_DEFAULTS, addonPriceLabel } from "@/lib/addons";
+import { storeNames } from "@/lib/store-identity";
 
 const ZAP_ADDON_PRICE_LABEL = addonPriceLabel(ADDON_DEFAULTS.zapier);
 import {
@@ -64,7 +65,7 @@ import {
   type MarketingSettings,
 } from "@/lib/marketing";
 import { COUPON_COLUMNS, couponLabel, type Coupon } from "@/lib/coupons";
-import { DEFAULT_STORE_NAME } from "@/lib/branding";
+
 import { cn } from "@/lib/utils";
 
 const NO_COUPON = "__none__";
@@ -123,8 +124,7 @@ export function MarketingPanel() {
 
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const feedUrl = zapFeedUrl(origin);
-  const storeName =
-    settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME;
+  const storeName = storeNames(settings).name;
 
   const load = useCallback(async () => {
     const [{ data, error }, { data: couponRows }, { count }] = await Promise.all([

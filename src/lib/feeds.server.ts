@@ -24,7 +24,7 @@ import {
   tenantSiteOrigin,
 } from "@/integrations/supabase/tenant.server";
 import { isLocalOrigin } from "@/lib/seo-urls";
-import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { storeNames } from "@/lib/store-identity";
 import { GOOGLE_FILE_FORMAT, googleVerificationFileBody, plainText } from "@/lib/marketing";
 import { PORTAL_STORE_SLUG } from "@/lib/portal";
 
@@ -321,11 +321,7 @@ export async function zapStore(origin: string): Promise<ZapStore> {
     .filter((price) => Number.isFinite(price) && price >= 0);
   const vatRate = Number(settings?.vat_rate ?? 18);
   return {
-    name:
-      settings?.business_name?.trim() ||
-      settings?.site_title?.trim() ||
-      maybeCurrentTenant()?.name ||
-      DEFAULT_STORE_NAME,
+    name: storeNames(settings).name,
     origin,
     deliveryDays: Number(settings?.zap_delivery_days ?? 3),
     shipmentCost: delivery.length > 0 ? Math.min(...delivery) : 0,
@@ -455,7 +451,7 @@ async function llmsTxt(origin: string): Promise<string | null> {
     await Promise.all([
       supabaseAdmin
         .from("site_settings")
-        .select("business_name, seo_title, seo_description, seo_keywords, llms_txt_enabled")
+        .select("business_name, site_title, seo_description, seo_keywords, llms_txt_enabled")
         .eq("id", true)
         .maybeSingle(),
       supabaseAdmin.from("categories").select("name, parent_name"),
@@ -487,11 +483,7 @@ async function llmsTxt(origin: string): Promise<string | null> {
   }
   return renderLlmsTxt({
     origin,
-    name:
-      settings.business_name?.trim() ||
-      settings.seo_title?.trim() ||
-      maybeCurrentTenant()?.name ||
-      DEFAULT_STORE_NAME,
+    name: storeNames(settings).name,
     description: settings.seo_description?.trim() ?? "",
     keywords: settings.seo_keywords?.trim() ?? "",
     pages: pages ?? [],

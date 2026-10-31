@@ -21,6 +21,7 @@ import {
   type StorePromo,
   type StoreTracking,
 } from "@/lib/marketing";
+import { storeNames } from "@/lib/store-identity";
 
 /** פופ-אפ: לא בקופה (לא מפריעים באמצע תשלום) ולא בעמודי הצוות / החשבון */
 // הקופה ודף תוצאת התשלום (חלק 16) — בלי פופ-אפ מבצעים
@@ -226,10 +227,7 @@ export function MarketingLayer({
                       aria-label="אישור קבלת דיוור"
                     />
                     <span>
-                      {marketingConsentText(
-                        settings?.business_name?.trim() || settings?.site_title || "",
-                        "account",
-                      )}
+                      {marketingConsentText(storeNames(settings).ownName ?? "", "account")}
                     </span>
                   </label>
                   <Button

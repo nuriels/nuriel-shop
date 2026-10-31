@@ -17,6 +17,7 @@ import { marketingConsentText } from "@/lib/marketing-consent";
 import { checkCustomerInvite } from "@/lib/invite.functions";
 import { GoogleSignInButton, OrDivider } from "@/components/GoogleSignInButton";
 import { Mail } from "lucide-react";
+import { storeNames } from "@/lib/store-identity";
 
 type InviteState =
   | { status: "none" }
@@ -301,10 +302,7 @@ function RegisterPage() {
                     data-testid="register-marketing-optin"
                   />
                   <span>
-                    {marketingConsentText(
-                      settings?.business_name?.trim() || settings?.site_title?.trim() || "",
-                      "register",
-                    )}{" "}
+                    {marketingConsentText(storeNames(settings).ownName ?? "", "register")}{" "}
                     <span className="text-muted-foreground">(לא חובה)</span>
                   </span>
                 </label>

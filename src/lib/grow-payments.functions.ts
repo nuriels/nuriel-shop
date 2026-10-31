@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { storeNames } from "@/lib/store-identity";
 
 /**
  * חלק 43: תשלום מקוון דרך Grow — הצד של החנות (קופה).
@@ -73,7 +74,7 @@ export const startGrowPayment = createServerFn({ method: "POST" })
       .select("business_name, site_title")
       .eq("id", true)
       .maybeSingle();
-    const storeName = settings?.business_name?.trim() || settings?.site_title?.trim() || "החנות";
+    const storeName = storeNames(settings).ownName ?? "החנות";
 
     const origin = tenantSiteOrigin();
     const created = await createGrowPaymentProcess({
@@ -142,7 +143,7 @@ export const getGrowPaymentStatus = createServerFn({ method: "POST" })
       paid: order.payment_status === "paid",
       amount: Number(due ?? 0),
       asmachta: order.grow_asmachta,
-      storeName: settings?.business_name?.trim() || settings?.site_title?.trim() || null,
+      storeName: storeNames(settings).ownName,
     };
   });
 

@@ -112,6 +112,7 @@ import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { useSubscription } from "@/hooks/useSubscription";
 import type { CatalogVariant } from "@/lib/variants";
 import { randomUuid } from "@/lib/uuid";
+import { storeNames } from "@/lib/store-identity";
 
 type CheckoutSearch = {
   /** קישור "להשלמת ההזמנה" ממייל תזכורת על עגלה נטושה (חלק 14) */
@@ -1595,10 +1596,7 @@ function CheckoutPage() {
                         data-testid="checkout-marketing-optin"
                       />
                       <span>
-                        {marketingConsentText(
-                          settings?.business_name?.trim() || settings?.site_title?.trim() || "",
-                          "checkout",
-                        )}{" "}
+                        {marketingConsentText(storeNames(settings).ownName ?? "", "checkout")}{" "}
                         <span className="text-muted-foreground">(לא חובה)</span>
                       </span>
                     </label>

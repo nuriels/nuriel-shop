@@ -1,6 +1,7 @@
 import { defaultPrivacyPolicy, defaultTermsOfService, type LegalBusinessInfo } from "@/lib/legal";
 import { countRedMarks, escapeHtml, plainTextToHtml, RED_MARK_CLASS } from "@/lib/rich-text";
 import { PRIVACY_TEMPLATE_TEXT, TERMS_TEMPLATE_TEXT } from "@/lib/legal-templates";
+import { storeNames } from "@/lib/store-identity";
 
 /**
  * העמודים המשפטיים (חלק 16א): נוסחי ברירת המחדל של העורך בפאנל הניהול,
@@ -167,7 +168,8 @@ export function legalVariablesFrom(
 ): LegalVariables {
   const clean = (value: string | null | undefined) => (value ?? "").trim();
   return {
-    store_name: clean(settings?.business_name) || clean(settings?.site_title),
+    // זהות החנות: שם העסק ואחריו שם התצוגה; חסר → "[שם העסק]" (לא ברירת מחדל)
+    store_name: storeNames(settings).ownName ?? "",
     store_email: clean(settings?.business_email),
     store_phone: clean(settings?.support_phone) || clean(settings?.business_phone),
     business_id: clean(settings?.business_tax_id),

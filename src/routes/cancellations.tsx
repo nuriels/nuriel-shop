@@ -23,6 +23,7 @@ import {
   type CancellationInput,
   type Captcha,
 } from "@/lib/site-forms";
+import { pageTitle } from "@/lib/store-identity";
 
 type Search = {
   /** מספר הזמנה למילוי מראש (קישור "ביטול עסקה" מההזמנה) */
@@ -31,7 +32,7 @@ type Search = {
 
 export const Route = createFileRoute("/cancellations")({
   ssr: false,
-  head: () => ({ meta: [{ title: "ביטול עסקה" }] }),
+  head: ({ matches }) => ({ meta: [{ title: pageTitle("ביטול עסקה", matches) }] }),
   validateSearch: (search: Record<string, unknown>): Search => {
     const order = search["order"];
     return typeof order === "string" && /^[A-Za-z0-9_/#\s-]{1,40}$/.test(order) ? { order } : {};

@@ -1,17 +1,17 @@
 import { Link } from "@tanstack/react-router";
 import { OPEN_COOKIE_SETTINGS_EVENT } from "@/components/marketing/TrackingConsent";
-import { APP_VERSION, DEFAULT_STORE_NAME } from "@/lib/branding";
+import { APP_VERSION } from "@/lib/branding";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useStorePages } from "@/hooks/useStorePages";
 import { useStorefrontFrame } from "@/components/layout/storefront-frame";
 import { cn } from "@/lib/utils";
+import { storeNames } from "@/lib/store-identity";
 
 /** wide — המסגרת הרחבה של חזית החנות, מיושרת לכותרת ולתוכן */
 export function AppFooter({ wide = false }: { wide?: boolean | "panel" } = {}) {
   const { settings } = useSiteSettings();
   const frame = useStorefrontFrame(wide);
-  const title =
-    settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME;
+  const title = storeNames(settings).name;
   const year = new Date().getFullYear();
   const phone = settings?.support_phone?.trim() || settings?.business_phone?.trim() || "";
   // חלק 30: עמודי התוכן שבעל החנות פרסם

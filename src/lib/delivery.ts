@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { OrderRow } from "@/lib/orders";
 import type { ProfileContact } from "@/lib/order-details";
 import { normalizeLabelSize, type LabelSize } from "@/lib/shipping-label";
+import { storeNames } from "@/lib/store-identity";
 
 export type CourierLink = {
   order_id: string;
@@ -41,7 +42,7 @@ export async function loadLabelStore(): Promise<LabelStore> {
     .eq("id", true)
     .maybeSingle();
   return {
-    name: data?.business_name?.trim() || data?.site_title?.trim() || "",
+    name: storeNames(data).ownName ?? "",
     phone: data?.support_phone?.trim() || data?.business_phone?.trim() || null,
     size: normalizeLabelSize({
       width: Number(data?.label_width_mm),

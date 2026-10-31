@@ -54,15 +54,14 @@ export const getStorePageSeo = createServerFn({ method: "GET" })
     }
     if (!page) return null;
 
-    const { DEFAULT_STORE_NAME } = await import("@/lib/branding");
+    const { storeNames } = await import("@/lib/store-identity");
     let origin: string | null = null;
     try {
       origin = tenantSiteOrigin();
     } catch {
       origin = null;
     }
-    const storeName =
-      settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME;
+    const storeName = storeNames(settings).name;
     return {
       ...page,
       description: plainText(page.content_html, 160) || `${page.title} — ${storeName}`,

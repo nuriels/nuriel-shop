@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuthState } from "@/hooks/useAuthState";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { unsubscribeMarketing } from "@/lib/marketing-consent.functions";
+import { storeNames } from "@/lib/store-identity";
 
 /**
  * חלק 40: הסרה מרשימת הדיוור — הקישור שבתחתית כל מייל שיווקי. ההסרה מתבצעת
@@ -29,7 +30,7 @@ function UnsubscribePage() {
   const unsubscribe = useServerFn(unsubscribeMarketing);
   const [state, setState] = useState<"working" | "done" | "missing" | "error">("working");
   const ran = useRef(false);
-  const storeName = settings?.business_name?.trim() || settings?.site_title?.trim() || "החנות";
+  const storeName = storeNames(settings).ownName ?? "החנות";
 
   useEffect(() => {
     if (ran.current) return;

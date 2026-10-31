@@ -35,10 +35,11 @@ import {
   type ContactField,
   type ContactInput,
 } from "@/lib/site-forms";
+import { pageTitle } from "@/lib/store-identity";
 
 export const Route = createFileRoute("/contact")({
   ssr: false,
-  head: () => ({ meta: [{ title: "צור קשר" }] }),
+  head: ({ matches }) => ({ meta: [{ title: pageTitle("צור קשר", matches) }] }),
   component: ContactPage,
 });
 

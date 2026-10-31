@@ -14,7 +14,7 @@ import { calculateVat, type VatBreakdown } from "@/lib/vat";
 import { formatUnitIls } from "@/lib/catalog";
 import { billingOf, deliveryOf, type OrderBilling, type OrderDelivery } from "@/lib/order-details";
 import { hasShippingLine, orderShippingLabel, shippingWasFree } from "@/lib/shipping";
-import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { storeNames } from "@/lib/store-identity";
 import { orderDiscount, orderDiscountLabel } from "@/lib/coupons";
 import type { PaymentMethod, PaymentStatus } from "@/lib/bit-payments";
 
@@ -325,6 +325,6 @@ export async function loadPickupAddress(): Promise<string> {
     .maybeSingle();
   const address = data?.business_address?.trim() ?? "";
   if (!address) return "";
-  const name = data?.business_name?.trim() || data?.site_title?.trim() || DEFAULT_STORE_NAME;
+  const name = storeNames(data).name;
   return `${name}, ${address}`;
 }

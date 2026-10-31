@@ -15,7 +15,7 @@ import {
   SITE_FORM_EXCLUDED_KEYS,
   type SiteSettings,
 } from "@/lib/site";
-import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { storeNames } from "@/lib/store-identity";
 import { SabbathModeCard } from "@/components/SabbathModeCard";
 import { ShabbatScheduleCard } from "@/components/ShabbatScheduleCard";
 import { LabelSizeCard } from "@/components/delivery/LabelSizeCard";
@@ -112,7 +112,7 @@ export function SiteSettingsPanel({ onOpenHomeDesign }: { onOpenHomeDesign?: () 
 
       <SabbathModeCard
         checked={form.is_sabbath_mode}
-        storeName={form.business_name.trim() || form.site_title || DEFAULT_STORE_NAME}
+        storeName={storeNames(form).name}
         onSaved={(on) => patch({ is_sabbath_mode: on })}
       />
 
@@ -492,7 +492,7 @@ export function SiteSettingsPanel({ onOpenHomeDesign }: { onOpenHomeDesign?: () 
       <LabelSizeCard
         width={form.label_width_mm}
         height={form.label_height_mm}
-        storeName={form.business_name || form.site_title}
+        storeName={storeNames(form).ownName ?? ""}
         storePhone={form.support_phone || form.business_phone}
         onChange={patch}
       />

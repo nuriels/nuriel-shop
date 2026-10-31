@@ -61,7 +61,7 @@ import {
   saveBarcodeLabelSize,
   type LabelCatalogProduct,
 } from "@/lib/barcode-labels-data";
-import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { storeNames } from "@/lib/store-identity";
 import { cn } from "@/lib/utils";
 
 type Scope = "stock" | "category" | "manual";
@@ -214,7 +214,7 @@ export function BarcodeLabelsPanel() {
 
   const store: LabelStore = useMemo(
     () => ({
-      name: settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME,
+      name: storeNames(settings).name,
       pricesIncludeVat: settings?.prices_include_vat ?? true,
       vatRate: settings?.business_type === "exempt" ? 0 : Number(settings?.vat_rate ?? 18),
     }),

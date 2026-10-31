@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { fillLegalVariables, legalVariablesFrom } from "@/lib/legal-content";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { storeNames } from "@/lib/store-identity";
 
 /**
  * חתימה דיגיטלית על תנאי השירות.
@@ -102,7 +103,7 @@ export const loadAgreementForm = createServerFn({ method: "POST" })
       taxId: profile?.tax_id ?? "",
       contactName: profile?.contact_name ?? "",
       phone: profile?.phone ?? "",
-      companyName: settings?.business_name?.trim() || settings?.site_title || "",
+      companyName: storeNames(settings).ownName ?? "",
       // חלק 37: התקנון עם פרטי החנות במקום המשתנים ({{store_name}} וכו')
       terms: agreementTerms(settings),
     };

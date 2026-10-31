@@ -85,7 +85,7 @@ export const getProductSeo = createServerFn({ method: "GET" })
     const product = rows?.[0];
     if (!product) return null;
 
-    const { DEFAULT_STORE_NAME } = await import("@/lib/branding");
+    const { storeNames } = await import("@/lib/store-identity");
     let url: string | null = null;
     let origin: string | null = null;
     try {
@@ -104,8 +104,7 @@ export const getProductSeo = createServerFn({ method: "GET" })
     // המחיר בפיד כבר כולל מבצע בתוקף — אז גם תוקף המבצע רלוונטי
     const onSale = Number(product.price) < Number(product.regular_price);
     const saleEndsAt = onSale ? (extra?.sale_ends_at ?? null) : null;
-    const storeName =
-      settings?.business_name?.trim() || settings?.site_title?.trim() || DEFAULT_STORE_NAME;
+    const storeName = storeNames(settings).name;
     const description =
       plainText(product.seo_description, 320) ||
       plainText(product.description, 160) ||

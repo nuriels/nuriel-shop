@@ -11,7 +11,10 @@
 
 /** הפרטים של החנות לסכמה (מהגדרות האתר) */
 export type StoreSchemaInput = {
+  /** שם החנות מזהות החנות (store-identity.ts) — שם העסק, אחריו שם התצוגה */
   name: string;
+  /** שם התצוגה כשהוא שונה משם העסק — alternateName */
+  alternateName?: string | null;
   /** הכתובת הראשית של החנות (https://…), בלי / בסוף */
   url: string;
   description?: string | null;
@@ -105,11 +108,14 @@ export function storeJsonLd(store: StoreSchemaInput): Record<string, unknown> {
   const hours = schemaOpeningHours(store.hours);
   const description = clean(store.description);
   const logo = isHttpUrl(store.logoUrl) ? store.logoUrl : null;
+  const alternateName = clean(store.alternateName);
+  const alternate = alternateName && alternateName !== store.name ? { alternateName } : {};
 
   const organization: Record<string, unknown> = {
     "@type": address ? ["Store", "LocalBusiness"] : "Organization",
     "@id": orgId,
     name: store.name,
+    ...alternate,
     url: `${url}/`,
     ...(description ? { description } : {}),
     ...(logo ? { logo: { "@type": "ImageObject", url: logo }, image: logo } : {}),
@@ -140,6 +146,7 @@ export function storeJsonLd(store: StoreSchemaInput): Record<string, unknown> {
     "@id": `${url}/#website`,
     url: `${url}/`,
     name: store.name,
+    ...alternate,
     inLanguage: "he-IL",
     publisher: { "@id": orgId },
     ...(description ? { description } : {}),
@@ -170,7 +177,7 @@ export function productJsonLd(product: ProductSchemaInput): Record<string, unkno
     description: product.description,
     sku: product.sku,
     category: product.category,
-    brand: { "@type": "Brand", name: product.storeName },
+    // בלי brand: למוצרים אין שדה של מותג היצרן, ושם החנות הוא המוכר (seller), לא המותג
     ...(images.length > 0 ? { image: images } : {}),
     ...(product.url ? { url: product.url } : {}),
     ...gtin,

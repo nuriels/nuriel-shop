@@ -8,6 +8,7 @@ import {
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requireStoreOpen } from "@/lib/rest-window.middleware";
+import { storeNames } from "@/lib/store-identity";
 
 /** פעולות הזמנה בצד השרת: שכפול הזמנה ובון ליקוט למחסן */
 
@@ -322,7 +323,7 @@ export const downloadPickingSlip = createServerFn({ method: "POST" })
       orderNumber: order.order_number,
       createdAt: order.created_at,
       kindLabel: order.kind === "quote" ? "בקשת הצעת מחיר" : "הזמנה",
-      sellerName: settings?.business_name?.trim() || settings?.site_title?.trim() || "",
+      sellerName: storeNames(settings).ownName ?? "",
       logoDataUrl: await loadLogoDataUrl(settings?.logo_path ?? null),
       // לאן לשלוח בפועל — הכתובת החלופית מהקופה אם נבחרה
       customerBusinessName: billingOf(order, profile).name,

@@ -60,6 +60,7 @@ import {
 } from "@/lib/stock-count";
 import { useBackToClose } from "@/hooks/useBackToClose";
 import { cn } from "@/lib/utils";
+import { storeNames } from "@/lib/store-identity";
 
 type StockCount = {
   id: string;
@@ -163,7 +164,7 @@ export function StockCountPanel() {
 
   const openCount = counts.find((count) => count.status === "open") ?? null;
   const clearFocus = useCallback(() => setFocusId(null), []);
-  const storeName = settings?.business_name?.trim() || settings?.site_title?.trim() || "החנות";
+  const storeName = storeNames(settings).ownName ?? "החנות";
 
   const load = useCallback(async () => {
     setLoading(true);

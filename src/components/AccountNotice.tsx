@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import logo from "@/assets/logo";
+import { storeNames } from "@/lib/store-identity";
 
 /** מסך חסימה מלא — לחשבון ממתין לאישור מנהל או לחשבון חסום */
 export function AccountNotice({
@@ -21,7 +22,11 @@ export function AccountNotice({
     <div className="flex w-full flex-1 items-center justify-center px-4 py-10">
       <Card className="w-full max-w-md text-center shadow-soft">
         <CardContent className="flex flex-col items-center gap-4 pt-8">
-          <img src={logoUrl ?? logo.url} alt={settings?.site_title ?? ""} className="h-16 w-auto" />
+          <img
+            src={logoUrl ?? logo.url}
+            alt={settings ? storeNames(settings).displayName : ""}
+            className="h-16 w-auto"
+          />
           <div
             className={`flex size-14 items-center justify-center rounded-full ${
               isBlocked ? "bg-destructive/10 text-destructive" : "bg-secondary text-primary"

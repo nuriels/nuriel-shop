@@ -17,6 +17,7 @@
 
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { DEFAULT_SENDER_LOCAL_PART, senderLocalPartProblem } from "@/lib/email-sender";
+import { storeNames } from "@/lib/store-identity";
 
 export type EmailAttachment = {
   filename: string;
@@ -166,7 +167,7 @@ export async function storeSender(): Promise<StoreSender> {
           .eq("id", true)
           .maybeSingle(),
       ]);
-      name = site?.business_name?.trim() || site?.site_title?.trim() || tenant.name || "";
+      name = storeNames(site).name;
       const chosen = emailSettings?.sender_local_part?.trim().toLowerCase() ?? "";
       if (chosen !== "" && senderLocalPartProblem(chosen) === null) localPart = chosen;
       const businessEmail = site?.business_email?.trim().toLowerCase() ?? "";
@@ -383,7 +384,7 @@ export async function renderEmailHtml(
       .eq("id", true)
       .maybeSingle();
     logoUrl = publicLogoUrl(settings?.logo_path ?? null);
-    businessName = settings?.business_name?.trim() || settings?.site_title?.trim() || "";
+    businessName = storeNames(settings).ownName ?? "";
     signature = settings?.email_signature?.trim() ?? "";
     // אם המנהל לא כתב חתימה, בונים אחת מפרטי העסק כדי שהמייל לא ייצא ערום
     if (signature === "") {

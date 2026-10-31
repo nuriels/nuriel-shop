@@ -5,10 +5,11 @@ import { InfoPage, LoadingLine } from "@/components/legal/InfoPage";
 import { RichContent } from "@/components/legal/RichContent";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { legalPageHtml } from "@/lib/legal-content";
+import { pageTitle } from "@/lib/store-identity";
 
 export const Route = createFileRoute("/terms")({
   ssr: false,
-  head: () => ({ meta: [{ title: "תקנון האתר" }] }),
+  head: ({ matches }) => ({ meta: [{ title: pageTitle("תקנון האתר", matches) }] }),
   component: TermsPage,
 });
 

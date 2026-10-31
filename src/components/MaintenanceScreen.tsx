@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
+import { storeNames } from "@/lib/store-identity";
 
 /**
  * מצב תחזוקה: האתר חסום לאורחים וללקוחות, מנהלים וסוכנים ממשיכים לעבוד
@@ -18,7 +19,7 @@ export function MaintenanceScreen({ onSignOut }: { onSignOut?: () => void }) {
           <Wrench className="size-7" />
         </span>
         <h1 className="font-display mt-5 text-2xl text-primary-foreground">
-          {settings?.site_title ?? "האתר"} בעבודות תחזוקה
+          {settings ? storeNames(settings).displayName : "האתר"} בעבודות תחזוקה
         </h1>
         <p className="mt-3 leading-7 text-primary-foreground/75">
           {settings?.maintenance_message?.trim() ||

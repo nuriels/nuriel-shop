@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { marketingConsentText } from "@/lib/marketing-consent";
 import { myMarketingConsent, setMyMarketingConsent } from "@/lib/marketing-consent.functions";
+import { storeNames } from "@/lib/store-identity";
 
 /**
  * חלק 40: "דיוור" ב"החשבון שלי" — הלקוח רואה אם הוא מנוי, ומצטרף / מסיר את
@@ -18,7 +19,7 @@ export function MarketingConsentCard() {
   const save = useServerFn(setMyMarketingConsent);
   const [subscribed, setSubscribed] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
-  const storeName = settings?.business_name?.trim() || settings?.site_title?.trim() || "";
+  const storeName = storeNames(settings).ownName ?? "";
 
   useEffect(() => {
     void load()

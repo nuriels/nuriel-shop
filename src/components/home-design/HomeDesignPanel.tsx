@@ -47,7 +47,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { refreshSiteSettings, useSiteSettings } from "@/hooks/useSiteSettings";
 import { textColorOn, normalizeBrandColor } from "@/lib/brand-theme";
-import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { storeNames } from "@/lib/store-identity";
 import { isValidBannerLink, type BannerDevice } from "@/lib/banners";
 import {
   ANNOUNCEMENT_INTERVAL,
@@ -579,7 +579,7 @@ function BrandingCard({ editor }: { editor: ReturnType<typeof useBrandingEditor>
         <BrandColorField
           value={form.brand_color}
           onChange={(next) => editor.patch({ brand_color: next })}
-          storeName={form.site_title.trim() || DEFAULT_STORE_NAME}
+          storeName={storeNames({ site_title: form.site_title }).displayName}
         />
 
         <SaveRow
@@ -761,7 +761,7 @@ function PreviewHeader({
 }) {
   const color = normalizeBrandColor(branding?.brand_color);
   const logo = resolveSiteLogoUrl(branding?.logo_path ?? null);
-  const title = branding?.site_title.trim() || DEFAULT_STORE_NAME;
+  const title = storeNames({ site_title: branding?.site_title }).displayName;
   return (
     <>
       <div

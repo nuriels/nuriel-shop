@@ -18,6 +18,7 @@ import {
   unsubscribePath,
   type ConsentSource,
 } from "@/lib/marketing-consent";
+import { storeNames } from "@/lib/store-identity";
 
 type ConsentResult = { subscribed: boolean; token: string | null; welcome_due: boolean };
 
@@ -45,7 +46,7 @@ async function storeContact(): Promise<{
     .eq("id", true)
     .maybeSingle();
   return {
-    name: data?.business_name?.trim() || data?.site_title?.trim() || "",
+    name: storeNames(data).ownName ?? "",
     email: data?.business_email?.trim() ?? "",
     phone: (data?.support_phone || data?.business_phone || "").trim(),
     address: data?.business_address?.trim() ?? "",

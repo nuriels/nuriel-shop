@@ -6,6 +6,7 @@ import { RichContent } from "@/components/legal/RichContent";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { loadStorePage } from "@/lib/pages-data";
+import { storeNames, pageTitle } from "@/lib/store-identity";
 
 /**
  * חלק 40: הצהרת נגישות — תקנות שוויון זכויות לאנשים עם מוגבלות (התאמות
@@ -15,7 +16,7 @@ import { loadStorePage } from "@/lib/pages-data";
  * הצהרה בסיסית עם פרטי העסק ודרכי הפנייה בנושא נגישות.
  */
 export const Route = createFileRoute("/accessibility")({
-  head: () => ({ meta: [{ title: "הצהרת נגישות" }] }),
+  head: ({ matches }) => ({ meta: [{ title: pageTitle("הצהרת נגישות", matches) }] }),
   component: AccessibilityStatementPage,
 });
 
@@ -39,7 +40,7 @@ function AccessibilityStatementPage() {
     };
   }, []);
 
-  const store = settings?.business_name?.trim() || settings?.site_title?.trim() || "החנות";
+  const store = storeNames(settings).ownName ?? "החנות";
   const phone = settings?.support_phone?.trim() || settings?.business_phone?.trim() || "";
   const email = settings?.business_email?.trim() || "";
 

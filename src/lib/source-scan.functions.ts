@@ -11,6 +11,7 @@ import {
 } from "@/lib/source-scan";
 import type { ImportSummary } from "@/lib/csv-import";
 import type { SourceDiscovery } from "@/server/services/source-scan";
+import { storeNames } from "@/lib/store-identity";
 
 /**
  * חלק 44: "סריקת אתר מקור" — Server Actions. מנהל החנות בלבד, והכל מוגבל לחנות של הבקשה:
@@ -183,7 +184,7 @@ export const compareSourceCatalog = createServerFn({ method: "POST" })
     return {
       rows,
       summary,
-      storeName: settings?.business_name?.trim() || settings?.site_title?.trim() || "",
+      storeName: storeNames(settings).ownName ?? "",
       catalogSize: products.data.length,
     };
   });

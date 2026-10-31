@@ -8,10 +8,11 @@ import { useCategoryTree } from "@/hooks/useCategories";
 import { useStorePages } from "@/hooks/useStorePages";
 import { countByCategory, totalCounts, type CategoryNode } from "@/lib/category-tree";
 import { fetchAllRows } from "@/lib/fetch-all";
+import { pageTitle } from "@/lib/store-identity";
 
 export const Route = createFileRoute("/sitemap")({
   ssr: false,
-  head: () => ({ meta: [{ title: "מפת האתר" }] }),
+  head: ({ matches }) => ({ meta: [{ title: pageTitle("מפת האתר", matches) }] }),
   component: SitemapPage,
 });
 

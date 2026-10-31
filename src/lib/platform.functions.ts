@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Json, TenantPlan, TenantStatus } from "@/integrations/supabase/types";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { PORTAL_STORE_SLUG } from "@/lib/portal";
+import { storeNames } from "@/lib/store-identity";
 
 /**
  * באיזה דומיין אנחנו: פאנל ניהול הפלטפורמה (PLATFORM_ADMIN_HOST) או אתר של חנות.
@@ -244,8 +245,11 @@ export const PLATFORM_SITE_NAME = "מערכת ניהול אתר אינטרנט";
 
 /**
  * מה שה-root route צריך כבר ב-SSR (בלי הבהוב בטעינה):
- * - siteName: ל-title / Open Graph — בדומיין הניהול שם קבוע; בחנות שם העסק
- *   מהגדרות החנות (site_settings.business_name), ואם ריק — "החנות שלי".
+ * - siteName: ל-title / Open Graph / Schema — בדומיין הניהול שם קבוע; בחנות
+ *   השם מזהות החנות (store-identity.ts): שם העסק, אחריו שם התצוגה, ואם שניהם
+ *   ריקים — "החנות שלי".
+ * - displayName: הכותרת הגלויה באתר (שם התצוגה, אחריו שם העסק).
+ * - alternateName: שם התצוגה כשהוא שונה משם העסק (Schema: alternateName).
  * - brandColor: צבע המותג של החנות (null = עיצוב ברירת המחדל).
  * - sabbath: מצב שבת — הלקוחות רואים מסך "שבת שלום" במקום הקטלוג.
  * - isDefaultStore: החנות הראשית (הלוגו המובנה שייך רק לה).
@@ -277,20 +281,23 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     shareImage: null,
     appleIcon: null,
     rest: null,
+    alternateName: null,
   };
-  if (isPlatformRequest()) return { siteName: PLATFORM_SITE_NAME, ...none };
+  if (isPlatformRequest()) {
+    return { siteName: PLATFORM_SITE_NAME, displayName: PLATFORM_SITE_NAME, ...none };
+  }
   const tenant = maybeCurrentTenant();
-  if (!tenant) return { siteName: DEFAULT_STORE_NAME, ...none };
+  if (!tenant) return { siteName: DEFAULT_STORE_NAME, displayName: DEFAULT_STORE_NAME, ...none };
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin
     .from("site_settings")
     .select(
-      "business_name, brand_color, is_sabbath_mode, seo_title, seo_description, seo_keywords, facebook_pixel_id, google_analytics_id, google_site_verification, promo_popup_enabled, promo_popup_text, promo_popup_coupon, logo_path, business_phone, support_phone, business_email, business_address, business_hours, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url",
+      "business_name, site_title, brand_color, is_sabbath_mode, seo_title, seo_description, seo_keywords, facebook_pixel_id, google_analytics_id, google_site_verification, promo_popup_enabled, promo_popup_text, promo_popup_coupon, logo_path, business_phone, support_phone, business_email, business_address, business_hours, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url",
     )
     .eq("id", true)
     .maybeSingle();
-  const storeName = data?.business_name?.trim();
+  const names = storeNames(data);
   const isPortal = tenant.slug === PORTAL_STORE_SLUG;
   const pixelId = data?.facebook_pixel_id ?? null;
   const gaId = data?.google_analytics_id ?? null;
@@ -312,7 +319,9 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
       ? `${supabaseUrl}/storage/v1/object/public/branding/${logoPath}`
       : null;
   return {
-    siteName: storeName || DEFAULT_STORE_NAME,
+    siteName: names.name,
+    displayName: names.displayName,
+    alternateName: names.alternateName,
     // חלק 24: תמונת שיתוף ואייקון מסך הבית — PNG מהלוגו, מהדומיין של החנות (/pwa/…);
     // v משתנה כשהלוגו משתנה (ווטסאפ / אייפון שומרים במטמון)
     shareImage: logoPath && origin ? `${origin}/pwa/og-image.png?v=${logoVersion(logoPath)}` : null,

@@ -8,10 +8,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { APP_VERSION } from "@/lib/branding";
 import { ORDER_HOURS } from "@/lib/order-hours";
+import { storeNames, pageTitle } from "@/lib/store-identity";
 
 export const Route = createFileRoute("/about")({
   ssr: false,
-  head: () => ({ meta: [{ title: "אודות" }] }),
+  head: ({ matches }) => ({ meta: [{ title: pageTitle("אודות", matches) }] }),
   component: AboutPage,
 });
 
@@ -34,7 +35,7 @@ function AboutPage() {
               <RichContent content={settings.about_content} className="leading-7" />
             ) : (
               <p className="leading-7 text-foreground">
-                {`${settings?.site_title ?? "העסק"} — פורטל הזמנות סיטונאי ללקוחות עסקיים.`}
+                {`${settings ? storeNames(settings).displayName : "העסק"} — פורטל הזמנות סיטונאי ללקוחות עסקיים.`}
               </p>
             )}
           </CardContent>
@@ -140,7 +141,7 @@ function AboutPage() {
         </Card>
 
         <p className="pt-2 text-center text-xs text-muted-foreground">
-          © כל הזכויות שמורות ל{settings?.site_title ?? "העסק"} ·{" "}
+          © כל הזכויות שמורות ל{settings ? storeNames(settings).name : "העסק"} ·{" "}
           <span dir="ltr">גרסה {APP_VERSION}</span>
         </p>
       </main>

@@ -7,7 +7,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sendEmail, renderEmailHtml, escapeHtml } from "@/lib/email.server";
 import { tenantSiteOrigin } from "@/integrations/supabase/tenant.server";
-import { DEFAULT_STORE_NAME } from "@/lib/branding";
+import { storeNames } from "@/lib/store-identity";
 
 export function hashAgreementToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -57,7 +57,7 @@ export async function sendAgreementEmail(
     .select("business_name, site_title")
     .eq("id", true)
     .maybeSingle();
-  const company = settings?.business_name?.trim() || settings?.site_title || DEFAULT_STORE_NAME;
+  const company = storeNames(settings).name;
   const origin = await resolveSiteOrigin();
   const link = `${origin}/agreement?token=${encodeURIComponent(token)}`;
 
