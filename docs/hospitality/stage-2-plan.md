@@ -290,6 +290,27 @@ from the bucket; no executable or SVG uploads; delete only the site's own object
 E2E upload image (desktop + mobile), set cover, reorder, delete — the file is gone from
 storage; upload to another site's path refused.
 
+**Owner requirements (approved 31/10/2026 — binding for 2e; 2e not started):**
+- Upload from the computer (and phone camera / gallery).
+- Paste a link to an image → the **server** downloads it and stores an **independent copy**
+  in Supabase Storage (`hosp-media`). Never hotlink an external image — pages show only
+  stored copies.
+- Check the **real** file type (content / magic bytes, not the extension or the declared
+  Content-Type), the size and the content: decode and re-encode (strips metadata,
+  defeats polyglots); no SVG, no executables.
+- SSRF protection for links: http / https only; DNS resolved by us and the connection made
+  to the checked address (no DNS rebinding); private, loopback, link-local (cloud
+  metadata), multicast and reserved IPv4 / IPv6 ranges and internal host names refused;
+  every redirect re-checked (limited); time and size limits while streaming.
+- Every image belongs to a tenant, a property and (optionally) a unit — path
+  `<tenant>/<uuid>.<ext>`, RLS + the `media` permission.
+- Delete, replace and reorder (and set cover).
+- Reuse, don't copy: Ecommerce already has a downloader with these protections
+  (`src/server/services/image-fetch.ts` — pinned lookup, private ranges, 4 re-checked
+  redirects, size caps, sharp re-encode). 2e plans to expose it to the engine through a
+  platform adapter (`src/platform/media/`) with its own tests, without changing Ecommerce
+  behaviour.
+
 ### 2f — Pricing, rate rules and cancellation policies
 **Functionality:** per unit: base price, weekend price, seasons (date ranges), holidays,
 minimum nights per rule, priority explained in plain words; **price preview** for any

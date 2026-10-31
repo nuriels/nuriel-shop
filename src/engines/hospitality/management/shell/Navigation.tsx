@@ -1,5 +1,6 @@
 // ניווט אזור הניהול: בצד (מחשב) ובשורה תחתונה + "עוד" (טלפון). מסכים שעוד לא
 // נבנו מוצגים כ"בקרוב" — לא קישורים.
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   BedDouble,
@@ -44,8 +45,8 @@ function SoonBadge() {
   );
 }
 
-/** פריט ברשימה (צד / תפריט "עוד") */
-function ListItem({ item }: { item: NavItem }) {
+/** פריט ברשימה (צד / תפריט "עוד"); onNavigate — סוגר את תפריט "עוד" כשבוחרים מסך */
+function ListItem({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
   const Icon = ICONS[item.key];
   const base = "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm";
   if (!item.to) {
@@ -63,6 +64,7 @@ function ListItem({ item }: { item: NavItem }) {
       activeOptions={{ exact: true }}
       className={cn(base, "font-medium hover:bg-muted")}
       activeProps={{ className: "bg-primary/10 text-primary", "aria-current": "page" }}
+      onClick={onNavigate}
     >
       <Icon className="size-5 shrink-0" aria-hidden="true" />
       <span className="flex-1">{item.label}</span>
@@ -118,6 +120,8 @@ function BarItem({ item }: { item: NavItem }) {
 
 export function BottomNav({ items }: { items: NavItem[] }) {
   const { bar, more } = splitForMobile(items);
+  // התפריט נסגר כשבוחרים מסך — אחרת המסך החדש נפתח מאחורי התפריט
+  const [moreOpen, setMoreOpen] = useState(false);
   return (
     <nav
       aria-label="ניווט ראשי"
@@ -131,7 +135,7 @@ export function BottomNav({ items }: { items: NavItem[] }) {
         ))}
         {more.length > 0 && (
           <li className="flex flex-1">
-            <Sheet>
+            <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
               <SheetTrigger
                 className="flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-medium"
                 aria-label="עוד מסכים"
@@ -147,7 +151,7 @@ export function BottomNav({ items }: { items: NavItem[] }) {
                 <ul className="mt-4 flex flex-col gap-1">
                   {more.map((item) => (
                     <li key={item.key}>
-                      <ListItem item={item} />
+                      <ListItem item={item} onNavigate={() => setMoreOpen(false)} />
                     </li>
                   ))}
                 </ul>

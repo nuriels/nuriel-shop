@@ -333,6 +333,11 @@ test("@mobile phone: bottom navigation with 'more', RTL, accessible", async ({ p
   await expect(sheet.getByText("צוות ניהול")).toBeVisible();
   await expect(sheet.getByText("הגדרות העסק")).toBeVisible();
   await expectAccessible(page, "more sheet (phone)");
+  // בחירת מסך מ"עוד" סוגרת את התפריט — המסך החדש לא נשאר מוסתר מאחוריו
+  await sheet.getByRole("link", { name: "הגדרות העסק" }).click();
+  await expect(page).toHaveURL(/\/manage\/settings$/);
+  await expect(sheet).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 });
 
 test("a suspended site shows the suspended page in the management area", async ({ request }) => {

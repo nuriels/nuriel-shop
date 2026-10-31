@@ -36,7 +36,7 @@ jobs:
       - name: typecheck (app + tests)
         run: bun run typecheck
       - name: lint new code (strict) — tests and the engine layers (incl. import boundaries)
-        run: npx eslint tests e2e vitest.config.ts eslint.config.js src/platform src/engines src/app src/start.ts src/server.ts src/routes/__root.tsx src/routes/manage.tsx src/routes/manage.index.tsx src/routes/manage_.login.tsx src/routes/manage.settings.tsx src/routes/manage.team.tsx src/routes/manage.units.tsx vite.config.ts
+        run: npx eslint tests e2e scripts/preview vitest.config.ts eslint.config.js src/platform src/engines src/app src/start.ts src/server.ts src/routes/__root.tsx src/routes/manage.tsx src/routes/manage.index.tsx src/routes/manage_.login.tsx src/routes/manage.settings.tsx src/routes/manage.team.tsx src/routes/manage.units.tsx vite.config.ts
       - name: lint whole repo (report only — 28 known formatting errors, see docs/testing.md)
         continue-on-error: true
         run: bun run lint
@@ -102,6 +102,47 @@ jobs:
             e2e/playwright-report
             e2e/test-results
           retention-days: 7
+      - name: stop local Supabase
+        if: always()
+        run: bun run e2e:down || true
+
+  preview:
+    name: Hospitality preview (demo data · screenshots + videos)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - name: install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: install ffmpeg (MP4 videos that play on every phone)
+        run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - name: start local Supabase (all migrations + test seed)
+        run: bun run e2e:up
+      - name: build the app against the local Supabase
+        run: |
+          set -a; . e2e/.env.e2e; set +a
+          bun run build
+      - name: demo data + recorded walkthrough (desktop + phone; every step checked)
+        env:
+          E2E_SKIP_BUILD: "1"
+        run: bun run hosp:preview:record
+      - name: upload screenshots and videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hospitality-preview
+          path: |
+            e2e/preview/out/index.html
+            e2e/preview/out/screens
+            e2e/preview/out/videos
+          retention-days: 14
       - name: stop local Supabase
         if: always()
         run: bun run e2e:down || true

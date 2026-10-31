@@ -21,7 +21,10 @@
     "test:scripts": "bash scripts/run-checks.sh",
     "e2e:up": "bash e2e/scripts/supabase-up.sh",
     "e2e:down": "bash e2e/scripts/supabase-down.sh",
-    "test:e2e": "playwright test -c e2e/playwright.config.ts"
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
+    "hosp:preview": "bash scripts/preview/hospitality-preview.sh",
+    "hosp:demo": "node scripts/preview/hospitality-demo.mjs",
+    "hosp:preview:record": "bash scripts/preview/record.sh"
   },
   "overrides": {
     "rolldown": "1.2.1"

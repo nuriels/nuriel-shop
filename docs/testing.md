@@ -18,6 +18,8 @@
 | `bun run e2e:up` | Supabase מקומי ב-Docker + כל המיגרציות + נתוני בדיקה; הסכמה `hospitality` חשופה ב-API המקומי (כמו `PGRST_DB_SCHEMAS` בשרת בעתיד) | Docker |
 | `bun run test:e2e` | Playwright — Regression לחנויות (בונה ומריץ את האפליקציה מול ה-Supabase המקומי) | `e2e:up` |
 | `bun run e2e:down` | עצירה ומחיקה של ה-Supabase המקומי | — |
+| `bun run hosp:preview` | תצוגה מקומית של Hospitality (P0): Supabase מקומי + נתוני הדגמה (3 אתרים) + האפליקציה — `docs/hospitality/preview.md` | Docker |
+| `bun run hosp:preview:record` | סיור מוקלט בתצוגה: צילומי מסך וסרטונים במחשב ובטלפון (`e2e/preview`), כל צעד גם נבדק | `e2e:up` |
 
 ## בדיקות SQL — איך לקרוא את התוצאה
 
