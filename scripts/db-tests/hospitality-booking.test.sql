@@ -1030,9 +1030,13 @@ SELECT pg_temp.after('outbox: a row stuck in "sending" (worker crashed) is claim
   format($$SELECT $1 ? %L AND (SELECT attempts = 2 FROM hospitality.notifications WHERE id = %L)$$, :'n3', :'n3'));
 SELECT tests.run('outbox: the worker functions are not callable through the API',
   'SELECT * FROM hospitality.claim_notifications(1)', :OWNER_X, 'permission denied');
-SELECT tests.check('outbox: the owner sees the email status of their bookings (read-only)',
-  format($$SELECT (pg_temp.call(%L, %L, 'SELECT to_jsonb(count(*)) FROM hospitality.notifications'))::integer
-                  = (SELECT count(*) FROM hospitality.notifications WHERE tenant_id = %L)$$, :'sx', :OWNER_X, :'sx'));
+-- Stage 2a (migration 7): the outbox payload holds the guest's manage-link token until the
+-- email is sent, so staff no longer read the table; the email status comes from
+-- staff_email_status() (no payload, masked recipient). Tested in hospitality-management.test.sql.
+SELECT tests.check('outbox: the owner sees the email status of their bookings (read-only, through the safe function)',
+  format($$SELECT jsonb_array_length(pg_temp.call(%L, %L, format('SELECT hospitality.staff_email_status(%%L)', %L)))
+                  = (SELECT count(*) FROM hospitality.notifications WHERE tenant_id = %L AND booking_id = %L)$$,
+         :'sx', :OWNER_X, :'b1', :'sx', :'b1'));
 
 -- ============================================================
 -- 11. Privacy

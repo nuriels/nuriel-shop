@@ -92,3 +92,17 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Exactly once | the release happens in the status-changing transaction, guarded by `promotion_released_at` and the one-way state machine; `used_count` never goes below 0 or above the limit (constraints) |
 | Rollback | `supabase/rollbacks/20261101140000_hosp_coupon_release.down.sql` — drops the trigger, function, constraint and column (back to "counted at creation, never released"); released counts and history stay |
 | Tests | `hospitality-billing.test.sql` §9 (decline, expiry with a second sweep, withdrawal, confirmed-then-cancelled, re-approval, re-approval with the coupon used up, bounds); concurrency 21 (two sweeps + a lazy expiry at once) and 22 (decline racing the sweep); `rollback-check.sh` |
+
+## 20261101150000_hosp_management_foundation.sql — Stage 2a (hospitality)
+
+| | |
+|---|---|
+| Flag | `hospitality_management_enabled` (off): the owner management area, independent of `hospitality_frontend_enabled` (public website) |
+| Manager seats | `plans.max_managers` (trial 3 · basic 2 · pro 5 · enterprise unlimited — approved values, set only when the column is added), `subscriptions.extra_managers` (0–100, platform admin via `admin_set_extra_managers`, audited). Trigger `hospitality_admin_seat_guard` on `public.user_roles` (Hospitality sites only): a new `admin` row / change to `admin` / move into the site beyond the limit is refused in the database, under the same per-site lock as Ecommerce (`admin_seats:<site>`); the owner counts as a seat; platform admins are exempt (as actor and as seat); an inactive subscription blocks additions; a downgrade removes nobody. `entitlements()` adds `max_managers`, `extra_managers`, `managers_used` |
+| Ecommerce | `public.user_roles_admin_seat_guard` keeps its exact body plus one early return for non-Ecommerce sites (tested: body still uses `tenant_admin_limit`, stores keep the Ecommerce limit and message, Ecommerce seat tests unchanged) |
+| Outbox | staff lose direct `SELECT` on `notifications` (the payload holds the guest manage-link token until the email is sent); `staff_email_status(booking)` returns status, attempts, masked recipient — no payload, no token, no provider error text |
+| Guest privacy | new owner-only permission `guests.privacy`; `export_guest` / `anonymize_guest` require it (managers keep reading guests for daily work) |
+| Management context | `management_context()`: role, permission map, flags, site, business name / timezone, entitlements (owner: full; manager: active + units only), setup checklist (business details, active unit, real photo, price, reviewed policy). Refused for anyone but this site's owner / managers, and when the database or management flag is off |
+| Rollback | `supabase/rollbacks/20261101150000_hosp_management_foundation.down.sql` — refuses while extra manager seats are assigned; restores the original Ecommerce guard body, the migration 3/4/5 functions, staff outbox read; drops the trigger, columns, functions and the flag |
+| Tests | `scripts/db-tests/hospitality-management.test.sql` (63 assertions), concurrency 23 (5 parallel managers, one seat left → exactly one), `rollback-check.sh` (M7 first, refusal, exact restore, re-apply), Stage 1 assertions updated for the approved rules (11 permissions, outbox through the safe function) |
+| Production | nothing to configure; the management area also needs `HOSPITALITY_ENGINE=on`, which is not set in production |

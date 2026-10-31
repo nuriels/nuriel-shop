@@ -36,7 +36,7 @@ jobs:
       - name: typecheck (app + tests)
         run: bun run typecheck
       - name: lint new code (strict) — tests and the engine layers (incl. import boundaries)
-        run: npx eslint tests e2e vitest.config.ts eslint.config.js src/platform src/engines src/app src/start.ts src/server.ts
+        run: npx eslint tests e2e vitest.config.ts eslint.config.js src/platform src/engines src/app src/start.ts src/server.ts src/routes/__root.tsx src/routes/manage.tsx src/routes/manage.index.tsx src/routes/manage_.login.tsx vite.config.ts
       - name: lint whole repo (report only — 28 known formatting errors, see docs/testing.md)
         continue-on-error: true
         run: bun run lint

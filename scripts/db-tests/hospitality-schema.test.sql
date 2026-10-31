@@ -249,14 +249,15 @@ DELETE FROM public.user_roles WHERE tenant_id = :SHOP_E AND user_id = :GUEST;
 -- ============================================================
 -- 4. Permissions: hospitality.can() (RPC, as the user, on a site)
 -- ============================================================
-SELECT tests.check('can: the permission list is the Hospitality list (10 permissions)',
-  $$SELECT cardinality(hospitality.permissions()) = 10$$);
+-- Stage 2a (migration 7) added guests.privacy (guest export / anonymise, owner only): 11 permissions
+SELECT tests.check('can: the permission list is the Hospitality list (11 permissions)',
+  $$SELECT cardinality(hospitality.permissions()) = 11$$);
 SELECT pg_temp.run_at(:hosp_a, 'can: owner has every Hospitality permission',
-  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :H_OWNER_A, NULL, 10);
-SELECT pg_temp.run_at(:hosp_a, 'can: manager has all but staff.managers and billing.manage',
+  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :H_OWNER_A, NULL, 11);
+SELECT pg_temp.run_at(:hosp_a, 'can: manager has all but staff.managers, billing.manage and guests.privacy',
   $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :H_MANAGER_A, NULL, 8);
-SELECT pg_temp.run_at(:hosp_a, 'can: manager lacks exactly staff.managers and billing.manage',
-  $$SELECT 1 FROM unnest(ARRAY['staff.managers', 'billing.manage']) p WHERE NOT hospitality.can(p)$$, :H_MANAGER_A, NULL, 2);
+SELECT pg_temp.run_at(:hosp_a, 'can: manager lacks exactly staff.managers, billing.manage and guests.privacy',
+  $$SELECT 1 FROM unnest(ARRAY['staff.managers', 'billing.manage', 'guests.privacy']) p WHERE NOT hospitality.can(p)$$, :H_MANAGER_A, NULL, 3);
 SELECT pg_temp.run_at(:hosp_a, 'can: owner gets no Ecommerce or unknown permission (pos, admin, products.view, inventory)',
   $$SELECT 1 FROM unnest(ARRAY['pos', 'admin', 'products.view', 'inventory', 'orders.fulfill', '', 'catalog ']) p
      WHERE hospitality.can(p)$$, :H_OWNER_A, NULL, 0);
@@ -279,7 +280,7 @@ SELECT pg_temp.run_at(:hosp_a, 'can: a member of both products is a manager on t
 SELECT pg_temp.run_at(NULL, 'can: a member of both products without a site header gets nothing',
   $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :DUAL, NULL, 0);
 SELECT pg_temp.run_at(:hosp_a, 'can: the platform admin is owner (as in stores)',
-  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :PLATFORM, NULL, 10);
+  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :PLATFORM, NULL, 11);
 SELECT pg_temp.run_at(:hosp_a, 'can: anon cannot call it',
   $$SELECT hospitality.can('catalog')$$, NULL, 'permission denied');
 

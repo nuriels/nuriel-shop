@@ -24,6 +24,7 @@ import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ForbiddenRouteImport } from './routes/forbidden'
 import { Route as LockedRouteImport } from './routes/locked'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ManageRouteImport } from './routes/manage'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as PrivacyRouteImport } from './routes/privacy'
@@ -40,6 +41,8 @@ import { Route as AdminPagesRouteImport } from './routes/admin_.pages'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
 import { Route as CartCodeRouteImport } from './routes/cart.$code'
 import { Route as CourierTokenRouteImport } from './routes/courier.$token'
+import { Route as ManageIndexRouteImport } from './routes/manage.index'
+import { Route as ManageLoginRouteImport } from './routes/manage_.login'
 import { Route as OwnerAgreementTokenRouteImport } from './routes/owner-agreement.$token'
 import { Route as PagesSlugRouteImport } from './routes/pages.$slug'
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
@@ -139,6 +142,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManageRoute = ManageRouteImport.update({
+  id: '/manage',
+  path: '/manage',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrdersRoute = OrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
@@ -217,6 +225,16 @@ const CartCodeRoute = CartCodeRouteImport.update({
 const CourierTokenRoute = CourierTokenRouteImport.update({
   id: '/courier/$token',
   path: '/courier/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageIndexRoute = ManageIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ManageRoute,
+} as any)
+const ManageLoginRoute = ManageLoginRouteImport.update({
+  id: '/manage_/login',
+  path: '/manage/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OwnerAgreementTokenRoute = OwnerAgreementTokenRouteImport.update({
@@ -354,6 +372,7 @@ export interface FileRoutesByFullPath {
   '/forbidden': typeof ForbiddenRoute
   '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
+  '/manage': typeof ManageRouteWithChildren
   '/orders': typeof OrdersRoute
   '/platform': typeof PlatformRoute
   '/privacy': typeof PrivacyRoute
@@ -370,6 +389,7 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AdminSettingsRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/manage/login': typeof ManageLoginRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/plans': typeof PlatformPlansRoute
@@ -378,6 +398,7 @@ export interface FileRoutesByFullPath {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
+  '/manage/': typeof ManageIndexRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/inventory/serials': typeof AdminInventorySerialsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -426,6 +447,7 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AdminSettingsRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/manage/login': typeof ManageLoginRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/plans': typeof PlatformPlansRoute
@@ -434,6 +456,7 @@ export interface FileRoutesByTo {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
+  '/manage': typeof ManageIndexRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/inventory/serials': typeof AdminInventorySerialsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -467,6 +490,7 @@ export interface FileRoutesById {
   '/forbidden': typeof ForbiddenRoute
   '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
+  '/manage': typeof ManageRouteWithChildren
   '/orders': typeof OrdersRoute
   '/platform': typeof PlatformRoute
   '/privacy': typeof PrivacyRoute
@@ -483,6 +507,7 @@ export interface FileRoutesById {
   '/admin_/settings': typeof AdminSettingsRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/manage_/login': typeof ManageLoginRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform_/plans': typeof PlatformPlansRoute
@@ -491,6 +516,7 @@ export interface FileRoutesById {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
+  '/manage/': typeof ManageIndexRoute
   '/admin_/inventory_/labels': typeof AdminInventoryLabelsRoute
   '/admin_/inventory_/serials': typeof AdminInventorySerialsRoute
   '/admin_/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -525,6 +551,7 @@ export interface FileRouteTypes {
     | '/forbidden'
     | '/locked'
     | '/login'
+    | '/manage'
     | '/orders'
     | '/platform'
     | '/privacy'
@@ -541,6 +568,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/cart/$code'
     | '/courier/$token'
+    | '/manage/login'
     | '/owner-agreement/$token'
     | '/pages/$slug'
     | '/platform/plans'
@@ -549,6 +577,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/unsubscribe/$token'
+    | '/manage/'
     | '/admin/inventory/labels'
     | '/admin/inventory/serials'
     | '/admin/marketing/abandoned-carts'
@@ -597,6 +626,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/cart/$code'
     | '/courier/$token'
+    | '/manage/login'
     | '/owner-agreement/$token'
     | '/pages/$slug'
     | '/platform/plans'
@@ -605,6 +635,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/unsubscribe/$token'
+    | '/manage'
     | '/admin/inventory/labels'
     | '/admin/inventory/serials'
     | '/admin/marketing/abandoned-carts'
@@ -637,6 +668,7 @@ export interface FileRouteTypes {
     | '/forbidden'
     | '/locked'
     | '/login'
+    | '/manage'
     | '/orders'
     | '/platform'
     | '/privacy'
@@ -653,6 +685,7 @@ export interface FileRouteTypes {
     | '/admin_/settings'
     | '/cart/$code'
     | '/courier/$token'
+    | '/manage_/login'
     | '/owner-agreement/$token'
     | '/pages/$slug'
     | '/platform_/plans'
@@ -661,6 +694,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/unsubscribe/$token'
+    | '/manage/'
     | '/admin_/inventory_/labels'
     | '/admin_/inventory_/serials'
     | '/admin_/marketing/abandoned-carts'
@@ -694,6 +728,7 @@ export interface RootRouteChildren {
   ForbiddenRoute: typeof ForbiddenRoute
   LockedRoute: typeof LockedRoute
   LoginRoute: typeof LoginRoute
+  ManageRoute: typeof ManageRouteWithChildren
   OrdersRoute: typeof OrdersRoute
   PlatformRoute: typeof PlatformRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -710,6 +745,7 @@ export interface RootRouteChildren {
   AdminSettingsRoute: typeof AdminSettingsRoute
   CartCodeRoute: typeof CartCodeRoute
   CourierTokenRoute: typeof CourierTokenRoute
+  ManageLoginRoute: typeof ManageLoginRoute
   OwnerAgreementTokenRoute: typeof OwnerAgreementTokenRoute
   PagesSlugRoute: typeof PagesSlugRoute
   PlatformPlansRoute: typeof PlatformPlansRoute
@@ -842,6 +878,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage': {
+      id: '/manage'
+      path: '/manage'
+      fullPath: '/manage'
+      preLoaderRoute: typeof ManageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/orders': {
       id: '/orders'
       path: '/orders'
@@ -952,6 +995,20 @@ declare module '@tanstack/react-router' {
       path: '/courier/$token'
       fullPath: '/courier/$token'
       preLoaderRoute: typeof CourierTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/': {
+      id: '/manage/'
+      path: '/'
+      fullPath: '/manage/'
+      preLoaderRoute: typeof ManageIndexRouteImport
+      parentRoute: typeof ManageRoute
+    }
+    '/manage_/login': {
+      id: '/manage_/login'
+      path: '/manage/login'
+      fullPath: '/manage/login'
+      preLoaderRoute: typeof ManageLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/owner-agreement/$token': {
@@ -1118,6 +1175,17 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ManageRouteChildren {
+  ManageIndexRoute: typeof ManageIndexRoute
+}
+
+const ManageRouteChildren: ManageRouteChildren = {
+  ManageIndexRoute: ManageIndexRoute,
+}
+
+const ManageRouteWithChildren =
+  ManageRoute._addFileChildren(ManageRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
@@ -1134,6 +1202,7 @@ const rootRouteChildren: RootRouteChildren = {
   ForbiddenRoute: ForbiddenRoute,
   LockedRoute: LockedRoute,
   LoginRoute: LoginRoute,
+  ManageRoute: ManageRouteWithChildren,
   OrdersRoute: OrdersRoute,
   PlatformRoute: PlatformRoute,
   PrivacyRoute: PrivacyRoute,
@@ -1150,6 +1219,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminSettingsRoute: AdminSettingsRoute,
   CartCodeRoute: CartCodeRoute,
   CourierTokenRoute: CourierTokenRoute,
+  ManageLoginRoute: ManageLoginRoute,
   OwnerAgreementTokenRoute: OwnerAgreementTokenRoute,
   PagesSlugRoute: PagesSlugRoute,
   PlatformPlansRoute: PlatformPlansRoute,

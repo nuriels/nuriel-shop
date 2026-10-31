@@ -1,8 +1,10 @@
 // הגדרות מנוע Hospitality
 
-/** מפתחות הדגלים (נרשמו במיגרציה 3; כולם כבויים כברירת מחדל) */
+/** מפתחות הדגלים (מיגרציות 3 ו-7; כולם כבויים כברירת מחדל) */
 export const HOSPITALITY_FLAGS = {
   backend: "hospitality_backend_enabled",
+  /** אזור הניהול של בעל העסק — נפרד מהאתר הציבורי (frontend) */
+  management: "hospitality_management_enabled",
   frontend: "hospitality_frontend_enabled",
   onboarding: "hospitality_onboarding_enabled",
   themes: "hospitality_themes_enabled",
@@ -23,3 +25,6 @@ export function hospitalitySwitchOn(
 ): boolean {
   return (env[HOSPITALITY_ENGINE_ENV] ?? "").trim().toLowerCase() === "on";
 }
+
+/** אזור הניהול של בעל העסק (Stage 2) */
+export const MANAGE_PATH = "/manage";

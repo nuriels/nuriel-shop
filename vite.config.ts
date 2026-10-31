@@ -31,7 +31,30 @@ export default defineConfig(({ command }) => ({
       },
     }),
     // שרת Node עצמאי (.output/server/index.mjs) — מה שרץ בקונטיינר
-    ...(command === "build" ? [nitro({ preset: "node-server" })] : []),
+    ...(command === "build"
+      ? [
+          nitro({
+            preset: "node-server",
+            // סביבת הריצה של TanStack Start בשרת (ה-handler, פונקציות השרת, CSRF,
+            // middleware) — תמיד בחלק (chunk) אחד. אחרת החלוקה תלויה ב-hash של הקבצים,
+            // ולפעמים נוצר מעגל בין שני חלקים והשרת נופל בעלייה
+            // ("createCsrfMiddleware is not a function" — Hospitality Stage 2a)
+            rolldownConfig: {
+              output: {
+                codeSplitting: {
+                  groups: [
+                    {
+                      name: "_tanstack-start-runtime",
+                      priority: 100,
+                      test: /[\\/]\.nitro[\\/]vite[\\/]services[\\/]ssr[\\/]assets[\\/](server|createServerFn|createCsrfMiddleware|createMiddleware|__23tanstack-start-server-fn-resolver)-[\w-]+\.js$/,
+                    },
+                  ],
+                },
+              },
+            },
+          }),
+        ]
+      : []),
     viteReact(),
   ],
 }));

@@ -97,3 +97,17 @@ CREATE OR REPLACE FUNCTION conc.reqc(_unit uuid, _in integer, _out integer, _ema
     _policy_hash => hospitality.quote(_unit, current_date + _in, current_date + _out, 2, 0, 'CONC') ->> 'policy_hash');
 $$;
 GRANT EXECUTE ON FUNCTION conc.reqc(uuid, integer, integer, text, text) TO anon, authenticated, service_role;
+
+-- a third site for the manager-seat scenario (migration 7): trial (3 seats), owner + 1 manager,
+-- and five more accounts that try to become managers at the same time
+SELECT set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-0000000000f0', false);
+SELECT hospitality.admin_create_site('conc-site-3', 'בדיקות מקביליות 3');
+SELECT set_config('request.jwt.claim.sub', '', false);
+INSERT INTO auth.users (id, email, email_confirmed_at)
+SELECT ('c0000000-0000-0000-0000-0000000003' || lpad(n::text, 2, '0'))::uuid, 'conc.seat' || n || '@test.local', now()
+  FROM generate_series(0, 6) n
+ON CONFLICT DO NOTHING;
+INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_approved)
+SELECT t.id, ('c0000000-0000-0000-0000-0000000003' || lpad(n::text, 2, '0'))::uuid, 'conc.seat' || n || '@test.local',
+       'conc_seat_' || n, 'admin', true
+  FROM public.tenants t, generate_series(0, 1) n WHERE t.slug = 'conc-site-3';

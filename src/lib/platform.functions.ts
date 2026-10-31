@@ -10,12 +10,16 @@ import { PORTAL_STORE_SLUG } from "@/lib/portal";
  * נקרא מ-beforeLoad של ה-root route (גם ב-SSR וגם בניווט בדפדפן).
  */
 export const getHostMode = createServerFn({ method: "GET" }).handler(async () => {
-  const { isPlatformRequest, storeLockReason, tenantBaseDomain } =
+  const { isPlatformRequest, maybeCurrentTenant, storeLockReason, tenantBaseDomain } =
     await import("@/integrations/supabase/tenant.server");
+  const { siteTypeOf } = await import("@/platform/tenancy/site-type.server");
   const adminHost = process.env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase() || null;
   const lock = storeLockReason();
+  const tenant = isPlatformRequest() ? null : maybeCurrentTenant();
   return {
     platform: isPlatformRequest(),
+    // סוג האתר (Stage 2a) — מטמון של 15 שניות, כל תקלה → ecommerce (ההתנהגות הקיימת)
+    siteType: tenant ? await siteTypeOf(tenant.id) : ("ecommerce" as const),
     suspended: lock !== null,
     lock,
     baseDomain: tenantBaseDomain(),

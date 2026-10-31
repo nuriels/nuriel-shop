@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
-# המיגרציות של Hospitality Stage 1 נבדקות בסדר הפוך (האחרונה קודם):
+# המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_management_foundation (2a): הגנה (מקומות מנהל נוספים שהוקצו), rollback →
+#     כלל המנהלים של Ecommerce חוזר בדיוק, דגל הניהול, העמודות והפונקציות נעלמו,
+#     הצוות קורא שוב את תור המיילים, ייצוא / מחיקת אורח חוזרים להרשאת guests
 #   • hosp_billing_admin (1e): הגנה (מנוי ששונה / היסטוריית מדיניות), rollback →
 #     חבילות, מנויים, היסטוריה, מגבלות וסטטיסטיקות נעלמו; פונקציות 1d חוזרות
 #   • hosp_booking (1d): הגנה (נעצר כשיש הזמנות / אורחים / חסימות / מיילים),
@@ -26,6 +29,7 @@ M3=20261101110000_hosp_schema
 M4=20261101120000_hosp_booking
 M5=20261101130000_hosp_billing_admin
 M6=20261101140000_hosp_coupon_release
+M7=20261101150000_hosp_management_foundation
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -41,6 +45,36 @@ psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
 "${PSQL[@]}" -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do "${PSQL[@]}" -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }; done
 q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id, 'rb-row', 'pickup', 0 FROM public.tenants WHERE is_default" >/dev/null
+
+# ---------- 2a: management foundation ----------
+echo "rollback guard: $M7 refuses while extra manager seats are assigned"
+q "INSERT INTO public.tenants (id, slug, name, site_type) VALUES ('72a00000-0000-0000-0000-000000000001', 'rb-stay-2a', 'x', 'hospitality')" >/dev/null
+q "INSERT INTO hospitality.subscriptions (tenant_id, plan_code, status, trial_ends_at, extra_managers) VALUES ('72a00000-0000-0000-0000-000000000001', 'trial', 'trialing', now() + interval '1 day', 2)" >/dev/null
+if down "$M7" 2>/dev/null; then
+  echo "  FAIL rollback ran although extra manager seats were assigned"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hospitality_admin_seat_guard')"
+q "DELETE FROM public.tenants WHERE id = '72a00000-0000-0000-0000-000000000001'" >/dev/null
+
+echo "rollback: $M7"
+down "$M7"
+expect "Ecommerce seat guard restored to its original body (no site-type branch)" \
+  "SELECT prosrc NOT LIKE '%site_type%' AND prosrc LIKE '%tenant_admin_limit(NEW.tenant_id)%'
+     FROM pg_proc WHERE oid = 'public.user_roles_admin_seat_guard()'::regprocedure"
+expect "Hospitality seat trigger, functions, columns and the management flag removed" \
+  "SELECT NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hospitality_admin_seat_guard')
+     AND to_regprocedure('hospitality.management_context()') IS NULL
+     AND to_regprocedure('hospitality.staff_email_status(uuid)') IS NULL
+     AND to_regprocedure('hospitality.admin_set_extra_managers(uuid, integer)') IS NULL
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality'
+                       AND column_name IN ('max_managers', 'extra_managers'))
+     AND NOT EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key = 'hospitality_management_enabled')"
+expect "back to the migration 6 rules: staff read the outbox, 10 permissions, entitlements without seats" \
+  "SELECT has_table_privilege('authenticated', 'hospitality.notifications', 'SELECT')
+     AND cardinality(hospitality.permissions()) = 10
+     AND (SELECT prosrc NOT LIKE '%max_managers%' FROM pg_proc WHERE oid = 'hospitality.entitlements(uuid)'::regprocedure)
+     AND (SELECT prosrc LIKE '%_staff_tenant(''guests'')%' FROM pg_proc WHERE oid = 'hospitality.export_guest(uuid)'::regprocedure)"
 
 # ---------- coupon release ----------
 echo "rollback: $M6"
@@ -184,13 +218,14 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1 … $M6"
+echo "re-apply: $M1 … $M7"
 up "$M1"
 up "$M2"
 up "$M3"
 up "$M4"
 up "$M5"
 up "$M6"
+up "$M7"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -199,12 +234,17 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 21 tables, RLS on all, role admin, 5 flags off" \
+expect "Hospitality schema back: 21 tables, RLS on all, role admin, 6 flags off (incl. management)" \
   "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 21
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
-      AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 5"
+      AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 6"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
 expect "coupon release back" "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'bookings_coupon_usage')"
+expect "management foundation back: seat trigger, Ecommerce guard branch, no staff outbox read" \
+  "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hospitality_admin_seat_guard')
+     AND (SELECT prosrc LIKE '%site_type <> ''ecommerce''%' FROM pg_proc WHERE oid = 'public.user_roles_admin_seat_guard()'::regprocedure)
+     AND NOT has_table_privilege('authenticated', 'hospitality.notifications', 'SELECT')
+     AND (SELECT max_managers FROM hospitality.plans WHERE code = 'basic') = 2"
 expect "plans back (4 unpublished placeholders), unit limit and terms guard active" \
   "SELECT (SELECT count(*) FROM hospitality.plans WHERE NOT is_published AND price_monthly IS NULL) = 4
      AND (SELECT count(*) FROM pg_trigger WHERE tgname IN ('units_limit_guard', 'bookings_terms_guard')) = 2"

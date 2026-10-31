@@ -25,6 +25,8 @@ import { MarketingLayer } from "@/components/marketing/MarketingLayer";
 import { CartProvider } from "@/hooks/useCart";
 import { TrackingConsent } from "@/components/marketing/TrackingConsent";
 import { canonicalUrl } from "@/lib/seo-urls";
+import { EngineSiteShell } from "@/app/site-shell";
+import { engineRouteRedirect } from "@/app/site-routes";
 
 function NotFoundComponent() {
   return (
@@ -88,6 +90,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   // ובאתרי החנויות /platform לא קיים. רץ גם ב-SSR וגם בכל ניווט בדפדפן.
   beforeLoad: async ({ location }) => {
     const mode = await hostMode();
+    // אתר של מנוע אחר (Hospitality): רק הנתיבים שהמנוע מגיש — השאר מופנים (בלי נעילת החנויות)
+    if (mode.siteType !== "ecommerce") {
+      const target = engineRouteRedirect(mode.siteType, location.pathname);
+      if (target) throw redirect({ href: target });
+      return { hostMode: mode };
+    }
     if (mode.platform && !PLATFORM_PATHS.test(location.pathname)) {
       throw redirect({ to: "/platform" });
     }
@@ -231,8 +239,19 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
+  const { queryClient, hostMode: mode } = Route.useRouteContext();
   const site = Route.useLoaderData();
+
+  // אתר של מנוע אחר (Hospitality): המעטפת של המנוע, בלי הסל, מצב שבת, פופ-אפ ומעקב של החנויות
+  if (mode.siteType !== "ecommerce") {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <EngineSiteShell siteType={mode.siteType}>
+          <Outlet />
+        </EngineSiteShell>
+      </QueryClientProvider>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

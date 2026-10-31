@@ -14,10 +14,13 @@ boundaries are enforced by ESLint (`eslint.config.js`) and by
 | `@/platform/tenancy/current-site.server` | the request's site (`SiteRef`) for database calls |
 | `@/platform/supabase/api-client.server` | Supabase client for the `hospitality` schema, with the site's `x-tenant-id` |
 | `@/platform/auth/session.server` | the signed-in user (no store-membership rule: guests may be staff elsewhere) |
+| `@/platform/auth/browser-session` | the browser session of the management area (apply server tokens, sign out) |
+| `@/platform/auth/login` | owner / manager login: password and email code (existing shared functions; no Google) |
+| `@/platform/ui` | the shared UI kit (shadcn primitives, `cn`) for the management screens |
 
 The engine is registered in the composition root `src/app/engines.ts`.
 
-## Layout (Stage 1)
+## Layout
 
 | Path | Contents |
 |---|---|
@@ -28,9 +31,14 @@ The engine is registered in the composition root `src/app/engines.ts`.
 | `validation/input.ts` | input checks of every server function (mirror the database checks) |
 | `server/*.functions.ts` | server functions: `public` (guests without an account), `guest` (signed-in guests), `owner` (owner / manager) |
 | `server/rpc.server.ts` | calls the `hospitality` schema functions; database messages (Hebrew) are shown to the user, technical errors are not |
+| `access.server.ts` | when the engine (backend) and the management area are enabled for a site |
+| `api/*.functions.ts` | server functions the browser calls (outside `server/` — import protection): `management.functions.ts` (2a) |
+| `management/` | the owner area `/manage` (Stage 2): `shell/` (layout, navigation, status screens), `login/`, `dashboard/`, `lib/` (pure helpers), `route-guard.ts` |
+| `src/routes/manage*.tsx` | thin route adapters (path, title, guard, screen) — Hospitality code in the router's folder |
 
 Business rules live in the engine's own migrations (`supabase/migrations/*_hosp_*`): the
-TypeScript layer validates input and calls them. There is no UI yet (Stage 2+).
+TypeScript layer validates input and calls them. The management area (Stage 2) is Hebrew RTL
+and mobile-first; it opens only with `hospitality_management_enabled`.
 
 ## Runtime gates
 1. **Dispatcher** (`@/platform/engines/engine-guard`): a Hospitality server function runs

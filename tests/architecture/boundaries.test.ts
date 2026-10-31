@@ -24,12 +24,22 @@ const FILES = walk(join(ROOT, "src"));
 const SOURCE = new Map(FILES.map((f) => [f, readFileSync(join(ROOT, f), "utf8")]));
 
 type Layer = "app" | "platform" | "hospitality" | "ecommerce-engine" | "entry" | "ecommerce";
+
+/** מתאמי הנתיבים של Hospitality (src/routes/manage*.tsx): קוד של המנוע במקום שהמסגרת דורשת */
+const HOSPITALITY_ROUTE = /^src\/routes\/manage(_?\.[^/]+)?\.tsx?$/;
+/** קבצי כניסה: מגיעים למנועים רק דרך שורש ההרכבה (ה-root של הנתבים — מ-Stage 2a) */
+const ENTRY_FILES = ["src/start.ts", "src/server.ts", "src/routes/__root.tsx"];
+/** עץ הנתיבים שנוצר אוטומטית — מייבא כל קובץ נתיב, גם את מתאמי Hospitality */
+const ROUTE_TREE = "src/routeTree.gen.ts";
+
 function layerOf(rel: string): Layer {
   if (rel.startsWith("src/app/")) return "app";
   if (rel.startsWith("src/platform/")) return "platform";
-  if (rel.startsWith("src/engines/hospitality/")) return "hospitality";
+  if (rel.startsWith("src/engines/hospitality/") || HOSPITALITY_ROUTE.test(rel))
+    return "hospitality";
   if (rel.startsWith("src/engines/ecommerce/")) return "ecommerce-engine";
-  if (rel === "src/start.ts" || rel === "src/server.ts") return "entry";
+  if (ENTRY_FILES.includes(rel.replace(/\.ts$/, ".tsx")) || ENTRY_FILES.includes(rel))
+    return "entry";
   return "ecommerce";
 }
 
@@ -54,8 +64,30 @@ function importsOf(rel: string): string[] {
   return out;
 }
 
-/** מודולים קיימים שהפלטפורמה עוטפת (adapter) — רשימה סגורה */
-const PLATFORM_ADAPTERS = new Set(["src/integrations/supabase/tenant.server"]);
+/**
+ * מתאמי הפלטפורמה — רשימה סגורה: כל קובץ מתאם, ובדיוק המודולים הקיימים שהוא עוטף.
+ * כל ייבוא אחר של קוד מוצר מהפלטפורמה — הפרה.
+ */
+const PLATFORM_ADAPTERS: [adapter: string, wraps: (target: string) => boolean][] = [
+  [
+    "src/platform/tenancy/current-site.server.ts",
+    (t) => t === "src/integrations/supabase/tenant.server",
+  ],
+  [
+    "src/platform/ui/index.ts",
+    (t) =>
+      /^src\/components\/ui\/[\w-]+$/.test(t) ||
+      t === "src/lib/utils" ||
+      t === "src/hooks/use-mobile",
+  ],
+  ["src/platform/auth/browser-session.ts", (t) => t === "src/integrations/supabase/client"],
+  [
+    "src/platform/auth/login.ts",
+    (t) => t === "src/lib/auth.functions" || t === "src/lib/login-code.functions",
+  ],
+];
+const adapterAllows = (from: string, target: string) =>
+  PLATFORM_ADAPTERS.some(([file, wraps]) => file === from && wraps(target));
 
 function violation(from: string, target: string): string | null {
   const fromLayer = layerOf(from);
@@ -63,11 +95,13 @@ function violation(from: string, target: string): string | null {
   const bad = `${from} → ${target}`;
   switch (fromLayer) {
     case "platform":
-      return toLayer === "platform" || PLATFORM_ADAPTERS.has(target) ? null : bad;
+      return toLayer === "platform" || adapterAllows(from, target) ? null : bad;
     case "hospitality":
       return toLayer === "hospitality" || toLayer === "platform" ? null : bad;
     case "ecommerce":
     case "ecommerce-engine":
+      // החריג היחיד: עץ הנתיבים שנוצר מייבא את מתאמי הנתיבים של Hospitality (ורק אותם)
+      if (from === ROUTE_TREE && HOSPITALITY_ROUTE.test(`${target}.tsx`)) return null;
       return toLayer === "hospitality" || toLayer === "app" ? bad : null;
     case "entry":
       return toLayer === "hospitality" || toLayer === "ecommerce-engine" ? bad : null;
@@ -94,11 +128,14 @@ describe("architecture: dependency boundaries", () => {
     expect(importsOf("src/app/engines.ts")).toEqual(
       expect.arrayContaining(["src/engines/hospitality/engine", "src/engines/hospitality/server"]),
     );
+    expect(importsOf("src/engines/hospitality/access.server.ts")).toContain(
+      "src/platform/feature-flags/flags.server",
+    );
     expect(importsOf("src/engines/hospitality/engine.ts")).toEqual(
       expect.arrayContaining([
         "src/platform/engines/contract",
-        "src/platform/feature-flags/flags.server",
         "src/engines/hospitality/config",
+        "src/engines/hospitality/access.server",
         "src/engines/hospitality/edge/gate",
       ]),
     );
@@ -120,13 +157,59 @@ describe("architecture: dependency boundaries", () => {
     expect(violationsFor(["entry"])).toEqual([]);
     expect(importsOf("src/start.ts")).toContain("src/app/engines");
     expect(importsOf("src/server.ts")).toContain("src/app/engines");
+    expect(importsOf("src/routes/__root.tsx")).toContain("src/app/site-shell");
   });
 
   it("only the composition root knows both engines", () => {
     const importers = (prefix: string) =>
-      FILES.filter((f) => !f.startsWith(prefix) && importsOf(f).some((t) => t.startsWith(prefix)));
-    expect(importers("src/engines/hospitality/")).toEqual(["src/app/engines.ts"]);
+      FILES.filter(
+        (f) =>
+          layerOf(f) !== layerOf(`${prefix}x.ts`) && importsOf(f).some((t) => t.startsWith(prefix)),
+      );
+    expect(importers("src/engines/hospitality/")).toEqual([
+      "src/app/engines.ts",
+      "src/app/site-routes.ts",
+      "src/app/site-shell.tsx",
+    ]);
     expect(importers("src/engines/ecommerce/")).toEqual(["src/app/engines.ts"]);
+    const both = FILES.filter(
+      (f) =>
+        importsOf(f).some((t) => t.startsWith("src/engines/hospitality/")) &&
+        importsOf(f).some((t) => t.startsWith("src/engines/ecommerce/")),
+    );
+    expect(both).toEqual(["src/app/engines.ts"]);
+  });
+
+  it("Hospitality route adapters are thin: a path, a title and one engine screen", () => {
+    const adapters = FILES.filter((f) => HOSPITALITY_ROUTE.test(f));
+    expect(adapters).toEqual([
+      "src/routes/manage.index.tsx",
+      "src/routes/manage.tsx",
+      "src/routes/manage_.login.tsx",
+    ]);
+    for (const f of adapters) {
+      const code = stripComments(SOURCE.get(f)!);
+      // המסך, ולכל היותר שומר הנתיב (קיים רק באתר אירוח)
+      expect(importsOf(f).length, f).toBeLessThanOrEqual(2);
+      for (const t of importsOf(f))
+        expect(t, f).toMatch(/^src\/engines\/hospitality\/management\//);
+      expect(code, f).not.toMatch(/createServerFn|useQuery|fetch\(|supabase|process\.env/);
+      expect(code.split("\n").filter((l) => l.trim()).length, f).toBeLessThan(15);
+    }
+  });
+
+  it("Ecommerce code reaches the Hospitality route adapters only through the generated route tree", () => {
+    const importers = FILES.filter(
+      (f) =>
+        layerOf(f) !== "hospitality" &&
+        importsOf(f).some((t) => HOSPITALITY_ROUTE.test(`${t}.tsx`)),
+    );
+    expect(importers).toEqual([ROUTE_TREE]);
+  });
+
+  it("every platform adapter wraps only its listed modules, and each listed adapter exists", () => {
+    for (const [file] of PLATFORM_ADAPTERS) expect(existsSync(join(ROOT, file)), file).toBe(true);
+    expect(violationsFor(["platform"])).toEqual([]);
   });
 
   it("the composition root contains no business logic", () => {
@@ -163,11 +246,12 @@ describe("architecture: server-function ownership", () => {
     }
   });
 
-  it("Hospitality server functions live only under src/engines/hospitality/server", () => {
+  it("Hospitality server functions live only in src/engines/hospitality/{server,api}", () => {
     const hosp = serverFnFiles.filter((f) => registry.ownerOf(f) === "hospitality");
-    expect(hosp.length).toBe(3);
+    expect(hosp.length).toBe(4);
+    // api/ = נקראות מהדפדפן (מחוץ ל-server/, import protection); server/ = בלי ממשק עדיין
     for (const f of hosp)
-      expect(f).toMatch(/^src\/engines\/hospitality\/server\/[\w-]+\.functions\.ts$/);
+      expect(f).toMatch(/^src\/engines\/hospitality\/(server|api)\/[\w-]+\.functions\.ts$/);
   });
 
   it("the shared (platform) list names existing files that define server functions", () => {
@@ -229,6 +313,27 @@ describe("architecture: ESLint enforces the same boundaries", () => {
       'import { hospitalityEngine } from "@/engines/hospitality/engine";\n',
     ],
     ["src/server.ts", 'import { hospitalityEngine } from "./engines/hospitality/engine";\n'],
+    // Stage 2a: adapters wrap only their listed modules; route adapters are Hospitality code;
+    // the root route is an entry file
+    ["src/platform/ui/index.ts", 'export { useCart } from "@/hooks/useCart";\n'],
+    ["src/platform/ui/index.ts", 'export { AdminNav } from "@/components/AdminNav";\n'],
+    ["src/platform/auth/login.ts", 'export { createOrder } from "@/lib/orders.functions";\n'],
+    ["src/platform/tenancy/x.ts", 'import { Button } from "@/components/ui/button";\n'],
+    ["src/routes/manage.tsx", 'import { AdminNav } from "@/components/AdminNav";\n'],
+    ["src/routes/manage.index.tsx", 'import { engineRegistry } from "@/app/engines";\n'],
+    [
+      "src/routes/__root.tsx",
+      'import { Dashboard } from "@/engines/hospitality/management/dashboard/Dashboard";\n',
+    ],
+    [
+      "src/routes/admin.tsx",
+      'import { ManageLayout } from "@/engines/hospitality/management/shell/ManageLayout";\n',
+    ],
+    [
+      "src/engines/hospitality/management/x.tsx",
+      'import { Button } from "@/components/ui/button";\n',
+    ],
+    ["src/engines/hospitality/management/x.tsx", 'import { useCart } from "@/hooks/useCart";\n'],
   ])("rejects %s importing a forbidden module", async (file, code) => {
     expect(await restricted(file, code)).toBeGreaterThan(0);
   });
@@ -242,6 +347,22 @@ describe("architecture: ESLint enforces the same boundaries", () => {
     ["src/lib/x.ts", 'import type { SiteRef } from "@/platform/engines/contract";\n'],
     ["src/platform/tenancy/x.ts", 'import type { SiteRef } from "../engines/contract";\n'],
     ["src/app/x.ts", 'import { hospitalityEngine } from "@/engines/hospitality/engine";\n'],
+    ["src/platform/ui/index.ts", 'export { Button } from "@/components/ui/button";\n'],
+    ["src/platform/ui/index.ts", 'export { cn } from "@/lib/utils";\n'],
+    [
+      "src/platform/auth/login.ts",
+      'export { verifyLoginCode } from "@/lib/login-code.functions";\n',
+    ],
+    [
+      "src/routes/manage.tsx",
+      'import { ManageLayout } from "@/engines/hospitality/management/shell/ManageLayout";\n',
+    ],
+    ["src/routes/__root.tsx", 'import { EngineSiteShell } from "@/app/site-shell";\n'],
+    ["src/engines/hospitality/management/x.tsx", 'import { Button } from "@/platform/ui";\n'],
+    [
+      "src/engines/hospitality/management/x.tsx",
+      'import { manageKeys } from "@/engines/hospitality/management/lib/query-keys";\n',
+    ],
   ])("allows %s importing a permitted module", async (file, code) => {
     expect(await restricted(file, code)).toBe(0);
   });

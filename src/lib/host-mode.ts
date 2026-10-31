@@ -1,7 +1,10 @@
 import { getHostMode } from "@/lib/platform.functions";
+import type { SiteType } from "@/platform/engines/contract";
 
 export type HostMode = {
   platform: boolean;
+  /** סוג האתר (tenants.site_type); פאנל הפלטפורמה / אתר לא מזוהה → ecommerce */
+  siteType: SiteType;
   /** האתר נעול ללקוחות — מוקפא או שהמנוי פג (הסיבה ב-lock) */
   suspended: boolean;
   /** suspended: הוקפא ע"י מנהל הפלטפורמה | expired: המנוי הסתיים (חלק 13) */

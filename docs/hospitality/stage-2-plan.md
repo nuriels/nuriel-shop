@@ -1,7 +1,7 @@
 # Nuriel Hospitality — Stage 2 plan: owner management system
 
-Status: **proposal, awaiting approval. No Stage 2 code has been written.**
-Branch: `hospitality/stage-1` (or a new `hospitality/stage-2` branched from it — decision D-8).
+Status: **breakdown approved; 2a implemented (awaiting review). 2b and later not started.**
+Branch: `hospitality/stage-2`, created from `hospitality/stage-1` at `0f59e85` (Stage 1 unchanged).
 Builds on Stage 1 (migrations 1–6, engine layer 1f). Product roadmap: `stage-1-plan.md` A4
 "Stage 2"; engine rules: `architecture.md`.
 
@@ -400,7 +400,38 @@ Nothing is enabled globally; flags are set per site, and only in local / E2E dat
 
 ---
 
-## 5. Decisions needed
+## 5. Decisions (approved)
+
+| # | Decision |
+|---|---|
+| D-1 | Manager seats: trial 3 · basic 2 · pro 5 · enterprise unlimited; the owner counts; platform admins exempt; extra seats by the platform admin; enforced atomically in the database; a downgrade never removes managers, it only blocks additions until the limit is respected — **implemented in 2a (migration 7)** |
+| D-2 | Separate per-site `hospitality_management_enabled`, independent of the public-website flag — **implemented in 2a** |
+| D-3 | Guest export / anonymise owner-only (permission `guests.privacy`); contact data masked in lists and dashboards — **permission implemented in 2a**; masking applies to every list from 2h on |
+| D-4 | Owner access through the existing portal / platform handoff, email code and password; no Google login for Hospitality. The OAuth remediation is postponed to the final security and deployment preparation stage and stays documented (`docs/security/oauth-pkce-analysis.md`) |
+| D-5 | Promotions / coupons screens stay in Stage 7 |
+| D-6 | The small Hospitality-only changes to existing code — approved (as delivered: `__root.tsx` +20/−1, `getHostMode` + `HostMode.siteType`, the seat-guard early return) |
+| D-7 | `@axe-core/playwright` (dev only, `4.14.0`) with WCAG 2.1 AA checks — added in 2a |
+| D-8 | Branch `hospitality/stage-2` from the completed `hospitality/stage-1` |
+
+### 2a — what changed against the plan
+- Client-callable server functions live in `src/engines/hospitality/api/` (TanStack import
+  protection forbids client imports from `server/` folders); `server/` keeps server-only
+  helpers and the Stage 1f functions, which get wrappers in `api/` when their screens arrive.
+- The store-side "`/manage` does not exist" rule is a guard on the `/manage` routes
+  (`ssr: "data-only"`, so the server answers 404 with the store's own page) instead of the
+  root; the root only redirects on Hospitality sites.
+- G5: removing the token after sending already existed (migration 4); 2a removed the staff
+  read of the table and added `staff_email_status`.
+- G12 (Storage and `x-tenant-id`) is already covered by `e2e/tests/hospitality-api.spec.ts`
+  (upload to the site's folder through the real Storage API); 2e reuses it.
+- The suspended-site screen is served by the engine's page gate (403) rather than inside the
+  shell.
+- Build fix found by the E2E start-up: Nitro could split TanStack Start's server runtime
+  into two chunks that import each other (order depended on file hashes), and the built
+  server then failed at start-up. `vite.config.ts` now keeps that runtime in one chunk
+  (`_tanstack-start-runtime.mjs`). No Docker or deployment file changed.
+
+## 5a. Decisions needed (original proposal, kept for reference)
 
 | # | Decision | Recommendation |
 |---|---|---|

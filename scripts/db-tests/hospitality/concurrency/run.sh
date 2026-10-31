@@ -263,6 +263,18 @@ check "22 an owner decline racing the expiry sweep → one terminal status, the 
      AND (SELECT count(*) FROM hospitality.booking_events WHERE booking_id = '$B22' AND kind = 'coupon_released') = 1
      AND (SELECT count(*) FROM hospitality.booking_events WHERE booking_id = '$B22' AND to_status IN ('declined', 'expired')) = 2"
 
+# ---- 23. manager seats under concurrent additions (migration 7; trial: 3 seats, 2 in use) ----
+SITE3=$(q "SELECT id FROM public.tenants WHERE slug = 'conc-site-3'")
+args=()
+for n in $(seq 2 6); do
+  args+=("INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_approved)
+            VALUES ('$SITE3', 'c0000000-0000-0000-0000-00000000030$n', 'conc.seat$n@test.local', 'conc_seat_$n', 'admin', true);")
+done
+parallel c23 "${args[@]}"
+check "23 5 managers added in parallel with one seat left → exactly one succeeds, 4 are refused by the seat limit" \
+  "SELECT $(ok_count c23) = 1 AND $(err_count c23 'מגבלת המנהלים') = 4
+     AND (SELECT count(*) FROM public.user_roles WHERE tenant_id = '$SITE3' AND role = 'admin') = 3"
+
 # ---- final invariants ----
 check "invariant: no two occupancy rows overlap on any physical unit" \
   "SELECT NOT EXISTS (SELECT 1 FROM hospitality.unit_occupancy a JOIN hospitality.unit_occupancy b

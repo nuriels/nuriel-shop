@@ -3,6 +3,13 @@
 Status: **analysis only. No authentication code or configuration was changed.**
 Any remediation is a separate change that needs explicit approval.
 
+**Decision (Stage 2 approval): the finding stays open.** The remediation (central login host,
+PKCE, allow-list change) is postponed to the final security and deployment preparation stage
+and must be done before Google login is enabled anywhere in Hospitality. Until then:
+Hospitality offers no Google login on any screen (owner area: portal / platform handoff,
+email code, password — tested in `e2e/tests/manage.spec.ts`); Google OAuth, GoTrue
+configuration, redirect allow-lists and the existing login flows are unchanged.
+
 Environment: local disposable Supabase stack (GoTrue v2.197.0, supabase-js / auth-js
 2.112.4), configured like production (`SITE_URL` + `https://*.<base domain>/**`
 allow-list), two store addresses `legit.shop.localhost` and `evil.shop.localhost`.
