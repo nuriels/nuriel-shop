@@ -230,9 +230,11 @@ check "19 different sites: a booking on site 2 is not blocked by an open booking
   "SELECT $(rc c19 a) = 0 AND $(rc c19 b) = 0 AND $(cat "$TMP/c19/b.ms") < 1000"
 
 # ---- 20. unit limit under concurrent inserts (basic plan: 5, already 4) ----
+# the database rule itself (trigger), written by the server; staff go through unit_create since
+# migration 10 (direct staff inserts are refused — scenario 27 covers the function)
 args=()
 for n in $(seq 1 5); do
-  args+=("$(as_staff $OWNER | sed "s/$SITE/$SITE2/") INSERT INTO hospitality.units (tenant_id, property_id, name, slug)
+  args+=("INSERT INTO hospitality.units (tenant_id, property_id, name, slug)
             VALUES ('$SITE2', 'c1000000-0000-0000-0000-000000000002', 'מקבילית $n', 'par$n');")
 done
 parallel c20 "${args[@]}"
@@ -313,6 +315,70 @@ check "26 two settings saves from the same revision → one is saved, the other 
   "SELECT $(ok_count c26) = 1 AND $(err_count c26 'ההגדרות עודכנו בינתיים') = 1
      AND (SELECT revision = $REV + 1 AND address IN ('כתובת א', 'כתובת ב') FROM hospitality.settings WHERE tenant_id = '$SITE4')
      AND (SELECT count(*) FROM hospitality.audit_log WHERE tenant_id = '$SITE4' AND action = 'settings.updated') = 1"
+
+# ---- 27–32. properties and units (migration 10; site 4, trial: 20 units) ----
+P4=c0000000-0000-0000-0000-0000000004a0
+q "INSERT INTO hospitality.properties (id, tenant_id, name, slug, status) VALUES ('$P4', '$SITE4', 'מתחם מקביל', 'conc-p4', 'active')" >/dev/null
+q "INSERT INTO hospitality.units (tenant_id, property_id, name, slug)
+   SELECT '$SITE4', '$P4', 'יחידה ' || g, 'conc-u' || g FROM generate_series(1, 19) g" >/dev/null
+parallel c27 "$(as_owner4) SELECT hospitality.unit_create('$P4', '{\"name\": \"אחרונה א\", \"unit_type\": \"zimmer\"}');" \
+             "$(as_owner4) SELECT hospitality.unit_create('$P4', '{\"name\": \"אחרונה ב\", \"unit_type\": \"zimmer\"}');"
+check "27 two new units at once for the last place in the plan → exactly one is added, the other gets the plan message" \
+  "SELECT $(ok_count c27) = 1 AND $(err_count c27 'מגבלת היחידות בחבילה (20)') = 1
+     AND hospitality._units_used('$SITE4') = 20"
+# free places again for the next scenarios
+q "UPDATE hospitality.units SET is_active = false WHERE tenant_id = '$SITE4' AND slug LIKE 'conc-u%'" >/dev/null
+
+U28=$(q "SELECT id FROM hospitality.units WHERE tenant_id = '$SITE4' AND slug = 'conc-u1'")
+REV28=$(q "SELECT revision FROM hospitality.units WHERE id = '$U28'")
+parallel c28 "$(as_owner4) SELECT hospitality.unit_update('$U28', '{\"capacity\": 4}', $REV28);" \
+             "$(as_owner4) SELECT hospitality.unit_update('$U28', '{\"capacity\": 6}', $REV28);"
+check "28 two edits of the same unit from the same revision → one is saved, the other gets 'updated in the meantime'" \
+  "SELECT $(ok_count c28) = 1 AND $(err_count c28 'היחידה עודכנה בינתיים') = 1
+     AND (SELECT revision = $REV28 + 1 AND capacity IN (4, 6) FROM hospitality.units WHERE id = '$U28')"
+
+U29=$(q "SELECT id FROM hospitality.units WHERE tenant_id = '$SITE4' AND slug = 'conc-u2'")
+parallel c29 "$(as_owner4) SELECT hospitality.unit_delete('$U29');" \
+             "$(as_owner4) INSERT INTO hospitality.blocks (tenant_id, unit_id, start_date, end_date) VALUES ('$SITE4', '$U29', current_date + 5, current_date + 7);"
+check "29 deleting a unit while a block is written for it → exactly one wins; never a block without its unit" \
+  "SELECT $(ok_count c29) = 1
+     AND (EXISTS (SELECT 1 FROM hospitality.units WHERE id = '$U29')
+          = EXISTS (SELECT 1 FROM hospitality.blocks WHERE unit_id = '$U29'))"
+
+q "UPDATE hospitality.units SET is_active = true WHERE tenant_id = '$SITE4' AND slug IN ('conc-u3', 'conc-u4', 'conc-u5')" >/dev/null
+U3=$(q "SELECT id FROM hospitality.units WHERE tenant_id = '$SITE4' AND slug = 'conc-u3'")
+U4=$(q "SELECT id FROM hospitality.units WHERE tenant_id = '$SITE4' AND slug = 'conc-u4'")
+U5=$(q "SELECT id FROM hospitality.units WHERE tenant_id = '$SITE4' AND slug = 'conc-u5'")
+W30=$("${Q[@]}" -c "$(as_owner4) SELECT hospitality.whole_property_set('$P4', true, ARRAY['$U3', '$U4']::uuid[]) ->> 'id';" | tail -1)
+parallel c30 "$(as_owner4) SELECT hospitality.whole_property_set('$P4', true, ARRAY['$U3', '$U5']::uuid[]);" \
+             "$(as_owner4) INSERT INTO hospitality.blocks (tenant_id, unit_id, start_date, end_date) VALUES ('$SITE4', '$W30', current_date + 10, current_date + 12);"
+[ -n "${DEBUG_CONC:-}" ] && { for f in "$TMP"/c30/*; do echo "--- $f"; cat "$f"; done; q "SELECT array_agg(o.unit_id) FROM hospitality.unit_occupancy o JOIN hospitality.blocks b ON b.id = o.block_id WHERE b.unit_id = '$W30'"; q "SELECT hospitality._fanout_units('$SITE4', '$W30')"; } >&2
+check "30 changing the units of 'the whole property' while it is being blocked → the block holds exactly its units at that moment; a late change is refused" \
+  "SELECT $(ok_count c30) >= 1
+     AND (SELECT array_agg(o.unit_id ORDER BY o.unit_id) FROM hospitality.unit_occupancy o
+            JOIN hospitality.blocks b ON b.id = o.block_id WHERE b.unit_id = '$W30')
+         = (SELECT array_agg(x ORDER BY x) FROM unnest(hospitality._fanout_units('$SITE4', '$W30')) x)
+     AND ($(ok_count c30) = 2 OR $(err_count c30 'הזמנות או חסימות עתידיות') = 1)"
+
+U31=$(q "SELECT string_agg(quote_literal(id), ',' ORDER BY slug DESC) FROM hospitality.units
+          WHERE tenant_id = '$SITE4' AND property_id = '$P4' AND kind <> 'whole_property'")
+parallel c31 "$(as_owner4) SELECT hospitality.catalog_reorder('units', ARRAY[$U31]::uuid[]);" \
+             "$(as_owner4) SELECT hospitality.unit_create('$P4', '{\"name\": \"חדשה בזמן הסידור\", \"unit_type\": \"room\"}');"
+check "31 reorder and a new unit at the same time → both succeed, every unit keeps a distinct place" \
+  "SELECT $(ok_count c31) = 2
+     AND (SELECT count(*) = count(DISTINCT sort_order) FROM hospitality.units
+           WHERE tenant_id = '$SITE4' AND property_id = '$P4' AND kind <> 'whole_property')"
+
+parallel c32 "$(as_owner4) SELECT hospitality.unit_create('$P4', '{\"name\": \"צימר תאום\", \"unit_type\": \"zimmer\"}');" \
+             "$(as_owner4) SELECT hospitality.unit_create('$P4', '{\"name\": \"צימר תאום\", \"unit_type\": \"zimmer\"}');" \
+             "$(as_owner4) SELECT hospitality.unit_create('$P4', '{\"name\": \"צימר תאום\", \"unit_type\": \"zimmer\"}');"
+check "32 three units with the same name at once → all three added with distinct addresses (slugs)" \
+  "SELECT $(ok_count c32) = 3
+     AND (SELECT count(DISTINCT slug) = 3 FROM hospitality.units WHERE tenant_id = '$SITE4' AND name = 'צימר תאום')"
+check "invariant: every active block holds exactly its units (the whole property: itself and its units)" \
+  "SELECT NOT EXISTS (SELECT 1 FROM hospitality.blocks b WHERE b.released_at IS NULL
+     AND (SELECT count(*) FROM hospitality.unit_occupancy o WHERE o.block_id = b.id)
+         <> cardinality(hospitality._fanout_units(b.tenant_id, b.unit_id)))"
 
 # ---- final invariants ----
 check "invariant: no two occupancy rows overlap on any physical unit" \

@@ -1,6 +1,6 @@
 # Nuriel Hospitality — Stage 2 plan: owner management system
 
-Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, `6b279f4`) implemented and approved; R-1 fixed before 2c (migration 9); 2c planned (`stage-2c-plan.md`, awaiting approval), not started.** Open items after 2b: §7.
+Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, `6b279f4`) implemented and approved; R-1 fixed before 2c (migration 9); 2c approved (`stage-2c-plan.md`), 2c.1 (database, migration 10) implemented — awaiting review.** Open items after 2b: §7.
 Branch: `hospitality/stage-2`, created from `hospitality/stage-1` at `0f59e85` (Stage 1 unchanged).
 Builds on Stage 1 (migrations 1–6, engine layer 1f). Product roadmap: `stage-1-plan.md` A4
 "Stage 2"; engine rules: `architecture.md`.

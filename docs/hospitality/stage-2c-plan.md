@@ -1,6 +1,23 @@
 # Hospitality Stage 2c — Properties and units (detailed plan)
 
-Status: **proposal — awaiting approval. Nothing implemented.**
+Status: **approved (D-2c-1 … D-2c-6). 2c.1 (database) implemented — awaiting review; 2c.2+ not started.**
+
+### 2c.1 — as implemented (differences from the plan)
+- C5 was already half-covered by the Stage 1 trigger `unit_members_occupancy_guard`
+  (members frozen while the whole property has future occupancy); `whole_property_set`
+  relies on it and adds the inventory lock.
+- Found by the new concurrency scenarios and fixed before commit: (a) a deadlock between
+  changing "the whole property" and a block being written for it (row lock vs. the block's
+  foreign-key check) → rows that are only updated use `FOR NO KEY UPDATE`, deletes use
+  `NOWAIT` with a Hebrew "in use right now" answer; (b) reorder with a list that misses a
+  unit added meanwhile could give two units the same place → unlisted items are placed
+  after the listed ones.
+- Archive also switches the property's units off (frees plan places); bringing a property
+  back from the archive (owner) leaves its units off until switched on.
+- Seven Stage 1 SQL assertions were updated, none removed: 13 permissions; direct unit
+  writes now expect "permission denied", and the RLS checks they carried moved to tables
+  staff still write directly (amenities, beds). Concurrency scenario 20 (the plan-limit
+  trigger) now writes as the server; scenario 27 covers the function.
 Branch: `hospitality/stage-2` (after R-1). Overview: `stage-2-plan.md` §3 "2c".
 Migration: **10** (`20261101180000_hosp_catalog`) — 9 went to R-1.
 

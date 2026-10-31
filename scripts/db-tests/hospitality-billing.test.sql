@@ -226,10 +226,10 @@ INSERT INTO hospitality.units (tenant_id, property_id, name, slug) VALUES
 SELECT pg_temp.expect_error('limit: the sixth unit is refused on the basic plan',
   format($$INSERT INTO hospitality.units (tenant_id, property_id, name, slug) VALUES (%L, '71e20000-0000-0000-0000-0000000000a1', 'צימר 6', 'z6')$$, :'sp'),
   'מגבלת היחידות בחבילה (5)');
-SELECT pg_temp.expect_error('limit: … also through the owner''s API (RLS insert)',
+SELECT pg_temp.expect_error('limit: … the owner cannot go around it through the API (direct insert refused since 2c.1; unit_create keeps the limit — hospitality-catalog.test.sql)',
   format($$SELECT pg_temp.call(%L, %L, format('INSERT INTO hospitality.units (tenant_id, property_id, name, slug) VALUES (%%L, %%L, %%L, %%L) RETURNING to_jsonb(id)',
             %L::uuid, '71e20000-0000-0000-0000-0000000000a1', 'צימר 6', 'z6'))$$, :'sp', :OWNER_P, :'sp'),
-  'מגבלת היחידות');
+  'permission denied');
 INSERT INTO hospitality.units (tenant_id, property_id, kind, name, slug) VALUES
   (:'sp', '71e20000-0000-0000-0000-0000000000a1', 'whole_property', 'כל המתחם', 'all');
 INSERT INTO hospitality.units (tenant_id, property_id, name, slug, is_active) VALUES

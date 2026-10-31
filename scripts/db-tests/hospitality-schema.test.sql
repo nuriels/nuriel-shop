@@ -250,14 +250,14 @@ DELETE FROM public.user_roles WHERE tenant_id = :SHOP_E AND user_id = :GUEST;
 -- 4. Permissions: hospitality.can() (RPC, as the user, on a site)
 -- ============================================================
 -- Stage 2a (migration 7) added guests.privacy, Stage 2b (migration 8) settings.owner — both owner only: 12
-SELECT tests.check('can: the permission list is the Hospitality list (12 permissions)',
-  $$SELECT cardinality(hospitality.permissions()) = 12$$);
+SELECT tests.check('can: the permission list is the Hospitality list (13 permissions, + catalog.owner in 2c.1)',
+  $$SELECT cardinality(hospitality.permissions()) = 13$$);
 SELECT pg_temp.run_at(:hosp_a, 'can: owner has every Hospitality permission',
-  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :H_OWNER_A, NULL, 12);
+  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :H_OWNER_A, NULL, 13);
 SELECT pg_temp.run_at(:hosp_a, 'can: manager has all but the four owner-only permissions',
   $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :H_MANAGER_A, NULL, 8);
-SELECT pg_temp.run_at(:hosp_a, 'can: manager lacks exactly staff.managers, billing.manage, guests.privacy and settings.owner',
-  $$SELECT 1 FROM unnest(ARRAY['staff.managers', 'billing.manage', 'guests.privacy', 'settings.owner']) p WHERE NOT hospitality.can(p)$$, :H_MANAGER_A, NULL, 4);
+SELECT pg_temp.run_at(:hosp_a, 'can: manager lacks exactly staff.managers, billing.manage, guests.privacy, settings.owner and catalog.owner',
+  $$SELECT 1 FROM unnest(ARRAY['staff.managers', 'billing.manage', 'guests.privacy', 'settings.owner', 'catalog.owner']) p WHERE NOT hospitality.can(p)$$, :H_MANAGER_A, NULL, 5);
 SELECT pg_temp.run_at(:hosp_a, 'can: owner gets no Ecommerce or unknown permission (pos, admin, products.view, inventory)',
   $$SELECT 1 FROM unnest(ARRAY['pos', 'admin', 'products.view', 'inventory', 'orders.fulfill', '', 'catalog ']) p
      WHERE hospitality.can(p)$$, :H_OWNER_A, NULL, 0);
@@ -280,7 +280,7 @@ SELECT pg_temp.run_at(:hosp_a, 'can: a member of both products is a manager on t
 SELECT pg_temp.run_at(NULL, 'can: a member of both products without a site header gets nothing',
   $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :DUAL, NULL, 0);
 SELECT pg_temp.run_at(:hosp_a, 'can: the platform admin is owner (as in stores)',
-  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :PLATFORM, NULL, 12);
+  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :PLATFORM, NULL, 13);
 SELECT pg_temp.run_at(:hosp_a, 'can: anon cannot call it',
   $$SELECT hospitality.can('catalog')$$, NULL, 'permission denied');
 
@@ -364,7 +364,9 @@ SELECT pg_temp.run_at(:hosp_c, 'flags: site C (flag off) — owner cannot write'
   format($$INSERT INTO hospitality.amenities (tenant_id, name) VALUES (%s, 'בריכה')$$, :'hosp_c'),
   :H_OWNER_C, 'row-level security');
 SELECT pg_temp.run_at(:hosp_c, 'flags: site C (flag off) — owner cannot update',
-  $$UPDATE hospitality.units SET name = 'x'$$, :H_OWNER_C, NULL, 0);
+  $$UPDATE hospitality.unit_beds SET quantity = 2$$, :H_OWNER_C, NULL, 0);
+SELECT pg_temp.run_at(:hosp_c, 'flags: site C — units are not writable directly at all (only the catalog functions, 2c.1)',
+  $$UPDATE hospitality.units SET name = 'x'$$, :H_OWNER_C, 'permission denied');
 SELECT tests.check('flags: hospitality.flag_for() is server-only (not executable by authenticated)',
   $$SELECT NOT has_function_privilege('authenticated', 'hospitality.flag_for(text, uuid)', 'EXECUTE')
        AND has_function_privilege('service_role', 'hospitality.flag_for(text, uuid)', 'EXECUTE')$$);
@@ -390,15 +392,20 @@ SELECT pg_temp.run_at(:hosp_b, 'rls: owner B sees only site B (1 unit)',
 SELECT pg_temp.run_at(:hosp_a, 'rls: owner A cannot insert a row for site B',
   format($$INSERT INTO hospitality.amenities (tenant_id, name) VALUES (%s, 'חדירה')$$, :'hosp_b'), :H_OWNER_A, 'row-level security');
 SELECT pg_temp.run_at(:hosp_a, 'rls: owner A cannot update site B rows (0 rows)',
-  $$UPDATE hospitality.units SET base_price = 1 WHERE id = '71c30000-0000-0000-0000-0000000000b1'$$, :H_OWNER_A, NULL, 0);
+  $$UPDATE hospitality.amenities SET icon = 'x' WHERE id = '71c40000-0000-0000-0000-0000000000b1'$$, :H_OWNER_A, NULL, 0);
+SELECT pg_temp.run_at(:hosp_a, 'rls: owner A cannot write site B units directly (no direct unit writes since 2c.1)',
+  $$UPDATE hospitality.units SET base_price = 1 WHERE id = '71c30000-0000-0000-0000-0000000000b1'$$, :H_OWNER_A, 'permission denied');
 SELECT pg_temp.run_at(:hosp_b, 'rls: owner B cannot delete site A rows (0 rows)',
   $$DELETE FROM hospitality.promotions WHERE tenant_id <> '00000000-0000-0000-0000-000000000000'$$, :H_OWNER_B, NULL, 1);
 SELECT tests.check('rls: site A promotion is still there after owner B deleted "everything"',
   format($$SELECT EXISTS (SELECT 1 FROM hospitality.promotions WHERE tenant_id = %s)$$, :'hosp_a'));
 INSERT INTO hospitality.promotions (tenant_id, name, code, discount_kind, value) VALUES (:hosp_b, 'קופון', 'SUMMER10', 'percent', 10);
 SELECT pg_temp.run_at(:hosp_a, 'rls: owner A cannot move a row to site B',
+  $$UPDATE hospitality.amenities SET tenant_id = (SELECT id FROM public.tenants WHERE slug = 'hc1c-b')
+     WHERE id = '71c40000-0000-0000-0000-0000000000a1'$$, :H_OWNER_A, 'אי אפשר להעביר נתונים בין אתרים');
+SELECT pg_temp.run_at(:hosp_a, 'rls: owner A cannot move a unit to site B (no direct unit writes since 2c.1)',
   $$UPDATE hospitality.units SET tenant_id = (SELECT id FROM public.tenants WHERE slug = 'hc1c-b')
-     WHERE id = '71c30000-0000-0000-0000-0000000000a1'$$, :H_OWNER_A, 'אי אפשר להעביר נתונים בין אתרים');
+     WHERE id = '71c30000-0000-0000-0000-0000000000a1'$$, :H_OWNER_A, 'permission denied');
 SELECT pg_temp.run_at(:hosp_a, 'rls: owner A can create, edit and delete catalog rows',
   format($$WITH i AS (INSERT INTO hospitality.amenities (tenant_id, name) VALUES (%s, 'בריכה') RETURNING id)
           SELECT 1 FROM i$$, :'hosp_a'), :H_OWNER_A, NULL, 1);

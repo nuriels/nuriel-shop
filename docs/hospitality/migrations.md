@@ -128,6 +128,20 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Purpose | the page head of a Hospitality site (meta `description`, `og:title`, `og:site_name`) shows the business name; the app root no longer reads the store's data there |
 | Function | `hospitality.site_identity()` — SECURITY DEFINER, callable by `anon` / `authenticated`: `{ "name": business name, or the site name when empty }` for the request's site (`x-tenant-id` → `request_tenant()`: active Hospitality site), only when `hospitality_backend_enabled` and the management area or the public website are enabled; otherwise `NULL`. Nothing else (no contact data, plan or ids) |
 | Rollback | `supabase/rollbacks/20261101170000_hosp_site_identity.down.sql` — drops the function (no data) |
-| Tests | `scripts/db-tests/hospitality-site-identity.test.sql` (14 assertions: flags, suspended site, store / missing / unknown header, only the name, privileges, Ecommerce data unchanged); Stage 1 anon allow-list updated; `rollback-check.sh` (M9 first, re-apply, whole-schema comparison) |
+| Tests | `scripts/db-tests/hospitality-site-identity.test.sql` (15 assertions: flags, suspended site, store / missing / unknown header, only the name, privileges, Ecommerce data unchanged); Stage 1 anon allow-list updated; `rollback-check.sh` (M9 first, re-apply, whole-schema comparison) |
+| Production | nothing to configure |
+
+## 20261101180000_hosp_catalog.sql — Stage 2c.1 (hospitality)
+
+| | |
+|---|---|
+| Permissions | new owner-only `catalog.owner` (archive / permanent delete): 13 permissions; a manager lacks `staff.managers`, `billing.manage`, `guests.privacy`, `settings.owner`, `catalog.owner` |
+| Columns | `properties.property_type` (zimmer · zimmer_complex · vacation_apartments · villa · boutique_hotel · guest_house · other), `units.unit_type` (zimmer · suite · room · apartment · villa · cabin · studio · other) — labels only; `revision` on both |
+| Writes | staff lose direct `INSERT / UPDATE / DELETE` on `properties`, `units`, `unit_members` (SELECT + RLS unchanged). Beds / amenities unchanged until 2d |
+| Functions | `catalog_view`, `property_create / update / archive / delete`, `unit_create / update / set_active / delete`, `whole_property_set`, `catalog_reorder` — SECURITY DEFINER, management flag, Hebrew validation, generated slugs (Hebrew allowed, unique), "updated in the meantime" (`HS409`), every change in `audit_log` (descriptions logged as "changed", never their text) |
+| Rules | delete only without any booking / block ever (otherwise deactivate / archive); archive refused with future bookings / blocks and switches the property's units off; a member of an active "whole property" cannot be switched off or deleted; "whole property" needs ≥ 2 active units of the same property and its units are frozen while it has future bookings / blocks (existing trigger); plan unit limit by the existing trigger |
+| Locks | site catalog lock → site inventory lock (`hosp-inventory`, as every booking) → unit limit; rows that are only updated use `FOR NO KEY UPDATE` (no conflict with a booking / block being written); deletes use `NOWAIT` after the inventory lock and answer "in use right now" instead of waiting (no deadlock) |
+| Rollback | `supabase/rollbacks/20261101180000_hosp_catalog.down.sql` — refuses while a property / unit has a saved type; restores direct writes and 12 permissions; drops functions and columns |
+| Tests | `scripts/db-tests/hospitality-catalog.test.sql` (90 assertions; +3 in the updated Stage 1 file), concurrency 27–32 (+ an invariant for blocks), Stage 1 assertions updated (13 permissions; direct unit writes now "permission denied", RLS checks moved to still-writable tables), `rollback-check.sh` (M10 first, refusal, restore, re-apply, whole-schema comparison), `e2e/tests/catalog-api.spec.ts` (real PostgREST / GoTrue) |
 | Production | nothing to configure |
 
