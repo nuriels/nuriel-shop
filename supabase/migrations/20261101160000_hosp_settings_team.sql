@@ -472,6 +472,10 @@ BEGIN
     RAISE EXCEPTION 'השם ארוך מדי (עד 60 תווים)' USING ERRCODE = 'check_violation';
   END IF;
 
+  -- מנעול המקומות של האתר קודם לכל: הוספה מקבילה של אותו אדם מחכה כאן, ואחר כך
+  -- רואה את השורה שנוספה (already_member) — ולא "הגעתם למגבלה" על המקום שהיא עצמה תפסה
+  PERFORM pg_advisory_xact_lock(hashtextextended('admin_seats:' || _t::text, 0));
+
   SELECT u.id INTO _uid FROM auth.users u
    WHERE lower(u.email) = _e AND u.deleted_at IS NULL
    ORDER BY u.created_at LIMIT 1;
@@ -488,7 +492,6 @@ BEGIN
   END IF;
 
   -- בדיקות שלא תלויות בחשבון — לפני שמבקשים מהשרת ליצור חשבון
-  PERFORM pg_advisory_xact_lock(hashtextextended('admin_seats:' || _t::text, 0));
   _ent := hospitality.entitlements(_t);
   IF NOT COALESCE((_ent ->> 'active')::boolean, false) THEN
     RAISE EXCEPTION 'המנוי של האתר אינו פעיל — אי אפשר להוסיף מנהלים' USING ERRCODE = 'check_violation';

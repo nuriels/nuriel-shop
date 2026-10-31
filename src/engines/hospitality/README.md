@@ -32,8 +32,8 @@ The engine is registered in the composition root `src/app/engines.ts`.
 | `server/*.functions.ts` | server functions: `public` (guests without an account), `guest` (signed-in guests), `owner` (owner / manager) |
 | `server/rpc.server.ts` | calls the `hospitality` schema functions; database messages (Hebrew) are shown to the user, technical errors are not |
 | `access.server.ts` | when the engine (backend) and the management area are enabled for a site |
-| `api/*.functions.ts` | server functions the browser calls (outside `server/` — import protection): `management.functions.ts` (2a), `settings.functions.ts` (2b.2) |
-| `management/` | the owner area `/manage` (Stage 2): `shell/` (layout, navigation, status screens), `login/`, `dashboard/`, `settings/` (business settings, 2b.2), `lib/` (pure helpers), `route-guard.ts` |
+| `api/*.functions.ts` | server functions the browser calls (outside `server/` — import protection): `management.functions.ts` (2a), `settings.functions.ts` (2b.2), `team.functions.ts` (2b.3) |
+| `management/` | the owner area `/manage` (Stage 2): `shell/` (layout, navigation, status screens), `login/`, `dashboard/`, `settings/` (business settings, 2b.2), `team/` (team, owner only, 2b.3), `lib/` (pure helpers), `route-guard.ts` |
 | `src/routes/manage*.tsx` | thin route adapters (path, title, guard, screen) — Hospitality code in the router's folder |
 
 Business rules live in the engine's own migrations (`supabase/migrations/*_hosp_*`): the

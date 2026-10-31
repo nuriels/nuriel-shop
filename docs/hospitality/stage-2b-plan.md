@@ -1,6 +1,33 @@
 # Hospitality Stage 2b — Business settings and team (detailed plan)
 
-Status: **approved (D-2b-1 … D-2b-6). 2b.1 (database, `d119a02`) approved; 2b.2 (settings screen) implemented — awaiting review; 2b.3+ not started.**
+Status: **approved (D-2b-1 … D-2b-6). 2b.1 (database, `d119a02`) and 2b.2 (settings screen, `24973aa`) approved; 2b.3 (team) implemented — awaiting review; 2b.4+ not started.**
+
+### 2b.3 — as implemented
+- **Team screen** `/manage/team` (owner only — a manager sees "המסך הזה זמין לבעל העסק
+  בלבד." and has no nav link; the database refuses every team function to a manager).
+  Seats card ("X מתוך Y מקומות בשימוש"), member list, "הוספת מנהל" sheet (bottom on
+  phones), remove with confirmation, recent activity.
+- **Adding a manager:** `team_add_manager` (as the owner, through the owner's token). For
+  an address without an account the server function — after the database confirmed the
+  caller is the owner and a seat is free — creates a **confirmed account without a
+  password** (`platform/auth/accounts.server.ts`, GoTrue admin API; GoTrue keeps a random
+  password nobody knows, exactly like the existing email-code sign-up) and calls the
+  function again. Account creation is rate-limited per site (20 per hour). Nothing is sent:
+  the sheet shows the address to share (copy / WhatsApp) — D-2b-3, invitation email in 2k.
+- **Sign-in of a new manager:** the existing email-code login of `/manage/login` — no
+  password set by the owner (verified in the browser, with the real code from the mock mail
+  service).
+- **Removal** deletes the row: the next request of an open session is refused
+  ("אין גישה לניהול העסק הזה"); the account and its roles in other sites (e.g. its own
+  Ecommerce store) stay.
+- **Fix to migration 8 found by the E2E test** (`team_add_manager`): the seat lock is now
+  taken before the membership check, so the same person added twice at once when only one
+  seat is left answers "already a member" instead of "seat limit" (one row in both
+  versions — the answer was wrong, not the data). Migration 8 had been applied only to
+  disposable test databases (not merged, not deployed), so the function was corrected in
+  place; new concurrency scenario 25b covers it. Migration 9 stays reserved for media (2c).
+- New platform adapters (closed list): `auth/accounts.server.ts`,
+  `security/rate-limit.server.ts`.
 
 ### 2b.2 — as implemented
 - The settings screen shows **only the sections and fields the user may edit**

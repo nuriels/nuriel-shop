@@ -217,8 +217,12 @@ describe("navigation", () => {
     expect(more.map((i) => i.key)).toContain("team");
   });
 
-  it("only built screens are links (2a: the dashboard, 2b.2: business settings)", () => {
-    expect(NAV_ITEMS.filter((i) => i.to).map((i) => i.key)).toEqual(["dashboard", "settings"]);
+  it("only built screens are links (2a dashboard, 2b.2 settings, 2b.3 team)", () => {
+    expect(NAV_ITEMS.filter((i) => i.to).map((i) => i.key)).toEqual([
+      "dashboard",
+      "settings",
+      "team",
+    ]);
   });
 });
 

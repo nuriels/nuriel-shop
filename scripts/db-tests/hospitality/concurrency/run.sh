@@ -295,6 +295,17 @@ check "25 the same person added three times at once → one row, the others answ
      AND (SELECT count(*) FROM hospitality.audit_log WHERE tenant_id = '$SITE4' AND action = 'team.manager_added'
             AND changes ->> 'email' = 'c•••@test.local') >= 1
      AND $(grep -l 'already_member' "$TMP"/c25/*.out | wc -l) = 2"
+# 25b. the same person twice when only ONE seat is left: the second call waits on the seat lock,
+#      then sees the first one's row → already_member (not "seat limit")
+USED4=$(q "SELECT count(*) FROM public.user_roles WHERE tenant_id = '$SITE4' AND role = 'admin'")
+q "SELECT set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-0000000000f0', false), hospitality.admin_set_extra_managers('$SITE4', $USED4 - 3 + 1)" >/dev/null
+parallel c25b "$(as_owner4) SELECT hospitality.team_add_manager('conc.team6@test.local');" \
+              "$(as_owner4) SELECT hospitality.team_add_manager('conc.team6@test.local');"
+check "25b the same person twice at once for the last seat → one row; one 'added', one already_member (no seat-limit error)" \
+  "SELECT $(ok_count c25b) = 2 AND (SELECT count(*) FROM public.user_roles WHERE tenant_id = '$SITE4'
+       AND user_id = 'c0000000-0000-0000-0000-000000000406') = 1
+     AND $(grep -l '\"added\"' "$TMP"/c25b/*.out | wc -l) = 1
+     AND $(grep -l 'already_member' "$TMP"/c25b/*.out | wc -l) = 1"
 REV=$(q "SELECT revision FROM hospitality.settings WHERE tenant_id = '$SITE4'")
 parallel c26 "$(as_owner4) SELECT hospitality.update_settings('{\"address\": \"כתובת א\"}', $REV);" \
              "$(as_owner4) SELECT hospitality.update_settings('{\"address\": \"כתובת ב\"}', $REV);"

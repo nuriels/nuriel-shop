@@ -126,3 +126,62 @@ export async function loadSession(page: Page, session: SavedSession, path: strin
   }, session.items);
   await page.goto(`${session.origin}${path}`);
 }
+
+/** הקוד מהמייל האחרון שנשלח לכתובת אחרי `since` (שירות המייל המדומה) */
+export async function readLoginCode(
+  request: APIRequestContext,
+  email: string,
+  since: number,
+): Promise<string> {
+  let code = "";
+  await expect
+    .poll(
+      async () => {
+        const calls = (await (await request.get("http://127.0.0.1:4010/__calls")).json()) as {
+          url: string;
+          body: string;
+          at: number;
+        }[];
+        const mail = calls
+          .filter((c) => c.url.startsWith("/emails") && c.at >= since && c.body.includes(email))
+          .pop();
+        code = mail?.body.match(/\b(\d{6})\b/)?.[1] ?? "";
+        return code;
+      },
+      { timeout: 15_000 },
+    )
+    .toMatch(/^\d{6}$/);
+  return code;
+}
+
+/** כמה מיילים נשלחו לכתובת אחרי `since` */
+export async function emailsTo(
+  request: APIRequestContext,
+  email: string,
+  since: number,
+): Promise<number> {
+  const calls = (await (await request.get("http://127.0.0.1:4010/__calls")).json()) as {
+    url: string;
+    body: string;
+    at: number;
+  }[];
+  return calls.filter((c) => c.url.startsWith("/emails") && c.at >= since && c.body.includes(email))
+    .length;
+}
+
+/** כניסה אמיתית בקוד למייל דרך מסך הכניסה של אזור הניהול */
+export async function signInWithEmailCode(
+  page: Page,
+  request: APIRequestContext,
+  siteUrl: string,
+  email: string,
+) {
+  await page.goto(`${siteUrl}/manage/login`);
+  await page.getByLabel("אימייל").fill(email);
+  const since = Date.now();
+  await page.getByRole("button", { name: "שליחת קוד" }).click();
+  await expect(page.getByRole("status")).toContainText("שלחנו קוד");
+  await page.getByLabel("הקוד מהמייל").fill(await readLoginCode(request, email, since));
+  await page.getByRole("button", { name: "כניסה" }).click();
+  await expect(page).toHaveURL(/\/manage$/, { timeout: 20_000 });
+}

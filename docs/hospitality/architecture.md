@@ -35,7 +35,9 @@ Platform adapters that wrap an existing module are a closed list (ESLint `regex`
 the architecture test): `tenancy/current-site.server.ts` → `tenant.server`;
 `ui/index.ts` → `src/components/ui/*`, `cn`, `use-mobile` (re-exports only);
 `auth/browser-session.ts` → the browser Supabase client; `auth/login.ts` → the shared
-password and email-code server functions. Only the generated `src/routeTree.gen.ts` may
+password and email-code server functions; `auth/accounts.server.ts` → the server Supabase
+admin client (create a confirmed account without a password, 2b.3);
+`security/rate-limit.server.ts` → the existing in-memory rate limiter (2b.3). Only the generated `src/routeTree.gen.ts` may
 import the Hospitality route adapters from Ecommerce code.
 
 Enforced twice:
@@ -68,18 +70,21 @@ src/
     ui/index.ts                     shared UI kit for engine screens (re-exports src/components/ui)        [2a]
     auth/browser-session.ts         browser session: get, apply server tokens, sign out, changes         [2a]
     auth/login.ts                   password + email-code login (existing shared functions; no Google)   [2a]
+    auth/accounts.server.ts         ensureAccount: confirmed account, no password (signs in with a code)  [2b.3]
+    security/rate-limit.server.ts   adapter: the existing rate limiter (allowAction, requestIp)            [2b.3]
     supabase/api-client.server.ts   Supabase client for an engine schema with x-tenant-id (+ user token)
     auth/session.server.ts          the signed-in user (no store-membership rule)
   engines/
     ecommerce/engine.ts             thin descriptor — no Ecommerce code moved or changed
     hospitality/                    see src/engines/hospitality/README.md
-      engine.ts config.ts access.server.ts edge/gate.ts types/{domain,management}.ts validation/input.ts
+      engine.ts config.ts access.server.ts edge/gate.ts types/{domain,management,settings,team}.ts validation/{input,settings,team}.ts
       server/public.functions.ts guest.functions.ts owner.functions.ts rpc.server.ts index.ts
       api/management.functions.ts   client-callable server functions (outside server/: import protection) [2a]
       api/settings.functions.ts     business settings: view / save with revision                          [2b.2]
+      api/team.functions.ts         team (owner only): members, recent activity, add / remove a manager   [2b.3]
       server/manage.server.ts       management call: area enabled + signed-in user + the user's token     [2b.2]
-      management/                   owner area (Stage 2): shell/, login/, dashboard/, settings/, lib/, route-guard.ts
-  routes/manage.tsx manage.index.tsx manage_.login.tsx manage.settings.tsx   thin route adapters
+      management/                   owner area (Stage 2): shell/, login/, dashboard/, settings/, team/, lib/, route-guard.ts
+  routes/manage.tsx manage.index.tsx manage_.login.tsx manage.settings.tsx manage.team.tsx   thin route adapters
 ```
 
 Stage 2a existing-file changes (approved, Hospitality-only branches): `src/routes/__root.tsx`

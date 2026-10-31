@@ -33,3 +33,22 @@ export function daysText(days: number): string {
 export function usageText(used: number, limit: number | null | undefined): string {
   return limit === null || limit === undefined ? `${used} (ללא הגבלה)` : `${used} מתוך ${limit}`;
 }
+
+/** "06.10.2027, 14:05" לפי אזור הזמן של העסק */
+export function formatDateTime(
+  iso: string | null | undefined,
+  timeZone = "Asia/Jerusalem",
+): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("he-IL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+  });
+}

@@ -81,6 +81,8 @@ const PLATFORM_ADAPTERS: [adapter: string, wraps: (target: string) => boolean][]
       t === "src/hooks/use-mobile",
   ],
   ["src/platform/auth/browser-session.ts", (t) => t === "src/integrations/supabase/client"],
+  ["src/platform/auth/accounts.server.ts", (t) => t === "src/integrations/supabase/client.server"],
+  ["src/platform/security/rate-limit.server.ts", (t) => t === "src/lib/rate-limit.server"],
   [
     "src/platform/auth/login.ts",
     (t) => t === "src/lib/auth.functions" || t === "src/lib/login-code.functions",
@@ -185,6 +187,7 @@ describe("architecture: dependency boundaries", () => {
     expect(adapters).toEqual([
       "src/routes/manage.index.tsx",
       "src/routes/manage.settings.tsx",
+      "src/routes/manage.team.tsx",
       "src/routes/manage.tsx",
       "src/routes/manage_.login.tsx",
     ]);
@@ -249,7 +252,7 @@ describe("architecture: server-function ownership", () => {
 
   it("Hospitality server functions live only in src/engines/hospitality/{server,api}", () => {
     const hosp = serverFnFiles.filter((f) => registry.ownerOf(f) === "hospitality");
-    expect(hosp.length).toBe(5);
+    expect(hosp.length).toBe(6);
     // api/ = נקראות מהדפדפן (מחוץ ל-server/, import protection); server/ = בלי ממשק עדיין
     for (const f of hosp)
       expect(f).toMatch(/^src\/engines\/hospitality\/(server|api)\/[\w-]+\.functions\.ts$/);

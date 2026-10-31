@@ -9,7 +9,7 @@ export interface NavItem {
   key: NavKey;
   label: string;
   /** נתיב של מסך קיים; בלי נתיב = עוד לא נבנה ("בקרוב") */
-  to?: "/manage" | "/manage/settings";
+  to?: "/manage" | "/manage/settings" | "/manage/team";
   /** בניווט התחתון בטלפון (השאר תחת "עוד") */
   primary?: boolean;
   permission?: string;
@@ -23,7 +23,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: "guests", label: "אורחים", permission: "guests" },
   { key: "emails", label: "מיילים", permission: "bookings" },
   { key: "settings", label: "הגדרות העסק", to: "/manage/settings", permission: "settings" },
-  { key: "team", label: "צוות ניהול", permission: "staff.managers" },
+  { key: "team", label: "צוות ניהול", to: "/manage/team", permission: "staff.managers" },
 ];
 
 export function visibleNav(permissions: Record<string, boolean>): NavItem[] {
