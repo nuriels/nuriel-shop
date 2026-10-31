@@ -1,6 +1,6 @@
 # Nuriel Hospitality — product plan and Stage 1 (backend foundation)
 
-Status: **approved plan; implementation in progress.** Stages 1a–1e (migrations 1–5) implemented on this branch — see `docs/hospitality/migrations.md`. Later steps await approval.
+Status: **approved plan; implementation in progress.** Stages 1a–1f implemented on this branch (migrations 1–6, engine layer) — see `docs/hospitality/migrations.md` and `docs/hospitality/architecture.md`. Later steps await approval.
 Branch: `hospitality/stage-1` (based on `hospitality/stage-0`). No merge to `main`,
 no production deployment, no production credentials, no migrations yet.
 
@@ -1047,18 +1047,18 @@ dashboard). Nothing is sent before the outbox worker (Stage 2).
   dedupe key per hour.
 - The link keeps expiring 30 days after check-out (D16).
 
-### A12.5 Coupon usage count — current rule and recommendation (decision needed)
-- **Current rule (1d, pinned by a test in 1e):** a use is counted when the booking or
-  request is created (under a row lock, respecting `usage_limit`) and is **never released**
-  — not when the owner declines, not when a request expires, not on cancellation.
-- **Effect:** a declined or expired request uses up a coupon (a one-use coupon can be lost
-  to a request the owner never accepted); contact flooding is limited by the open-request
-  cap, but a limited coupon can still be drained by requests that are declined.
-- **Recommendation:** release the use automatically when a booking ends **without having
-  been confirmed** (declined, expired, request withdrawn by the guest); keep it counted
-  after a confirmed booking is cancelled (the guest did redeem it; the owner can grant a new
-  code). Record a history event for each release.
-- **Not changed yet** — awaiting approval of the business rule.
+### A12.5 Coupon usage count — approved rule (implemented, migration 6)
+- A use is counted when the booking or request is created (under a row lock, respecting
+  `usage_limit`).
+- It is **released** when the booking ends **before confirmation**: declined by the owner,
+  expired, or withdrawn by the guest (`pending_* → declined / expired / cancelled`).
+- Once confirmed, the use **stays consumed**, even if the booking is cancelled later.
+- An expired request that the owner re-approves consumes the use again — only if the coupon
+  still has room; otherwise the approval is refused with an explanation.
+- Atomic (same transaction as the status change) and exactly once:
+  `bookings.promotion_released_at` marks the release, the state machine allows each
+  transition once, and each release / re-consumption writes a history event. Tested with
+  repeated sweeps, a decline racing the sweep, and two sweeps plus a lazy expiry in parallel.
 
 # Part B — Stage 1: backend foundation (implementation-ready)
 

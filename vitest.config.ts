@@ -5,7 +5,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: { alias: { "@": `${process.cwd()}/src` } },
   test: {
-    include: ["tests/unit/**/*.test.ts"],
+    include: ["tests/unit/**/*.test.ts", "tests/architecture/**/*.test.ts"],
     environment: "node",
     env: {
       SUPABASE_URL: "http://127.0.0.1:1",

@@ -16,6 +16,9 @@ export RESEND_API_KEY=re_e2e_mock RESEND_API_URL=http://127.0.0.1:4010
 export GROW_SANDBOX_URL=http://127.0.0.1:4010/grow GROW_SECRETS_KEY=ZTJlLW9ubHktbm90LWEtcmVhbC1rZXktMDEyMzQ1Njc=
 export LOGIN_CODE_SECRET=e2e-only-login-code-secret
 export SITEMAP_TTL_MS=0 PORT=3100 NODE_ENV=production
+# מנוע Hospitality: מתג הסביבה פתוח רק בבדיקות (בפרודקשן לא מוגדר = כבוי);
+# האתרים עדיין סגורים עד שהבדיקה מדליקה את הדגלים שלהם
+export HOSPITALITY_ENGINE=on
 if [ "${E2E_SKIP_BUILD:-}" != "1" ]; then bun run build >/dev/null; fi
 node "$ROOT/e2e/scripts/mock-services.mjs" &
 exec node .output/server/index.mjs

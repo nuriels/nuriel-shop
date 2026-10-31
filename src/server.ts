@@ -147,6 +147,12 @@ export default {
           headers: { "content-type": "text/html; charset=utf-8" },
         });
       }
+      // אתר של מנוע אחר (Hospitality) — המנוע מחליט; אתר Ecommerce ממשיך כמו היום
+      const { gateSiteRequest } = await import("./app/engines");
+      const engineResponse = await runWithTenant(host, tenant, () =>
+        gateSiteRequest(tenant, request),
+      );
+      if (engineResponse) return engineResponse;
       if (FEED_PATHS.has(pathname)) {
         const { renderFeed } = await import("./lib/feeds.server");
         return await runWithTenant(host, tenant, () => renderFeed(pathname, request));
