@@ -1,4 +1,4 @@
-# Engine architecture (Stage 1f, extended in Stage 2a)
+# Engine architecture (Stage 1f, extended in Stages 2a–2b)
 
 How Nuriel Ecommerce and Nuriel Hospitality live in one codebase without depending on
 each other. Implements plan §B1, §B2 and §B11 (`stage-1-plan.md`).
@@ -91,6 +91,10 @@ Stage 2a existing-file changes (approved, Hospitality-only branches): `src/route
 (+20/−1: Hospitality path redirect and engine shell), `src/lib/platform.functions.ts`
 `getHostMode` (+`siteType`), `src/lib/host-mode.ts` (+the `siteType` type field), and the
 SQL guard `public.user_roles_admin_seat_guard` (one early return for non-Ecommerce sites).
+Stage 2b changed no existing Ecommerce file or function: migration 8 adds a trigger on
+`public.user_roles` that returns at its first check for store rows; the rest is new
+Hospitality code, two new platform adapters, the route adapters and the generated route
+tree.
 
 Stage 1f existing files changed (minimal): `src/start.ts` (+3 lines: the dispatcher as global
 function middleware), `src/server.ts` (+6 lines: the engine edge gate after the site is
@@ -134,6 +138,26 @@ function or business rule was moved or changed.
 - Every screen gets its data from `hospitalityManagementContext` → `management_context()`
   with the user's own token; permissions, seats, flags and subscription are decided in the
   database.
+
+## Business settings and team (Stage 2b)
+- Screens: `/manage/settings` (owner and managers — each sees only the sections the database
+  says they may edit) and `/manage/team` (owner only). Server functions in
+  `api/settings.functions.ts` and `api/team.functions.ts` go through
+  `server/manage.server.ts` (`manageRpc`): management area enabled for the site, a signed-in
+  user, and the **user's own token** — so every permission is decided in the database
+  (`update_settings`, `team_*`, the `user_roles` guards), never by the UI.
+- Platform admins act as the owner on any site (the existing platform rule:
+  `store_staff_role` returns `owner` for them), exactly as on Ecommerce stores.
+- Adding a manager with no account: after the database confirmed the caller is the owner
+  and a seat is free, the platform adapter `auth/accounts.server.ts` creates a confirmed
+  account without a password (rate-limited per site through
+  `security/rate-limit.server.ts`); the manager signs in with the existing email code. No
+  email is sent by the team screen (invitation email: 2k).
+- Every change of settings or team is written to `hospitality.audit_log` (append-only, read
+  by the owner only through `team_activity`).
+- Integration coverage: `e2e/tests/manage-integration.spec.ts` (permission matrix of every
+  management function × every kind of account, PostgREST directly, all screens on desktop
+  and phone, the shared store / Hospitality account).
 
 ## Edge (pages and files)
 - Ecommerce sites: unchanged (`storeGate`, feeds, Zap pages).

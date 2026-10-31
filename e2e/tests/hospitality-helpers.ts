@@ -185,3 +185,27 @@ export async function signInWithEmailCode(
   await page.getByRole("button", { name: "כניסה" }).click();
   await expect(page).toHaveURL(/\/manage$/, { timeout: 20_000 });
 }
+
+/**
+ * חיבור שמור מכניסה ישירה ל-GoTrue בסיסמה (כמו ש-supabase-js שומר אותו בדפדפן) — לבדיקות
+ * שצריכות הרבה חיבורים בלי לנצל את מגבלות הכניסה של האפליקציה (handoff / סיסמה לכתובת IP).
+ * מסלולי הכניסה עצמם נבדקים ב-manage.spec.ts וב-manage-team.spec.ts.
+ */
+export async function passwordSession(
+  request: APIRequestContext,
+  siteUrl: string,
+  user: Account,
+): Promise<SavedSession> {
+  const { url, anonKey } = supabaseEnv();
+  const res = await request.post(`${url}/auth/v1/token?grant_type=password`, {
+    headers: { apikey: anonKey },
+    data: { email: user.email, password: user.password },
+  });
+  expect(res.ok(), await res.text()).toBe(true);
+  const session = (await res.json()) as Record<string, unknown>;
+  const key = `sb-${new URL(url).hostname.split(".")[0]}-auth-token`;
+  return {
+    origin: new URL(siteUrl).origin,
+    items: [{ name: key, value: JSON.stringify(session) }],
+  };
+}

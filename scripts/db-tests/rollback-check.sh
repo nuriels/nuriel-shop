@@ -48,6 +48,11 @@ psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
 "${PSQL[@]}" -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do "${PSQL[@]}" -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }; done
 q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id, 'rb-row', 'pickup', 0 FROM public.tenants WHERE is_default" >/dev/null
+# the whole schema (every object, privilege, policy and function body) before rolling back —
+# compared with the schema after rolling everything back and re-applying (end of the script)
+SCHEMA_DIR=$(mktemp -d)
+schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
+schema_dump "$SCHEMA_DIR/before.sql"
 
 # ---------- 2b.1: settings and team ----------
 echo "rollback guard: $M8 refuses while the action log has rows"
@@ -293,5 +298,12 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
      AND (SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%consistency' AND tgdeferrable) = 3
      AND has_function_privilege('anon', 'hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)', 'EXECUTE')"
 
+schema_dump "$SCHEMA_DIR/after.sql"
+if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
+  echo "  ok   whole schema after rollback 8 → 1 and re-apply 1 → 8 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+else
+  echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
+fi
+rm -rf "$SCHEMA_DIR"
 "${PSQL[@]}" -d postgres -c "DROP DATABASE rollback_test" >/dev/null 2>&1 || true
 echo "rollback check passed"
