@@ -2,6 +2,7 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_site_identity (R-1): rollback → site_identity נעלמה, ההגדרות והצוות במקומם
 #   • hosp_settings_team (2b.1): הגנה (יש רשומות ביומן הפעולות), rollback → עדכון ישיר
 #     של ההגדרות לצוות חוזר, 11 הרשאות, היומן, פונקציות הצוות וה-trigger נעלמו
 #   • hosp_management_foundation (2a): הגנה (מקומות מנהל נוספים שהוקצו), rollback →
@@ -33,6 +34,7 @@ M5=20261101130000_hosp_billing_admin
 M6=20261101140000_hosp_coupon_release
 M7=20261101150000_hosp_management_foundation
 M8=20261101160000_hosp_settings_team
+M9=20261101170000_hosp_site_identity
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -53,6 +55,14 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- R-1: site identity (migration 9) ----------
+echo "rollback: $M9"
+down "$M9"
+expect "site_identity removed, settings and team untouched" \
+  "SELECT to_regprocedure('hospitality.site_identity()') IS NULL
+     AND to_regclass('hospitality.audit_log') IS NOT NULL
+     AND to_regprocedure('hospitality.team_members()') IS NOT NULL"
 
 # ---------- 2b.1: settings and team ----------
 echo "rollback guard: $M8 refuses while the action log has rows"
@@ -257,7 +267,7 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1 … $M8"
+echo "re-apply: $M1 … $M9"
 up "$M1"
 up "$M2"
 up "$M3"
@@ -266,6 +276,7 @@ up "$M5"
 up "$M6"
 up "$M7"
 up "$M8"
+up "$M9"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -290,6 +301,9 @@ expect "settings and team back: guard trigger, action log, no direct settings wr
      AND to_regclass('hospitality.audit_log') IS NOT NULL
      AND NOT has_column_privilege('authenticated', 'hospitality.settings', 'check_in_time', 'UPDATE')
      AND cardinality(hospitality.permissions()) = 12"
+expect "site identity back: public name only, anon may call it" \
+  "SELECT has_function_privilege('anon', 'hospitality.site_identity()', 'EXECUTE')
+     AND (SELECT prosecdef FROM pg_proc WHERE oid = 'hospitality.site_identity()'::regprocedure)"
 expect "plans back (4 unpublished placeholders), unit limit and terms guard active" \
   "SELECT (SELECT count(*) FROM hospitality.plans WHERE NOT is_published AND price_monthly IS NULL) = 4
      AND (SELECT count(*) FROM pg_trigger WHERE tgname IN ('units_limit_guard', 'bookings_terms_guard')) = 2"
@@ -300,7 +314,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 8 → 1 and re-apply 1 → 8 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 9 → 1 and re-apply 1 → 9 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi

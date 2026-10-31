@@ -1,6 +1,6 @@
 # Nuriel Hospitality — Stage 2 plan: owner management system
 
-Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, regression 2b.4) implemented and approved up to 2b.3; 2c and later not started.** Open items after 2b: §7.
+Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, `6b279f4`) implemented and approved; R-1 fixed before 2c (migration 9); 2c planned (`stage-2c-plan.md`, awaiting approval), not started.** Open items after 2b: §7.
 Branch: `hospitality/stage-2`, created from `hospitality/stage-1` at `0f59e85` (Stage 1 unchanged).
 Builds on Stage 1 (migrations 1–6, engine layer 1f). Product roadmap: `stage-1-plan.md` A4
 "Stage 2"; engine rules: `architecture.md`.
@@ -244,7 +244,7 @@ the screen shows only what the user may edit); owner-only team screen; managers 
 the owner (new account: confirmed, no password, email-code sign-in; no invitation email);
 append-only action log; migration 8 (`20261101160000_hosp_settings_team`).
 Migration numbers below are provisional: each sub-stage takes the next free number
-(2b used 8, so the plan shifted by one from 2c on).
+(2b used 8 and R-1 used 9, so the plan shifted by two from 2c on).
 
 ### 2c — Properties and units
 **Functionality:** list of properties ("מתחם") and units; create / edit (name, description,
@@ -252,7 +252,7 @@ capacity, base occupancy, child age, bedrooms, bathrooms, base price, extra adul
 child price, minimum nights, price floor / ceiling, active / inactive, order);
 "כל המתחם" units (choose member units); unit limit shown and enforced; deactivate instead
 of delete when bookings exist (clear message).
-**DB / API:** existing tables (RLS), unit-limit trigger, membership guards; migration 9:
+**DB / API:** existing tables (RLS), unit-limit trigger, membership guards; migration 10:
 `reorder_catalog(kind, ids[])` (G11).
 **Files:** `management/catalog/{PropertyList,PropertyForm,UnitList,UnitForm,WholePropertyMembers}.tsx`,
 `server/manage/catalog.functions.ts`, `validation/catalog.ts`, routes `manage.units.tsx`,
@@ -278,7 +278,7 @@ amenities, reload, remove.
 browser before upload), short videos (≤ 50 MB, mp4 / webm / mov), YouTube / Vimeo links;
 assign to site / property / unit; set cover; drag to order; alt text (with a hint); delete
 (file and record); demo badge.
-**DB / API:** `media` table and `hosp-media` bucket; migration 10: `set_media_cover`,
+**DB / API:** `media` table and `hosp-media` bucket; migration 11: `set_media_cover`,
 `reorder_media` (G10). **First task: verify G12** on the real Storage API; if the header
 does not reach Postgres, use the fallback (signed upload URL issued after a permission
 check, path always `<tenant>/<uuid>.<ext>`).
@@ -321,7 +321,7 @@ test reuses it) and quote shows unavailable; release → available again.
 search by name / phone / booking number, approval countdown; booking card: dates, unit,
 guests, price breakdown per night, policy snapshot, history timeline, email status (safe);
 actions: approve, decline (reason), check-in, check-out, no-show.
-**DB / API:** migration 11: `staff_bookings(filter, cursor)` (masked contact),
+**DB / API:** migration 12: `staff_bookings(filter, cursor)` (masked contact),
 `staff_booking_detail(id)` (G8); existing `approve_booking`, `decline_booking`,
 `set_stay_status` with `revision`.
 **Files:** `management/bookings/{BookingList,BookingFilters,BookingCard,BookingTimeline,PriceBreakdown,ApproveDeclineBar}.tsx`,
@@ -350,7 +350,7 @@ cancellation with a reduced fee. Concurrency already covered by Stage 1 tests.
 **Functionality:** guest list (name, masked contact, number of stays, last stay), search;
 guest card: full contact, booking history, notes; export (JSON / printable) and
 anonymise with strong confirmation (owner only if D-3 approved).
-**DB / API:** migration 12: `update_guest_notes` (G9); if D-3 approved, a new owner-only
+**DB / API:** migration 13: `update_guest_notes` (G9); if D-3 approved, a new owner-only
 permission for export / anonymise in `hospitality.can()`; existing `export_guest`,
 `anonymize_guest`.
 **Files:** `management/guests/{GuestList,GuestCard,GuestNotes,PrivacyActions}.tsx`,
@@ -375,7 +375,7 @@ when owner-only.
 - Dashboard: pending approvals with deadlines, today's arrivals / departures, staying now,
   occupancy today / 7 / 30 days, free units tonight, this month's revenue, recent bookings,
   failed emails, cancellation requests.
-**DB / API:** migration 13: `staff_emails(filter)`, `requeue_notification(id)`,
+**DB / API:** migration 14: `staff_emails(filter)`, `requeue_notification(id)`,
 `resend_booking_email(booking_id, event)`, `dashboard(_on)`.
 **Files:** `src/platform/notifications/email.server.ts`,
 `src/engines/hospitality/emails/{templates/*.ts,render.server.ts}`,
@@ -502,10 +502,10 @@ Status at the end of 2b (`hospitality/stage-2`). "Where" names the stage that ow
 | G12 | Storage `x-tenant-id` on the real stack — covered by `hospitality-api.spec.ts`; re-check in 2e | 2e |
 | G14 | Dashboard numbers (`hospitality.dashboard`) — today only the setup checklist | 2k |
 
-**Found in the 2b.4 regression (needs a decision — touches an existing file)**
+**Found in the 2b.4 regression**
 | # | Item | Proposal | Where |
 |---|---|---|---|
-| R-1 | On Hospitality management pages the root loader (`getSiteSeo`, Ecommerce-shaped) still fills the meta tags: `description`, `og:title`, `og:site_name` = "החנות שלי" (the Ecommerce default store name); the visible `<title>` is right. A `/manage` link shared on WhatsApp (as the team screen suggests) previews as "החנות שלי". The page state also carries the Ecommerce plan object (default values, nothing personal) | on Hospitality sites, the root `head` uses the business name and no store meta (a few lines in `__root.tsx`, Hospitality branch only — like the approved D-6 edits) | before 2c, or with Stage 4 (website root data) |
+| R-1 | On Hospitality management pages the meta tags showed "החנות שלי" and the page state carried the Ecommerce plan object (root loader `getSiteSeo`) | **fixed before 2c**: root data and head by site type; business name from `site_identity()` (migration 9); host-mode lock by site status; SSR tests (`hospitality-head.spec.ts`) | done |
 
 **Small follow-ups noticed in 2b (not blocking)**
 | # | Item | Where |

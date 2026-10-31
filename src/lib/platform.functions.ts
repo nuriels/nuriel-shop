@@ -14,12 +14,19 @@ export const getHostMode = createServerFn({ method: "GET" }).handler(async () =>
     await import("@/integrations/supabase/tenant.server");
   const { siteTypeOf } = await import("@/platform/tenancy/site-type.server");
   const adminHost = process.env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase() || null;
-  const lock = storeLockReason();
   const tenant = isPlatformRequest() ? null : maybeCurrentTenant();
+  // סוג האתר (Stage 2a) — מטמון של 15 שניות, כל תקלה → ecommerce (ההתנהגות הקיימת)
+  const siteType = tenant ? await siteTypeOf(tenant.id) : ("ecommerce" as const);
+  // אתר של מנוע אחר: הנעילה רק לפי מצב האתר עצמו — לא לפי מנוי ה-Ecommerce (R-1)
+  const lock =
+    siteType === "ecommerce"
+      ? storeLockReason()
+      : tenant?.status === "suspended"
+        ? "suspended"
+        : null;
   return {
     platform: isPlatformRequest(),
-    // סוג האתר (Stage 2a) — מטמון של 15 שניות, כל תקלה → ecommerce (ההתנהגות הקיימת)
-    siteType: tenant ? await siteTypeOf(tenant.id) : ("ecommerce" as const),
+    siteType,
     suspended: lock !== null,
     lock,
     baseDomain: tenantBaseDomain(),

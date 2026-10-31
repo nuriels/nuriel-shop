@@ -120,3 +120,14 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Changed in 2b.3 | `team_add_manager` takes the site's seat lock **before** checking membership, so the same person added twice at once when only one seat is left answers `already_member` (was: the seat-limit message; one row either way). Corrected in this file because migration 8 had been applied only to disposable test databases (not merged, not deployed); covered by concurrency scenario 25b |
 | Tests | `scripts/db-tests/hospitality-settings-team.test.sql` (105 assertions), concurrency 24–26 and 25b, `rollback-check.sh` (M8 first, refusal, restore, re-apply), `tests/architecture/migrations.test.ts` (order / rollback rule), Stage 1 assertions updated (12 permissions; no direct settings writes) |
 | Production | nothing to configure |
+
+## 20261101170000_hosp_site_identity.sql — R-1, before Stage 2c (hospitality)
+
+| | |
+|---|---|
+| Purpose | the page head of a Hospitality site (meta `description`, `og:title`, `og:site_name`) shows the business name; the app root no longer reads the store's data there |
+| Function | `hospitality.site_identity()` — SECURITY DEFINER, callable by `anon` / `authenticated`: `{ "name": business name, or the site name when empty }` for the request's site (`x-tenant-id` → `request_tenant()`: active Hospitality site), only when `hospitality_backend_enabled` and the management area or the public website are enabled; otherwise `NULL`. Nothing else (no contact data, plan or ids) |
+| Rollback | `supabase/rollbacks/20261101170000_hosp_site_identity.down.sql` — drops the function (no data) |
+| Tests | `scripts/db-tests/hospitality-site-identity.test.sql` (14 assertions: flags, suspended site, store / missing / unknown header, only the name, privileges, Ecommerce data unchanged); Stage 1 anon allow-list updated; `rollback-check.sh` (M9 first, re-apply, whole-schema comparison) |
+| Production | nothing to configure |
+

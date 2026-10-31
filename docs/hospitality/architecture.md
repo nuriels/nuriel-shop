@@ -77,11 +77,12 @@ src/
   engines/
     ecommerce/engine.ts             thin descriptor — no Ecommerce code moved or changed
     hospitality/                    see src/engines/hospitality/README.md
-      engine.ts config.ts access.server.ts edge/gate.ts types/{domain,management,settings,team}.ts validation/{input,settings,team}.ts
+      engine.ts config.ts access.server.ts edge/gate.ts types/{domain,management,settings,team,site}.ts validation/{input,settings,team}.ts
       server/public.functions.ts guest.functions.ts owner.functions.ts rpc.server.ts index.ts
       api/management.functions.ts   client-callable server functions (outside server/: import protection) [2a]
       api/settings.functions.ts     business settings: view / save with revision                          [2b.2]
       api/team.functions.ts         team (owner only): members, recent activity, add / remove a manager   [2b.3]
+      api/site.functions.ts         the business name for the page head (site_identity)                   [R-1]
       server/manage.server.ts       management call: area enabled + signed-in user + the user's token     [2b.2]
       management/                   owner area (Stage 2): shell/, login/, dashboard/, settings/, team/, lib/, route-guard.ts
   routes/manage.tsx manage.index.tsx manage_.login.tsx manage.settings.tsx manage.team.tsx   thin route adapters
@@ -91,6 +92,9 @@ Stage 2a existing-file changes (approved, Hospitality-only branches): `src/route
 (+20/−1: Hospitality path redirect and engine shell), `src/lib/platform.functions.ts`
 `getHostMode` (+`siteType`), `src/lib/host-mode.ts` (+the `siteType` type field), and the
 SQL guard `public.user_roles_admin_seat_guard` (one early return for non-Ecommerce sites).
+R-1 (before 2c) adds Hospitality-only branches to `src/routes/__root.tsx` (loader by site
+type, an early head branch) and `getHostMode` (lock by site status); the store branch is
+unchanged.
 Stage 2b changed no existing Ecommerce file or function: migration 8 adds a trigger on
 `public.user_roles` that returns at its first check for store rows; the rest is new
 Hospitality code, two new platform adapters, the route adapters and the generated route
@@ -158,6 +162,20 @@ function or business rule was moved or changed.
 - Integration coverage: `e2e/tests/manage-integration.spec.ts` (permission matrix of every
   management function × every kind of account, PostgREST directly, all screens on desktop
   and phone, the shared store / Hospitality account).
+
+## Page head and root data per site type (R-1)
+- The root loader picks by site type (`src/app/site-head.ts`): stores keep `getSiteSeo()`
+  exactly as before; a Hospitality site gets only `{ engineSite: { siteType, name } }` —
+  the business name from `hospitality.site_identity()` (migration 9). No store subscription,
+  SEO, tracking, Sabbath, promotion or logo data is read or sent to the page.
+- The head on a Hospitality site: `description`, `og:title`, `og:description`,
+  `og:site_name` = the business name; `robots: noindex, nofollow`; none of the store's SEO,
+  verification, branding or social-image tags (`management/head.ts`). Each screen keeps its
+  own `<title>`.
+- `getHostMode`: on a Hospitality site the lock comes only from the site's own status
+  (suspended), never from an Ecommerce subscription.
+- Verified: the store pages' head and page state are byte-identical before and after
+  (`e2e/tests/hospitality-head.spec.ts`; a one-off comparison of two builds).
 
 ## Edge (pages and files)
 - Ecommerce sites: unchanged (`storeGate`, feeds, Zap pages).

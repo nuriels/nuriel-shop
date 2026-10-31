@@ -1,6 +1,6 @@
 # Hospitality Stage 2b — Business settings and team (detailed plan)
 
-Status: **approved (D-2b-1 … D-2b-6). 2b.1 (`d119a02`), 2b.2 (`24973aa`) and 2b.3 (`9d95676`) approved; 2b.4 (regression, integration tests, docs) implemented — awaiting review.** Open items after 2b: `stage-2-plan.md` §7.
+Status: **approved (D-2b-1 … D-2b-6). 2b.1 (`d119a02`), 2b.2 (`24973aa`) and 2b.3 (`9d95676`) approved; 2b.4 (`6b279f4`) approved — Stage 2b complete. R-1 (found in 2b.4) fixed before 2c.** Open items after 2b: `stage-2-plan.md` §7.
 
 ### 2b.4 — as implemented
 - `e2e/tests/manage-integration.spec.ts`: permission matrix (8 kinds of account × 9
@@ -37,8 +37,8 @@ Status: **approved (D-2b-1 … D-2b-6). 2b.1 (`d119a02`), 2b.2 (`24973aa`) and 2
   seat is left answers "already a member" instead of "seat limit" (one row in both
   versions — the answer was wrong, not the data). Migration 8 had been applied only to
   disposable test databases (not merged, not deployed), so the function was corrected in
-  place; new concurrency scenario 25b covers it. The next migration is number 9 (2c,
-  `reorder_catalog`).
+  place; new concurrency scenario 25b covers it. (Migration 9 then went to the R-1 fix;
+  2c starts at 10.)
 - New platform adapters (closed list): `auth/accounts.server.ts`,
   `security/rate-limit.server.ts`.
 

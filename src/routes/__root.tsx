@@ -27,6 +27,7 @@ import { TrackingConsent } from "@/components/marketing/TrackingConsent";
 import { canonicalUrl } from "@/lib/seo-urls";
 import { EngineSiteShell } from "@/app/site-shell";
 import { engineRouteRedirect } from "@/app/site-routes";
+import { engineSiteData, engineSiteMeta } from "@/app/site-head";
 
 function NotFoundComponent() {
   return (
@@ -111,9 +112,28 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   },
   // שם האתר ל-SEO, צבע המותג ומצב שבת: נטענים פעם אחת לטעינת עמוד (גם ב-SSR,
   // בלי הבהוב), ומתרעננים ברענון העמוד או אחרי שמירת ההגדרות (router.invalidate)
-  loader: () => getSiteSeo(),
+  // אתר של מנוע אחר (Hospitality): רק נתוני המנוע — בלי נתוני החנות ובלי המנוי שלה (R-1)
+  loader: ({ context }) =>
+    context.hostMode.siteType === "ecommerce"
+      ? getSiteSeo()
+      : engineSiteData<Awaited<ReturnType<typeof getSiteSeo>>>(context.hostMode.siteType),
   staleTime: Infinity,
   head: ({ loaderData, matches }) => {
+    if (loaderData && "engineSite" in loaderData && loaderData.engineSite) {
+      return {
+        meta: engineSiteMeta(loaderData.engineSite),
+        links: [
+          { rel: "stylesheet", href: appCss },
+          { rel: "icon", type: "image/png", href: "/favicon.png" },
+          { rel: "preconnect", href: "https://fonts.googleapis.com" },
+          { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+          {
+            rel: "stylesheet",
+            href: "https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Frank+Ruhl+Libre:wght@500;700;900&display=swap",
+          },
+        ],
+      };
+    }
     // חנות בלי שם עסק מוגדר → "החנות שלי"; דומיין הניהול → שם קבוע (מהשרת)
     const siteName = loaderData?.siteName || DEFAULT_STORE_NAME;
     // SEO (חלק 14): הכותרת והתיאור מ"שיווק ואינטגרציות" — ואם ריקים, שם העסק
