@@ -452,19 +452,76 @@ SELECT tests.check('owner email: nothing is sent — rows are only queued in the
   $$SELECT NOT EXISTS (SELECT 1 FROM hospitality.notifications WHERE status <> 'queued')$$);
 
 -- ============================================================
--- 9. Coupon usage — the current rule, pinned (see docs/hospitality/migrations.md)
+-- 9. Coupon usage (approved rule, migration 6): released when a booking ends before
+--    confirmation (declined / expired / withdrawn), kept once confirmed; exactly once
 -- ============================================================
 INSERT INTO hospitality.promotions (tenant_id, name, code, discount_kind, value, usage_limit) VALUES
-  (:'sp', 'קופון', 'ONCE', 'fixed', 50, 3);
-SELECT pg_temp.req(:'sp', :U2, pg_temp.d(70), pg_temp.d(72), 'he.coupon1@example.com', 'he-cpn-0001', 'ONCE') ->> 'booking_id' AS bc1 \gset
-SELECT pg_temp.req(:'sp', :U2, pg_temp.d(73), pg_temp.d(75), 'he.coupon2@example.com', 'he-cpn-0002', 'ONCE') ->> 'booking_id' AS bc2 \gset
-SELECT pg_temp.call(:'sp', :OWNER_P, format('SELECT hospitality.decline_booking(%L)', :'bc1')) IS NOT NULL AS ok \gset
-UPDATE hospitality.bookings SET hold_expires_at = now() - interval '1 second' WHERE id = :'bc2';
-SELECT (hospitality.expire_holds() ->> 'expired')::integer AS expired \gset
-SELECT tests.check('coupon (current rule): a use is counted when the request is made, and is NOT released when the request is declined or expires',
-  format($$SELECT (SELECT used_count FROM hospitality.promotions WHERE tenant_id = %L AND code = 'ONCE') = 2
-             AND (SELECT array_agg(status ORDER BY status) FROM hospitality.bookings WHERE id IN (%L, %L)) = ARRAY['declined', 'expired']$$,
-         :'sp', :'bc1', :'bc2'));
+  (:'sp', 'קופון', 'COUPON3', 'fixed', 50, 3),
+  (:'sp', 'קופון יחיד', 'ONLYONE', 'fixed', 50, 1);
+CREATE OR REPLACE FUNCTION pg_temp.used(_code text) RETURNS integer LANGUAGE sql AS $$
+  SELECT used_count FROM hospitality.promotions WHERE code = _code $$;
+CREATE OR REPLACE FUNCTION pg_temp.released(_id uuid) RETURNS integer LANGUAGE sql AS $$
+  SELECT count(*)::integer FROM hospitality.booking_events WHERE booking_id = _id AND kind = 'coupon_released' $$;
+
+-- declined
+SELECT pg_temp.req(:'sp', :U2, pg_temp.d(70), pg_temp.d(71), 'he.coupon1@example.com', 'he-cpn-0001', 'COUPON3') ->> 'booking_id' AS ca \gset
+SELECT tests.check('coupon: a request counts one use', $$SELECT pg_temp.used('COUPON3') = 1$$);
+SELECT pg_temp.call(:'sp', :OWNER_P, format('SELECT hospitality.decline_booking(%L)', :'ca')) IS NOT NULL AS ok \gset
+SELECT tests.check('coupon: declined by the owner → the use is released, once, with a history event',
+  format($$SELECT pg_temp.used('COUPON3') = 0 AND pg_temp.released(%1$L) = 1
+             AND (SELECT promotion_released_at IS NOT NULL FROM hospitality.bookings WHERE id = %1$L)$$, :'ca'));
+SELECT pg_temp.expect_error('coupon: declining again is refused (no second release)',
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.decline_booking(%%L)', %L::uuid))$$, :'sp', :OWNER_P, :'ca'),
+  'רק בקשה שממתינה');
+SELECT tests.check('coupon: … and the count is unchanged', $$SELECT pg_temp.used('COUPON3') = 0$$);
+
+-- expired (sweep, run twice)
+SELECT pg_temp.req(:'sp', :U2, pg_temp.d(72), pg_temp.d(73), 'he.coupon2@example.com', 'he-cpn-0002', 'COUPON3') ->> 'booking_id' AS cb \gset
+UPDATE hospitality.bookings SET hold_expires_at = now() - interval '1 second' WHERE id = :'cb';
+SELECT (hospitality.expire_holds() ->> 'expired')::integer AS n1 \gset
+SELECT (hospitality.expire_holds() ->> 'expired')::integer AS n2 \gset
+SELECT tests.check('coupon: expired before confirmation → released exactly once, even after a second sweep',
+  format($$SELECT pg_temp.used('COUPON3') = 0 AND pg_temp.released(%L) = 1 AND %s >= 1 AND %s = 0$$, :'cb', :n1, :n2));
+UPDATE hospitality.bookings SET status = 'expired' WHERE id = :'cb';
+SELECT tests.check('coupon: a no-op status update never releases again', format($$SELECT pg_temp.used('COUPON3') = 0 AND pg_temp.released(%L) = 1$$, :'cb'));
+
+-- withdrawn by the guest before confirmation
+SELECT pg_temp.req(:'sp', :U2, pg_temp.d(74), pg_temp.d(75), 'he.coupon3@example.com', 'he-cpn-0003', 'COUPON3') AS rc \gset
+SELECT pg_temp.call(:'sp', NULL, format('SELECT hospitality.request_cancellation(%L)', (:'rc'::jsonb) ->> 'manage_token')) IS NOT NULL AS ok \gset
+SELECT tests.check('coupon: withdrawn by the guest before confirmation → released once',
+  format($$SELECT pg_temp.used('COUPON3') = 0 AND pg_temp.released(%L) = 1$$, (:'rc'::jsonb) ->> 'booking_id'));
+
+-- confirmed, then cancelled → stays consumed
+SELECT pg_temp.req(:'sp', :U2, pg_temp.d(76), pg_temp.d(77), 'he.coupon4@example.com', 'he-cpn-0004', 'COUPON3') ->> 'booking_id' AS cd \gset
+SELECT pg_temp.call(:'sp', :OWNER_P, format('SELECT hospitality.approve_booking(%L)', :'cd')) IS NOT NULL AS ok \gset
+SELECT pg_temp.call(:'sp', :OWNER_P, format('SELECT hospitality.cancel_booking(%L)', :'cd')) IS NOT NULL AS ok \gset
+SELECT tests.check('coupon: once confirmed, the use stays consumed after the booking is cancelled',
+  format($$SELECT pg_temp.used('COUPON3') = 1 AND pg_temp.released(%1$L) = 0
+             AND (SELECT status = 'cancelled' AND promotion_released_at IS NULL FROM hospitality.bookings WHERE id = %1$L)$$, :'cd'));
+
+-- expired, then re-approved by the owner → consumed again
+SELECT pg_temp.req(:'sp', :U2, pg_temp.d(78), pg_temp.d(79), 'he.coupon5@example.com', 'he-cpn-0005', 'COUPON3') ->> 'booking_id' AS ce \gset
+UPDATE hospitality.bookings SET hold_expires_at = now() - interval '1 second' WHERE id = :'ce';
+SELECT (hospitality.expire_holds() ->> 'expired')::integer AS n3 \gset
+SELECT tests.check('coupon: (expired → released)', $$SELECT pg_temp.used('COUPON3') = 1$$);
+SELECT pg_temp.call(:'sp', :OWNER_P, format('SELECT hospitality.approve_booking(%L)', :'ce')) IS NOT NULL AS ok \gset
+SELECT tests.check('coupon: an expired request re-approved by the owner consumes the use again (history event)',
+  format($$SELECT pg_temp.used('COUPON3') = 2
+             AND (SELECT status = 'confirmed' AND promotion_released_at IS NULL FROM hospitality.bookings WHERE id = %1$L)
+             AND EXISTS (SELECT 1 FROM hospitality.booking_events WHERE booking_id = %1$L AND kind = 'coupon_reconsumed')$$, :'ce'));
+
+-- re-approval when the coupon has meanwhile been used up
+SELECT pg_temp.req(:'sp', :U2, pg_temp.d(80), pg_temp.d(81), 'he.coupon6@example.com', 'he-cpn-0006', 'ONLYONE') ->> 'booking_id' AS cf \gset
+UPDATE hospitality.bookings SET hold_expires_at = now() - interval '1 second' WHERE id = :'cf';
+SELECT (hospitality.expire_holds() ->> 'expired')::integer AS n4 \gset
+SELECT pg_temp.req(:'sp', :U2, pg_temp.d(82), pg_temp.d(83), 'he.coupon7@example.com', 'he-cpn-0007', 'ONLYONE') IS NOT NULL AS ok \gset
+SELECT pg_temp.expect_error('coupon: re-approving when the coupon is used up is refused with an explanation',
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.approve_booking(%%L)', %L::uuid))$$, :'sp', :OWNER_P, :'cf'),
+  'הקופון של ההזמנה כבר נוצל');
+SELECT tests.check('coupon: … the booking stays expired and the count stays at the limit',
+  format($$SELECT pg_temp.used('ONLYONE') = 1 AND (SELECT status FROM hospitality.bookings WHERE id = %L) = 'expired'$$, :'cf'));
+SELECT tests.check('coupon: the count never goes below zero or above the limit (constraint)',
+  $$SELECT bool_and(used_count >= 0 AND (usage_limit IS NULL OR used_count <= usage_limit)) FROM hospitality.promotions$$);
 
 -- ============================================================
 -- 10. Ecommerce unchanged

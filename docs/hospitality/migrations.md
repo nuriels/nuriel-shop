@@ -82,3 +82,13 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Rollback | `supabase/rollbacks/20261101130000_hosp_billing_admin.down.sql` — refuses while a subscription was changed by the platform or a policy has history beyond version 1; drops the tables, triggers and functions; restores the Stage 1d `_public_tenant` and `_owner_emails` |
 | Tests | `scripts/db-tests/hospitality-billing.test.sql` (83 assertions), concurrency scenarios 18–20 (same-site lock waits, other site not blocked, unit limit under parallel inserts), `rollback-check.sh` (M5 → M1, refusals, re-apply), RLS coverage for tables without `tenant_id`, API E2E (owner plan, platform-only statistics) |
 | Production | nothing to configure; plan values and prices are placeholders until approved |
+
+## 20261101140000_hosp_coupon_release.sql — approved coupon rule (hospitality)
+
+| | |
+|---|---|
+| Adds | `bookings.promotion_released_at` (+ CHECK: only on declined / expired / cancelled); trigger `bookings_coupon_usage` (BEFORE UPDATE OF status, after the state-machine trigger) |
+| Rule | release one use when a booking ends before confirmation (`pending_approval` / `pending_payment` → `declined` / `expired` / `cancelled`); keep it after confirmation; an expired request re-approved by the owner consumes the use again only if the coupon has room (else the approval is refused); every release / re-consumption is a history event |
+| Exactly once | the release happens in the status-changing transaction, guarded by `promotion_released_at` and the one-way state machine; `used_count` never goes below 0 or above the limit (constraints) |
+| Rollback | `supabase/rollbacks/20261101140000_hosp_coupon_release.down.sql` — drops the trigger, function, constraint and column (back to "counted at creation, never released"); released counts and history stay |
+| Tests | `hospitality-billing.test.sql` §9 (decline, expiry with a second sweep, withdrawal, confirmed-then-cancelled, re-approval, re-approval with the coupon used up, bounds); concurrency 21 (two sweeps + a lazy expiry at once) and 22 (decline racing the sweep); `rollback-check.sh` |

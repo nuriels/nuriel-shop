@@ -25,6 +25,7 @@ M2=20261101100000_ecommerce_engine_guard
 M3=20261101110000_hosp_schema
 M4=20261101120000_hosp_booking
 M5=20261101130000_hosp_billing_admin
+M6=20261101140000_hosp_coupon_release
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -40,6 +41,14 @@ psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
 "${PSQL[@]}" -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do "${PSQL[@]}" -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }; done
 q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id, 'rb-row', 'pickup', 0 FROM public.tenants WHERE is_default" >/dev/null
+
+# ---------- coupon release ----------
+echo "rollback: $M6"
+down "$M6"
+expect "coupon release trigger and column removed (back to: counted at creation, never released)" \
+  "SELECT NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'bookings_coupon_usage')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality'
+                       AND table_name = 'bookings' AND column_name = 'promotion_released_at')"
 
 # ---------- 1e ----------
 echo "rollback guard: $M5 refuses while a platform-changed subscription exists"
@@ -175,12 +184,13 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1, $M2, $M3, $M4, $M5"
+echo "re-apply: $M1 … $M6"
 up "$M1"
 up "$M2"
 up "$M3"
 up "$M4"
 up "$M5"
+up "$M6"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -194,6 +204,7 @@ expect "Hospitality schema back: 21 tables, RLS on all, role admin, 5 flags off"
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
       AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 5"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
+expect "coupon release back" "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'bookings_coupon_usage')"
 expect "plans back (4 unpublished placeholders), unit limit and terms guard active" \
   "SELECT (SELECT count(*) FROM hospitality.plans WHERE NOT is_published AND price_monthly IS NULL) = 4
      AND (SELECT count(*) FROM pg_trigger WHERE tgname IN ('units_limit_guard', 'bookings_terms_guard')) = 2"

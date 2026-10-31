@@ -84,3 +84,16 @@ SELECT ('c2100000-0000-0000-0000-0000000000' || lpad(n::text, 2, '0'))::uuid, t.
 CREATE OR REPLACE FUNCTION conc.unit2(_n integer) RETURNS uuid LANGUAGE sql IMMUTABLE AS $$
   SELECT ('c2100000-0000-0000-0000-0000000000' || lpad(_n::text, 2, '0'))::uuid $$;
 GRANT EXECUTE ON FUNCTION conc.unit2(integer) TO anon, authenticated, service_role;
+
+-- a coupon for the release scenarios (migration 6)
+INSERT INTO hospitality.promotions (tenant_id, name, code, discount_kind, value, usage_limit)
+SELECT id, 'קופון מקבילי', 'CONC', 'fixed', 10, 100 FROM public.tenants WHERE slug = 'conc-site';
+CREATE OR REPLACE FUNCTION conc.reqc(_unit uuid, _in integer, _out integer, _email text, _key text) RETURNS jsonb LANGUAGE sql AS $$
+  SELECT hospitality.request_booking(
+    _unit_id => _unit, _check_in => current_date + _in, _check_out => current_date + _out,
+    _full_name => 'אורח קופון', _email => _email,
+    _phone => '05' || lpad((abs(hashtext(_email)) % 100000000)::text, 8, '0'),
+    _idempotency_key => _key, _policy_accepted => true, _promo_code => 'CONC',
+    _policy_hash => hospitality.quote(_unit, current_date + _in, current_date + _out, 2, 0, 'CONC') ->> 'policy_hash');
+$$;
+GRANT EXECUTE ON FUNCTION conc.reqc(uuid, integer, integer, text, text) TO anon, authenticated, service_role;

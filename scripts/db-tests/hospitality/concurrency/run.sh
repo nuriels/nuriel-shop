@@ -240,6 +240,29 @@ check "20 5 parallel unit inserts with one place left → exactly one succeeds, 
   "SELECT $(ok_count c20) = 1 AND $(err_count c20 'מגבלת היחידות') = 4
      AND (SELECT count(*) FROM hospitality.units WHERE tenant_id = '$SITE2' AND is_active AND kind <> 'whole_property') = 5"
 
+# ---- 21/22. coupon release is atomic and happens once (migration 6) ----
+used() { q "SELECT used_count FROM hospitality.promotions WHERE code = 'CONC'"; }
+q "SELECT set_config('request.headers', '{\"x-tenant-id\": \"$SITE\"}', false), conc.reqc(conc.unit(26), 210, 211, 'c21@example.com', 'c21-key-hold')" >/dev/null
+q "UPDATE hospitality.bookings SET hold_expires_at = now() - interval '1 second' WHERE idempotency_key = 'c21-key-hold'" >/dev/null
+U21=$(used)
+parallel c21 "SET ROLE service_role; SELECT hospitality.expire_holds();" \
+             "SET ROLE service_role; SELECT hospitality.expire_holds();" \
+             "$(as_guest) SELECT conc.req(conc.unit(27), 210, 211, 'c21x@example.com', 'c21-key-lazy');"
+check "21 two sweeps and a booking (lazy expiry) at once → the coupon use is released exactly once" \
+  "SELECT $(ok_count c21) = 3 AND $(used) = $U21 - 1
+     AND (SELECT count(*) FROM hospitality.booking_events e JOIN hospitality.bookings b ON b.id = e.booking_id
+           WHERE b.idempotency_key = 'c21-key-hold' AND e.kind = 'coupon_released') = 1"
+q "SELECT set_config('request.headers', '{\"x-tenant-id\": \"$SITE\"}', false), conc.reqc(conc.unit(28), 220, 221, 'c22@example.com', 'c22-key-hold')" >/dev/null
+q "UPDATE hospitality.bookings SET hold_expires_at = now() - interval '1 second' WHERE idempotency_key = 'c22-key-hold'" >/dev/null
+B22=$(q "SELECT id FROM hospitality.bookings WHERE idempotency_key = 'c22-key-hold'")
+U22=$(used)
+parallel c22 "$(as_staff $OWNER) SELECT hospitality.decline_booking('$B22');" \
+             "SET ROLE service_role; SELECT hospitality.expire_holds();"
+check "22 an owner decline racing the expiry sweep → one terminal status, the use released exactly once" \
+  "SELECT (SELECT status IN ('declined', 'expired') FROM hospitality.bookings WHERE id = '$B22') AND $(used) = $U22 - 1
+     AND (SELECT count(*) FROM hospitality.booking_events WHERE booking_id = '$B22' AND kind = 'coupon_released') = 1
+     AND (SELECT count(*) FROM hospitality.booking_events WHERE booking_id = '$B22' AND to_status IN ('declined', 'expired')) = 2"
+
 # ---- final invariants ----
 check "invariant: no two occupancy rows overlap on any physical unit" \
   "SELECT NOT EXISTS (SELECT 1 FROM hospitality.unit_occupancy a JOIN hospitality.unit_occupancy b
