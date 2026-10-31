@@ -111,3 +111,21 @@ INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_app
 SELECT t.id, ('c0000000-0000-0000-0000-0000000003' || lpad(n::text, 2, '0'))::uuid, 'conc.seat' || n || '@test.local',
        'conc_seat_' || n, 'admin', true
   FROM public.tenants t, generate_series(0, 1) n WHERE t.slug = 'conc-site-3';
+
+-- a fourth site for settings and team (migration 8): trial (3 seats), owner + 1 manager,
+-- the management area on, and accounts that the owner adds in parallel
+SELECT set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-0000000000f0', false);
+SELECT hospitality.admin_create_site('conc-site-4', 'בדיקות מקביליות 4');
+SELECT public.platform_set_flag('hospitality_management_enabled', true),
+       public.platform_set_flag('hospitality_backend_enabled', true, (SELECT id FROM public.tenants WHERE slug = 'conc-site-4')),
+       public.platform_set_flag('hospitality_management_enabled', true, (SELECT id FROM public.tenants WHERE slug = 'conc-site-4'));
+SELECT set_config('request.jwt.claim.sub', '', false);
+INSERT INTO auth.users (id, email, email_confirmed_at)
+SELECT ('c0000000-0000-0000-0000-0000000004' || lpad(n::text, 2, '0'))::uuid, 'conc.team' || n || '@test.local', now()
+  FROM generate_series(0, 9) n
+ON CONFLICT DO NOTHING;
+-- 00 = owner, 01 = manager → one seat left
+INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_approved)
+SELECT t.id, ('c0000000-0000-0000-0000-0000000004' || lpad(n::text, 2, '0'))::uuid, 'conc.team' || n || '@test.local',
+       'conc_team_' || n, 'admin', true
+  FROM public.tenants t, generate_series(0, 1) n WHERE t.slug = 'conc-site-4';

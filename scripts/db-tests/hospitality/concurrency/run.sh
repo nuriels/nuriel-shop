@@ -275,6 +275,34 @@ check "23 5 managers added in parallel with one seat left → exactly one succee
   "SELECT $(ok_count c23) = 1 AND $(err_count c23 'מגבלת המנהלים') = 4
      AND (SELECT count(*) FROM public.user_roles WHERE tenant_id = '$SITE3' AND role = 'admin') = 3"
 
+# ---- 24–26. settings and team (migration 8; site 4: trial 3 seats, owner + 1 manager) ----
+SITE4=$(q "SELECT id FROM public.tenants WHERE slug = 'conc-site-4'")
+OWNER4=c0000000-0000-0000-0000-000000000400
+as_owner4() { echo "SET ROLE authenticated; SELECT set_config('request.headers', '{\"x-tenant-id\": \"$SITE4\"}', false);
+                    SELECT set_config('request.jwt.claim.sub', '$OWNER4', false);"; }
+parallel c24 "$(as_owner4) SELECT hospitality.team_add_manager('conc.team2@test.local');" \
+             "$(as_owner4) SELECT hospitality.team_add_manager('conc.team3@test.local');"
+check "24 the owner adds two managers at once with one seat left → exactly one is added, the other is refused by the seat limit" \
+  "SELECT $(ok_count c24) = 1 AND $(err_count c24 'מגבלת המנהלים') = 1
+     AND (SELECT count(*) FROM public.user_roles WHERE tenant_id = '$SITE4' AND role = 'admin') = 3"
+q "SELECT set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-0000000000f0', false), hospitality.admin_set_extra_managers('$SITE4', 3)" >/dev/null
+parallel c25 "$(as_owner4) SELECT hospitality.team_add_manager('conc.team5@test.local');" \
+             "$(as_owner4) SELECT hospitality.team_add_manager('conc.team5@test.local');" \
+             "$(as_owner4) SELECT hospitality.team_add_manager('conc.team5@test.local');"
+check "25 the same person added three times at once → one row, the others answer already_member (no error)" \
+  "SELECT $(ok_count c25) = 3 AND (SELECT count(*) FROM public.user_roles WHERE tenant_id = '$SITE4'
+       AND user_id = 'c0000000-0000-0000-0000-000000000405') = 1
+     AND (SELECT count(*) FROM hospitality.audit_log WHERE tenant_id = '$SITE4' AND action = 'team.manager_added'
+            AND changes ->> 'email' = 'c•••@test.local') >= 1
+     AND $(grep -l 'already_member' "$TMP"/c25/*.out | wc -l) = 2"
+REV=$(q "SELECT revision FROM hospitality.settings WHERE tenant_id = '$SITE4'")
+parallel c26 "$(as_owner4) SELECT hospitality.update_settings('{\"address\": \"כתובת א\"}', $REV);" \
+             "$(as_owner4) SELECT hospitality.update_settings('{\"address\": \"כתובת ב\"}', $REV);"
+check "26 two settings saves from the same revision → one is saved, the other gets 'updated in the meantime'" \
+  "SELECT $(ok_count c26) = 1 AND $(err_count c26 'ההגדרות עודכנו בינתיים') = 1
+     AND (SELECT revision = $REV + 1 AND address IN ('כתובת א', 'כתובת ב') FROM hospitality.settings WHERE tenant_id = '$SITE4')
+     AND (SELECT count(*) FROM hospitality.audit_log WHERE tenant_id = '$SITE4' AND action = 'settings.updated') = 1"
+
 # ---- final invariants ----
 check "invariant: no two occupancy rows overlap on any physical unit" \
   "SELECT NOT EXISTS (SELECT 1 FROM hospitality.unit_occupancy a JOIN hospitality.unit_occupancy b

@@ -1,6 +1,18 @@
 # Hospitality Stage 2b — Business settings and team (detailed plan)
 
-Status: **plan, awaiting approval. No 2b code has been written.**
+Status: **approved (D-2b-1 … D-2b-6). 2b.1 (database) implemented — awaiting review; 2b.2+ not started.**
+
+### 2b.1 — as implemented (differences from the plan)
+- The "updated in the meantime" check uses a new `settings.revision` counter instead of
+  `updated_at` (the stored timestamp is shown with second precision; a counter cannot
+  collide).
+- `audit_log` also carries the standard RESTRICTIVE isolation and backend policies (no
+  permissive policy, no grants), so the schema-wide RLS coverage rule holds unchanged.
+- `team_add_manager` checks seats and the subscription before answering
+  `needs_account`, so no account is created for someone who cannot be added.
+- Email-code sign-in for an added manager (new and existing account) is verified at the
+  database level (`issue_login_code` / `consume_login_code` → `same_store`); the full
+  browser flow is tested in 2b.3.
 Branch: `hospitality/stage-2` (after 2a, `3e246f2`). Overview: `stage-2-plan.md` §3 "2b".
 
 ## 1. Scope

@@ -169,9 +169,11 @@ SELECT tests.check('structure: staff have read-only access to bookings, nights, 
   $$SELECT NOT bool_or(has_table_privilege('authenticated', 'hospitality.' || t, p))
       FROM unnest(ARRAY['bookings', 'booking_nights', 'booking_events', 'unit_occupancy', 'notifications', 'guests']) t,
            unnest(ARRAY['INSERT', 'UPDATE', 'DELETE']) p$$);
-SELECT tests.check('structure: staff cannot update the booking-number counter in settings',
+-- Stage 2b (migration 8): no direct settings writes for staff at all (update_settings() only)
+SELECT tests.check('structure: staff cannot update the booking-number counter (nor any settings column directly)',
   $$SELECT NOT has_column_privilege('authenticated', 'hospitality.settings', 'last_booking_number', 'UPDATE')
-       AND has_column_privilege('authenticated', 'hospitality.settings', 'check_in_time', 'UPDATE')$$);
+       AND NOT has_column_privilege('authenticated', 'hospitality.settings', 'check_in_time', 'UPDATE')
+       AND NOT has_table_privilege('authenticated', 'hospitality.settings', 'UPDATE')$$);
 SELECT tests.check('structure: anon can execute only the public guest functions',
   $$SELECT array_agg(proname::text ORDER BY proname) = ARRAY['cancellation_quote', 'get_booking_by_token', 'quote',
       'request_booking', 'request_cancellation', 'request_tenant']
