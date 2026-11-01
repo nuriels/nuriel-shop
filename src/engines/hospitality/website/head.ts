@@ -2,8 +2,9 @@
 // (LodgingBusiness) בעמוד הבית. מפת אתר ו-hreflang — Stage 7.
 import type { PublicSite, PublicUnit } from "../types/website";
 import { siteCopy } from "./copy";
+import { normalizeDesign } from "./design/schema";
 import { firstSentence } from "./lib/format";
-import { heroImage, unitCover } from "./lib/media";
+import { heroImage, mediaById, unitCover } from "./lib/media";
 
 type Meta = Record<string, string>;
 
@@ -36,7 +37,10 @@ export function siteHomeMeta(site: PublicSite | undefined) {
   const p = site.properties[0];
   const kind = p?.property_type ? t.propertyTypes[p.property_type] : "";
   const title = kind ? `${site.business.name} | ${kind}` : site.business.name;
-  const image = heroImage(site)?.url ?? null;
+  // הלוגו (D2) לא משמש כתמונת שיתוף; הוא נכנס לנתונים המובנים כ-logo
+  const logoId = normalizeDesign(site.design?.document ?? null, site.design?.theme).logo;
+  const image = heroImage(site, logoId)?.url ?? null;
+  const logo = mediaById(site, logoId)?.url ?? null;
   const prices = site.units.map((u) => u.base_price);
   const ld = {
     "@context": "https://schema.org",
@@ -44,6 +48,7 @@ export function siteHomeMeta(site: PublicSite | undefined) {
     name: site.business.name,
     description: describe(site),
     ...(image ? { image } : {}),
+    ...(logo ? { logo } : {}),
     ...(site.business.phone ? { telephone: site.business.phone } : {}),
     ...(site.business.email ? { email: site.business.email } : {}),
     ...(site.business.address ? { address: site.business.address } : {}),

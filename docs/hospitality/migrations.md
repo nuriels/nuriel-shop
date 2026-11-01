@@ -285,3 +285,11 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Fixes in earlier migrations (not deployed anywhere yet) | `site_versions_immutable()` (M21) and `payments_immutable()` (M23): `REVOKE … FROM PUBLIC` like every other trigger function |
 | Rollback | `supabase/rollbacks/20261103090000_hosp_security.down.sql` — drops the counters and functions, restores the grants of migrations 4 / 22; exact migration-24 schema (`rollback-check.sh`, M25) |
 | Production | `HOSPITALITY_SECRET` (recommended — see `install-guide.md`); nothing else |
+
+## 20261103100000_hosp_site_theme.sql — D2, the site's theme when a business is opened
+
+| | |
+|---|---|
+| Function | `admin_site_theme(_tenant_id, _theme)` — platform admin only: creates the business's first site draft in the chosen theme (luxury / nature / modern / romantic; every section, content from the business data). Only before the first design: a business that already has a draft or a published version is never changed. Platform audit log (`hosp_site_theme`). No existing function changed |
+| Rollback | `supabase/rollbacks/20261103100000_hosp_site_theme.down.sql` — drops the function (drafts it created stay as ordinary drafts); exact migration-25 schema (`rollback-check.sh`, M26) |
+| Production | nothing to configure |

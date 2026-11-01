@@ -5,6 +5,7 @@ import { useCopy } from "../copy";
 import { money } from "../lib/format";
 import { useSite } from "../lib/site-context";
 import type { Section } from "../design/schema";
+import { Editable } from "../components/Editable";
 
 export function Intro({ section }: { section?: Section | undefined }) {
   const t = useCopy();
@@ -22,26 +23,40 @@ export function Intro({ section }: { section?: Section | undefined }) {
       <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-8 sm:py-28 lg:grid-cols-[1.4fr_1fr] lg:gap-20">
         <div>
           <p className="mb-3 text-xs font-medium tracking-[0.06em] text-[var(--site-gold-ink)]">
-            {c.eyebrow ?? t.about}
+            <Editable section={section?.id} field="eyebrow" value={c.eyebrow ?? t.about} />
           </p>
           <h2
             id="about-title"
             className="font-display text-3xl leading-tight font-medium sm:text-4xl"
           >
-            {c.title ?? (site.properties.length === 1 ? site.properties[0]!.name : b.name)}
+            <Editable
+              section={section?.id}
+              field="title"
+              value={c.title ?? (site.properties.length === 1 ? site.properties[0]!.name : b.name)}
+            />
           </h2>
           <span aria-hidden="true" className="mt-6 block h-px w-14 bg-[var(--site-gold)]" />
           <div className="mt-8 space-y-8">
             {c.body ? (
               <p className="text-lg leading-loose whitespace-pre-line text-foreground/85">
-                {c.body}
+                <Editable section={section?.id} field="body" value={c.body} multiline />
               </p>
             ) : null}
             {(c.body ? [] : texts).map((p) => (
               <div key={p.id}>
                 {texts.length > 1 && <h3 className="font-display mb-2 text-xl">{p.name}</h3>}
                 <p className="text-lg leading-loose whitespace-pre-line text-foreground/85">
-                  {p.description}
+                  {/* מתחם אחד: עריכה כאן הופכת את התיאור לטקסט של המקטע (התיאור במתחם לא משתנה) */}
+                  {texts.length === 1 ? (
+                    <Editable
+                      section={section?.id}
+                      field="body"
+                      value={p.description ?? ""}
+                      multiline
+                    />
+                  ) : (
+                    p.description
+                  )}
                 </p>
               </div>
             ))}

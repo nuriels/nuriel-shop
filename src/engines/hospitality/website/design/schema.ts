@@ -6,6 +6,10 @@
 export const THEME_IDS = ["luxury", "nature", "modern", "romantic"] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
+/** זוגות הגופנים המאושרים (D2) — כולם עם עברית; הפרטים ב-theme/fonts.ts */
+export const FONT_PAIR_IDS = ["classic", "modern", "elegant", "soft", "bold", "literary"] as const;
+export type FontPairId = (typeof FONT_PAIR_IDS)[number];
+
 /** המקטעים הקבועים: אי אפשר למחוק (רק להסתיר); מופיעים פעם אחת */
 export const CORE_SECTIONS = [
   "hero",
@@ -79,6 +83,12 @@ export interface SiteDesign {
   theme: ThemeId;
   /** צבעים לכל ערכה בנפרד — החלפת ערכה לא מוחקת את הבחירה בערכה הקודמת */
   colors: Partial<Record<ThemeId, ColorOverrides>>;
+  /** D2: זוג גופנים לכל ערכה (חסר — הגופנים של הערכה) */
+  fonts?: Partial<Record<ThemeId, FontPairId>>;
+  /** D2: הלוגו — מזהה תמונה מתמונות האתר (חסר — שם העסק בטקסט) */
+  logo?: string;
+  /** D2: להציג גם את שם העסק ליד הלוגו */
+  logoName?: boolean;
   sections: Section[];
 }
 
@@ -102,6 +112,8 @@ const ICON = /^[a-z0-9-]{1,30}$/;
 
 export const isThemeId = (v: unknown): v is ThemeId =>
   typeof v === "string" && (THEME_IDS as readonly string[]).includes(v);
+export const isFontPairId = (v: unknown): v is FontPairId =>
+  typeof v === "string" && (FONT_PAIR_IDS as readonly string[]).includes(v);
 export const isCore = (t: SectionType): t is CoreSectionType =>
   (CORE_SECTIONS as readonly string[]).includes(t);
 const isType = (v: unknown): v is SectionType =>
@@ -196,6 +208,16 @@ function colors(raw: unknown): SiteDesign["colors"] {
   return out;
 }
 
+function fonts(raw: unknown): NonNullable<SiteDesign["fonts"]> {
+  const out: NonNullable<SiteDesign["fonts"]> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const id of THEME_IDS) {
+    const f = (raw as Record<string, unknown>)[id];
+    if (isFontPairId(f)) out[id] = f;
+  }
+  return out;
+}
+
 /** העיצוב ההתחלתי: כל המקטעים הקבועים בסדר הרגיל, בלי תוכן (הכל מנתוני העסק) */
 export function defaultDesign(theme: ThemeId = "luxury"): SiteDesign {
   return {
@@ -246,7 +268,14 @@ export function normalizeDesign(input: unknown, themeHint?: unknown): SiteDesign
     seenIds.add(id);
     sections.push({ id, type, hidden: !fresh, content: {} });
   }
-  return { v: 1, theme, colors: colors(d["colors"]), sections };
+  const out: SiteDesign = { v: 1, theme, colors: colors(d["colors"]), sections };
+  const f = fonts(d["fonts"]);
+  if (Object.keys(f).length) out.fonts = f;
+  if (typeof d["logo"] === "string" && UUID.test(d["logo"])) {
+    out.logo = d["logo"].toLowerCase();
+    if (d["logoName"] === true) out.logoName = true;
+  }
+  return out;
 }
 
 /** מזהה למקטע חדש (לא קיים כבר במסמך) */

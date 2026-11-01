@@ -1,6 +1,7 @@
 // כותרת של חלק באתר: שורת-על קטנה בזהב, כותרת בגופן התצוגה, תת-כותרת.
 import { cn } from "@/platform/ui";
 import { useSite } from "../lib/site-context";
+import { Editable } from "./Editable";
 
 export function SectionHeading({
   id,
@@ -9,8 +10,11 @@ export function SectionHeading({
   subtitle,
   align: alignProp,
   className,
+  section,
 }: {
   id?: string | undefined;
+  /** D2: מזהה המקטע — הטקסטים ניתנים לעריכה ישירה בתצוגה המקדימה */
+  section?: string | undefined;
   eyebrow?: string | undefined;
   title: string;
   subtitle?: string | undefined;
@@ -26,17 +30,19 @@ export function SectionHeading({
     >
       {eyebrow && (
         <p className="mb-3 text-xs font-medium tracking-[0.06em] text-[var(--site-gold-ink)]">
-          {eyebrow}
+          <Editable section={section} field="eyebrow" value={eyebrow} />
         </p>
       )}
       <h2
         id={id}
         className="font-display text-3xl leading-tight font-medium text-foreground sm:text-4xl"
       >
-        {title}
+        <Editable section={section} field="title" value={title} />
       </h2>
       {subtitle && (
-        <p className="mt-4 text-base leading-relaxed text-muted-foreground">{subtitle}</p>
+        <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+          <Editable section={section} field="subtitle" value={subtitle} />
+        </p>
       )}
       <span
         aria-hidden="true"

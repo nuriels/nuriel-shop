@@ -36,6 +36,8 @@ import type {
   SiteFlagKey,
 } from "../types/platform-admin";
 import { emailError, slugError, suggestSlug } from "../validation/platform-admin";
+import type { ThemeId } from "../website/design/schema";
+import { THEME_LIST } from "../website/theme/themes";
 import { FormSheet } from "../management/catalog/CatalogSheets";
 import { errorText } from "../management/catalog/refresh";
 
@@ -234,7 +236,15 @@ function EngineSwitches({ view }: { view: PlatformHospitalityView }) {
 
 function OpenSiteCard({ view }: { view: PlatformHospitalityView }) {
   const refresh = useRefresh();
-  const empty = { name: "", slug: "", ownerEmail: "", ownerName: "", plan: "trial", periodEnd: "" };
+  const empty = {
+    name: "",
+    slug: "",
+    ownerEmail: "",
+    ownerName: "",
+    plan: "trial",
+    periodEnd: "",
+    theme: "luxury" as ThemeId,
+  };
   const [f, setF] = useState(empty);
   const [slugTouched, setSlugTouched] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -378,6 +388,52 @@ function OpenSiteCard({ view }: { view: PlatformHospitalityView }) {
               />
             </Field>
           )}
+          <fieldset className="md:col-span-2">
+            <legend className="mb-1 text-sm font-medium">עיצוב האתר</legend>
+            <p className="mb-2 text-xs text-muted-foreground">
+              הערכה שהאתר נפתח בה. בעל העסק יכול להחליף אותה בכל זמן בעורך האתר, בלי לאבד תוכן.
+            </p>
+            <div
+              className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+              role="radiogroup"
+              aria-label="עיצוב האתר"
+            >
+              {THEME_LIST.map((t) => {
+                const selected = f.theme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setF((x) => ({ ...x, theme: t.id }))}
+                    className={
+                      selected
+                        ? "flex flex-col overflow-hidden rounded-md border-2 border-primary text-start"
+                        : "flex flex-col overflow-hidden rounded-md border-2 border-transparent text-start ring-1 ring-border hover:ring-foreground/30"
+                    }
+                  >
+                    <span
+                      className="flex h-10"
+                      style={{ background: t.palette.background }}
+                      aria-hidden="true"
+                    >
+                      <span
+                        className="m-1.5 flex-1 rounded-sm"
+                        style={{ background: t.palette.sand }}
+                      />
+                      <span className="my-1.5 w-5" style={{ background: t.palette.primary }} />
+                      <span
+                        className="m-1.5 ms-1 w-3 rounded-full"
+                        style={{ background: t.palette.accent }}
+                      />
+                    </span>
+                    <span className="px-2 py-1 text-sm font-medium">{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
           {error && (
             <p role="alert" className="text-sm text-destructive md:col-span-2">
               {error}

@@ -2,6 +2,7 @@
 // (מילים שמורות, כתובת תפוסה) נבדקת במסד ב-platform_slug_problem.
 import type { SiteFlagKey } from "../types/platform-admin";
 import { InputError, uuid } from "./input";
+import { isThemeId, type ThemeId } from "../website/design/schema";
 
 type Raw = Record<string, unknown> | null | undefined;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -38,6 +39,8 @@ export interface OpenSiteInput {
   ownerName: string | null;
   plan: string;
   periodEnd: string | null;
+  /** D2: ערכת העיצוב הראשונה של האתר */
+  theme: ThemeId;
 }
 
 export function parseOpenSite(input: Raw): OpenSiteInput {
@@ -57,7 +60,9 @@ export function parseOpenSite(input: Raw): OpenSiteInput {
   if (!/^[a-z_]{2,30}$/.test(plan)) throw new InputError("חבילה לא מוכרת");
   const periodEnd = text(i["periodEnd"]) || null;
   if (periodEnd && !DATE.test(periodEnd)) throw new InputError("תאריך סיום המנוי לא תקין");
-  return { name, slug, ownerEmail, ownerName, plan, periodEnd };
+  const theme = text(i["theme"]) || "luxury";
+  if (!isThemeId(theme)) throw new InputError("ערכת עיצוב לא מוכרת");
+  return { name, slug, ownerEmail, ownerName, plan, periodEnd, theme };
 }
 
 export function parseSetOwner(input: Raw): { siteId: string; email: string; name: string | null } {

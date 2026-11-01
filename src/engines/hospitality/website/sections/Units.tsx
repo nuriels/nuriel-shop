@@ -40,6 +40,7 @@ export function Units({
     >
       <div className="mx-auto max-w-7xl px-4 py-20 sm:px-8 sm:py-28">
         <SectionHeading
+          section={exclude ? undefined : section?.id}
           id={exclude ? "more-units-title" : "units-title"}
           eyebrow={c.eyebrow ?? t.nav.units}
           title={title ?? c.title ?? t.units.title}

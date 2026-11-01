@@ -373,7 +373,7 @@ function Items<T>({
   );
 }
 
-function ImagePicker({
+export function ImagePicker({
   site,
   value,
   onChange,

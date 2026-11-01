@@ -102,6 +102,15 @@ export const hospitalityPlatformOpenSite = createServerFn({ method: "POST" })
       _plan: data.plan,
       _period_end: data.periodEnd,
     });
+    // D2: ערכת העיצוב הראשונה (טיוטת האתר). כישלון לא מבטל את הפתיחה — העסק בוחר בעורך
+    try {
+      await platformRpc("admin_site_theme", { _tenant_id: site.id, _theme: data.theme });
+    } catch (error) {
+      console.error(
+        "[hospitality] admin_site_theme failed",
+        error instanceof Error ? error.message : error,
+      );
+    }
     // האתר נפתח; אם השיוך נכשל — מחזירים את הסיבה, והמסך מציע לנסות שוב (האתר לא נמחק)
     let owner: OwnerResult;
     try {

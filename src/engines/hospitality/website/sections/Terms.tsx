@@ -138,6 +138,7 @@ export function Terms({
     <section id="terms" aria-labelledby="terms-title" className="scroll-mt-24 bg-background">
       <div className="mx-auto max-w-7xl px-4 py-20 sm:px-8 sm:py-28">
         <SectionHeading
+          section={section?.id}
           id="terms-title"
           eyebrow={section?.content.eyebrow ?? t.terms.title}
           title={section?.content.title ?? t.terms.subtitle}

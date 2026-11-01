@@ -9,8 +9,10 @@ import type { PublicSite } from "../types/website";
 import { CopyContext, siteCopy, useCopy } from "./copy";
 import { findUnit, telHref, whatsappHref } from "./lib/format";
 import { findType } from "./lib/listing";
+import { mediaById } from "./lib/media";
 import { SiteContext, useSite } from "./lib/site-context";
 import { normalizeDesign, type SiteDesign } from "./design/schema";
+import { fontHref } from "./theme/fonts";
 import { themeFor, themeStyle } from "./theme/themes";
 
 export type SitePage = "home" | "unit" | "other";
@@ -64,7 +66,13 @@ export function SiteShell({
   const heroPage =
     page === "unit" || (page === "home" && design.sections.find((s) => !s.hidden)?.type === "hero");
   const copy = siteCopy("he");
-  const style = useMemo(() => themeStyle(theme, design.colors[theme.id]), [theme, design.colors]);
+  // D2: זוג הגופנים שהעסק בחר לערכה (בלי בחירה — הגופנים של הערכה)
+  const font = design.fonts?.[theme.id];
+  const fontSheet = fontHref(font);
+  const style = useMemo(
+    () => themeStyle(theme, design.colors[theme.id], font),
+    [theme, design.colors, font],
+  );
   return (
     <CopyContext.Provider value={copy}>
       <SiteContext.Provider value={{ site, theme, design, preview, heroPage }}>
@@ -76,6 +84,8 @@ export function SiteShell({
           data-site-theme={theme.id}
         >
           <style>{DISPLAY_CSS}</style>
+          {/* React מעביר את הגיליון ל-<head> (גם ב-SSR) ולא טוען אותו פעמיים */}
+          {fontSheet && <link rel="stylesheet" href={fontSheet} precedence="default" />}
           {/* נגישות: הקישור הראשון בעמוד — מדלג על התפריט ישר לתוכן (מוצג רק בפוקוס מהמקלדת) */}
           <a
             href="#main-content"
@@ -123,6 +133,7 @@ function SiteHeader() {
   const scrolled = useScrolled();
   const overlay = theme.layout.overlayHeader && heroPage && !scrolled;
   const items = navItems(t);
+  const logo = mediaById(site, design.logo);
   return (
     <header
       className={cn(
@@ -135,10 +146,22 @@ function SiteHeader() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:h-20 sm:px-8">
         <Link
           to="/stay"
-          className="font-display truncate text-xl font-medium tracking-wide sm:text-2xl"
+          className="flex min-w-0 items-center gap-3"
           aria-label={`${site.business.name} — ${t.nav.home}`}
         >
-          {site.business.name}
+          {/* D2: הלוגו (התמונה דקורטיבית — שם העסק בתווית הקישור) */}
+          {logo?.url && (
+            <img
+              src={logo.url}
+              alt=""
+              className="h-10 w-auto max-w-[11rem] shrink-0 object-contain sm:h-12"
+            />
+          )}
+          {(!logo?.url || design.logoName) && (
+            <span className="font-display truncate text-xl font-medium tracking-wide sm:text-2xl">
+              {site.business.name}
+            </span>
+          )}
         </Link>
         <nav aria-label={t.nav.menu} className="hidden items-center gap-7 text-sm lg:flex">
           {items.map((i) => (
@@ -197,7 +220,7 @@ function SiteHeader() {
             <SheetContent
               side="right"
               className="w-[85vw] max-w-sm border-s-0 bg-background p-0"
-              style={themeStyle(theme, design.colors[theme.id])}
+              style={themeStyle(theme, design.colors[theme.id], design.fonts?.[theme.id])}
               dir={t.dir}
             >
               <SheetTitle className="font-display border-b border-border px-6 py-5 text-xl font-medium">

@@ -3,10 +3,10 @@ import type { PublicAmenity, PublicMedia, PublicSite, PublicUnit } from "../../t
 
 const isImage = (m: PublicMedia) => m.kind === "image" && !!m.url;
 
-/** הפתיח: גלריית האתר → המתחם הראשון → היחידה הראשונה (הראשית קודם) */
-export function heroImage(site: PublicSite): PublicMedia | null {
+/** הפתיח: גלריית האתר → המתחם הראשון → היחידה הראשונה (הראשית קודם). exclude — הלוגו (D2) */
+export function heroImage(site: PublicSite, exclude?: string): PublicMedia | null {
   return (
-    site.gallery.find(isImage) ??
+    site.gallery.find((m) => isImage(m) && m.id !== exclude) ??
     site.properties.flatMap((p) => p.media).find(isImage) ??
     site.units.flatMap((u) => u.media).find(isImage) ??
     null
@@ -32,10 +32,10 @@ export function unitMedia(unit: PublicUnit, site: PublicSite): PublicMedia[] {
   return dedupe([...unit.media, ...members.flatMap((u) => u.media), ...(property?.media ?? [])]);
 }
 
-/** הגלריה של עמוד הבית: האתר, המתחמים, היחידות */
-export function siteGallery(site: PublicSite): PublicMedia[] {
+/** הגלריה של עמוד הבית: האתר, המתחמים, היחידות. exclude — הלוגו (D2: לא מוצג כתמונה בגלריה) */
+export function siteGallery(site: PublicSite, exclude?: string): PublicMedia[] {
   return dedupe([
-    ...site.gallery,
+    ...site.gallery.filter((m) => m.id !== exclude),
     ...site.properties.flatMap((p) => p.media),
     ...site.units.flatMap((u) => u.media),
   ]);

@@ -26,9 +26,9 @@ function tiles(n: number): string[] {
 
 export function Gallery({ section }: { section?: Section | undefined }) {
   const t = useCopy();
-  const { site } = useSite();
+  const { site, design } = useSite();
   const c = section?.content ?? {};
-  const all = siteGallery(site);
+  const all = siteGallery(site, design.logo);
   // נבחרו תמונות בעורך — רק הן, בסדר שנבחר
   const picked = c.images?.length
     ? c.images
@@ -41,6 +41,7 @@ export function Gallery({ section }: { section?: Section | undefined }) {
     <section id="gallery" aria-labelledby="gallery-title" className="scroll-mt-24 bg-background">
       <div className="mx-auto max-w-7xl px-4 py-20 sm:px-8 sm:py-28">
         <SectionHeading
+          section={section?.id}
           id="gallery-title"
           eyebrow={c.eyebrow ?? t.gallery.title}
           title={c.title ?? t.gallery.subtitle}

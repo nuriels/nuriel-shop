@@ -12,6 +12,7 @@ import { useCopy } from "../copy";
 import { firstSentence } from "../lib/format";
 import { heroImage, mediaById } from "../lib/media";
 import { useSite } from "../lib/site-context";
+import { Editable } from "../components/Editable";
 
 const SHADE: Record<string, string> = {
   light: "opacity-60",
@@ -21,9 +22,9 @@ const SHADE: Record<string, string> = {
 
 export function Hero({ section }: { section?: Section | undefined }) {
   const t = useCopy();
-  const { site, theme } = useSite();
+  const { site, theme, design } = useSite();
   const c = section?.content ?? {};
-  const image = mediaById(site, c.image) ?? heroImage(site);
+  const image = mediaById(site, c.image) ?? heroImage(site, design.logo);
   const property = site.properties[0];
   const kind = property?.property_type ? t.propertyTypes[property.property_type] : "";
   const area = site.business.address?.split(",").slice(-1)[0]?.trim() || property?.address || "";
@@ -41,13 +42,17 @@ export function Hero({ section }: { section?: Section | undefined }) {
       <section className="bg-[var(--site-sand)] pt-20 sm:pt-24">
         <div className="mx-auto grid max-w-7xl items-center gap-8 px-4 py-10 sm:px-8 lg:grid-cols-2 lg:gap-14 lg:py-16">
           <div className="order-2 lg:order-1">
-            {eyebrow && <p className="mb-4 text-sm text-[var(--site-gold-ink)]">{eyebrow}</p>}
+            {eyebrow && (
+              <p className="mb-4 text-sm text-[var(--site-gold-ink)]">
+                <Editable section={section?.id} field="eyebrow" value={eyebrow} />
+              </p>
+            )}
             <h1 className="font-display text-4xl leading-tight text-balance sm:text-6xl">
-              {title}
+              <Editable section={section?.id} field="title" value={title} />
             </h1>
             {subtitle && (
               <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">
-                {subtitle}
+                <Editable section={section?.id} field="subtitle" value={subtitle} />
               </p>
             )}
             <div className="mt-8">{actions(false)}</div>
@@ -69,14 +74,20 @@ export function Hero({ section }: { section?: Section | undefined }) {
         <div className="mx-auto max-w-7xl px-4 sm:px-8">
           <div className="grid gap-6 border-b border-foreground pb-8 lg:grid-cols-[1.4fr_1fr] lg:items-end">
             <div>
-              {eyebrow && <p className="mb-3 text-sm text-[var(--site-gold-ink)]">{eyebrow}</p>}
+              {eyebrow && (
+                <p className="mb-3 text-sm text-[var(--site-gold-ink)]">
+                  <Editable section={section?.id} field="eyebrow" value={eyebrow} />
+                </p>
+              )}
               <h1 className="font-display text-5xl leading-[0.95] text-balance sm:text-7xl lg:text-8xl">
-                {title}
+                <Editable section={section?.id} field="title" value={title} />
               </h1>
             </div>
             <div>
               {subtitle && (
-                <p className="text-lg leading-relaxed text-muted-foreground">{subtitle}</p>
+                <p className="text-lg leading-relaxed text-muted-foreground">
+                  <Editable section={section?.id} field="subtitle" value={subtitle} />
+                </p>
               )}
               <div className="mt-6">{actions(false)}</div>
             </div>
@@ -122,14 +133,18 @@ export function Hero({ section }: { section?: Section | undefined }) {
           centered ? "max-w-3xl pb-20" : "pb-14 sm:pb-20",
         )}
       >
-        {eyebrow && <p className="mb-4 text-xs font-medium text-white/85 sm:text-sm">{eyebrow}</p>}
+        {eyebrow && (
+          <p className="mb-4 text-xs font-medium text-white/85 sm:text-sm">
+            <Editable section={section?.id} field="eyebrow" value={eyebrow} />
+          </p>
+        )}
         <h1
           className={cn(
             "font-display text-5xl leading-[1.05] text-balance sm:text-7xl lg:text-8xl",
             !centered && "max-w-4xl",
           )}
         >
-          {title}
+          <Editable section={section?.id} field="title" value={title} />
         </h1>
         {subtitle && (
           <p
@@ -138,7 +153,7 @@ export function Hero({ section }: { section?: Section | undefined }) {
               centered ? "mx-auto max-w-xl" : "max-w-xl",
             )}
           >
-            {subtitle}
+            <Editable section={section?.id} field="subtitle" value={subtitle} />
           </p>
         )}
         <div className={cn("mt-9", centered && "flex justify-center")}>{actions(true)}</div>

@@ -10,6 +10,7 @@ import { SectionHeading } from "../components/SectionHeading";
 import { useCopy } from "../copy";
 import { mediaById } from "../lib/media";
 import { useSite } from "../lib/site-context";
+import { Editable } from "../components/Editable";
 
 export function TextSection({ section }: { section: Section }) {
   const { site } = useSite();
@@ -26,14 +27,18 @@ export function TextSection({ section }: { section: Section }) {
       >
         <div className={cn(image && c.imageSide === "start" && "lg:order-2")}>
           {c.eyebrow && (
-            <p className="mb-3 text-xs font-medium text-[var(--site-gold-ink)]">{c.eyebrow}</p>
+            <p className="mb-3 text-xs font-medium text-[var(--site-gold-ink)]">
+              <Editable section={section.id} field="eyebrow" value={c.eyebrow} />
+            </p>
           )}
           {c.title && (
-            <h2 className="font-display text-3xl leading-tight sm:text-4xl">{c.title}</h2>
+            <h2 className="font-display text-3xl leading-tight sm:text-4xl">
+              <Editable section={section.id} field="title" value={c.title} />
+            </h2>
           )}
           {c.body && (
             <p className="mt-6 text-lg leading-loose whitespace-pre-line text-foreground/85">
-              {c.body}
+              <Editable section={section.id} field="body" value={c.body} multiline />
             </p>
           )}
         </div>
@@ -58,7 +63,12 @@ export function Highlights({ section }: { section: Section }) {
     <section id={section.id} className="scroll-mt-24 bg-[var(--site-sand)]">
       <div className="mx-auto max-w-7xl px-4 py-20 sm:px-8 sm:py-24">
         {(c.title || c.eyebrow) && (
-          <SectionHeading eyebrow={c.eyebrow} title={c.title ?? ""} subtitle={c.subtitle} />
+          <SectionHeading
+            section={section.id}
+            eyebrow={c.eyebrow}
+            title={c.title ?? ""}
+            subtitle={c.subtitle}
+          />
         )}
         <ul
           className={cn(
@@ -88,6 +98,7 @@ export function Faq({ section }: { section: Section }) {
     <section id={section.id} className="scroll-mt-24 bg-background">
       <div className="mx-auto max-w-3xl px-4 py-20 sm:px-8 sm:py-24">
         <SectionHeading
+          section={section.id}
           eyebrow={c.eyebrow}
           title={c.title ?? "שאלות נפוצות"}
           subtitle={c.subtitle}
@@ -124,9 +135,13 @@ export function CtaBanner({ section }: { section: Section }) {
     >
       <div className="mx-auto max-w-4xl px-4 py-20 text-center sm:px-8 sm:py-24">
         <h2 className="font-display text-3xl leading-tight sm:text-5xl">
-          {c.title ?? site.business.name}
+          <Editable section={section.id} field="title" value={c.title ?? site.business.name} />
         </h2>
-        {c.body && <p className="mx-auto mt-5 max-w-2xl text-lg opacity-80">{c.body}</p>}
+        {c.body && (
+          <p className="mx-auto mt-5 max-w-2xl text-lg opacity-80">
+            <Editable section={section.id} field="body" value={c.body} multiline />
+          </p>
+        )}
         <div className="mt-9">
           {site.booking_open ? (
             <Link

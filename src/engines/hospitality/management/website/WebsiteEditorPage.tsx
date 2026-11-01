@@ -1,6 +1,7 @@
 // "עיצוב האתר" (Stage 5b): עורך האתר של בעל העסק.
 //   • מקטעים: סדר (גרירה או חצים), הסתרה, עריכת תוכן ותמונות, הוספה / מחיקה של מקטעים משלכם;
-//   • עיצוב: ערכה (יוקרה / טבע / מודרני / רומנטי) וצבעים לכל ערכה, עם שמירה על קריאות;
+//   • עיצוב: ערכה (יוקרה / טבע / מודרני / רומנטי), צבעים וגופנים לכל ערכה, לוגו (D2);
+//   • עריכה ישירה בתצוגה המקדימה (D2): לוחצים על טקסט ומקלידים; לחיצה על מקטע פותחת אותו כאן;
 //   • פרסום: שינויים שלא פורסמו, פרסום, גרסאות קודמות ושחזור.
 // כל שינוי מוצג מיד בתצוגה המקדימה (אותו רנדרר כמו האתר) ונשמר אוטומטית לטיוטה (revision —
 // עריכה מקבילה ממקום אחר מזוהה). הגולשים רואים רק מה שפורסם.
@@ -50,18 +51,28 @@ import {
   type SiteEditorView,
 } from "../../api/site-editor.functions";
 import type { PublicSite } from "../../types/website";
-import { PREVIEW_DESIGN_MESSAGE, PREVIEW_READY_MESSAGE } from "../../website/design/preview";
+import {
+  PREVIEW_DESIGN_MESSAGE,
+  PREVIEW_EDIT_MESSAGE,
+  PREVIEW_READY_MESSAGE,
+  PREVIEW_RELOAD_MESSAGE,
+  PREVIEW_SELECT_MESSAGE,
+  isInlineField,
+} from "../../website/design/preview";
 import {
   MAX_CUSTOM_SECTIONS,
+  defaultDesign,
   isCore,
   normalizeDesign,
   type CustomSectionType,
   type SiteDesign,
+  type ThemeId,
 } from "../../website/design/schema";
 import { THEME_LIST, THEMES, themeColors } from "../../website/theme/themes";
 import { errorText } from "../catalog/refresh";
 import { formatDateTime } from "../lib/format";
 import { manageKeys } from "../lib/query-keys";
+import { FontField, LogoField } from "./BrandFields";
 import { SectionFields } from "./SectionFields";
 import {
   CUSTOM_TYPES,
@@ -96,6 +107,8 @@ export function WebsiteEditorPage() {
       </p>
     );
   const d = editor.data;
+  // D2: אתר שעוד לא עוצב (ולא נבחרה לו ערכה בפתיחת העסק) — קודם בוחרים סגנון
+  if (!d.draft && !d.published) return <ThemeWelcome />;
   const initial = normalizeDesign(
     d.draft?.document ?? d.published?.document ?? null,
     d.draft?.theme ?? d.published?.theme,
@@ -142,14 +155,43 @@ function Editor({
       ),
     [],
   );
+  // הלשונית והמקטע הפתוח (לחיצה על מקטע בתצוגה המקדימה פותחת אותו כאן)
+  const [tab, setTab] = useState("sections");
+  const [openSection, setOpenSection] = useState<string | null>(null);
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin || e.source !== frame.current?.contentWindow) return;
-      if ((e.data as { type?: string } | null)?.type === PREVIEW_READY_MESSAGE) send(design);
+      const data = e.data as { type?: string; section?: unknown; field?: unknown; value?: unknown };
+      if (data?.type === PREVIEW_READY_MESSAGE) send(design);
+      // D2: טקסט שנערך בתצוגה המקדימה → אותו עדכון כמו מהשדות כאן (ואותה בדיקה)
+      if (
+        data?.type === PREVIEW_EDIT_MESSAGE &&
+        typeof data.section === "string" &&
+        isInlineField(data.field) &&
+        typeof data.value === "string"
+      ) {
+        const { section, field, value } = data;
+        setDesign((d) =>
+          d.sections.some((x) => x.id === section)
+            ? normalizeDesign(updateContent(d, section, { [field]: value.slice(0, 5000) }))
+            : d,
+        );
+      }
+      if (data?.type === PREVIEW_SELECT_MESSAGE && typeof data.section === "string") {
+        setTab("sections");
+        setOpenSection(data.section);
+      }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [design, send]);
+  const reloadPreview = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: [...KEY, "site"] });
+    frame.current?.contentWindow?.postMessage(
+      { type: PREVIEW_RELOAD_MESSAGE },
+      window.location.origin,
+    );
+  }, [qc]);
   useEffect(() => send(design), [design, send]);
 
   // שמירה אוטומטית לטיוטה
@@ -201,17 +243,28 @@ function Editor({
 
       <div className="grid gap-4 lg:grid-cols-[24rem_minmax(0,1fr)]">
         <div className="min-w-0 rounded-lg border bg-card">
-          <Tabs defaultValue="sections" dir="rtl">
+          <Tabs value={tab} onValueChange={setTab} dir="rtl">
             <TabsList className="m-2 grid grid-cols-3">
               <TabsTrigger value="sections">מקטעים</TabsTrigger>
               <TabsTrigger value="design">עיצוב</TabsTrigger>
               <TabsTrigger value="publish">פרסום</TabsTrigger>
             </TabsList>
             <TabsContent value="sections" className="p-3 pt-0">
-              <SectionsPanel design={design} site={site} onChange={setDesign} />
+              <SectionsPanel
+                design={design}
+                site={site}
+                onChange={setDesign}
+                open={openSection}
+                setOpen={setOpenSection}
+              />
             </TabsContent>
             <TabsContent value="design" className="p-3 pt-0">
-              <DesignPanel design={design} onChange={setDesign} />
+              <DesignPanel
+                design={design}
+                site={site}
+                onChange={setDesign}
+                onMediaAdded={reloadPreview}
+              />
             </TabsContent>
             <TabsContent value="publish" className="p-3 pt-0">
               <PublishPanel
@@ -278,6 +331,64 @@ function Editor({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** בחירת הסגנון הראשונה (D2): ערכה → טיוטה ראשונה עם כל המקטעים, ומשם העורך הרגיל */
+function ThemeWelcome() {
+  const qc = useQueryClient();
+  const pick = useMutation({
+    mutationFn: (theme: ThemeId) =>
+      hospitalitySiteDraftSave({
+        data: { revision: 0, document: JSON.stringify(defaultDesign(theme)) },
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
+    onError: (e) => toast.error(errorText(e)),
+  });
+  return (
+    <div className="mx-auto flex max-w-4xl flex-col gap-6 py-6">
+      <header>
+        <h1 className="text-2xl font-bold">איזה סגנון מתאים לעסק שלכם?</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          בוחרים ערכה להתחלה — התוכן, התמונות והמחירים כבר מגיעים מנתוני העסק. אפשר להחליף ערכה,
+          צבעים וגופנים בכל זמן, בלי לאבד כלום.
+        </p>
+      </header>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {THEME_LIST.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            disabled={pick.isPending}
+            onClick={() => pick.mutate(t.id)}
+            className="flex flex-col overflow-hidden rounded-lg border text-start ring-offset-2 transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
+          >
+            <span
+              className="flex h-28"
+              style={{ background: t.palette.background }}
+              aria-hidden="true"
+            >
+              <span className="m-3 flex-1 rounded" style={{ background: t.palette.sand }} />
+              <span className="my-3 w-10" style={{ background: t.palette.primary }} />
+              <span
+                className="m-3 ms-2 w-6 rounded-full"
+                style={{ background: t.palette.accent }}
+              />
+            </span>
+            <span className="flex flex-col gap-1 p-4">
+              <span className="text-lg font-semibold">{t.label}</span>
+              <span className="text-sm text-muted-foreground">{t.description}</span>
+              <span className="text-xs text-muted-foreground">מתאים ל: {t.suits.join(", ")}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      {pick.isPending && (
+        <p role="status" className="text-sm text-muted-foreground">
+          מכינים את האתר…
+        </p>
+      )}
     </div>
   );
 }
@@ -387,24 +498,33 @@ function SectionsPanel({
   design,
   site,
   onChange,
+  open,
+  setOpen,
 }: {
   design: SiteDesign;
   site: PublicSite;
   onChange: (d: SiteDesign) => void;
+  open: string | null;
+  setOpen: (id: string | null) => void;
 }) {
-  const [open, setOpen] = useState<string | null>(null);
+  // מקטע שנפתח מהתצוגה המקדימה — גלילה אליו ברשימה
+  useEffect(() => {
+    if (open) document.getElementById(`section-item-${open}`)?.scrollIntoView({ block: "nearest" });
+  }, [open]);
   const [drag, setDrag] = useState<string | null>(null);
   const [remove, setRemove] = useState<string | null>(null);
   const count = customCount(design);
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-muted-foreground">
-        גוררים (או בחצים) כדי לשנות את הסדר; העין מסתירה מקטע בלי למחוק אותו.
+        גוררים (או בחצים) כדי לשנות את הסדר; העין מסתירה מקטע בלי למחוק אותו. אפשר גם ללחוץ על כותרת
+        או טקסט בתצוגה המקדימה ולערוך אותם שם ישירות.
       </p>
       <ol className="flex flex-col gap-2" aria-label="מקטעי עמוד הבית">
         {design.sections.map((s, i) => (
           <li
             key={s.id}
+            id={`section-item-${s.id}`}
             draggable
             onDragStart={() => setDrag(s.id)}
             onDragOver={(e) => e.preventDefault()}
@@ -414,9 +534,10 @@ function SectionsPanel({
             }}
             onDragEnd={() => setDrag(null)}
             className={cn(
-              "rounded-md border bg-background",
+              "scroll-mt-2 rounded-md border bg-background",
               drag === s.id && "opacity-50",
               s.hidden && "bg-muted/50",
+              open === s.id && "ring-2 ring-primary/40",
             )}
           >
             <div className="flex items-center gap-1 p-1.5">
@@ -589,10 +710,14 @@ function IconButton({
 
 function DesignPanel({
   design,
+  site,
   onChange,
+  onMediaAdded,
 }: {
   design: SiteDesign;
+  site: PublicSite;
   onChange: (d: SiteDesign) => void;
+  onMediaAdded: () => void;
 }) {
   const theme = THEMES[design.theme];
   const overrides = useMemo(() => design.colors[design.theme] ?? {}, [design.colors, design.theme]);
@@ -606,6 +731,7 @@ function DesignPanel({
   };
   return (
     <div className="flex flex-col gap-5">
+      <LogoField design={design} site={site} onChange={onChange} onMediaAdded={onMediaAdded} />
       <fieldset>
         <legend className="mb-2 text-sm font-medium">ערכת עיצוב</legend>
         <p className="mb-3 text-xs text-muted-foreground">
@@ -674,6 +800,8 @@ function DesignPanel({
           </p>
         )}
       </fieldset>
+
+      <FontField design={design} onChange={onChange} />
     </div>
   );
 }

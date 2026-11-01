@@ -4,8 +4,9 @@
 // החלפת ערכה לא נוגעת בתוכן (מסמך העיצוב), והצבעים שהעסק בחר נשמרים לכל ערכה בנפרד.
 // premium — לפי החבילה (Stage 11); כולן חינם בהשקה.
 import type { CSSProperties } from "react";
-import { isHexColor, type ColorOverrides, type ThemeId } from "../design/schema";
+import { isHexColor, type ColorOverrides, type FontPairId, type ThemeId } from "../design/schema";
 import { ensureContrast, mix, readableOn } from "./color";
+import { fontVars } from "./fonts";
 
 export type { ThemeId };
 
@@ -210,7 +211,12 @@ export function themeColors(theme: SiteTheme, overrides?: ColorOverrides) {
   };
 }
 
-export function themeStyle(theme: SiteTheme, overrides?: ColorOverrides): CSSProperties {
+/** משתני ה-CSS של האתר: הערכה, הצבעים שהעסק בחר, וזוג הגופנים שבחר (D2) */
+export function themeStyle(
+  theme: SiteTheme,
+  overrides?: ColorOverrides,
+  font?: FontPairId,
+): CSSProperties {
   const c = themeColors(theme, overrides);
   return {
     ...theme.vars,
@@ -232,5 +238,6 @@ export function themeStyle(theme: SiteTheme, overrides?: ColorOverrides): CSSPro
     "--site-gold": c.accentOnDeep,
     "--site-gold-ink": c.accentInk,
     "--font-display": theme.vars["--site-display-font"],
+    ...fontVars(font),
   } as CSSProperties;
 }

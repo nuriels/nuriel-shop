@@ -6,6 +6,7 @@ import { useCopy } from "../copy";
 import { useSite } from "../lib/site-context";
 import type { Section } from "../design/schema";
 import { uniqueAmenities } from "../lib/media";
+import { Editable } from "../components/Editable";
 
 const ORDER = ["room", "kitchen", "pool_spa", "outdoor", "services", "accessibility", "other"];
 
@@ -27,13 +28,17 @@ export function Amenities({ section }: { section?: Section | undefined }) {
       <div className="mx-auto max-w-7xl px-4 py-20 sm:px-8 sm:py-28">
         <div className="mx-auto max-w-2xl text-center">
           <p className="mb-3 text-xs font-medium tracking-[0.06em] text-[var(--site-gold)]">
-            {c.eyebrow ?? t.amenities.title}
+            <Editable
+              section={section?.id}
+              field="eyebrow"
+              value={c.eyebrow ?? t.amenities.title}
+            />
           </p>
           <h2
             id="amenities-title"
             className="font-display text-3xl leading-tight font-medium sm:text-4xl"
           >
-            {c.title ?? t.amenities.subtitle}
+            <Editable section={section?.id} field="title" value={c.title ?? t.amenities.subtitle} />
           </h2>
           <span aria-hidden="true" className="mx-auto mt-6 block h-px w-14 bg-[var(--site-gold)]" />
         </div>
