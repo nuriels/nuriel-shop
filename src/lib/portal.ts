@@ -264,6 +264,78 @@ export const PORTAL_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"] as co
 export const PORTAL_LOGO_MAX_BYTES = 2 * 1024 * 1024;
 
 // ------------------------------------------------------------
+// אתר לצימר מהשער (שלב E2): החבילות המפורסמות + בקשה (ההקמה בתשלום — מנהל הפלטפורמה מקים).
+// אותם כללים כמו hospitality.site_request_submit במסד.
+// ------------------------------------------------------------
+
+export type PortalZimmerPlan = {
+  code: string;
+  name: string;
+  tagline: string;
+  price_monthly: number | null;
+  setup_fee: number | null;
+  max_units: number | null;
+  highlights: string[];
+};
+
+export type ZimmerRequest = {
+  business_name: string;
+  phone: string;
+  /** כמה יחידות (חדרים / בקתות) — לא חובה */
+  units: number | null;
+  /** החבילה המבוקשת; ריק = "עוד לא יודע" */
+  plan_code: string;
+  area: string;
+  message: string;
+};
+
+export type ZimmerRequestField = "business_name" | "phone" | "units" | "area" | "message";
+
+export const ZIMMER_AREA_MAX = 80;
+export const ZIMMER_MESSAGE_MAX = 1000;
+
+export function cleanZimmerRequest(input: unknown): ZimmerRequest {
+  const raw = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const unitsText = String(raw["units"] ?? "").trim();
+  return {
+    business_name: oneLine(raw["business_name"]),
+    phone: cleanBusinessPhone(raw["phone"]),
+    // ריק = לא צוין; טקסט שאינו מספר → NaN, והבדיקה מסמנת אותו
+    units: unitsText === "" ? null : Number(unitsText),
+    plan_code: String(raw["plan_code"] ?? "").trim(),
+    area: oneLine(raw["area"]),
+    message: String(raw["message"] ?? "").trim(),
+  };
+}
+
+export function zimmerRequestProblems(
+  request: ZimmerRequest,
+): Partial<Record<ZimmerRequestField, string>> {
+  const problems: Partial<Record<ZimmerRequestField, string>> = {};
+  if (request.business_name.length < 2 || request.business_name.length > BUSINESS_NAME_MAX) {
+    problems.business_name = `שם העסק — 2 עד ${BUSINESS_NAME_MAX} תווים`;
+  }
+  if (!/^\+?[0-9]{9,15}$/.test(request.phone)) {
+    problems.phone = "טלפון — 9 עד 15 ספרות, למשל 050-1234567";
+  }
+  if (
+    request.units !== null &&
+    (!Number.isInteger(request.units) || request.units < 1 || request.units > 500)
+  ) {
+    problems.units = "מספר היחידות — 1 עד 500";
+  }
+  if (request.area.length > ZIMMER_AREA_MAX) problems.area = `אזור — עד ${ZIMMER_AREA_MAX} תווים`;
+  if (request.message.length > ZIMMER_MESSAGE_MAX) {
+    problems.message = `הערה — עד ${ZIMMER_MESSAGE_MAX.toLocaleString("he-IL")} תווים`;
+  }
+  return problems;
+}
+
+/** "200 ₪" — בלי אגורות כשאין */
+export const shekels = (value: number | null | undefined): string | null =>
+  value === null || value === undefined ? null : `${Number(value).toLocaleString("he-IL")} ₪`;
+
+// ------------------------------------------------------------
 // החשבון והחנויות (מהמסד: portal_account / portal_store_state)
 // ------------------------------------------------------------
 

@@ -10,6 +10,7 @@ import type {
   PlanOption,
   PlatformFlags,
   PlatformHospitalityView,
+  SiteRequest,
 } from "../types/platform-admin";
 import {
   parseOpenSite,
@@ -17,6 +18,7 @@ import {
   parseSetFlag,
   parseSetOwner,
   parseSetPlan,
+  parseSiteRequestSet,
 } from "../validation/platform-admin";
 
 type RpcOwner = { status: "added" | "already_owner" | "needs_account"; user_id?: string };
@@ -169,4 +171,23 @@ export const hospitalityPlatformSavePlan = createServerFn({ method: "POST" })
     const { platformRpc } = await import("../server/platform-admin.server");
     const { code, ...plan } = data;
     return platformRpc<PlanOption>("admin_save_plan", { _code: code, _plan: plan });
+  });
+
+/** שלב E2: הבקשות לאתר צימר מהשער (חדשות קודם) */
+export const hospitalityPlatformSiteRequests = createServerFn({ method: "GET" }).handler(
+  async (): Promise<SiteRequest[]> => {
+    const { platformRpc } = await import("../server/platform-admin.server");
+    return platformRpc<SiteRequest[]>("admin_site_requests", {});
+  },
+);
+
+export const hospitalityPlatformSiteRequestSet = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseSiteRequestSet(input))
+  .handler(async ({ data }): Promise<SiteRequest> => {
+    const { platformRpc } = await import("../server/platform-admin.server");
+    return platformRpc<SiteRequest>("admin_site_request_set", {
+      _id: data.id,
+      _status: data.status,
+      _note: data.note,
+    });
   });

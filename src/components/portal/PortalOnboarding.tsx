@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowLeft,
   ArrowRight,
+  BedDouble,
   Check,
   CheckCircle2,
   ExternalLink,
@@ -41,6 +42,8 @@ import {
   requestPortalCode,
   verifyPortalCode,
   portalFromGoogle,
+  getPortalZimmerPlans,
+  submitZimmerRequest,
   uploadPortalStoreLogo,
 } from "@/lib/portal.functions";
 import {
@@ -51,6 +54,7 @@ import {
   cleanSlugInput,
   PORTAL_BUSINESS_TYPES,
   PORTAL_LOGO_MAX_BYTES,
+  shekels,
   slugFormatProblem,
   STORE_NAME_MAX,
   storeNameProblem,
@@ -59,13 +63,21 @@ import {
   type PortalBusinessDetails,
   type PortalBusinessField,
   type PortalStore,
+  type PortalZimmerPlan,
+  ZIMMER_AREA_MAX,
+  ZIMMER_MESSAGE_MAX,
+  cleanZimmerRequest,
+  zimmerRequestProblems,
+  type ZimmerRequestField,
 } from "@/lib/portal";
 import { compressLogoImage } from "@/lib/image";
 
 /**
  * תהליך הכניסה בשער הפלטפורמה (חלק 12), בחלון אחד:
  *   אימייל → קוד בן 6 ספרות → החנויות שלכם (לחיצה = כניסה לניהול)
- *                            ↘ אין חנות: "צור את החנות שלך" (שם + כתובת)
+ *                            ↘ אתר חדש: מה מקימים? (שלב E2)
+ *                              • אתר לצימר → החבילות + בקשה (ההקמה בתשלום — אנחנו מקימים)
+ *                              • חנות אונליין → "צור את החנות שלך" (שם + כתובת)
  *                              → פרטי העסק (שלב E1: שם רשמי, ח.פ / ע.מ, סוג עוסק, מע"מ,
  *                                טלפון לשירות לקוחות; כתובת ולוגו — לא חובה)
  *                              → מכינים את הכתובת (SSL) → ישר לניהול החנות.
@@ -73,7 +85,17 @@ import { compressLogoImage } from "@/lib/image";
  * לא מחייב קוד חדש; הוא פג אחרי שעה.
  */
 
-type Step = "email" | "code" | "loading" | "stores" | "create" | "business" | "preparing";
+type Step =
+  | "email"
+  | "code"
+  | "loading"
+  | "stores"
+  | "product"
+  | "zimmer"
+  | "zimmer-sent"
+  | "create"
+  | "business"
+  | "preparing";
 
 /** מה שנבחר בשלב "צור את החנות שלך" — הפתיחה עצמה רק אחרי פרטי העסק */
 type StoreDraft = { name: string; slug: string };
@@ -138,6 +160,8 @@ export function PortalOnboarding({
   const [account, setAccount] = useState<PortalAccount | null>(null);
   const [newStore, setNewStore] = useState<PortalStore | null>(null);
   const [draft, setDraft] = useState<StoreDraft | null>(null);
+  // שלב E2: החבילות לצימרים (null = עוד נטען; ריק = רק חנות אונליין)
+  const [zimmerPlans, setZimmerPlans] = useState<PortalZimmerPlan[] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // בדרך לאתר החנות (קוד כניסה נוצר, הדפדפן עובר) — לא סוגרים את החלון
   const [leaving, setLeaving] = useState(false);
@@ -155,7 +179,7 @@ export function PortalOnboarding({
         .then((result) => {
           setAccount(result.account);
           setStep(
-            result.account.stores.length > 0 || !result.account.canCreate ? "stores" : "create",
+            result.account.stores.length > 0 || !result.account.canCreate ? "stores" : "product",
           );
         })
         .catch((thrown: unknown) => {
@@ -178,6 +202,15 @@ export function PortalOnboarding({
     setNotice(null);
     setStep("email");
   }, []);
+
+  // החבילות לצימרים — פעם אחת, בפתיחה הראשונה של החלון
+  const plansFn = useServerFn(getPortalZimmerPlans);
+  useEffect(() => {
+    if (!open || zimmerPlans !== null) return;
+    plansFn()
+      .then(setZimmerPlans)
+      .catch(() => setZimmerPlans([]));
+  }, [open, zimmerPlans, plansFn]);
 
   // פתיחת החלון: אימות קודם בלשונית הזו → ישר לחנויות
   useEffect(() => {
@@ -210,7 +243,7 @@ export function PortalOnboarding({
     setSession(next);
     setEmail(next.email);
     setAccount(nextAccount);
-    setStep(nextAccount.stores.length > 0 || !nextAccount.canCreate ? "stores" : "create");
+    setStep(nextAccount.stores.length > 0 || !nextAccount.canCreate ? "stores" : "product");
   };
 
   // חזרה מ-Google (?portal_google=1): Google אימת את המייל — מקבלים אסימון
@@ -266,6 +299,18 @@ export function PortalOnboarding({
           ? "בחרו חנות כדי להיכנס ישר לפאנל הניהול שלה."
           : "כתובת המייל הזו כבר משויכת לחנות אחרת במערכת.",
     },
+    product: {
+      title: "מה מקימים?",
+      description: "חנות אונליין — פותחים לבד, תוך דקה. אתר לצימר — אנחנו מקימים בשבילכם.",
+    },
+    zimmer: {
+      title: "אתר לצימר",
+      description: "בוחרים חבילה ומשאירים פרטים — נחזור אליכם לתיאום ההקמה.",
+    },
+    "zimmer-sent": {
+      title: "הבקשה נשלחה",
+      description: "תודה! נחזור אליכם בהקדם.",
+    },
     create: {
       title: "צור את החנות שלך",
       description: "שם לחנות וכתובת באנגלית. בשלב הבא — פרטי העסק, ואז החנות באוויר.",
@@ -299,7 +344,9 @@ export function PortalOnboarding({
         <div className="bg-gradient-to-l from-primary to-primary/85 px-6 pb-5 pt-7 text-primary-foreground sm:rounded-t-2xl">
           <DialogHeader className="space-y-1.5 text-right sm:text-right">
             <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-              {step === "create" || step === "business" ? (
+              {step === "zimmer" || step === "zimmer-sent" ? (
+                <BedDouble className="size-5 text-accent" aria-hidden="true" />
+              ) : step === "create" || step === "business" || step === "product" ? (
                 <Sparkles className="size-5 text-accent" aria-hidden="true" />
               ) : step === "stores" ? (
                 <Store className="size-5 text-accent" aria-hidden="true" />
@@ -346,18 +393,40 @@ export function PortalOnboarding({
               session={session}
               account={account}
               onSignOut={signOut}
-              onCreate={() => setStep("create")}
+              onCreate={() => setStep("product")}
               onLeaving={setLeaving}
             />
           )}
+
+          {step === "product" && session && account && (
+            <ProductStep
+              plans={zimmerPlans}
+              canCreateStore={account.canCreate}
+              onStore={() => setStep("create")}
+              onZimmer={() => setStep("zimmer")}
+              onBack={account.stores.length > 0 ? () => setStep("stores") : null}
+            />
+          )}
+
+          {step === "zimmer" && session && zimmerPlans && zimmerPlans.length > 0 && (
+            <ZimmerStep
+              session={session}
+              plans={zimmerPlans}
+              onBack={() => setStep("product")}
+              onSent={() => setStep("zimmer-sent")}
+            />
+          )}
+
+          {step === "zimmer-sent" && <ZimmerSentStep onClose={() => onOpenChange(false)} />}
 
           {step === "create" && session && account && (
             <CreateStep
               session={session}
               baseDomain={baseDomain}
               initial={draft}
-              canGoBack={account.stores.length > 0}
-              onBack={() => setStep("stores")}
+              canGoBack={account.stores.length > 0 || (zimmerPlans?.length ?? 0) > 0}
+              backLabel={(zimmerPlans?.length ?? 0) > 0 ? "חזרה לבחירה" : "לחנויות שלי"}
+              onBack={() => setStep((zimmerPlans?.length ?? 0) > 0 ? "product" : "stores")}
               onSignOut={signOut}
               onNext={(next) => {
                 setDraft(next);
@@ -399,10 +468,14 @@ function StepDots({ step }: { step: Step }) {
   const index =
     step === "email" || step === "code" || step === "loading"
       ? 0
-      : step === "stores" || step === "create" || step === "business"
+      : step === "stores" ||
+          step === "product" ||
+          step === "zimmer" ||
+          step === "create" ||
+          step === "business"
         ? 1
         : 2;
-  const labels = ["אימות מייל", "החנות שלך", "פאנל הניהול"];
+  const labels = ["אימות מייל", "האתר שלך", "פאנל הניהול"];
   return (
     <ol className="mt-4 flex items-center gap-2 text-[11px] font-medium" aria-label="שלבים">
       {labels.map((label, i) => (
@@ -817,11 +890,331 @@ type SlugCheck =
   | { state: "ok" }
   | { state: "bad"; message: string; suggestion: string | null };
 
+// ============================================================
+// שלב E2: מה מקימים — חנות אונליין (פותחים לבד) או אתר לצימר (בקשה; ההקמה בתשלום)
+// ============================================================
+
+function ProductStep({
+  plans,
+  canCreateStore,
+  onStore,
+  onZimmer,
+  onBack,
+}: {
+  plans: PortalZimmerPlan[] | null;
+  canCreateStore: boolean;
+  onStore: () => void;
+  onZimmer: () => void;
+  onBack: (() => void) | null;
+}) {
+  // אין חבילות לצימרים (המנוע לא מותקן) — ישר לחנות, כמו קודם
+  useEffect(() => {
+    if (plans !== null && plans.length === 0) onStore();
+  }, [plans, onStore]);
+  if (plans === null || plans.length === 0) {
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="size-7 animate-spin text-muted-foreground" aria-hidden="true" />
+      </div>
+    );
+  }
+  const from = Math.min(...plans.map((p) => p.price_monthly ?? Number.POSITIVE_INFINITY));
+  const choice =
+    "flex w-full items-start gap-3 rounded-xl border border-input p-4 text-start transition-colors hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
+  return (
+    <div className="space-y-3">
+      <button type="button" className={choice} onClick={onStore} disabled={!canCreateStore}>
+        <Store className="mt-0.5 size-6 shrink-0 text-primary" aria-hidden="true" />
+        <span>
+          <span className="block font-semibold">חנות אונליין</span>
+          <span className="block text-sm text-muted-foreground">
+            מוצרים, עגלה, תשלום ומשלוחים. פותחים לבד — תוך דקה.
+          </span>
+        </span>
+      </button>
+      <button type="button" className={choice} onClick={onZimmer}>
+        <BedDouble className="mt-0.5 size-6 shrink-0 text-primary" aria-hidden="true" />
+        <span>
+          <span className="block font-semibold">אתר לצימר / מקום אירוח</span>
+          <span className="block text-sm text-muted-foreground">
+            הזמנות, לוח זמינות, גלריה ותמיכה. אנחנו מקימים בשבילכם.
+          </span>
+          {Number.isFinite(from) && (
+            <span className="mt-1 block text-sm font-medium text-primary">
+              החל מ-{shekels(from)} לחודש
+            </span>
+          )}
+        </span>
+      </button>
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowRight className="size-3.5" aria-hidden="true" />
+          לאתרים שלי
+        </button>
+      )}
+    </div>
+  );
+}
+
+const ZIMMER_FIELDS: ZimmerRequestField[] = ["business_name", "phone", "units", "area", "message"];
+
+function ZimmerStep({
+  session,
+  plans,
+  onBack,
+  onSent,
+}: {
+  session: PortalSession;
+  plans: PortalZimmerPlan[];
+  onBack: () => void;
+  onSent: () => void;
+}) {
+  const submit = useServerFn(submitZimmerRequest);
+  const [form, setForm] = useState({
+    business_name: "",
+    phone: "",
+    units: "",
+    plan_code: plans[0]?.code ?? "",
+    area: "",
+    message: "",
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [touched, setTouched] = useState(false);
+  const request = cleanZimmerRequest(form);
+  const problems = zimmerRequestProblems(request);
+  const problemOf = (field: ZimmerRequestField) => (touched ? problems[field] : undefined);
+  const set = (key: keyof typeof form, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setError(null);
+  };
+  const setupFees = [...new Set(plans.map((p) => p.setup_fee).filter((f) => f !== null))];
+
+  const send = async () => {
+    setTouched(true);
+    const first = ZIMMER_FIELDS.find((field) => problems[field]);
+    if (first) {
+      document.getElementById(`portal-zim-${first}`)?.focus();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await submit({ data: { token: session.token, request } });
+      onSent();
+    } catch (thrown) {
+      setError(errorText(thrown, "הבקשה לא נשלחה. נסו שוב."));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void send();
+      }}
+      className="space-y-5"
+      noValidate
+    >
+      <fieldset className="space-y-2">
+        <legend className="mb-2 text-sm font-medium">החבילה</legend>
+        {plans.map((plan) => (
+          <label
+            key={plan.code}
+            className="flex cursor-pointer gap-3 rounded-xl border border-input p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
+          >
+            <input
+              type="radio"
+              name="portal-zim-plan"
+              value={plan.code}
+              checked={form.plan_code === plan.code}
+              onChange={() => set("plan_code", plan.code)}
+              className="mt-1 size-4 accent-[hsl(var(--primary))]"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-baseline justify-between gap-x-2">
+                <span className="font-semibold">{plan.name}</span>
+                {plan.price_monthly !== null && (
+                  <span className="font-semibold text-primary">
+                    {shekels(plan.price_monthly)} לחודש
+                  </span>
+                )}
+              </span>
+              {plan.tagline && <span className="block text-muted-foreground">{plan.tagline}</span>}
+              {plan.highlights.length > 0 && (
+                <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-xs text-muted-foreground">
+                  {plan.highlights.map((h) => (
+                    <li key={h}>{h}</li>
+                  ))}
+                </ul>
+              )}
+            </span>
+          </label>
+        ))}
+        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-input p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+          <input
+            type="radio"
+            name="portal-zim-plan"
+            value=""
+            checked={form.plan_code === ""}
+            onChange={() => set("plan_code", "")}
+            className="size-4 accent-[hsl(var(--primary))]"
+          />
+          עוד לא יודעים — נתייעץ בשיחה
+        </label>
+        {setupFees.length === 1 && (
+          <p className="text-xs text-muted-foreground">
+            בכל החבילות: הקמה ראשונית — {shekels(setupFees[0] ?? null)} חד-פעמי (דומיין, עיצוב, תוכן
+            והגדרות גוגל).
+          </p>
+        )}
+      </fieldset>
+
+      <div className="space-y-2">
+        <Label htmlFor="portal-zim-business_name">שם המקום / העסק</Label>
+        <Input
+          id="portal-zim-business_name"
+          maxLength={BUSINESS_NAME_MAX}
+          value={form.business_name}
+          onChange={(event) => set("business_name", event.target.value)}
+          autoComplete="organization"
+          className="h-11"
+          aria-invalid={problemOf("business_name") !== undefined}
+        />
+        {problemOf("business_name") && (
+          <p className="text-xs font-medium text-destructive">{problemOf("business_name")}</p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="portal-zim-phone">טלפון לחזרה</Label>
+        <Input
+          id="portal-zim-phone"
+          type="tel"
+          dir="ltr"
+          inputMode="tel"
+          autoComplete="tel"
+          maxLength={20}
+          value={form.phone}
+          onChange={(event) => set("phone", event.target.value)}
+          placeholder="050-1234567"
+          className="h-11 text-left"
+          aria-invalid={problemOf("phone") !== undefined}
+        />
+        {problemOf("phone") && (
+          <p className="text-xs font-medium text-destructive">{problemOf("phone")}</p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="portal-zim-units">
+            כמה יחידות <span className="font-normal text-muted-foreground">(לא חובה)</span>
+          </Label>
+          <Input
+            id="portal-zim-units"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={500}
+            dir="ltr"
+            value={form.units}
+            onChange={(event) => set("units", event.target.value)}
+            className="h-11"
+            aria-invalid={problemOf("units") !== undefined}
+          />
+          {problemOf("units") && (
+            <p className="text-xs font-medium text-destructive">{problemOf("units")}</p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="portal-zim-area">
+            אזור <span className="font-normal text-muted-foreground">(לא חובה)</span>
+          </Label>
+          <Input
+            id="portal-zim-area"
+            maxLength={ZIMMER_AREA_MAX}
+            value={form.area}
+            onChange={(event) => set("area", event.target.value)}
+            placeholder="למשל: גליל עליון"
+            className="h-11"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="portal-zim-message">
+          משהו שכדאי שנדע <span className="font-normal text-muted-foreground">(לא חובה)</span>
+        </Label>
+        <textarea
+          id="portal-zim-message"
+          rows={3}
+          maxLength={ZIMMER_MESSAGE_MAX}
+          value={form.message}
+          onChange={(event) => set("message", event.target.value)}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+        />
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        נחזור אליכם בטלפון תוך יום עסקים לתיאום ההקמה. אישור יישלח גם ל-<bdi>{session.email}</bdi>.
+      </p>
+
+      {error && (
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
+      <Button
+        type="submit"
+        size="lg"
+        className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+        disabled={busy}
+      >
+        {busy ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+        {busy ? "שולחים…" : "שליחת בקשה"}
+      </Button>
+
+      <button
+        type="button"
+        onClick={onBack}
+        disabled={busy}
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+      >
+        <ArrowRight className="size-3.5" aria-hidden="true" />
+        חזרה לבחירה
+      </button>
+    </form>
+  );
+}
+
+function ZimmerSentStep({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="space-y-4 text-center" role="status">
+      <CheckCircle2 className="mx-auto size-12 text-emerald-600" aria-hidden="true" />
+      <p className="text-lg font-semibold">הבקשה נשלחה!</p>
+      <p className="text-sm text-muted-foreground">
+        נחזור אליכם בטלפון תוך יום עסקים כדי לתאם את ההקמה. בינתיים אפשר לסגור את החלון.
+      </p>
+      <Button type="button" size="lg" className="w-full" onClick={onClose}>
+        סגירה
+      </Button>
+    </div>
+  );
+}
+
 function CreateStep({
   session,
   baseDomain,
   initial,
   canGoBack,
+  backLabel,
   onBack,
   onSignOut,
   onNext,
@@ -831,6 +1224,7 @@ function CreateStep({
   /** חזרה מ"פרטי העסק" — השם והכתובת שכבר נבחרו */
   initial: StoreDraft | null;
   canGoBack: boolean;
+  backLabel: string;
   onBack: () => void;
   onSignOut: () => void;
   onNext: (draft: StoreDraft) => void;
@@ -1007,7 +1401,7 @@ function CreateStep({
             className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
           >
             <ArrowRight className="size-3.5" aria-hidden="true" />
-            לחנויות שלי
+            {backLabel}
           </button>
         ) : (
           <span />

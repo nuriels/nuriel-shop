@@ -4,6 +4,7 @@ import {
   businessDetailsProblems,
   cleanBusinessDetails,
   cleanSlugInput,
+  cleanZimmerRequest,
   otherMembershipReason,
   PORTAL_LOGO_MAX_BYTES,
   PORTAL_LOGO_TYPES,
@@ -14,7 +15,9 @@ import {
   type PortalAccount,
   type PortalBusinessDetails,
   type PortalStore,
+  type PortalZimmerPlan,
   type StoreReadiness,
+  zimmerRequestProblems,
 } from "@/lib/portal";
 
 /**
@@ -36,6 +39,8 @@ import {
  *    שלב E1: עם פרטי העסק (שם רשמי, ח.פ / ע.מ, סוג עוסק, מע"מ, טלפון, כתובת) —
  *    באותה טרנזקציה (portal_create_store_business); התקנון מתמלא מהם.
  *    uploadPortalStoreLogo — לוגו שנבחר בהקמה (לא חובה), לחנות של האימייל בלבד.
+ * 3ב. שלב E2 — אתר לצימר: getPortalZimmerPlans (החבילות המפורסמות) ו-submitZimmerRequest
+ *    (בקשה; ההקמה בתשלום — מנהל הפלטפורמה מקים אותה). מייל למנהלי הפלטפורמה.
  * 4. getPortalStoreStatus — חנות חדשה: האם תעודת ה-SSL של הכתובת כבר הונפקה.
  * 5. enterPortalStore — קוד כניסה חד-פעמי (2 דקות) לאתר החנות:
  *    https://<slug>.nuri1.fit/admin-handoff#code=... → מחובר → /admin.
@@ -575,6 +580,123 @@ export const uploadPortalStoreLogo = createServerFn({ method: "POST" })
       throw new Error(error.message);
     }
     logPortal("info", "logo set", { ip, email: maskEmail(email), tenant: data.tenantId });
+    return { ok: true as const };
+  });
+
+// ============================================================
+// 3ב. אתר לצימר (שלב E2)
+// ============================================================
+
+/** קריאה לפונקציה בסכמה hospitality עם מפתח השירות (השרת בלבד) */
+async function hospitalityRpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+  const base = (process.env["SUPABASE_URL"] ?? "").trim().replace(/\/$/, "");
+  const key = (process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "").trim();
+  if (!base || !key) throw new Error("תקלת הגדרות בשרת");
+  const res = await fetch(`${base}/rest/v1/rpc/${fn}`, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      "Content-Profile": "hospitality",
+      "Accept-Profile": "hospitality",
+    },
+    body: JSON.stringify(args),
+    signal: AbortSignal.timeout(8000),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    let parsed: { message?: string; code?: string } = {};
+    try {
+      parsed = JSON.parse(text) as typeof parsed;
+    } catch {
+      // לא JSON
+    }
+    // הודעות הבדיקה של המסד (check_violation) כתובות לגולש; כל השאר — כללית
+    const message = parsed.code === "23514" && parsed.message ? parsed.message : "";
+    throw Object.assign(new Error(message || "הבקשה לא נשלחה. נסו שוב בעוד רגע."), {
+      status: res.status,
+      code: parsed.code,
+    });
+  }
+  return JSON.parse(text) as T;
+}
+
+/**
+ * החבילות לצימרים שמפורסמות — לבחירה בשער. כשמנוע האירוח לא מותקן (אין סכמה / פונקציה) —
+ * רשימה ריקה, והשער מציג רק "חנות אונליין".
+ */
+export const getPortalZimmerPlans = createServerFn({ method: "GET" }).handler(
+  async (): Promise<PortalZimmerPlan[]> => {
+    await requirePortal();
+    try {
+      const raw = await hospitalityRpc<unknown>("public_plans", {});
+      if (!Array.isArray(raw)) return [];
+      return raw.map((value) => {
+        const p = obj(value);
+        const num = (v: unknown) => (typeof v === "number" ? v : null);
+        return {
+          code: str(p["code"]),
+          name: str(p["name"]),
+          tagline: str(p["tagline"]),
+          price_monthly: num(p["price_monthly"]),
+          setup_fee: num(p["setup_fee"]),
+          max_units: num(p["max_units"]),
+          highlights: Array.isArray(p["highlights"])
+            ? (p["highlights"] as unknown[]).filter((h): h is string => typeof h === "string")
+            : [],
+        };
+      });
+    } catch (error) {
+      logPortal("warn", "zimmer plans unavailable", { message: String(error) });
+      return [];
+    }
+  },
+);
+
+/** בקשה לאתר צימר — האימייל מאומת בשער; עד 3 ביממה לאימייל (במסד) ו-5 בשעה למכשיר */
+export const submitZimmerRequest = createServerFn({ method: "POST" })
+  .inputValidator((input: { token: string; request: unknown }) => {
+    const request = cleanZimmerRequest(input?.request);
+    const problem = Object.values(zimmerRequestProblems(request))[0];
+    if (problem) throw new Error(problem);
+    return { token: tokenOf(input?.token), request };
+  })
+  .handler(async ({ data }) => {
+    const email = await verifiedEmail(data.token);
+    const { allowAction, requestIp } = await import("@/lib/rate-limit.server");
+    const ip = await requestIp();
+    if (!allowAction(`portal-zimmer:${ip}`, 5, 60 * 60 * 1000)) {
+      throw new Error("נשלחו כבר כמה בקשות מהמכשיר הזה בשעה האחרונה. נסו שוב מאוחר יותר.");
+    }
+    const saved = await hospitalityRpc<Record<string, unknown>>("site_request_submit", {
+      _email: email,
+      _request: {
+        business_name: data.request.business_name,
+        phone: data.request.phone,
+        units: data.request.units,
+        plan_code: data.request.plan_code || null,
+        area: data.request.area,
+        message: data.request.message,
+      },
+    });
+    logPortal("info", "zimmer request", { ip, email: maskEmail(email) });
+    const { confirmZimmerRequestToRequester, notifyPlatformOfZimmerRequest } =
+      await import("@/lib/portal-notify.server");
+    await confirmZimmerRequestToRequester({ email, business_name: str(saved["business_name"]) });
+    await notifyPlatformOfZimmerRequest({
+      id: str(saved["id"]),
+      email,
+      business_name: str(saved["business_name"]),
+      phone: str(saved["phone"]),
+      units: typeof saved["units"] === "number" ? saved["units"] : null,
+      plan_name: strOrNull(saved["plan_name"]),
+      area: strOrNull(saved["area"]),
+      message: strOrNull(saved["message"]),
+      notify: Array.isArray(saved["notify"])
+        ? (saved["notify"] as unknown[]).filter((v): v is string => typeof v === "string")
+        : [],
+    });
     return { ok: true as const };
   });
 

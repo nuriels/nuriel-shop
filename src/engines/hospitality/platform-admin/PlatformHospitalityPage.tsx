@@ -24,6 +24,8 @@ import {
 import {
   hospitalityPlatformOpenSite,
   hospitalityPlatformSavePlan,
+  hospitalityPlatformSiteRequestSet,
+  hospitalityPlatformSiteRequests,
   hospitalityPlatformSetFlag,
   hospitalityPlatformSetOwner,
   hospitalityPlatformSetPlan,
@@ -36,6 +38,7 @@ import type {
   PlanOption,
   PlatformHospitalityView,
   SiteFlagKey,
+  SiteRequest,
 } from "../types/platform-admin";
 import { emailError, slugError, suggestSlug } from "../validation/platform-admin";
 import type { ThemeId } from "../website/design/schema";
@@ -133,10 +136,21 @@ function AccessProblem({ message }: { message: string }) {
 function Content({ view }: { view: PlatformHospitalityView }) {
   const [owner, setOwner] = useState<HospitalitySiteRow | null>(null);
   const [plan, setPlan] = useState<HospitalitySiteRow | null>(null);
+  // שלב E2: "פתיחת עסק מהבקשה" — ממלא את הטופס (מפתח חדש = הטופס נטען מחדש עם הערכים)
+  const [prefill, setPrefill] = useState<{ key: number; values: OpenSitePrefill } | null>(null);
   return (
     <>
       <EngineSwitches view={view} />
-      <OpenSiteCard view={view} />
+      <SiteRequestsCard
+        onOpen={(values) => {
+          setPrefill((current) => ({ key: (current?.key ?? 0) + 1, values }));
+          window.setTimeout(() => {
+            document.getElementById("open-site")?.scrollIntoView({ behavior: "smooth" });
+            document.getElementById("os-name")?.focus();
+          }, 50);
+        }}
+      />
+      <OpenSiteCard key={prefill?.key ?? 0} view={view} prefill={prefill?.values ?? null} />
       <section className="flex flex-col gap-3" aria-labelledby="sites-title">
         <h2 id="sites-title" className="text-xl font-semibold">
           אתרי אירוח ({view.sites.length})
@@ -237,7 +251,15 @@ function EngineSwitches({ view }: { view: PlatformHospitalityView }) {
   );
 }
 
-function OpenSiteCard({ view }: { view: PlatformHospitalityView }) {
+type OpenSitePrefill = { name: string; ownerEmail: string };
+
+function OpenSiteCard({
+  view,
+  prefill,
+}: {
+  view: PlatformHospitalityView;
+  prefill: OpenSitePrefill | null;
+}) {
   const refresh = useRefresh();
   const empty = {
     name: "",
@@ -248,7 +270,17 @@ function OpenSiteCard({ view }: { view: PlatformHospitalityView }) {
     periodEnd: "",
     theme: "luxury" as ThemeId,
   };
-  const [f, setF] = useState(empty);
+  // מבקשה מהשער (שלב E2): שם, אימייל הבעלים וכתובת מוצעת. החבילה — ניסיון עד שמסכמים
+  const [f, setF] = useState(
+    prefill
+      ? {
+          ...empty,
+          name: prefill.name,
+          slug: suggestSlug(prefill.name),
+          ownerEmail: prefill.ownerEmail,
+        }
+      : empty,
+  );
   const [slugTouched, setSlugTouched] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -282,7 +314,7 @@ function OpenSiteCard({ view }: { view: PlatformHospitalityView }) {
     }
   };
   return (
-    <Card data-section="open-site">
+    <Card data-section="open-site" id="open-site">
       <CardHeader>
         <CardTitle className="text-lg">
           <h2>פתיחת עסק אירוח</h2>
@@ -1136,5 +1168,145 @@ function PlanEditorSheet({ plan, onClose }: { plan: PlanOption; onClose: () => v
         מפורסמת בשער ובפתיחת עסק
       </label>
     </FormSheet>
+  );
+}
+
+// ============================================================
+// שלב E2: בקשות לאתר צימר מהשער — חדשות קודם; טיפול, הערה, ו"פתיחת עסק מהבקשה"
+// ============================================================
+
+const REQUESTS_KEY = ["hospitality-platform", "site-requests"] as const;
+
+function SiteRequestsCard({ onOpen }: { onOpen: (values: OpenSitePrefill) => void }) {
+  const query = useQuery({
+    queryKey: REQUESTS_KEY,
+    queryFn: () => hospitalityPlatformSiteRequests(),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const fresh = (query.data ?? []).filter((r) => r.status === "new").length;
+  return (
+    <section
+      className="flex flex-col gap-3"
+      aria-labelledby="site-requests-title"
+      id="site-requests"
+    >
+      <h2 id="site-requests-title" className="flex items-center gap-2 text-xl font-semibold">
+        בקשות לאתרי צימר מהשער
+        {fresh > 0 && <Badge>{fresh} חדשות</Badge>}
+      </h2>
+      {query.isPending ? (
+        <p role="status">טוען…</p>
+      ) : query.isError ? (
+        <p role="alert" className="text-destructive">
+          {errorText(query.error)}
+        </p>
+      ) : query.data.length === 0 ? (
+        <p className="text-muted-foreground">עוד אין בקשות. בעלי צימרים שולחים אותן בשער.</p>
+      ) : (
+        <ul className="grid gap-3 md:grid-cols-2">
+          {query.data.map((r) => (
+            <SiteRequestItem
+              key={r.id}
+              request={r}
+              onOpen={() => onOpen({ name: r.business_name, ownerEmail: r.email })}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function SiteRequestItem({ request: r, onOpen }: { request: SiteRequest; onOpen: () => void }) {
+  const qc = useQueryClient();
+  const [note, setNote] = useState(r.admin_note ?? "");
+  const [busy, setBusy] = useState(false);
+  const set = async (status: "new" | "handled") => {
+    setBusy(true);
+    try {
+      await hospitalityPlatformSiteRequestSet({ data: { id: r.id, status, note } });
+      toast.success(status === "handled" ? "סומן כטופל" : "הוחזר לחדשות");
+      void qc.invalidateQueries({ queryKey: REQUESTS_KEY });
+    } catch (e) {
+      toast.error(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <li>
+      <Card className={cn("h-full", r.status === "new" && "border-primary/50")}>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
+            <h3>{r.business_name}</h3>
+            {r.status === "new" ? <Badge>חדשה</Badge> : <Badge variant="secondary">טופלה</Badge>}
+          </CardTitle>
+          <CardDescription>נשלחה {dateText(r.created_at)}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 text-sm">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+            <dt className="text-muted-foreground">טלפון</dt>
+            <dd>
+              <a href={`tel:${r.phone}`} dir="ltr" className="text-primary hover:underline">
+                {r.phone}
+              </a>
+            </dd>
+            <dt className="text-muted-foreground">אימייל</dt>
+            <dd>
+              <a href={`mailto:${r.email}`} dir="ltr" className="text-primary hover:underline">
+                {r.email}
+              </a>
+            </dd>
+            <dt className="text-muted-foreground">חבילה</dt>
+            <dd>{r.plan_name ?? "עוד לא יודעים"}</dd>
+            <dt className="text-muted-foreground">יחידות</dt>
+            <dd>{r.units ?? "לא צוין"}</dd>
+            {r.area && (
+              <>
+                <dt className="text-muted-foreground">אזור</dt>
+                <dd>{r.area}</dd>
+              </>
+            )}
+          </dl>
+          {r.message && <p className="whitespace-pre-line rounded-md bg-muted p-3">{r.message}</p>}
+          <Field id={`rq-note-${r.id}`} label="הערה פנימית (לא חובה)">
+            <Input
+              id={`rq-note-${r.id}`}
+              value={note}
+              maxLength={500}
+              onChange={(e) => setNote(e.target.value)}
+              className="min-h-11"
+            />
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" className="min-h-11" onClick={onOpen}>
+              פתיחת עסק מהבקשה
+            </Button>
+            {r.status === "new" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={busy}
+                onClick={() => void set("handled")}
+              >
+                סימון כטופלה
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                className="min-h-11"
+                disabled={busy}
+                onClick={() => void set("new")}
+              >
+                החזרה לחדשות
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </li>
   );
 }

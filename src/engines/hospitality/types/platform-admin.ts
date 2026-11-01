@@ -106,3 +106,20 @@ export type OwnerResult =
   | { status: "failed"; message: string };
 
 export type SiteFlagKey = "backend" | "management" | "frontend" | "booking";
+
+/** שלב E2: בקשה לאתר צימר מהשער (admin_site_requests) */
+export interface SiteRequest {
+  id: string;
+  email: string;
+  business_name: string;
+  phone: string;
+  units: number | null;
+  plan_code: string | null;
+  plan_name: string | null;
+  area: string | null;
+  message: string | null;
+  status: "new" | "handled";
+  admin_note: string | null;
+  handled_at: string | null;
+  created_at: string;
+}

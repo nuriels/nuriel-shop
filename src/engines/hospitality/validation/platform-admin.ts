@@ -155,3 +155,17 @@ export function parseSavePlan(input: Raw): SavePlanInput {
     is_published: i["is_published"] === true,
   };
 }
+
+// ---- שלב E2: טיפול בבקשה לאתר צימר ----
+export function parseSiteRequestSet(input: Raw): {
+  id: string;
+  status: "new" | "handled";
+  note: string | null;
+} {
+  const i = input ?? {};
+  const status = text(i["status"]);
+  if (status !== "new" && status !== "handled") throw new InputError("מצב לא תקין");
+  const note = text(i["note"]) || null;
+  if (note && note.length > 500) throw new InputError("ההערה: עד 500 תווים");
+  return { id: uuid(i["id"], "הבקשה"), status, note };
+}
