@@ -43,7 +43,7 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Verified on the real local Supabase | rollback → store API 200, `hospitality.units` 404 `PGRST205` (not 503); re-apply → 401 `42501` for anon again |
 | Site deletion | the existing `platform_delete_tenant()` deletes a Hospitality site: it clears the shared `public` rows and the tenant; Hospitality tables cascade |
 | Tests | `scripts/db-tests/hospitality-schema.test.sql` (181 assertions: structure, roles, permission matrix, cross-product, RLS isolation, flags, `request_tenant`, data rules, storage), RLS coverage extended to the `hospitality` schema (`tenant-isolation-coverage.test.sql`), `rollback-check.sh` (M3 → M2 → M1, refusals, re-apply), `e2e/tests/hospitality-api.spec.ts` (real PostgREST / Storage / GoTrue tokens) |
-| Production | nothing to configure in this stage. At go-live (separately approved): apply the migration, **then** add `hospitality` to `PGRST_DB_SCHEMAS` and restart `kobi-rest` (runbook §A11) |
+| Production | nothing to configure in this stage. At go-live (separately approved): apply the migration, **then** append `hospitality` to `PGRST_DB_SCHEMAS` and recreate the rest container (`docker compose -p <project> up -d --no-deps rest` — a plain `docker restart` keeps the old environment); steps in `install-guide.md` §4 |
 
 ## 20261101120000_hosp_booking.sql — Stage 1d (hospitality)
 

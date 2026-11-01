@@ -4,8 +4,11 @@
 עושים בשרת, אחרי ההתקנה (`install-guide.md`), עם עסק בדיקה ועם עסק אמיתי לפני הפתיחה.
 את התוצאות אפשר לרשום בעמודה "✓ / הערה".
 
-`<site>` = הכתובת של עסק הבדיקה (למשל `https://demo-zimmer.example.co.il`).
-`<api>` = כתובת ה-API של Supabase.
+**מקרא:**
+- `<site>` — הכתובת של עסק הבדיקה (למשל `https://demo-zimmer.example.co.il`).
+- `<api>` — כתובת ה-API של Supabase.
+- `<publishable>` — המפתח הציבורי (`SUPABASE_PUBLISHABLE_KEY` ב-`.env` של האפליקציה).
+- `$DB`, `$APP` — המשתנים בראש `install-guide.md`.
 
 ---
 
@@ -13,19 +16,72 @@
 
 | # | בדיקה | איך | מצופה | ✓ / הערה |
 |---|---|---|---|---|
-| S1 | כותרות האבטחה באתר | `curl -sI <site>/stay` | `strict-transport-security`, `x-content-type-options: nosniff`, `x-frame-options: SAMEORIGIN`, `content-security-policy` עם `frame-ancestors 'self'` | |
-| S2 | כותרות אזור הניהול | `curl -sI <site>/manage/login` | כמו S1, וגם `cache-control: private, no-store` | |
-| S3 | בקשת הזמנה ישירה ל-API נחסמת | `curl -s -X POST <api>/rest/v1/rpc/request_booking -H "apikey: <publishable>" -H "Content-Profile: hospitality" -H "x-tenant-id: <site-id>" -H "Content-Type: application/json" -d '{}'` | 401 / 403 (permission denied) | |
-| S4 | הגבלת קצב על בקשות הזמנה | 4 בקשות מאותו מחשב תוך 10 דקות | הרביעית: "יותר מדי בקשות — נסו שוב בעוד … דקות" | |
-| S5 | CAPTCHA שקוף | DevTools → Network בטופס הפרטים | קריאה לאתגר כשהטופס נטען; הבקשה נשלחת עם `captcha`; אין עוגייה חדשה; אין קריאה לדומיין חיצוני | |
+| S1 | כותרות האבטחה באתר | `curl -s -o /dev/null -D - <site>/stay` | `strict-transport-security`, `x-content-type-options: nosniff`, `x-frame-options: SAMEORIGIN`, `content-security-policy` עם `frame-ancestors 'self'` | |
+| S2 | כותרות אזור הניהול | `curl -s -o /dev/null -D - <site>/manage/login` | כמו S1, וגם `cache-control: private, no-store` | |
+| S3 | בקשת הזמנה ישירה ל-API נחסמת | הפקודה מתחת לטבלה — עם כל הפרמטרים | HTTP 401, `"code":"42501"`, `permission denied for function request_booking` | |
+| S4 | הגבלת קצב על בקשות הזמנה | 4 בקשות מאותו מחשב תוך 10 דקות. **בכל בקשה תאריכים אחרים ופרטי קשר אחרים** (אימייל וטלפון) | הרביעית: "יותר מדי בקשות — נסו שוב בעוד … דקות". אחרי הבדיקה — לדחות את בקשות הבדיקה | |
+| S5 | CAPTCHA שקוף | DevTools → Network בטופס הפרטים | קריאה לאתגר כשהטופס נטען; הבקשה נשלחת עם `captcha`; אין עוגייה חדשה; ה-CAPTCHA לא פונה לדומיין חיצוני | |
 | S6 | שליחה חוזרת של אותו פתרון | העתקה של בקשת ההזמנה מ-DevTools ושליחה שנייה (מזהה בקשה אחר) | "לא הצלחנו לאמת את הבקשה" | |
-| S7 | הגבלה משותפת בין שרתים | אם רצים כמה קונטיינרים: S4 מול שני שרתים שונים | המונה משותף — החסימה חלה גם בשני | |
-| S8 | IP אמיתי | בקשה עם `X-Forwarded-For: 1.2.3.4` מזויף | ההגבלה חלה על ה-IP האמיתי. בתיעוד אישור התנאים בהזמנה: ה-IP האמיתי | |
+| S7 | הגבלה משותפת בין שרתים | אם רצים כמה קונטיינרים: S4 לסירוגין מול שני שרתים | המונה משותף — הרביעית נחסמת בכל שרת | |
+| S8 | IP אמיתי | הפקודות מתחת לטבלה | ב-Nginx רק `X-Real-IP $remote_addr`. ה-IP בהזמנה = הכתובת של המחשב שלך | |
 | S9 | יומן ייצוא iCal | `curl -s <site>/ical/<token>` / טוקן שגוי / POST | תקין: `text/calendar` עם "Not available" בלבד; שגוי: 404; POST: 404 | |
 | S10 | הפרדת עסקים בממשק | התחברות כבעלים של עסק A, כניסה לכתובת `/manage` של עסק B | "אין הרשאה" / מסך כניסה. אין אף נתון של B | |
 | S11 | מנהל משנה | התחברות כמנהל משנה | אין: ייצוא / אנונימיזציה של אורח, ניהול צוות, מחיקת יחידה. יש: הזמנות, תשלומים, לוח, ערוצים | |
-| S12 | הכניסה לניהול מוגבלת | 20 ניסיונות כניסה שגויים | חסימה (מגבלת האפליקציה + `limit_req` ב-Nginx) | |
-| S13 | `HOSPITALITY_SECRET` מוגדר | `docker exec <app> printenv HOSPITALITY_SECRET \| wc -c` | יותר מ-32 | |
+| S12 | הכניסה לניהול מוגבלת | 5 קודים שגויים ברצף | "יותר מדי ניסיונות שגויים — הקוד בוטל. בקשו קוד חדש." | |
+| S13 | המשתנים הגיעו לאפליקציה | הפקודות מתחת לטבלה | `on`; אורך הסוד 64 | |
+| S14 | המונה המשותף במסד עובד | הפקודה מתחת לטבלה | 0 | |
+| S15 | HTTPS לעסק | `curl -sI http://<slug>.<domain>/` ואז `curl -sI https://<slug>.<domain>/` (בלי `-k`) | http: 301 ל-https. https: נפתח בלי שגיאת תעודה | |
+
+**הערות לטבלה:**
+- **S1–S2:** `curl -I` שולח HEAD. בודקים GET, כמו שהדפדפן שולח.
+- **S4:**
+  - אותם פרטי קשר נעצרים כבר ב-2 בקשות פתוחות, עם הודעה אחרת;
+  - אותם תאריכים כבר תפוסים;
+  - ההגבלות לפי כתובת: 3 ל-10 דקות, 6 לשעה.
+- **S5:** קריאות ל-`fonts.googleapis.com` / `fonts.gstatic.com` מופיעות אם נבחר בעורך גופן של
+  Google. הן לא קשורות ל-CAPTCHA.
+- **S7:** צריך אותו `HOSPITALITY_SECRET` בכל השרתים.
+- **S8 — לא חובה:** עם תוסף כותרות בדפדפן (למשל ModHeader) מוסיפים `X-Real-IP: 1.2.3.4`
+  ו-`X-Forwarded-For: 1.2.3.4`, ושולחים בקשה. ה-IP בהזמנה נשאר הכתובת האמיתית.
+- **S12:**
+  - ההגבלה במסד — חלה בכל השרתים.
+  - בקשת קודים מעבר ל-10 ב-15 דקות מאותה כתובת — חסימה זמנית בזיכרון של השרת.
+- **S14:** "shared rate limit unavailable" — הגבלת הקצב עברה לזיכרון של השרת. הבדיקה הישירה —
+  `install-guide.md` §4, בדיקה 3.
+
+**S3** — בקשה עם כל הפרמטרים, כדי שה-API ימצא את הפונקציה:
+
+```bash
+curl -s -w '  [HTTP %{http_code}]\n' -X POST "<api>/rest/v1/rpc/request_booking" \
+  -H "apikey: <publishable>" -H "Content-Type: application/json" -H "Content-Profile: hospitality" \
+  -d '{"_unit_id":"00000000-0000-0000-0000-000000000000","_check_in":"2030-01-01","_check_out":"2030-01-02","_full_name":"Test","_email":"test@example.com","_phone":"0500000000","_idempotency_key":"s3-check-0001","_policy_accepted":true,"_policy_hash":"x"}'
+```
+
+תשובה `PGRST202` היא טעות בבדיקה, לא הצלחה: הפונקציה לא נמצאה.
+
+**S8:**
+
+```bash
+nginx -T 2>/dev/null | grep -n 'X-Real-IP'                 # בכל השורות: $remote_addr
+# אחרי בקשה מהאתר (F11) מהמחשב שלך:
+docker exec "$DB" psql -U postgres -d postgres -c \
+  "SELECT number, created_at, policy_acceptance->>'ip' AS ip FROM hospitality.bookings
+    WHERE source = 'site' ORDER BY created_at DESC LIMIT 3"
+# להשוות לכתובת של המחשב: curl -s https://api.ipify.org (מאותו מחשב)
+```
+
+**S13:**
+
+```bash
+docker exec "$APP" printenv HOSPITALITY_ENGINE                       # on
+docker exec "$APP" sh -c 'printf %s "$HOSPITALITY_SECRET" | wc -c'   # 64 — זהה בכל השרתים
+```
+
+**S14:**
+
+```bash
+docker logs --since 24h "$APP" 2>&1 | grep -c "shared rate limit unavailable"   # 0
+```
 
 ## ב. פרטיות
 
@@ -74,4 +130,4 @@
 | F4 | ערוצים | חיבור יומן Airbnb / Booking.com (קישור iCal) → תאריכים חסומים בלוח. הקישור שלנו מוזן ב-Airbnb | |
 | F5 | עורך האתר | שינוי טקסט, תמונה, ערכה וצבע → תצוגה מקדימה → פרסום → האתר מתעדכן. שחזור גרסה | |
 
-(הזרימות של שלבים D2–D4 — F6–F14 — ב-`install-guide.md` §9.)
+(הזרימות של שלבים D2–D4 — F6–F14 — ב-`install-guide.md` §10.)
