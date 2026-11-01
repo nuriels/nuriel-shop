@@ -218,7 +218,7 @@ describe("navigation", () => {
     expect(more.map((i) => i.key)).toContain("team");
   });
 
-  it("only built screens are links (2a dashboard, 3a calendar, 2b.2 settings, 2b.3 team, 2c.2 units, 2e photos, 2f prices / policies)", () => {
+  it("every screen is a link now (2a → 2k)", () => {
     expect(NAV_ITEMS.filter((i) => i.to).map((i) => i.key)).toEqual([
       "dashboard",
       "calendar",
@@ -228,6 +228,7 @@ describe("navigation", () => {
       "pricing",
       "policies",
       "guests",
+      "emails",
       "settings",
       "team",
     ]);

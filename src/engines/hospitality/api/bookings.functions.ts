@@ -14,6 +14,12 @@ import {
 
 type Changed = { booking_id: string; status: string; revision?: number };
 
+/** אחרי פעולה שמכניסה מיילים לתור — לשלוח עכשיו (לא מחכים לסבב של 30 שניות) */
+async function sendQueued(): Promise<void> {
+  const { kickOutbox } = await import("../outbox/worker.server");
+  kickOutbox();
+}
+
 export const hospitalityBookings = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseBookingsQuery(input))
   .handler(async ({ data }): Promise<BookingList> => {
@@ -37,32 +43,38 @@ export const hospitalityApproveBooking = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseDecision(input))
   .handler(async ({ data }): Promise<Changed> => {
     const { manageRpc } = await import("../server/manage.server");
-    return manageRpc<Changed>("approve_booking", {
+    const result = await manageRpc<Changed>("approve_booking", {
       _booking_id: data.id,
       _expected_revision: data.revision,
     });
+    await sendQueued();
+    return result;
   });
 
 export const hospitalityDeclineBooking = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseDecision(input))
   .handler(async ({ data }): Promise<Changed> => {
     const { manageRpc } = await import("../server/manage.server");
-    return manageRpc<Changed>("decline_booking", {
+    const result = await manageRpc<Changed>("decline_booking", {
       _booking_id: data.id,
       _reason: data.reason,
       _expected_revision: data.revision,
     });
+    await sendQueued();
+    return result;
   });
 
 export const hospitalitySetStayStatus = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseStay(input))
   .handler(async ({ data }): Promise<Changed> => {
     const { manageRpc } = await import("../server/manage.server");
-    return manageRpc<Changed>("set_stay_status", {
+    const result = await manageRpc<Changed>("set_stay_status", {
       _booking_id: data.id,
       _status: data.status,
       _expected_revision: data.revision,
     });
+    await sendQueued();
+    return result;
   });
 
 // ---------- 2i: הזמנה ידנית, שינוי, ביטול, בקשות ביטול ----------
@@ -85,31 +97,36 @@ export const hospitalityCreateBooking = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseCreateBooking(input))
   .handler(async ({ data }): Promise<{ booking_id: string; number: number; status: string }> => {
     const { manageRpc } = await import("../server/manage.server");
-    return manageRpc("create_manual_booking", {
-      _unit_id: data.unitId,
-      _check_in: data.checkIn,
-      _check_out: data.checkOut,
-      _full_name: data.fullName,
-      _phone: data.phone,
-      _terms_explained: data.termsExplained,
-      _email: data.email,
-      _adults: data.adults,
-      _children: data.children,
-      _total_override: data.totalOverride,
-      _policy_id: data.policyId,
-      _status: data.status,
-      _source: data.source,
-      _channel: data.channel,
-      _notes: data.notes,
-      _send_guest_email: data.sendGuestEmail,
-    });
+    const result = await manageRpc<{ booking_id: string; number: number; status: string }>(
+      "create_manual_booking",
+      {
+        _unit_id: data.unitId,
+        _check_in: data.checkIn,
+        _check_out: data.checkOut,
+        _full_name: data.fullName,
+        _phone: data.phone,
+        _terms_explained: data.termsExplained,
+        _email: data.email,
+        _adults: data.adults,
+        _children: data.children,
+        _total_override: data.totalOverride,
+        _policy_id: data.policyId,
+        _status: data.status,
+        _source: data.source,
+        _channel: data.channel,
+        _notes: data.notes,
+        _send_guest_email: data.sendGuestEmail,
+      },
+    );
+    await sendQueued();
+    return result;
   });
 
 export const hospitalityModifyBooking = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseModify(input))
   .handler(async ({ data }): Promise<BookingChange> => {
     const { manageRpc } = await import("../server/manage.server");
-    return manageRpc("modify_booking", {
+    const result = await manageRpc<BookingChange>("modify_booking", {
       _booking_id: data.id,
       _expected_revision: data.revision,
       _check_in: data.checkIn,
@@ -120,6 +137,8 @@ export const hospitalityModifyBooking = createServerFn({ method: "POST" })
       _total_override: data.totalOverride,
       _note: data.note,
     });
+    await sendQueued();
+    return result;
   });
 
 export const hospitalityCancellationQuote = createServerFn({ method: "POST" })
@@ -136,25 +155,29 @@ export const hospitalityCancelBooking = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseCancel(input))
   .handler(async ({ data }): Promise<BookingChange> => {
     const { manageRpc } = await import("../server/manage.server");
-    return manageRpc("cancel_booking", {
+    const result = await manageRpc<BookingChange>("cancel_booking", {
       _booking_id: data.id,
       _reason: data.reason,
       _fee_override: data.feeOverride,
       _override_reason: data.overrideReason,
       _expected_revision: data.revision,
     });
+    await sendQueued();
+    return result;
   });
 
 export const hospitalityApproveCancellation = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseCancel(input))
   .handler(async ({ data }): Promise<BookingChange> => {
     const { manageRpc } = await import("../server/manage.server");
-    return manageRpc("approve_cancellation", {
+    const result = await manageRpc<BookingChange>("approve_cancellation", {
       _booking_id: data.id,
       _fee_override: data.feeOverride,
       _override_reason: data.overrideReason,
       _expected_revision: data.revision,
     });
+    await sendQueued();
+    return result;
   });
 
 export const hospitalityDeclineCancellation = createServerFn({ method: "POST" })
@@ -162,9 +185,11 @@ export const hospitalityDeclineCancellation = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<BookingChange> => {
     const { manageRpc } = await import("../server/manage.server");
     if (!data.reason) throw new Error("יש לכתוב לאורח למה הבקשה לא אושרה");
-    return manageRpc("decline_cancellation", {
+    const result = await manageRpc<BookingChange>("decline_cancellation", {
       _booking_id: data.id,
       _reason: data.reason,
       _expected_revision: data.revision,
     });
+    await sendQueued();
+    return result;
   });

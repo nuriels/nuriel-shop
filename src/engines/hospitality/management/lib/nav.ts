@@ -24,6 +24,7 @@ export interface NavItem {
     | "/manage/calendar"
     | "/manage/bookings"
     | "/manage/guests"
+    | "/manage/emails"
     | "/manage/settings"
     | "/manage/team"
     | "/manage/units"
@@ -66,7 +67,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: "guests",
     also: ["/manage/guests/"],
   },
-  { key: "emails", label: "מיילים", permission: "bookings" },
+  { key: "emails", label: "מיילים", to: "/manage/emails", permission: "bookings" },
   { key: "settings", label: "הגדרות העסק", to: "/manage/settings", permission: "settings" },
   { key: "team", label: "צוות ניהול", to: "/manage/team", permission: "staff.managers" },
 ];

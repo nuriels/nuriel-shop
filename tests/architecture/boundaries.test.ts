@@ -87,6 +87,7 @@ const PLATFORM_ADAPTERS: [adapter: string, wraps: (target: string) => boolean][]
   ["src/platform/auth/accounts.server.ts", (t) => t === "src/integrations/supabase/client.server"],
   ["src/platform/security/rate-limit.server.ts", (t) => t === "src/lib/rate-limit.server"],
   ["src/platform/media/remote-image.server.ts", (t) => t === "src/server/services/image-fetch"],
+  ["src/platform/email/send.server.ts", (t) => t === "src/lib/email.server"],
   [
     "src/platform/auth/login.ts",
     (t) => t === "src/lib/auth.functions" || t === "src/lib/login-code.functions",
@@ -194,6 +195,7 @@ describe("architecture: dependency boundaries", () => {
       "src/routes/manage.bookings_.$bookingId.tsx",
       "src/routes/manage.bookings_.new.tsx",
       "src/routes/manage.calendar.tsx",
+      "src/routes/manage.emails.tsx",
       "src/routes/manage.guests.tsx",
       "src/routes/manage.guests_.$guestId.tsx",
       "src/routes/manage.index.tsx",
@@ -270,7 +272,7 @@ describe("architecture: server-function ownership", () => {
 
   it("Hospitality server functions live only in src/engines/hospitality/{server,api}", () => {
     const hosp = serverFnFiles.filter((f) => registry.ownerOf(f) === "hospitality");
-    expect(hosp.length).toBe(15); // + details (2d), media (2e), pricing (2f), calendar (3a), platform-admin (P1), bookings (2h), guests (2j) in api/
+    expect(hosp.length).toBe(16); // + details (2d), media (2e), pricing (2f), calendar (3a), platform-admin (P1), bookings (2h), guests (2j), emails (2k) in api/
     // api/ = נקראות מהדפדפן (מחוץ ל-server/, import protection); server/ = בלי ממשק עדיין
     for (const f of hosp)
       expect(f).toMatch(/^src\/engines\/hospitality\/(server|api)\/[\w-]+\.functions\.ts$/);

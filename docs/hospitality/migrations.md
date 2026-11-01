@@ -212,3 +212,11 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Functions | `staff_guests`, `staff_guest_detail`, `update_guest_notes` (`guests`), `export_guest_logged` (`guests.privacy`, action log); `anonymize_guest` redefined with an action-log entry; `REVOKE EXECUTE ON export_guest FROM authenticated` (export only through the logged function) |
 | Rollback | `supabase/rollbacks/20261102110000_hosp_guests.down.sql` — exact migration-16 schema (`rollback-check.sh`, M17) |
 | Production | nothing to configure |
+
+## 20261102120000_hosp_emails_dashboard.sql — Stage 2k (hospitality)
+
+| | |
+|---|---|
+| Functions | `staff_emails`, `requeue_notification` (logged), `dashboard`, `_occupancy` — `bookings`; the sending itself is the app worker (`outbox/worker.server.ts`) with the Stage 1 `claim_notifications` / `mark_notification` / `expire_holds` / `apply_retention` |
+| Rollback | `supabase/rollbacks/20261102120000_hosp_emails_dashboard.down.sql` — exact migration-17 schema (`rollback-check.sh`, M18) |
+| Production | the worker runs only with `HOSPITALITY_ENGINE=on`; emails need `RESEND_API_KEY` |

@@ -134,10 +134,27 @@ export function eventText(e: { kind: string; from: string | null; to: string | n
 export const ACTOR_TEXT = { guest: "האורח", staff: "צוות", system: "המערכת" } as const;
 
 export const EMAIL_STATUS: Record<string, string> = {
-  pending: "בתור לשליחה",
+  queued: "בתור לשליחה",
   sending: "נשלח עכשיו",
   sent: "נשלח",
-  failed: "נכשל — יש ניסיון חוזר",
+  failed: "נכשל — ננסה שוב",
   dead: "נכשל",
-  cancelled: "בוטל",
+};
+
+/** שם המייל לפי האירוע (מסך המיילים וכרטיס ההזמנה) */
+export const EMAIL_EVENT: Record<string, string> = {
+  request_received: "לאורח: הבקשה התקבלה",
+  booking_confirmed: "לאורח: ההזמנה אושרה",
+  booking_declined: "לאורח: הבקשה לא אושרה",
+  request_expired: "לאורח: הבקשה פגה",
+  booking_cancelled: "לאורח: ההזמנה בוטלה",
+  cancellation_received: "לאורח: בקשת הביטול התקבלה",
+  cancellation_declined: "לאורח: בקשת הביטול לא אושרה",
+  new_request: "לעסק: בקשה חדשה",
+  new_booking: "לעסק: הזמנה חדשה",
+  approval_reminder: "לעסק: תזכורת לאישור",
+  request_expired_owner: "לעסק: בקשה פגה",
+  cancellation_requested: "לעסק: בקשת ביטול",
+  cancelled_by_guest: "לעסק: האורח ביטל",
+  request_withdrawn: "לעסק: הבקשה נמשכה",
 };

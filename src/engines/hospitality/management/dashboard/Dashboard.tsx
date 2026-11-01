@@ -7,6 +7,7 @@ import { CHECKLIST_STEPS, checklistProgress } from "../lib/checklist";
 import { formatDate, usageText } from "../lib/format";
 import { useManagement } from "../shell/management-context";
 import { BookingsCard } from "./BookingsCard";
+import { TodayCard } from "./TodayCard";
 import { UnitsCard } from "./UnitsCard";
 
 export function Dashboard() {
@@ -19,6 +20,7 @@ export function Dashboard() {
           כאן מנהלים את העסק: יחידות, מחירים, הזמנות ואורחים.
         </p>
       </div>
+      {ctx.permissions["bookings"] && <TodayCard />}
       {ctx.permissions["bookings"] && <BookingsCard />}
       <SetupChecklist />
       {ctx.permissions["catalog"] && <UnitsCard />}

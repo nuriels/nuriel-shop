@@ -12,6 +12,11 @@ export const engineRegistry = createEngineRegistry([ecommerceEngine, hospitality
 /** פונקציות השרת של המנועים שעדיין אין להן ממשק — נכללות בבנייה דרך כאן */
 export * as hospitalityServerFunctions from "@/engines/hospitality/server";
 
+/** תהליכי הרקע של המנועים — נקרא פעם אחת מ-src/server.ts */
+export function startEngineWorkers(): void {
+  for (const engine of engineRegistry.all()) engine.startWorkers?.();
+}
+
 /** המתג של פונקציות השרת — נרשם כ-middleware גלובלי ב-src/start.ts */
 export const engineGuard = createEngineGuard(engineRegistry);
 

@@ -10,6 +10,11 @@ export const hospitalityEngine: Engine = {
   // "ניהול Hospitality" בפאנל הפלטפורמה — רק הקובץ הזה, ורק בכתובת הפאנל
   platformAdminServerFn: (filename) =>
     filename === `${HOSPITALITY_SOURCE_PREFIX}api/platform-admin.functions.ts`,
+  // תור המיילים ותפוגת בקשות (2k) — בשרת בלבד, ורק כשמתג הסביבה דולק (נבדק בתוך ה-worker)
+  startWorkers() {
+    if (typeof window !== "undefined") return;
+    void import("./outbox/worker.server").then((m) => m.startOutboxWorker());
+  },
   async enabledFor(site: SiteRef) {
     const { backendEnabled } = await import("./access.server");
     return backendEnabled(site.id);

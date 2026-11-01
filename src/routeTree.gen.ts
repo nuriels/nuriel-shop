@@ -44,6 +44,7 @@ import { Route as CourierTokenRouteImport } from './routes/courier.$token'
 import { Route as ManageIndexRouteImport } from './routes/manage.index'
 import { Route as ManageBookingsRouteImport } from './routes/manage.bookings'
 import { Route as ManageCalendarRouteImport } from './routes/manage.calendar'
+import { Route as ManageEmailsRouteImport } from './routes/manage.emails'
 import { Route as ManageGuestsRouteImport } from './routes/manage.guests'
 import { Route as ManagePhotosRouteImport } from './routes/manage.photos'
 import { Route as ManagePoliciesRouteImport } from './routes/manage.policies'
@@ -255,6 +256,11 @@ const ManageBookingsRoute = ManageBookingsRouteImport.update({
 const ManageCalendarRoute = ManageCalendarRouteImport.update({
   id: '/calendar',
   path: '/calendar',
+  getParentRoute: () => ManageRoute,
+} as any)
+const ManageEmailsRoute = ManageEmailsRouteImport.update({
+  id: '/emails',
+  path: '/emails',
   getParentRoute: () => ManageRoute,
 } as any)
 const ManageGuestsRoute = ManageGuestsRouteImport.update({
@@ -482,6 +488,7 @@ export interface FileRoutesByFullPath {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
+  '/manage/emails': typeof ManageEmailsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
@@ -555,6 +562,7 @@ export interface FileRoutesByTo {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
+  '/manage/emails': typeof ManageEmailsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
@@ -630,6 +638,7 @@ export interface FileRoutesById {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
+  '/manage/emails': typeof ManageEmailsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
@@ -706,6 +715,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/bookings'
     | '/manage/calendar'
+    | '/manage/emails'
     | '/manage/guests'
     | '/manage/photos'
     | '/manage/policies'
@@ -779,6 +789,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/bookings'
     | '/manage/calendar'
+    | '/manage/emails'
     | '/manage/guests'
     | '/manage/photos'
     | '/manage/policies'
@@ -853,6 +864,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/bookings'
     | '/manage/calendar'
+    | '/manage/emails'
     | '/manage/guests'
     | '/manage/photos'
     | '/manage/policies'
@@ -1200,6 +1212,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageCalendarRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/emails': {
+      id: '/manage/emails'
+      path: '/emails'
+      fullPath: '/manage/emails'
+      preLoaderRoute: typeof ManageEmailsRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/guests': {
       id: '/manage/guests'
       path: '/guests'
@@ -1465,6 +1484,7 @@ declare module '@tanstack/react-router' {
 interface ManageRouteChildren {
   ManageBookingsRoute: typeof ManageBookingsRoute
   ManageCalendarRoute: typeof ManageCalendarRoute
+  ManageEmailsRoute: typeof ManageEmailsRoute
   ManageGuestsRoute: typeof ManageGuestsRoute
   ManagePhotosRoute: typeof ManagePhotosRoute
   ManagePoliciesRoute: typeof ManagePoliciesRoute
@@ -1483,6 +1503,7 @@ interface ManageRouteChildren {
 const ManageRouteChildren: ManageRouteChildren = {
   ManageBookingsRoute: ManageBookingsRoute,
   ManageCalendarRoute: ManageCalendarRoute,
+  ManageEmailsRoute: ManageEmailsRoute,
   ManageGuestsRoute: ManageGuestsRoute,
   ManagePhotosRoute: ManagePhotosRoute,
   ManagePoliciesRoute: ManagePoliciesRoute,
