@@ -6,7 +6,12 @@ export interface ChecklistStep {
   title: string;
   hint: string;
   /** המסך שבו משלימים את הצעד (כשכבר קיים) */
-  to?: "/manage/settings" | "/manage/units" | "/manage/photos";
+  to?:
+    | "/manage/settings"
+    | "/manage/units"
+    | "/manage/photos"
+    | "/manage/pricing"
+    | "/manage/policies";
 }
 
 export const CHECKLIST_STEPS: readonly ChecklistStep[] = [
@@ -28,8 +33,13 @@ export const CHECKLIST_STEPS: readonly ChecklistStep[] = [
     hint: "תמונה אחת לפחות של המקום (לא תמונת הדגמה)",
     to: "/manage/photos",
   },
-  { key: "prices", title: "מחירים", hint: "מחיר ללילה ליחידה פעילה" },
-  { key: "policy", title: "מדיניות ביטול", hint: "לבדוק את תנאי הביטול ולהתאים אותם לעסק" },
+  { key: "prices", title: "מחירים", hint: "מחיר ללילה ליחידה פעילה", to: "/manage/pricing" },
+  {
+    key: "policy",
+    title: "מדיניות ביטול",
+    hint: "לבדוק את תנאי הביטול ולהתאים אותם לעסק",
+    to: "/manage/policies",
+  },
 ];
 
 export function checklistProgress(state: Partial<Record<ChecklistKey, boolean>>): {

@@ -8,6 +8,7 @@ export type NavKey =
   | "units"
   | "photos"
   | "pricing"
+  | "policies"
   | "guests"
   | "emails"
   | "settings"
@@ -17,7 +18,14 @@ export interface NavItem {
   key: NavKey;
   label: string;
   /** נתיב של מסך קיים; בלי נתיב = עוד לא נבנה ("בקרוב") */
-  to?: "/manage" | "/manage/settings" | "/manage/team" | "/manage/units" | "/manage/photos";
+  to?:
+    | "/manage"
+    | "/manage/settings"
+    | "/manage/team"
+    | "/manage/units"
+    | "/manage/photos"
+    | "/manage/pricing"
+    | "/manage/policies";
   /** בניווט התחתון בטלפון (השאר תחת "עוד") */
   primary?: boolean;
   permission?: string;
@@ -37,7 +45,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
     also: ["/manage/units/", "/manage/properties/"],
   },
   { key: "photos", label: "תמונות", to: "/manage/photos", permission: "media" },
-  { key: "pricing", label: "מחירים", permission: "pricing" },
+  { key: "pricing", label: "מחירים", to: "/manage/pricing", permission: "pricing" },
+  { key: "policies", label: "מדיניות ביטול", to: "/manage/policies", permission: "policies" },
   { key: "guests", label: "אורחים", permission: "guests" },
   { key: "emails", label: "מיילים", permission: "bookings" },
   { key: "settings", label: "הגדרות העסק", to: "/manage/settings", permission: "settings" },

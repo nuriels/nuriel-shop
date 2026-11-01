@@ -167,3 +167,13 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Rollback | `supabase/rollbacks/20261101200000_hosp_media.down.sql` — refuses while 2e media exist; restores the exact migration-11 schema |
 | Tests | `scripts/db-tests/hospitality-media.test.sql` (39), `rollback-check.sh` (M12), `tests/unit/hospitality-media.test.ts`, `e2e/tests/manage-media.spec.ts` |
 | Production | nothing to configure; not applied anywhere but local / CI databases |
+
+## 20261101210000_hosp_pricing.sql — Stage 2f (hospitality)
+
+| | |
+|---|---|
+| Writes | staff lose direct writes on `rate_rules` and `policies` (SELECT + RLS kept) |
+| Functions | `pricing_view`, `unit_prices_set`, `rate_rule_save`, `rate_rule_delete`, `policy_save`, `policy_set_default`, `policy_archive`, `policy_history` (existing `policy_versions`), `policy_preview` (engine schedule for unsaved rules), `price_preview` (staff quote) — DEFINER, management flag, action log; no new table or column |
+| Rollback | `supabase/rollbacks/20261101210000_hosp_pricing.down.sql` — restores the exact migration-12 schema |
+| Tests | `scripts/db-tests/hospitality-pricing.test.sql` (48), Stage 1 schema / billing files updated, `rollback-check.sh` (M13), `tests/unit/hospitality-pricing.test.ts`, `e2e/tests/manage-pricing.spec.ts` |
+| Production | nothing to configure; not applied anywhere but local / CI databases |

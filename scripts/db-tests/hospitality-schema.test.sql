@@ -364,7 +364,7 @@ SELECT pg_temp.run_at(:hosp_c, 'flags: site C (flag off) — owner cannot write'
   format($$INSERT INTO hospitality.promotions (tenant_id, name, discount_kind, value) VALUES (%s, 'בריכה', 'percent', 5)$$, :'hosp_c'),
   :H_OWNER_C, 'row-level security');
 SELECT pg_temp.run_at(:hosp_c, 'flags: site C (flag off) — owner cannot update',
-  $$UPDATE hospitality.rate_rules SET value = 2$$, :H_OWNER_C, NULL, 0);
+  $$UPDATE hospitality.promotions SET value = 2$$, :H_OWNER_C, NULL, 0);
 SELECT pg_temp.run_at(:hosp_c, 'flags: site C — units are not writable directly at all (only the catalog functions, 2c.1)',
   $$UPDATE hospitality.units SET name = 'x'$$, :H_OWNER_C, 'permission denied');
 SELECT tests.check('flags: hospitality.flag_for() is server-only (not executable by authenticated)',
@@ -409,8 +409,8 @@ SELECT pg_temp.run_at(:hosp_a, 'rls: owner A cannot move a unit to site B (no di
 SELECT pg_temp.run_at(:hosp_a, 'rls: owner A can create rows directly where the plan still allows it (promotions; catalog only through functions since 2c.1 / 2d)',
   format($$WITH i AS (INSERT INTO hospitality.promotions (tenant_id, name, discount_kind, value, is_active) VALUES (%s, 'בריכה', 'percent', 5, false) RETURNING id)
           SELECT 1 FROM i$$, :'hosp_a'), :H_OWNER_A, NULL, 1);
-SELECT pg_temp.run_at(:hosp_a, 'rls: manager A can edit pricing',
-  $$UPDATE hospitality.rate_rules SET value = 1150$$, :H_MANAGER_A, NULL, 1);
+SELECT pg_temp.run_at(:hosp_a, 'rls: manager A edits prices only through the 2f functions (no direct writes since migration 13)',
+  $$UPDATE hospitality.rate_rules SET value = 1150$$, :H_MANAGER_A, 'permission denied');
 -- Stage 2b (migration 8): staff no longer write settings directly — only through
 -- update_settings() (per-field permission, audit). Tested in hospitality-settings-team.test.sql.
 SELECT pg_temp.run_at(:hosp_a, 'rls: manager A cannot write settings directly (only through update_settings)',
@@ -614,8 +614,10 @@ SELECT pg_temp.expect_error('policies: the default cannot be unset directly',
 SELECT pg_temp.expect_error('policies: the default cannot be deleted',
   format($$DELETE FROM hospitality.policies WHERE tenant_id = %s AND is_default$$, :'hosp_a'),
   'אי אפשר למחוק את מדיניות ברירת המחדל');
-SELECT pg_temp.run_at(:hosp_a, 'policies: the owner makes another policy the default (API)',
-  $$UPDATE hospitality.policies SET is_default = true WHERE id = '71c50000-0000-0000-0000-0000000000a2'$$, :H_OWNER_A, NULL, 1);
+SELECT pg_temp.run_at(:hosp_a, 'policies: staff cannot switch the default directly (only policy_set_default, 2f)',
+  $$UPDATE hospitality.policies SET is_default = true WHERE id = '71c50000-0000-0000-0000-0000000000a2'$$, :H_OWNER_A, 'permission denied');
+-- the database rule itself (as the functions do it): switching moves the single default
+UPDATE hospitality.policies SET is_default = true WHERE id = '71c50000-0000-0000-0000-0000000000a2';
 SELECT tests.check('policies: exactly one default after switching',
   format($$SELECT count(*) FILTER (WHERE is_default) = 1
             AND bool_or(is_default AND id = '71c50000-0000-0000-0000-0000000000a2')
@@ -623,7 +625,7 @@ SELECT tests.check('policies: exactly one default after switching',
 SELECT pg_temp.expect_error('policies: the default cannot be archived',
   $$UPDATE hospitality.policies SET is_archived = true WHERE id = '71c50000-0000-0000-0000-0000000000a2'$$, 'check constraint');
 SELECT pg_temp.run_at(:hosp_b, 'policies: owner B cannot switch site A''s default',
-  $$UPDATE hospitality.policies SET is_default = true WHERE name = 'גמישה'$$, :H_OWNER_B, NULL, 1);
+  $$UPDATE hospitality.policies SET is_default = true WHERE name = 'גמישה'$$, :H_OWNER_B, 'permission denied');
 SELECT tests.check('policies: site A still has its own default (B''s switch only touched B)',
   format($$SELECT bool_or(is_default AND id = '71c50000-0000-0000-0000-0000000000a2') AND count(*) FILTER (WHERE is_default) = 1
           FROM hospitality.policies WHERE tenant_id = %s$$, :'hosp_a'));

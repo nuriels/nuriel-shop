@@ -43,6 +43,8 @@ import { Route as CartCodeRouteImport } from './routes/cart.$code'
 import { Route as CourierTokenRouteImport } from './routes/courier.$token'
 import { Route as ManageIndexRouteImport } from './routes/manage.index'
 import { Route as ManagePhotosRouteImport } from './routes/manage.photos'
+import { Route as ManagePoliciesRouteImport } from './routes/manage.policies'
+import { Route as ManagePricingRouteImport } from './routes/manage.pricing'
 import { Route as ManageSettingsRouteImport } from './routes/manage.settings'
 import { Route as ManageTeamRouteImport } from './routes/manage.team'
 import { Route as ManageUnitsRouteImport } from './routes/manage.units'
@@ -243,6 +245,16 @@ const ManagePhotosRoute = ManagePhotosRouteImport.update({
   path: '/photos',
   getParentRoute: () => ManageRoute,
 } as any)
+const ManagePoliciesRoute = ManagePoliciesRouteImport.update({
+  id: '/policies',
+  path: '/policies',
+  getParentRoute: () => ManageRoute,
+} as any)
+const ManagePricingRoute = ManagePricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => ManageRoute,
+} as any)
 const ManageSettingsRoute = ManageSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -427,6 +439,8 @@ export interface FileRoutesByFullPath {
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
   '/manage/photos': typeof ManagePhotosRoute
+  '/manage/policies': typeof ManagePoliciesRoute
+  '/manage/pricing': typeof ManagePricingRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
@@ -491,6 +505,8 @@ export interface FileRoutesByTo {
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
   '/manage/photos': typeof ManagePhotosRoute
+  '/manage/policies': typeof ManagePoliciesRoute
+  '/manage/pricing': typeof ManagePricingRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
@@ -557,6 +573,8 @@ export interface FileRoutesById {
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
   '/manage/photos': typeof ManagePhotosRoute
+  '/manage/policies': typeof ManagePoliciesRoute
+  '/manage/pricing': typeof ManagePricingRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
@@ -624,6 +642,8 @@ export interface FileRouteTypes {
     | '/cart/$code'
     | '/courier/$token'
     | '/manage/photos'
+    | '/manage/policies'
+    | '/manage/pricing'
     | '/manage/settings'
     | '/manage/team'
     | '/manage/units'
@@ -688,6 +708,8 @@ export interface FileRouteTypes {
     | '/cart/$code'
     | '/courier/$token'
     | '/manage/photos'
+    | '/manage/policies'
+    | '/manage/pricing'
     | '/manage/settings'
     | '/manage/team'
     | '/manage/units'
@@ -753,6 +775,8 @@ export interface FileRouteTypes {
     | '/cart/$code'
     | '/courier/$token'
     | '/manage/photos'
+    | '/manage/policies'
+    | '/manage/pricing'
     | '/manage/settings'
     | '/manage/team'
     | '/manage/units'
@@ -1084,6 +1108,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManagePhotosRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/policies': {
+      id: '/manage/policies'
+      path: '/policies'
+      fullPath: '/manage/policies'
+      preLoaderRoute: typeof ManagePoliciesRouteImport
+      parentRoute: typeof ManageRoute
+    }
+    '/manage/pricing': {
+      id: '/manage/pricing'
+      path: '/pricing'
+      fullPath: '/manage/pricing'
+      preLoaderRoute: typeof ManagePricingRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/settings': {
       id: '/manage/settings'
       path: '/settings'
@@ -1292,6 +1330,8 @@ declare module '@tanstack/react-router' {
 
 interface ManageRouteChildren {
   ManagePhotosRoute: typeof ManagePhotosRoute
+  ManagePoliciesRoute: typeof ManagePoliciesRoute
+  ManagePricingRoute: typeof ManagePricingRoute
   ManageSettingsRoute: typeof ManageSettingsRoute
   ManageTeamRoute: typeof ManageTeamRoute
   ManageUnitsRoute: typeof ManageUnitsRoute
@@ -1302,6 +1342,8 @@ interface ManageRouteChildren {
 
 const ManageRouteChildren: ManageRouteChildren = {
   ManagePhotosRoute: ManagePhotosRoute,
+  ManagePoliciesRoute: ManagePoliciesRoute,
+  ManagePricingRoute: ManagePricingRoute,
   ManageSettingsRoute: ManageSettingsRoute,
   ManageTeamRoute: ManageTeamRoute,
   ManageUnitsRoute: ManageUnitsRoute,

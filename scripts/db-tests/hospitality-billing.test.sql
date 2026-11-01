@@ -345,9 +345,12 @@ CREATE TEMP TABLE he_terms AS
 SELECT id, policy_snapshot, policy_acceptance, hospitality._hash(policy_snapshot) AS h
   FROM hospitality.bookings WHERE tenant_id = :'sp';
 SELECT pg_temp.call(:'sp', NULL, format('SELECT hospitality.cancellation_quote(%L)', :'t1')) AS fee_before \gset
-SELECT pg_temp.call(:'sp', :OWNER_P, $$WITH x AS (UPDATE hospitality.policies
-   SET free_cancel_days = 30, fee_tiers = '[{"from_days": 30, "fee": "full"}]', auto_cancel = 'never' WHERE is_default RETURNING 1)
-   SELECT to_jsonb(count(*)) FROM x$$) IS NOT NULL AS ok \gset
+-- an edit by the owner (since 2f staff edit only through policy_save; the history trigger is what is tested here)
+SELECT set_config('request.jwt.claim.sub', :OWNER_P, false) IS NOT NULL AS ok \gset
+UPDATE hospitality.policies
+   SET free_cancel_days = 30, fee_tiers = '[{"from_days": 30, "fee": "full"}]', auto_cancel = 'never'
+ WHERE tenant_id = :'sp' AND is_default;
+SELECT set_config('request.jwt.claim.sub', '', false) IS NOT NULL AS ok \gset
 SELECT tests.check('policy history: editing the rules records version 2 with the actor',
   format($$SELECT count(*) = 2 AND max(version) = 2
              AND (SELECT changed_by = %L AND rules -> 'fee_tiers' -> 0 ->> 'fee' = 'full' FROM hospitality.policy_versions

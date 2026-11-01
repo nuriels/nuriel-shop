@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_pricing (2f): בלי נתונים חדשים; rollback → הצוות כותב שוב ישירות לכללי המחיר
+#     ולמדיניות, הסכמה זהה בדיוק למצב של מיגרציה 12
 #   • hosp_media (2e): הגנה (נשמרו תמונות עם גדלים / מקישור), rollback → הצוות כותב שוב
 #     ישירות ל-media, הסכמה זהה בדיוק למצב של מיגרציה 11
 #   • hosp_details (2d): הגנה (נשמרו פרטים חדשים — חניה / מידע פרטי להגעה / כללים בהזמנה),
@@ -44,6 +46,7 @@ M9=20261101170000_hosp_site_identity
 M10=20261101180000_hosp_catalog
 M11=20261101190000_hosp_details
 M12=20261101200000_hosp_media
+M13=20261101210000_hosp_pricing
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -64,6 +67,30 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- 2f: prices and policies (migration 13) ----------
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M13" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M13"
+down "$M13"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m12.sql"
+schema_dump "$SCHEMA_DIR/after-m13-down.sql"
+if diff -q "$SCHEMA_DIR/m12.sql" "$SCHEMA_DIR/after-m13-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 12, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 12:"; diff "$SCHEMA_DIR/m12.sql" "$SCHEMA_DIR/after-m13-down.sql" | head -20; exit 1
+fi
+expect "staff write rate rules and policies directly again; pricing functions gone; version history kept" \
+  "SELECT has_table_privilege('authenticated', 'hospitality.rate_rules', 'UPDATE')
+     AND has_table_privilege('authenticated', 'hospitality.policies', 'INSERT')
+     AND to_regprocedure('hospitality.pricing_view()') IS NULL
+     AND to_regclass('hospitality.policy_versions') IS NOT NULL"
 
 # ---------- 2e: photos and galleries (migration 12) ----------
 echo "rollback guard: $M12 refuses while 2e media are saved"
@@ -363,7 +390,7 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1 … $M12"
+echo "re-apply: $M1 … $M13"
 up "$M1"
 up "$M2"
 up "$M3"
@@ -376,6 +403,7 @@ up "$M9"
 up "$M10"
 up "$M11"
 up "$M12"
+up "$M13"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -417,7 +445,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 12 → 1 and re-apply 1 → 12 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 13 → 1 and re-apply 1 → 13 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi

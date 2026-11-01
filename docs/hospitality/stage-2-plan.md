@@ -1,6 +1,6 @@
 # Nuriel Hospitality — Stage 2 plan: owner management system
 
-Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, `6b279f4`) implemented and approved; R-1 fixed before 2c (migration 9); 2c approved (`stage-2c-plan.md`), 2c.1 (database, migration 10, `0efc471`) approved, 2c.2 (screens) implemented; P0 local preview kit (`238995e`) approved; 2c.3 (unit and property pages, whole property, order, activation, archive / delete, `e2de74d`) and 2c.4 (dashboard units card, setup link) implemented — awaiting review (`stage-2c-plan.md`). The overnight continuous approval of 01/11/2026 covers 2d → 2e → 2f → 3a in order; 2d (unit and property details, migration 11) and 2e (photos and galleries, migration 12) implemented — awaiting review (`stage-2d-plan.md`, `stage-2e-plan.md`).** Open items: §7.
+Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, `6b279f4`) implemented and approved; R-1 fixed before 2c (migration 9); 2c approved (`stage-2c-plan.md`), 2c.1 (database, migration 10, `0efc471`) approved, 2c.2 (screens) implemented; P0 local preview kit (`238995e`) approved; 2c.3 (unit and property pages, whole property, order, activation, archive / delete, `e2de74d`) and 2c.4 (dashboard units card, setup link) implemented — awaiting review (`stage-2c-plan.md`). The overnight continuous approval of 01/11/2026 covers 2d → 2e → 2f → 3a in order; 2d (unit and property details, migration 11) 2e (photos and galleries, migration 12) and 2f (prices and policies, migration 13) implemented — awaiting review (`stage-2d-plan.md`, `stage-2e-plan.md`, `stage-2f-plan.md`).** Open items: §7.
 **Round 7 (31/10/2026, after the requirements audit — roadmap D19–D30):** approved order
 2c.3 → 2c.4 → 2d → 2e → 2f → **3a** → 2h → 2i → **3b** → 2j → 2k; 2g merged into 3a; 2d and
 2e scopes extended (§3); house rules at property level (2d). Every requirement and its
@@ -27,7 +27,7 @@ Ecommerce regression before it is reported.
 | 2c | Properties and units (2c.1 ✓ 2c.2 ✓ 2c.3 ✓ 2c.4 ✓ — awaiting review) | create / edit / order / activate units; whole-property units; unit-limit UX | 10 ✓ |
 | 2d ✓ (awaiting review) | **Unit and property details** (extended — D20, D21; `stage-2d-plan.md`) | beds per room; amenity catalogue + custom, private / shared; parking; bathrooms + separate toilets; max adults / children; map location; guest info (public + private arrival info); property-level house rules snapshotted per booking; action log for beds and amenities | 11 ✓ (`20261101190000_hosp_details`) — additive |
 | 2e ✓ (awaiting review) | **Photos and galleries** (extended; `stage-2e-plan.md`) | upload (phone / computer), link import with a server copy, real content checks, SSRF protection, galleries (site / property / unit), cover / order / delete / replace, ALT, video, optimisation, storage usage | 12 ✓ (`20261101200000_hosp_media`) |
-| 2f | Pricing, rate rules and cancellation policies | base / weekend / seasons / holidays; price preview; policy editor with live example (house rules moved to 2d) | — |
+| 2f ✓ (awaiting review) | Pricing, rate rules and cancellation policies (`stage-2f-plan.md`) | base / weekend / seasons / holidays; price preview; policy editor with live example (house rules moved to 2d) | — |
 | ~~2g~~ | ~~Availability blocks~~ — **merged into 3a** | — | — |
 | **3a** | **Calendar board I** (D19) | month / week board of all units + per-unit view; bookings and blocks coloured by status; whole property; filters; automatic refresh; block / release from the board; built for many units | expected 13 |
 | (RT) | Hotel room types — **design closed before 2h**; implementation stage decided then (recommended here) | room type → physical rooms; a specific room per booking; room move | if approved |
@@ -800,7 +800,7 @@ Status at the end of 2b (`hospitality/stage-2`). "Where" names the stage that ow
 |---|---|---|
 | F-1 | A removed manager keeps a valid session token until it expires; every management request is refused at once (checked per request in the database), nothing else on the site is reachable | documented behaviour |
 | F-2 | Action log has no retention / export yet (append-only; rows go with the site) | 2j (privacy) |
-| F-3 | Checklist steps "units", "photos", "prices", "policy" have no link yet — their screens arrive in 2c–2f | units ✓ 2c.4 · photos ✓ 2e · prices and policy 2f |
+| F-3 | Checklist steps "units", "photos", "prices", "policy" have no link yet — their screens arrive in 2c–2f | units ✓ 2c.4 · photos ✓ 2e · prices and policy ✓ 2f |
 
 **Found by the requirements audit (31/10/2026 — `requirements-traceability.md`)**
 | # | Item | Where |
