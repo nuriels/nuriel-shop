@@ -108,6 +108,18 @@ write_app_env() {
     grow_key=$(openssl rand -base64 32 | tr -d '\n')
     GROW_KEY_CREATED=1
   fi
+  # Hospitality (docs/hospitality/install-guide.md §5): ערכים שכבר ב-.env נשמרים בין הרצות.
+  # HOSPITALITY_SECRET נוצר פעם אחת אם חסר (זהה בכל שרתי האפליקציה; החלפה רק מאפסת מונים).
+  local hosp_engine="${HOSPITALITY_ENGINE:-}" hosp_secret="${HOSPITALITY_SECRET:-}" hosp_pow="${HOSPITALITY_POW_MAX:-}"
+  if [[ -f "$APP_DIR/.env" ]]; then
+    [[ -z "$hosp_engine" ]] && hosp_engine=$(grep '^HOSPITALITY_ENGINE=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/^"//; s/"$//' || true)
+    [[ -z "$hosp_secret" ]] && hosp_secret=$(grep '^HOSPITALITY_SECRET=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/^"//; s/"$//' || true)
+    [[ -z "$hosp_pow" ]] && hosp_pow=$(grep '^HOSPITALITY_POW_MAX=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/^"//; s/"$//' || true)
+  fi
+  if [[ -z "$hosp_secret" ]]; then
+    hosp_secret=$(openssl rand -hex 32)
+    HOSP_SECRET_CREATED=1
+  fi
   log "כותב את קבצי הסביבה של האפליקציה"
   umask 077
   # docker compose קורא את הקובץ הזה אוטומטית (משתני ${...} ב-docker-compose.yml)
@@ -131,6 +143,10 @@ PUBLIC_SITE_URL=${SITE_URL}
 TENANT_BASE_DOMAIN=${TENANT_BASE_DOMAIN}
 # דומיין פאנל ניהול הפלטפורמה (/platform) — לא משמש כחנות
 PLATFORM_ADMIN_HOST=${PLATFORM_ADMIN_HOST}
+# Hospitality: המתג (ריק = כבוי, on = פעיל), סוד ה-HMAC (סוד — לגבות; זהה בכל השרתים), קושי ה-CAPTCHA
+HOSPITALITY_ENGINE=${hosp_engine}
+HOSPITALITY_SECRET=${hosp_secret}
+HOSPITALITY_POW_MAX=${hosp_pow}
 EOF
   umask 022
   # פורט מקומי בלבד — הגישה מבחוץ רק דרך Nginx (כמו שאר האפליקציות בשרת)
@@ -142,6 +158,9 @@ services:
     ports:
       - "127.0.0.1:${APP_PORT}:3000"
 EOF
+  if [[ "${HOSP_SECRET_CREATED:-}" == 1 ]]; then
+    echo "  ✓ נוצר HOSPITALITY_SECRET ב-$APP_DIR/.env — לשמור עותק בגיבוי הסודות"
+  fi
   if [[ "${GROW_KEY_CREATED:-}" == 1 ]]; then
     echo "  ✓ נוצר מפתח הצפנה לסליקה (GROW_SECRETS_KEY) ב-$APP_DIR/.env — לשמור עותק גיבוי נפרד"
   fi

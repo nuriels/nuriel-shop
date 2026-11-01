@@ -12,13 +12,13 @@
 
 החנויות (Ecommerce) לא מושפעות מאף שלב. כל שלב הפיך (§12).
 
-> **⚠ דרישה לפני §9 (הדלקת המנוע) — "תיקון A":** `docker-compose.yml` מעביר לקונטיינר רק את
-> המשתנים שרשומים בו. בגרסה שנבדקה בסקירה (`72fe23d`) `HOSPITALITY_*` לא רשומים בו, ולכן
-> `HOSPITALITY_ENGINE=on` ב-`.env` לא מגיע לאפליקציה והמנוע נשאר כבוי. בנוסף, `setup-selfhost.sh`
-> כותב את `.env` מחדש בכל הרצה ומוחק אותם. התיקון מחכה לאישור.
+> **משתני `HOSPITALITY_*` ("תיקון A"):**
+> - `docker-compose.yml` מעביר אותם לקונטיינר;
+> - `setup-selfhost.sh` שומר אותם בין הרצות.
 >
-> בדיקה שהוא בענף: `grep -c HOSPITALITY_ "$APP_DIR/docker-compose.yml"` — 3 ומעלה.
-> - תוצאה 0: אפשר לבצע את §0–§8, אבל לא את §9.
+> בגרסאות שלפני התיקון הם לא הגיעו לאפליקציה, והמנוע לא נדלק.
+>
+> בדיקה שהקוד בשרת כולל את התיקון: `grep -c HOSPITALITY_ "$APP_DIR/docker-compose.yml"` — 3 ומעלה.
 
 ---
 
@@ -306,7 +306,7 @@ unset ANON SERVICE
 - `.env.production` **לא** נקרא (שם ישן מ-`DEPLOY.md`).
 
 **איך מגיעים לקונטיינר:** רק משתנה שרשום תחת `environment:` ב-`docker-compose.yml` מגיע
-לאפליקציה. לכן `HOSPITALITY_*` דורשים את תיקון A.
+לאפליקציה. שלושת `HOSPITALITY_*` רשומים שם.
 
 | משתנה | ערך | הערה |
 |---|---|---|
@@ -327,10 +327,9 @@ unset ANON SERVICE
 - **החלפה:** המונים מתאפסים, ואתגרים פתוחים נכשלים (לכל היותר 30 דקות).
 
 **הרצה חוזרת של `setup-selfhost.sh`:** הסקריפט כותב את `.env` מחדש (גם עם `--env-only`).
-- **עם תיקון A:** `HOSPITALITY_*` נשמרים, ו-`HOSPITALITY_SECRET` נוצר פעם אחת אם חסר.
-- **בלי התיקון:** הם נמחקים, וצריך להוסיף שוב.
-- **משתנים נוספים:** כל משתנה שהסקריפט לא כותב נמחק באותה דרך — למשל `LOGIN_CODE_SECRET`
-  ו-`SERVER_PUBLIC_IPS`.
+- **`HOSPITALITY_*`:** נשמרים, ו-`HOSPITALITY_SECRET` נוצר פעם אחת אם חסר.
+- **משתנים שהסקריפט לא כותב:** נמחקים — למשל `LOGIN_CODE_SECRET` ו-`SERVER_PUBLIC_IPS`.
+  אחרי הרצה מוסיפים אותם שוב.
 
 **כבר עכשיו** (המנוע עדיין כבוי, אז זה לא משנה כלום):
 
@@ -539,7 +538,7 @@ docker compose up -d
 docker compose ps                                           # healthy אחרי כדקה
 docker logs --since 3m "$APP" 2>&1 | tail -50
 curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$APP_PORT/robots.txt"   # 200
-docker exec "$APP" sh -c 'printf %s "$HOSPITALITY_SECRET" | wc -c'   # 64 עם תיקון A; 0 בלעדיו
+docker exec "$APP" sh -c 'printf %s "$HOSPITALITY_SECRET" | wc -c'   # 64
 docker exec "$APP" printenv HOSPITALITY_ENGINE              # ריק — כבוי
 ```
 
@@ -551,13 +550,13 @@ docker exec "$APP" printenv HOSPITALITY_ENGINE              # ריק — כבו�
 > **פתוח מ-Stage 1:** ה-health check של Docker בודק רק את `/robots.txt`, שלא עובר דרך ה-SSR. זה
 > לא מזהה build שבור. **לפני ייצור:** health check שעובר דרך ה-handler.
 
-## 9. הפעלת Hospitality — בהדרגה (דורש תיקון A)
+## 9. הפעלת Hospitality — בהדרגה
 
 ### 9.1 המתג
 
 ```bash
 cd "$APP_DIR"
-grep -c HOSPITALITY_ docker-compose.yml                     # 3 ומעלה — תיקון A בענף
+grep -c HOSPITALITY_ docker-compose.yml                     # 3 ומעלה
 sed -i '/^HOSPITALITY_ENGINE=/d' .env && echo 'HOSPITALITY_ENGINE=on' >> .env
 docker compose up -d                                        # יוצר מחדש את הקונטיינר עם הערכים (בלי build)
 docker exec "$APP" printenv HOSPITALITY_ENGINE              # on
@@ -565,7 +564,8 @@ docker exec "$APP" sh -c 'printf %s "$HOSPITALITY_SECRET" | wc -c'   # 64
 docker logs --since 2m "$APP" 2>&1 | grep '\[hospitality' | tail
 ```
 
-- **ריק:** אם `printenv` מחזיר ריק — תיקון A חסר. המנוע כבוי.
+- **ריק:** אם `printenv` מחזיר ריק, הקוד בשרת מלפני תיקון A. בודקים עם `git log --oneline -3`.
+  המנוע כבוי.
 - **תהליך הרקע** עולה עם האפליקציה:
   - כל 30 שניות: מיילים ותפוגת בקשות;
   - כל 5 דקות: סנכרון יומנים;

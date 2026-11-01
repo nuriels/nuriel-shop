@@ -176,7 +176,8 @@
 2. **בדיקת נגישות ידנית** עם קורא מסך — `launch-checklist.md` §ג.
 3. **הגדרות שרת** (`install-guide.md` §4–7):
    - חשיפת הסכמה;
-   - `HOSPITALITY_*` מגיעים לקונטיינר (דורש את תיקון A);
+   - `HOSPITALITY_*` ב-`.env` (מגיעים לקונטיינר דרך `docker-compose.yml`, ו-`setup-selfhost.sh`
+     שומר אותם);
    - `X-Forwarded-For $remote_addr` בבלוקים של האתרים בלבד;
    - הגבלת Nginx לכניסה הישירה ל-Auth (לא חובה);
    - HTTPS לכל עסק.
