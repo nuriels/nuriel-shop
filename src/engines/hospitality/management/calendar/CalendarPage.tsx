@@ -42,11 +42,19 @@ import { errorText } from "../catalog/refresh";
 import { manageKeys } from "../lib/query-keys";
 import { useManagement } from "../shell/management-context";
 import {
+  hospitalityApproveBooking,
+  hospitalityBookingDetail,
+  hospitalitySetStayStatus,
+} from "../../api/bookings.functions";
+import { actionsFor, bookingKey, STATE_LABELS as BOOKING_STATE } from "../bookings/model";
+import { useBookingRefresh } from "../bookings/refresh";
+import {
   DAY_SHORT,
   STATUS_LABELS,
   TONE_LABELS,
   addDays,
   agenda,
+  dayOverview,
   buildRows,
   calendarKey,
   dayLabel,
@@ -165,7 +173,7 @@ export function CalendarPage() {
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">יומן</h1>
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="תצוגה">
-          {(["month", "week", "agenda"] as ViewMode[]).map((m) => (
+          {(["month", "week", "day", "agenda"] as ViewMode[]).map((m) => (
             <Button
               key={m}
               type="button"
@@ -174,7 +182,7 @@ export function CalendarPage() {
               aria-pressed={view === m}
               onClick={() => setMode(m)}
             >
-              {m === "month" ? "חודש" : m === "week" ? "שבוע" : "סדר יום"}
+              {m === "month" ? "חודש" : m === "week" ? "שבוע" : m === "day" ? "יום" : "סדר יום"}
             </Button>
           ))}
         </div>
@@ -208,7 +216,11 @@ export function CalendarPage() {
           <ChevronLeft className="size-4" aria-hidden="true" />
         </Button>
         <p className="text-lg font-medium" aria-live="polite" data-testid="calendar-title">
-          {view === "month" ? monthTitle(from) : `${dayLabel(from)} – ${dayLabel(addDays(to, -1))}`}
+          {view === "month"
+            ? monthTitle(from)
+            : view === "day"
+              ? `${dayLabel(anchor)}${anchor === data.today ? " — היום" : ""}`
+              : `${dayLabel(from)} – ${dayLabel(addDays(to, -1))}`}
         </p>
         <span className="ms-auto flex items-center gap-2">
           {query.isFetching && (
@@ -367,6 +379,15 @@ export function CalendarPage() {
       <Legend />
       {view === "agenda" ? (
         <Agenda view={data} filters={filters} onBooking={setBooking} onBlock={setBlock} />
+      ) : view === "day" ? (
+        <DayView
+          view={data}
+          date={anchor}
+          filters={filters}
+          onBooking={setBooking}
+          onBlock={setBlock}
+          onNewBlock={(unitId) => setBlockForm({ unitId, from: anchor, to: addDays(anchor, 1) })}
+        />
       ) : (
         <Board
           view={data}
@@ -780,10 +801,11 @@ function BookingPanel({
           {b.channel ?? (b.source === "site" ? "האתר" : b.source === "phone" ? "טלפון" : b.source)}
         </dd>
       </dl>
+      <QuickActions bookingId={b.id} />
       <Link
         to="/manage/bookings/$bookingId"
         params={{ bookingId: b.id }}
-        className="inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        className="inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium hover:bg-muted"
       >
         לעמוד ההזמנה
       </Link>
@@ -1006,5 +1028,193 @@ function BlockSheet(props: {
       )}
       {submitted && error && <p className="text-sm text-destructive">{error}</p>}
     </FormSheet>
+  );
+}
+
+/**
+ * פעולות מהיר מהיומן (3b): אישור, הגיעו / לא הגיעו / עזבו — עם הגרסה העדכנית של ההזמנה
+ * (נטענת כאן); דחייה, שינוי וביטול — בעמוד ההזמנה.
+ */
+function QuickActions({ bookingId }: { bookingId: string }) {
+  const refresh = useBookingRefresh(bookingId);
+  const detail = useQuery({
+    queryKey: bookingKey(bookingId),
+    queryFn: () => hospitalityBookingDetail({ data: { id: bookingId } }),
+  });
+  const [error, setError] = useState<string | null>(null);
+  const d = detail.data;
+  if (!d) return null;
+  const can = actionsFor(d);
+  const run = async (what: () => Promise<unknown>, done: string) => {
+    setError(null);
+    try {
+      await what();
+      toast.success(done);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      refresh();
+    }
+  };
+  const stay = (status: "checked_in" | "checked_out" | "no_show", done: string) =>
+    run(() => hospitalitySetStayStatus({ data: { id: d.id, status, revision: d.revision } }), done);
+  return (
+    <div className="flex flex-col gap-2" data-testid="quick-actions">
+      <p className="text-sm">
+        מצב: <span className="font-medium">{BOOKING_STATE[d.state]}</span>
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {can.approve && (
+          <ConfirmButton
+            label="אישור ההזמנה"
+            title={`לאשר את הזמנה #${d.number}?`}
+            description={<p>האורח יקבל מייל אישור.</p>}
+            confirmLabel="אישור"
+            onConfirm={() =>
+              run(
+                () =>
+                  hospitalityApproveBooking({
+                    data: { id: d.id, revision: d.revision, reason: null },
+                  }),
+                "ההזמנה אושרה",
+              )
+            }
+          />
+        )}
+        {can.checkIn && (
+          <ConfirmButton
+            label="הגיעו"
+            title="לסמן שהאורחים הגיעו?"
+            description={<p>ההזמנה תעבור ל"שוהים עכשיו".</p>}
+            confirmLabel="הגיעו"
+            onConfirm={() => stay("checked_in", "סומן: האורחים הגיעו")}
+          />
+        )}
+        {can.noShow && (
+          <ConfirmButton
+            label="לא הגיעו"
+            title="לסמן שהאורחים לא הגיעו?"
+            description={<p>דמי אי-ההגעה לפי המדיניות שנשמרה עם ההזמנה.</p>}
+            confirmLabel="לא הגיעו"
+            destructive
+            onConfirm={() => stay("no_show", "סומן: האורחים לא הגיעו")}
+          />
+        )}
+        {can.checkOut && (
+          <ConfirmButton
+            label="עזבו"
+            title="לסמן שהאורחים עזבו?"
+            description={<p>ההזמנה תעבור ל"עבר".</p>}
+            confirmLabel="עזבו"
+            onConfirm={() => stay("checked_out", "סומן: האורחים עזבו")}
+          />
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** תצוגת יום (3b): לכל יחידה — מגיעים, עוזבים, שוהים, חסום או פנוי הלילה */
+function DayView(props: {
+  view: CalendarView;
+  date: string;
+  filters: Filters;
+  onBooking: (b: CalendarBooking) => void;
+  onBlock: (k: CalendarBlock) => void;
+  onNewBlock: (unitId: string) => void;
+}) {
+  const rows = dayOverview(props.view, props.date, props.filters);
+  const count = (f: (r: (typeof rows)[number]) => boolean) => rows.filter(f).length;
+  const bookingButton = (b: CalendarBooking, what: string) => (
+    <button
+      type="button"
+      className="min-h-11 text-start font-medium text-primary hover:underline"
+      onClick={() => props.onBooking(b)}
+    >
+      {what}: #{b.number} {b.guest_name} ({nightsText(b)})
+    </button>
+  );
+  return (
+    <section className="flex flex-col gap-3" data-testid="calendar-day" aria-label="תצוגת יום">
+      <p className="flex flex-wrap gap-x-4 text-sm">
+        <span>מגיעים: {count((r) => Boolean(r.arriving))}</span>
+        <span>עוזבים: {count((r) => Boolean(r.leaving))}</span>
+        <span>תפוסות הלילה: {count((r) => r.night === "booked")}</span>
+        <span>פנויות הלילה: {count((r) => r.night === "free")}</span>
+        <span>חסומות: {count((r) => r.night === "blocked")}</span>
+      </p>
+      <ul className="grid gap-2 md:grid-cols-2">
+        {rows.map((r) => (
+          <li
+            key={r.unit.id}
+            className="flex flex-col gap-1 rounded-md border p-3 text-sm"
+            data-day-unit={r.unit.name}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold">{r.unit.name}</span>
+              <span
+                className={cn(
+                  "rounded px-2 py-0.5 text-xs",
+                  r.night === "free" && "bg-emerald-100 text-emerald-900",
+                  r.night === "booked" && "bg-sky-100 text-sky-900",
+                  r.night === "blocked" && "bg-slate-200 text-slate-900",
+                )}
+              >
+                {r.night === "free"
+                  ? "פנויה הלילה"
+                  : r.night === "booked"
+                    ? "תפוסה הלילה"
+                    : "חסומה"}
+              </span>
+            </div>
+            {r.leaving && bookingButton(r.leaving, "עוזבים")}
+            {r.arriving && bookingButton(r.arriving, "מגיעים")}
+            {r.staying &&
+              r.staying !== r.arriving &&
+              r.staying.unit_id === r.unit.id &&
+              bookingButton(r.staying, "שוהים")}
+            {r.staying && r.staying.unit_id !== r.unit.id && (
+              <span className="text-muted-foreground">
+                {r.unit.kind === "whole_property"
+                  ? `חלק מהמתחם תפוס — #${r.staying.number}`
+                  : `תפוסה דרך "כל המתחם" — #${r.staying.number}`}
+              </span>
+            )}
+            {r.block && (
+              <button
+                type="button"
+                className="min-h-11 text-start hover:underline"
+                onClick={() => props.onBlock(r.block!)}
+              >
+                חסום{r.block.reason ? ` — ${r.block.reason}` : ""}
+              </button>
+            )}
+            {r.night === "free" && (
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  to="/manage/bookings/new"
+                  search={{ unit: r.unit.id, from: props.date, to: addDays(props.date, 1) }}
+                  className="inline-flex min-h-11 items-center rounded-md border px-3 font-medium text-primary hover:bg-primary/5"
+                >
+                  הוספת הזמנה
+                </Link>
+                <button
+                  type="button"
+                  className="inline-flex min-h-11 items-center rounded-md border px-3 hover:bg-muted"
+                  onClick={() => props.onNewBlock(r.unit.id)}
+                >
+                  חסימה
+                </button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

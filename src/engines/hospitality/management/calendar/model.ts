@@ -22,7 +22,7 @@ export const diffDays = (a: string, b: string) =>
   Math.round((toDate(b).getTime() - toDate(a).getTime()) / DAY);
 export const dow = (isoDate: string) => toDate(isoDate).getUTCDay();
 
-export type ViewMode = "month" | "week" | "agenda";
+export type ViewMode = "month" | "week" | "day" | "agenda";
 
 /** החודש של התאריך: מהראשון לחודש עד הראשון לחודש הבא; שבוע: 7 ימים מיום ראשון */
 export function rangeFor(mode: ViewMode, anchor: string): { from: string; to: string } {
@@ -36,6 +36,8 @@ export function rangeFor(mode: ViewMode, anchor: string): { from: string; to: st
     const from = addDays(anchor, -dow(anchor));
     return { from, to: addDays(from, 7) };
   }
+  // יום: גם הלילה הקודם — כדי לראות את מי שעוזב היום
+  if (mode === "day") return { from: addDays(anchor, -1), to: addDays(anchor, 1) };
   return { from: anchor, to: addDays(anchor, 14) };
 }
 
@@ -44,7 +46,7 @@ export function shift(mode: ViewMode, anchor: string, dir: 1 | -1): string {
     const d = toDate(anchor);
     return iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + dir, 1)));
   }
-  return addDays(anchor, dir * (mode === "week" ? 7 : 14));
+  return addDays(anchor, dir * (mode === "week" ? 7 : mode === "day" ? 1 : 14));
 }
 
 export const daysOf = (from: string, to: string) =>
@@ -321,4 +323,59 @@ export function visibleWindow(
   const first = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
   const last = Math.min(total, Math.ceil((scrollTop + height) / rowHeight) + overscan);
   return { first, last };
+}
+
+// ---------- תצוגת יום (Stage 3b) ----------
+
+export interface DayUnit {
+  unit: CalendarUnit;
+  /** מה קורה ביחידה בלילה של היום */
+  night: "free" | "booked" | "blocked";
+  staying: CalendarBooking | null;
+  arriving: CalendarBooking | null;
+  leaving: CalendarBooking | null;
+  block: CalendarBlock | null;
+}
+
+/** יום אחד: לכל יחידה — מי מגיע, מי עוזב, מי נשאר, חסום או פנוי הלילה ("כל המתחם" — דרך יחידותיו) */
+export function dayOverview(
+  view: CalendarView,
+  date: string,
+  filters?: Pick<Filters, "propertyId" | "unitId">,
+): DayUnit[] {
+  const only = filters?.unitId ? relatedUnits(view, filters.unitId) : null;
+  const wholeOf = new Map<string, string>();
+  for (const u of view.units) for (const m of u.member_ids ?? []) wholeOf.set(m, u.id);
+  const holdingB = view.bookings.filter((b) => holding(b));
+  const covers = (unitId: string) => {
+    const ids = new Set([unitId]);
+    const w = wholeOf.get(unitId);
+    if (w) ids.add(w);
+    for (const m of view.units.find((u) => u.id === unitId)?.member_ids ?? []) ids.add(m);
+    return ids;
+  };
+  return view.units
+    .filter((u) => u.is_active || holdingB.some((b) => b.unit_id === u.id))
+    .filter(
+      (u) =>
+        (!only || only.has(u.id)) && (!filters?.propertyId || u.property_id === filters.propertyId),
+    )
+    .map((u) => {
+      const ids = covers(u.id);
+      const own = holdingB.filter((b) => b.unit_id === u.id);
+      const staying =
+        holdingB.find((b) => ids.has(b.unit_id) && b.check_in <= date && b.check_out > date) ??
+        null;
+      const block =
+        view.blocks.find((k) => ids.has(k.unit_id) && k.start_date <= date && k.end_date > date) ??
+        null;
+      return {
+        unit: u,
+        night: staying ? "booked" : block ? "blocked" : "free",
+        staying,
+        arriving: own.find((b) => b.check_in === date) ?? null,
+        leaving: own.find((b) => b.check_out === date) ?? null,
+        block,
+      };
+    });
 }
