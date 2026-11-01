@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   BedDouble,
+  Images,
   CalendarCheck,
   LayoutDashboard,
   Mail,
@@ -29,6 +30,7 @@ const ICONS: Record<NavKey, LucideIcon> = {
   dashboard: LayoutDashboard,
   bookings: CalendarCheck,
   units: BedDouble,
+  photos: Images,
   pricing: Tag,
   guests: Users,
   emails: Mail,

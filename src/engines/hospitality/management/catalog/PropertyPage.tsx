@@ -28,6 +28,8 @@ import {
 import { PROPERTY_TYPES, type CatalogProperty, type CatalogView } from "../../types/catalog";
 import { PROPERTY_LABELS, WHOLE_MEMBERS_ERROR } from "../../validation/catalog";
 import { ArrivalInfoCard } from "../details/ArrivalInfoCard";
+import { MediaGallery } from "../media/MediaGallery";
+import { useManagement } from "../shell/management-context";
 import { PropertyDetailSections } from "../details/PropertySections";
 import { ChoiceField, SelectField, TextAreaField, TextField } from "../lib/fields";
 import { manageKeys } from "../lib/query-keys";
@@ -106,6 +108,7 @@ function PropertyEditor({ view, property }: { view: CatalogView; property: Catal
   const [gone, setGone] = useState(false);
   const [wholeDirty, setWholeDirty] = useState(false);
   const [arrivalDirty, setArrivalDirty] = useState(false);
+  const canMedia = useManagement().permissions["media"] === true;
   const [adding, setAdding] = useState(false);
 
   const errors = propertyFormErrors(form);
@@ -435,6 +438,16 @@ function PropertyEditor({ view, property }: { view: CatalogView; property: Catal
       {/* מחוץ לטופס של העמוד: שמירה משלו, ו-Enter בשדות הקודים לא שומר את העמוד */}
       {!gone && (
         <div className="mx-auto mt-5 flex max-w-3xl flex-col gap-5">
+          {canMedia && (
+            <div id="gallery">
+              <MediaGallery
+                galleryRef={{ ownerKind: "property", ownerId: property.id }}
+                title="תמונות המתחם"
+                description="תמונות של המתחם כולו — שטחים משותפים, בריכה, נוף. כל שינוי נשמר מיד."
+                canEdit={!readOnly}
+              />
+            </div>
+          )}
           <ArrivalInfoCard propertyId={property.id} onDirty={setArrivalDirty} />
         </div>
       )}

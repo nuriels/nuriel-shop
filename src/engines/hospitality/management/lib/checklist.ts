@@ -6,7 +6,7 @@ export interface ChecklistStep {
   title: string;
   hint: string;
   /** המסך שבו משלימים את הצעד (כשכבר קיים) */
-  to?: "/manage/settings" | "/manage/units";
+  to?: "/manage/settings" | "/manage/units" | "/manage/photos";
 }
 
 export const CHECKLIST_STEPS: readonly ChecklistStep[] = [
@@ -22,7 +22,12 @@ export const CHECKLIST_STEPS: readonly ChecklistStep[] = [
     hint: "צימר, סוויטה או חדר — עם מספר אורחים",
     to: "/manage/units",
   },
-  { key: "photos", title: "תמונות", hint: "תמונה אחת לפחות של המקום (לא תמונת הדגמה)" },
+  {
+    key: "photos",
+    title: "תמונות",
+    hint: "תמונה אחת לפחות של המקום (לא תמונת הדגמה)",
+    to: "/manage/photos",
+  },
   { key: "prices", title: "מחירים", hint: "מחיר ללילה ליחידה פעילה" },
   { key: "policy", title: "מדיניות ביטול", hint: "לבדוק את תנאי הביטול ולהתאים אותם לעסק" },
 ];

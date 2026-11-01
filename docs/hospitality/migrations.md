@@ -156,3 +156,14 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Rollback | `supabase/rollbacks/20261101190000_hosp_details.down.sql` — refuses while any 2d data is saved; restores the exact migration-10 schema (verified by a full schema comparison in `rollback-check.sh`) |
 | Tests | `scripts/db-tests/hospitality-details.test.sql` (96 assertions), concurrency 39/39 unchanged, Stage 1 / 2c / booking files updated, `rollback-check.sh` (M11), `tests/unit/hospitality-details.test.ts`, `e2e/tests/manage-details.spec.ts` |
 | Production | nothing to configure; not applied anywhere but local / CI databases |
+
+## 20261101200000_hosp_media.sql — Stage 2e (hospitality)
+
+| | |
+|---|---|
+| Columns | `media.variants` (paths of the 960 / 480 / thumb sizes), `media.source_url` (link imports) |
+| Writes | staff lose direct writes on `media` (SELECT + RLS kept); files are written to `hosp-media` with the user's token (existing storage policies; G12 verified on the real Storage API) |
+| Functions | `media_list`, `media_galleries`, `media_add`, `media_add_embed`, `media_update`, `media_set_cover`, `media_reorder`, `media_replace`, `media_delete` — DEFINER, `media` permission, strict path rules (`<tenant>/<uuid>…`), gallery lock, action log; replace / delete return the files for the server to delete |
+| Rollback | `supabase/rollbacks/20261101200000_hosp_media.down.sql` — refuses while 2e media exist; restores the exact migration-11 schema |
+| Tests | `scripts/db-tests/hospitality-media.test.sql` (39), `rollback-check.sh` (M12), `tests/unit/hospitality-media.test.ts`, `e2e/tests/manage-media.spec.ts` |
+| Production | nothing to configure; not applied anywhere but local / CI databases |

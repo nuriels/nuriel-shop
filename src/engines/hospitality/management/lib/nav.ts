@@ -3,13 +3,21 @@
 // ההרשאה עצמה נאכפת במסד; כאן רק מה מוצג.
 
 export type NavKey =
-  "dashboard" | "bookings" | "units" | "pricing" | "guests" | "emails" | "settings" | "team";
+  | "dashboard"
+  | "bookings"
+  | "units"
+  | "photos"
+  | "pricing"
+  | "guests"
+  | "emails"
+  | "settings"
+  | "team";
 
 export interface NavItem {
   key: NavKey;
   label: string;
   /** נתיב של מסך קיים; בלי נתיב = עוד לא נבנה ("בקרוב") */
-  to?: "/manage" | "/manage/settings" | "/manage/team" | "/manage/units";
+  to?: "/manage" | "/manage/settings" | "/manage/team" | "/manage/units" | "/manage/photos";
   /** בניווט התחתון בטלפון (השאר תחת "עוד") */
   primary?: boolean;
   permission?: string;
@@ -28,6 +36,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: "catalog",
     also: ["/manage/units/", "/manage/properties/"],
   },
+  { key: "photos", label: "תמונות", to: "/manage/photos", permission: "media" },
   { key: "pricing", label: "מחירים", permission: "pricing" },
   { key: "guests", label: "אורחים", permission: "guests" },
   { key: "emails", label: "מיילים", permission: "bookings" },
