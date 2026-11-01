@@ -120,8 +120,14 @@ export async function seedDemo({ log = console.log } = {}) {
   );
   const admin = await signIn(ACCOUNTS.admin);
 
-  // המנוע פתוח ברמת הפלטפורמה — רק המסד וניהול האתרים (בלי אתר ציבורי והזמנות)
-  for (const key of ["hospitality_backend_enabled", "hospitality_management_enabled"]) {
+  // המנוע פתוח ברמת הפלטפורמה: המסד, ניהול האתרים, האתר הציבורי והזמנות מהאתר (Stage 4).
+  // ברמת העסק — האתר וההזמנות נפתחים רק בעסק שמסומן website (צימרי הגליל).
+  for (const key of [
+    "hospitality_backend_enabled",
+    "hospitality_management_enabled",
+    "hospitality_frontend_enabled",
+    "hospitality_booking_enabled",
+  ]) {
     await rpc(
       "platform_set_flag",
       { _key: key, _enabled: true },
@@ -151,7 +157,14 @@ export async function seedDemo({ log = console.log } = {}) {
          VALUES (${q(siteId)}, ${q(ids[site.owner])}, ${q(site.owner)},
                  ${q(`demo_${site.slug.replace(/-/g, "_")}_owner`)}, 'admin', true, true)`);
 
-    for (const key of ["hospitality_backend_enabled", "hospitality_management_enabled"]) {
+    const siteFlags = site.website
+      ? ["hospitality_frontend_enabled", "hospitality_booking_enabled"]
+      : [];
+    for (const key of [
+      "hospitality_backend_enabled",
+      "hospitality_management_enabled",
+      ...siteFlags,
+    ]) {
       await rpc(
         "platform_set_flag",
         { _key: key, _enabled: true, _tenant_id: siteId },
@@ -254,6 +267,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
 כתובות (בדפדפן; *.localhost מפנה למחשב שלך):
   פאנל הפלטפורמה:  http://platform.${base}/platform     (${ACCOUNTS.admin})
   מתחם צימרים:     http://demo-zimmer.${base}/manage    (${ACCOUNTS.zimmerOwner})
+  האתר של המתחם:   http://demo-zimmer.${base}/          (אתר ציבורי + בקשות הזמנה)
   וילה:            http://demo-villa.${base}/manage     (${ACCOUNTS.villaOwner})
   מלון בוטיק:      http://demo-hotel.${base}/manage     (${ACCOUNTS.hotelOwner} / ${ACCOUNTS.hotelManager})
   עסק חדש (ריק):   http://demo-new.${base}/manage       (${ACCOUNTS.newOwner})

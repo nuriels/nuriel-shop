@@ -220,3 +220,11 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Functions | `staff_emails`, `requeue_notification` (logged), `dashboard`, `_occupancy` — `bookings`; the sending itself is the app worker (`outbox/worker.server.ts`) with the Stage 1 `claim_notifications` / `mark_notification` / `expire_holds` / `apply_retention` |
 | Rollback | `supabase/rollbacks/20261102120000_hosp_emails_dashboard.down.sql` — exact migration-17 schema (`rollback-check.sh`, M18) |
 | Production | the worker runs only with `HOSPITALITY_ENGINE=on`; emails need `RESEND_API_KEY` |
+
+## 20261102130000_hosp_public_site.sql — Stage 4a (hospitality)
+
+| | |
+|---|---|
+| Functions | `public_site()` (anon: business details, `booking_open`, galleries, default policy, active properties — description, coordinates, parking, house rules, public guest info, amenities, photos — and active units — capacity, rooms, beds, amenities, photos, "from" price, minimum nights, own policy), `public_availability(unit, from, to)` (anon: busy nights only, ≤ 120 days; an expired request does not hold the night); helpers `_public_site_tenant` (request tenant + database flag + `hospitality_frontend_enabled`), `_public_media`, `_public_amenities`, `_public_policy`. Never returned: guests, private arrival info, notes, staff emails, rate rules. No new table or column |
+| Rollback | `supabase/rollbacks/20261102130000_hosp_public_site.down.sql` — exact migration-18 schema (`rollback-check.sh`, M19) |
+| Production | nothing to configure; a business's site opens with the platform switch + the business's `hospitality_frontend_enabled` (and requests with `hospitality_booking_enabled`) |

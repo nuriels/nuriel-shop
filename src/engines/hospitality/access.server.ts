@@ -13,3 +13,9 @@ export async function managementEnabled(siteId: string): Promise<boolean> {
   if (!(await backendEnabled(siteId))) return false;
   return featureEnabled(HOSPITALITY_FLAGS.management, siteId);
 }
+
+/** האתר הציבורי של העסק (Stage 4): המסד + hospitality_frontend_enabled. לא תלוי באזור הניהול. */
+export async function siteEnabled(siteId: string): Promise<boolean> {
+  if (!(await backendEnabled(siteId))) return false;
+  return featureEnabled(HOSPITALITY_FLAGS.frontend, siteId);
+}

@@ -28,3 +28,6 @@ export function hospitalitySwitchOn(
 
 /** אזור הניהול של בעל העסק (Stage 2) */
 export const MANAGE_PATH = "/manage";
+
+/** האתר הציבורי של העסק (Stage 4); "/" מופנה לכאן כשהאתר פתוח */
+export const SITE_PATH = "/stay";

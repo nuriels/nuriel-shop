@@ -1,0 +1,155 @@
+// האתר הציבורי של העסק (Stage 4) — מה שהאתר מקבל מהשרת (public_site, מיגרציה 19).
+// רק מידע ציבורי: בלי פרטי אורחים, קודי כניסה, הערות פנימיות או כללי מחיר.
+export interface PublicMedia {
+  id: string;
+  kind: "image" | "video" | "embed";
+  alt: string | null;
+  width: number | null;
+  height: number | null;
+  is_cover: boolean;
+  /** תמונת הדגמה (מסומנת "להמחשה" באתר) */
+  is_demo: boolean;
+  embed_provider: "youtube" | "vimeo" | null;
+  embed_id: string | null;
+  /** הקובץ עצמו (WebP 1600 / סרטון); null בהטמעה */
+  url: string | null;
+  /** 480w / 960w / 1600w */
+  srcset: string | null;
+  /** תמונה קטנה (רשימות, תצוגה מקדימה) */
+  thumb_url: string | null;
+}
+
+export interface PublicAmenity {
+  name: string;
+  icon: string | null;
+  category: string | null;
+  note: string | null;
+}
+
+export interface PublicBed {
+  bed_type: string;
+  quantity: number;
+  room_label: string | null;
+}
+
+export interface PublicRules {
+  smoking: string | null;
+  pets: string | null;
+  pets_note: string | null;
+  events: string | null;
+  quiet_from: string | null;
+  quiet_to: string | null;
+  custom: string[] | null;
+}
+
+export interface PublicProperty {
+  id: string;
+  slug: string;
+  name: string;
+  property_type: string | null;
+  description: string | null;
+  address: string | null;
+  location: { lat: number; lng: number } | null;
+  parking: string | null;
+  parking_type: string | null;
+  parking_spaces: number | null;
+  parking_fee_note: string | null;
+  parking_instructions: string | null;
+  guest_info: string | null;
+  rules: PublicRules;
+  amenities: PublicAmenity[];
+  media: PublicMedia[];
+}
+
+export interface PublicUnit {
+  id: string;
+  slug: string;
+  name: string;
+  property_id: string;
+  /** unit = יחידה אחת; whole_property = כל המתחם (מורכב מיחידות) */
+  kind: "unit" | "whole_property";
+  unit_type: string | null;
+  description: string | null;
+  capacity: number;
+  base_occupancy: number;
+  max_adults: number | null;
+  max_children: number | null;
+  child_age_limit: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  separate_toilets: number | null;
+  /** מחיר בסיס ללילה ("החל מ-"); המחיר הסופי — רק מהצעת המחיר בשרת */
+  base_price: number;
+  min_nights: number;
+  /** מדיניות ביטול משלה (אחרת — של העסק) */
+  policy: PublicPolicy | null;
+  member_ids: string[] | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  beds: PublicBed[];
+  amenities: PublicAmenity[];
+  media: PublicMedia[];
+}
+
+export interface PublicFeeTier {
+  from_days: number;
+  fee: "none" | "nights" | "percent_total" | "fixed" | "full";
+  value?: number;
+}
+
+export interface PublicPolicy {
+  name: string;
+  free_cancel_days: number | null;
+  fee_tiers: PublicFeeTier[] | null;
+  no_show_fee: string | null;
+  no_show_value: number | null;
+  deposit_kind: string | null;
+  deposit_value: number | null;
+  guest_text: string | null;
+}
+
+export interface PublicBusiness {
+  name: string;
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  address: string | null;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  currency: string;
+  timezone: string;
+  booking_mode: "request" | "instant" | string;
+  approval_hours: number;
+}
+
+export interface PublicSite {
+  business: PublicBusiness;
+  /** היום באזור הזמן של העסק (YYYY-MM-DD) */
+  today: string;
+  /** אפשר לשלוח בקשת הזמנה מהאתר (דגל ההזמנות + מנוי פעיל) */
+  booking_open: boolean;
+  gallery: PublicMedia[];
+  policy: PublicPolicy | null;
+  properties: PublicProperty[];
+  units: PublicUnit[];
+}
+
+export interface PublicAvailability {
+  unit_id: string;
+  from: string;
+  to: string;
+  /** לילות תפוסים (YYYY-MM-DD) — בלי מי / למה */
+  busy: string[];
+}
+
+/** הצורה הגולמית מהמסד (נתיבי אחסון במקום כתובות) */
+export type RawPublicMedia = Omit<PublicMedia, "url" | "srcset" | "thumb_url"> & {
+  path: string | null;
+  variants: Record<string, string> | null;
+};
+
+export type RawPublicSite = Omit<PublicSite, "gallery" | "properties" | "units"> & {
+  gallery: RawPublicMedia[];
+  properties: (Omit<PublicProperty, "media"> & { media: RawPublicMedia[] })[];
+  units: (Omit<PublicUnit, "media"> & { media: RawPublicMedia[] })[];
+};

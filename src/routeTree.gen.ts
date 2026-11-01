@@ -31,6 +31,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SitemapRouteImport } from './routes/sitemap'
+import { Route as StayRouteImport } from './routes/stay'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as WarehouseRouteImport } from './routes/warehouse'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin_.analytics'
@@ -61,6 +62,7 @@ import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
 import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrades'
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
 import { Route as PwaIconRouteImport } from './routes/pwa.$icon'
+import { Route as StayIndexRouteImport } from './routes/stay.index'
 import { Route as UnsubscribeTokenRouteImport } from './routes/unsubscribe.$token'
 import { Route as AdminInventoryLabelsRouteImport } from './routes/admin_.inventory_.labels'
 import { Route as AdminInventorySerialsRouteImport } from './routes/admin_.inventory_.serials'
@@ -82,6 +84,7 @@ import { Route as ManageGuestsGuestIdRouteImport } from './routes/manage.guests_
 import { Route as ManagePropertiesPropertyIdRouteImport } from './routes/manage.properties.$propertyId'
 import { Route as ManageUnitsUnitIdRouteImport } from './routes/manage.units_.$unitId'
 import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
+import { Route as StayUnitsUnitSlugRouteImport } from './routes/stay.units.$unitSlug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -191,6 +194,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const SitemapRoute = SitemapRouteImport.update({
   id: '/sitemap',
   path: '/sitemap',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StayRoute = StayRouteImport.update({
+  id: '/stay',
+  path: '/stay',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TermsRoute = TermsRouteImport.update({
@@ -343,6 +351,11 @@ const PwaIconRoute = PwaIconRouteImport.update({
   path: '/pwa/$icon',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StayIndexRoute = StayIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StayRoute,
+} as any)
 const UnsubscribeTokenRoute = UnsubscribeTokenRouteImport.update({
   id: '/unsubscribe/$token',
   path: '/unsubscribe/$token',
@@ -452,6 +465,11 @@ const PlatformCustomersTenantIdRoute =
     path: '/platform/customers/$tenantId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const StayUnitsUnitSlugRoute = StayUnitsUnitSlugRouteImport.update({
+  id: '/units/$unitSlug',
+  path: '/units/$unitSlug',
+  getParentRoute: () => StayRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -476,6 +494,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap': typeof SitemapRoute
+  '/stay': typeof StayRouteWithChildren
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
@@ -507,6 +526,7 @@ export interface FileRoutesByFullPath {
   '/pwa/$icon': typeof PwaIconRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/manage/': typeof ManageIndexRoute
+  '/stay/': typeof StayIndexRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/inventory/serials': typeof AdminInventorySerialsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -527,6 +547,7 @@ export interface FileRoutesByFullPath {
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -581,6 +602,7 @@ export interface FileRoutesByTo {
   '/pwa/$icon': typeof PwaIconRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/manage': typeof ManageIndexRoute
+  '/stay': typeof StayIndexRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/inventory/serials': typeof AdminInventorySerialsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -601,6 +623,7 @@ export interface FileRoutesByTo {
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -626,6 +649,7 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap': typeof SitemapRoute
+  '/stay': typeof StayRouteWithChildren
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
   '/admin_/analytics': typeof AdminAnalyticsRoute
@@ -657,6 +681,7 @@ export interface FileRoutesById {
   '/pwa/$icon': typeof PwaIconRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/manage/': typeof ManageIndexRoute
+  '/stay/': typeof StayIndexRoute
   '/admin_/inventory_/labels': typeof AdminInventoryLabelsRoute
   '/admin_/inventory_/serials': typeof AdminInventorySerialsRoute
   '/admin_/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -677,6 +702,7 @@ export interface FileRoutesById {
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/units_/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -703,6 +729,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/reset-password'
     | '/sitemap'
+    | '/stay'
     | '/terms'
     | '/warehouse'
     | '/admin/analytics'
@@ -734,6 +761,7 @@ export interface FileRouteTypes {
     | '/pwa/$icon'
     | '/unsubscribe/$token'
     | '/manage/'
+    | '/stay/'
     | '/admin/inventory/labels'
     | '/admin/inventory/serials'
     | '/admin/marketing/abandoned-carts'
@@ -754,6 +782,7 @@ export interface FileRouteTypes {
     | '/manage/properties/$propertyId'
     | '/manage/units/$unitId'
     | '/platform/customers/$tenantId'
+    | '/stay/units/$unitSlug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -808,6 +837,7 @@ export interface FileRouteTypes {
     | '/pwa/$icon'
     | '/unsubscribe/$token'
     | '/manage'
+    | '/stay'
     | '/admin/inventory/labels'
     | '/admin/inventory/serials'
     | '/admin/marketing/abandoned-carts'
@@ -828,6 +858,7 @@ export interface FileRouteTypes {
     | '/manage/properties/$propertyId'
     | '/manage/units/$unitId'
     | '/platform/customers/$tenantId'
+    | '/stay/units/$unitSlug'
   id:
     | '__root__'
     | '/'
@@ -852,6 +883,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/reset-password'
     | '/sitemap'
+    | '/stay'
     | '/terms'
     | '/warehouse'
     | '/admin_/analytics'
@@ -883,6 +915,7 @@ export interface FileRouteTypes {
     | '/pwa/$icon'
     | '/unsubscribe/$token'
     | '/manage/'
+    | '/stay/'
     | '/admin_/inventory_/labels'
     | '/admin_/inventory_/serials'
     | '/admin_/marketing/abandoned-carts'
@@ -903,6 +936,7 @@ export interface FileRouteTypes {
     | '/manage/properties/$propertyId'
     | '/manage/units_/$unitId'
     | '/platform_/customers/$tenantId'
+    | '/stay/units/$unitSlug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -928,6 +962,7 @@ export interface RootRouteChildren {
   RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SitemapRoute: typeof SitemapRoute
+  StayRoute: typeof StayRouteWithChildren
   TermsRoute: typeof TermsRoute
   WarehouseRoute: typeof WarehouseRoute
   AdminAnalyticsRoute: typeof AdminAnalyticsRoute
@@ -1119,6 +1154,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap'
       fullPath: '/sitemap'
       preLoaderRoute: typeof SitemapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/stay': {
+      id: '/stay'
+      path: '/stay'
+      fullPath: '/stay'
+      preLoaderRoute: typeof StayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -1331,6 +1373,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PwaIconRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stay/': {
+      id: '/stay/'
+      path: '/'
+      fullPath: '/stay/'
+      preLoaderRoute: typeof StayIndexRouteImport
+      parentRoute: typeof StayRoute
+    }
     '/unsubscribe/$token': {
       id: '/unsubscribe/$token'
       path: '/unsubscribe/$token'
@@ -1478,6 +1527,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformCustomersTenantIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stay/units/$unitSlug': {
+      id: '/stay/units/$unitSlug'
+      path: '/units/$unitSlug'
+      fullPath: '/stay/units/$unitSlug'
+      preLoaderRoute: typeof StayUnitsUnitSlugRouteImport
+      parentRoute: typeof StayRoute
+    }
   }
 }
 
@@ -1522,6 +1578,18 @@ const ManageRouteChildren: ManageRouteChildren = {
 const ManageRouteWithChildren =
   ManageRoute._addFileChildren(ManageRouteChildren)
 
+interface StayRouteChildren {
+  StayIndexRoute: typeof StayIndexRoute
+  StayUnitsUnitSlugRoute: typeof StayUnitsUnitSlugRoute
+}
+
+const StayRouteChildren: StayRouteChildren = {
+  StayIndexRoute: StayIndexRoute,
+  StayUnitsUnitSlugRoute: StayUnitsUnitSlugRoute,
+}
+
+const StayRouteWithChildren = StayRoute._addFileChildren(StayRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
@@ -1545,6 +1613,7 @@ const rootRouteChildren: RootRouteChildren = {
   RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SitemapRoute: SitemapRoute,
+  StayRoute: StayRouteWithChildren,
   TermsRoute: TermsRoute,
   WarehouseRoute: WarehouseRoute,
   AdminAnalyticsRoute: AdminAnalyticsRoute,

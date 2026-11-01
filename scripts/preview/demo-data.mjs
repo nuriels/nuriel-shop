@@ -18,6 +18,8 @@ export const SITES = [
     name: "צימרי הגליל",
     owner: ACCOUNTS.zimmerOwner,
     plan: "basic",
+    // האתר הציבורי והזמנות מהאתר (Stage 4) — פתוחים רק בעסק הזה בהדגמה
+    website: true,
     settings: {
       business_name: "צימרי הגליל",
       contact_phone: "050-0000101",

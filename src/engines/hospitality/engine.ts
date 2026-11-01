@@ -20,10 +20,13 @@ export const hospitalityEngine: Engine = {
     return backendEnabled(site.id);
   },
   async gate(site: SiteRef, request: EdgeRequest) {
-    const [{ hospitalityGate }, { managementEnabled }] = await Promise.all([
+    const [{ hospitalityGate }, { managementEnabled, siteEnabled }] = await Promise.all([
       import("./edge/gate"),
       import("./access.server"),
     ]);
-    return hospitalityGate(site, request, { managementOpen: () => managementEnabled(site.id) });
+    return hospitalityGate(site, request, {
+      managementOpen: () => managementEnabled(site.id),
+      siteOpen: () => siteEnabled(site.id),
+    });
   },
 };

@@ -29,7 +29,8 @@ type Layer = "app" | "platform" | "hospitality" | "ecommerce-engine" | "entry" |
  * מתאמי הנתיבים של Hospitality (src/routes/manage*.tsx, ו"ניהול Hospitality" בפאנל הפלטפורמה —
  * src/routes/platform_.hospitality.tsx): קוד של המנוע במקום שהמסגרת דורשת
  */
-const HOSPITALITY_ROUTE = /^src\/routes\/(manage(_?\.[^/]+)?|platform_\.hospitality)\.tsx?$/;
+const HOSPITALITY_ROUTE =
+  /^src\/routes\/(manage(_?\.[^/]+)?|stay(\.[^/]+)?|platform_\.hospitality)\.tsx?$/;
 /** קבצי כניסה: מגיעים למנועים רק דרך שורש ההרכבה (ה-root של הנתבים — מ-Stage 2a) */
 const ENTRY_FILES = ["src/start.ts", "src/server.ts", "src/routes/__root.tsx"];
 /** עץ הנתיבים שנוצר אוטומטית — מייבא כל קובץ נתיב, גם את מתאמי Hospitality */
@@ -210,13 +211,16 @@ describe("architecture: dependency boundaries", () => {
       "src/routes/manage.units_.$unitId.tsx",
       "src/routes/manage_.login.tsx",
       "src/routes/platform_.hospitality.tsx",
+      "src/routes/stay.index.tsx",
+      "src/routes/stay.tsx",
+      "src/routes/stay.units.$unitSlug.tsx",
     ]);
     for (const f of adapters) {
       const code = stripComments(SOURCE.get(f)!);
       // המסך, ולכל היותר שומר הנתיב (קיים רק באתר אירוח)
       expect(importsOf(f).length, f).toBeLessThanOrEqual(2);
       for (const t of importsOf(f))
-        expect(t, f).toMatch(/^src\/engines\/hospitality\/(management|platform-admin)\//);
+        expect(t, f).toMatch(/^src\/engines\/hospitality\/(management|platform-admin|website)\//);
       expect(code, f).not.toMatch(/createServerFn|useQuery|fetch\(|supabase|process\.env/);
       expect(code.split("\n").filter((l) => l.trim()).length, f).toBeLessThan(15);
     }
@@ -272,7 +276,7 @@ describe("architecture: server-function ownership", () => {
 
   it("Hospitality server functions live only in src/engines/hospitality/{server,api}", () => {
     const hosp = serverFnFiles.filter((f) => registry.ownerOf(f) === "hospitality");
-    expect(hosp.length).toBe(16); // + details (2d), media (2e), pricing (2f), calendar (3a), platform-admin (P1), bookings (2h), guests (2j), emails (2k) in api/
+    expect(hosp.length).toBe(17); // + details (2d), media (2e), pricing (2f), calendar (3a), platform-admin (P1), bookings (2h), guests (2j), emails (2k), website (4a) in api/
     // api/ = נקראות מהדפדפן (מחוץ ל-server/, import protection); server/ = בלי ממשק עדיין
     for (const f of hosp)
       expect(f).toMatch(/^src\/engines\/hospitality\/(server|api)\/[\w-]+\.functions\.ts$/);
