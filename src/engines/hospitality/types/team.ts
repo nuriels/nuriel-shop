@@ -10,6 +10,8 @@ export interface TeamMember {
   is_blocked: boolean;
   added_at: string;
   last_sign_in_at: string | null;
+  /** שלב F3: צפייה בנתונים כספיים — לבעלים תמיד; למנהל רק אם הבעלים נתן */
+  finance?: boolean;
 }
 
 export interface TeamView {

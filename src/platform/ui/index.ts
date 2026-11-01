@@ -22,6 +22,27 @@ export {
   CardTitle,
 } from "@/components/ui/card";
 export { Checkbox } from "@/components/ui/checkbox";
+// שלב F2/F3 (Hospitality): טווח תאריכים בלוח הבקרה, תפריט "חדש" / משתמש, וחיפוש מהיר
+export {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+export {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+export { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 export { Input } from "@/components/ui/input";
 export { Label } from "@/components/ui/label";
 export { Progress } from "@/components/ui/progress";

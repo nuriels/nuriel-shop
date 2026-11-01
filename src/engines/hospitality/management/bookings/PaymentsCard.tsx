@@ -63,7 +63,7 @@ export function PaymentsCard({
   };
   const p = query.data;
   return (
-    <Card data-section="payments">
+    <Card data-section="payments" id="payments" className="scroll-mt-24">
       <CardHeader className="pb-2">
         <CardTitle className="text-lg">תשלומים</CardTitle>
       </CardHeader>

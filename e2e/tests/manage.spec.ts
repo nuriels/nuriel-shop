@@ -5,6 +5,9 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import { toJSONAsync } from "seroval";
 import { AUTH, hostGet, hostOf, PORT, STORE_A, supabaseEnv, USERS } from "./helpers";
 
+// לוח הבקרה (F3): ברכה לפי השעה אצל העסק ושם המשתמש — "ערב טוב, דנה"
+const DASHBOARD_GREETING = /^(בוקר טוב|צהריים טובים|ערב טוב|לילה טוב), /;
+
 // Hospitality Stage 2a — אזור הניהול של בעל העסק (/manage) על השרת הבנוי:
 //   • נפתח רק באתר אירוח עם הדגלים (מסד + ניהול), בלי לפתוח את האתר הציבורי;
 //   • כניסה: ה-handoff הקיים מהשער, סיסמה, קוד במייל — בלי Google;
@@ -227,7 +230,7 @@ test("owner: password login → dashboard with the checklist, plan, team; access
   await page.locator("#manage-password").fill(OWNER.password);
   await page.getByRole("button", { name: "כניסה" }).click();
   await expect(page).toHaveURL(/\/manage$/);
-  await expect(page.getByRole("heading", { name: "שלום, צימרים בגליל" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: DASHBOARD_GREETING })).toBeVisible();
   await expect(page.getByText("0 מתוך 5 צעדים הושלמו")).toBeVisible();
   await expect(page.getByRole("heading", { name: "החבילה שלי" })).toBeVisible();
   await expect(page.getByText("2 מתוך 3")).toBeVisible(); // מנהלים: הבעלים + מנהל, ניסיון = 3
@@ -295,7 +298,7 @@ test("an account without management rights on this site cannot get in", async ({
   await page.locator("#manage-password").fill(USERS.ownerA.password);
   await page.getByRole("button", { name: "כניסה" }).click();
   // השרת מסרב (חשבון של חנות אחרת); אם בכל זאת היה נכנס — המסך "אין גישה"
-  await expect(page.getByRole("heading", { name: "שלום, צימרים בגליל" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1, name: DASHBOARD_GREETING })).toHaveCount(0);
   await expect(page).toHaveURL(/\/manage\/login$/);
 });
 
@@ -303,7 +306,7 @@ test("the existing owner handoff (portal → /admin-handoff → /admin) lands in
   page,
 }) => {
   await enterViaHandoff(page);
-  await expect(page.getByRole("heading", { name: "שלום, צימרים בגליל" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: DASHBOARD_GREETING })).toBeVisible();
 });
 
 test("@mobile phone: bottom navigation with 'more', RTL, accessible", async ({ page, request }) => {

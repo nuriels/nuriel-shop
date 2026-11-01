@@ -13,6 +13,9 @@ import {
   type SavedSession,
 } from "./hospitality-helpers";
 
+// לוח הבקרה (F3): ברכה לפי השעה אצל העסק ושם המשתמש — "ערב טוב, דנה"
+const DASHBOARD_GREETING = /^(בוקר טוב|צהריים טובים|ערב טוב|לילה טוב), /;
+
 // Hospitality Stage 2b.4 — בדיקות אינטגרציה של כל אזור הניהול (2a–2b.3) יחד, על השרת הבנוי:
 //   • טבלת הרשאות מלאה: כל פונקציית שרת של הניהול × כל סוג חשבון (אנונימי, לקוח חנות, בעל חנות,
 //     בעלים של אתר אירוח אחר, מנהל פלטפורמה, מנהל, חשבון משותף חנות + אירוח, בעלים) — ובין אתרים;
@@ -500,7 +503,7 @@ for (const who of ["owner", "manager"] as const) {
     const account = who === "owner" ? OWNER_A : MANAGER_A;
     const session: SavedSession = await passwordSession(request, url(SLUG_A), account);
     const screens = [
-      { path: "/manage", heading: "שלום, צימרים בגליל" },
+      { path: "/manage", heading: DASHBOARD_GREETING },
       { path: "/manage/settings", heading: "הגדרות העסק" },
       { path: "/manage/team", heading: "צוות ניהול" },
       { path: "/manage/units", heading: "יחידות ומתחמים" },
@@ -553,7 +556,7 @@ test("shared account in the browser: manager here, store owner there — each si
     await passwordSession(request, url(SLUG_A), SHARED as Account),
     "/manage",
   );
-  await expect(page.getByRole("heading", { level: 1, name: "שלום, צימרים בגליל" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: DASHBOARD_GREETING })).toBeVisible();
   await expect(page.getByText("מנהל/ת", { exact: true })).toBeVisible();
   // /admin on a Hospitality site goes to /manage, never to the store panel
   const admin = await hostGet(request, hostOf(SLUG_A), "/admin");

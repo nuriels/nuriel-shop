@@ -2,8 +2,8 @@
 // אחרת רשימה מקובצת לפי מתחם, עם הוספה ועריכה מהירה, קישור לעמוד של כל יחידה ומתחם,
 // סידור היחידות, יחידות לא פעילות בנפרד, ומתחמים בארכיון (לבעלים). כל שינוי דרך פונקציות
 // השרת (מיגרציה 10).
-import { useId, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useEffect, useId, useState } from "react";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpDown,
@@ -153,6 +153,16 @@ function CatalogList({ view }: { view: CatalogView }) {
       propertyId: p?.id ?? (properties.length === 1 ? properties[0]!.id : null),
       defaults: newUnitDefaults(p ?? properties[0]),
     });
+  // ?add=unit — "הוספת יחידה" מלוח הבקרה: פותח את הטופס פעם אחת (אם החבילה מאפשרת) ומנקה את
+  // הכתובת; אם לא — ההסבר כבר מוצג בראש המסך
+  const add = (useSearch({ strict: false }) as { add?: string }).add;
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (add !== "unit") return;
+    if (limit.canAdd) addUnit(null);
+    void navigate({ to: "/manage/units", search: {}, replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- פעם אחת, כשהכתובת מבקשת
+  }, [add]);
 
   return (
     <>

@@ -126,8 +126,8 @@ CREATE TEMP TABLE c2c_before AS SELECT pg_temp.ecommerce_hash() AS h;
 -- ============================================================
 -- 1. structure
 -- ============================================================
-SELECT tests.check('catalog: 13 permissions; catalog.owner is the owner''s only',
-  $$SELECT cardinality(hospitality.permissions()) = 13 AND 'catalog.owner' = ANY (hospitality.permissions())$$);
+SELECT tests.check('catalog: catalog.owner is the owner''s only (13 permissions here; 14 since reports.finance, stage F3)',
+  $$SELECT cardinality(hospitality.permissions()) >= 13 AND 'catalog.owner' = ANY (hospitality.permissions())$$);
 SELECT tests.check('catalog: manager can(catalog) and not can(catalog.owner); owner and platform admin can both',
   format($$SELECT pg_temp.call(%1$L, %2$L, 'SELECT to_jsonb(ARRAY[hospitality.can(''catalog''), hospitality.can(''catalog.owner'')])') = '[true, false]'
            AND pg_temp.call(%1$L, %3$L, 'SELECT to_jsonb(ARRAY[hospitality.can(''catalog''), hospitality.can(''catalog.owner'')])') = '[true, true]'

@@ -53,6 +53,8 @@ html:root {
   --hm-line-soft: #efeae2;
   --hm-sidebar-muted: #8fb0ab;
   --hm-sidebar-text: #d5e3e0;
+  /* טקסט משני על רקע בהיר (AA) */
+  --hm-ink-2: #4e5b58;
 
   /* סטטוסים: טקסט / רקע / נקודה */
   --hm-success: #1e6b4e;
@@ -74,6 +76,9 @@ html:root {
   --hm-direct: #0e3b3a;
   --hm-airbnb: #b9473a;
   --hm-booking: #1f4e8c;
+  --hm-channel: #5d3e7a;
+  /* חסימה פנימית בלוח — פסים (לא לינה) */
+  --hm-block-stripes: repeating-linear-gradient(135deg, #e8e2d7 0 6px, #f5f2ec 6px 12px);
 
   /* עומק ותנועה */
   --hm-shadow-card: 0 1px 2px rgb(12 48 47 / 0.04), 0 10px 24px -18px rgb(12 48 47 / 0.3);

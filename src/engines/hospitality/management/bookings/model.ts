@@ -15,6 +15,13 @@ export const TABS: { key: Exclude<BookingTab, "all">; label: string; empty: stri
   { key: "cancelled", label: "בוטלו", empty: "אין הזמנות שבוטלו." },
 ];
 
+/** ?tab= בכתובת (קישור ישיר ללשונית, למשל מ"דורש טיפול" בלוח הבקרה) */
+export type BookingsSearch = { tab?: Exclude<BookingTab, "all"> };
+export function parseBookingsSearch(s: Record<string, unknown>): BookingsSearch {
+  const tab = TABS.find((t) => t.key === s["tab"])?.key;
+  return tab ? { tab } : {};
+}
+
 export const STATE_LABELS: Record<BookingState, string> = {
   pending_approval: "ממתינה לאישור",
   pending_payment: "ממתינה לתשלום",

@@ -67,6 +67,7 @@ M28=20261103120000_hosp_phone_payments
 M29=20261104090000_portal_business_details
 M30=20261104100000_hosp_plans_pricing
 M31=20261104110000_hosp_site_requests
+M32=20261105090000_hosp_dashboard
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -87,6 +88,31 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- F3: the owner's dashboard (migration 32) ----------
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M32" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M32"
+down "$M32"
+expect "dashboard functions, finance grants and the new indexes are gone; 13 permissions again" \
+  "SELECT to_regprocedure('hospitality.dashboard_overview(date,date)') IS NULL
+      AND to_regprocedure('hospitality.team_set_finance(uuid,boolean)') IS NULL
+      AND to_regclass('hospitality.staff_grants') IS NULL
+      AND to_regclass('hospitality.bookings_created_idx') IS NULL
+      AND cardinality(hospitality.permissions()) = 13"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m31.sql"
+schema_dump "$SCHEMA_DIR/after-m32-down.sql"
+if diff -q "$SCHEMA_DIR/m31.sql" "$SCHEMA_DIR/after-m32-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 31, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 31:"; diff "$SCHEMA_DIR/m31.sql" "$SCHEMA_DIR/after-m32-down.sql" | head -20; exit 1
+fi
 
 # ---------- E2: zimmer site requests from the portal (migration 31) ----------
 psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
@@ -784,7 +810,7 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1 … $M31"
+echo "re-apply: $M1 … $M32"
 up "$M1"
 up "$M2"
 up "$M3"
@@ -816,6 +842,7 @@ up "$M28"
 up "$M29"
 up "$M30"
 up "$M31"
+up "$M32"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -824,8 +851,8 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 30 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters and the site requests), RLS on all, role admin, 6 flags off (incl. management)" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 30
+expect "Hospitality schema back: 31 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests and the staff grants), RLS on all, role admin, 6 flags off (incl. management)" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 31
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
       AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 6"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
@@ -835,15 +862,15 @@ expect "management foundation back: seat trigger, Ecommerce guard branch, no sta
      AND (SELECT prosrc LIKE '%site_type <> ''ecommerce''%' FROM pg_proc WHERE oid = 'public.user_roles_admin_seat_guard()'::regprocedure)
      AND NOT has_table_privilege('authenticated', 'hospitality.notifications', 'SELECT')
      AND (SELECT max_managers FROM hospitality.plans WHERE code = 'trial') = 3"
-expect "settings and team back: guard trigger, action log, no direct settings writes, 13 permissions (12 + catalog.owner of migration 10)" \
+expect "settings and team back: guard trigger, action log, no direct settings writes, 14 permissions (12 + catalog.owner of migration 10 + reports.finance of migration 32)" \
   "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hospitality_admin_row_guard')
      AND to_regclass('hospitality.audit_log') IS NOT NULL
      AND NOT has_column_privilege('authenticated', 'hospitality.settings', 'check_in_time', 'UPDATE')
-     AND cardinality(hospitality.permissions()) = 13"
-expect "catalog back: functions, types, revision, no direct staff writes, 13 permissions" \
+     AND cardinality(hospitality.permissions()) = 14"
+expect "catalog back: functions, types, revision, no direct staff writes, 14 permissions" \
   "SELECT to_regprocedure('hospitality.whole_property_set(uuid, boolean, uuid[])') IS NOT NULL
      AND NOT has_table_privilege('authenticated', 'hospitality.units', 'INSERT')
-     AND cardinality(hospitality.permissions()) = 13"
+     AND cardinality(hospitality.permissions()) = 14"
 expect "site identity back: public name only, anon may call it" \
   "SELECT has_function_privilege('anon', 'hospitality.site_identity()', 'EXECUTE')
      AND (SELECT prosecdef FROM pg_proc WHERE oid = 'hospitality.site_identity()'::regprocedure)"
@@ -860,7 +887,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 31 → 1 and re-apply 1 → 31 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 32 → 1 and re-apply 1 → 32 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi

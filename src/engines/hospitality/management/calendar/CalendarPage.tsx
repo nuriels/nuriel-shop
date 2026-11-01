@@ -6,7 +6,7 @@
 // בדיקת שינוי זולה כל 30 שניות כשהדף פתוח, בחזרה ללשונית ואחרי כל פעולה. שורות וירטואליות.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { CalendarPlus, ChevronLeft, ChevronRight, Lock, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -108,7 +108,9 @@ export function CalendarPage() {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   // ?unit= — "היומן של היחידה" (מעמוד היחידה): חודש של יחידה אחת, גם בטלפון
-  const unitParam = (useSearch({ strict: false }) as { unit?: string }).unit ?? "";
+  const params = useSearch({ strict: false }) as { unit?: string; block?: string };
+  const unitParam = params.unit ?? "";
+  const navigate = useNavigate();
   const [mode, setMode] = useState<ViewMode | null>(null);
   const [anchor, setAnchor] = useState(todayIso());
   const [filters, setFilters] = useState<Filters>({
@@ -161,8 +163,24 @@ export function CalendarPage() {
   const afterAction = () => {
     void queryClient.invalidateQueries({ queryKey: [...manageKeys.all, "calendar"] });
     void queryClient.invalidateQueries({ queryKey: [...manageKeys.all, "blocks-upcoming"] });
+    void queryClient.invalidateQueries({ queryKey: [...manageKeys.all, "dashboard"] });
     void queryClient.invalidateQueries({ queryKey: manageKeys.activity });
   };
+  // ?block=1 — "חסימת תאריכים" מלוח הבקרה: פותח את הטופס פעם אחת ומנקה את הכתובת
+  const loaded = query.data;
+  useEffect(() => {
+    if (params.block !== "1" || !loaded) return;
+    setBlockForm({
+      unitId: loaded.units.find((u) => u.kind !== "whole_property")?.id ?? "",
+      from: loaded.today,
+      to: addDays(loaded.today, 1),
+    });
+    void navigate({
+      to: "/manage/calendar",
+      search: params.unit ? { unit: params.unit } : {},
+      replace: true,
+    });
+  }, [params.block, params.unit, loaded, navigate]);
 
   if (!ctx.permissions["bookings"])
     return <p className="p-4">אין לכם הרשאה לראות את היומן באתר הזה.</p>;

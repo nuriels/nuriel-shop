@@ -1,10 +1,20 @@
 // מסך צוות הניהול (/manage/team) — לבעלים בלבד. כל פעולה נבדקת שוב במסד
 // (team_* — בעלים, מגבלת מקומות, כללי user_roles). אין מייל הזמנה בשלב הזה:
 // אחרי ההוספה הבעלים משתף את הכתובת, והמנהל נכנס בקוד שנשלח למייל שלו.
+// שלב F3: לכל מנהל — מתג "נתונים כספיים" (הכנסות וגבייה בלוח הבקרה). ברירת המחדל: כבוי;
+// נאכף במסד (team_set_finance, can('reports.finance')).
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, Loader2, MessageCircle, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import {
+  Copy,
+  Loader2,
+  MessageCircle,
+  ShieldCheck,
+  Trash2,
+  UserPlus,
+  WalletCards,
+} from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +39,7 @@ import {
   SheetHeader,
   SheetTitle,
   Skeleton,
+  Switch,
   useIsMobile,
 } from "@/platform/ui";
 import {
@@ -36,6 +47,7 @@ import {
   hospitalityRemoveManager,
   hospitalityTeam,
   hospitalityTeamActivity,
+  hospitalityTeamSetFinance,
 } from "../../api/team.functions";
 import type { TeamMember, TeamView } from "../../types/team";
 import { managerEmailError, managerNameError } from "../../validation/team";
@@ -78,6 +90,10 @@ export function TeamPage() {
         <h1 className="text-2xl font-semibold">צוות ניהול</h1>
         <p className="mt-1 text-muted-foreground">
           מי מנהל איתך את העסק. רק בעל העסק רואה את המסך הזה.
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          מנהלים רואים הזמנות, יומן ותפוסה. הכנסות וגבייה — רק למי שתפעילו לו &quot;נתונים
+          כספיים&quot;.
         </p>
       </div>
       {team.isError ? (
@@ -240,6 +256,7 @@ function TeamContent({ team, siteUrl }: { team: TeamView; siteUrl: string }) {
                       : "עוד לא נכנס/ה"}
                   </p>
                 </div>
+                <FinanceAccess member={m} onChanged={refresh} />
                 {m.role !== "owner" && (
                   <Button
                     variant="outline"
@@ -285,6 +302,53 @@ function TeamContent({ team, siteUrl }: { team: TeamView; siteUrl: string }) {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+/** נתונים כספיים (הכנסות וגבייה בלוח הבקרה): לבעלים — תמיד; למנהל — מתג, כבוי כברירת מחדל */
+function FinanceAccess({ member, onChanged }: { member: TeamMember; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const id = `finance-${member.user_id}`;
+  const name = member.display_name || member.email;
+  if (member.role === "owner")
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--hm-champagne-100)] px-2.5 py-1 text-xs font-semibold text-[var(--hm-champagne-700)]">
+        <WalletCards className="size-3.5" aria-hidden="true" />
+        נתונים כספיים — תמיד
+      </span>
+    );
+  const toggle = async (enabled: boolean) => {
+    setBusy(true);
+    try {
+      await hospitalityTeamSetFinance({ data: { userId: member.user_id, enabled } });
+      toast.success(
+        enabled
+          ? `${name} יראה/תראה מעכשיו הכנסות וגבייה`
+          : `${name} כבר לא יראה/תראה הכנסות וגבייה`,
+      );
+    } catch (e) {
+      toast.error(errorText(e));
+    } finally {
+      setBusy(false);
+      onChanged();
+    }
+  };
+  return (
+    <div
+      className="flex min-h-11 items-center gap-2 rounded-lg border px-3"
+      data-finance={member.email}
+    >
+      <Switch
+        id={id}
+        checked={member.finance === true}
+        disabled={busy || member.is_blocked}
+        onCheckedChange={(v) => void toggle(v)}
+      />
+      <Label htmlFor={id} className="text-sm">
+        נתונים כספיים
+        <span className="sr-only"> — הכנסות וגבייה בלוח הבקרה, ל{name}</span>
+      </Label>
+    </div>
   );
 }
 

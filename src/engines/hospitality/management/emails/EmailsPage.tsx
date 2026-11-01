@@ -1,9 +1,9 @@
 // מסך "מיילים" (/manage/emails) — Stage 2k: כל המיילים שהמערכת שלחה בשם העסק (לאורחים
 // ולעסק): נכשלו · ממתינים · נשלחו, נמען ממוסך, קישור להזמנה; "לשלוח שוב" למייל שנכשל.
 // השליחה עצמה — תהליך הרקע בשרת (כל 30 שניות ומיד אחרי כל פעולה).
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useSearch } from "@tanstack/react-router";
 import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, CardContent, cn } from "@/platform/ui";
@@ -14,18 +14,19 @@ import { LoadError, PageSkeleton } from "../catalog/parts";
 import { errorText } from "../catalog/refresh";
 import { manageKeys } from "../lib/query-keys";
 import { useManagement } from "../shell/management-context";
+import { EMAIL_FILTERS, parseEmailsSearch } from "./model";
 
-const FILTERS: { key: EmailFilter; label: string }[] = [
-  { key: "failed", label: "נכשלו" },
-  { key: "waiting", label: "ממתינים" },
-  { key: "sent", label: "נשלחו" },
-  { key: "all", label: "הכול" },
-];
+const FILTERS = EMAIL_FILTERS;
 
 export function EmailsPage() {
   const ctx = useManagement();
   const qc = useQueryClient();
-  const [filter, setFilter] = useState<EmailFilter>("all");
+  // ?filter=failed — מלוח הבקרה ("מיילים שלא נשלחו")
+  const linked = parseEmailsSearch(useSearch({ strict: false }) as Record<string, unknown>).filter;
+  const [filter, setFilter] = useState<EmailFilter>(linked ?? "all");
+  useEffect(() => {
+    if (linked) setFilter(linked);
+  }, [linked]);
   const key = [...manageKeys.all, "emails", filter] as const;
   const query = useQuery({
     queryKey: key,

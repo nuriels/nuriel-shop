@@ -4,6 +4,7 @@
 // אין מייל הזמנה בשלב הזה (2k); המנהל נכנס בקוד במייל.
 import { createServerFn } from "@tanstack/react-start";
 import type { ActivityEntry, AddManagerResult, TeamView } from "../types/team";
+import { parseFinanceGrant } from "../validation/dashboard";
 import { parseAddManager, parseRemoveManager } from "../validation/team";
 
 type RpcAdd = { status: "added" | "already_member" | "needs_account"; user_id?: string };
@@ -55,4 +56,15 @@ export const hospitalityRemoveManager = createServerFn({ method: "POST" })
     const { manageRpc } = await import("../server/manage.server");
     await manageRpc<boolean>("team_remove_manager", { _user_id: data.userId });
     return { removed: true };
+  });
+
+/** שלב F3: הבעלים נותן / מבטל למנהל צפייה בנתונים כספיים (נאכף במסד: הבעלים בלבד, ביומן) */
+export const hospitalityTeamSetFinance = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseFinanceGrant(input))
+  .handler(async ({ data }): Promise<TeamView> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<TeamView>("team_set_finance", {
+      _user_id: data.userId,
+      _enabled: data.enabled,
+    });
   });

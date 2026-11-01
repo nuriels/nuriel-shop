@@ -222,11 +222,11 @@ export function TrendBadge({
 export function Sparkline({
   values,
   className,
-  color = "var(--hm-lagoon-700)",
+  color,
 }: {
   values: number[];
-  className?: string;
-  color?: string;
+  className?: string | undefined;
+  color?: string | undefined;
 }) {
   if (values.length < 2) return null;
   const W = 92;
@@ -252,7 +252,7 @@ export function Sparkline({
       <path
         d={d}
         fill="none"
-        stroke={color}
+        stroke={color ?? "var(--hm-lagoon-700)"}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -340,10 +340,10 @@ export function ErrorState({
   onRetry,
   className,
 }: {
-  title?: string;
-  message?: string;
-  onRetry?: () => void;
-  className?: string;
+  title?: string | undefined;
+  message?: string | undefined;
+  onRetry?: (() => void) | undefined;
+  className?: string | undefined;
 }) {
   return (
     <div

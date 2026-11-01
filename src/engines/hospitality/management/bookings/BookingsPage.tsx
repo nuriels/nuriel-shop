@@ -4,7 +4,7 @@
 // לחיצה על הזמנה פותחת את עמוד ההזמנה (אישור / דחייה / הגעה / עזיבה).
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useSearch } from "@tanstack/react-router";
 import { Plus, Search } from "lucide-react";
 import { Button, Card, CardContent, Input, Label, cn } from "@/platform/ui";
 import { hospitalityBookings } from "../../api/bookings.functions";
@@ -19,6 +19,7 @@ import {
   bookingsKey,
   guestsText,
   holdText,
+  parseBookingsSearch,
   sourceText,
   stateTone,
   stayText,
@@ -39,7 +40,12 @@ const PAGE = 30;
 
 export function BookingsPage() {
   const ctx = useManagement();
-  const [tab, setTab] = useState<Exclude<BookingTab, "all">>("pending");
+  // ?tab= — קישור ישיר ללשונית (למשל "ממתינות לטיפול" מלוח הבקרה)
+  const linked = parseBookingsSearch(useSearch({ strict: false }) as Record<string, unknown>).tab;
+  const [tab, setTab] = useState<Exclude<BookingTab, "all">>(linked ?? "pending");
+  useEffect(() => {
+    if (linked) setTab(linked);
+  }, [linked]);
   const [text, setText] = useState("");
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(PAGE);
