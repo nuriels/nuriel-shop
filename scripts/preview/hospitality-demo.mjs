@@ -22,6 +22,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ACCOUNTS, DEMO_PASSWORD, SITES } from "./demo-data.mjs";
+import { enrichZimmer } from "./demo-zimmer-details.mjs";
 import { assertLocalTargets } from "./local-guard.mjs";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -173,6 +174,12 @@ export async function seedDemo({ log = console.log } = {}) {
     // מכאן — הבעלים, דרך הפונקציות של אזור הניהול
     const owner = await signIn(site.owner);
     const as = { token: owner, site: siteId };
+    if (site.empty) {
+      // ריק בכוונה: הבעלים מתחילים ממסך "מה אתם משכירים?"
+      created.push({ ...site, id: siteId, units: 0 });
+      log(`  ✓ ${site.name} (${site.slug}) — ריק, להתחלה מאפס`);
+      continue;
+    }
     const current = await rpc("settings_view", {}, as);
     await rpc(
       "update_settings",
@@ -199,6 +206,17 @@ export async function seedDemo({ log = console.log } = {}) {
         { _property_id: property.id, _enabled: true, _member_ids: unitIds },
         as,
       );
+    }
+    if (site.full) {
+      await enrichZimmer({
+        rpc,
+        as,
+        api: API,
+        anon: ANON,
+        propertyId: property.id,
+        unitIdByName: Object.fromEntries(site.units.map((u, i) => [u.name, unitIds[i]])),
+        log,
+      });
     }
     if (site.manager) {
       ids[site.manager.email] ??= await ensureUser(site.manager.email);
@@ -238,6 +256,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   מתחם צימרים:     http://demo-zimmer.${base}/manage    (${ACCOUNTS.zimmerOwner})
   וילה:            http://demo-villa.${base}/manage     (${ACCOUNTS.villaOwner})
   מלון בוטיק:      http://demo-hotel.${base}/manage     (${ACCOUNTS.hotelOwner} / ${ACCOUNTS.hotelManager})
+  עסק חדש (ריק):   http://demo-new.${base}/manage       (${ACCOUNTS.newOwner})
   חנות (Ecommerce): http://kobi.${base}/
 סיסמה לכל חשבונות ההדגמה: ${DEMO_PASSWORD}`);
     })

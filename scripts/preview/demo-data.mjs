@@ -8,6 +8,7 @@ export const ACCOUNTS = {
   villaOwner: "owner.villa@demo.test",
   hotelOwner: "owner.hotel@demo.test",
   hotelManager: "manager.hotel@demo.test",
+  newOwner: "owner.new@demo.test",
 };
 
 /** שלושת אתרי ההדגמה — כל הטקסטים פיקטיביים */
@@ -71,6 +72,8 @@ export const SITES = [
       },
     ],
     wholeProperty: true,
+    // עסק מלא לבדיקה: מיטות, מתקנים, חניה, תמונות, מחירים, מדיניות, הזמנות וחסימה (2d–3a)
+    full: true,
   },
   {
     slug: "demo-villa",
@@ -194,5 +197,14 @@ export const SITES = [
         bathrooms: 1,
       },
     ],
+  },
+  // עסק חדש וריק — לנסות בעצמכם את כל השלבים מההתחלה ("מה אתם משכירים?" → … → יומן)
+  {
+    slug: "demo-new",
+    name: "העסק החדש שלי",
+    owner: ACCOUNTS.newOwner,
+    plan: "basic",
+    units: [],
+    empty: true,
   },
 ];

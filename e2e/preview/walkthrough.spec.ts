@@ -94,7 +94,7 @@ async function signedIn(
 /** ניווט: בצד (מחשב) או בשורה התחתונה + "עוד" (טלפון) */
 async function go(page: Page, phone: boolean, label: string, path: string) {
   const nav = page.getByRole("navigation", { name: "ניווט ראשי" });
-  if (!phone || label === "לוח בקרה" || label === "יחידות") {
+  if (!phone || label === "לוח בקרה" || label === "יומן" || label === "יחידות") {
     await nav.getByRole("link", { name: label }).click();
   } else {
     await nav.getByRole("button", { name: "עוד מסכים" }).click();
@@ -422,4 +422,167 @@ test("09 boutique hotel owner: ordering the rooms — arrows, and drag on the co
   await quiet(page);
   await shot(page, p, "27-hotel-rooms-ordered");
   await finish(context, p, "09-hotel-room-order", [page]);
+});
+
+// ---------- 2d → 3a: העסק המלא "צימרי הגליל" (נתוני ההדגמה — דרך הפונקציות האמיתיות) ----------
+
+test("10 zimmer owner (2d): a unit's beds, guests and amenities; the property's parking, location, rules and private arrival info", async ({
+  page,
+  context,
+  request,
+}, info) => {
+  const p = info.project.name;
+  await signedIn(page, request, "demo-zimmer", ACCOUNTS.zimmerOwner, "/manage/units");
+  await unitRow(page, "צימר האלון").getByRole("link", { name: "צימר האלון" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "צימר האלון" })).toBeVisible();
+  const rooms = page.locator('[data-section="rooms"]');
+  await expect(rooms).toContainText("ישנים עד 4 אנשים");
+  await rooms.scrollIntoViewIfNeeded();
+  await pause(page);
+  await shot(page, p, "28-zimmer-unit-beds", false);
+  const amenities = page.locator('[data-section="amenities"]');
+  await amenities.scrollIntoViewIfNeeded();
+  await expect(amenities).toContainText("ערסל בגינה");
+  await pause(page);
+  await shot(page, p, "29-zimmer-unit-amenities", false);
+
+  await page.getByRole("link", { name: "צימרי הגליל" }).first().click();
+  await expect(page.getByRole("heading", { level: 1, name: "צימרי הגליל" })).toBeVisible();
+  const parking = page.locator('[data-section="parking"]');
+  await parking.scrollIntoViewIfNeeded();
+  await pause(page);
+  await shot(page, p, "30-zimmer-property-parking", false);
+  const rules = page.locator('[data-section="house-rules"]');
+  await rules.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      rules
+        .locator("input, textarea")
+        .evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value).join("|")),
+    )
+    .toContain("נא לכבות מזגנים");
+  await pause(page);
+  await shot(page, p, "31-zimmer-property-rules", false);
+  const arrival = page.locator('[data-section="arrival-info"]');
+  await arrival.scrollIntoViewIfNeeded();
+  await arrival.getByRole("button", { name: "הצגת הקודים" }).click();
+  await expect(arrival.getByLabel("קוד השער")).toHaveValue("2580#");
+  await pause(page);
+  await shot(page, p, "32-zimmer-arrival-info", false);
+  await finish(context, p, "10-zimmer-details", [page]);
+});
+
+test("11 zimmer owner (2e): photos — the overview, a unit's gallery with cover and ALT", async ({
+  page,
+  context,
+  request,
+}, info) => {
+  const p = info.project.name;
+  const phone = p === "phone";
+  await signedIn(page, request, "demo-zimmer", ACCOUNTS.zimmerOwner, "/manage");
+  await go(page, phone, "תמונות", "/manage/photos");
+  await expect(page.getByTestId("media-notice")).toBeVisible();
+  await pause(page);
+  await shot(page, p, "33-zimmer-photos");
+  await page.goto(`${site("demo-zimmer")}/manage/units`);
+  await unitRow(page, "צימר הגפן").getByRole("link", { name: "צימר הגפן" }).click();
+  const gallery = page.locator('[data-section="gallery"]');
+  await gallery.scrollIntoViewIfNeeded();
+  await expect(gallery.getByRole("img", { name: "הצימר בין הכרמים בשקיעה" })).toBeVisible();
+  await pause(page);
+  await shot(page, p, "34-zimmer-unit-gallery", false);
+  await finish(context, p, "11-zimmer-photos", [page]);
+});
+
+test("12 zimmer owner (2f): prices, weekend and summer rules, the server's price preview; the cancellation policy", async ({
+  page,
+  context,
+  request,
+}, info) => {
+  const p = info.project.name;
+  const phone = p === "phone";
+  await signedIn(page, request, "demo-zimmer", ACCOUNTS.zimmerOwner, "/manage");
+  await go(page, phone, "מחירים", "/manage/pricing");
+  await expect(page.locator('[data-rule="סוף שבוע"]')).toBeVisible();
+  await pause(page);
+  await shot(page, p, "35-zimmer-pricing");
+  const preview = page.locator('[data-section="preview"]');
+  await preview.scrollIntoViewIfNeeded();
+  const inDays = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  await preview.getByLabel("יחידה").selectOption({ label: "צימר האלון" });
+  await preview.getByLabel("כניסה").fill(inDays(20));
+  await preview.getByLabel("יציאה").fill(inDays(22));
+  await preview.getByLabel("מבוגרים").fill("3");
+  await preview.getByRole("button", { name: "חישוב מחיר" }).click();
+  await expect(page.getByTestId("price-summary")).toBeVisible();
+  await pause(page);
+  await preview.scrollIntoViewIfNeeded();
+  await shot(page, p, "36-zimmer-price-preview", false);
+  await go(page, phone, "מדיניות ביטול", "/manage/policies");
+  await expect(page.locator('[data-policy="רגילה"]')).toContainText("ברירת המחדל");
+  await pause(page);
+  await shot(page, p, "37-zimmer-policy");
+  await finish(context, p, "12-zimmer-prices-policy", [page]);
+});
+
+test("13 zimmer owner (3a): the calendar — bookings by state, a booking's summary, block two nights and release; the phone's agenda", async ({
+  page,
+  context,
+  request,
+}, info) => {
+  const p = info.project.name;
+  const phone = p === "phone";
+  await signedIn(page, request, "demo-zimmer", ACCOUNTS.zimmerOwner, "/manage");
+  await go(page, phone, "יומן", "/manage/calendar");
+  if (phone) {
+    const agenda = page.getByTestId("calendar-agenda");
+    await expect(agenda).toContainText("דנה ואבי לוי");
+    await pause(page);
+    await shot(page, p, "38-calendar-agenda");
+    await agenda
+      .getByRole("button", { name: /דנה ואבי לוי/ })
+      .first()
+      .click();
+    await expect(page.getByTestId("booking-panel")).toContainText("שוהים עכשיו");
+    await pause(page);
+    await shot(page, p, "39-calendar-booking", false);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "שבוע", exact: true }).click();
+    await expect(page.getByTestId("calendar-board")).toBeVisible();
+    await pause(page);
+    await shot(page, p, "40-calendar-week");
+  } else {
+    const board = page.getByTestId("calendar-board");
+    await expect(board.locator('[data-status="checked_in"]').first()).toBeVisible();
+    await pause(page);
+    await shot(page, p, "38-calendar-month");
+    await board.locator('[data-status="checked_in"]').first().click();
+    await expect(page.getByTestId("booking-panel")).toContainText("דנה ואבי לוי");
+    await pause(page);
+    await shot(page, p, "39-calendar-booking", false);
+    await page.keyboard.press("Escape");
+    // לחסום שני לילות פנויים בסוויטה — שתי לחיצות בשורה
+    const today = new Date();
+    const d = (n: number) => new Date(today.getTime() + n * 86400000).toISOString().slice(0, 10);
+    const sameMonth = (n: number) => d(n).slice(0, 7) === d(0).slice(0, 7);
+    const first = sameMonth(16) ? 15 : sameMonth(3) ? 1 : -1;
+    if (first > 0) {
+      const row = page.locator('[data-unit-row="סוויטת הנוף"]');
+      await row.locator(`[data-cell="${d(first)}"]`).click();
+      await row.locator(`[data-cell="${d(first + 1)}"]`).click();
+      await page.getByRole("dialog").getByLabel("סיבה (לא חובה)").fill("שימוש פרטי");
+      await pause(page);
+      await shot(page, p, "40-calendar-block-form", false);
+      await page.getByRole("dialog").getByRole("button", { name: "חסימה" }).click();
+      await expect(row.getByRole("button", { name: "חסום — שימוש פרטי" })).toBeVisible();
+      await quiet(page);
+      await shot(page, p, "41-calendar-blocked");
+      await row.getByRole("button", { name: "חסום — שימוש פרטי" }).click();
+      await page.getByRole("button", { name: "שחרור החסימה" }).click();
+      await page.getByRole("alertdialog").getByRole("button", { name: "שחרור" }).click();
+      await expect(row.locator('[data-bar="block"]')).toHaveCount(0);
+      await quiet(page);
+    }
+  }
+  await finish(context, p, "13-zimmer-calendar", [page]);
 });
