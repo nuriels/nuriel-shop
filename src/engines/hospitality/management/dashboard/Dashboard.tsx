@@ -1,4 +1,4 @@
-// לוח הבקרה — שלב 2a: רשימת ההקמה, מצב האתר, והחבילה (לבעלים). המספרים
+// לוח הבקרה — שלב 2a: רשימת ההקמה, מצב האתר, והחבילה (לבעלים); 2c.4: כרטיס היחידות. המספרים
 // (הגעות, תפוסה, הכנסות) יתווספו בשלב 2k.
 import { Link } from "@tanstack/react-router";
 import { CheckCircle2, Circle, Globe, Lock } from "lucide-react";
@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, Progress } f
 import { CHECKLIST_STEPS, checklistProgress } from "../lib/checklist";
 import { formatDate, usageText } from "../lib/format";
 import { useManagement } from "../shell/management-context";
+import { UnitsCard } from "./UnitsCard";
 
 export function Dashboard() {
   const ctx = useManagement();
@@ -18,6 +19,7 @@ export function Dashboard() {
         </p>
       </div>
       <SetupChecklist />
+      {ctx.permissions["catalog"] && <UnitsCard />}
       <div className="grid gap-5 md:grid-cols-2">
         <SiteStatusCard />
         {ctx.permissions["billing.manage"] && <PlanCard />}

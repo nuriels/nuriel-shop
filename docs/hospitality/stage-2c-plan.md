@@ -1,6 +1,22 @@
 # Hospitality Stage 2c — Properties and units (detailed plan)
 
-Status: **approved (D-2c-1 … D-2c-6). 2c.1 (database, `0efc471`) and 2c.2 (screens) approved; 2c.3 (unit and property pages) implemented — awaiting review; 2c.4 not started.**
+Status: **approved (D-2c-1 … D-2c-6). 2c.1 (database, `0efc471`) and 2c.2 (screens) approved; 2c.3 (unit and property pages, `e2de74d`) and 2c.4 (dashboard card, setup link) implemented under the overnight continuous approval of 01/11/2026 — awaiting review.**
+
+### 2c.4 — as implemented
+- **No migration, no new server function** — the dashboard reads the same `catalog_view`.
+- **Dashboard card "מקום האירוח"** (`management/dashboard/UnitsCard.tsx`, shown with the
+  `catalog` permission): no property yet → an invitation and a link to the first run; one
+  unit → the unit's name linking to its page (a single zimmer owner is one click from the
+  details); more → properties, active / inactive units, active "כל המתחם" units, units
+  without a price, the plan limit text, and "לניהול היחידות". Counts come from
+  `unitsOverview()` in `catalog/model.ts` (same rules as the units screen: archived
+  properties hidden, whole-property units not counted as physical units).
+- **Setup checklist:** the "יחידות" step links to `/manage/units` (open item F-3, units part —
+  closed); photos / prices / policy links follow in 2e / 2f.
+- **Tests:** Vitest (`unitsOverview`: empty, one unit, many, archived, whole-property, missing
+  price); E2E desktop: empty site → checklist link → first run; single unit → card link →
+  unit page, step done without a link; hotel → counts, axe, link to the list.
+
 
 ### 2c.3 — as implemented
 - **No migration** — every action uses the migration 10 functions.

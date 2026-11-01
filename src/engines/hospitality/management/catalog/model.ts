@@ -427,3 +427,33 @@ export function staleOrder(
     ? null
     : STALE_ORDER;
 }
+
+// ---------- לוח הבקרה (Stage 2c.4) ----------
+
+export interface UnitsOverview {
+  limitText: string;
+  properties: number;
+  active: number;
+  inactive: number;
+  wholeActive: number;
+  /** יחידות פעילות שעוד אין להן מחיר */
+  missingPrice: number;
+  /** עסק עם יחידה פיזית אחת בלבד (צימר בודד, וילה) — היחידה עצמה */
+  single: CatalogUnit | null;
+}
+
+/** תמונת מצב של היחידות לכרטיס בלוח הבקרה (בלי מתחמים בארכיון) */
+export function unitsOverview(view: CatalogView): UnitsOverview {
+  const properties = visibleProperties(view);
+  const units = properties.flatMap((p) => physicalUnits(p));
+  const active = units.filter((u) => u.is_active);
+  return {
+    limitText: unitsLimit(view.limits).text,
+    properties: properties.length,
+    active: active.length,
+    inactive: units.length - active.length,
+    wholeActive: properties.filter((p) => wholeUnit(p)?.is_active).length,
+    missingPrice: active.filter((u) => !u.has_price).length,
+    single: units.length === 1 ? units[0]! : null,
+  };
+}

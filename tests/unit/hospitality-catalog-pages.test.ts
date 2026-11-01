@@ -37,6 +37,7 @@ import {
   staleUnit,
   staleWhole,
   unitDeleteBlock,
+  unitsOverview,
   withUnitOrder,
 } from "@/engines/hospitality/management/catalog/model";
 import { NAV_ITEMS, isNavActive } from "@/engines/hospitality/management/lib/nav";
@@ -310,5 +311,32 @@ describe("navigation on the unit and property pages", () => {
     expect(isNavActive(item("dashboard"), "/manage/units")).toBe(false);
     expect(isNavActive(item("settings"), "/manage/settings")).toBe(true);
     expect(isNavActive(item("bookings"), "/manage")).toBe(false);
+  });
+});
+
+describe("dashboard units card (2c.4)", () => {
+  it("counts active, inactive and whole properties; archived properties are left out", () => {
+    const p = property([
+      unit(1),
+      unit(2, { is_active: false }),
+      unit(3, { has_price: true }),
+      whole([1, 3]),
+    ]);
+    const archived = property([unit(7)], { id: id(201), status: "archived" });
+    const o = unitsOverview(view([p, archived]));
+    expect(o).toMatchObject({
+      properties: 1,
+      active: 2,
+      inactive: 1,
+      wholeActive: 1,
+      missingPrice: 1,
+    });
+    expect(o.single).toBeNull();
+    expect(o.limitText).toBe("3 מתוך 5 יחידות פעילות בחבילה");
+  });
+
+  it("a single unit is shown itself; no property → nothing to count", () => {
+    expect(unitsOverview(view([property([unit(1)])])).single?.name).toBe("צימר 1");
+    expect(unitsOverview(view([]))).toMatchObject({ properties: 0, active: 0, single: null });
   });
 });

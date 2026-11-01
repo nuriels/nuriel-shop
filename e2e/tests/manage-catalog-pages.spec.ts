@@ -34,6 +34,8 @@ const DESKTOP_SITES = {
   hotel: "h2c3-hotel",
   limit: "h2c3-limit",
   foreign: "h2c3-foreign",
+  empty: "h2c3-empty",
+  single: "h2c3-single",
 } as const;
 const MOBILE_SITES = { phone: "h2c3-m" } as const;
 type SiteKey = keyof typeof DESKTOP_SITES | keyof typeof MOBILE_SITES;
@@ -225,6 +227,7 @@ test.beforeAll(async ({ request }, testInfo) => {
       })),
     );
     seedProperty(ids.foreign!, "מתחם זר", "other", [{ name: "יחידה זרה" }]);
+    seedProperty(ids.single!, "בקתת האורן", "zimmer", [{ name: "בקתת האורן", type: "cabin" }]);
   }
   for (const slug of Object.values(sitesFor(project))) {
     await expect
@@ -859,6 +862,40 @@ test("@mobile phone: unit page, property page, the whole property and the order 
   await page.getByRole("button", { name: "הזזת וילה כחולה למעלה" }).click();
   await expect.poll(() => activeOrder(property)).toBe("וילה אדומה,וילה כחולה,וילה ירוקה");
   expect(await noSideways(page)).toBe(true);
+});
+
+test("dashboard (2c.4): the units card and the setup step lead to the units screen — empty, one unit, many", async ({
+  page,
+  request,
+}) => {
+  test.skip(test.info().project.name === "mobile", "desktop flow");
+  // an empty site: an invitation to start, and the setup step links to the first run
+  await open(page, request, slugOf(DESKTOP_SITES.empty), "/manage");
+  const card = page.getByTestId("units-card");
+  await expect(card).toContainText("עוד לא הוספתם מקום אירוח");
+  const step = page.locator('li[data-step="units"]');
+  await step.getByRole("link", { name: /^להשלמה/ }).click();
+  await expect(page).toHaveURL(/\/manage\/units$/);
+  await expect(page.getByRole("heading", { name: "בואו נקים את מקום האירוח שלכם" })).toBeVisible();
+
+  // one unit: the unit itself, one click to its page
+  await open(page, request, slugOf(DESKTOP_SITES.single), "/manage");
+  await expect(page.getByTestId("units-card")).toContainText("1 מתוך 20 יחידות פעילות בחבילה");
+  await page.getByTestId("units-card").getByRole("link", { name: "בקתת האורן" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "בקתת האורן" })).toBeVisible();
+  // the units step is done now (an active unit exists): no link
+  await page.goto(url(slugOf(DESKTOP_SITES.single), "/manage"));
+  await expect(page.locator('li[data-step="units"]')).toContainText("הושלם");
+  await expect(page.locator('li[data-step="units"]').getByRole("link")).toHaveCount(0);
+
+  // many units: counts, and the way to the list
+  await open(page, request, slugOf(DESKTOP_SITES.hotel), "/manage");
+  const hotel = page.getByTestId("units-card");
+  await expect(hotel).toContainText("מתחמים");
+  await expect(hotel).toContainText("לא פעילות");
+  await expectAccessible(page, "dashboard with the units card");
+  await hotel.getByRole("link", { name: "לניהול היחידות" }).click();
+  await expect(page).toHaveURL(/\/manage\/units$/);
 });
 
 test("Ecommerce untouched: no unit or property pages or actions on a store; store data unchanged", async ({
