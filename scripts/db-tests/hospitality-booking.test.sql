@@ -432,18 +432,20 @@ SELECT pg_temp.expect_error('whole property: membership cannot change while the 
   format($$DELETE FROM hospitality.unit_members WHERE parent_unit_id = %L AND member_unit_id = %L$$, :W, :U2),
   'אי אפשר לשנות את היחידות');
 
--- blocks (owner, through RLS) share the same inventory
-SELECT tests.run('blocks: the owner blocks free dates',
+-- blocks share the same inventory. Since 3a staff write blocks only through block_create /
+-- block_release (hospitality-calendar.test.sql); here the engine rules are tested directly.
+SELECT tests.run('blocks: staff cannot write blocks directly (only the 3a functions)',
   format($$INSERT INTO hospitality.blocks (tenant_id, unit_id, start_date, end_date, reason) VALUES (%L, %L, %L, %L, 'שיפוץ')$$,
-         :'sx', :U5, pg_temp.d(120), pg_temp.d(125)), :OWNER_X);
+         :'sx', :U5, pg_temp.d(120), pg_temp.d(125)), :OWNER_X, 'permission denied');
+INSERT INTO hospitality.blocks (tenant_id, unit_id, start_date, end_date, reason)
+VALUES (:'sx', :U5, pg_temp.d(120), pg_temp.d(125), 'שיפוץ');
 SELECT pg_temp.expect_error('blocks: a guest request over a block is refused',
   format($$SELECT pg_temp.req(%L, NULL, %L, pg_temp.d(122), pg_temp.d(123), 'blocked@example.com', '0565555551', 'key-blk-0001')$$, :'sx', :U5),
   'כבר לא פנויים');
 SELECT pg_temp.expect_error('blocks: a block over a held booking is refused',
   format($$INSERT INTO hospitality.blocks (tenant_id, unit_id, start_date, end_date) VALUES (%L, %L, %L, %L)$$, :'sx', :U1, pg_temp.d(41), pg_temp.d(42)),
   'יש הזמנה או חסימה');
-SELECT tests.run('blocks: the owner releases the block',
-  $$UPDATE hospitality.blocks SET released_at = now() WHERE reason = 'שיפוץ'$$, :OWNER_X, NULL, 1);
+UPDATE hospitality.blocks SET released_at = now() WHERE reason = 'שיפוץ';
 SELECT tests.check('blocks: a released block frees the dates',
   format($$SELECT (pg_temp.req(%L, NULL, %L, pg_temp.d(122), pg_temp.d(123), 'blocked@example.com', '0565555551', 'key-blk-0002') ->> 'status') = 'pending_approval'$$,
          :'sx', :U5));
@@ -451,7 +453,7 @@ SELECT pg_temp.expect_error('blocks: a released block cannot be re-activated',
   $$UPDATE hospitality.blocks SET released_at = NULL WHERE reason = 'שיפוץ'$$, 'כבר שוחררה');
 SELECT tests.run('blocks: guests and other owners cannot create blocks',
   format($$INSERT INTO hospitality.blocks (tenant_id, unit_id, start_date, end_date) VALUES (%L, %L, %L, %L)$$, :'sx', :U6, pg_temp.d(200), pg_temp.d(201)),
-  :OWNER_Y, 'row-level security');
+  :OWNER_Y, 'permission denied');
 
 -- the constraint holds even when the functions are bypassed
 SELECT pg_temp.expect_error('authority: a raw occupancy row overlapping a held booking is refused (EXCLUDE)',

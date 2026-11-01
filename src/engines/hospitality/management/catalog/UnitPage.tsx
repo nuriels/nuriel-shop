@@ -97,6 +97,7 @@ function UnitEditor({
   const refresh = useRefresh();
   const navigate = useNavigate();
   const canMedia = useManagement().permissions["media"] === true;
+  const canCalendar = useManagement().permissions["bookings"] === true;
   const [revision, setRevision] = useState(unit.revision);
   const [base, setBase] = useState<UnitForm>(() => unitFormFrom(unit));
   const [form, setForm] = useState<UnitForm>(base);
@@ -237,6 +238,18 @@ function UnitEditor({
               <StatusPill tone="ok">פעילה</StatusPill>
             ) : (
               <StatusPill tone="muted">לא פעילה</StatusPill>
+            )}
+            {canCalendar && (
+              <>
+                <span aria-hidden="true">·</span>
+                <Link
+                  to="/manage/calendar"
+                  search={{ unit: unit.id }}
+                  className="font-medium text-primary hover:underline"
+                >
+                  יומן היחידה
+                </Link>
+              </>
             )}
           </p>
           {missing.length > 0 && (

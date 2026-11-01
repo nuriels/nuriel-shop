@@ -345,6 +345,9 @@ test("photos screen: site gallery, every gallery with its count, the setup check
     .click();
   await expect(page).toHaveURL(/\/manage\/photos$/);
   await expect(page.getByRole("heading", { level: 1, name: "תמונות" })).toBeVisible();
+  // the files are public — a clear notice (no personal documents, entry codes; only images you may use)
+  await expect(page.getByTestId("media-notice")).toContainText("גלויים לכל מי שמגיע לאתר");
+  await expect(page.getByTestId("media-notice")).toContainText("שיש לכם זכות להשתמש בהן");
   await expect(page.locator('[data-gallery-unit="צימר הזית"]')).toContainText("2 פריטים");
   await expect(page.locator('[data-gallery-unit="צימר האלון"]')).toContainText("פריט אחד");
   const site = page.getByTestId("gallery-site");

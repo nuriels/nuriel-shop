@@ -4,6 +4,7 @@
 
 export type NavKey =
   | "dashboard"
+  | "calendar"
   | "bookings"
   | "units"
   | "photos"
@@ -20,6 +21,7 @@ export interface NavItem {
   /** נתיב של מסך קיים; בלי נתיב = עוד לא נבנה ("בקרוב") */
   to?:
     | "/manage"
+    | "/manage/calendar"
     | "/manage/settings"
     | "/manage/team"
     | "/manage/units"
@@ -35,6 +37,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: "dashboard", label: "לוח בקרה", to: "/manage", primary: true },
+  { key: "calendar", label: "יומן", to: "/manage/calendar", primary: true, permission: "bookings" },
   { key: "bookings", label: "הזמנות", primary: true, permission: "bookings" },
   {
     key: "units",

@@ -92,6 +92,7 @@ else.
 
 - Showing galleries on the public site — Stage 4 (`srcset` is already produced).
 - Drag-and-drop ordering in the gallery (arrows only for now).
+- The photos screen tells the owner that the files are public and to upload only images they may use (no personal documents or entry codes) — added with 3a (security plan FILE-08, LIC-05).
 - Deleting a whole site does not yet delete its files in the bucket (database cascade only) —
   open item, `security-privacy-compliance-plan.md`.
 - Demo images with a licence (`is_demo` + `licence_ref`) are shown with a badge; adding them is

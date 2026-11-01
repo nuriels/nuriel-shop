@@ -177,3 +177,14 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Rollback | `supabase/rollbacks/20261101210000_hosp_pricing.down.sql` — restores the exact migration-12 schema |
 | Tests | `scripts/db-tests/hospitality-pricing.test.sql` (48), Stage 1 schema / billing files updated, `rollback-check.sh` (M13), `tests/unit/hospitality-pricing.test.ts`, `e2e/tests/manage-pricing.spec.ts` |
 | Production | nothing to configure; not applied anywhere but local / CI databases |
+
+## 20261101220000_hosp_calendar.sql — Stage 3a (hospitality)
+
+| | |
+|---|---|
+| Indexes | `bookings_calendar_idx (tenant_id, check_out, check_in)`, `blocks_calendar_idx (tenant_id, end_date) WHERE released_at IS NULL` |
+| Writes | staff lose direct writes on `blocks` (audit finding A-1; SELECT + RLS kept) |
+| Functions | `calendar` (≤ 62 days, `bookings` permission, guest name only — no contact data), `calendar_stamp`, `block_create`, `block_update`, `block_release` (history kept in `released_at`), `blocks_upcoming` — DEFINER, management flag, action log. **Fix:** `_quote` now counts active blocks also when no booking is excluded (before, a quote could show blocked dates as available; the EXCLUDE constraint always prevented the actual double booking) |
+| Rollback | `supabase/rollbacks/20261101220000_hosp_calendar.down.sql` — restores the migration-11 `_quote` and the block writes; exact migration-13 schema |
+| Tests | `scripts/db-tests/hospitality-calendar.test.sql` (34), Stage 1 booking / catalog files use `block_create`, concurrency 41 (new 33, 34), `rollback-check.sh` (M14), `scripts/db-tests/hospitality/perf/calendar-perf.sh`, `tests/unit/hospitality-calendar.test.ts`, `e2e/tests/manage-calendar.spec.ts` |
+| Production | nothing to configure; not applied anywhere but local / CI databases |

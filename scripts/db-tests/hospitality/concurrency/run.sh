@@ -154,8 +154,7 @@ check "8  the same request (same key) 5 times in parallel → one booking, every
      AND $(cat "$TMP"/c8/*.out | grep -o '\"booking_id\": \"[0-9a-f-]*\"' | sort -u | wc -l) = 1"
 
 # ---- 9. owner block vs pending whole-property request ----
-parallel c9 "$(as_staff $OWNER) INSERT INTO hospitality.blocks (tenant_id, unit_id, start_date, end_date, reason)
-               VALUES ('$SITE', conc.unit(23), current_date + 130, current_date + 131, 'c9');" \
+parallel c9 "$(as_staff $OWNER) SELECT hospitality.block_create(conc.unit(23), current_date + 130, current_date + 131, 'c9');" \
             "$(as_guest) SELECT conc.req(conc.whole(2), 130, 132, 'c9@example.com', 'c9-key-whole');"
 check "9  an owner block vs a whole-property request on a member unit, in parallel → exactly one succeeds" \
   "SELECT $(ok_count c9) = 1 AND $(err_count c9 'כבר לא פנויים') + $(err_count c9 'יש הזמנה או חסימה') = 1"
@@ -339,7 +338,7 @@ check "28 two edits of the same unit from the same revision → one is saved, th
 
 U29=$(q "SELECT id FROM hospitality.units WHERE tenant_id = '$SITE4' AND slug = 'conc-u2'")
 parallel c29 "$(as_owner4) SELECT hospitality.unit_delete('$U29');" \
-             "$(as_owner4) INSERT INTO hospitality.blocks (tenant_id, unit_id, start_date, end_date) VALUES ('$SITE4', '$U29', current_date + 5, current_date + 7);"
+             "$(as_owner4) SELECT hospitality.block_create('$U29', current_date + 5, current_date + 7);"
 check "29 deleting a unit while a block is written for it → exactly one wins; never a block without its unit" \
   "SELECT $(ok_count c29) = 1
      AND (EXISTS (SELECT 1 FROM hospitality.units WHERE id = '$U29')
@@ -351,7 +350,7 @@ U4=$(q "SELECT id FROM hospitality.units WHERE tenant_id = '$SITE4' AND slug = '
 U5=$(q "SELECT id FROM hospitality.units WHERE tenant_id = '$SITE4' AND slug = 'conc-u5'")
 W30=$("${Q[@]}" -c "$(as_owner4) SELECT hospitality.whole_property_set('$P4', true, ARRAY['$U3', '$U4']::uuid[]) ->> 'id';" | tail -1)
 parallel c30 "$(as_owner4) SELECT hospitality.whole_property_set('$P4', true, ARRAY['$U3', '$U5']::uuid[]);" \
-             "$(as_owner4) INSERT INTO hospitality.blocks (tenant_id, unit_id, start_date, end_date) VALUES ('$SITE4', '$W30', current_date + 10, current_date + 12);"
+             "$(as_owner4) SELECT hospitality.block_create('$W30', current_date + 10, current_date + 12);"
 [ -n "${DEBUG_CONC:-}" ] && { for f in "$TMP"/c30/*; do echo "--- $f"; cat "$f"; done; q "SELECT array_agg(o.unit_id) FROM hospitality.unit_occupancy o JOIN hospitality.blocks b ON b.id = o.block_id WHERE b.unit_id = '$W30'"; q "SELECT hospitality._fanout_units('$SITE4', '$W30')"; } >&2
 check "30 changing the units of 'the whole property' while it is being blocked → the block holds exactly its units at that moment; a late change is refused" \
   "SELECT $(ok_count c30) >= 1
@@ -375,6 +374,22 @@ parallel c32 "$(as_owner4) SELECT hospitality.unit_create('$P4', '{\"name\": \"�
 check "32 three units with the same name at once → all three added with distinct addresses (slugs)" \
   "SELECT $(ok_count c32) = 3
      AND (SELECT count(DISTINCT slug) = 3 FROM hospitality.units WHERE tenant_id = '$SITE4' AND name = 'צימר תאום')"
+# ---- 33–34. the calendar (migration 14): blocks only through block_create / block_update ----
+parallel c33 "$(as_staff $OWNER) SELECT hospitality.block_create(conc.unit(29), current_date + 160, current_date + 163, 'c33a');" \
+             "$(as_staff $OWNER) SELECT hospitality.block_create(conc.unit(29), current_date + 161, current_date + 162, 'c33b');"
+check "33 two staff block overlapping dates of the same unit at once → exactly one block is saved" \
+  "SELECT $(ok_count c33) = 1 AND $(err_count c33 'יש הזמנה או חסימה') = 1
+     AND (SELECT count(*) FROM hospitality.blocks WHERE unit_id = conc.unit(29) AND released_at IS NULL) = 1"
+
+B34=$("${Q[@]}" -c "$(as_staff $OWNER) SELECT hospitality.block_create(conc.unit(30), current_date + 170, current_date + 171, 'c34') ->> 'id';" | tail -1)
+parallel c34 "$(as_staff $OWNER) SELECT hospitality.block_update('$B34', current_date + 172, current_date + 175, 'c34 moved');" \
+             "$(as_guest) SELECT conc.req(conc.unit(30), 173, 174, 'c34@example.com', 'c34-key');"
+check "34 moving a block onto dates a guest is requesting at the same moment → exactly one holds them; the block keeps its old dates if it lost" \
+  "SELECT $(ok_count c34) = 1
+     AND ((SELECT start_date FROM hospitality.blocks WHERE id = '$B34') = current_date + 172)
+         <> EXISTS (SELECT 1 FROM hospitality.bookings WHERE idempotency_key = 'c34-key')
+     AND (SELECT start_date = current_date + 170 OR start_date = current_date + 172 FROM hospitality.blocks WHERE id = '$B34')"
+
 check "invariant: every active block holds exactly its units (the whole property: itself and its units)" \
   "SELECT NOT EXISTS (SELECT 1 FROM hospitality.blocks b WHERE b.released_at IS NULL
      AND (SELECT count(*) FROM hospitality.unit_occupancy o WHERE o.block_id = b.id)

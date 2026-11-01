@@ -313,9 +313,8 @@ SELECT pg_temp.after('whole: members can change while nothing is booked',
   pg_temp.cat_sql(:'sa', :OWNER_A, format('whole_property_set(%L, true, ARRAY[%L, %L]::uuid[])', :'pa', :'u1', :'u3')),
   format($$SELECT (SELECT array_agg(member_unit_id ORDER BY member_unit_id) FROM hospitality.unit_members WHERE parent_unit_id = %L)
                 = (SELECT array_agg(x ORDER BY x) FROM unnest(ARRAY[%L, %L]::uuid[]) x)$$, :'uw', :'u1', :'u3'));
--- a future block on the whole property (the owner, through RLS, as in Stage 1)
-SELECT pg_temp.call(:'sa', :OWNER_A, format($$INSERT INTO hospitality.blocks (tenant_id, unit_id, start_date, end_date, reason)
-         VALUES (%L, %L, current_date + 30, current_date + 32, 'חתונה') RETURNING to_jsonb(id)$$, :'sa', :'uw')) #>> '{}' AS blk \gset
+-- a future block on the whole property (the owner, through the calendar function — migration 14)
+SELECT pg_temp.cat(:'sa', :OWNER_A, format('block_create(%L, current_date + 30, current_date + 32, %L)', :'uw', 'חתונה')) ->> 'id' AS blk \gset
 SELECT pg_temp.expect_error('whole: with a future block / booking its units are frozen',
   pg_temp.cat_sql(:'sa', :OWNER_A, format('whole_property_set(%L, true, ARRAY[%L, %L]::uuid[])', :'pa', :'u1', :'u2')),
   'יש הזמנות או חסימות עתידיות ל"כל המתחם"');

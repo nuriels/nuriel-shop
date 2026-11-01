@@ -42,6 +42,7 @@ import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
 import { Route as CartCodeRouteImport } from './routes/cart.$code'
 import { Route as CourierTokenRouteImport } from './routes/courier.$token'
 import { Route as ManageIndexRouteImport } from './routes/manage.index'
+import { Route as ManageCalendarRouteImport } from './routes/manage.calendar'
 import { Route as ManagePhotosRouteImport } from './routes/manage.photos'
 import { Route as ManagePoliciesRouteImport } from './routes/manage.policies'
 import { Route as ManagePricingRouteImport } from './routes/manage.pricing'
@@ -238,6 +239,11 @@ const CourierTokenRoute = CourierTokenRouteImport.update({
 const ManageIndexRoute = ManageIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => ManageRoute,
+} as any)
+const ManageCalendarRoute = ManageCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => ManageRoute,
 } as any)
 const ManagePhotosRoute = ManagePhotosRouteImport.update({
@@ -438,6 +444,7 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AdminSettingsRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/manage/calendar': typeof ManageCalendarRoute
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
@@ -504,6 +511,7 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AdminSettingsRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/manage/calendar': typeof ManageCalendarRoute
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
@@ -572,6 +580,7 @@ export interface FileRoutesById {
   '/admin_/settings': typeof AdminSettingsRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
+  '/manage/calendar': typeof ManageCalendarRoute
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
@@ -641,6 +650,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/cart/$code'
     | '/courier/$token'
+    | '/manage/calendar'
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
@@ -707,6 +717,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/cart/$code'
     | '/courier/$token'
+    | '/manage/calendar'
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
@@ -774,6 +785,7 @@ export interface FileRouteTypes {
     | '/admin_/settings'
     | '/cart/$code'
     | '/courier/$token'
+    | '/manage/calendar'
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
@@ -1101,6 +1113,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageIndexRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/calendar': {
+      id: '/manage/calendar'
+      path: '/calendar'
+      fullPath: '/manage/calendar'
+      preLoaderRoute: typeof ManageCalendarRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/photos': {
       id: '/manage/photos'
       path: '/photos'
@@ -1329,6 +1348,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface ManageRouteChildren {
+  ManageCalendarRoute: typeof ManageCalendarRoute
   ManagePhotosRoute: typeof ManagePhotosRoute
   ManagePoliciesRoute: typeof ManagePoliciesRoute
   ManagePricingRoute: typeof ManagePricingRoute
@@ -1341,6 +1361,7 @@ interface ManageRouteChildren {
 }
 
 const ManageRouteChildren: ManageRouteChildren = {
+  ManageCalendarRoute: ManageCalendarRoute,
   ManagePhotosRoute: ManagePhotosRoute,
   ManagePoliciesRoute: ManagePoliciesRoute,
   ManagePricingRoute: ManagePricingRoute,

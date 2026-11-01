@@ -118,7 +118,9 @@ SELECT set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-0000000000f0
 SELECT hospitality.admin_create_site('conc-site-4', 'בדיקות מקביליות 4');
 SELECT public.platform_set_flag('hospitality_management_enabled', true),
        public.platform_set_flag('hospitality_backend_enabled', true, (SELECT id FROM public.tenants WHERE slug = 'conc-site-4')),
-       public.platform_set_flag('hospitality_management_enabled', true, (SELECT id FROM public.tenants WHERE slug = 'conc-site-4'));
+       public.platform_set_flag('hospitality_management_enabled', true, (SELECT id FROM public.tenants WHERE slug = 'conc-site-4')),
+       -- the calendar (migration 14): blocks are written only through the management functions
+       public.platform_set_flag('hospitality_management_enabled', true, (SELECT id FROM public.tenants WHERE slug = 'conc-site'));
 SELECT set_config('request.jwt.claim.sub', '', false);
 INSERT INTO auth.users (id, email, email_confirmed_at)
 SELECT ('c0000000-0000-0000-0000-0000000004' || lpad(n::text, 2, '0'))::uuid, 'conc.team' || n || '@test.local', now()

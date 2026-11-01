@@ -50,6 +50,11 @@ export function PhotosPage() {
           גלריה לאתר, לכל מתחם ולכל יחידה. נפח האחסון של העסק: {formatBytes(g.usage.bytes)} (
           {g.usage.files} קבצים).
         </p>
+        <p className="text-sm text-muted-foreground" data-testid="media-notice">
+          התמונות והסרטונים גלויים לכל מי שמגיע לאתר. אין להעלות מסמכים אישיים, צילומי תעודות או
+          קודי כניסה (את אלה שומרים ב"מידע פרטי להגעה" בעמוד המתחם). העלו או ייבאו רק תמונות שיש לכם
+          זכות להשתמש בהן.
+        </p>
       </header>
 
       <MediaGallery

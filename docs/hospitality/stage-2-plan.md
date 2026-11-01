@@ -1,6 +1,6 @@
 # Nuriel Hospitality — Stage 2 plan: owner management system
 
-Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, `6b279f4`) implemented and approved; R-1 fixed before 2c (migration 9); 2c approved (`stage-2c-plan.md`), 2c.1 (database, migration 10, `0efc471`) approved, 2c.2 (screens) implemented; P0 local preview kit (`238995e`) approved; 2c.3 (unit and property pages, whole property, order, activation, archive / delete, `e2de74d`) and 2c.4 (dashboard units card, setup link) implemented — awaiting review (`stage-2c-plan.md`). The overnight continuous approval of 01/11/2026 covers 2d → 2e → 2f → 3a in order; 2d (unit and property details, migration 11) 2e (photos and galleries, migration 12) and 2f (prices and policies, migration 13) implemented — awaiting review (`stage-2d-plan.md`, `stage-2e-plan.md`, `stage-2f-plan.md`).** Open items: §7.
+Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, `6b279f4`) implemented and approved; R-1 fixed before 2c (migration 9); 2c approved (`stage-2c-plan.md`), 2c.1 (database, migration 10, `0efc471`) approved, 2c.2 (screens) implemented; P0 local preview kit (`238995e`) approved; 2c.3 (unit and property pages, whole property, order, activation, archive / delete, `e2de74d`) and 2c.4 (dashboard units card, setup link) implemented — awaiting review (`stage-2c-plan.md`). The overnight continuous approval of 01/11/2026 covers 2d → 2e → 2f → 3a in order; 2d (unit and property details, migration 11), 2e (photos and galleries, migration 12), 2f (prices and policies, migration 13) and 3a (calendar board I, migration 14) implemented — awaiting review (`stage-2d-plan.md`, `stage-2e-plan.md`, `stage-2f-plan.md`, `stage-3a-plan.md`).** Open items: §7.
 **Round 7 (31/10/2026, after the requirements audit — roadmap D19–D30):** approved order
 2c.3 → 2c.4 → 2d → 2e → 2f → **3a** → 2h → 2i → **3b** → 2j → 2k; 2g merged into 3a; 2d and
 2e scopes extended (§3); house rules at property level (2d). Every requirement and its
@@ -551,7 +551,7 @@ Roadmap: `stage-1-plan.md` A4 Stage 3.
   42 days with ~5,000 bookings — database read ≤ 300 ms, first render ≤ 1 s, smooth
   scrolling; phone: 30 units smooth.
 
-**DB / API** (migration, expected 13): `calendar`, `calendar_stamp`; `block_create`,
+**Implemented** as migration 14 — `stage-3a-plan.md`. **DB / API** (as planned): `calendar`, `calendar_stamp`; `block_create`,
 `block_update`, `block_release` (DEFINER, `bookings` permission, action log, Hebrew
 messages); direct staff writes to `blocks` revoked (audit finding A-1, §7).
 **Files:** `management/calendar/{Board,MonthGrid,WeekGrid,UnitCalendar,Agenda,BookingBar,BlockSheet,Legend,Filters}.tsx`,
@@ -805,7 +805,7 @@ Status at the end of 2b (`hospitality/stage-2`). "Where" names the stage that ow
 **Found by the requirements audit (31/10/2026 — `requirements-traceability.md`)**
 | # | Item | Where |
 |---|---|---|
-| A-1 | Blocks are written directly to the table by staff (RLS) — no action-log entry, technical messages possible | 3a: `block_create` / `block_release` functions, direct writes revoked |
+| A-1 | Blocks are written directly to the table by staff (RLS) — no action-log entry, technical messages possible | **Closed in 3a (migration 14):** `block_create` / `block_update` / `block_release` with the action log; direct writes revoked |
 | A-2 | `policies.house_rules` superseded by property-level house rules (D21) | 2d (column kept, not edited) |
 | A-3 | Property coordinates exist in the database but no function or screen accepts them | 2d (map link / coordinates); public map provider: Stage 4 |
 | A-4 | Storage usage per site is not measured; no plan limit (original spec #1 part 12) | 2e measures; limit — open decision (Stage 11) |

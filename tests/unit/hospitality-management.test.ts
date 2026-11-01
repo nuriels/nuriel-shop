@@ -205,21 +205,23 @@ describe("navigation", () => {
     expect(visibleNav(all).map((i) => i.key)).toEqual(NAV_ITEMS.map((i) => i.key));
     expect(visibleNav(manager).map((i) => i.key)).not.toContain("team");
     expect(visibleNav(manager).map((i) => i.key)).toContain("bookings");
+    expect(visibleNav(manager).map((i) => i.key)).toContain("calendar");
   });
 
   it("an item whose permission is missing or false is hidden", () => {
     expect(visibleNav({}).map((i) => i.key)).toEqual(["dashboard"]);
   });
 
-  it("phone: dashboard, bookings and units in the bar, the rest under 'more'", () => {
+  it("phone: dashboard, calendar, bookings and units in the bar, the rest under 'more'", () => {
     const { bar, more } = splitForMobile(visibleNav(all));
-    expect(bar.map((i) => i.key)).toEqual(["dashboard", "bookings", "units"]);
+    expect(bar.map((i) => i.key)).toEqual(["dashboard", "calendar", "bookings", "units"]);
     expect(more.map((i) => i.key)).toContain("team");
   });
 
-  it("only built screens are links (2a dashboard, 2b.2 settings, 2b.3 team, 2c.2 units, 2e photos, 2f prices / policies)", () => {
+  it("only built screens are links (2a dashboard, 3a calendar, 2b.2 settings, 2b.3 team, 2c.2 units, 2e photos, 2f prices / policies)", () => {
     expect(NAV_ITEMS.filter((i) => i.to).map((i) => i.key)).toEqual([
       "dashboard",
+      "calendar",
       "units",
       "photos",
       "pricing",

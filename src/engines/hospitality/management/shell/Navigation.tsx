@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   BedDouble,
+  CalendarDays,
   Images,
   FileText,
   CalendarCheck,
@@ -29,6 +30,7 @@ import { isNavActive, splitForMobile, type NavItem, type NavKey } from "../lib/n
 
 const ICONS: Record<NavKey, LucideIcon> = {
   dashboard: LayoutDashboard,
+  calendar: CalendarDays,
   bookings: CalendarCheck,
   units: BedDouble,
   photos: Images,
