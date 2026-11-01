@@ -464,15 +464,20 @@ function Board(props: {
 
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-xs text-muted-foreground" id="board-help">
-        לחיצה על לילה פנוי ואז על הלילה האחרון באותה שורה — חסימת התאריכים. Escape מבטל. אפשר גם
-        בכפתור "חסימת תאריכים".
+      {/* שורה אחת שהטקסט שלה מתחלף — בלי להזיז את הלוח בין הלחיצה הראשונה לשנייה */}
+      <p
+        className={cn(
+          "min-h-12 text-xs sm:min-h-8",
+          pick ? "font-medium text-foreground" : "text-muted-foreground",
+        )}
+        id="board-help"
+        role="status"
+        data-testid="board-help"
+      >
+        {pick
+          ? "נבחר לילה ראשון — לחצו על הלילה האחרון בשורה (Escape מבטל)."
+          : 'לחיצה על לילה פנוי ואז על הלילה האחרון באותה שורה — חסימת התאריכים. Escape מבטל. אפשר גם בכפתור "חסימת תאריכים".'}
       </p>
-      {pick && (
-        <p role="status" className="text-sm font-medium">
-          נבחר לילה ראשון — לחצו על הלילה האחרון בשורה.
-        </p>
-      )}
       <div
         ref={scroller}
         onScroll={measure}

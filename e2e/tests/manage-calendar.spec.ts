@@ -327,7 +327,7 @@ test("blocks: two clicks block free nights → not bookable → release → book
   await row(page, "צימר התמר")
     .locator(`[data-cell="${day(12)}"]`)
     .click();
-  await expect(page.getByText("נבחר לילה ראשון")).toBeVisible();
+  await expect(page.getByTestId("board-help")).toContainText("נבחר לילה ראשון");
   await row(page, "צימר התמר")
     .locator(`[data-cell="${day(13)}"]`)
     .click();

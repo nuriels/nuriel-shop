@@ -561,15 +561,19 @@ test("13 zimmer owner (3a): the calendar — bookings by state, a booking's summ
     await pause(page);
     await shot(page, p, "39-calendar-booking", false);
     await page.keyboard.press("Escape");
-    // לחסום שני לילות פנויים בסוויטה — שתי לחיצות בשורה
+    await expect(page.getByTestId("booking-panel")).toBeHidden();
+    // לחסום שני לילות פנויים בצימר התאנה — שתי לחיצות בשורה (הסוויטה הושבתה בפרק 08, ויחידה לא
+    // פעילה בלי הזמנות לא מוצגת ביומן)
     const today = new Date();
     const d = (n: number) => new Date(today.getTime() + n * 86400000).toISOString().slice(0, 10);
     const sameMonth = (n: number) => d(n).slice(0, 7) === d(0).slice(0, 7);
     const first = sameMonth(16) ? 15 : sameMonth(3) ? 1 : -1;
     if (first > 0) {
-      const row = page.locator('[data-unit-row="סוויטת הנוף"]');
-      await row.locator(`[data-cell="${d(first)}"]`).click();
-      await row.locator(`[data-cell="${d(first + 1)}"]`).click();
+      const row = page.locator('[data-unit-row="צימר התאנה"]');
+      await row.locator(`[data-cell="${d(first)}"]`).click({ timeout: 15_000 });
+      await expect(page.getByTestId("board-help")).toContainText("נבחר לילה ראשון");
+      await row.locator(`[data-cell="${d(first + 1)}"]`).click({ timeout: 15_000 });
+      await expect(page.getByRole("dialog")).toBeVisible();
       await page.getByRole("dialog").getByLabel("סיבה (לא חובה)").fill("שימוש פרטי");
       await pause(page);
       await shot(page, p, "40-calendar-block-form", false);
@@ -580,7 +584,7 @@ test("13 zimmer owner (3a): the calendar — bookings by state, a booking's summ
       await row.getByRole("button", { name: "חסום — שימוש פרטי" }).click();
       await page.getByRole("button", { name: "שחרור החסימה" }).click();
       await page.getByRole("alertdialog").getByRole("button", { name: "שחרור" }).click();
-      await expect(row.locator('[data-bar="block"]')).toHaveCount(0);
+      await expect(row.getByRole("button", { name: "חסום — שימוש פרטי" })).toHaveCount(0);
       await quiet(page);
     }
   }
