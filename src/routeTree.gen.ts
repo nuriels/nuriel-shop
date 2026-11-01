@@ -53,7 +53,9 @@ import { Route as ManagePricingRouteImport } from './routes/manage.pricing'
 import { Route as ManageSettingsRouteImport } from './routes/manage.settings'
 import { Route as ManageTeamRouteImport } from './routes/manage.team'
 import { Route as ManageUnitsRouteImport } from './routes/manage.units'
+import { Route as ManageWebsiteRouteImport } from './routes/manage.website'
 import { Route as ManageLoginRouteImport } from './routes/manage_.login'
+import { Route as ManagePreviewRouteImport } from './routes/manage_.preview'
 import { Route as OwnerAgreementTokenRouteImport } from './routes/owner-agreement.$token'
 import { Route as PagesSlugRouteImport } from './routes/pages.$slug'
 import { Route as PlatformHospitalityRouteImport } from './routes/platform_.hospitality'
@@ -311,9 +313,19 @@ const ManageUnitsRoute = ManageUnitsRouteImport.update({
   path: '/units',
   getParentRoute: () => ManageRoute,
 } as any)
+const ManageWebsiteRoute = ManageWebsiteRouteImport.update({
+  id: '/website',
+  path: '/website',
+  getParentRoute: () => ManageRoute,
+} as any)
 const ManageLoginRoute = ManageLoginRouteImport.update({
   id: '/manage_/login',
   path: '/manage/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManagePreviewRoute = ManagePreviewRouteImport.update({
+  id: '/manage_/preview',
+  path: '/manage/preview',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OwnerAgreementTokenRoute = OwnerAgreementTokenRouteImport.update({
@@ -545,7 +557,9 @@ export interface FileRoutesByFullPath {
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
+  '/manage/website': typeof ManageWebsiteRoute
   '/manage/login': typeof ManageLoginRoute
+  '/manage/preview': typeof ManagePreviewRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/hospitality': typeof PlatformHospitalityRoute
@@ -626,7 +640,9 @@ export interface FileRoutesByTo {
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
+  '/manage/website': typeof ManageWebsiteRoute
   '/manage/login': typeof ManageLoginRoute
+  '/manage/preview': typeof ManagePreviewRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/hospitality': typeof PlatformHospitalityRoute
@@ -710,7 +726,9 @@ export interface FileRoutesById {
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
+  '/manage/website': typeof ManageWebsiteRoute
   '/manage_/login': typeof ManageLoginRoute
+  '/manage_/preview': typeof ManagePreviewRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
   '/platform_/hospitality': typeof PlatformHospitalityRoute
@@ -795,7 +813,9 @@ export interface FileRouteTypes {
     | '/manage/settings'
     | '/manage/team'
     | '/manage/units'
+    | '/manage/website'
     | '/manage/login'
+    | '/manage/preview'
     | '/owner-agreement/$token'
     | '/pages/$slug'
     | '/platform/hospitality'
@@ -876,7 +896,9 @@ export interface FileRouteTypes {
     | '/manage/settings'
     | '/manage/team'
     | '/manage/units'
+    | '/manage/website'
     | '/manage/login'
+    | '/manage/preview'
     | '/owner-agreement/$token'
     | '/pages/$slug'
     | '/platform/hospitality'
@@ -959,7 +981,9 @@ export interface FileRouteTypes {
     | '/manage/settings'
     | '/manage/team'
     | '/manage/units'
+    | '/manage/website'
     | '/manage_/login'
+    | '/manage_/preview'
     | '/owner-agreement/$token'
     | '/pages/$slug'
     | '/platform_/hospitality'
@@ -1034,6 +1058,7 @@ export interface RootRouteChildren {
   CartCodeRoute: typeof CartCodeRoute
   CourierTokenRoute: typeof CourierTokenRoute
   ManageLoginRoute: typeof ManageLoginRoute
+  ManagePreviewRoute: typeof ManagePreviewRoute
   OwnerAgreementTokenRoute: typeof OwnerAgreementTokenRoute
   PagesSlugRoute: typeof PagesSlugRoute
   PlatformHospitalityRoute: typeof PlatformHospitalityRoute
@@ -1370,11 +1395,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageUnitsRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/website': {
+      id: '/manage/website'
+      path: '/website'
+      fullPath: '/manage/website'
+      preLoaderRoute: typeof ManageWebsiteRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage_/login': {
       id: '/manage_/login'
       path: '/manage/login'
       fullPath: '/manage/login'
       preLoaderRoute: typeof ManageLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage_/preview': {
+      id: '/manage_/preview'
+      path: '/manage/preview'
+      fullPath: '/manage/preview'
+      preLoaderRoute: typeof ManagePreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/owner-agreement/$token': {
@@ -1643,6 +1682,7 @@ interface ManageRouteChildren {
   ManageSettingsRoute: typeof ManageSettingsRoute
   ManageTeamRoute: typeof ManageTeamRoute
   ManageUnitsRoute: typeof ManageUnitsRoute
+  ManageWebsiteRoute: typeof ManageWebsiteRoute
   ManageIndexRoute: typeof ManageIndexRoute
   ManageBookingsBookingIdRoute: typeof ManageBookingsBookingIdRoute
   ManageBookingsNewRoute: typeof ManageBookingsNewRoute
@@ -1662,6 +1702,7 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManageSettingsRoute: ManageSettingsRoute,
   ManageTeamRoute: ManageTeamRoute,
   ManageUnitsRoute: ManageUnitsRoute,
+  ManageWebsiteRoute: ManageWebsiteRoute,
   ManageIndexRoute: ManageIndexRoute,
   ManageBookingsBookingIdRoute: ManageBookingsBookingIdRoute,
   ManageBookingsNewRoute: ManageBookingsNewRoute,
@@ -1730,6 +1771,7 @@ const rootRouteChildren: RootRouteChildren = {
   CartCodeRoute: CartCodeRoute,
   CourierTokenRoute: CourierTokenRoute,
   ManageLoginRoute: ManageLoginRoute,
+  ManagePreviewRoute: ManagePreviewRoute,
   OwnerAgreementTokenRoute: OwnerAgreementTokenRoute,
   PagesSlugRoute: PagesSlugRoute,
   PlatformHospitalityRoute: PlatformHospitalityRoute,

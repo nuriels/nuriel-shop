@@ -65,3 +65,14 @@ export function uniqueAmenities(list: PublicAmenity[]): PublicAmenity[] {
   for (const a of list) if (!seen.has(a.name)) seen.set(a.name, a);
   return [...seen.values()];
 }
+
+/** כל התמונות והסרטונים של האתר (גלריה, מתחמים, יחידות) — לבחירה בעורך ולמקטעים */
+export function allMedia(site: PublicSite): PublicMedia[] {
+  return siteGallery(site);
+}
+
+/** תמונה לפי מזהה (רק מתמונות האתר הזה) */
+export function mediaById(site: PublicSite, id: string | undefined): PublicMedia | null {
+  if (!id) return null;
+  return allMedia(site).find((m) => m.id === id && m.kind === "image") ?? null;
+}

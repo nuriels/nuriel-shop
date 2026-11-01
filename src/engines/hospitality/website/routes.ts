@@ -10,6 +10,7 @@ import { validateBookSearch } from "./lib/booking";
 import { BookingPage } from "./pages/BookingPage";
 import { BookingReceivedPage, MyBookingPage } from "./pages/GuestBookingPages";
 import { HomePage } from "./pages/HomePage";
+import { PreviewPage } from "./pages/PreviewPage";
 import { AccessibilityPage, PrivacyPage } from "./pages/LegalPages";
 import { SiteError, SiteNotFound } from "./pages/SiteMessage";
 import { UnitPage } from "./pages/UnitPage";
@@ -86,3 +87,17 @@ export const siteReceivedRoute = privateRoute("הבקשה התקבלה", Booking
 export const siteMyBookingRoute = privateRoute("ההזמנה שלי", MyBookingPage);
 export const sitePrivacyRoute = privateRoute("מדיניות פרטיות", PrivacyPage);
 export const siteAccessibilityRoute = privateRoute("הצהרת נגישות", AccessibilityPage);
+
+/** התצוגה המקדימה של העורך (/manage/preview) — רק באתר אירוח, לצוות המחובר; בלי אינדוקס */
+export const sitePreviewRoute = {
+  beforeLoad: hospitalitySiteOnly,
+  ssr: false as const,
+  validateSearch: (raw: Record<string, unknown>) => ({
+    ...(raw["page"] === "unit" ? { page: "unit" as const } : {}),
+    ...(typeof raw["unit"] === "string" && raw["unit"].length <= 200 ? { unit: raw["unit"] } : {}),
+  }),
+  head: () => ({
+    meta: [{ title: "תצוגה מקדימה" }, { name: "robots", content: "noindex, nofollow" }],
+  }),
+  component: PreviewPage,
+};

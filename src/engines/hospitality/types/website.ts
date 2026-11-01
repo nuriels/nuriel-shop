@@ -134,6 +134,18 @@ export interface PublicSite {
   policy: PublicPolicy | null;
   properties: PublicProperty[];
   units: PublicUnit[];
+  /** מסמך העיצוב: באתר — הגרסה המפורסמת האחרונה; בתצוגה המקדימה — הטיוטה (null — עוד לא עוצב) */
+  design: SiteDesignRecord | null;
+}
+
+export interface SiteDesignRecord {
+  kind: "draft" | "published";
+  version: number;
+  revision: number;
+  theme: string;
+  /** JSON כמחרוזת (נבדק ומתוקן ב-normalizeDesign לפני ההצגה) */
+  document: string;
+  updated_at: string;
 }
 
 export interface PublicAvailability {
@@ -150,7 +162,8 @@ export type RawPublicMedia = Omit<PublicMedia, "url" | "srcset" | "thumb_url"> &
   variants: Record<string, string> | null;
 };
 
-export type RawPublicSite = Omit<PublicSite, "gallery" | "properties" | "units"> & {
+export type RawPublicSite = Omit<PublicSite, "gallery" | "properties" | "units" | "design"> & {
+  design: (Omit<SiteDesignRecord, "document"> & { document: unknown }) | null;
   gallery: RawPublicMedia[];
   properties: (Omit<PublicProperty, "media"> & { media: RawPublicMedia[] })[];
   units: (Omit<PublicUnit, "media"> & { media: RawPublicMedia[] })[];

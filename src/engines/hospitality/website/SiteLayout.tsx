@@ -2,39 +2,80 @@
 // קרדיט נוריאל (D6 — מחוץ לתוכן, לא ניתן להסרה) ושורת פעולות קבועה בנייד.
 import { Link, Outlet, useLoaderData, useLocation } from "@tanstack/react-router";
 import { Mail, Menu, MessageCircle, Phone } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { NurielCredit } from "@/platform/branding/NurielCredit";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger, cn } from "@/platform/ui";
 import type { PublicSite } from "../types/website";
 import { CopyContext, siteCopy, useCopy } from "./copy";
 import { findUnit, telHref, whatsappHref } from "./lib/format";
 import { SiteContext, useSite } from "./lib/site-context";
-import { DEFAULT_THEME, themeFor, themeStyle } from "./theme/themes";
+import { normalizeDesign, type SiteDesign } from "./design/schema";
+import { themeFor, themeStyle } from "./theme/themes";
 
-/** עמודים שמתחילים בתמונה גדולה (הבית, יחידה קיימת) — הכותרת שקופה מעליה עד שגוללים */
-function isHeroPage(pathname: string, site: PublicSite): boolean {
-  if (/^\/stay\/?$/.test(pathname)) return true;
+export type SitePage = "home" | "unit" | "other";
+
+/** איזה עמוד: הבית / יחידה קיימת (מתחילים בתמונה גדולה) / אחר */
+function pageOf(pathname: string, site: PublicSite): SitePage {
+  if (/^\/stay\/?$/.test(pathname)) return "home";
   const unit = pathname.match(/^\/stay\/units\/([^/]+)\/?$/);
-  return !!unit && !!findUnit(site.units, unit[1]);
+  return unit && findUnit(site.units, unit[1]) ? "unit" : "other";
 }
+
+/** משקל ומרווח של גופן התצוגה לפי הערכה (מעל ברירת המחדל של .font-display) — קבוע, בלי קלט */
+const DISPLAY_CSS =
+  "[data-site-theme] .font-display{font-family:var(--site-display-font);font-weight:var(--site-display-weight);letter-spacing:var(--site-display-tracking)}";
 
 export function SiteLayout(): ReactNode {
   const site = useLoaderData({ strict: false }) as PublicSite;
-  const theme = themeFor(DEFAULT_THEME);
+  const { pathname } = useLocation();
+  return (
+    <SiteShell site={site} page={pageOf(pathname, site)}>
+      <Outlet />
+    </SiteShell>
+  );
+}
+
+/**
+ * המעטפת עצמה — גם לאתר (העיצוב המפורסם) וגם לתצוגה המקדימה בעורך (הטיוטה). מסמך העיצוב
+ * עובר normalizeDesign כאן, כך שגם מסמך פגום לא שובר את האתר.
+ */
+export function SiteShell({
+  site,
+  design: designOverride,
+  page,
+  preview = false,
+  children,
+}: {
+  site: PublicSite;
+  design?: SiteDesign | undefined;
+  page: SitePage;
+  preview?: boolean;
+  children: ReactNode;
+}): ReactNode {
+  const design = useMemo(
+    () => designOverride ?? normalizeDesign(site.design?.document, site.design?.theme),
+    [designOverride, site.design],
+  );
+  const theme = themeFor(design.theme);
+  // הכותרת שקופה רק מעל תמונה: עמוד יחידה, או עמוד הבית כשהמקטע הראשון הוא הפתיח
+  const heroPage =
+    page === "unit" || (page === "home" && design.sections.find((s) => !s.hidden)?.type === "hero");
   const copy = siteCopy("he");
+  const style = useMemo(() => themeStyle(theme, design.colors[theme.id]), [theme, design.colors]);
   return (
     <CopyContext.Provider value={copy}>
-      <SiteContext.Provider value={{ site, theme }}>
+      <SiteContext.Provider value={{ site, theme, design, preview, heroPage }}>
         <div
           dir={copy.dir}
           lang={copy.locale}
-          style={themeStyle(theme)}
+          style={style}
           className="min-h-screen bg-background font-sans text-foreground antialiased"
           data-site-theme={theme.id}
         >
+          <style>{DISPLAY_CSS}</style>
           <SiteHeader />
           <main id="main-content" tabIndex={-1} className="pb-20 outline-none md:pb-0">
-            <Outlet />
+            {children}
           </main>
           <SiteFooter />
           <MobileActionBar />
@@ -68,10 +109,9 @@ function navItems(t: ReturnType<typeof useCopy>) {
 
 function SiteHeader() {
   const t = useCopy();
-  const { site, theme } = useSite();
-  const { pathname } = useLocation();
+  const { site, theme, design, heroPage } = useSite();
   const scrolled = useScrolled();
-  const overlay = theme.layout.overlayHeader && isHeroPage(pathname, site) && !scrolled;
+  const overlay = theme.layout.overlayHeader && heroPage && !scrolled;
   const items = navItems(t);
   return (
     <header
@@ -147,7 +187,7 @@ function SiteHeader() {
             <SheetContent
               side="right"
               className="w-[85vw] max-w-sm border-s-0 bg-background p-0"
-              style={themeStyle(theme)}
+              style={themeStyle(theme, design.colors[theme.id])}
               dir={t.dir}
             >
               <SheetTitle className="font-display border-b border-border px-6 py-5 text-xl font-medium">

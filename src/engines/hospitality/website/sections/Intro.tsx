@@ -4,10 +4,12 @@ import { Clock, Home, Users } from "lucide-react";
 import { useCopy } from "../copy";
 import { money } from "../lib/format";
 import { useSite } from "../lib/site-context";
+import type { Section } from "../design/schema";
 
-export function Intro() {
+export function Intro({ section }: { section?: Section | undefined }) {
   const t = useCopy();
   const { site } = useSite();
+  const c = section?.content ?? {};
   const b = site.business;
   const bookable = site.units;
   const maxGuests = Math.max(0, ...bookable.map((u) => u.capacity));
@@ -20,17 +22,22 @@ export function Intro() {
       <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-8 sm:py-28 lg:grid-cols-[1.4fr_1fr] lg:gap-20">
         <div>
           <p className="mb-3 text-xs font-medium tracking-[0.06em] text-[var(--site-gold-ink)]">
-            {t.about}
+            {c.eyebrow ?? t.about}
           </p>
           <h2
             id="about-title"
             className="font-display text-3xl leading-tight font-medium sm:text-4xl"
           >
-            {site.properties.length === 1 ? site.properties[0]!.name : b.name}
+            {c.title ?? (site.properties.length === 1 ? site.properties[0]!.name : b.name)}
           </h2>
           <span aria-hidden="true" className="mt-6 block h-px w-14 bg-[var(--site-gold)]" />
           <div className="mt-8 space-y-8">
-            {texts.map((p) => (
+            {c.body ? (
+              <p className="text-lg leading-loose whitespace-pre-line text-foreground/85">
+                {c.body}
+              </p>
+            ) : null}
+            {(c.body ? [] : texts).map((p) => (
               <div key={p.id}>
                 {texts.length > 1 && <h3 className="font-display mb-2 text-xl">{p.name}</h3>}
                 <p className="text-lg leading-loose whitespace-pre-line text-foreground/85">
@@ -40,47 +47,49 @@ export function Intro() {
             ))}
           </div>
         </div>
-        <dl className="grid grid-cols-2 content-start gap-px self-start overflow-hidden rounded-[var(--radius)] border border-border bg-border">
-          {b.check_in_time && (
-            <Fact
-              icon={<Clock className="size-5" />}
-              label={t.facts.checkIn}
-              value={b.check_in_time}
-            />
-          )}
-          {b.check_out_time && (
-            <Fact
-              icon={<Clock className="size-5" />}
-              label={t.facts.checkOut}
-              value={b.check_out_time}
-            />
-          )}
-          {physical > 0 && (
-            <Fact
-              icon={<Home className="size-5" />}
-              label={t.nav.units}
-              value={t.facts.units(physical)}
-            />
-          )}
-          {maxGuests > 0 && (
-            <Fact
-              icon={<Users className="size-5" />}
-              label={t.facts.guests}
-              value={t.facts.guestsUpTo(maxGuests)}
-            />
-          )}
-          {from !== null && (
-            <div className="col-span-2 bg-[var(--site-sand)] px-6 py-6">
-              <dt className="text-sm text-muted-foreground">{t.facts.from}</dt>
-              <dd className="font-display mt-1 text-3xl">
-                {money(from, b.currency)}{" "}
-                <span className="font-sans text-base text-muted-foreground">
-                  {t.facts.perNight}
-                </span>
-              </dd>
-            </div>
-          )}
-        </dl>
+        {c.facts !== false && (
+          <dl className="grid grid-cols-2 content-start gap-px self-start overflow-hidden rounded-[var(--radius)] border border-border bg-border">
+            {b.check_in_time && (
+              <Fact
+                icon={<Clock className="size-5" />}
+                label={t.facts.checkIn}
+                value={b.check_in_time}
+              />
+            )}
+            {b.check_out_time && (
+              <Fact
+                icon={<Clock className="size-5" />}
+                label={t.facts.checkOut}
+                value={b.check_out_time}
+              />
+            )}
+            {physical > 0 && (
+              <Fact
+                icon={<Home className="size-5" />}
+                label={t.nav.units}
+                value={t.facts.units(physical)}
+              />
+            )}
+            {maxGuests > 0 && (
+              <Fact
+                icon={<Users className="size-5" />}
+                label={t.facts.guests}
+                value={t.facts.guestsUpTo(maxGuests)}
+              />
+            )}
+            {from !== null && (
+              <div className="col-span-2 bg-[var(--site-sand)] px-6 py-6">
+                <dt className="text-sm text-muted-foreground">{t.facts.from}</dt>
+                <dd className="font-display mt-1 text-3xl">
+                  {money(from, b.currency)}{" "}
+                  <span className="font-sans text-base text-muted-foreground">
+                    {t.facts.perNight}
+                  </span>
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
       </div>
     </section>
   );

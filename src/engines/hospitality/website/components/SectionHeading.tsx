@@ -1,21 +1,25 @@
 // כותרת של חלק באתר: שורת-על קטנה בזהב, כותרת בגופן התצוגה, תת-כותרת.
 import { cn } from "@/platform/ui";
+import { useSite } from "../lib/site-context";
 
 export function SectionHeading({
   id,
   eyebrow,
   title,
   subtitle,
-  align = "center",
+  align: alignProp,
   className,
 }: {
   id?: string | undefined;
   eyebrow?: string | undefined;
   title: string;
   subtitle?: string | undefined;
-  align?: "center" | "start";
+  /** ברירת המחדל — לפי הערכה */
+  align?: "center" | "start" | undefined;
   className?: string;
 }) {
+  const { theme } = useSite();
+  const align = alignProp ?? theme.layout.headingAlign;
   return (
     <div
       className={cn(align === "center" ? "mx-auto max-w-2xl text-center" : "max-w-2xl", className)}

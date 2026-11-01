@@ -56,6 +56,7 @@ M17=20261102110000_hosp_guests
 M18=20261102120000_hosp_emails_dashboard
 M19=20261102130000_hosp_public_site
 M20=20261102140000_hosp_site_switches
+M21=20261102150000_hosp_site_design
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -76,6 +77,25 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- 5a: site document, drafts and versions (migration 21) ----------
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M21" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M21"
+down "$M21"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m20.sql"
+schema_dump "$SCHEMA_DIR/after-m21-down.sql"
+if diff -q "$SCHEMA_DIR/m20.sql" "$SCHEMA_DIR/after-m21-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 20, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 20:"; diff "$SCHEMA_DIR/m20.sql" "$SCHEMA_DIR/after-m21-down.sql" | head -20; exit 1
+fi
 
 # ---------- 4c: website switches in the platform panel (migration 20) ----------
 psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
@@ -535,7 +555,7 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1 … $M20"
+echo "re-apply: $M1 … $M21"
 up "$M1"
 up "$M2"
 up "$M3"
@@ -556,6 +576,7 @@ up "$M17"
 up "$M18"
 up "$M19"
 up "$M20"
+up "$M21"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -564,8 +585,8 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 23 tables (incl. the action log and arrival info), RLS on all, role admin, 6 flags off (incl. management)" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 23
+expect "Hospitality schema back: 24 tables (incl. the action log, arrival info and site versions), RLS on all, role admin, 6 flags off (incl. management)" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 24
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
       AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 6"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
@@ -597,7 +618,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 20 → 1 and re-apply 1 → 20 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 21 → 1 and re-apply 1 → 21 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi

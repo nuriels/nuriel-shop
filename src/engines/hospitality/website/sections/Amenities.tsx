@@ -4,13 +4,15 @@ import type { PublicAmenity } from "../../types/website";
 import { SectionHeading } from "../components/SectionHeading";
 import { useCopy } from "../copy";
 import { useSite } from "../lib/site-context";
+import type { Section } from "../design/schema";
 import { uniqueAmenities } from "../lib/media";
 
 const ORDER = ["room", "kitchen", "pool_spa", "outdoor", "services", "accessibility", "other"];
 
-export function Amenities() {
+export function Amenities({ section }: { section?: Section | undefined }) {
   const t = useCopy();
   const { site } = useSite();
+  const c = section?.content ?? {};
   const all = uniqueAmenities([
     ...site.properties.flatMap((p) => p.amenities),
     ...site.units.flatMap((u) => u.amenities),
@@ -25,13 +27,13 @@ export function Amenities() {
       <div className="mx-auto max-w-7xl px-4 py-20 sm:px-8 sm:py-28">
         <div className="mx-auto max-w-2xl text-center">
           <p className="mb-3 text-xs font-medium tracking-[0.06em] text-[var(--site-gold)]">
-            {t.amenities.title}
+            {c.eyebrow ?? t.amenities.title}
           </p>
           <h2
             id="amenities-title"
             className="font-display text-3xl leading-tight font-medium sm:text-4xl"
           >
-            {t.amenities.subtitle}
+            {c.title ?? t.amenities.subtitle}
           </h2>
           <span aria-hidden="true" className="mx-auto mt-6 block h-px w-14 bg-[var(--site-gold)]" />
         </div>

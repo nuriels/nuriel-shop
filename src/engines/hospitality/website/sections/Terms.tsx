@@ -7,6 +7,7 @@ import { SectionHeading } from "../components/SectionHeading";
 import { useCopy, type SiteCopy } from "../copy";
 import { policyLines, rulesLines } from "../lib/format";
 import { useSite } from "../lib/site-context";
+import type { Section } from "../design/schema";
 
 function parkingLines(p: PublicProperty, t: SiteCopy): string[] {
   if (!p.parking) return [];
@@ -27,7 +28,9 @@ export function Terms({
   property,
   policy,
   compact = false,
+  section,
 }: {
+  section?: Section | undefined;
   property?: PublicProperty | undefined;
   policy?: PublicPolicy | null | undefined;
   compact?: boolean;
@@ -134,7 +137,12 @@ export function Terms({
   return (
     <section id="terms" aria-labelledby="terms-title" className="scroll-mt-24 bg-background">
       <div className="mx-auto max-w-7xl px-4 py-20 sm:px-8 sm:py-28">
-        <SectionHeading id="terms-title" eyebrow={t.terms.title} title={t.terms.subtitle} />
+        <SectionHeading
+          id="terms-title"
+          eyebrow={section?.content.eyebrow ?? t.terms.title}
+          title={section?.content.title ?? t.terms.subtitle}
+          subtitle={section?.content.subtitle}
+        />
         {grid}
         {b.booking_mode === "request" && (
           <p className="mx-auto mt-8 max-w-2xl text-center text-sm text-muted-foreground">

@@ -28,7 +28,19 @@ import {
   unitCover,
   uniqueAmenities,
 } from "@/engines/hospitality/website/lib/media";
-import { DEFAULT_THEME, THEMES, themeFor } from "@/engines/hospitality/website/theme/themes";
+import {
+  DEFAULT_THEME,
+  THEMES,
+  themeFor,
+  themeStyle,
+} from "@/engines/hospitality/website/theme/themes";
+import { contrast, ensureContrast } from "@/engines/hospitality/website/theme/color";
+import {
+  CORE_SECTIONS,
+  defaultDesign,
+  newSectionId,
+  normalizeDesign,
+} from "@/engines/hospitality/website/design/schema";
 import { siteCopy } from "@/engines/hospitality/website/copy";
 import { he } from "@/engines/hospitality/website/copy/he";
 import { NURIEL_CREDIT_TEXT, NURIEL_CREDIT_URL } from "@/platform/branding/NurielCredit";
@@ -217,6 +229,7 @@ const site = (extra: Partial<PublicSite> = {}): PublicSite => ({
   policy: null,
   properties: [property()],
   units: [unit("a")],
+  design: null,
   ...extra,
 });
 
@@ -347,14 +360,56 @@ describe("website helpers", () => {
 });
 
 describe("themes and the fixed credit", () => {
-  it("Luxury is the default; an unknown theme falls back to it", () => {
+  it("Luxury is the default; an unknown theme falls back to it; four themes, all complete", () => {
     expect(DEFAULT_THEME).toBe("luxury");
     expect(themeFor("nope").id).toBe("luxury");
     expect(themeFor(null).id).toBe("luxury");
+    expect(Object.keys(THEMES).sort()).toEqual(["luxury", "modern", "nature", "romantic"]);
     for (const theme of Object.values(THEMES)) {
-      for (const key of ["--background", "--foreground", "--primary", "--site-gold", "--site-deep"])
-        expect(theme.vars, `${theme.id} ${key}`).toHaveProperty(key);
+      const style = themeStyle(theme) as Record<string, string>;
+      for (const key of [
+        "--background",
+        "--foreground",
+        "--primary",
+        "--primary-foreground",
+        "--site-gold",
+        "--site-gold-ink",
+        "--site-deep",
+        "--radius",
+        "--site-display-font",
+      ])
+        expect(style[key], `${theme.id} ${key}`).toBeTruthy();
+      // טקסט קטן בצבע ההדגשה על הרקע, וטקסט על הכפתור — קריאים (4.5:1)
+      expect(
+        contrast(style["--site-gold-ink"]!, theme.palette.background),
+        theme.id,
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        contrast(style["--primary-foreground"]!, style["--primary"]!),
+        theme.id,
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        contrast(theme.palette.foreground, theme.palette.background),
+        theme.id,
+      ).toBeGreaterThanOrEqual(7);
     }
+  });
+
+  it("owner colours are guarded: unreadable choices are adjusted, invalid values ignored", () => {
+    const lux = THEMES.luxury;
+    const pale = themeStyle(lux, { primary: "#f5f0e6", accent: "#fff3c4" }) as Record<
+      string,
+      string
+    >;
+    expect(contrast(pale["--primary-foreground"]!, pale["--primary"]!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(pale["--site-gold-ink"]!, lux.palette.background)).toBeGreaterThanOrEqual(4.5);
+    const bad = themeStyle(lux, { primary: "red;}body{x:y", accent: "url(x)" } as never) as Record<
+      string,
+      string
+    >;
+    expect(bad["--primary"]).toBe(lux.palette.primary);
+    expect(ensureContrast("#c2a061", "#ffffff", 4.5)).not.toBe("#c2a061");
+    expect(contrast("#000000", "#ffffff")).toBeCloseTo(21, 0);
   });
 
   it("the Nuriel credit text and link are fixed (D6)", () => {
@@ -472,5 +527,108 @@ describe("4c: platform switches", () => {
     expect(() => parseSetFlag({ key: "themes", enabled: true })).toThrow("דגל לא מוכר");
     expect(() => parseSetFlag({ key: "hospitality_frontend_enabled", enabled: true })).toThrow();
     expect(() => parseSetFlag({ key: "frontend", enabled: "yes" })).toThrow();
+  });
+});
+
+describe("5a: the site design document", () => {
+  it("the default design has every core section once, in order, visible", () => {
+    const d = defaultDesign();
+    expect(d.theme).toBe("luxury");
+    expect(d.sections.map((s) => s.type)).toEqual([...CORE_SECTIONS]);
+    expect(d.sections.every((s) => !s.hidden)).toBe(true);
+    expect(normalizeDesign(null)).toEqual(d);
+    expect(normalizeDesign("not json")).toEqual(d);
+  });
+
+  it("normalises any input: unknown types and fields dropped, texts trimmed and capped, core sections kept once", () => {
+    const d = normalizeDesign(
+      JSON.stringify({
+        theme: "modern",
+        colors: {
+          modern: { primary: "#112233", accent: "javascript:x" },
+          nope: { primary: "#000000" },
+        },
+        sections: [
+          { id: "units", type: "units", hidden: true, content: { title: "  החדרים  ", junk: 1 } },
+          { id: "units", type: "units", content: {} },
+          { id: "x", type: "script", content: {} },
+          {
+            id: "hero",
+            type: "hero",
+            content: { title: "א".repeat(500), overlay: "dark", image: "not-a-uuid" },
+          },
+          {
+            id: "faq-1",
+            type: "faq",
+            content: { faq: [{ q: "מתי?", a: "תמיד" }, { q: "", a: "x" }, "bad"] },
+          },
+          { id: "BAD ID", type: "text", content: { body: "שלום\u0000עולם" } },
+        ],
+      }),
+    );
+    expect(d.theme).toBe("modern");
+    expect(d.colors).toEqual({ modern: { primary: "#112233" } });
+    const types = d.sections.map((s) => s.type);
+    expect(types.filter((x) => x === "units")).toHaveLength(1);
+    expect(types).not.toContain("script");
+    expect(d.sections[0]).toEqual({
+      id: "units",
+      type: "units",
+      hidden: true,
+      content: { title: "החדרים" },
+    });
+    const hero = d.sections.find((s) => s.type === "hero")!;
+    expect(hero.content.title).toHaveLength(120);
+    expect(hero.content.overlay).toBeUndefined();
+    expect(hero.content.image).toBeUndefined();
+    expect(d.sections.find((s) => s.type === "faq")!.content.faq).toEqual([
+      { q: "מתי?", a: "תמיד" },
+    ]);
+    const text = d.sections.find((s) => s.type === "text")!;
+    expect(text.id).toMatch(/^text-\d+$/);
+    expect(text.content.body).toBe("שלוםעולם");
+    // מקטעים קבועים שחסרו — נוספו בסוף, מוסתרים
+    for (const core of CORE_SECTIONS)
+      expect(types.filter((x) => x === core).length).toBeLessThanOrEqual(1);
+    expect(d.sections.find((s) => s.type === "about")!.hidden).toBe(true);
+  });
+
+  it("new custom sections get a fresh id; the custom section limit holds", () => {
+    const d = defaultDesign();
+    d.sections.push({ id: "faq-1", type: "faq", hidden: false, content: {} });
+    expect(newSectionId(d, "faq")).toBe("faq-2");
+    const many = normalizeDesign({
+      sections: Array.from({ length: 40 }, (_, i) => ({
+        id: `text-${i}`,
+        type: "text",
+        content: {},
+      })),
+    });
+    expect(many.sections.filter((s) => s.type === "text")).toHaveLength(12);
+  });
+});
+
+describe("5b: editor operations on the design", () => {
+  it("move, hide, edit, add and remove sections — core sections are never removed", async () => {
+    const ops = await import("@/engines/hospitality/management/website/labels");
+    let d = defaultDesign();
+    d = ops.moveSection(d, "units", 0);
+    expect(d.sections[0]!.type).toBe("units");
+    expect(ops.moveSection(d, "units", -5).sections[0]!.type).toBe("units");
+    d = ops.toggleHidden(d, "gallery");
+    expect(d.sections.find((s) => s.id === "gallery")!.hidden).toBe(true);
+    d = ops.updateContent(d, "hero", { title: "צימרי הגליל", subtitle: "" });
+    expect(d.sections.find((s) => s.id === "hero")!.content).toEqual({ title: "צימרי הגליל" });
+    d = ops.updateContent(d, "hero", { title: undefined });
+    expect(d.sections.find((s) => s.id === "hero")!.content).toEqual({});
+    d = ops.addSection(d, "faq", "hero");
+    const at = d.sections.findIndex((s) => s.type === "faq");
+    expect(d.sections[at - 1]!.id).toBe("hero");
+    expect(d.sections[at]!.content.faq).toHaveLength(1);
+    expect(ops.removeSection(d, "hero")).toBe(d);
+    d = ops.removeSection(d, d.sections[at]!.id);
+    expect(d.sections.some((s) => s.type === "faq")).toBe(false);
+    // the result always survives normalisation unchanged
+    expect(normalizeDesign(JSON.stringify(d))).toEqual(d);
   });
 });

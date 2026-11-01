@@ -9,6 +9,7 @@ import { SectionHeading } from "../components/SectionHeading";
 import { useCopy } from "../copy";
 import { siteGallery } from "../lib/media";
 import { useSite } from "../lib/site-context";
+import type { Section } from "../design/schema";
 import { cn } from "@/platform/ui";
 
 /** פריסת הפסיפס לפי מספר התמונות (1 / 2 / 3 / 4+), כך שאין "חורים" */
@@ -23,15 +24,28 @@ function tiles(n: number): string[] {
   return ["col-span-2 row-span-2", "", "", "", "", "col-span-2 sm:col-span-1", "hidden sm:block"];
 }
 
-export function Gallery() {
+export function Gallery({ section }: { section?: Section | undefined }) {
   const t = useCopy();
   const { site } = useSite();
-  const items = siteGallery(site);
+  const c = section?.content ?? {};
+  const all = siteGallery(site);
+  // נבחרו תמונות בעורך — רק הן, בסדר שנבחר
+  const picked = c.images?.length
+    ? c.images
+        .map((id) => all.find((m) => m.id === id))
+        .filter((m): m is (typeof all)[number] => !!m)
+    : [];
+  const items = picked.length ? picked : all;
   if (items.length === 0) return null;
   return (
     <section id="gallery" aria-labelledby="gallery-title" className="scroll-mt-24 bg-background">
       <div className="mx-auto max-w-7xl px-4 py-20 sm:px-8 sm:py-28">
-        <SectionHeading id="gallery-title" eyebrow={t.gallery.title} title={t.gallery.subtitle} />
+        <SectionHeading
+          id="gallery-title"
+          eyebrow={c.eyebrow ?? t.gallery.title}
+          title={c.title ?? t.gallery.subtitle}
+          subtitle={c.subtitle}
+        />
         <MediaMosaic items={items} title={site.business.name} className="mt-14" />
       </div>
     </section>

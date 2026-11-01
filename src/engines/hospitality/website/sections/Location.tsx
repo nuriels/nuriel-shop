@@ -6,6 +6,7 @@ import type { PublicProperty } from "../../types/website";
 import { useCopy } from "../copy";
 import { googleMapsHref, telHref, wazeHref, whatsappHref } from "../lib/format";
 import { useSite } from "../lib/site-context";
+import type { Section } from "../design/schema";
 
 export function MapLinks({
   property,
@@ -48,9 +49,10 @@ export function MapLinks({
   );
 }
 
-export function LocationContact() {
+export function LocationContact({ section }: { section?: Section | undefined }) {
   const t = useCopy();
   const { site } = useSite();
+  const c = section?.content ?? {};
   const b = site.business;
   const wa = b.whatsapp || b.phone;
   return (
@@ -62,10 +64,10 @@ export function LocationContact() {
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-20 sm:px-8 sm:py-28 lg:grid-cols-2">
         <div className="rounded-[var(--radius)] bg-card p-8 shadow-[var(--site-shadow)] sm:p-12">
           <p className="mb-3 text-xs font-medium tracking-[0.06em] text-[var(--site-gold-ink)]">
-            {t.location.subtitle}
+            {c.eyebrow ?? t.location.subtitle}
           </p>
           <h2 id="location-title" className="font-display text-3xl font-medium sm:text-4xl">
-            {t.location.title}
+            {c.title ?? t.location.title}
           </h2>
           <div className="mt-8 space-y-8">
             {(site.properties.length ? site.properties : [undefined]).map((p, i) => (
@@ -86,7 +88,7 @@ export function LocationContact() {
               </div>
             ))}
           </div>
-          <p className="mt-8 text-sm text-muted-foreground">{t.location.note}</p>
+          <p className="mt-8 text-sm text-muted-foreground">{c.note ?? t.location.note}</p>
         </div>
         <div
           id="contact"
@@ -95,7 +97,9 @@ export function LocationContact() {
           <p className="mb-3 text-xs font-medium tracking-[0.06em] text-[var(--site-gold)]">
             {t.contact.subtitle}
           </p>
-          <h2 className="font-display text-3xl font-medium sm:text-4xl">{t.contact.title}</h2>
+          <h2 className="font-display text-3xl font-medium sm:text-4xl">
+            {c.subtitle ?? t.contact.title}
+          </h2>
           <ul className="mt-8 space-y-3">
             {b.phone && (
               <ContactRow

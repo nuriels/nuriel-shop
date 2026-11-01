@@ -12,6 +12,7 @@ export type NavKey =
   | "policies"
   | "guests"
   | "emails"
+  | "website"
   | "settings"
   | "team";
 
@@ -26,6 +27,7 @@ export interface NavItem {
     | "/manage/guests"
     | "/manage/emails"
     | "/manage/settings"
+    | "/manage/website"
     | "/manage/team"
     | "/manage/units"
     | "/manage/photos"
@@ -68,6 +70,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     also: ["/manage/guests/"],
   },
   { key: "emails", label: "מיילים", to: "/manage/emails", permission: "bookings" },
+  { key: "website", label: "עיצוב האתר", to: "/manage/website", permission: "settings" },
   { key: "settings", label: "הגדרות העסק", to: "/manage/settings", permission: "settings" },
   { key: "team", label: "צוות ניהול", to: "/manage/team", permission: "staff.managers" },
 ];

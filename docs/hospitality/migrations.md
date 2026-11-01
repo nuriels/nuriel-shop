@@ -236,3 +236,12 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Functions | `admin_site_switches()` — platform admin only: the platform-wide website / bookings switches and, per Hospitality site, its own website flag and whether the website is open in practice. The switching itself is the existing `platform_set_flag` (logged). No new table or column |
 | Rollback | `supabase/rollbacks/20261102140000_hosp_site_switches.down.sql` — exact migration-19 schema (`rollback-check.sh`, M20) |
 | Production | nothing to configure |
+
+## 20261102150000_hosp_site_design.sql — Stage 5a (hospitality)
+
+| | |
+|---|---|
+| Table | `site_versions` — per business one **draft** (version 0, `revision` for autosave) and **published** versions 1, 2, 3… (immutable: a trigger refuses any update). Document = JSON (theme, colours per theme, sections: order, hidden, content); ≤ 256 KB. RLS (tenant + database flag, RESTRICTIVE), no grants, tenant guard |
+| Functions | `site_editor`, `site_draft_save(revision, theme, document)` (conflict → "changed elsewhere"), `site_publish(revision, note)` (logged), `site_restore(version)` (logged) — `settings` permission, management area on; `site_preview()` — the site data + draft for staff, also while the site is closed; `public_site()` now also returns the latest published design; the shared data is `_site_payload(tenant)` |
+| Rollback | `supabase/rollbacks/20261102150000_hosp_site_design.down.sql` — drops the table and functions (site designs are lost; the site falls back to the default design) and restores the migration-19 `public_site()`; exact migration-20 schema (`rollback-check.sh`, M21) |
+| Production | nothing to configure |

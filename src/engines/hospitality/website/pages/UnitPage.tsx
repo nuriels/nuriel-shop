@@ -19,11 +19,11 @@ import { MapLinks } from "../sections/Location";
 import { Terms } from "../sections/Terms";
 import { Units } from "../sections/Units";
 
-export function UnitPage() {
+export function UnitPage({ slug }: { slug?: string | undefined } = {}) {
   const t = useCopy();
   const { site } = useSite();
-  const { unitSlug } = useParams({ strict: false }) as { unitSlug?: string };
-  const unit = findUnit(site.units, unitSlug)!;
+  const params = useParams({ strict: false }) as { unitSlug?: string };
+  const unit = findUnit(site.units, slug ?? params.unitSlug)!;
   const property = site.properties.find((p) => p.id === unit.property_id);
   const media = unitMedia(unit, site);
   const images = media.filter((m) => m.kind === "image");

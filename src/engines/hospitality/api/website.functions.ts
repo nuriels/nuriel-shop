@@ -15,12 +15,11 @@ import type {
 import type {
   GuestArrival,
   PublicAvailability,
-  PublicMedia,
   PublicSite,
-  RawPublicMedia,
   RawPublicSite,
   SiteGuestBooking,
 } from "../types/website";
+import { toPublicSite } from "../website/lib/site-map";
 import {
   InputError,
   isoDate,
@@ -42,21 +41,6 @@ async function throttle(action: string, limit: number, windowMs: number): Promis
 
 const MAX_RANGE_DAYS = 120;
 
-function mediaUrls(publicUrl: (p: string | null | undefined) => string | null) {
-  return ({ path, variants, ...rest }: RawPublicMedia): PublicMedia => {
-    const v = variants ?? {};
-    return {
-      ...rest,
-      url: publicUrl(path),
-      thumb_url: publicUrl(v["480"] ?? v["thumb"] ?? (rest.kind === "image" ? path : null)),
-      srcset:
-        rest.kind === "image" && v["480"] && v["960"]
-          ? `${publicUrl(v["480"])} 480w, ${publicUrl(v["960"])} 960w, ${publicUrl(path)} ${rest.width ?? 1600}w`
-          : null,
-    };
-  };
-}
-
 export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
   async (): Promise<PublicSite> => {
     const [{ callRpc }, { publicUrl }] = await Promise.all([
@@ -64,17 +48,7 @@ export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
       import("../server/media.server"),
     ]);
     const raw = await callRpc<RawPublicSite>("public_site", {});
-    const urls = mediaUrls(publicUrl);
-    return {
-      ...raw,
-      gallery: raw.gallery.map(urls),
-      properties: raw.properties.map((p) => ({ ...p, media: p.media.map(urls) })),
-      units: raw.units.map((u) => ({
-        ...u,
-        base_price: Number(u.base_price),
-        media: u.media.map(urls),
-      })),
-    };
+    return toPublicSite(raw, publicUrl);
   },
 );
 

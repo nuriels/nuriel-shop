@@ -16,6 +16,7 @@ import {
   Users,
   UserCog,
   type LucideIcon,
+  Palette,
 } from "lucide-react";
 import {
   Sheet,
@@ -38,6 +39,7 @@ const ICONS: Record<NavKey, LucideIcon> = {
   pricing: Tag,
   guests: Users,
   emails: Mail,
+  website: Palette,
   settings: Settings,
   team: UserCog,
 };
