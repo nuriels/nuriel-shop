@@ -1,0 +1,134 @@
+/*
+ * Nuriel Hospitality — מערכת העיצוב של אזור הניהול (שלב F2): "Deep Lagoon & Champagne".
+ * נטען רק בנתיבי /manage (head של הנתיבים), ולכן לא משפיע על החנויות ולא על האתר הציבורי.
+ * דורס את משתני הצבע של רכיבי shadcn (כפתורים, כרטיסים, שדות, חלונות) ומוסיף טוקנים סמנטיים
+ * (--hm-*) לסטטוסים, לגרפים ולמותג. ניגודיות טקסט AA בכל הצירופים שבשימוש.
+ */
+html:root {
+  --radius: 0.875rem;
+  --background: #f6f4ef;
+  --foreground: #17201f;
+  --card: #ffffff;
+  --card-foreground: #17201f;
+  --popover: #ffffff;
+  --popover-foreground: #17201f;
+  --primary: #0e3b3a;
+  --primary-foreground: #ffffff;
+  --secondary: #f1eee8;
+  --secondary-foreground: #17201f;
+  --muted: #f1eee8;
+  --muted-foreground: #5e6b68;
+  --accent: #f3efe6;
+  --accent-foreground: #17201f;
+  --destructive: #9a3a2b;
+  --destructive-foreground: #ffffff;
+  --border: #e7e1d7;
+  --input: #dcd5c9;
+  --ring: #1f6f6b;
+  --chart-1: #0e3b3a;
+  --chart-2: #b8935a;
+  --chart-3: #1f4e8c;
+  --chart-4: #b9473a;
+  --chart-5: #6f8f7a;
+  --sidebar: #0c302f;
+  --sidebar-foreground: #e8f0ee;
+  --sidebar-primary: #d8b87a;
+  --sidebar-primary-foreground: #0c302f;
+  --sidebar-accent: rgb(255 255 255 / 0.08);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgb(255 255 255 / 0.1);
+  --sidebar-ring: #d8b87a;
+
+  /* המותג */
+  --hm-lagoon-900: #0c302f;
+  --hm-lagoon-700: #0e3b3a;
+  --hm-lagoon-500: #1f6f6b;
+  --hm-lagoon-100: #e3eeec;
+  --hm-lagoon-50: #f0f6f5;
+  --hm-champagne-500: #d8b87a;
+  --hm-champagne-600: #b8935a;
+  --hm-champagne-700: #7a5d27;
+  --hm-champagne-100: #f7f0e1;
+  --hm-surface-2: #faf8f4;
+  --hm-line-soft: #efeae2;
+  --hm-sidebar-muted: #8fb0ab;
+  --hm-sidebar-text: #d5e3e0;
+
+  /* סטטוסים: טקסט / רקע / נקודה */
+  --hm-success: #1e6b4e;
+  --hm-success-bg: #e5f2eb;
+  --hm-success-dot: #2e9a6b;
+  --hm-warning: #8a5300;
+  --hm-warning-bg: #fff1db;
+  --hm-warning-dot: #d99a2b;
+  --hm-danger: #9a3a2b;
+  --hm-danger-bg: #fbede9;
+  --hm-danger-dot: #c9553f;
+  --hm-info: #1f4e8c;
+  --hm-info-bg: #e7eef6;
+  --hm-info-dot: #3d72b8;
+  --hm-neutral: #4e5b58;
+  --hm-neutral-bg: #f0ede7;
+
+  /* ערוצים */
+  --hm-direct: #0e3b3a;
+  --hm-airbnb: #b9473a;
+  --hm-booking: #1f4e8c;
+
+  /* עומק ותנועה */
+  --hm-shadow-card: 0 1px 2px rgb(12 48 47 / 0.04), 0 10px 24px -18px rgb(12 48 47 / 0.3);
+  --hm-shadow-lift: 0 2px 4px rgb(12 48 47 / 0.06), 0 18px 34px -20px rgb(12 48 47 / 0.38);
+  --hm-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* כותרות הממשק ב-Heebo; הסריף (Frank Ruhl Libre) רק בברכה ובמקומות שמסומנים font-display */
+html:root body :where(h1, h2, h3) {
+  font-family: "Heebo", ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.005em;
+}
+html:root body .font-display {
+  font-family: "Frank Ruhl Libre", "Heebo", Georgia, serif;
+}
+
+/* מספרים טבלאיים בכל מקום שמוצג סכום, אחוז או מונה */
+[data-num] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* כרטיס לחיץ: הרמה עדינה בריחוף */
+[data-lift] {
+  transition:
+    transform 0.2s var(--hm-ease),
+    box-shadow 0.2s var(--hm-ease),
+    border-color 0.2s var(--hm-ease);
+}
+[data-lift]:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--hm-shadow-lift);
+}
+
+/* כניסה רכה של תוכן המסך */
+@keyframes hm-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+[data-rise] {
+  animation: hm-rise 0.32s var(--hm-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-lift],
+  [data-rise] {
+    animation: none;
+    transition: none;
+  }
+  [data-lift]:hover {
+    transform: none;
+  }
+}

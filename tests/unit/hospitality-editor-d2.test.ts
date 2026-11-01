@@ -1,5 +1,7 @@
 // D2 — השלמת העורך: לוגו, גופנים (זוגות מאושרים לכל ערכה), עריכה ישירה מהתצוגה המקדימה
 // (טקסט פשוט בלבד, אותה בדיקה כמו בעורך), וערכה בפתיחת עסק.
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -106,16 +108,35 @@ describe("font pairs", () => {
     }
   });
 
-  it("the two pairs already loaded on every page need no extra stylesheet; the rest load from Google Fonts with swap", () => {
+  it("the two pairs already loaded on every page need no extra stylesheet; the rest load our own self-hosted sheet (F2: no Google Fonts)", () => {
     expect(fontHref("classic")).toBeNull();
     expect(fontHref("modern")).toBeNull();
     expect(fontHref(undefined)).toBeNull();
-    const href = fontHref("elegant")!;
-    expect(href.startsWith("https://fonts.googleapis.com/css2?")).toBe(true);
-    expect(href).toContain("family=Bellefair");
-    expect(href).toContain("display=swap");
-    for (const id of ["soft", "bold", "literary"] as const)
-      expect(fontHref(id)).toMatch(/^https:\/\/fonts\.googleapis\.com\//);
+    for (const id of ["elegant", "soft", "bold", "literary"] as const) {
+      const href = fontHref(id)!;
+      expect(href, id).toBe(`/fonts/hosp/pair-${id}.css`);
+      // the sheet exists, uses swap, and every file it names is in public/fonts/hosp
+      const css = readFileSync(join(process.cwd(), "public", href), "utf8");
+      expect(css, id).toContain("font-display:swap");
+      expect(css, id).not.toMatch(/googleapis|gstatic/);
+      const files = [...css.matchAll(/url\(\.\/([^)]+)\)/g)].map((m) => m[1]!);
+      expect(files.length, id).toBeGreaterThanOrEqual(4);
+      for (const f of files)
+        expect(existsSync(join(process.cwd(), "public/fonts/hosp", f)), f).toBe(true);
+    }
+    expect(
+      readFileSync(join(process.cwd(), "public/fonts/hosp/pair-elegant.css"), "utf8"),
+    ).toContain('font-family:"Bellefair"');
+  });
+
+  it("the base fonts of every hospitality page (Heebo + Frank Ruhl Libre) are self-hosted, Hebrew and Latin", () => {
+    const css = readFileSync(join(process.cwd(), "public/fonts/hosp/base.css"), "utf8");
+    for (const family of ["Heebo", "Frank Ruhl Libre"])
+      expect(css).toContain(`font-family:"${family}"`);
+    expect(css).toContain("U+0590-05FF");
+    expect(css).not.toMatch(/googleapis|gstatic/);
+    for (const m of css.matchAll(/url\(\.\/([^)]+)\)/g))
+      expect(existsSync(join(process.cwd(), "public/fonts/hosp", m[1]!)), m[1]).toBe(true);
   });
 
   it("no choice = the theme's own fonts, exactly as before; a choice overrides display and body fonts", () => {

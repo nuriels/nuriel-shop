@@ -14,8 +14,8 @@ export interface FontPair {
   body: string;
   displayWeight: string;
   displayTracking: string;
-  /** הפרמטרים ל-fonts.googleapis.com/css2 (null — כבר נטען בכל עמוד) */
-  google: string | null;
+  /** גיליון הגופנים המאוחסן בשרת שלנו (public/fonts/hosp; null — כבר נטען בכל עמוד). בלי Google Fonts */
+  sheet: string | null;
 }
 
 const HEEBO = '"Heebo", ui-sans-serif, system-ui, sans-serif';
@@ -31,7 +31,7 @@ export const FONT_PAIRS: Record<FontPairId, FontPair> = {
     body: HEEBO,
     displayWeight: "500",
     displayTracking: "0",
-    google: null,
+    sheet: null,
   },
   modern: {
     id: "modern",
@@ -41,7 +41,7 @@ export const FONT_PAIRS: Record<FontPairId, FontPair> = {
     body: HEEBO,
     displayWeight: "800",
     displayTracking: "-0.02em",
-    google: null,
+    sheet: null,
   },
   elegant: {
     id: "elegant",
@@ -51,7 +51,7 @@ export const FONT_PAIRS: Record<FontPairId, FontPair> = {
     body: ASSISTANT,
     displayWeight: "400",
     displayTracking: "0.01em",
-    google: "family=Bellefair&family=Assistant:wght@400;500;600;700",
+    sheet: "/fonts/hosp/pair-elegant.css",
   },
   soft: {
     id: "soft",
@@ -61,7 +61,7 @@ export const FONT_PAIRS: Record<FontPairId, FontPair> = {
     body: ASSISTANT,
     displayWeight: "400",
     displayTracking: "0",
-    google: "family=Varela+Round&family=Assistant:wght@400;500;600;700",
+    sheet: "/fonts/hosp/pair-soft.css",
   },
   bold: {
     id: "bold",
@@ -71,7 +71,7 @@ export const FONT_PAIRS: Record<FontPairId, FontPair> = {
     body: '"Rubik", "Heebo", ui-sans-serif, system-ui, sans-serif',
     displayWeight: "400",
     displayTracking: "0",
-    google: "family=Secular+One&family=Rubik:wght@400;500;600;700",
+    sheet: "/fonts/hosp/pair-bold.css",
   },
   literary: {
     id: "literary",
@@ -81,7 +81,7 @@ export const FONT_PAIRS: Record<FontPairId, FontPair> = {
     body: '"Alef", "Heebo", ui-sans-serif, system-ui, sans-serif',
     displayWeight: "500",
     displayTracking: "0",
-    google: "family=David+Libre:wght@400;500;700&family=Alef:wght@400;700",
+    sheet: "/fonts/hosp/pair-literary.css",
   },
 };
 
@@ -89,8 +89,7 @@ export const FONT_PAIR_LIST: FontPair[] = Object.values(FONT_PAIRS);
 
 /** הגיליון של Google Fonts לזוג (null — הגופנים כבר נטענים בכל עמוד) */
 export function fontHref(id: FontPairId | undefined): string | null {
-  const g = id ? FONT_PAIRS[id]?.google : null;
-  return g ? `https://fonts.googleapis.com/css2?${g}&display=swap` : null;
+  return (id ? FONT_PAIRS[id]?.sheet : null) ?? null;
 }
 
 /** משתני ה-CSS של הזוג — דורסים את הגופנים של הערכה (רק כשהעסק בחר זוג) */

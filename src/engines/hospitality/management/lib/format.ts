@@ -52,3 +52,19 @@ export function formatDateTime(
     timeZone,
   });
 }
+
+/** "48,250 ₪" — סכום בשקלים (או במטבע העסק), בלי אגורות כשהסכום שלם */
+export function formatMoney(amount: number, currency = "ILS"): string {
+  const whole = Math.round(amount * 100) % 100 === 0;
+  return new Intl.NumberFormat("he-IL", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: whole ? 0 : 2,
+    minimumFractionDigits: whole ? 0 : 2,
+  }).format(amount);
+}
+
+/** מספר עם מפרידי אלפים */
+export function formatNumber(n: number): string {
+  return new Intl.NumberFormat("he-IL").format(n);
+}

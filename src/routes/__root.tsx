@@ -29,6 +29,18 @@ import { EngineSiteShell } from "@/app/site-shell";
 import { engineRouteRedirect } from "@/app/site-routes";
 import { engineSiteData, engineSiteMeta } from "@/app/site-head";
 
+// גופני אתרי המנוע (Hospitality): Heebo + Frank Ruhl Libre, משתנים, עברית ולטינית — public/fonts/hosp
+const ENGINE_FONT_LINKS = [
+  {
+    rel: "preload",
+    href: "/fonts/hosp/heebo-hebrew-wght.woff2",
+    as: "font",
+    type: "font/woff2",
+    crossOrigin: "anonymous" as const,
+  },
+  { rel: "stylesheet", href: "/fonts/hosp/base.css" },
+];
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -125,12 +137,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         links: [
           { rel: "stylesheet", href: appCss },
           { rel: "icon", type: "image/png", href: "/favicon.png" },
-          { rel: "preconnect", href: "https://fonts.googleapis.com" },
-          { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-          {
-            rel: "stylesheet",
-            href: "https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Frank+Ruhl+Libre:wght@500;700;900&display=swap",
-          },
+          // אתרי מנוע (Hospitality, שלב F2): הגופנים מאוחסנים בשרת שלנו — בלי Google Fonts
+          ...ENGINE_FONT_LINKS,
         ],
       };
     }
