@@ -30,7 +30,7 @@ APP_DIR=/root/nuriel-shop-git        # הריפו שממנו נבנית האפל
 SB_DIR=/root/nuriel-shop-supabase    # הסטאק של Supabase (הקבצים ב-$SB_DIR/docker)
 APP_PORT=3700                        # האפליקציה ב-127.0.0.1
 KONG=http://127.0.0.1:8500           # ה-API המקומי (Kong)
-SB_SERVICES="db meta studio kong auth rest storage"
+SB_SERVICES="db meta studio kong auth rest storage imgproxy"   # imgproxy עולה עם ה-storage
 DB=$PROJECT-db
 APP=$PROJECT-app
 ```
@@ -38,7 +38,7 @@ APP=$PROJECT-app
 **אימות השמות** (אם משהו שונה — מתקנים את המשתנים, לא את הפקודות):
 
 ```bash
-docker ps --format '{{.Names}}' | grep "^$PROJECT-"                                              # 8 קונטיינרים
+docker ps --format '{{.Names}}' | grep "^$PROJECT-"                                              # 9 קונטיינרים (כולל imgproxy)
 docker inspect "$APP" --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' # = $APP_DIR
 docker inspect "$DB"  --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' # = $SB_DIR/docker
 docker port "$APP"                                                                               # 127.0.0.1:3700
@@ -111,7 +111,11 @@ tar -C "$(dirname "$BK")" -cf - "$(basename "$BK")" \
   | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -out "$BK.tar.enc"
 ```
 
-- **הסיסמה:** `openssl` מבקש אותה. שומרים אותה בנפרד מהקובץ.
+- **הסיסמה:** `openssl` מבקש סיסמה **חדשה** שבוחרים עכשיו (פעמיים, בלי שתוצג).
+  - היא רק לקובץ המוצפן — לא סיסמה של השרת או של Supabase.
+  - שומרים אותה במנהל סיסמאות, בנפרד מהקובץ. בלעדיה אי אפשר לפתוח את העותק.
+- **בדיקה שהסיסמה עובדת** (מבקש אותה שוב ומציג את רשימת הקבצים):
+  `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in "$BK.tar.enc" | tar -tf - | head`.
 - **העותק:** מעתיקים את `$BK.tar.enc` אל מחוץ לשרת (`scp` / `rclone`).
 - **פתיחה:** `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in <file> | tar -xf -`.
 
