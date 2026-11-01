@@ -10,7 +10,8 @@ import { Photo } from "../components/Photo";
 import { PriceFrom } from "../components/PriceFrom";
 import { useCopy } from "../copy";
 import { findUnit, stayText } from "../lib/format";
-import { unitMedia } from "../lib/media";
+import { findType } from "../lib/listing";
+import { dedupeMedia, unitMedia } from "../lib/media";
 import { useSite } from "../lib/site-context";
 import { AmenityGroups } from "../sections/Amenities";
 import { uniqueAmenities } from "../lib/media";
@@ -19,19 +20,35 @@ import { MapLinks } from "../sections/Location";
 import { Terms } from "../sections/Terms";
 import { Units } from "../sections/Units";
 
-export function UnitPage({ slug }: { slug?: string | undefined } = {}) {
+/**
+ * עמוד יחידה — או עמוד של סוג חדר (מלון): אותו עמוד, עם השם והתיאור של הסוג, התמונות של כל
+ * החדרים, זמינות לפי הסוג (לילה תפוס = אין אף חדר פנוי) והזמנה לפי סוג.
+ */
+export function UnitPage({
+  slug,
+  typeSlug,
+}: { slug?: string | undefined; typeSlug?: string | undefined } = {}) {
   const t = useCopy();
   const { site } = useSite();
-  const params = useParams({ strict: false }) as { unitSlug?: string };
-  const unit = findUnit(site.units, slug ?? params.unitSlug)!;
+  const params = useParams({ strict: false }) as { unitSlug?: string; typeSlug?: string };
+  const roomType = findType(site, typeSlug ?? params.typeSlug);
+  const unit = roomType?.lead ?? findUnit(site.units, slug ?? params.unitSlug)!;
   const property = site.properties.find((p) => p.id === unit.property_id);
-  const media = unitMedia(unit, site);
+  const media = roomType
+    ? dedupeMedia(roomType.rooms.flatMap((r) => unitMedia(r, site)))
+    : unitMedia(unit, site);
+  const name = roomType?.type.name ?? unit.name;
+  const description = roomType?.type.description ?? unit.description;
+  const capacity = roomType?.capacity ?? unit.capacity;
+  const fromPrice = roomType?.fromPrice ?? unit.base_price;
+  const minNights = roomType?.minNights ?? unit.min_nights;
   const images = media.filter((m) => m.kind === "image");
   const [open, setOpen] = useState<number | null>(null);
   const [range, setRange] = useState<DateRange>({ from: null, to: null });
   const members = site.units.filter((u) => unit.member_ids?.includes(u.id));
-  const type =
-    unit.kind === "whole_property"
+  const type = roomType
+    ? t.units.roomsOfType(roomType.rooms.length)
+    : unit.kind === "whole_property"
       ? t.units.wholeProperty
       : unit.unit_type
         ? t.unitTypes[unit.unit_type]
@@ -44,7 +61,7 @@ export function UnitPage({ slug }: { slug?: string | undefined } = {}) {
       <header className="relative isolate flex min-h-[62svh] items-end overflow-hidden text-white sm:min-h-[72svh]">
         <Photo
           media={images[0] ?? null}
-          alt={unit.name}
+          alt={name}
           priority
           sizes="100vw"
           placeholderTone="dark"
@@ -67,9 +84,7 @@ export function UnitPage({ slug }: { slug?: string | undefined } = {}) {
             {type && (
               <p className="mb-3 text-xs font-medium tracking-[0.06em] text-white/85">{type}</p>
             )}
-            <h1 className="font-display text-4xl leading-tight font-medium sm:text-6xl">
-              {unit.name}
-            </h1>
+            <h1 className="font-display text-4xl leading-tight font-medium sm:text-6xl">{name}</h1>
           </div>
           {images.length > 1 && (
             <button
@@ -83,12 +98,12 @@ export function UnitPage({ slug }: { slug?: string | undefined } = {}) {
           )}
         </div>
       </header>
-      <Lightbox items={media} index={open} onIndex={setOpen} title={unit.name} />
+      <Lightbox items={media} index={open} onIndex={setOpen} title={name} />
 
       <div className="mx-auto grid max-w-7xl gap-12 px-4 py-14 sm:px-8 sm:py-20 lg:grid-cols-[1fr_24rem] lg:gap-16">
         <div className="min-w-0 space-y-14">
           <ul className="flex flex-wrap gap-x-8 gap-y-4 border-b border-border pb-8 text-[0.95rem]">
-            <Fact icon={<Users />} text={t.units.guests(unit.capacity)} />
+            <Fact icon={<Users />} text={t.units.guests(capacity)} />
             {!!unit.bedrooms && <Fact icon={<DoorOpen />} text={t.units.bedrooms(unit.bedrooms)} />}
             {!!unit.bathrooms && <Fact icon={<Bath />} text={t.units.bathrooms(unit.bathrooms)} />}
             {rooms.length > 0 && (
@@ -99,9 +114,9 @@ export function UnitPage({ slug }: { slug?: string | undefined } = {}) {
             )}
           </ul>
 
-          {unit.description && (
+          {description && (
             <p className="text-lg leading-loose whitespace-pre-line text-foreground/85">
-              {unit.description}
+              {description}
             </p>
           )}
 
@@ -129,7 +144,7 @@ export function UnitPage({ slug }: { slug?: string | undefined } = {}) {
             </section>
           )}
 
-          {images.length > 1 && <MediaMosaic items={media.slice(1)} title={unit.name} max={5} />}
+          {images.length > 1 && <MediaMosaic items={media.slice(1)} title={name} max={5} />}
 
           {rooms.length > 0 && (
             <section aria-labelledby="beds-title">
@@ -199,10 +214,10 @@ export function UnitPage({ slug }: { slug?: string | undefined } = {}) {
         <aside className="lg:sticky lg:top-28 lg:self-start">
           <div className="rounded-[var(--radius)] border border-border bg-card p-6 shadow-[var(--site-shadow)] sm:p-7">
             <p>
-              <PriceFrom price={unit.base_price} currency={site.business.currency} size="lg" />
+              <PriceFrom price={fromPrice} currency={site.business.currency} size="lg" />
             </p>
             <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-              {unit.min_nights > 1 && <li>{t.facts.minNights(unit.min_nights)}</li>}
+              {minNights > 1 && <li>{t.facts.minNights(minNights)}</li>}
               {unit.max_children === 0 && <li>{t.units.adultsOnly}</li>}
               {!!unit.max_children && unit.child_age_limit !== null && (
                 <li>{t.units.childrenUpTo(unit.child_age_limit)}</li>
@@ -211,12 +226,10 @@ export function UnitPage({ slug }: { slug?: string | undefined } = {}) {
             <div className="mt-6 border-t border-border pt-6">
               <h2 className="mb-2 text-sm font-medium">{t.availability.title}</h2>
               <AvailabilityCalendar
-                unitId={unit.id}
+                {...(roomType ? { typeId: roomType.type.id } : { unitId: unit.id })}
                 today={site.today}
                 months={1}
-                {...(site.booking_open
-                  ? { range, onSelect: setRange, minNights: unit.min_nights }
-                  : {})}
+                {...(site.booking_open ? { range, onSelect: setRange, minNights } : {})}
               />
               {site.booking_open && (
                 <>
@@ -230,7 +243,7 @@ export function UnitPage({ slug }: { slug?: string | undefined } = {}) {
                   <Link
                     to="/stay/book"
                     search={{
-                      unit: unit.slug,
+                      ...(roomType ? { type: roomType.type.slug } : { unit: unit.slug }),
                       ...(range.from && range.to ? { from: range.from, to: range.to } : {}),
                     }}
                     className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-sm bg-primary text-base font-medium text-primary-foreground hover:opacity-90"
@@ -247,7 +260,7 @@ export function UnitPage({ slug }: { slug?: string | undefined } = {}) {
         </aside>
       </div>
 
-      <Units exclude={unit.id} title={t.units.other} />
+      <Units exclude={roomType?.type.id ?? unit.id} title={t.units.other} />
     </article>
   );
 }

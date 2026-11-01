@@ -15,7 +15,9 @@ import type {
 import type {
   GuestArrival,
   PublicAvailability,
+  PublicRoomType,
   PublicSite,
+  PublicTypeAvailability,
   RawPublicSite,
   SiteGuestBooking,
 } from "../types/website";
@@ -47,8 +49,11 @@ export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
       import("../server/rpc.server"),
       import("../server/media.server"),
     ]);
-    const raw = await callRpc<RawPublicSite>("public_site", {});
-    return toPublicSite(raw, publicUrl);
+    const [raw, types] = await Promise.all([
+      callRpc<RawPublicSite>("public_site", {}),
+      callRpc<PublicRoomType[]>("public_room_types", {}),
+    ]);
+    return toPublicSite(raw, publicUrl, types);
   },
 );
 
@@ -173,4 +178,84 @@ export const hospitalitySiteRequestCancellation = createServerFn({ method: "POST
     });
     kickOutbox();
     return view;
+  });
+
+// ---------- RT: מכירה לפי סוג חדר (מלונות) ----------
+
+function categoryInput(input: Record<string, unknown>) {
+  const categoryId = uuid(input?.["categoryId"], "סוג החדר");
+  const pref = input?.["preferredUnit"];
+  return { categoryId, preferredUnit: pref ? uuid(pref, "החדר") : null };
+}
+
+export const hospitalityPublicTypeAvailability = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => {
+    const categoryId = uuid(input?.["categoryId"], "סוג החדר");
+    const from = isoDate(input?.["from"]);
+    const to = isoDate(input?.["to"]);
+    const days = (Date.parse(to) - Date.parse(from)) / 86400000;
+    if (days <= 0 || days > MAX_RANGE_DAYS) throw new InputError("טווח התאריכים לא תקין");
+    return { categoryId, from, to };
+  })
+  .handler(async ({ data }): Promise<PublicTypeAvailability> => {
+    const { callRpc } = await import("../server/rpc.server");
+    return callRpc<PublicTypeAvailability>("public_type_availability", {
+      _category_id: data.categoryId,
+      _from: data.from,
+      _to: data.to,
+    });
+  });
+
+/** הצעת מחיר לסוג: החדר הראשון שפנוי לכל הלילות (unit_id בהצעה) */
+export const hospitalitySiteQuoteType = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => {
+    const c = categoryInput(input);
+    return { ...parseQuote({ ...input, unitId: c.categoryId }), ...c };
+  })
+  .handler(async ({ data }): Promise<Quote & { category_id: string }> => {
+    await throttle("quote", 120, 10 * MINUTE);
+    const { callRpc } = await import("../server/rpc.server");
+    return callRpc<Quote & { category_id: string }>("quote_type", {
+      _category_id: data.categoryId,
+      _check_in: data.checkIn,
+      _check_out: data.checkOut,
+      _adults: data.adults,
+      _children: data.children,
+      _promo_code: data.promoCode,
+      _preferred_unit: data.preferredUnit,
+    });
+  });
+
+/** בקשת הזמנה לסוג: המסד בוחר חדר פנוי מהסוג באותה טרנזקציה (בלי מרוץ בין אורחים) */
+export const hospitalitySiteRequestBookingType = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => {
+    const c = categoryInput(input);
+    return { ...parseRequestBooking({ ...input, unitId: c.categoryId }), ...c };
+  })
+  .handler(async ({ data }): Promise<BookingRequestResult> => {
+    await throttle("request", 6, 60 * MINUTE);
+    const [{ callRpc }, { kickOutbox }] = await Promise.all([
+      import("../server/rpc.server"),
+      import("../outbox/worker.server"),
+    ]);
+    const result = await callRpc<BookingRequestResult>("request_booking_type", {
+      _category_id: data.categoryId,
+      _check_in: data.checkIn,
+      _check_out: data.checkOut,
+      _full_name: data.fullName,
+      _email: data.email,
+      _phone: data.phone,
+      _idempotency_key: data.idempotencyKey,
+      _policy_accepted: true,
+      _policy_hash: data.policyHash,
+      _adults: data.adults,
+      _children: data.children,
+      _special_requests: data.specialRequests,
+      _promo_code: data.promoCode,
+      _marketing_consent: data.marketingConsent,
+      _language: data.language,
+      _preferred_unit: data.preferredUnit,
+    });
+    kickOutbox();
+    return result;
   });

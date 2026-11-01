@@ -230,6 +230,7 @@ const site = (extra: Partial<PublicSite> = {}): PublicSite => ({
   properties: [property()],
   units: [unit("a")],
   design: null,
+  room_types: [],
   ...extra,
 });
 
@@ -630,5 +631,84 @@ describe("5b: editor operations on the design", () => {
     expect(d.sections.some((s) => s.type === "faq")).toBe(false);
     // the result always survives normalisation unchanged
     expect(normalizeDesign(JSON.stringify(d))).toEqual(d);
+  });
+});
+
+describe("RT: room types on the site", () => {
+  it("a type replaces its rooms in the listing, at the place of its first room; other units stay", async () => {
+    const { siteListing, findType, listingId } =
+      await import("@/engines/hospitality/website/lib/listing");
+    const s = site({
+      units: [
+        unit("suite", { base_price: 1200 }),
+        unit("r101", { base_price: 600, capacity: 2 }),
+        unit("r102", { base_price: 650, capacity: 3, min_nights: 2 }),
+        unit("r201", { base_price: 0 }),
+      ],
+      room_types: [
+        {
+          id: "t1",
+          slug: "זוגי",
+          name: "זוגי",
+          description: null,
+          property_id: "p1",
+          sort_order: 0,
+          revision: 1,
+          room_ids: ["r101", "r102", "gone"],
+        },
+        {
+          id: "t2",
+          slug: "ריק",
+          name: "ריק",
+          description: null,
+          property_id: "p1",
+          sort_order: 1,
+          revision: 1,
+          room_ids: [],
+        },
+      ],
+    });
+    const items = siteListing(s);
+    expect(items.map(listingId)).toEqual(["suite", "t1", "r201"]);
+    const t = findType(s, encodeURIComponent("זוגי"))!;
+    expect(t.rooms.map((r) => r.id)).toEqual(["r101", "r102"]);
+    expect(t.capacity).toBe(3);
+    expect(t.fromPrice).toBe(600);
+    expect(t.minNights).toBe(1);
+    expect(findType(s, "ריק")).toBeUndefined();
+  });
+
+  it("the calendar groups rooms of a type under the type header", async () => {
+    const { buildRows } = await import("@/engines/hospitality/management/calendar/model");
+    const u = (id: string, name: string) => ({
+      id,
+      name,
+      property_id: "p",
+      kind: "room",
+      unit_type: "room",
+      is_active: true,
+      member_ids: null,
+    });
+    const view = {
+      from: "2026-11-01",
+      to: "2026-11-08",
+      today: "2026-11-01",
+      timezone: "Asia/Jerusalem",
+      stamp: "s",
+      properties: [{ id: "p", name: "מלון" }],
+      units: [u("a", "101"), u("x", "סוויטה"), u("b", "102")],
+      bookings: [],
+      blocks: [],
+    } as never;
+    const rows = buildRows(view, { propertyId: "", unitId: "", unitType: "", tone: "" }, [
+      { id: "t", name: "זוגי", room_ids: ["a", "b"] },
+    ]);
+    expect(rows.map((r) => (r.type === "unit" ? r.unit.name : r.name))).toEqual([
+      "מלון",
+      "זוגי · 2 חדרים",
+      "101",
+      "102",
+      "סוויטה",
+    ]);
   });
 });

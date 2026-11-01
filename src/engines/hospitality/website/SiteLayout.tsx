@@ -8,6 +8,7 @@ import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger, cn } from "@
 import type { PublicSite } from "../types/website";
 import { CopyContext, siteCopy, useCopy } from "./copy";
 import { findUnit, telHref, whatsappHref } from "./lib/format";
+import { findType } from "./lib/listing";
 import { SiteContext, useSite } from "./lib/site-context";
 import { normalizeDesign, type SiteDesign } from "./design/schema";
 import { themeFor, themeStyle } from "./theme/themes";
@@ -18,7 +19,9 @@ export type SitePage = "home" | "unit" | "other";
 function pageOf(pathname: string, site: PublicSite): SitePage {
   if (/^\/stay\/?$/.test(pathname)) return "home";
   const unit = pathname.match(/^\/stay\/units\/([^/]+)\/?$/);
-  return unit && findUnit(site.units, unit[1]) ? "unit" : "other";
+  if (unit && findUnit(site.units, unit[1])) return "unit";
+  const type = pathname.match(/^\/stay\/rooms\/([^/]+)\/?$/);
+  return type && findType(site, type[1]) ? "unit" : "other";
 }
 
 /** משקל ומרווח של גופן התצוגה לפי הערכה (מעל ברירת המחדל של .font-display) — קבוע, בלי קלט */

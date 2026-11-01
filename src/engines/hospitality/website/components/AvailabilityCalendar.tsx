@@ -5,7 +5,10 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "@/platform/ui";
-import { hospitalityPublicAvailability } from "../../api/website.functions";
+import {
+  hospitalityPublicAvailability,
+  hospitalityPublicTypeAvailability,
+} from "../../api/website.functions";
 import { useCopy } from "../copy";
 import { monthTitle } from "../lib/format";
 import { addDays, monthGrid, rangeHasBusy } from "../lib/dates";
@@ -17,6 +20,7 @@ export interface DateRange {
 
 export function AvailabilityCalendar({
   unitId,
+  typeId,
   today,
   range,
   onSelect,
@@ -24,7 +28,9 @@ export function AvailabilityCalendar({
   months: count = 2,
   className,
 }: {
-  unitId: string;
+  /** יחידה — או סוג חדר (לילה תפוס = אין אף חדר פנוי מהסוג) */
+  unitId?: string | undefined;
+  typeId?: string | undefined;
   today: string;
   range?: DateRange;
   onSelect?: (r: DateRange) => void;
@@ -42,8 +48,11 @@ export function AvailabilityCalendar({
     .toISOString()
     .slice(0, 10);
   const query = useQuery({
-    queryKey: ["hospitality", "site", "availability", unitId, from, to],
-    queryFn: () => hospitalityPublicAvailability({ data: { unitId, from, to } }),
+    queryKey: ["hospitality", "site", "availability", unitId ?? `type:${typeId}`, from, to],
+    queryFn: async (): Promise<{ busy: string[] }> =>
+      typeId
+        ? hospitalityPublicTypeAvailability({ data: { categoryId: typeId, from, to } })
+        : hospitalityPublicAvailability({ data: { unitId: unitId ?? "", from, to } }),
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });

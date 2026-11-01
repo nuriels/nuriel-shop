@@ -116,6 +116,21 @@ export const SITES = [
     owner: ACCOUNTS.hotelOwner,
     manager: { email: ACCOUNTS.hotelManager, displayName: "רוני — קבלה" },
     plan: "pro",
+    // סוגי חדרים (RT): הסוג נמכר באתר, ההזמנה נרשמת לחדר פנוי מהסוג
+    roomTypes: [
+      {
+        name: "חדר זוגי סטנדרט",
+        description: "חדר זוגי מואר עם מיטה זוגית ומקלחת.",
+        rooms: ["חדר 101 — זוגי", "חדר 102 — זוגי"],
+        price: 600,
+      },
+      {
+        name: "חדר דלקס",
+        description: "חדר מרווח עם פינת ישיבה ונוף לים.",
+        rooms: ["חדר 201 — דלקס", "חדר 202 — דלקס"],
+        price: 900,
+      },
+    ],
     settings: {
       business_name: "מלון הנמל",
       contact_phone: "050-0000303",

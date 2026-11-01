@@ -245,3 +245,13 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Functions | `site_editor`, `site_draft_save(revision, theme, document)` (conflict → "changed elsewhere"), `site_publish(revision, note)` (logged), `site_restore(version)` (logged) — `settings` permission, management area on; `site_preview()` — the site data + draft for staff, also while the site is closed; `public_site()` now also returns the latest published design; the shared data is `_site_payload(tenant)` |
 | Rollback | `supabase/rollbacks/20261102150000_hosp_site_design.down.sql` — drops the table and functions (site designs are lost; the site falls back to the default design) and restores the migration-19 `public_site()`; exact migration-20 schema (`rollback-check.sh`, M21) |
 | Production | nothing to configure |
+
+## 20261102160000_hosp_room_types.sql — RT, hotel room types (hospitality)
+
+| | |
+|---|---|
+| Table | `unit_categories` (room type: property, name, slug, description, order, revision) — RLS (tenant + database flag, RESTRICTIVE), no grants, tenant guard |
+| Column | `units.category_id` (nullable) — composite FK `(tenant_id, property_id, category_id)` so a room and its type are always in the same property; `CHECK` that "whole property" has no type. Existing units are untouched (NULL = as today) |
+| Functions | staff (`catalog`): `room_types_view`, `room_type_save` (revision), `room_type_delete` (only without rooms), `room_type_assign`, `room_type_apply` (price / min nights / capacity / max adults / max children to every room of the type) — logged. Guests: `public_room_types`, `public_type_availability` (nights with no free room of the type), `quote_type` (first room free for all nights — the quoted room first), `request_booking_type` (inside the inventory lock: a free room of the type whose terms match the accepted `policy_hash`, then the existing `request_booking`). No existing function changed |
+| Rollback | `supabase/rollbacks/20261102160000_hosp_room_types.down.sql` — drops the functions, the column and the table (bookings keep their rooms); exact migration-21 schema (`rollback-check.sh`, M22) |
+| Production | nothing to configure |

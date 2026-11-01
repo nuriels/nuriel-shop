@@ -220,6 +220,18 @@ export async function seedDemo({ log = console.log } = {}) {
         as,
       );
     }
+    for (const type of site.roomTypes ?? []) {
+      const saved = await rpc(
+        "room_type_save",
+        { _id: null, _property_id: property.id, _name: type.name, _description: type.description },
+        as,
+      );
+      for (const room of type.rooms) {
+        const unitId = unitIds[site.units.findIndex((u) => u.name === room)];
+        if (unitId) await rpc("room_type_assign", { _unit_id: unitId, _category_id: saved.id }, as);
+      }
+      await rpc("room_type_apply", { _id: saved.id, _base_price: type.price }, as);
+    }
     if (site.full) {
       await enrichZimmer({
         rpc,

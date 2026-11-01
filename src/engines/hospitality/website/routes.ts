@@ -15,6 +15,7 @@ import { AccessibilityPage, PrivacyPage } from "./pages/LegalPages";
 import { SiteError, SiteNotFound } from "./pages/SiteMessage";
 import { UnitPage } from "./pages/UnitPage";
 import { findUnit } from "./lib/format";
+import { findType } from "./lib/listing";
 import { SiteLayout } from "./SiteLayout";
 
 type ParentMatch = Promise<{ loaderData?: unknown }>;
@@ -100,4 +101,32 @@ export const sitePreviewRoute = {
     meta: [{ title: "תצוגה מקדימה" }, { name: "robots", content: "noindex, nofollow" }],
   }),
   component: PreviewPage,
+};
+
+/** עמוד סוג חדר (מלון): /stay/rooms/<slug> — אותו עמוד כמו יחידה, לפי הסוג */
+export const siteRoomTypeRoute = {
+  loader: async ({
+    params,
+    parentMatchPromise,
+  }: {
+    params: { typeSlug: string };
+    parentMatchPromise: ParentMatch;
+  }) => {
+    const site = (await parentMatchPromise).loaderData as PublicSite | undefined;
+    const type = site ? findType(site, params.typeSlug) : undefined;
+    if (!site || !type) throw notFound();
+    const meta = siteUnitMeta(site, {
+      ...type.lead,
+      name: type.type.name,
+      description: type.type.description ?? type.lead.description,
+      seo_title: null,
+      seo_description: null,
+    });
+    return { meta };
+  },
+  head: ({ loaderData }: { loaderData?: { meta: ReturnType<typeof siteUnitMeta> } }) => ({
+    meta: loaderData?.meta ?? [],
+  }),
+  component: UnitPage,
+  notFoundComponent: SiteNotFound,
 };

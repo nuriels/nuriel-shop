@@ -2,6 +2,8 @@
 
 export interface BookSearch {
   unit?: string;
+  /** סוג חדר (מלון) — slug */
+  type?: string;
   from?: string;
   to?: string;
   adults?: number;
@@ -14,6 +16,7 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
 export function validateBookSearch(raw: Record<string, unknown>): BookSearch {
   const out: BookSearch = {};
   if (typeof raw["unit"] === "string" && raw["unit"].length <= 200) out.unit = raw["unit"];
+  if (typeof raw["type"] === "string" && raw["type"].length <= 200) out.type = raw["type"];
   if (typeof raw["from"] === "string" && ISO.test(raw["from"])) out.from = raw["from"];
   if (typeof raw["to"] === "string" && ISO.test(raw["to"])) out.to = raw["to"];
   const n = (v: unknown, min: number) => {

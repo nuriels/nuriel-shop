@@ -50,6 +50,7 @@ import { Route as ManageGuestsRouteImport } from './routes/manage.guests'
 import { Route as ManagePhotosRouteImport } from './routes/manage.photos'
 import { Route as ManagePoliciesRouteImport } from './routes/manage.policies'
 import { Route as ManagePricingRouteImport } from './routes/manage.pricing'
+import { Route as ManageRoomTypesRouteImport } from './routes/manage.room-types'
 import { Route as ManageSettingsRouteImport } from './routes/manage.settings'
 import { Route as ManageTeamRouteImport } from './routes/manage.team'
 import { Route as ManageUnitsRouteImport } from './routes/manage.units'
@@ -91,6 +92,7 @@ import { Route as ManageGuestsGuestIdRouteImport } from './routes/manage.guests_
 import { Route as ManagePropertiesPropertyIdRouteImport } from './routes/manage.properties.$propertyId'
 import { Route as ManageUnitsUnitIdRouteImport } from './routes/manage.units_.$unitId'
 import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
+import { Route as StayRoomsTypeSlugRouteImport } from './routes/stay.rooms.$typeSlug'
 import { Route as StayUnitsUnitSlugRouteImport } from './routes/stay.units.$unitSlug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -296,6 +298,11 @@ const ManagePoliciesRoute = ManagePoliciesRouteImport.update({
 const ManagePricingRoute = ManagePricingRouteImport.update({
   id: '/pricing',
   path: '/pricing',
+  getParentRoute: () => ManageRoute,
+} as any)
+const ManageRoomTypesRoute = ManageRoomTypesRouteImport.update({
+  id: '/room-types',
+  path: '/room-types',
   getParentRoute: () => ManageRoute,
 } as any)
 const ManageSettingsRoute = ManageSettingsRouteImport.update({
@@ -507,6 +514,11 @@ const PlatformCustomersTenantIdRoute =
     path: '/platform/customers/$tenantId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const StayRoomsTypeSlugRoute = StayRoomsTypeSlugRouteImport.update({
+  id: '/rooms/$typeSlug',
+  path: '/rooms/$typeSlug',
+  getParentRoute: () => StayRoute,
+} as any)
 const StayUnitsUnitSlugRoute = StayUnitsUnitSlugRouteImport.update({
   id: '/units/$unitSlug',
   path: '/units/$unitSlug',
@@ -554,6 +566,7 @@ export interface FileRoutesByFullPath {
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
+  '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
@@ -596,6 +609,7 @@ export interface FileRoutesByFullPath {
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
 }
 export interface FileRoutesByTo {
@@ -637,6 +651,7 @@ export interface FileRoutesByTo {
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
+  '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
@@ -679,6 +694,7 @@ export interface FileRoutesByTo {
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
 }
 export interface FileRoutesById {
@@ -723,6 +739,7 @@ export interface FileRoutesById {
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
+  '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
@@ -765,6 +782,7 @@ export interface FileRoutesById {
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/units_/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
 }
 export interface FileRouteTypes {
@@ -810,6 +828,7 @@ export interface FileRouteTypes {
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
+    | '/manage/room-types'
     | '/manage/settings'
     | '/manage/team'
     | '/manage/units'
@@ -852,6 +871,7 @@ export interface FileRouteTypes {
     | '/manage/properties/$propertyId'
     | '/manage/units/$unitId'
     | '/platform/customers/$tenantId'
+    | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -893,6 +913,7 @@ export interface FileRouteTypes {
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
+    | '/manage/room-types'
     | '/manage/settings'
     | '/manage/team'
     | '/manage/units'
@@ -935,6 +956,7 @@ export interface FileRouteTypes {
     | '/manage/properties/$propertyId'
     | '/manage/units/$unitId'
     | '/platform/customers/$tenantId'
+    | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
   id:
     | '__root__'
@@ -978,6 +1000,7 @@ export interface FileRouteTypes {
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
+    | '/manage/room-types'
     | '/manage/settings'
     | '/manage/team'
     | '/manage/units'
@@ -1020,6 +1043,7 @@ export interface FileRouteTypes {
     | '/manage/properties/$propertyId'
     | '/manage/units_/$unitId'
     | '/platform_/customers/$tenantId'
+    | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
   fileRoutesById: FileRoutesById
 }
@@ -1374,6 +1398,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManagePricingRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/room-types': {
+      id: '/manage/room-types'
+      path: '/room-types'
+      fullPath: '/manage/room-types'
+      preLoaderRoute: typeof ManageRoomTypesRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/settings': {
       id: '/manage/settings'
       path: '/settings'
@@ -1661,6 +1692,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformCustomersTenantIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stay/rooms/$typeSlug': {
+      id: '/stay/rooms/$typeSlug'
+      path: '/rooms/$typeSlug'
+      fullPath: '/stay/rooms/$typeSlug'
+      preLoaderRoute: typeof StayRoomsTypeSlugRouteImport
+      parentRoute: typeof StayRoute
+    }
     '/stay/units/$unitSlug': {
       id: '/stay/units/$unitSlug'
       path: '/units/$unitSlug'
@@ -1679,6 +1717,7 @@ interface ManageRouteChildren {
   ManagePhotosRoute: typeof ManagePhotosRoute
   ManagePoliciesRoute: typeof ManagePoliciesRoute
   ManagePricingRoute: typeof ManagePricingRoute
+  ManageRoomTypesRoute: typeof ManageRoomTypesRoute
   ManageSettingsRoute: typeof ManageSettingsRoute
   ManageTeamRoute: typeof ManageTeamRoute
   ManageUnitsRoute: typeof ManageUnitsRoute
@@ -1699,6 +1738,7 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManagePhotosRoute: ManagePhotosRoute,
   ManagePoliciesRoute: ManagePoliciesRoute,
   ManagePricingRoute: ManagePricingRoute,
+  ManageRoomTypesRoute: ManageRoomTypesRoute,
   ManageSettingsRoute: ManageSettingsRoute,
   ManageTeamRoute: ManageTeamRoute,
   ManageUnitsRoute: ManageUnitsRoute,
@@ -1721,6 +1761,7 @@ interface StayRouteChildren {
   StayMyBookingRoute: typeof StayMyBookingRoute
   StayPrivacyRoute: typeof StayPrivacyRoute
   StayIndexRoute: typeof StayIndexRoute
+  StayRoomsTypeSlugRoute: typeof StayRoomsTypeSlugRoute
   StayUnitsUnitSlugRoute: typeof StayUnitsUnitSlugRoute
 }
 
@@ -1731,6 +1772,7 @@ const StayRouteChildren: StayRouteChildren = {
   StayMyBookingRoute: StayMyBookingRoute,
   StayPrivacyRoute: StayPrivacyRoute,
   StayIndexRoute: StayIndexRoute,
+  StayRoomsTypeSlugRoute: StayRoomsTypeSlugRoute,
   StayUnitsUnitSlugRoute: StayUnitsUnitSlugRoute,
 }
 

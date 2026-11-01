@@ -41,6 +41,11 @@ export function siteGallery(site: PublicSite): PublicMedia[] {
   ]);
 }
 
+/** בלי כפילויות ובלי פריטים ריקים */
+export function dedupeMedia(items: PublicMedia[]): PublicMedia[] {
+  return dedupe(items);
+}
+
 function dedupe(items: PublicMedia[]): PublicMedia[] {
   const seen = new Set<string>();
   return items.filter((m) => {

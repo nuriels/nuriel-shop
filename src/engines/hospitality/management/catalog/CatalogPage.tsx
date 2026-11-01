@@ -68,6 +68,12 @@ export function CatalogPage() {
       <div>
         <h1 className="text-2xl font-semibold">יחידות ומתחמים</h1>
         <p className="mt-1 text-muted-foreground">המקומות שאתם משכירים — כל מתחם והיחידות שבו.</p>
+        <p className="mt-1 text-sm">
+          <Link to="/manage/room-types" className="font-medium text-primary hover:underline">
+            סוגי חדרים
+          </Link>
+          <span className="text-muted-foreground"> — למלונות: כמה חדרים זהים שנמכרים כסוג אחד</span>
+        </p>
       </div>
       {catalog.isError ? (
         <p role="alert" className="rounded-md border border-destructive/40 p-4 text-destructive">

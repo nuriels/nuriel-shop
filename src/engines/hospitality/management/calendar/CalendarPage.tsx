@@ -25,6 +25,7 @@ import {
   cn,
   useIsMobile,
 } from "@/platform/ui";
+import { hospitalityRoomTypes } from "../../api/room-types.functions";
 import {
   hospitalityCalendar,
   hospitalityCalendarStamp,
@@ -441,7 +442,18 @@ function Board(props: {
   onSelectRange: (unitId: string, from: string, to: string) => void;
 }) {
   const { view } = props;
-  const rows = useMemo(() => buildRows(view, props.filters), [view, props.filters]);
+  // סוגי חדרים (מלונות) — לקיבוץ השורות; בלי הרשאת קטלוג / בלי סוגים — לוח רגיל
+  const roomTypes = useQuery({
+    queryKey: [...manageKeys.all, "room-types"],
+    queryFn: () => hospitalityRoomTypes(),
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+  const groups = roomTypes.data;
+  const rows = useMemo(
+    () => buildRows(view, props.filters, groups ?? []),
+    [view, props.filters, groups],
+  );
   const days = useMemo(() => daysOf(view.from, view.to), [view.from, view.to]);
   const scroller = useRef<HTMLDivElement>(null);
   // וירטואליזציה: רק השורות שעל המסך (ועוד מרווח) מצוירות — מאות יחידות בלי האטה

@@ -136,6 +136,29 @@ export interface PublicSite {
   units: PublicUnit[];
   /** מסמך העיצוב: באתר — הגרסה המפורסמת האחרונה; בתצוגה המקדימה — הטיוטה (null — עוד לא עוצב) */
   design: SiteDesignRecord | null;
+  /** סוגי חדרים (מלונות): הסוג נמכר במקום כל חדר; ההזמנה — לחדר פנוי מהסוג */
+  room_types: PublicRoomType[];
+}
+
+export interface PublicRoomType {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  property_id: string;
+  sort_order: number;
+  revision: number;
+  /** החדרים הפעילים של הסוג (באתר); לצוות — כל החדרים */
+  room_ids: string[];
+}
+
+export interface PublicTypeAvailability {
+  category_id: string;
+  from: string;
+  to: string;
+  rooms: number;
+  /** לילות שבהם אף חדר מהסוג לא פנוי */
+  busy: string[];
 }
 
 export interface SiteDesignRecord {
@@ -162,7 +185,10 @@ export type RawPublicMedia = Omit<PublicMedia, "url" | "srcset" | "thumb_url"> &
   variants: Record<string, string> | null;
 };
 
-export type RawPublicSite = Omit<PublicSite, "gallery" | "properties" | "units" | "design"> & {
+export type RawPublicSite = Omit<
+  PublicSite,
+  "gallery" | "properties" | "units" | "design" | "room_types"
+> & {
   design: (Omit<SiteDesignRecord, "document"> & { document: unknown }) | null;
   gallery: RawPublicMedia[];
   properties: (Omit<PublicProperty, "media"> & { media: RawPublicMedia[] })[];

@@ -44,6 +44,8 @@ export const he = {
     bathrooms: (n: number) => (n === 1 ? "חדר רחצה" : `${n} חדרי רחצה`),
     beds: "מיטות",
     wholeProperty: "המתחם כולו",
+    roomsOfType: (n: number) => (n === 1 ? "חדר אחד מהסוג" : `${n} חדרים מהסוג`),
+    roomType: "סוג חדר",
     includes: "כולל את:",
     none: "היחידות יוצגו כאן בקרוב.",
     other: "יחידות נוספות",

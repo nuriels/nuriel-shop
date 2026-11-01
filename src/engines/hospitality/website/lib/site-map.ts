@@ -1,7 +1,13 @@
 // נתוני האתר מהמסד (public_site / site_preview) → מה שהאתר מקבל: כתובות לתמונות (480 / 960 / 1600),
 // מחיר כמספר, ומסמך העיצוב כמחרוזת JSON (נבדק ב-normalizeDesign לפני ההצגה). טהור — publicUrl
 // מגיע מהשרת.
-import type { PublicMedia, PublicSite, RawPublicMedia, RawPublicSite } from "../../types/website";
+import type {
+  PublicMedia,
+  PublicRoomType,
+  PublicSite,
+  RawPublicMedia,
+  RawPublicSite,
+} from "../../types/website";
 
 type PublicUrl = (p: string | null | undefined) => string | null;
 
@@ -20,10 +26,15 @@ function mediaUrls(publicUrl: PublicUrl) {
   };
 }
 
-export function toPublicSite(raw: RawPublicSite, publicUrl: PublicUrl): PublicSite {
+export function toPublicSite(
+  raw: RawPublicSite,
+  publicUrl: PublicUrl,
+  roomTypes: PublicRoomType[] = [],
+): PublicSite {
   const urls = mediaUrls(publicUrl);
   return {
     ...raw,
+    room_types: roomTypes,
     design: raw.design
       ? { ...raw.design, document: JSON.stringify(raw.design.document ?? {}) }
       : null,

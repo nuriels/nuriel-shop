@@ -32,7 +32,7 @@ const html = (body: string, status: number) =>
   });
 
 const ROBOTS_CLOSED = "User-agent: *\nDisallow: /\n";
-const ROBOTS_OPEN = `User-agent: *\nAllow: ${SITE_PATH}$\nAllow: ${SITE_PATH}/units/\nDisallow: /\n`;
+const ROBOTS_OPEN = `User-agent: *\nAllow: ${SITE_PATH}$\nAllow: ${SITE_PATH}/units/\nAllow: ${SITE_PATH}/rooms/\nDisallow: /\n`;
 
 export interface GateOptions {
   /** אזור הניהול פעיל לאתר */

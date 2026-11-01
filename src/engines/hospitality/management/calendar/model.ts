@@ -152,8 +152,18 @@ export interface Filters {
   tone: "" | Tone;
 }
 
-/** השורות של הלוח: לפי מתחם (כותרת), יחידות פיזיות ואז "כל המתחם"; הפסים של כל שורה */
-export function buildRows(view: CalendarView, filters: Filters): Row[] {
+/** סוג חדר (RT) לקיבוץ השורות בלוח */
+export interface RoomGroup {
+  id: string;
+  name: string;
+  room_ids: string[];
+}
+
+/**
+ * השורות של הלוח: לפי מתחם (כותרת), יחידות פיזיות ואז "כל המתחם"; הפסים של כל שורה.
+ * מלון: חדרים מאותו סוג — יחד, תחת כותרת הסוג (במקום של החדר הראשון שלו).
+ */
+export function buildRows(view: CalendarView, filters: Filters, groups: RoomGroup[] = []): Row[] {
   const unitById = new Map(view.units.map((u) => [u.id, u]));
   const wholeOf = new Map<string, string>();
   for (const u of view.units) for (const m of u.member_ids ?? []) wholeOf.set(m, u.id);
@@ -242,13 +252,31 @@ export function buildRows(view: CalendarView, filters: Filters): Row[] {
     );
     if (units.length === 0) continue;
     rows.push({ type: "property", key: `p-${p.id}`, name: p.name });
-    for (const u of units)
+    const unitRow = (u: CalendarUnit): Row => ({
+      type: "unit",
+      key: u.id,
+      unit: u,
+      bars: (bars.get(u.id) ?? []).sort((a, b) => a.start - b.start),
+    });
+    const groupOf = new Map<string, RoomGroup>();
+    for (const g of groups) for (const id of g.room_ids) groupOf.set(id, g);
+    const done = new Set<string>();
+    for (const u of units) {
+      const g = groupOf.get(u.id);
+      if (!g) {
+        rows.push(unitRow(u));
+        continue;
+      }
+      if (done.has(g.id)) continue;
+      done.add(g.id);
+      const members = units.filter((x) => groupOf.get(x.id)?.id === g.id);
       rows.push({
-        type: "unit",
-        key: u.id,
-        unit: u,
-        bars: (bars.get(u.id) ?? []).sort((a, b) => a.start - b.start),
+        type: "property",
+        key: `g-${g.id}`,
+        name: `${g.name} · ${members.length} חדרים`,
       });
+      for (const m of members) rows.push(unitRow(m));
+    }
   }
   return rows;
 }

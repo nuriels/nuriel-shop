@@ -57,7 +57,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/manage/units",
     primary: true,
     permission: "catalog",
-    also: ["/manage/units/", "/manage/properties/"],
+    also: ["/manage/units/", "/manage/properties/", "/manage/room-types"],
   },
   { key: "photos", label: "תמונות", to: "/manage/photos", permission: "media" },
   { key: "pricing", label: "מחירים", to: "/manage/pricing", permission: "pricing" },

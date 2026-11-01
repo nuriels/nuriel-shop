@@ -7,7 +7,12 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Minus, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { cn } from "@/platform/ui";
-import { hospitalitySiteQuote, hospitalitySiteRequestBooking } from "../../api/website.functions";
+import {
+  hospitalitySiteQuote,
+  hospitalitySiteQuoteType,
+  hospitalitySiteRequestBooking,
+  hospitalitySiteRequestBookingType,
+} from "../../api/website.functions";
 import type { PublicUnit } from "../../types/website";
 import { AvailabilityCalendar, type DateRange } from "../components/AvailabilityCalendar";
 import { Photo } from "../components/Photo";
@@ -23,6 +28,13 @@ import {
   whatsappHref,
 } from "../lib/format";
 import type { BookSearch } from "../lib/booking";
+import {
+  findType,
+  listingId,
+  siteListing,
+  type ListingItem,
+  type TypeListing,
+} from "../lib/listing";
 import { unitCover } from "../lib/media";
 import { useSite } from "../lib/site-context";
 
@@ -42,17 +54,31 @@ export function BookingPage() {
   const { site } = useSite();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as BookSearch;
+  const listing = useMemo(() => siteListing(site), [site]);
   const units = site.units;
-  const [unit, setUnit] = useState<PublicUnit | undefined>(
-    () => findUnit(units, search.unit) ?? (units.length === 1 ? units[0] : undefined),
-  );
+  // הבחירה: יחידה או סוג חדר (קישור לחדר ששייך לסוג → הסוג)
+  const [selection, setSelection] = useState<ListingItem | undefined>(() => {
+    const byType = findType(site, search.type);
+    if (byType) return { kind: "type", type: byType };
+    const u = findUnit(units, search.unit);
+    if (u) {
+      const owner = listing.find(
+        (i) => i.kind === "type" && i.type.rooms.some((r) => r.id === u.id),
+      );
+      return owner ?? { kind: "unit", unit: u };
+    }
+    return listing.length === 1 ? listing[0] : undefined;
+  });
+  const roomType = selection?.kind === "type" ? selection.type : undefined;
+  // היחידה שמגדירה את המגבלות (בסוג — החדר הראשון; התפוסה — המקסימום של הסוג)
+  const unit = selection?.kind === "unit" ? selection.unit : roomType?.lead;
+  const capacity = roomType?.capacity ?? unit?.capacity ?? 20;
+  const preferredRoom = useRef<string | null>(null);
   const [range, setRange] = useState<DateRange>({
     from: search.from && search.from >= site.today ? search.from : null,
     to: search.from && search.to && search.to > search.from ? search.to : null,
   });
-  const [adults, setAdults] = useState(
-    Math.max(1, search.adults ?? Math.min(2, unit?.capacity ?? 2)),
-  );
+  const [adults, setAdults] = useState(Math.max(1, search.adults ?? Math.min(2, capacity)));
   const [children, setChildren] = useState(search.children ?? 0);
   const [step, setStep] = useState<"choose" | "details">("choose");
   const keyRef = useRef(newKey());
@@ -62,7 +88,7 @@ export function BookingPage() {
     void navigate({
       to: "/stay/book",
       search: {
-        ...(unit ? { unit: unit.slug } : {}),
+        ...(roomType ? { type: roomType.type.slug } : unit ? { unit: unit.slug } : {}),
         ...(range.from ? { from: range.from } : {}),
         ...(range.to ? { to: range.to } : {}),
         adults,
@@ -71,17 +97,17 @@ export function BookingPage() {
       replace: true,
       resetScroll: false,
     });
-  }, [unit, range.from, range.to, adults, children, navigate]);
+  }, [unit, roomType, range.from, range.to, adults, children, navigate]);
 
   // שינוי בבחירה = ניסיון חדש (מזהה בקשה חדש)
   useEffect(() => {
     keyRef.current = newKey();
-  }, [unit?.id, range.from, range.to, adults, children]);
+  }, [unit?.id, roomType?.type.id, range.from, range.to, adults, children]);
 
-  const maxAdults = Math.min(unit?.max_adults ?? unit?.capacity ?? 20, unit?.capacity ?? 20);
+  const maxAdults = Math.min(unit?.max_adults ?? capacity, capacity);
   const maxChildren = Math.min(
-    unit?.max_children ?? Math.max(0, (unit?.capacity ?? 20) - 1),
-    Math.max(0, (unit?.capacity ?? 20) - adults),
+    unit?.max_children ?? Math.max(0, capacity - 1),
+    Math.max(0, capacity - adults),
   );
   useEffect(() => {
     if (adults > maxAdults) setAdults(Math.max(1, maxAdults));
@@ -90,11 +116,27 @@ export function BookingPage() {
 
   const ready = !!unit && !!range.from && !!range.to;
   const quote = useQuery({
-    queryKey: ["hospitality", "site", "quote", unit?.id, range.from, range.to, adults, children],
-    queryFn: () =>
-      hospitalitySiteQuote({
-        data: { unitId: unit!.id, checkIn: range.from!, checkOut: range.to!, adults, children },
-      }),
+    queryKey: [
+      "hospitality",
+      "site",
+      "quote",
+      roomType ? `type:${roomType.type.id}` : unit?.id,
+      range.from,
+      range.to,
+      adults,
+      children,
+    ],
+    queryFn: async () => {
+      const stay = { checkIn: range.from!, checkOut: range.to!, adults, children };
+      // סוג חדר: המסד בוחר חדר פנוי (החדר מההצעה הקודמת קודם, כדי שהתנאים לא יתחלפו)
+      const q = roomType
+        ? await hospitalitySiteQuoteType({
+            data: { categoryId: roomType.type.id, preferredUnit: preferredRoom.current, ...stay },
+          })
+        : await hospitalitySiteQuote({ data: { unitId: unit!.id, ...stay } });
+      if (q.available) preferredRoom.current = q.unit_id;
+      return q;
+    },
     enabled: ready && site.booking_open,
     retry: false,
     staleTime: 30_000,
@@ -118,7 +160,14 @@ export function BookingPage() {
           {step === "choose" ? (
             <div className="space-y-12">
               <Field title={t.book.unit} index={1}>
-                <UnitPicker units={units} value={unit} onChange={(u) => setUnit(u)} />
+                <UnitPicker
+                  items={listing}
+                  value={selection}
+                  onChange={(i) => {
+                    preferredRoom.current = null;
+                    setSelection(i);
+                  }}
+                />
               </Field>
               <Field title={t.book.dates} index={2}>
                 {unit ? (
@@ -140,11 +189,11 @@ export function BookingPage() {
                       )}
                     </p>
                     <AvailabilityCalendar
-                      unitId={unit.id}
+                      {...(roomType ? { typeId: roomType.type.id } : { unitId: unit.id })}
                       today={site.today}
                       range={range}
                       onSelect={setRange}
-                      minNights={unit.min_nights}
+                      minNights={roomType?.minNights ?? unit.min_nights}
                     />
                   </>
                 ) : (
@@ -175,14 +224,18 @@ export function BookingPage() {
                     />
                   )}
                   {unit && (
-                    <p className="text-sm text-muted-foreground">
-                      {t.book.capacity(unit.capacity)}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{t.book.capacity(capacity)}</p>
                   )}
                 </div>
               </Field>
               <div className="lg:hidden">
-                <Summary unit={unit} quote={quote} adults={adults} children={children} />
+                <Summary
+                  unit={unit}
+                  name={roomType?.type.name ?? unit?.name}
+                  quote={quote}
+                  adults={adults}
+                  children={children}
+                />
               </div>
               <button
                 type="button"
@@ -199,6 +252,7 @@ export function BookingPage() {
           ) : (
             <GuestForm
               unit={unit!}
+              roomType={roomType}
               quote={q!}
               idempotencyKey={keyRef.current}
               onBack={() => setStep("choose")}
@@ -210,7 +264,13 @@ export function BookingPage() {
           )}
         </div>
         <aside className="hidden lg:sticky lg:top-28 lg:block lg:self-start">
-          <Summary unit={unit} quote={quote} adults={adults} children={children} />
+          <Summary
+            unit={unit}
+            name={roomType?.type.name ?? unit?.name}
+            quote={quote}
+            adults={adults}
+            children={children}
+          />
         </aside>
       </div>
     </PageFrame>
@@ -250,27 +310,32 @@ function Field({ title, index, children }: { title: string; index: number; child
 }
 
 function UnitPicker({
-  units,
+  items,
   value,
   onChange,
 }: {
-  units: PublicUnit[];
-  value: PublicUnit | undefined;
-  onChange: (u: PublicUnit) => void;
+  items: ListingItem[];
+  value: ListingItem | undefined;
+  onChange: (i: ListingItem) => void;
 }) {
   const t = useCopy();
   const { site } = useSite();
   return (
     <div role="radiogroup" aria-label={t.book.unit} className="grid gap-3 sm:grid-cols-2">
-      {units.map((u) => {
-        const selected = value?.id === u.id;
+      {items.map((i) => {
+        const id = listingId(i);
+        const selected = !!value && listingId(value) === id;
+        const lead = i.kind === "unit" ? i.unit : i.type.lead;
+        const name = i.kind === "unit" ? i.unit.name : i.type.type.name;
+        const capacity = i.kind === "unit" ? i.unit.capacity : i.type.capacity;
+        const price = i.kind === "unit" ? i.unit.base_price : i.type.fromPrice;
         return (
           <button
-            key={u.id}
+            key={id}
             type="button"
             role="radio"
             aria-checked={selected}
-            onClick={() => onChange(u)}
+            onClick={() => onChange(i)}
             className={cn(
               "flex items-center gap-4 rounded-[var(--radius)] border bg-card p-3 text-start transition-colors",
               selected
@@ -279,18 +344,22 @@ function UnitPicker({
             )}
           >
             <Photo
-              media={unitCover(u, site)}
-              alt={u.name}
+              media={unitCover(lead, site)}
+              alt={name}
               sizes="96px"
               className="size-20 shrink-0 rounded-sm"
             />
             <span className="min-w-0">
-              <span className="block font-medium">{u.name}</span>
+              <span className="block font-medium">{name}</span>
               <span className="block text-sm text-muted-foreground">
-                {t.units.guests(u.capacity)}
-                {u.base_price > 0 &&
-                  ` · ${t.facts.from}${money(u.base_price, site.business.currency)}`}
+                {t.units.guests(capacity)}
+                {price > 0 && ` · ${t.facts.from}${money(price, site.business.currency)}`}
               </span>
+              {i.kind === "type" && (
+                <span className="block text-xs text-muted-foreground">
+                  {t.units.roomsOfType(i.type.rooms.length)}
+                </span>
+              )}
             </span>
           </button>
         );
@@ -352,11 +421,13 @@ type QuoteState = ReturnType<typeof useQuery<Awaited<ReturnType<typeof hospitali
 
 function Summary({
   unit,
+  name,
   quote,
   adults,
   children,
 }: {
   unit: PublicUnit | undefined;
+  name: string | undefined;
   quote: QuoteState;
   adults: number;
   children: number;
@@ -371,7 +442,7 @@ function Summary({
       <h2 className="font-display text-2xl">{t.book.summary}</h2>
       {unit && (
         <p className="mt-2 text-sm text-muted-foreground">
-          {unit.name} · {t.my.guestsText(adults, children)}
+          {name ?? unit.name} · {t.my.guestsText(adults, children)}
         </p>
       )}
       <div className="mt-5 border-t border-border pt-5" aria-live="polite">
@@ -483,12 +554,14 @@ function QuoteDetails({
 
 function GuestForm({
   unit,
+  roomType,
   quote,
   idempotencyKey,
   onBack,
   onTermsChanged,
 }: {
   unit: PublicUnit;
+  roomType: TypeListing | undefined;
   quote: Awaited<ReturnType<typeof hospitalitySiteQuote>>;
   idempotencyKey: string;
   onBack: () => void;
@@ -505,25 +578,29 @@ function GuestForm({
   const [marketing, setMarketing] = useState(false);
   const [touched, setTouched] = useState(false);
   const send = useMutation({
-    mutationFn: () =>
-      hospitalitySiteRequestBooking({
-        data: {
-          unitId: unit.id,
-          checkIn: quote.check_in,
-          checkOut: quote.check_out,
-          adults: quote.adults,
-          children: quote.children,
-          fullName,
-          phone,
-          email,
-          specialRequests: requests,
-          idempotencyKey,
-          policyHash: quote.policy_hash,
-          policyAccepted: accept,
-          marketingConsent: marketing,
-          language: t.locale,
-        },
-      }),
+    mutationFn: () => {
+      const guest = {
+        checkIn: quote.check_in,
+        checkOut: quote.check_out,
+        adults: quote.adults,
+        children: quote.children,
+        fullName,
+        phone,
+        email,
+        specialRequests: requests,
+        idempotencyKey,
+        policyHash: quote.policy_hash,
+        policyAccepted: accept,
+        marketingConsent: marketing,
+        language: t.locale,
+      };
+      // סוג חדר: המסד בוחר חדר פנוי מהסוג (החדר מההצעה קודם) באותה טרנזקציה
+      return roomType
+        ? hospitalitySiteRequestBookingType({
+            data: { categoryId: roomType.type.id, preferredUnit: quote.unit_id, ...guest },
+          })
+        : hospitalitySiteRequestBooking({ data: { unitId: unit.id, ...guest } });
+    },
     onSuccess: (r) => {
       void navigate({
         to: "/stay/booking-received",
@@ -547,8 +624,8 @@ function GuestForm({
     <form onSubmit={submit} noValidate className="max-w-xl space-y-6">
       <div className="lg:hidden">
         <p className="text-sm text-muted-foreground">
-          {unit.name} · {stayText(quote.check_in, quote.check_out, t.locale)} ·{" "}
-          {money(Number(quote.total), quote.currency)}
+          {roomType?.type.name ?? unit.name} · {stayText(quote.check_in, quote.check_out, t.locale)}{" "}
+          · {money(Number(quote.total), quote.currency)}
         </p>
       </div>
       <h2 className="text-xl font-medium">{t.book.details}</h2>

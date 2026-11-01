@@ -10,6 +10,7 @@ import { PriceFrom } from "../components/PriceFrom";
 import { SectionHeading } from "../components/SectionHeading";
 import { useCopy } from "../copy";
 import { bedsText, unitFacts } from "../lib/format";
+import { listingId, siteListing, type TypeListing } from "../lib/listing";
 import { unitCover } from "../lib/media";
 import { useSite } from "../lib/site-context";
 
@@ -25,7 +26,7 @@ export function Units({
   const t = useCopy();
   const { site, theme } = useSite();
   const c = section?.content ?? {};
-  const units = site.units.filter((u) => u.id !== exclude);
+  const units = siteListing(site).filter((i) => listingId(i) !== exclude);
   if (exclude && units.length === 0) return null;
   const variant = theme.layout.unitCards;
   return (
@@ -57,9 +58,13 @@ export function Units({
                   : "sm:grid-cols-2 lg:grid-cols-3",
             )}
           >
-            {units.map((u) => (
-              <li key={u.id}>
-                <UnitCard unit={u} />
+            {units.map((i) => (
+              <li key={listingId(i)}>
+                {i.kind === "unit" ? (
+                  <UnitCard unit={i.unit} />
+                ) : (
+                  <UnitCard unit={i.type.lead} roomType={i.type} />
+                )}
               </li>
             ))}
           </ul>
@@ -69,24 +74,33 @@ export function Units({
   );
 }
 
-function UnitCard({ unit }: { unit: PublicUnit }) {
+function UnitCard({ unit, roomType }: { unit: PublicUnit; roomType?: TypeListing }) {
   const t = useCopy();
   const { site, theme } = useSite();
   const variant = theme.layout.unitCards;
-  const type =
-    unit.kind === "whole_property"
+  const type = roomType
+    ? t.units.roomsOfType(roomType.rooms.length)
+    : unit.kind === "whole_property"
       ? t.units.wholeProperty
       : unit.unit_type
         ? t.unitTypes[unit.unit_type]
         : "";
+  const name = roomType?.type.name ?? unit.name;
+  const facts = roomType
+    ? [t.units.guests(roomType.capacity), ...unitFacts(unit, t).slice(1)]
+    : unitFacts(unit, t);
+  const price = roomType ? roomType.fromPrice : unit.base_price;
+  const minNights = roomType ? roomType.minNights : unit.min_nights;
+  const linkProps = roomType
+    ? ({ to: "/stay/rooms/$typeSlug", params: { typeSlug: roomType.type.slug } } as const)
+    : ({ to: "/stay/units/$unitSlug", params: { unitSlug: unit.slug } } as const);
   const beds = bedsText(unit.beds, t);
   const landscape = variant === "landscape";
   const minimal = variant === "minimal";
   const soft = variant === "soft";
   return (
     <Link
-      to="/stay/units/$unitSlug"
-      params={{ unitSlug: unit.slug }}
+      {...linkProps}
       className={cn(
         "group block h-full overflow-hidden transition-transform duration-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring",
         minimal
@@ -98,7 +112,7 @@ function UnitCard({ unit }: { unit: PublicUnit }) {
     >
       <Photo
         media={unitCover(unit, site)}
-        alt={unit.name}
+        alt={name}
         sizes={
           landscape
             ? "(min-width: 1024px) 28vw, (min-width: 640px) 50vw, 100vw"
@@ -116,8 +130,8 @@ function UnitCard({ unit }: { unit: PublicUnit }) {
       />
       <div className={cn("flex flex-col gap-3", minimal ? "pt-5" : "px-6 pt-6 pb-7")}>
         {type && <p className="text-xs font-medium text-[var(--site-gold-ink)]">{type}</p>}
-        <h3 className="font-display text-2xl leading-snug">{unit.name}</h3>
-        <p className="text-sm text-muted-foreground">{unitFacts(unit, t).join(" · ")}</p>
+        <h3 className="font-display text-2xl leading-snug">{name}</h3>
+        <p className="text-sm text-muted-foreground">{facts.join(" · ")}</p>
         {beds && <p className="text-sm text-muted-foreground">{beds}</p>}
         <div
           className={cn(
@@ -126,10 +140,10 @@ function UnitCard({ unit }: { unit: PublicUnit }) {
           )}
         >
           <p>
-            <PriceFrom price={unit.base_price} currency={site.business.currency} />
-            {unit.min_nights > 1 && (
+            <PriceFrom price={price} currency={site.business.currency} />
+            {minNights > 1 && (
               <span className="block text-xs text-muted-foreground">
-                {t.facts.minNights(unit.min_nights)}
+                {t.facts.minNights(minNights)}
               </span>
             )}
           </p>
