@@ -107,7 +107,6 @@ function Shell({
         items={items}
         badges={badges}
         businessName={context.business.name}
-        roleText={roleText}
         onSignOut={onSignOut}
       />
       <div className="flex min-h-dvh min-w-0 flex-col">

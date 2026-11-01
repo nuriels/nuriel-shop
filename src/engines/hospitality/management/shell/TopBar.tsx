@@ -47,11 +47,10 @@ export function TopBar({
     <header className="sticky top-0 z-30 border-b bg-[color-mix(in_srgb,var(--background)_88%,transparent)] backdrop-blur">
       <div className="flex min-h-16 items-center gap-2 px-4 md:px-8">
         <div className="min-w-0 flex-1">
-          {/* טלפון: שם העסק והתפקיד; מחשב: המסך הנוכחי (שם העסק והתפקיד בסרגל הצד) */}
+          {/* טלפון: שם העסק; מחשב: העסק / המסך הנוכחי. התפקיד — פעם אחת בעמוד, בכל רוחב */}
           <p className="truncate text-[15px] font-bold text-[var(--hm-lagoon-900)] md:hidden">
             {ctx.business.name}
           </p>
-          <p className="text-xs text-muted-foreground md:hidden">{roleText}</p>
           <p className="hidden truncate text-sm text-muted-foreground md:block">
             <span>{ctx.business.name}</span>
             {current && current.key !== "dashboard" && (
@@ -63,6 +62,7 @@ export function TopBar({
               </>
             )}
           </p>
+          <p className="text-xs text-muted-foreground">{roleText}</p>
         </div>
         <button
           type="button"
@@ -139,11 +139,12 @@ function NewMenu() {
   ].filter(Boolean) as { key: string; label: string; icon: typeof Plus; go: () => void }[];
   if (items.length === 0) return null;
   return (
-    <DropdownMenu dir="rtl">
+    <DropdownMenu dir="rtl" modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button className="min-h-10 gap-1.5 rounded-xl px-3 shadow-sm" aria-label="יצירה חדשה">
+        {/* השם הנגיש = הטקסט הנראה ("חדש"); בטלפון רק האייקון נראה והטקסט לקוראי מסך (WCAG 2.5.3) */}
+        <Button className="min-h-10 gap-1.5 rounded-xl px-3 shadow-sm">
           <Plus className="size-4" aria-hidden="true" />
-          <span className="hidden sm:inline">חדש</span>
+          <span className="max-sm:sr-only">חדש</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">

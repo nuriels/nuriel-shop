@@ -80,13 +80,11 @@ export function SideNav({
   items,
   badges,
   businessName,
-  roleText,
   onSignOut,
 }: {
   items: NavItem[];
   badges: NavBadges;
   businessName: string;
-  roleText: string;
   onSignOut: () => void;
 }) {
   return (
@@ -118,7 +116,7 @@ export function SideNav({
           </span>
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-white">{businessName}</span>
-            <span className="block text-xs text-[var(--hm-sidebar-muted)]">{roleText}</span>
+            <span className="block text-xs text-[var(--hm-sidebar-muted)]">ניהול העסק</span>
           </span>
         </div>
         <nav aria-label="ניווט ראשי" className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">

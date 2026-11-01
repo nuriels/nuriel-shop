@@ -369,7 +369,8 @@ test("08 zimmer complex owner: the property page — 'rent the whole property' w
   await card.getByRole("button", { name: "יחידות לא פעילות (1)" }).click();
   await expect(unitRow(page, "סוויטת הנוף")).toContainText("לא פעילה");
   await expect(unitRow(page, "כל המתחם — צימרי הגליל")).toContainText("הזמנה אחת ל-3 יחידות");
-  await expect(page.getByTestId("units-limit")).toHaveText("3 מתוך 5 יחידות פעילות בחבילה");
+  // מתחם הצימרים בהדגמה — על "פרימיום" (ללא הגבלת יחידות; "בסיסית" מאז E3 — עד 3)
+  await expect(page.getByTestId("units-limit")).toHaveText("3 יחידות פעילות (ללא הגבלה בחבילה)");
   await pause(page);
   await shot(page, p, "24-zimmer-list-inactive");
   await finish(context, p, "08-zimmer-property-whole-inactive", [page]);

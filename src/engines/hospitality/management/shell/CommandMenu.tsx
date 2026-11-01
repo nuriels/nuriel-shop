@@ -11,7 +11,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
 } from "@/platform/ui";
 import type { NavItem } from "../lib/nav";
 import { useManagement } from "./management-context";
@@ -61,7 +60,6 @@ export function CommandMenu({
                   חיפוש &quot;{q}&quot; בהזמנות
                 </CommandItem>
               </CommandGroup>
-              <CommandSeparator />
             </>
           )}
           <CommandGroup heading="פעולות">
@@ -100,7 +98,6 @@ export function CommandMenu({
               </CommandItem>
             )}
           </CommandGroup>
-          <CommandSeparator />
           <CommandGroup heading="מסכים">
             {items.map((item) => {
               const Icon = NAV_ICONS[item.key];
