@@ -169,9 +169,11 @@ test.beforeAll(async ({ request }, testInfo) => {
     asPlatform(`SELECT hospitality.admin_create_site('${slug}', 'אתר בדיקה ${key}')`);
     const id = sql(`SELECT id FROM public.tenants WHERE slug = '${slug}'`);
     ids[key as SiteKey] = id;
-    if (key === "foreign") addStaff(id, OTHER, `h2e_other_${project}${suffix}`, true);
-    else addStaff(id, OWNER, `h2e_owner_${key}_${project}${suffix}`, true);
-    if (key === "main") addStaff(id, MANAGER, `h2e_manager_${project}${suffix}`, false);
+    if (key === "foreign")
+      addStaff(id, OTHER, `h2e_other_${project}${suffix.replace("-", "_")}`, true);
+    else addStaff(id, OWNER, `h2e_owner_${key}_${project}${suffix.replace("-", "_")}`, true);
+    if (key === "main")
+      addStaff(id, MANAGER, `h2e_manager_${project}${suffix.replace("-", "_")}`, false);
     sql(`INSERT INTO public.tenant_feature_flags (tenant_id, key, enabled) VALUES
          ('${id}', 'hospitality_backend_enabled', true), ('${id}', 'hospitality_management_enabled', true)`);
   }

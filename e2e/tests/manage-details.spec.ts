@@ -133,9 +133,11 @@ test.beforeAll(async ({ request }, testInfo) => {
     asPlatform(`SELECT hospitality.admin_create_site('${slug}', 'אתר בדיקה ${key}')`);
     const id = sql(`SELECT id FROM public.tenants WHERE slug = '${slug}'`);
     ids[key as SiteKey] = id;
-    if (key === "foreign") addStaff(id, OTHER, `h2d_other_${project}${suffix}`, true);
-    else addStaff(id, OWNER, `h2d_owner_${key}_${project}${suffix}`, true);
-    if (key === "main") addStaff(id, MANAGER, `h2d_manager_${project}${suffix}`, false);
+    if (key === "foreign")
+      addStaff(id, OTHER, `h2d_other_${project}${suffix.replace("-", "_")}`, true);
+    else addStaff(id, OWNER, `h2d_owner_${key}_${project}${suffix.replace("-", "_")}`, true);
+    if (key === "main")
+      addStaff(id, MANAGER, `h2d_manager_${project}${suffix.replace("-", "_")}`, false);
     sql(`INSERT INTO public.tenant_feature_flags (tenant_id, key, enabled) VALUES
          ('${id}', 'hospitality_backend_enabled', true), ('${id}', 'hospitality_management_enabled', true)`);
   }
@@ -350,7 +352,11 @@ test("private arrival info: separate save, hidden by default, logged without val
   await card.getByLabel("למי המידע").selectOption({ label: "צימר הזית" });
   await card.getByLabel("קוד הכניסה").fill("1111");
   await card.getByRole("button", { name: "שמירת המידע הפרטי" }).click();
-  await expect(page.getByText("המידע הפרטי נשמר")).toHaveCount(1);
+  await expect
+    .poll(() =>
+      sql(`SELECT count(*) FROM hospitality.arrival_info WHERE property_id = '${property}'`),
+    )
+    .toBe("2");
   await card.getByRole("button", { name: "הצגת הקודים" }).click();
   await expect(card.getByLabel("קוד הכניסה")).toHaveAttribute("type", "text");
 

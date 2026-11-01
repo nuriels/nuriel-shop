@@ -199,20 +199,29 @@ test("flag on: each owner sees and writes only its own site", async () => {
     status: 200,
     json: [],
   });
-  const foreign = await rest("amenities", {
+  // RLS on a table staff still write directly (promotions); the catalogue, prices and policies
+  // are written only through database functions since 2c.1 / 2d / 2f
+  const foreign = await rest("promotions", {
     token: tokens.ownerA,
     site: siteA,
     method: "POST",
-    body: { tenant_id: siteB, name: "חדירה" },
+    body: { tenant_id: siteB, name: "חדירה", discount_kind: "percent", value: 5, is_active: false },
   });
   expect(foreign.status).toBe(403);
-  const own = await rest("amenities", {
+  const own = await rest("promotions", {
+    token: tokens.ownerA,
+    site: siteA,
+    method: "POST",
+    body: { tenant_id: siteA, name: "בריכה", discount_kind: "percent", value: 5, is_active: false },
+  });
+  expect(own.status).toBe(201);
+  const direct = await rest("amenities", {
     token: tokens.ownerA,
     site: siteA,
     method: "POST",
     body: { tenant_id: siteA, name: "בריכה" },
   });
-  expect(own.status).toBe(201);
+  expect(direct.status).toBe(403);
 });
 
 test("guests and store members get nothing; a guest cannot become a customer of the site", async () => {
