@@ -88,6 +88,46 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} כיבה/תה השכרה של כל המתחם ${target}`;
     case "catalog.reordered":
       return `${actor} שינה/תה את סדר התצוגה`;
+    case "media.added":
+      return `${actor} הוסיף/ה תמונה או סרטון`;
+    case "media.replaced":
+      return `${actor} החליף/ה תמונה`;
+    case "media.deleted":
+      return `${actor} מחק/ה תמונה או סרטון`;
+    case "media.cover_set":
+      return `${actor} בחר/ה תמונה ראשית`;
+    case "media.alt_updated":
+      return `${actor} עדכן/ה טקסט חלופי לתמונה`;
+    case "media.reordered":
+      return `${actor} שינה/תה את סדר התמונות`;
+    case "pricing.unit_prices":
+      return `${actor} עדכן/ה את המחירים של ${target}`;
+    case "pricing.rule_created":
+      return `${actor} הוסיף/ה כלל מחיר ${target}`;
+    case "pricing.rule_updated":
+      return `${actor} עדכן/ה את כלל המחיר ${target}`;
+    case "pricing.rule_deleted":
+      return `${actor} מחק/ה את כלל המחיר ${target}`;
+    case "policies.created":
+      return `${actor} יצר/ה מדיניות ביטול ${target}`;
+    case "policies.updated":
+      return `${actor} עדכן/ה את מדיניות הביטול ${target}`;
+    case "policies.default_set":
+      return `${actor} קבע/ה את ${target} כמדיניות ברירת המחדל`;
+    case "policies.archived":
+      return `${actor} העביר/ה לארכיון את מדיניות הביטול ${target}`;
+    case "calendar.block_created":
+      return `${actor} חסם/ה תאריכים ב${target}`;
+    case "calendar.block_updated":
+      return `${actor} שינה/תה חסימה ב${target}`;
+    case "calendar.block_released":
+      return `${actor} שחרר/ה חסימה ב${target}`;
+    case "guests.notes_updated":
+      return `${actor} עדכן/ה הערות על האורח ${target}`;
+    case "guests.exported":
+      return `${actor} ייצא/ה את המידע על האורח ${target}`;
+    case "guests.anonymized":
+      return `${actor} מחק/ה פרטים אישיים של אורח`;
     default:
       return `${actor}: ${entry.action}`;
   }

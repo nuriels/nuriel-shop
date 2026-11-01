@@ -204,3 +204,11 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Functions | `staff_bookings` (tabs, counts, search, masked contact), `staff_booking_detail` (nights, saved policy, house rules, history, emails; full contact only with `guests`), helpers `_booking_state`, `_booking_tab` — read only; the actions are the Stage 1f functions |
 | Rollback | `supabase/rollbacks/20261102100000_hosp_bookings_staff.down.sql` — drops them; exact migration-15 schema (`rollback-check.sh`, M16) |
 | Production | nothing to configure |
+
+## 20261102110000_hosp_guests.sql — Stage 2j (hospitality)
+
+| | |
+|---|---|
+| Functions | `staff_guests`, `staff_guest_detail`, `update_guest_notes` (`guests`), `export_guest_logged` (`guests.privacy`, action log); `anonymize_guest` redefined with an action-log entry; `REVOKE EXECUTE ON export_guest FROM authenticated` (export only through the logged function) |
+| Rollback | `supabase/rollbacks/20261102110000_hosp_guests.down.sql` — exact migration-16 schema (`rollback-check.sh`, M17) |
+| Production | nothing to configure |

@@ -227,6 +227,7 @@ describe("navigation", () => {
       "photos",
       "pricing",
       "policies",
+      "guests",
       "settings",
       "team",
     ]);

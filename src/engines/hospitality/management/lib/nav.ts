@@ -23,6 +23,7 @@ export interface NavItem {
     | "/manage"
     | "/manage/calendar"
     | "/manage/bookings"
+    | "/manage/guests"
     | "/manage/settings"
     | "/manage/team"
     | "/manage/units"
@@ -58,7 +59,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: "photos", label: "תמונות", to: "/manage/photos", permission: "media" },
   { key: "pricing", label: "מחירים", to: "/manage/pricing", permission: "pricing" },
   { key: "policies", label: "מדיניות ביטול", to: "/manage/policies", permission: "policies" },
-  { key: "guests", label: "אורחים", permission: "guests" },
+  {
+    key: "guests",
+    label: "אורחים",
+    to: "/manage/guests",
+    permission: "guests",
+    also: ["/manage/guests/"],
+  },
   { key: "emails", label: "מיילים", permission: "bookings" },
   { key: "settings", label: "הגדרות העסק", to: "/manage/settings", permission: "settings" },
   { key: "team", label: "צוות ניהול", to: "/manage/team", permission: "staff.managers" },

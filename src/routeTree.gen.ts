@@ -44,6 +44,7 @@ import { Route as CourierTokenRouteImport } from './routes/courier.$token'
 import { Route as ManageIndexRouteImport } from './routes/manage.index'
 import { Route as ManageBookingsRouteImport } from './routes/manage.bookings'
 import { Route as ManageCalendarRouteImport } from './routes/manage.calendar'
+import { Route as ManageGuestsRouteImport } from './routes/manage.guests'
 import { Route as ManagePhotosRouteImport } from './routes/manage.photos'
 import { Route as ManagePoliciesRouteImport } from './routes/manage.policies'
 import { Route as ManagePricingRouteImport } from './routes/manage.pricing'
@@ -76,6 +77,7 @@ import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$
 import { Route as CheckoutGrowOrderIdRouteImport } from './routes/checkout_.grow.$orderId'
 import { Route as ManageBookingsBookingIdRouteImport } from './routes/manage.bookings_.$bookingId'
 import { Route as ManageBookingsNewRouteImport } from './routes/manage.bookings_.new'
+import { Route as ManageGuestsGuestIdRouteImport } from './routes/manage.guests_.$guestId'
 import { Route as ManagePropertiesPropertyIdRouteImport } from './routes/manage.properties.$propertyId'
 import { Route as ManageUnitsUnitIdRouteImport } from './routes/manage.units_.$unitId'
 import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
@@ -255,6 +257,11 @@ const ManageCalendarRoute = ManageCalendarRouteImport.update({
   path: '/calendar',
   getParentRoute: () => ManageRoute,
 } as any)
+const ManageGuestsRoute = ManageGuestsRouteImport.update({
+  id: '/guests',
+  path: '/guests',
+  getParentRoute: () => ManageRoute,
+} as any)
 const ManagePhotosRoute = ManagePhotosRouteImport.update({
   id: '/photos',
   path: '/photos',
@@ -417,6 +424,11 @@ const ManageBookingsNewRoute = ManageBookingsNewRouteImport.update({
   path: '/bookings/new',
   getParentRoute: () => ManageRoute,
 } as any)
+const ManageGuestsGuestIdRoute = ManageGuestsGuestIdRouteImport.update({
+  id: '/guests_/$guestId',
+  path: '/guests/$guestId',
+  getParentRoute: () => ManageRoute,
+} as any)
 const ManagePropertiesPropertyIdRoute =
   ManagePropertiesPropertyIdRouteImport.update({
     id: '/properties/$propertyId',
@@ -470,6 +482,7 @@ export interface FileRoutesByFullPath {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
+  '/manage/guests': typeof ManageGuestsRoute
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
@@ -503,6 +516,7 @@ export interface FileRoutesByFullPath {
   '/checkout/grow/$orderId': typeof CheckoutGrowOrderIdRoute
   '/manage/bookings/$bookingId': typeof ManageBookingsBookingIdRoute
   '/manage/bookings/new': typeof ManageBookingsNewRoute
+  '/manage/guests/$guestId': typeof ManageGuestsGuestIdRoute
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
@@ -541,6 +555,7 @@ export interface FileRoutesByTo {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
+  '/manage/guests': typeof ManageGuestsRoute
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
@@ -574,6 +589,7 @@ export interface FileRoutesByTo {
   '/checkout/grow/$orderId': typeof CheckoutGrowOrderIdRoute
   '/manage/bookings/$bookingId': typeof ManageBookingsBookingIdRoute
   '/manage/bookings/new': typeof ManageBookingsNewRoute
+  '/manage/guests/$guestId': typeof ManageGuestsGuestIdRoute
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
@@ -614,6 +630,7 @@ export interface FileRoutesById {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
+  '/manage/guests': typeof ManageGuestsRoute
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
@@ -647,6 +664,7 @@ export interface FileRoutesById {
   '/checkout_/grow/$orderId': typeof CheckoutGrowOrderIdRoute
   '/manage/bookings_/$bookingId': typeof ManageBookingsBookingIdRoute
   '/manage/bookings_/new': typeof ManageBookingsNewRoute
+  '/manage/guests_/$guestId': typeof ManageGuestsGuestIdRoute
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/units_/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
@@ -688,6 +706,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/bookings'
     | '/manage/calendar'
+    | '/manage/guests'
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
@@ -721,6 +740,7 @@ export interface FileRouteTypes {
     | '/checkout/grow/$orderId'
     | '/manage/bookings/$bookingId'
     | '/manage/bookings/new'
+    | '/manage/guests/$guestId'
     | '/manage/properties/$propertyId'
     | '/manage/units/$unitId'
     | '/platform/customers/$tenantId'
@@ -759,6 +779,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/bookings'
     | '/manage/calendar'
+    | '/manage/guests'
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
@@ -792,6 +813,7 @@ export interface FileRouteTypes {
     | '/checkout/grow/$orderId'
     | '/manage/bookings/$bookingId'
     | '/manage/bookings/new'
+    | '/manage/guests/$guestId'
     | '/manage/properties/$propertyId'
     | '/manage/units/$unitId'
     | '/platform/customers/$tenantId'
@@ -831,6 +853,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/bookings'
     | '/manage/calendar'
+    | '/manage/guests'
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
@@ -864,6 +887,7 @@ export interface FileRouteTypes {
     | '/checkout_/grow/$orderId'
     | '/manage/bookings_/$bookingId'
     | '/manage/bookings_/new'
+    | '/manage/guests_/$guestId'
     | '/manage/properties/$propertyId'
     | '/manage/units_/$unitId'
     | '/platform_/customers/$tenantId'
@@ -1176,6 +1200,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageCalendarRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/guests': {
+      id: '/manage/guests'
+      path: '/guests'
+      fullPath: '/manage/guests'
+      preLoaderRoute: typeof ManageGuestsRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/photos': {
       id: '/manage/photos'
       path: '/photos'
@@ -1400,6 +1431,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageBookingsNewRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/guests_/$guestId': {
+      id: '/manage/guests_/$guestId'
+      path: '/guests/$guestId'
+      fullPath: '/manage/guests/$guestId'
+      preLoaderRoute: typeof ManageGuestsGuestIdRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/properties/$propertyId': {
       id: '/manage/properties/$propertyId'
       path: '/properties/$propertyId'
@@ -1427,6 +1465,7 @@ declare module '@tanstack/react-router' {
 interface ManageRouteChildren {
   ManageBookingsRoute: typeof ManageBookingsRoute
   ManageCalendarRoute: typeof ManageCalendarRoute
+  ManageGuestsRoute: typeof ManageGuestsRoute
   ManagePhotosRoute: typeof ManagePhotosRoute
   ManagePoliciesRoute: typeof ManagePoliciesRoute
   ManagePricingRoute: typeof ManagePricingRoute
@@ -1436,6 +1475,7 @@ interface ManageRouteChildren {
   ManageIndexRoute: typeof ManageIndexRoute
   ManageBookingsBookingIdRoute: typeof ManageBookingsBookingIdRoute
   ManageBookingsNewRoute: typeof ManageBookingsNewRoute
+  ManageGuestsGuestIdRoute: typeof ManageGuestsGuestIdRoute
   ManagePropertiesPropertyIdRoute: typeof ManagePropertiesPropertyIdRoute
   ManageUnitsUnitIdRoute: typeof ManageUnitsUnitIdRoute
 }
@@ -1443,6 +1483,7 @@ interface ManageRouteChildren {
 const ManageRouteChildren: ManageRouteChildren = {
   ManageBookingsRoute: ManageBookingsRoute,
   ManageCalendarRoute: ManageCalendarRoute,
+  ManageGuestsRoute: ManageGuestsRoute,
   ManagePhotosRoute: ManagePhotosRoute,
   ManagePoliciesRoute: ManagePoliciesRoute,
   ManagePricingRoute: ManagePricingRoute,
@@ -1452,6 +1493,7 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManageIndexRoute: ManageIndexRoute,
   ManageBookingsBookingIdRoute: ManageBookingsBookingIdRoute,
   ManageBookingsNewRoute: ManageBookingsNewRoute,
+  ManageGuestsGuestIdRoute: ManageGuestsGuestIdRoute,
   ManagePropertiesPropertyIdRoute: ManagePropertiesPropertyIdRoute,
   ManageUnitsUnitIdRoute: ManageUnitsUnitIdRoute,
 }

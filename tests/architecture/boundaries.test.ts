@@ -194,6 +194,8 @@ describe("architecture: dependency boundaries", () => {
       "src/routes/manage.bookings_.$bookingId.tsx",
       "src/routes/manage.bookings_.new.tsx",
       "src/routes/manage.calendar.tsx",
+      "src/routes/manage.guests.tsx",
+      "src/routes/manage.guests_.$guestId.tsx",
       "src/routes/manage.index.tsx",
       "src/routes/manage.photos.tsx",
       "src/routes/manage.policies.tsx",
@@ -268,7 +270,7 @@ describe("architecture: server-function ownership", () => {
 
   it("Hospitality server functions live only in src/engines/hospitality/{server,api}", () => {
     const hosp = serverFnFiles.filter((f) => registry.ownerOf(f) === "hospitality");
-    expect(hosp.length).toBe(14); // + details (2d), media (2e), pricing (2f), calendar (3a), platform-admin (P1), bookings (2h) in api/
+    expect(hosp.length).toBe(15); // + details (2d), media (2e), pricing (2f), calendar (3a), platform-admin (P1), bookings (2h), guests (2j) in api/
     // api/ = נקראות מהדפדפן (מחוץ ל-server/, import protection); server/ = בלי ממשק עדיין
     for (const f of hosp)
       expect(f).toMatch(/^src\/engines\/hospitality\/(server|api)\/[\w-]+\.functions\.ts$/);

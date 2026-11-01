@@ -56,6 +56,7 @@ export function BookingPage() {
 }
 
 function Booking({ b }: { b: BookingDetail }) {
+  const ctx = useManagement();
   const refresh = useBookingRefresh(b.id);
   const [error, setError] = useState<string | null>(null);
   const [declining, setDeclining] = useState(false);
@@ -202,7 +203,17 @@ function Booking({ b }: { b: BookingDetail }) {
           <p className="text-sm text-muted-foreground">פרטי האורח נמחקו לבקשתו.</p>
         ) : (
           <div className="flex flex-col gap-2 text-sm">
-            <p className="font-medium">{b.guest.name}</p>
+            {ctx.permissions["guests"] ? (
+              <Link
+                to="/manage/guests/$guestId"
+                params={{ guestId: b.guest.id }}
+                className="font-medium text-primary hover:underline"
+              >
+                {b.guest.name}
+              </Link>
+            ) : (
+              <p className="font-medium">{b.guest.name}</p>
+            )}
             {b.guest.phone && (
               <p className="flex items-center gap-2">
                 <Phone className="size-4 text-muted-foreground" aria-hidden="true" />
