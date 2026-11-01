@@ -293,3 +293,12 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Function | `admin_site_theme(_tenant_id, _theme)` — platform admin only: creates the business's first site draft in the chosen theme (luxury / nature / modern / romantic; every section, content from the business data). Only before the first design: a business that already has a draft or a published version is never changed. Platform audit log (`hosp_site_theme`). No existing function changed |
 | Rollback | `supabase/rollbacks/20261103100000_hosp_site_theme.down.sql` — drops the function (drafts it created stay as ordinary drafts); exact migration-25 schema (`rollback-check.sh`, M26) |
 | Production | nothing to configure |
+
+## 20261103110000_hosp_channel_alerts.sql — D3, conflict emails and the occupancy source
+
+| | |
+|---|---|
+| Trigger | `channel_conflicts_notify` (AFTER UPDATE OF conflicts ON `channel_calendars`): a conflict not in the previous sync → one `channel_conflict` email per owner address (existing outbox; unit, channel, dates only — no guest details; `echo_like` when every new conflict is exactly the dates of our own booking / block) + activity log `channels.conflict`. Dedupe: the same conflict set at most once a day. The sync function itself is unchanged; no booking is ever modified |
+| Function | `_block_json` — adds `synced` and `channel` (additive; STABLE instead of IMMUTABLE because it reads the calendar's channel) |
+| Rollback | `supabase/rollbacks/20261103110000_hosp_channel_alerts.down.sql` — drops the trigger and its function, restores `_block_json` of migration 14 exactly; exact migration-26 schema (`rollback-check.sh`, M27) |
+| Production | nothing to configure (the worker already sends the outbox) |

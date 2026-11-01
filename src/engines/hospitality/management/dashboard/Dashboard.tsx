@@ -7,6 +7,7 @@ import { CHECKLIST_STEPS, checklistProgress } from "../lib/checklist";
 import { formatDate, usageText } from "../lib/format";
 import { useManagement } from "../shell/management-context";
 import { BookingsCard } from "./BookingsCard";
+import { ChannelAlertsCard } from "./ChannelAlertsCard";
 import { TodayCard } from "./TodayCard";
 import { UnitsCard } from "./UnitsCard";
 
@@ -21,6 +22,8 @@ export function Dashboard() {
         </p>
       </div>
       {ctx.permissions["bookings"] && <TodayCard />}
+      {/* D3: התנגשויות ויומנים שלא מסתנכרנים — רק כשיש מה לטפל */}
+      {ctx.permissions["bookings"] && <ChannelAlertsCard />}
       {ctx.permissions["bookings"] && <BookingsCard />}
       <SetupChecklist />
       {ctx.permissions["catalog"] && <UnitsCard />}

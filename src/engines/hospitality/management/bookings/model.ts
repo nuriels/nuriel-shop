@@ -160,4 +160,5 @@ export const EMAIL_EVENT: Record<string, string> = {
   cancellation_requested: "לעסק: בקשת ביטול",
   cancelled_by_guest: "לעסק: האורח ביטל",
   request_withdrawn: "לעסק: הבקשה נמשכה",
+  channel_conflict: "לעסק: התנגשות ביומן חיצוני",
 };

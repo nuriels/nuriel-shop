@@ -89,7 +89,15 @@ export const STATUS_LABELS: Record<BookingStatus, string> = {
   no_show: "לא הגיעו",
 };
 /** קבוצה לצבע / לסינון */
-export type Tone = "pending" | "confirmed" | "staying" | "past" | "cancelled" | "block";
+export type Tone =
+  | "pending"
+  | "confirmed"
+  | "staying"
+  | "past"
+  | "cancelled"
+  | "block"
+  /** D3: תאריכים מסנכרון יומן חיצוני (Airbnb / Booking.com …) */
+  | "external";
 export const toneOf = (s: BookingStatus): Tone =>
   s === "pending_approval" || s === "pending_payment" || s === "cancel_requested"
     ? "pending"
@@ -107,7 +115,50 @@ export const TONE_LABELS: Record<Tone, string> = {
   past: "עזבו",
   cancelled: "בוטלה",
   block: "חסום",
+  external: "מיומן חיצוני",
 };
+
+// ---------- מקור התפוסה (D3) ----------
+
+export const CHANNEL_LABELS: Record<string, string> = {
+  airbnb: "Airbnb",
+  booking: "Booking.com",
+  vrbo: "Vrbo",
+  google: "Google",
+  other: "יומן חיצוני",
+};
+
+const BOOKING_SOURCE_LABELS: Record<string, string> = {
+  site: "האתר",
+  phone: "טלפון",
+  walk_in: "הגיעו למקום",
+  owner: "הוזן בניהול",
+  external: "ערוץ חיצוני",
+};
+
+export interface OccupancySource {
+  kind: "booking" | "block" | "synced";
+  /** "האתר", "טלפון", "Airbnb", "חסימה ידנית"… */
+  label: string;
+}
+
+/** מאיפה הגיעה ההזמנה: האתר / טלפון / הגיעו למקום / ניהול / ערוץ (לפי השם שנרשם) */
+export function bookingSource(b: Pick<CalendarBooking, "source" | "channel">): OccupancySource {
+  const channel = b.channel?.trim();
+  if (b.source === "external" && channel)
+    return { kind: "booking", label: CHANNEL_LABELS[channel.toLowerCase()] ?? channel };
+  return { kind: "booking", label: BOOKING_SOURCE_LABELS[b.source] ?? "אחר" };
+}
+
+/** חסימה: מסנכרון (הערוץ) או ידנית */
+export function blockSource(k: Pick<CalendarBlock, "synced" | "channel">): OccupancySource {
+  if (k.synced)
+    return {
+      kind: "synced",
+      label: CHANNEL_LABELS[k.channel ?? "other"] ?? CHANNEL_LABELS["other"]!,
+    };
+  return { kind: "block", label: "חסימה ידנית" };
+}
 
 // ---------- שורות ופסים ----------
 
@@ -174,9 +225,10 @@ export function buildRows(view: CalendarView, filters: Filters, groups: RoomGrou
     const geo = bar(view.from, view.to, b.check_in, b.check_out);
     if (!geo) continue;
     const tone = toneOf(b.status);
-    if (filters.tone && filters.tone !== "block" && filters.tone !== tone) continue;
-    if (filters.tone === "block") continue;
-    const label = `#${b.number} ${b.guest_name ?? ""}`.trim();
+    if (filters.tone && filters.tone !== tone) continue;
+    // הזמנה מערוץ חיצוני (נרשמה ידנית עם שם הערוץ) — שם הערוץ בתחילת הפס
+    const via = b.source === "external" ? `${bookingSource(b).label} · ` : "";
+    const label = `${via}#${b.number} ${b.guest_name ?? ""}`.trim();
     push(b.unit_id, {
       key: `b-${b.id}`,
       kind: "booking",
@@ -203,16 +255,23 @@ export function buildRows(view: CalendarView, filters: Filters, groups: RoomGrou
     if (w)
       push(w, { key: `b-${b.id}-w`, kind: "booking", via: true, tone, label, booking: b, ...geo });
   }
-  if (!filters.tone || filters.tone === "block") {
+  if (!filters.tone || filters.tone === "block" || filters.tone === "external") {
     for (const k of view.blocks) {
       const geo = bar(view.from, view.to, k.start_date, k.end_date);
       if (!geo) continue;
-      const label = k.reason ? `חסום — ${k.reason}` : "חסום";
+      // D3: תאריכים מיומן חיצוני — גוון משלהם ושם הערוץ, כדי שיהיה ברור מאיפה הם
+      const tone: Tone = k.synced ? "external" : "block";
+      if (filters.tone && filters.tone !== tone) continue;
+      const label = k.synced
+        ? `${blockSource(k).label} · סנכרון`
+        : k.reason
+          ? `חסום — ${k.reason}`
+          : "חסום";
       push(k.unit_id, {
         key: `k-${k.id}`,
         kind: "block",
         via: false,
-        tone: "block",
+        tone,
         label,
         block: k,
         ...geo,
@@ -222,7 +281,7 @@ export function buildRows(view: CalendarView, filters: Filters, groups: RoomGrou
           key: `k-${k.id}-${m}`,
           kind: "block",
           via: true,
-          tone: "block",
+          tone,
           label,
           block: k,
           ...geo,
@@ -233,7 +292,7 @@ export function buildRows(view: CalendarView, filters: Filters, groups: RoomGrou
           key: `k-${k.id}-w`,
           kind: "block",
           via: true,
-          tone: "block",
+          tone,
           label,
           block: k,
           ...geo,

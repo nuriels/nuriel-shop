@@ -168,8 +168,14 @@ async function sendDue(): Promise<void> {
         const ctx = await sites.get(n.tenant_id)!;
         const email = renderBookingEmail(n.event, n.recipient_kind, n.payload, {
           business: ctx.business,
-          bookingUrl:
-            ctx.origin && n.booking_id ? `${ctx.origin}/manage/bookings/${n.booking_id}` : null,
+          // לעסק: ההזמנה; התנגשות ביומן חיצוני (D3) — מסך הערוצים
+          bookingUrl: !ctx.origin
+            ? null
+            : n.booking_id
+              ? `${ctx.origin}/manage/bookings/${n.booking_id}`
+              : n.event === "channel_conflict"
+                ? `${ctx.origin}/manage/channels`
+                : null,
           siteOrigin: ctx.origin,
           escape: escapeHtml,
         });

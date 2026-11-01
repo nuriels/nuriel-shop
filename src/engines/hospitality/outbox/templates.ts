@@ -55,7 +55,14 @@ function dateTimeText(iso: string | null | undefined): string {
 const money = (n: number | undefined, currency = "ILS") =>
   new Intl.NumberFormat("he-IL", { style: "currency", currency }).format(Number(n ?? 0));
 
-type Copy = { subject: string; intro: string; details: boolean; outro?: string };
+type Copy = {
+  subject: string;
+  intro: string;
+  details: boolean;
+  outro?: string;
+  /** הכפתור לעסק (ברירת המחדל: "לפתיחת ההזמנה") */
+  button?: string;
+};
 
 /** הטקסט של כל אירוע; null — אירוע לא מוכר (לא שולחים) */
 export function copyFor(event: string, p: EmailPayload, b: EmailBusiness): Copy | null {
@@ -173,6 +180,20 @@ export function copyFor(event: string, p: EmailPayload, b: EmailBusiness): Copy 
         intro: `${p.guest_name ?? "האורח"} משך/ה את בקשת ההזמנה; התאריכים פנויים שוב.`,
         details: true,
       };
+    // D3: אירוע ביומן חיצוני על תאריכים שתפוסים אצלנו — לא נכתב, שום הזמנה לא שונתה
+    case "channel_conflict": {
+      const channel = String(p["channel_label"] ?? "היומן החיצוני");
+      return {
+        subject: `התנגשות ביומן ${channel}${p.unit_name ? ` — ${p.unit_name}` : ""}`,
+        intro: `ב-${channel} יש תאריכים שכבר תפוסים אצלכם (הזמנה או חסימה). לא שינינו ולא ביטלנו שום הזמנה — אבל כדי למנוע הזמנה כפולה, כדאי לבדוק ולסגור את התאריכים האלה ב-${channel}.`,
+        details: true,
+        outro:
+          p["echo_like"] === true
+            ? `אלה בדיוק התאריכים של הזמנה או חסימה שכבר קיימת אצלכם — ייתכן ש-${channel} פשוט מחזיר את התאריכים שהיומן שלנו שלח אליו. אם אין שם הזמנה אמיתית על התאריכים האלה, אין מה לעשות.`
+            : "אחרי שהתאריכים ייסגרו שם, ההתנגשות תיעלם בסנכרון הבא (עד 30 דקות).",
+        button: "לבדיקת היומנים",
+      };
+    }
     default:
       return null;
   }
@@ -197,6 +218,20 @@ export function renderBookingEmail(
     rows.push(["אורחים", `${p.adults} מבוגרים${p.children ? `, ${p.children} ילדים` : ""}`]);
   if (p.total !== undefined) rows.push(["סה״כ", money(p.total, p.currency)]);
   if (recipient === "owner" && p.guest_name) rows.unshift(["אורח", p.guest_name]);
+  // D3: התנגשויות ביומן חיצוני — רק התאריכים
+  const conflicts = Array.isArray(p["conflicts"])
+    ? (p["conflicts"] as { from?: unknown; to?: unknown }[]).filter(
+        (c) => typeof c?.from === "string" && typeof c?.to === "string",
+      )
+    : [];
+  if (conflicts.length) {
+    rows.push([
+      "תאריכים",
+      conflicts.map((c) => `${dateText(String(c.from))} – ${dateText(String(c.to))}`).join("; "),
+    ]);
+    const more = Number(p["conflict_count"] ?? conflicts.length) - conflicts.length;
+    if (more > 0) rows.push(["ועוד", `${more} התנגשויות נוספות`]);
+  }
   const table = copy.details
     ? `<table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0;font-size:15px">${rows
         .map(
@@ -210,7 +245,7 @@ export function renderBookingEmail(
     `<p style="margin:20px 0"><a href="${e(href)}" style="background:#1f3d2b;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">${e(label)}</a></p>`;
   const button =
     recipient === "owner" && ctx.bookingUrl
-      ? link(ctx.bookingUrl, "לפתיחת ההזמנה")
+      ? link(ctx.bookingUrl, copy.button ?? "לפתיחת ההזמנה")
       : manageUrl
         ? `${link(manageUrl, "לצפייה וניהול ההזמנה")}<p style="margin:0 0 8px;font-size:12px;color:#777">הקישור אישי — אין להעביר אותו לאחרים. הוא בתוקף עד 30 יום אחרי העזיבה.</p>`
         : "";

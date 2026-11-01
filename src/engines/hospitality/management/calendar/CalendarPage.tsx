@@ -70,6 +70,8 @@ import {
   shift,
   toneOf,
   visibleWindow,
+  blockSource,
+  bookingSource,
   type Bar,
   type Filters,
   type Row,
@@ -90,6 +92,9 @@ const TONE_CLASS: Record<Tone, string> = {
   cancelled: "bg-white text-slate-600 border-slate-400 line-through",
   block:
     "text-slate-900 border-slate-600 [background:repeating-linear-gradient(45deg,#e2e8f0,#e2e8f0_6px,#cbd5e1_6px,#cbd5e1_12px)]",
+  // D3: מיומן חיצוני (Airbnb / Booking.com …) — גוון ופסים משלהם, כדי שיהיה ברור מאיפה התפוסה
+  external:
+    "text-violet-950 border-violet-700 border-dashed [background:repeating-linear-gradient(-45deg,#ede9fe,#ede9fe_6px,#ddd6fe_6px,#ddd6fe_12px)]",
 };
 
 // תפוסה "דרך" (הזמנה / חסימה של "כל המתחם" על יחידה שבו, או להפך): בהיר ומקווקו — בלי שקיפות,
@@ -424,7 +429,7 @@ export function CalendarPage() {
 function Legend() {
   return (
     <ul className="flex flex-wrap gap-2 text-xs" aria-label="מקרא">
-      {(["pending", "confirmed", "staying", "past", "block"] as Tone[]).map((t) => (
+      {(["pending", "confirmed", "staying", "past", "block", "external"] as Tone[]).map((t) => (
         <li key={t} className={cn("rounded border px-2 py-1", TONE_CLASS[t])}>
           {TONE_LABELS[t]}
         </li>
@@ -620,8 +625,12 @@ function BarView({
   onBooking: (b: CalendarBooking) => void;
   onBlock: (k: CalendarBlock) => void;
 }) {
+  // D3: מקור התפוסה — באתר / טלפון / ערוץ / חסימה ידנית / סנכרון (לקורא מסך ובריחוף)
+  const source = bar.booking ? bookingSource(bar.booking) : blockSource(bar.block!);
   const text =
-    bar.kind === "block" ? bar.label : `${bar.label} · ${STATUS_LABELS[bar.booking!.status]}`;
+    bar.kind === "block"
+      ? `${bar.label} · ${source.label}`
+      : `${bar.label} · ${STATUS_LABELS[bar.booking!.status]} · מקור: ${source.label}`;
   return (
     <button
       type="button"
@@ -638,7 +647,12 @@ function BarView({
       aria-label={`${text}${bar.via ? " (דרך כל המתחם)" : ""}`}
       title={text}
     >
-      {bar.kind === "block" && <Lock className="me-1 size-3 shrink-0" aria-hidden="true" />}
+      {bar.kind === "block" &&
+        (bar.tone === "external" ? (
+          <RefreshCw className="me-1 size-3 shrink-0" aria-hidden="true" />
+        ) : (
+          <Lock className="me-1 size-3 shrink-0" aria-hidden="true" />
+        ))}
       <span className="truncate">{bar.label}</span>
     </button>
   );
@@ -696,8 +710,17 @@ function Agenda({
                       className="min-h-11 w-full text-start"
                       onClick={() => onBlock(k)}
                     >
-                      <span className="font-medium">חסום</span> · {k.unit_name}
-                      {k.reason ? ` · ${k.reason}` : ""}
+                      {k.synced ? (
+                        <>
+                          <span className="font-medium">מ-{blockSource(k).label}</span> (סנכרון) ·{" "}
+                          {k.unit_name}
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-medium">חסום</span> · {k.unit_name}
+                          {k.reason ? ` · ${k.reason}` : ""}
+                        </>
+                      )}
                     </button>
                   </li>
                 ))}
@@ -809,9 +832,7 @@ function BookingPanel({
         <dt className="text-muted-foreground">סכום</dt>
         <dd>{money}</dd>
         <dt className="text-muted-foreground">מקור</dt>
-        <dd>
-          {b.channel ?? (b.source === "site" ? "האתר" : b.source === "phone" ? "טלפון" : b.source)}
-        </dd>
+        <dd>{bookingSource(b).label}</dd>
       </dl>
       <QuickActions bookingId={b.id} />
       <Link
@@ -842,6 +863,34 @@ function BlockPanel({
   const [error, setError] = useState<string | null>(null);
   const changed = from !== k.start_date || to !== k.end_date || reason !== (k.reason ?? "");
   const invalid = blockError(from, to, reason, today);
+  // D3: תאריכים מסנכרון — מתעדכנים רק מהיומן החיצוני (שינוי כאן היה נדרס בסנכרון הבא)
+  if (k.synced) {
+    const channel = blockSource(k).label;
+    return (
+      <SidePanel
+        title={`${channel} — ${k.unit_name}`}
+        description={`${dayLabel(k.start_date)} – ${dayLabel(addDays(k.end_date, -1))} (${nightsText({ check_in: k.start_date, check_out: k.end_date })})`}
+        onClose={onClose}
+      >
+        <div className="flex flex-col gap-3 text-sm" data-testid="synced-block-panel">
+          <p className="flex items-center gap-2 rounded-md border border-violet-300 bg-violet-50 p-3 text-violet-950">
+            <RefreshCw className="size-4 shrink-0" aria-hidden="true" />
+            התאריכים האלה תפוסים ב-{channel} ומגיעים מסנכרון היומן (iCal).
+          </p>
+          <p className="text-muted-foreground">
+            כדי לשנות או לבטל אותם — עושים את זה ב-{channel}; הלוח כאן מתעדכן בסנכרון הבא (עד 30
+            דקות). שום הזמנה שלכם לא משתנה בגלל הסנכרון.
+          </p>
+          <Link
+            to="/manage/channels"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border px-4 font-medium hover:bg-muted"
+          >
+            ליומנים החיצוניים
+          </Link>
+        </div>
+      </SidePanel>
+    );
+  }
   const save = async () => {
     setError(null);
     try {

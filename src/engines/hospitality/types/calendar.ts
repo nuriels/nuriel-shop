@@ -41,6 +41,10 @@ export interface CalendarBlock {
   start_date: string;
   end_date: string;
   reason: string | null;
+  /** D3: נוצרה מסנכרון יומן חיצוני (iCal) */
+  synced?: boolean;
+  /** D3: הערוץ של היומן (airbnb / booking / vrbo / google / other) */
+  channel?: string | null;
 }
 
 export interface CalendarView {
