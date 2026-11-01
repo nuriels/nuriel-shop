@@ -302,3 +302,13 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Function | `_block_json` — adds `synced` and `channel` (additive; STABLE instead of IMMUTABLE because it reads the calendar's channel) |
 | Rollback | `supabase/rollbacks/20261103110000_hosp_channel_alerts.down.sql` — drops the trigger and its function, restores `_block_json` of migration 14 exactly; exact migration-26 schema (`rollback-check.sh`, M27) |
 | Production | nothing to configure (the worker already sends the outbox) |
+
+## 20261103120000_hosp_phone_payments.sql — D4, phone payments on the payments ledger
+
+| | |
+|---|---|
+| Fix | `_payments_sync` now also maintains `bookings.payment_status` (unpaid / deposit_paid / paid) from the ledger — it only updated `amount_paid`, so a booking with a recorded payment stayed "unpaid". Existing bookings whose status did not match the paid amount are corrected once |
+| One payment system | `confirm_payment` (Stage 1, server only, unused) wrote the amount straight into the booking, outside the ledger; it now records a ledger row (`method = 'provider'`, `provider = 'confirm'`). The paid amount always equals the ledger |
+| Card data | `payments_note_no_card` — a payment note cannot contain a 13–19 digit run (a card number) |
+| Rollback | `supabase/rollbacks/20261103120000_hosp_phone_payments.down.sql` — restores `_payments_sync` (migration 23) and `confirm_payment` (migration 4) exactly, drops the constraint (status values and ledger rows stay — they match what was recorded); exact migration-27 schema (`rollback-check.sh`, M28) |
+| Production | nothing to configure; no payment provider (OD-16) |

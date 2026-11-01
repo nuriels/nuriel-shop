@@ -1,6 +1,7 @@
 // בדיקת הקלט של פונקציות השרת של Hospitality — לפני הפנייה למסד.
 // משקף את הבדיקות של המסד (המסד נשאר הסמכות הסופית); הודעות בעברית למשתמש.
 import type { ManualBookingSource, StayStatus } from "../types/domain";
+import { CARD_IN_GUEST_TEXT, looksLikeCardNumber } from "../payments/phone";
 
 export class InputError extends Error {
   constructor(message: string) {
@@ -134,6 +135,12 @@ export function parseQuote(input: Raw) {
   };
 }
 
+/** D4: בלי פרטי כרטיס אשראי בטקסט חופשי של האורח (אין סליקה באתר — התשלום בטלפון) */
+function noCardData(text: string | null): string | null {
+  if (looksLikeCardNumber(text)) throw new InputError(CARD_IN_GUEST_TEXT);
+  return text;
+}
+
 export function parseRequestBooking(input: Raw) {
   const key = String(field(input, "idempotencyKey") ?? "");
   if (!IDEMPOTENCY_KEY.test(key)) throw new InputError("חסר מזהה בקשה");
@@ -148,7 +155,9 @@ export function parseRequestBooking(input: Raw) {
     phone: phone(field(input, "phone")),
     idempotencyKey: key,
     policyHash: hash,
-    specialRequests: optionalText(field(input, "specialRequests"), 2000, "הבקשות המיוחדות"),
+    specialRequests: noCardData(
+      optionalText(field(input, "specialRequests"), 2000, "הבקשות המיוחדות"),
+    ),
     marketingConsent: field(input, "marketingConsent") === true,
     language: oneOf(field(input, "language"), ["he", "en", "ar", "ru"] as const, "השפה", "he"),
   };

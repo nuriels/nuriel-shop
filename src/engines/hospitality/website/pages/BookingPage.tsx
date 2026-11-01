@@ -6,7 +6,7 @@
 // מהאורח ובלי עוגיות.
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Phone, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { cn } from "@/platform/ui";
 import {
@@ -534,6 +534,14 @@ function QuoteDetails({
           : t.book.requestNote(site.business.approval_hours)}{" "}
         {t.book.noCharge}
       </p>
+      {/* D4: אין סליקה באתר — התשלום בטלפון מול העסק */}
+      <p
+        className="flex items-start gap-2 rounded-sm border border-[var(--site-gold)] px-3 py-2 text-xs leading-relaxed"
+        data-testid="pay-by-phone"
+      >
+        <Phone className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        {t.book.payByPhone}
+      </p>
       <div>
         <h3 className="mb-2 font-medium">{t.book.cancellation}</h3>
         <ul className="space-y-1 text-muted-foreground">
@@ -752,6 +760,11 @@ function GuestForm({
           />
         </label>
       </div>
+      {/* D4: לפני השליחה — שוב, שהתשלום לא כאן */}
+      <p className="flex items-start gap-2 text-sm text-muted-foreground">
+        <Phone className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        {t.book.payByPhone}
+      </p>
       {send.isPending && bot.state === "working" && (
         <p role="status" className="text-sm text-muted-foreground">
           {t.book.verifying}

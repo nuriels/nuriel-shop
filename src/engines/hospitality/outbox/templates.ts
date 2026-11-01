@@ -74,16 +74,17 @@ export function copyFor(event: string, p: EmailPayload, b: EmailBusiness): Copy 
     case "request_received":
       return {
         subject: `קיבלנו את בקשת ההזמנה שלך${n} — ${b.name}`,
-        intro: `שלום ${p.guest_name ?? ""}, תודה! בקשת ההזמנה שלך התקבלה ועדיין לא אושרה. נחזור אליך${
-          p.hold_expires_at ? ` עד ${dateTimeText(p.hold_expires_at)}` : " בהקדם"
-        }.`,
+        // D4: תשלום טלפוני — אותה הודעה כמו באתר אחרי השליחה
+        intro: `שלום ${p.guest_name ?? ""}, תודה! בקשת ההזמנה התקבלה. נציג העסק יצור איתך קשר טלפונית להשלמת התשלום ואישור ההזמנה${
+          p.hold_expires_at ? ` (עד ${dateTimeText(p.hold_expires_at)})` : ""
+        }. עד אז הבקשה עוד לא מאושרת.`,
         details: true,
-        outro: reach,
+        outro: `לא ניתן לשלם באתר, ולא נבקש ממך פרטי כרטיס אשראי באימייל. ${reach}`.trim(),
       };
     case "booking_confirmed":
       return {
         subject: `ההזמנה שלך${n} אושרה — ${b.name}`,
-        intro: `שלום ${p.guest_name ?? ""}, שמחים לאשר את ההזמנה שלך. מחכים לראותך!`,
+        intro: `שלום ${p.guest_name ?? ""}, שמחים לאשר את ההזמנה שלך. מחכים לראותך! אם התשלום עוד לא הושלם — נציג העסק יצור איתך קשר טלפונית (לא ניתן לשלם באתר).`,
         details: true,
         outro: [
           b.checkInTime ? `כניסה מ-${b.checkInTime}` : "",

@@ -13,6 +13,7 @@ import { LoadError, PageSkeleton } from "../catalog/parts";
 import { money } from "../pricing/model";
 import { useManagement } from "../shell/management-context";
 import {
+  PAYMENT_LABELS,
   STATE_LABELS,
   TABS,
   bookingsKey,
@@ -23,6 +24,16 @@ import {
   stayText,
   TONE_CLASS,
 } from "./model";
+
+/** מצבים שבהם מוצג מצב התשלום (בקשה / הזמנה פעילה / שהייה שהסתיימה) */
+const PAYMENT_SHOWN = new Set<string>([
+  "pending_approval",
+  "pending_payment",
+  "confirmed",
+  "cancel_requested",
+  "checked_in",
+  "checked_out",
+]);
 
 const PAGE = 30;
 
@@ -183,6 +194,21 @@ function BookingCard({ b }: { b: BookingRow }) {
               <span>{guestsText(b)}</span>
               <span>{money(b.total, b.currency)}</span>
               <span>{sourceText(b)}</span>
+              {/* D4: מצב התשלום — נפרד ממצב ההזמנה; לפי מה שנרשם בלבד */}
+              {PAYMENT_SHOWN.has(b.state) && (
+                <span
+                  className={cn(
+                    "rounded px-1.5 text-xs font-medium",
+                    b.payment_status === "paid"
+                      ? "bg-emerald-100 text-emerald-900"
+                      : b.payment_status === "deposit_paid"
+                        ? "bg-sky-100 text-sky-900"
+                        : "bg-amber-100 text-amber-950",
+                  )}
+                >
+                  {PAYMENT_LABELS[b.payment_status]}
+                </span>
+              )}
             </p>
             {hold && <p className="text-sm font-medium text-amber-800">{hold}</p>}
             {b.state === "cancel_requested" && (

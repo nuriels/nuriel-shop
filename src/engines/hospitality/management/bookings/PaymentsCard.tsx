@@ -1,6 +1,7 @@
 // "תשלומים" בעמוד ההזמנה (תשתית Stage 8): כמה שולם, יתרה / החזר שמגיע, יומן התשלומים, רישום
 // תשלום או החזר ידני, וביטול רישום שגוי (עם סיבה — נשאר בהיסטוריה). הסכום ששולם משפיע על
-// חישובי הביטול (החזר / חוב). בלי סליקה מקוונת עדיין.
+// חישובי הביטול (החזר / חוב). D4: תשלום טלפוני — העסק גובה במסוף שלו ורושם כאן; בלי סליקה ובלי
+// פרטי כרטיס במערכת (גם בהערה — נבדק כאן, בשרת ובמסד).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Undo2 } from "lucide-react";
 import { useState } from "react";
@@ -11,6 +12,7 @@ import {
   hospitalityPaymentRecord,
   hospitalityPaymentVoid,
 } from "../../api/payments.functions";
+import { CARD_IN_PAYMENT_NOTE, looksLikeCardNumber } from "../../payments/phone";
 import type { BookingPayments, PaymentKind, PaymentMethod } from "../../types/payments";
 import { errorText } from "../catalog/refresh";
 import { formatDate } from "../lib/format";
@@ -28,7 +30,7 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: "מזומן",
   transfer: "העברה בנקאית",
   bit: "Bit",
-  card: "כרטיס אשראי",
+  card: "כרטיס אשראי (במסוף העסק)",
   check: "צ'ק",
   provider: "סליקה מקוונת",
   other: "אחר",
@@ -127,7 +129,8 @@ export function PaymentsCard({
               </Button>
             )}
             <p className="text-xs text-muted-foreground">
-              רישום בלבד (מזומן, העברה, Bit, כרטיס בטלפון). סליקה מקוונת מהאתר — בשלב התשלומים.
+              התשלום נגבה בטלפון במסוף של העסק (או במזומן / העברה / Bit) — כאן רק רושמים אותו, אחרי
+              שהתקבל. אין סליקה באתר, ואין לרשום מספרי כרטיס.
             </p>
           </>
         )}
@@ -253,6 +256,7 @@ function RecordForm({
   const [amount, setAmount] = useState(suggestAmount > 0 ? String(suggestAmount) : "");
   const [paidAt, setPaidAt] = useState(today);
   const [note, setNote] = useState("");
+  const cardInNote = looksLikeCardNumber(note);
   const save = useMutation({
     mutationFn: () =>
       hospitalityPaymentRecord({
@@ -323,15 +327,22 @@ function RecordForm({
           id={`pay-note-${bookingId}`}
           value={note}
           maxLength={300}
-          placeholder="למשל: אסמכתא 1234"
+          placeholder="למשל: אסמכתא 1234 / 4 ספרות אחרונות"
+          aria-invalid={cardInNote}
+          aria-describedby={cardInNote ? `pay-note-error-${bookingId}` : undefined}
           onChange={(e) => setNote(e.target.value)}
         />
+        {cardInNote && (
+          <p id={`pay-note-error-${bookingId}`} role="alert" className="text-xs text-destructive">
+            {CARD_IN_PAYMENT_NOTE}
+          </p>
+        )}
       </div>
       <div className="flex gap-2">
         <Button
           type="button"
           className="min-h-11"
-          disabled={!(Number(amount) > 0) || !paidAt || save.isPending}
+          disabled={!(Number(amount) > 0) || !paidAt || cardInNote || save.isPending}
           onClick={() => save.mutate()}
         >
           רישום

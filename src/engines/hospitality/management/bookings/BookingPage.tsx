@@ -9,6 +9,7 @@ import { Check, ChevronRight, LogIn, LogOut, Mail, Phone, UserX, X } from "lucid
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from "@/platform/ui";
 import { PaymentsCard } from "./PaymentsCard";
+import { PhonePaymentCard } from "./PhonePaymentCard";
 import {
   hospitalityApproveBooking,
   hospitalityBookingDetail,
@@ -111,6 +112,9 @@ function Booking({ b }: { b: BookingDetail }) {
 
       <PageNotice error={error}>{null}</PageNotice>
 
+      {/* D4: תשלום טלפוני — בקשה / אישור / תשלום, והטלפון של האורח */}
+      <PhonePaymentCard b={b} />
+
       {(can.approve || can.checkIn || can.checkOut) && (
         <Card data-section="actions">
           <CardContent className="flex flex-wrap gap-2 pt-6">
@@ -119,7 +123,17 @@ function Booking({ b }: { b: BookingDetail }) {
                 label="אישור ההזמנה"
                 icon={<Check className="size-4" aria-hidden="true" />}
                 title={`לאשר את הזמנה #${b.number}?`}
-                description={<p>האורח יקבל מייל אישור, והתאריכים נשמרים לו.</p>}
+                description={
+                  <>
+                    <p>האורח יקבל מייל אישור, והתאריכים נשמרים לו.</p>
+                    {b.payment_status === "unpaid" && (
+                      <p className="mt-2">
+                        עוד לא נרשם תשלום להזמנה הזו. אפשר לאשר עכשיו ולגבות אחר כך — ההזמנה תסומן
+                        כשולמה רק אחרי שתרשמו את התשלום.
+                      </p>
+                    )}
+                  </>
+                }
                 confirmLabel="אישור"
                 onConfirm={() =>
                   run(

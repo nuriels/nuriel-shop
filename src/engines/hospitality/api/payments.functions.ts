@@ -3,6 +3,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { BookingPayments, PaymentKind, PaymentMethod } from "../types/payments";
 import { InputError, isoDate, optionalText, uuid } from "../validation/input";
+import { CARD_IN_PAYMENT_NOTE, looksLikeCardNumber } from "../payments/phone";
 
 const KINDS: PaymentKind[] = ["deposit", "balance", "full", "refund", "other"];
 const METHODS: PaymentMethod[] = ["cash", "transfer", "bit", "card", "check", "other"];
@@ -31,7 +32,12 @@ export const hospitalityPaymentRecord = createServerFn({ method: "POST" })
       method,
       amount: Math.round(amount * 100) / 100,
       paidAt: isoDate(input?.["paidAt"], "תאריך התשלום"),
-      note: optionalText(input?.["note"], 300, "ההערה"),
+      note: (() => {
+        const note = optionalText(input?.["note"], 300, "ההערה");
+        // D4: בלי מספרי כרטיס במערכת (גם המסד מסרב — payments_note_no_card)
+        if (looksLikeCardNumber(note)) throw new InputError(CARD_IN_PAYMENT_NOTE);
+        return note;
+      })(),
     };
   })
   .handler(async ({ data }): Promise<BookingPayments> => {

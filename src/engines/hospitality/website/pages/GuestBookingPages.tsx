@@ -17,6 +17,17 @@ import type { GuestArrival } from "../../types/website";
 import { useCopy } from "../copy";
 import { dateTimeText, money, scheduleLines, stayText, telHref, whatsappHref } from "../lib/format";
 import { useSite } from "../lib/site-context";
+import { paymentState } from "../../payments/phone";
+
+/** מצבים שבהם מוצג מצב התשלום (בקשה פעילה / הזמנה) */
+const PAYABLE = new Set([
+  "pending_approval",
+  "pending_payment",
+  "confirmed",
+  "cancel_requested",
+  "checked_in",
+  "checked_out",
+]);
 
 /** הטוקן / מספר הבקשה מה-# של הכתובת (רק בדפדפן) */
 function useHashParams(): { token: string | null; number: number | null; ready: boolean } {
@@ -101,8 +112,19 @@ export function BookingReceivedPage() {
           <p className="mt-6 text-muted-foreground">{t.received.missing}</p>
         ) : (
           <>
-            <p className="mx-auto mt-6 max-w-md leading-relaxed text-muted-foreground">
+            {/* D4: תשלום טלפוני — ההודעה אחרי שליחת הבקשה */}
+            <p
+              className="mx-auto mt-6 max-w-md text-lg leading-relaxed"
+              data-testid="phone-payment-message"
+            >
+              {confirmed ? t.received.phoneInstant : t.received.phone}
+            </p>
+            <p className="mx-auto mt-3 max-w-md leading-relaxed text-muted-foreground">
               {confirmed ? t.received.confirmed : t.received.pending(site.business.approval_hours)}
+            </p>
+            <p className="mx-auto mt-4 flex max-w-md items-start justify-center gap-2 rounded-sm bg-[var(--site-sand)] px-3 py-2 text-sm">
+              <Phone className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              {t.received.noOnline}
             </p>
             {b && (
               <dl className="mx-auto mt-8 grid max-w-md gap-3 rounded-sm bg-[var(--site-sand)] p-5 text-start text-sm">
@@ -219,6 +241,13 @@ export function MyBookingPage() {
             <Row label={t.my.total} value={money(Number(b.total), b.currency)} />
             {Number(b.amount_paid) > 0 && (
               <Row label={t.my.paid} value={money(Number(b.amount_paid), b.currency)} />
+            )}
+            {/* D4: מצב התשלום — רק לפי מה שהעסק רשם (תשלום טלפוני) */}
+            {PAYABLE.has(b.status) && (
+              <Row
+                label={t.my.payment}
+                value={t.my.paymentStates[paymentState(Number(b.total), Number(b.amount_paid))]}
+              />
             )}
           </dl>
           {pending && b.hold_expires_at && (
