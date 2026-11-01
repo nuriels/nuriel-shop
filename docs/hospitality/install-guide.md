@@ -67,7 +67,8 @@ BK=/root/backups/$PROJECT/pre-hospitality-$(date +%Y%m%d-%H%M)
 mkdir -p "$BK" && chmod 700 "$(dirname "$BK")" "$BK" && echo "$BK"
 ```
 
-**לרשום את הנתיב.** בחלון טרמינל חדש מגדירים אותו מחדש:
+**לרשום את הנתיב.** בטרמינל חדש כל המשתנים ריקים, וצריך להגדיר שוב את המשתנים מראש המדריך.
+בדיקה מהירה: `echo "$APP $BK"` — שורה ריקה = לא מוגדרים. את BK מגדירים כך:
 `BK=$(ls -d /root/backups/$PROJECT/pre-hospitality-* | tail -1)`.
 
 ### 1.1 מסד הנתונים (בלי השבתה)
@@ -127,16 +128,22 @@ tar -C "$(dirname "$BK")" -cf - "$(basename "$BK")" \
 
 עושים את זה בשעה שקטה:
 
+בלוק אחד — עוצר רק אם כל המשתנים מוגדרים, ותמיד מעלה בחזרה (גם אם העתקה נכשלה):
+
 ```bash
-docker stop "$APP"
-cd "$SB_DIR/docker" && docker compose -p "$PROJECT" stop $SB_SERVICES
-tar -czf "$BK/supabase-volumes.tgz" -C "$SB_DIR/docker" volumes
-docker volume ls --format '{{.Name}}' | grep db-config      # ${PROJECT}_db-config
-tar -czf "$BK/db-config.tgz" -C "$(docker volume inspect "${PROJECT}_db-config" --format '{{.Mountpoint}}')" .
-docker compose -p "$PROJECT" start $SB_SERVICES
-until docker exec "$DB" pg_isready -U postgres -q; do sleep 2; done
-docker start "$APP"
-sleep 15; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$APP_PORT/robots.txt"   # 200
+if [ -n "$APP" ] && [ -n "$DB" ] && [ -d "$BK" ] && [ -f "$SB_DIR/docker/docker-compose.yml" ]; then
+  docker stop "$APP"
+  (cd "$SB_DIR/docker" && docker compose -p "$PROJECT" stop $SB_SERVICES)
+  tar -czf "$BK/supabase-volumes.tgz" -C "$SB_DIR/docker" volumes
+  V=$(docker volume inspect "${PROJECT}_db-config" --format '{{.Mountpoint}}' 2>/dev/null) \
+    && tar -czf "$BK/db-config.tgz" -C "$V" .
+  (cd "$SB_DIR/docker" && docker compose -p "$PROJECT" start $SB_SERVICES)
+  for i in $(seq 1 60); do docker exec "$DB" pg_isready -U postgres -q && break; sleep 2; done
+  docker start "$APP"
+  sleep 15; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$APP_PORT/robots.txt"   # 200
+else
+  echo "עצירה: המשתנים לא מוגדרים בטרמינל הזה — מגדירים אותם (ראש המדריך) ואת BK"
+fi
 ```
 
 השחזור של כל חלק — ב-§12.
@@ -711,15 +718,19 @@ docker exec "$DB" psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema'
 **עותק קר (1.5)** — שחזור מלא ומדויק של Supabase:
 
 ```bash
-docker stop "$APP"
-cd "$SB_DIR/docker" && docker compose -p "$PROJECT" stop $SB_SERVICES
-mv volumes "volumes.broken-$(date +%Y%m%d-%H%M)"
-tar -xzpf "$BK/supabase-volumes.tgz" -C "$SB_DIR/docker"
-V=$(docker volume inspect "${PROJECT}_db-config" --format '{{.Mountpoint}}')
-find "$V" -mindepth 1 -delete && tar -xzpf "$BK/db-config.tgz" -C "$V"
-cp -p "$BK/supabase.env" "$SB_DIR/docker/.env"
-docker compose -p "$PROJECT" up -d $SB_SERVICES
-until docker exec "$DB" pg_isready -U postgres -q; do sleep 2; done
+if [ -n "$APP" ] && [ -n "$DB" ] && [ -f "$BK/supabase-volumes.tgz" ] && [ -f "$SB_DIR/docker/docker-compose.yml" ]; then
+  docker stop "$APP"
+  (cd "$SB_DIR/docker" && docker compose -p "$PROJECT" stop $SB_SERVICES)
+  mv "$SB_DIR/docker/volumes" "$SB_DIR/docker/volumes.broken-$(date +%Y%m%d-%H%M)"
+  tar -xzpf "$BK/supabase-volumes.tgz" -C "$SB_DIR/docker"
+  V=$(docker volume inspect "${PROJECT}_db-config" --format '{{.Mountpoint}}' 2>/dev/null)
+  [ -n "$V" ] && [ -f "$BK/db-config.tgz" ] && find "$V" -mindepth 1 -delete && tar -xzpf "$BK/db-config.tgz" -C "$V"
+  cp -p "$BK/supabase.env" "$SB_DIR/docker/.env"
+  (cd "$SB_DIR/docker" && docker compose -p "$PROJECT" up -d $SB_SERVICES)
+  for i in $(seq 1 60); do docker exec "$DB" pg_isready -U postgres -q && break; sleep 2; done
+else
+  echo "עצירה: המשתנים לא מוגדרים, או שאין עותק קר ב-$BK"
+fi
 # והאפליקציה — צעד 3 למעלה
 ```
 
