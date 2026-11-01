@@ -3043,6 +3043,14 @@ export type Database = {
         Args: { _email: string; _name: string; _slug: string };
         Returns: Database["public"]["Tables"]["tenants"]["Row"];
       };
+      portal_create_store_business: {
+        Args: { _email: string; _name: string; _slug: string; _business: Json };
+        Returns: Database["public"]["Tables"]["tenants"]["Row"];
+      };
+      portal_set_store_logo: {
+        Args: { _email: string; _tenant: string; _path: string };
+        Returns: undefined;
+      };
       portal_store_state: { Args: { _email: string; _tenant: string }; Returns: Json };
       platform_list_tenants: {
         Args: Record<string, never>;

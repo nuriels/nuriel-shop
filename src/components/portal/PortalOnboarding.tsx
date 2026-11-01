@@ -6,6 +6,7 @@ import {
   Check,
   CheckCircle2,
   ExternalLink,
+  ImagePlus,
   Loader2,
   LockKeyhole,
   LogOut,
@@ -40,27 +41,42 @@ import {
   requestPortalCode,
   verifyPortalCode,
   portalFromGoogle,
+  uploadPortalStoreLogo,
 } from "@/lib/portal.functions";
 import {
+  BUSINESS_ADDRESS_MAX,
+  BUSINESS_NAME_MAX,
+  businessDetailsProblems,
+  cleanBusinessDetails,
   cleanSlugInput,
+  PORTAL_BUSINESS_TYPES,
+  PORTAL_LOGO_MAX_BYTES,
   slugFormatProblem,
   STORE_NAME_MAX,
   storeNameProblem,
   suggestSlug,
   type PortalAccount,
+  type PortalBusinessDetails,
+  type PortalBusinessField,
   type PortalStore,
 } from "@/lib/portal";
+import { compressLogoImage } from "@/lib/image";
 
 /**
  * תהליך הכניסה בשער הפלטפורמה (חלק 12), בחלון אחד:
  *   אימייל → קוד בן 6 ספרות → החנויות שלכם (לחיצה = כניסה לניהול)
  *                            ↘ אין חנות: "צור את החנות שלך" (שם + כתובת)
+ *                              → פרטי העסק (שלב E1: שם רשמי, ח.פ / ע.מ, סוג עוסק, מע"מ,
+ *                                טלפון לשירות לקוחות; כתובת ולוגו — לא חובה)
  *                              → מכינים את הכתובת (SSL) → ישר לניהול החנות.
  * האימות נשמר בלשונית (sessionStorage) כאסימון חתום מהשרת — רענון העמוד
  * לא מחייב קוד חדש; הוא פג אחרי שעה.
  */
 
-type Step = "email" | "code" | "loading" | "stores" | "create" | "preparing";
+type Step = "email" | "code" | "loading" | "stores" | "create" | "business" | "preparing";
+
+/** מה שנבחר בשלב "צור את החנות שלך" — הפתיחה עצמה רק אחרי פרטי העסק */
+type StoreDraft = { name: string; slug: string };
 
 type PortalSession = { token: string; email: string };
 
@@ -121,6 +137,7 @@ export function PortalOnboarding({
   const [session, setSession] = useState<PortalSession | null>(null);
   const [account, setAccount] = useState<PortalAccount | null>(null);
   const [newStore, setNewStore] = useState<PortalStore | null>(null);
+  const [draft, setDraft] = useState<StoreDraft | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // בדרך לאתר החנות (קוד כניסה נוצר, הדפדפן עובר) — לא סוגרים את החלון
   const [leaving, setLeaving] = useState(false);
@@ -251,7 +268,11 @@ export function PortalOnboarding({
     },
     create: {
       title: "צור את החנות שלך",
-      description: "שם לחנות וכתובת באנגלית — וזהו. את כל השאר משלימים בפאנל הניהול.",
+      description: "שם לחנות וכתובת באנגלית. בשלב הבא — פרטי העסק, ואז החנות באוויר.",
+    },
+    business: {
+      title: "פרטי העסק",
+      description: "מופיעים בתקנון, במדיניות הפרטיות ובמסמכים — כדי שלא תצטרכו לחפש אחר כך.",
     },
     preparing: { title: "מקימים את החנות…", description: "עוד כמה שניות והחנות שלכם באוויר." },
   };
@@ -278,7 +299,7 @@ export function PortalOnboarding({
         <div className="bg-gradient-to-l from-primary to-primary/85 px-6 pb-5 pt-7 text-primary-foreground sm:rounded-t-2xl">
           <DialogHeader className="space-y-1.5 text-right sm:text-right">
             <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-              {step === "create" ? (
+              {step === "create" || step === "business" ? (
                 <Sparkles className="size-5 text-accent" aria-hidden="true" />
               ) : step === "stores" ? (
                 <Store className="size-5 text-accent" aria-hidden="true" />
@@ -334,11 +355,26 @@ export function PortalOnboarding({
             <CreateStep
               session={session}
               baseDomain={baseDomain}
+              initial={draft}
               canGoBack={account.stores.length > 0}
               onBack={() => setStep("stores")}
               onSignOut={signOut}
+              onNext={(next) => {
+                setDraft(next);
+                setStep("business");
+              }}
+            />
+          )}
+
+          {step === "business" && session && draft && (
+            <BusinessStep
+              session={session}
+              draft={draft}
+              baseDomain={baseDomain}
+              onBack={() => setStep("create")}
               onCreated={(store) => {
                 setNewStore(store);
+                setDraft(null);
                 setStep("preparing");
               }}
             />
@@ -363,7 +399,7 @@ function StepDots({ step }: { step: Step }) {
   const index =
     step === "email" || step === "code" || step === "loading"
       ? 0
-      : step === "stores" || step === "create"
+      : step === "stores" || step === "create" || step === "business"
         ? 1
         : 2;
   const labels = ["אימות מייל", "החנות שלך", "פאנל הניהול"];
@@ -784,33 +820,32 @@ type SlugCheck =
 function CreateStep({
   session,
   baseDomain,
+  initial,
   canGoBack,
   onBack,
   onSignOut,
-  onCreated,
+  onNext,
 }: {
   session: PortalSession;
   baseDomain: string;
+  /** חזרה מ"פרטי העסק" — השם והכתובת שכבר נבחרו */
+  initial: StoreDraft | null;
   canGoBack: boolean;
   onBack: () => void;
   onSignOut: () => void;
-  onCreated: (store: PortalStore) => void;
+  onNext: (draft: StoreDraft) => void;
 }) {
   const checkSlug = useServerFn(checkPortalSlug);
-  const createStore = useServerFn(createPortalStore);
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [slug, setSlug] = useState(initial?.slug ?? "");
   // הכתובת נגזרת מהשם עד שעורכים אותה ידנית
-  const [slugEdited, setSlugEdited] = useState(false);
+  const [slugEdited, setSlugEdited] = useState(initial !== null);
   const [check, setCheck] = useState<SlugCheck>({ state: "idle" });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const latest = useRef(0);
 
   const onNameChange = (value: string) => {
     setName(value);
-    setError(null);
     if (!slugEdited) setSlug(value.trim() ? suggestSlug(value) : "");
   };
 
@@ -855,28 +890,18 @@ function CreateStep({
 
   const nameProblem = storeNameProblem(name);
 
-  const submit = async () => {
+  // הפתיחה עצמה — בשלב הבא, אחרי פרטי העסק
+  const submit = () => {
     setTouched(true);
     if (nameProblem || check.state !== "ok") return;
-    setBusy(true);
-    setError(null);
-    try {
-      const { store } = await createStore({
-        data: { token: session.token, name: name.trim(), slug },
-      });
-      toast.success("החנות נוצרה!");
-      onCreated(store);
-    } catch (thrown) {
-      setError(errorText(thrown, "פתיחת החנות נכשלה"));
-      setBusy(false);
-    }
+    onNext({ name: name.trim().replace(/\s+/g, " "), slug });
   };
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        void submit();
+        submit();
       }}
       className="space-y-5"
     >
@@ -913,7 +938,6 @@ function CreateStep({
             onChange={(event) => {
               setSlugEdited(true);
               setSlug(cleanSlugInput(event.target.value));
-              setError(null);
             }}
             placeholder="my-shop"
             autoComplete="off"
@@ -965,20 +989,14 @@ function CreateStep({
         </div>
       </div>
 
-      {error && (
-        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </p>
-      )}
-
       <Button
         type="submit"
         size="lg"
         className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-        disabled={busy || check.state === "checking"}
+        disabled={check.state === "checking"}
       >
-        {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-        {busy ? "פותחים את החנות…" : "צור את החנות שלי"}
+        המשך — פרטי העסק
+        <ArrowLeft className="size-4" aria-hidden="true" />
       </Button>
 
       <div className="flex items-center justify-between text-sm">
@@ -1006,6 +1024,364 @@ function CreateStep({
           </span>
         </button>
       </div>
+    </form>
+  );
+}
+
+// ============================================================
+// פרטי העסק (שלב E1) — לפני הפתיחה, כדי שהתקנון, מדיניות הפרטיות והמסמכים יתמלאו מיד.
+// חובה: שם רשמי, סוג עסק, ח.פ / ע.מ, טלפון לשירות לקוחות. לא חובה: כתובת, לוגו.
+// ============================================================
+
+const BUSINESS_FIELDS: PortalBusinessField[] = [
+  "legal_name",
+  "business_type",
+  "tax_id",
+  "phone",
+  "address",
+];
+
+function FieldError({ id, message }: { id: string; message: string | undefined }) {
+  if (!message) return null;
+  return (
+    <p id={id} className="text-xs font-medium text-destructive">
+      {message}
+    </p>
+  );
+}
+
+function BusinessStep({
+  session,
+  draft,
+  baseDomain,
+  onBack,
+  onCreated,
+}: {
+  session: PortalSession;
+  draft: StoreDraft;
+  baseDomain: string;
+  onBack: () => void;
+  onCreated: (store: PortalStore) => void;
+}) {
+  const createStore = useServerFn(createPortalStore);
+  const [details, setDetails] = useState<PortalBusinessDetails>({
+    legal_name: draft.name,
+    business_type: "",
+    tax_id: "",
+    prices_include_vat: true,
+    phone: "",
+    address: "",
+  });
+  const [logo, setLogo] = useState<{ file: File; preview: string } | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [touched, setTouched] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  // תצוגת הלוגו — משחררים את הכתובת הזמנית כשמחליפים / יוצאים
+  useEffect(() => {
+    return () => {
+      if (logo) URL.revokeObjectURL(logo.preview);
+    };
+  }, [logo]);
+
+  const cleaned = cleanBusinessDetails(details);
+  const problems = businessDetailsProblems(cleaned);
+  const problemOf = (field: PortalBusinessField) => (touched ? problems[field] : undefined);
+  const type = PORTAL_BUSINESS_TYPES.find((t) => t.value === details.business_type);
+  const patch = (next: Partial<PortalBusinessDetails>) => {
+    setDetails((current) => ({ ...current, ...next }));
+    setError(null);
+  };
+
+  const pickLogo = async (file: File | undefined) => {
+    setLogoError(null);
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setLogoError("יש לבחור קובץ תמונה");
+      return;
+    }
+    try {
+      // כמו הלוגו מההגדרות: עד 600px, PNG עם שקיפות
+      const { file: optimized } = await compressLogoImage(file);
+      if (optimized.size > PORTAL_LOGO_MAX_BYTES) {
+        setLogoError("הלוגו גדול מדי — עד 2MB");
+        return;
+      }
+      setLogo({ file: optimized, preview: URL.createObjectURL(optimized) });
+    } catch {
+      setLogoError("לא הצלחנו לקרוא את התמונה — נסו קובץ אחר");
+    }
+  };
+
+  const submit = async () => {
+    setTouched(true);
+    const first = BUSINESS_FIELDS.find((field) => problems[field]);
+    if (first) {
+      document.getElementById(`portal-biz-${first}`)?.focus();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const { store } = await createStore({
+        data: { token: session.token, name: draft.name, slug: draft.slug, business: cleaned },
+      });
+      if (logo) {
+        try {
+          const form = new FormData();
+          form.append("token", session.token);
+          form.append("tenantId", store.id);
+          form.append("file", logo.file, "logo.png");
+          await uploadPortalStoreLogo({ data: form });
+        } catch (thrown) {
+          // החנות כבר נפתחה — הלוגו לא מפיל אותה
+          toast.warning(errorText(thrown, "הלוגו לא נשמר — אפשר להעלות אותו בהגדרות החנות"));
+        }
+      }
+      toast.success("החנות נוצרה!");
+      onCreated(store);
+    } catch (thrown) {
+      setError(errorText(thrown, "פתיחת החנות נכשלה"));
+      setBusy(false);
+    }
+  };
+
+  const describedBy = (field: PortalBusinessField) =>
+    problemOf(field) ? `portal-biz-${field}-error` : undefined;
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+      className="space-y-5"
+      noValidate
+    >
+      <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+        החנות: <span className="font-medium text-foreground">{draft.name}</span> ·{" "}
+        <bdi dir="ltr">
+          {draft.slug}.{baseDomain}
+        </bdi>
+      </p>
+
+      <div className="space-y-2">
+        <Label htmlFor="portal-biz-legal_name">שם העסק הרשמי</Label>
+        <Input
+          id="portal-biz-legal_name"
+          maxLength={BUSINESS_NAME_MAX}
+          value={details.legal_name}
+          onChange={(event) => patch({ legal_name: event.target.value })}
+          autoComplete="organization"
+          className="h-11"
+          aria-invalid={problemOf("legal_name") !== undefined}
+          aria-describedby={describedBy("legal_name") ?? "portal-biz-legal_name-hint"}
+        />
+        <p id="portal-biz-legal_name-hint" className="text-xs text-muted-foreground">
+          כפי שמופיע ברשות המסים — למשל &quot;דנה כהן&quot; או &quot;דנה בע״מ&quot;
+        </p>
+        <FieldError id="portal-biz-legal_name-error" message={problemOf("legal_name")} />
+      </div>
+
+      <fieldset className="space-y-2" aria-describedby={describedBy("business_type")}>
+        <legend className="mb-2 text-sm font-medium">סוג העסק</legend>
+        <div className="grid grid-cols-3 gap-2">
+          {PORTAL_BUSINESS_TYPES.map((option, index) => (
+            <label
+              key={option.value}
+              className={`flex min-h-14 cursor-pointer flex-col items-center justify-center rounded-lg border px-2 py-2 text-center text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring ${
+                details.business_type === option.value
+                  ? "border-primary bg-primary/5 font-semibold text-primary"
+                  : "border-input hover:bg-muted"
+              }`}
+            >
+              <input
+                type="radio"
+                name="portal-biz-type"
+                id={index === 0 ? "portal-biz-business_type" : undefined}
+                value={option.value}
+                checked={details.business_type === option.value}
+                onChange={() => patch({ business_type: option.value })}
+                className="sr-only"
+              />
+              {option.label}
+              <span className="text-[11px] font-normal text-muted-foreground">{option.hint}</span>
+            </label>
+          ))}
+        </div>
+        <FieldError id="portal-biz-business_type-error" message={problemOf("business_type")} />
+      </fieldset>
+
+      <div className="space-y-2">
+        <Label htmlFor="portal-biz-tax_id">{type?.idLabel ?? "מספר ח.פ / ע.מ"}</Label>
+        <Input
+          id="portal-biz-tax_id"
+          dir="ltr"
+          inputMode="numeric"
+          maxLength={20}
+          value={details.tax_id}
+          onChange={(event) => patch({ tax_id: event.target.value })}
+          placeholder="514000000"
+          className="h-11 text-left"
+          aria-invalid={problemOf("tax_id") !== undefined}
+          aria-describedby={describedBy("tax_id")}
+        />
+        <FieldError id="portal-biz-tax_id-error" message={problemOf("tax_id")} />
+      </div>
+
+      {details.business_type === "exempt" ? (
+        <p className="rounded-lg border border-input px-3 py-2 text-sm text-muted-foreground">
+          עוסק פטור — המחירים באתר בלי מע״מ, והמסמכים בהתאם.
+        </p>
+      ) : (
+        <fieldset className="space-y-2">
+          <legend className="mb-2 text-sm font-medium">המחירים באתר</legend>
+          {[
+            { value: true, label: "כוללים מע״מ", hint: "מומלץ — מכירה לצרכנים" },
+            { value: false, label: "לפני מע״מ", hint: "מכירה לעסקים; המע״מ מתווסף בקופה" },
+          ].map((option) => (
+            <label
+              key={String(option.value)}
+              className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-input px-3 py-2 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+            >
+              <input
+                type="radio"
+                name="portal-biz-vat"
+                checked={details.prices_include_vat === option.value}
+                onChange={() => patch({ prices_include_vat: option.value })}
+                className="size-4 accent-[hsl(var(--primary))]"
+              />
+              <span>
+                <span className="font-medium">{option.label}</span>
+                <span className="block text-xs text-muted-foreground">{option.hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="portal-biz-phone">טלפון לשירות לקוחות</Label>
+        <Input
+          id="portal-biz-phone"
+          type="tel"
+          dir="ltr"
+          inputMode="tel"
+          autoComplete="tel"
+          maxLength={20}
+          value={details.phone}
+          onChange={(event) => patch({ phone: event.target.value })}
+          placeholder="050-1234567"
+          className="h-11 text-left"
+          aria-invalid={problemOf("phone") !== undefined}
+          aria-describedby={describedBy("phone")}
+        />
+        <FieldError id="portal-biz-phone-error" message={problemOf("phone")} />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="portal-biz-address">
+          כתובת העסק <span className="font-normal text-muted-foreground">(לא חובה)</span>
+        </Label>
+        <Input
+          id="portal-biz-address"
+          maxLength={BUSINESS_ADDRESS_MAX}
+          autoComplete="street-address"
+          value={details.address}
+          onChange={(event) => patch({ address: event.target.value })}
+          placeholder="רחוב, מספר, עיר"
+          className="h-11"
+          aria-invalid={problemOf("address") !== undefined}
+          aria-describedby={describedBy("address")}
+        />
+        <FieldError id="portal-biz-address-error" message={problemOf("address")} />
+      </div>
+
+      <div className="space-y-2">
+        <span className="text-sm font-medium">
+          לוגו <span className="font-normal text-muted-foreground">(לא חובה)</span>
+        </span>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="sr-only"
+          aria-label="בחירת לוגו"
+          tabIndex={-1}
+          onChange={(event) => {
+            void pickLogo(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
+        <div className="flex items-center gap-3">
+          {logo && (
+            <img
+              src={logo.preview}
+              alt="הלוגו שנבחר"
+              className="size-14 rounded-md border border-input bg-white object-contain p-1"
+            />
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 gap-2"
+            onClick={() => fileInput.current?.click()}
+          >
+            <ImagePlus className="size-4" aria-hidden="true" />
+            {logo ? "החלפת לוגו" : "בחירת לוגו"}
+          </Button>
+          {logo && (
+            <button
+              type="button"
+              className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+              onClick={() => setLogo(null)}
+            >
+              הסרה
+            </button>
+          )}
+        </div>
+        {logoError ? (
+          <p role="alert" className="text-xs font-medium text-destructive">
+            {logoError}
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            אפשר גם אחר כך, בהגדרות החנות. PNG / JPG / WebP.
+          </p>
+        )}
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        הפרטים ייכנסו לתקנון, למדיניות הפרטיות ולמסמכים. אפשר לשנות אותם בכל זמן בהגדרות החנות.
+      </p>
+
+      {error && (
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
+      <Button
+        type="submit"
+        size="lg"
+        className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+        disabled={busy}
+      >
+        {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+        {busy ? "פותחים את החנות…" : "צור את החנות שלי"}
+      </Button>
+
+      <button
+        type="button"
+        onClick={onBack}
+        disabled={busy}
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+      >
+        <ArrowRight className="size-3.5" aria-hidden="true" />
+        חזרה לשם ולכתובת
+      </button>
     </form>
   );
 }

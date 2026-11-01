@@ -174,6 +174,96 @@ export function storeNameProblem(name: string): string | null {
 }
 
 // ------------------------------------------------------------
+// פרטי העסק בהקמה (שלב E1) — אותם כללים כמו portal_create_store_business במסד.
+// נשמרים בהגדרות החנות, ומשם התקנון, מדיניות הפרטיות, המסמכים והמיילים מתמלאים.
+// ------------------------------------------------------------
+
+/** חברה = עוסק מורשה לעניין מע"מ; עוסק פטור → בלי מע"מ */
+export type PortalBusinessType = "authorized" | "exempt" | "company";
+
+export const PORTAL_BUSINESS_TYPES: {
+  value: PortalBusinessType;
+  label: string;
+  /** התווית של שדה המספר */
+  idLabel: string;
+  hint: string;
+}[] = [
+  { value: "authorized", label: "עוסק מורשה", idLabel: "מספר עוסק מורשה", hint: "גובים מע״מ" },
+  { value: "exempt", label: "עוסק פטור", idLabel: "מספר עוסק פטור", hint: "בלי מע״מ" },
+  { value: "company", label: "חברה בע״מ", idLabel: "מספר חברה (ח.פ)", hint: "גובים מע״מ" },
+];
+
+export type PortalBusinessDetails = {
+  legal_name: string;
+  business_type: PortalBusinessType | "";
+  tax_id: string;
+  /** בעוסק פטור לא רלוונטי (תמיד בלי מע"מ) */
+  prices_include_vat: boolean;
+  /** טלפון לשירות לקוחות */
+  phone: string;
+  /** לא חובה */
+  address: string;
+};
+
+export type PortalBusinessField = "legal_name" | "business_type" | "tax_id" | "phone" | "address";
+
+export const BUSINESS_NAME_MAX = 120;
+export const BUSINESS_ADDRESS_MAX = 200;
+
+const oneLine = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
+
+/** ספרות בלבד (רווחים ומקפים יורדים) — כמו במסד */
+export const cleanTaxId = (value: unknown) => String(value ?? "").replace(/[\s-]/g, "");
+/** ספרות ו-+ בלבד — כמו במסד */
+export const cleanBusinessPhone = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .replace(/[^0-9+]/g, "");
+
+export function cleanBusinessDetails(input: unknown): PortalBusinessDetails {
+  const raw = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const type = String(raw["business_type"] ?? "");
+  return {
+    legal_name: oneLine(raw["legal_name"]),
+    business_type: PORTAL_BUSINESS_TYPES.some((t) => t.value === type)
+      ? (type as PortalBusinessType)
+      : "",
+    tax_id: cleanTaxId(raw["tax_id"]),
+    prices_include_vat: raw["prices_include_vat"] !== false,
+    phone: cleanBusinessPhone(raw["phone"]),
+    address: oneLine(raw["address"]),
+  };
+}
+
+/** הבעיות לפי שדה (אובייקט ריק = הכול תקין) */
+export function businessDetailsProblems(
+  details: PortalBusinessDetails,
+): Partial<Record<PortalBusinessField, string>> {
+  const problems: Partial<Record<PortalBusinessField, string>> = {};
+  if (details.legal_name.length < 2 || details.legal_name.length > BUSINESS_NAME_MAX) {
+    problems.legal_name = `שם העסק — 2 עד ${BUSINESS_NAME_MAX} תווים`;
+  }
+  if (details.business_type === "") problems.business_type = "בחרו את סוג העסק";
+  if (!/^[0-9]{5,12}$/.test(details.tax_id)) {
+    problems.tax_id = "המספר — 5 עד 12 ספרות (בלי אותיות)";
+  }
+  if (!/^\+?[0-9]{9,15}$/.test(details.phone)) {
+    problems.phone = "טלפון — 9 עד 15 ספרות, למשל 050-1234567";
+  }
+  if (details.address.length > BUSINESS_ADDRESS_MAX) {
+    problems.address = `כתובת — עד ${BUSINESS_ADDRESS_MAX} תווים`;
+  }
+  return problems;
+}
+
+/** הלוגו בהקמה (לא חובה): PNG / JPEG / WebP, עד 2MB אחרי הדחיסה בדפדפן */
+export const PORTAL_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+export const PORTAL_LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+// ------------------------------------------------------------
 // החשבון והחנויות (מהמסד: portal_account / portal_store_state)
 // ------------------------------------------------------------
 

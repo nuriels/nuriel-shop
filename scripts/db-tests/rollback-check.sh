@@ -64,6 +64,7 @@ M25=20261103090000_hosp_security
 M26=20261103100000_hosp_site_theme
 M27=20261103110000_hosp_channel_alerts
 M28=20261103120000_hosp_phone_payments
+M29=20261104090000_portal_business_details
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -84,6 +85,29 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- E1: business details when opening a store from the portal (migration 29) ----------
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M29" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M29"
+down "$M29"
+expect "the portal business-details functions are gone; the plain portal_create_store stays" \
+  "SELECT to_regprocedure('public.portal_create_store_business(text,text,text,jsonb)') IS NULL
+      AND to_regprocedure('public.portal_set_store_logo(text,uuid,text)') IS NULL
+      AND to_regprocedure('public.portal_create_store(text,text,text)') IS NOT NULL"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m28.sql"
+schema_dump "$SCHEMA_DIR/after-m29-down.sql"
+if diff -q "$SCHEMA_DIR/m28.sql" "$SCHEMA_DIR/after-m29-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 28, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 28:"; diff "$SCHEMA_DIR/m28.sql" "$SCHEMA_DIR/after-m29-down.sql" | head -20; exit 1
+fi
 
 # ---------- D4: phone payments on the payments ledger (migration 28) ----------
 psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
@@ -708,7 +732,7 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1 … $M24"
+echo "re-apply: $M1 … $M29"
 up "$M1"
 up "$M2"
 up "$M3"
@@ -737,6 +761,7 @@ up "$M25"
 up "$M26"
 up "$M27"
 up "$M28"
+up "$M29"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -780,7 +805,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 28 → 1 and re-apply 1 → 28 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 29 → 1 and re-apply 1 → 29 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi

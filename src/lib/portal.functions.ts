@@ -1,13 +1,18 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Json } from "@/integrations/supabase/types";
 import {
+  businessDetailsProblems,
+  cleanBusinessDetails,
   cleanSlugInput,
   otherMembershipReason,
+  PORTAL_LOGO_MAX_BYTES,
+  PORTAL_LOGO_TYPES,
   PORTAL_STORE_SLUG,
   slugFormatProblem,
   storeNameProblem,
   storeReadiness,
   type PortalAccount,
+  type PortalBusinessDetails,
   type PortalStore,
   type StoreReadiness,
 } from "@/lib/portal";
@@ -28,6 +33,9 @@ import {
  * 2. checkPortalSlug — כתובת באנגלית: פורמט / שמורה / תפוסה, והצעה פנויה.
  * 3. createPortalStore — חשבון התחברות (אם אין) + חנות + המשתמש כמנהל שלה.
  *    חלק 18ב: בעלים של חנות יכולים לפתוח עוד חנויות עם אותו חשבון (עד 10).
+ *    שלב E1: עם פרטי העסק (שם רשמי, ח.פ / ע.מ, סוג עוסק, מע"מ, טלפון, כתובת) —
+ *    באותה טרנזקציה (portal_create_store_business); התקנון מתמלא מהם.
+ *    uploadPortalStoreLogo — לוגו שנבחר בהקמה (לא חובה), לחנות של האימייל בלבד.
  * 4. getPortalStoreStatus — חנות חדשה: האם תעודת ה-SSL של הכתובת כבר הונפקה.
  * 5. enterPortalStore — קוד כניסה חד-פעמי (2 דקות) לאתר החנות:
  *    https://<slug>.nuri1.fit/admin-handoff#code=... → מחובר → /admin.
@@ -383,17 +391,26 @@ export const checkPortalSlug = createServerFn({ method: "POST" })
 // ============================================================
 
 export const createPortalStore = createServerFn({ method: "POST" })
-  .inputValidator((input: { token: string; name: string; slug: string }) => {
-    const name = String(input?.name ?? "")
-      .trim()
-      .replace(/\s+/g, " ");
-    const slug = cleanSlugInput(String(input?.slug ?? ""));
-    const nameProblem = storeNameProblem(name);
-    if (nameProblem) throw new Error(nameProblem);
-    const slugProblem = slugFormatProblem(slug);
-    if (slugProblem) throw new Error(slugProblem);
-    return { token: tokenOf(input?.token), name, slug };
-  })
+  .inputValidator(
+    (input: { token: string; name: string; slug: string; business?: PortalBusinessDetails }) => {
+      const name = String(input?.name ?? "")
+        .trim()
+        .replace(/\s+/g, " ");
+      const slug = cleanSlugInput(String(input?.slug ?? ""));
+      const nameProblem = storeNameProblem(name);
+      if (nameProblem) throw new Error(nameProblem);
+      const slugProblem = slugFormatProblem(slug);
+      if (slugProblem) throw new Error(slugProblem);
+      // שלב E1: פרטי העסק. בלעדיהם (לשונית ישנה של השער) — הפתיחה הקודמת
+      let business: PortalBusinessDetails | null = null;
+      if (input?.business !== undefined) {
+        business = cleanBusinessDetails(input.business);
+        const problem = Object.values(businessDetailsProblems(business))[0];
+        if (problem) throw new Error(problem);
+      }
+      return { token: tokenOf(input?.token), name, slug, business };
+    },
+  )
   .handler(async ({ data }) => {
     const email = await verifiedEmail(data.token);
     const { allowAction, requestIp } = await import("@/lib/rate-limit.server");
@@ -431,11 +448,18 @@ export const createPortalStore = createServerFn({ method: "POST" })
       createdUserId = created?.user?.id ?? null;
     }
 
-    const { data: tenant, error } = await supabaseAdminUnscoped.rpc("portal_create_store", {
-      _email: email,
-      _name: data.name,
-      _slug: data.slug,
-    });
+    const { data: tenant, error } = data.business
+      ? await supabaseAdminUnscoped.rpc("portal_create_store_business", {
+          _email: email,
+          _name: data.name,
+          _slug: data.slug,
+          _business: data.business,
+        })
+      : await supabaseAdminUnscoped.rpc("portal_create_store", {
+          _email: email,
+          _name: data.name,
+          _slug: data.slug,
+        });
     if (error || !tenant) {
       // לא משאירים חשבון חדש בלי חנות
       if (createdUserId) await supabaseAdminUnscoped.auth.admin.deleteUser(createdUserId);
@@ -467,6 +491,91 @@ export const createPortalStore = createServerFn({ method: "POST" })
       actor: null,
     });
     return { store };
+  });
+
+/** סוג הקובץ לפי התוכן (לא לפי מה שהדפדפן הצהיר) */
+function sniffLogoType(bytes: Buffer): (typeof PORTAL_LOGO_TYPES)[number] | null {
+  if (
+    bytes.length > 8 &&
+    bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
+    return "image/png";
+  }
+  if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
+    return "image/jpeg";
+  if (
+    bytes.length > 12 &&
+    bytes.subarray(0, 4).toString("latin1") === "RIFF" &&
+    bytes.subarray(8, 12).toString("latin1") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+const LOGO_EXTENSION: Record<(typeof PORTAL_LOGO_TYPES)[number], string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
+
+/**
+ * שלב E1: לוגו שנבחר בהקמה (לא חובה) — FormData: token, tenantId, file.
+ * רק לחנות שהאימייל המאומת מנהל בה; הקובץ נבדק לפי התוכן (PNG / JPEG / WebP, עד 2MB),
+ * נשמר בנתיב הציבורי של החנות (<tenant>/site/logo-…, כמו הלוגו מההגדרות) ונרשם בהגדרות.
+ */
+export const uploadPortalStoreLogo = createServerFn({ method: "POST" })
+  .inputValidator((data: FormData) => {
+    if (!(data instanceof FormData)) throw new Error("בקשה לא תקינה");
+    const file = data.get("file");
+    if (!(file instanceof File)) throw new Error("לא נבחר קובץ");
+    if (file.size === 0 || file.size > PORTAL_LOGO_MAX_BYTES) {
+      throw new Error("הלוגו גדול מדי — עד 2MB");
+    }
+    return {
+      token: tokenOf(data.get("token")),
+      tenantId: tenantIdOf(data.get("tenantId")),
+      file,
+    };
+  })
+  .handler(async ({ data }) => {
+    const email = await verifiedEmail(data.token);
+    const { allowAction, requestIp } = await import("@/lib/rate-limit.server");
+    const ip = await requestIp();
+    if (!allowAction(`portal-logo:${ip}`, 20, 60 * 60 * 1000)) {
+      throw new Error("יותר מדי העלאות בשעה האחרונה. אפשר להעלות לוגו אחר כך בהגדרות החנות.");
+    }
+    const bytes = Buffer.from(await data.file.arrayBuffer());
+    const type = sniffLogoType(bytes);
+    if (!type) throw new Error("הלוגו צריך להיות תמונה (PNG, JPG או WebP)");
+
+    const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
+    // הרשאה לפני ההעלאה: החנות של האימייל (זורק "החנות לא נמצאה בחשבון שלכם")
+    const { error: stateError } = await supabaseAdminUnscoped.rpc("portal_store_state", {
+      _email: email,
+      _tenant: data.tenantId,
+    });
+    if (stateError) throw new Error(stateError.message);
+
+    const path = `${data.tenantId}/site/logo-${Date.now()}.${LOGO_EXTENSION[type]}`;
+    const { error: uploadError } = await supabaseAdminUnscoped.storage
+      .from("branding")
+      .upload(path, bytes, { contentType: type, upsert: false, cacheControl: "31536000" });
+    if (uploadError) {
+      logPortal("error", "logo upload failed", { ip, message: uploadError.message });
+      throw new Error("העלאת הלוגו נכשלה. אפשר להעלות אותו אחר כך בהגדרות החנות.");
+    }
+    const { error } = await supabaseAdminUnscoped.rpc("portal_set_store_logo", {
+      _email: email,
+      _tenant: data.tenantId,
+      _path: path,
+    });
+    if (error) {
+      await supabaseAdminUnscoped.storage.from("branding").remove([path]);
+      throw new Error(error.message);
+    }
+    logPortal("info", "logo set", { ip, email: maskEmail(email), tenant: data.tenantId });
+    return { ok: true as const };
   });
 
 // ============================================================
