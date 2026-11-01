@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { Gem, LifeBuoy, Lock, Store, UserPlus } from "lucide-react";
+import { BedDouble, Gem, LifeBuoy, Lock, Store, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthState } from "@/hooks/useAuthState";
 import { FORBIDDEN_PAGE } from "@/lib/blocked-pages";
@@ -72,6 +72,14 @@ export function PlatformShell({
                 >
                   בקשות שדרוג ותוספים
                 </NavLink>
+                {/* מסך של מנוע האירוח — רק קישור (הקוד שלו לא מיובא לכאן) */}
+                <NavLink
+                  to="/platform/hospitality"
+                  active={false}
+                  icon={<BedDouble className="size-4" />}
+                >
+                  ניהול Hospitality
+                </NavLink>
               </nav>
             )}
           </div>
@@ -127,7 +135,12 @@ function NavLink({
   badge = 0,
   children,
 }: {
-  to: "/platform" | "/platform/support" | "/platform/plans" | "/platform/upgrades";
+  to:
+    | "/platform"
+    | "/platform/support"
+    | "/platform/plans"
+    | "/platform/upgrades"
+    | "/platform/hospitality";
   active: boolean;
   icon: ReactNode;
   badge?: number;

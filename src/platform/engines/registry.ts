@@ -10,6 +10,8 @@ export interface EngineRegistry {
   get(key: SiteType): Engine | undefined;
   all(): readonly Engine[];
   ownerOf(filename: string): ServerFnOwner;
+  /** פונקציה של מנהל-על שהמנוע מגיש בפאנל הפלטפורמה (ראו Engine.platformAdminServerFn) */
+  isPlatformAdminFn(filename: string): boolean;
 }
 
 /** נתיב יחסי לשורש הפרויקט, עם / (גם אם הגיע מוחלט או עם ./) */
@@ -40,6 +42,12 @@ export function createEngineRegistry(engines: readonly Engine[]): EngineRegistry
         throw new Error(`${file} is claimed by ${owners.map((o) => o.key).join(", ")}`);
       }
       return owners[0]?.key ?? DEFAULT_ENGINE;
+    },
+    isPlatformAdminFn(filename) {
+      const file = normalizeFilename(filename);
+      return claimants.some(
+        (engine) => engine.ownsServerFn(file) && engine.platformAdminServerFn?.(file) === true,
+      );
     },
   };
 }

@@ -39,5 +39,10 @@ export interface Engine {
   enabledFor(site: SiteRef): Promise<boolean>;
   /** שער לבקשות עמוד / קובץ באתרים של המנוע; null = ממשיכים לאפליקציה */
   gate(site: SiteRef, request: EdgeRequest): Promise<Response | null>;
-  // provision (פתיחת אתר, A9) וספק מנהל-על (שלב 11) יצטרפו לחוזה כשיהיה להם שימוש
+  /**
+   * פונקציות של מנהל הפלטפורמה שהמנוע מגיש בפאנל הפלטפורמה (בלי אתר) — רק הקבצים שהמנוע
+   * מסמן כאן. הן רצות רק בכתובת הפאנל (לא באתר), וההרשאה נבדקת שוב במסד (מנהל-על).
+   */
+  platformAdminServerFn?(filename: string): boolean;
+  // provision (פתיחת אתר עצמית, A9) יצטרף לחוזה כשיהיה לו שימוש
 }

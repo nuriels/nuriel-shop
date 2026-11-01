@@ -11,7 +11,8 @@ export type GuardDecision = "allow" | "not_found";
 /**
  * טבלת ההחלטה (טהורה — נבדקת ביחידה):
  *   • בעלים = פלטפורמה → מותר
- *   • בלי אתר (פאנל הפלטפורמה / בקשה בלי אתר) → רק Ecommerce (כמו היום)
+ *   • בלי אתר (פאנל הפלטפורמה / בקשה בלי אתר) → Ecommerce (כמו היום), ופונקציות מנהל-על
+ *     שמנוע מגיש לפאנל (platformAdmin); אלה לא רצות אף פעם באתר
  *   • בעלים = סוג האתר → מותר אם המנוע פעיל לאתר
  *   • בעלים ≠ סוג האתר → לא נמצא (גם פונקציה לא מוכרת באתר שאינו Ecommerce)
  */
@@ -19,10 +20,12 @@ export function decideServerFnAccess(input: {
   owner: ServerFnOwner;
   site: SiteRef | null;
   ownerEnabled: boolean;
+  platformAdmin?: boolean;
 }): GuardDecision {
-  const { owner, site, ownerEnabled } = input;
+  const { owner, site, ownerEnabled, platformAdmin = false } = input;
   if (owner === "platform") return "allow";
-  if (!site) return owner === "ecommerce" ? "allow" : "not_found";
+  if (!site) return owner === "ecommerce" || platformAdmin ? "allow" : "not_found";
+  if (platformAdmin) return "not_found";
   if (owner !== site.siteType) return "not_found";
   return ownerEnabled ? "allow" : "not_found";
 }
@@ -38,7 +41,12 @@ export async function guardServerFn(
   const site = await currentSite();
   const engine = site && owner === site.siteType ? registry.get(owner) : undefined;
   const ownerEnabled = engine ? await engine.enabledFor(site!) : false;
-  return decideServerFnAccess({ owner, site, ownerEnabled });
+  return decideServerFnAccess({
+    owner,
+    site,
+    ownerEnabled,
+    platformAdmin: registry.isPlatformAdminFn(filename),
+  });
 }
 
 /** middleware גלובלי לפונקציות השרת (נרשם ב-src/start.ts דרך שורש ההרכבה) */

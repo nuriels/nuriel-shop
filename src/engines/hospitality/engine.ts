@@ -7,6 +7,9 @@ export const hospitalityEngine: Engine = {
   key: "hospitality",
   label: "Nuriel Hospitality",
   ownsServerFn: (filename) => filename.startsWith(HOSPITALITY_SOURCE_PREFIX),
+  // "ניהול Hospitality" בפאנל הפלטפורמה — רק הקובץ הזה, ורק בכתובת הפאנל
+  platformAdminServerFn: (filename) =>
+    filename === `${HOSPITALITY_SOURCE_PREFIX}api/platform-admin.functions.ts`,
   async enabledFor(site: SiteRef) {
     const { backendEnabled } = await import("./access.server");
     return backendEnabled(site.id);

@@ -99,6 +99,21 @@ describe("dispatcher decision table", () => {
     expect(decideServerFnAccess({ owner, site, ownerEnabled: enabled })).toBe(expected);
   });
 
+  it("an engine's platform-admin functions run only on the platform host (no site), never on a site", async () => {
+    const reg = createEngineRegistry([ecommerceEngine, hospitalityEngine]);
+    const admin = "src/engines/hospitality/api/platform-admin.functions.ts";
+    expect(reg.isPlatformAdminFn(admin)).toBe(true);
+    expect(reg.isPlatformAdminFn("src/engines/hospitality/api/team.functions.ts")).toBe(false);
+    expect(reg.isPlatformAdminFn("src/lib/platform.functions.ts")).toBe(false);
+    expect(await guardServerFn(reg, admin, async () => null)).toBe("allow");
+    expect(await guardServerFn(reg, admin, async () => HOSP)).toBe("not_found");
+    expect(await guardServerFn(reg, admin, async () => ECOM)).toBe("not_found");
+    // any other Hospitality function stays closed on the platform host
+    expect(
+      await guardServerFn(reg, "src/engines/hospitality/api/team.functions.ts", async () => null),
+    ).toBe("not_found");
+  });
+
   it("platform functions never look up the site", async () => {
     const current = vi.fn();
     const reg = createEngineRegistry([ecommerceEngine, hospitalityEngine]);

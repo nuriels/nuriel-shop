@@ -188,3 +188,11 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Rollback | `supabase/rollbacks/20261101220000_hosp_calendar.down.sql` — restores the migration-11 `_quote` and the block writes; exact migration-13 schema |
 | Tests | `scripts/db-tests/hospitality-calendar.test.sql` (34), Stage 1 booking / catalog files use `block_create`, concurrency 41 (new 33, 34), `rollback-check.sh` (M14), `scripts/db-tests/hospitality/perf/calendar-perf.sh`, `tests/unit/hospitality-calendar.test.ts`, `e2e/tests/manage-calendar.spec.ts` |
 | Production | nothing to configure; not applied anywhere but local / CI databases |
+
+## 20261102090000_hosp_platform_open.sql — P1 "ניהול Hospitality" (hospitality)
+
+| | |
+|---|---|
+| Functions | `admin_sites` (list for the panel), `admin_platform_flags` (engine switches + plans), `admin_open_site` (site + its database / management flags + plan), `admin_set_owner` (owner by email; `needs_account` → the server opens a password-less account) — platform admin only, `platform_audit_log`. No new table or column |
+| Rollback | `supabase/rollbacks/20261102090000_hosp_platform_open.down.sql` — drops the functions; exact migration-14 schema (`rollback-check.sh`, M15) |
+| Production | nothing to configure beyond the existing `TENANT_BASE_DOMAIN`; the platform-wide switches are turned on from the new tab when Hospitality goes live |

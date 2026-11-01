@@ -1,6 +1,31 @@
 # "ניהול Hospitality" in the super-admin panel — architecture and plan
 
-Status: **proposal — nothing implemented.** Built only after approval, as its own small step.
+Status: **§4 (dashboard) and opening a business implemented on 02/11/2026** (`hospitality/stage-2`,
+migration 15 `20261102090000_hosp_platform_open`) — the owner's instruction "a hospitality business
+can be opened and run through the system". §3 (Staging links) not built (no Staging yet).
+
+**As implemented — "ניהול Hospitality" (`/platform/hospitality`, platform host only):**
+- **Engine switches** for the whole platform (`hospitality_backend_enabled`,
+  `hospitality_management_enabled`) — without both no Hospitality site opens to its owner.
+- **Open a business:** name, address (slug; preview `<slug>.<TENANT_BASE_DOMAIN>`), the owner's
+  email (+ name), plan (trial = the automatic 14-day trial; another plan = active, optional end
+  date). `admin_open_site` creates the site (Stage 1e `admin_create_site`), turns on the site's
+  database and management flags (public site and guest bookings stay off) and sets the plan;
+  `admin_set_owner` attaches the owner — the server opens a password-less account only when the
+  database answers `needs_account` (as for managers, 2b.3); the owner signs in at
+  `/manage` with an email code and sets everything up from the setup checklist. A ready message
+  for the owner (management link + how to sign in) can be copied.
+- **Sites list:** owner (or "שיוך בעלים"), plan and status, units used / limit, properties,
+  pending / upcoming bookings, managers; per site: management on / off, change plan (extra units
+  kept), management link.
+- **Separation:** the screen is Hospitality code (`src/engines/hospitality/platform-admin/`,
+  route adapter `src/routes/platform_.hospitality.tsx`); the Ecommerce panel only got a tab link.
+  Its server functions (`api/platform-admin.functions.ts`) are the only Hospitality functions the
+  engine guard lets run on the platform host — and never on a site (`Engine.platformAdminServerFn`).
+  Every database function checks `is_platform_admin()` and writes `platform_audit_log`.
+- **Not yet:** self sign-up from the landing page (Stage 6, OD-15); entering a site's management
+  as the platform admin from this tab (the "כניסה" handoff in the stores tab works for Hospitality
+  sites); owner transfer; deleting a site's files with the site.
 
 ## 1. What exists today (verified in the code)
 

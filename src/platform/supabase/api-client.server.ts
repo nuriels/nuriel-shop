@@ -7,11 +7,12 @@ export type ApiClient = SupabaseClient<any, string, any>; // eslint-disable-line
 
 export function apiClient(opts: {
   schema: string;
-  siteId: string;
+  /** null — קריאה בלי אתר (פאנל הפלטפורמה; ההרשאה במסד: מנהל-על) */
+  siteId: string | null;
   accessToken?: string | null;
 }): ApiClient {
   const key = publishableKey();
-  const headers: Record<string, string> = { "x-tenant-id": opts.siteId };
+  const headers: Record<string, string> = opts.siteId ? { "x-tenant-id": opts.siteId } : {};
   if (opts.accessToken) headers["Authorization"] = `Bearer ${opts.accessToken}`;
   return createClient(supabaseUrl(), key, {
     db: { schema: opts.schema },

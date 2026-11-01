@@ -52,6 +52,7 @@ import { Route as ManageUnitsRouteImport } from './routes/manage.units'
 import { Route as ManageLoginRouteImport } from './routes/manage_.login'
 import { Route as OwnerAgreementTokenRouteImport } from './routes/owner-agreement.$token'
 import { Route as PagesSlugRouteImport } from './routes/pages.$slug'
+import { Route as PlatformHospitalityRouteImport } from './routes/platform_.hospitality'
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
 import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
 import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrades'
@@ -291,6 +292,11 @@ const PagesSlugRoute = PagesSlugRouteImport.update({
   path: '/pages/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlatformHospitalityRoute = PlatformHospitalityRouteImport.update({
+  id: '/platform_/hospitality',
+  path: '/platform/hospitality',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlatformPlansRoute = PlatformPlansRouteImport.update({
   id: '/platform_/plans',
   path: '/platform/plans',
@@ -454,6 +460,7 @@ export interface FileRoutesByFullPath {
   '/manage/login': typeof ManageLoginRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
+  '/platform/hospitality': typeof PlatformHospitalityRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
   '/platform/upgrades': typeof PlatformUpgradesRoute
@@ -521,6 +528,7 @@ export interface FileRoutesByTo {
   '/manage/login': typeof ManageLoginRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
+  '/platform/hospitality': typeof PlatformHospitalityRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
   '/platform/upgrades': typeof PlatformUpgradesRoute
@@ -590,6 +598,7 @@ export interface FileRoutesById {
   '/manage_/login': typeof ManageLoginRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
+  '/platform_/hospitality': typeof PlatformHospitalityRoute
   '/platform_/plans': typeof PlatformPlansRoute
   '/platform_/support': typeof PlatformSupportRoute
   '/platform_/upgrades': typeof PlatformUpgradesRoute
@@ -660,6 +669,7 @@ export interface FileRouteTypes {
     | '/manage/login'
     | '/owner-agreement/$token'
     | '/pages/$slug'
+    | '/platform/hospitality'
     | '/platform/plans'
     | '/platform/support'
     | '/platform/upgrades'
@@ -727,6 +737,7 @@ export interface FileRouteTypes {
     | '/manage/login'
     | '/owner-agreement/$token'
     | '/pages/$slug'
+    | '/platform/hospitality'
     | '/platform/plans'
     | '/platform/support'
     | '/platform/upgrades'
@@ -795,6 +806,7 @@ export interface FileRouteTypes {
     | '/manage_/login'
     | '/owner-agreement/$token'
     | '/pages/$slug'
+    | '/platform_/hospitality'
     | '/platform_/plans'
     | '/platform_/support'
     | '/platform_/upgrades'
@@ -857,6 +869,7 @@ export interface RootRouteChildren {
   ManageLoginRoute: typeof ManageLoginRoute
   OwnerAgreementTokenRoute: typeof OwnerAgreementTokenRoute
   PagesSlugRoute: typeof PagesSlugRoute
+  PlatformHospitalityRoute: typeof PlatformHospitalityRoute
   PlatformPlansRoute: typeof PlatformPlansRoute
   PlatformSupportRoute: typeof PlatformSupportRoute
   PlatformUpgradesRoute: typeof PlatformUpgradesRoute
@@ -1183,6 +1196,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PagesSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/platform_/hospitality': {
+      id: '/platform_/hospitality'
+      path: '/platform/hospitality'
+      fullPath: '/platform/hospitality'
+      preLoaderRoute: typeof PlatformHospitalityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/platform_/plans': {
       id: '/platform_/plans'
       path: '/platform/plans'
@@ -1412,6 +1432,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageLoginRoute: ManageLoginRoute,
   OwnerAgreementTokenRoute: OwnerAgreementTokenRoute,
   PagesSlugRoute: PagesSlugRoute,
+  PlatformHospitalityRoute: PlatformHospitalityRoute,
   PlatformPlansRoute: PlatformPlansRoute,
   PlatformSupportRoute: PlatformSupportRoute,
   PlatformUpgradesRoute: PlatformUpgradesRoute,

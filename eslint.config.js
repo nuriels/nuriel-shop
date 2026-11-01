@@ -61,6 +61,7 @@ const HOSPITALITY_ROUTES = [
   "src/routes/manage.tsx",
   "src/routes/manage.*.tsx",
   "src/routes/manage_.*.tsx",
+  "src/routes/platform_.hospitality.tsx",
 ];
 // ה-root של הנתבים: כמו קובץ כניסה — מגיע למנועים רק דרך שורש ההרכבה
 const ROOT_ROUTE = "src/routes/__root.tsx";
