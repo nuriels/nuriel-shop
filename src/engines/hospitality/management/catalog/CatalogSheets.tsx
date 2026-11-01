@@ -37,6 +37,7 @@ import {
 import { PROPERTY_LABELS, UNIT_LABELS } from "../../validation/catalog";
 import { ChoiceField, NumberField, SelectField, TextAreaField, TextField } from "../lib/fields";
 import { manageKeys } from "../lib/query-keys";
+import { useRefresh } from "./refresh";
 import { PROPERTY_TYPE_LABELS, UNIT_TYPE_LABELS } from "./labels";
 import {
   PROPERTY_FORM_KEYS,
@@ -58,15 +59,6 @@ import {
 
 const errorText = (e: unknown) =>
   e instanceof Error && e.message ? e.message : "השמירה נכשלה — נסו שוב";
-
-function useRefresh() {
-  const queryClient = useQueryClient();
-  return () => {
-    void queryClient.invalidateQueries({ queryKey: manageKeys.catalog });
-    void queryClient.invalidateQueries({ queryKey: manageKeys.context });
-    void queryClient.invalidateQueries({ queryKey: manageKeys.activity });
-  };
-}
 
 /** המעטפת המשותפת: חלונית, הודעות, שמירה, ושאלה לפני סגירה עם שינויים */
 function FormSheet(props: {
@@ -190,7 +182,7 @@ function FormSheet(props: {
   );
 }
 
-function ConflictNotice({
+export function ConflictNotice({
   title,
   changed,
   dropped,

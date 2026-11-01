@@ -6,9 +6,11 @@ import {
   UNIT_TYPES,
   type PropertyFields,
   type PropertyKey,
+  type ReorderInput,
   type SetupInput,
   type UnitFields,
   type UnitKey,
+  type WholePropertyInput,
 } from "../types/catalog";
 import { InputError, uuid } from "./input";
 
@@ -208,6 +210,58 @@ export function parseUpdateUnit(input: Raw): {
     changes: cleanUnit(changesOf(i["changes"]), true),
     revision: revisionOf(i["revision"]),
   };
+}
+
+// ---------- פעולות (Stage 2c.3) ----------
+
+/** יחידה / מתחם + הגרסה שנטענה (ארכיון, מחיקה) */
+export function parseTarget(
+  input: Raw,
+  what: "היחידה" | "המתחם",
+): { id: string; revision: number } {
+  const i = input ?? {};
+  return { id: uuid(i["id"], what), revision: revisionOf(i["revision"]) };
+}
+
+/** הפעלה / השבתה של יחידה */
+export function parseSetActive(input: Raw): { id: string; active: boolean; revision: number } {
+  const i = input ?? {};
+  if (typeof i["active"] !== "boolean") throw new InputError("חסר מצב היחידה");
+  return { ...parseTarget(i, "היחידה"), active: i["active"] };
+}
+
+const MAX_LIST = 500;
+const uuidList = (v: unknown, what: string): string[] => {
+  if (!Array.isArray(v) || v.length > MAX_LIST) throw new InputError(`${what} — רשימה לא תקינה`);
+  const ids = v.map((x) => uuid(x, what));
+  if (new Set(ids).size !== ids.length) throw new InputError(`${what} — יחידה מופיעה פעמיים`);
+  return ids;
+};
+
+export const WHOLE_MIN_MEMBERS = 2;
+export const WHOLE_MEMBERS_ERROR = "יש לבחור לפחות שתי יחידות פעילות מהמתחם";
+
+/** "השכרת המתחם כולו": כיבוי — בלי יחידות; הפעלה — לפחות שתיים */
+export function parseWholeProperty(input: Raw): WholePropertyInput {
+  const i = input ?? {};
+  if (typeof i["enabled"] !== "boolean") throw new InputError('חסר מצב "השכרת המתחם כולו"');
+  const rev = i["revision"];
+  const revision = rev === null || rev === undefined ? null : revisionOf(rev);
+  const memberIds = i["enabled"] ? uuidList(i["memberIds"], "היחידות") : [];
+  if (i["enabled"] && memberIds.length < WHOLE_MIN_MEMBERS)
+    throw new InputError(WHOLE_MEMBERS_ERROR);
+  return { propertyId: uuid(i["propertyId"], "המתחם"), enabled: i["enabled"], memberIds, revision };
+}
+
+/** סדר: אותן יחידות בדיוק (לפחות שתיים), בסדר חדש */
+export function parseReorder(input: Raw): ReorderInput {
+  const i = input ?? {};
+  const expected = uuidList(i["expected"], "הסדר הקודם");
+  const ids = uuidList(i["ids"], "הסדר החדש");
+  const same = new Set(expected);
+  if (ids.length < 2 || ids.length !== expected.length || ids.some((x) => !same.has(x)))
+    throw new InputError("רשימת הסדר לא תקינה");
+  return { propertyId: uuid(i["propertyId"], "המתחם"), expected, ids };
 }
 
 /** ההקמה הראשונה: סוג המקום, השם, ולפחות יחידה אחת (עד MAX_SETUP_UNITS) */

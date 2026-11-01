@@ -1,7 +1,7 @@
 // ניווט אזור הניהול: בצד (מחשב) ובשורה תחתונה + "עוד" (טלפון). מסכים שעוד לא
 // נבנו מוצגים כ"בקרוב" — לא קישורים.
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import {
   BedDouble,
   CalendarCheck,
@@ -23,7 +23,7 @@ import {
   SheetTrigger,
   cn,
 } from "@/platform/ui";
-import { splitForMobile, type NavItem, type NavKey } from "../lib/nav";
+import { isNavActive, splitForMobile, type NavItem, type NavKey } from "../lib/nav";
 
 const ICONS: Record<NavKey, LucideIcon> = {
   dashboard: LayoutDashboard,
@@ -35,6 +35,12 @@ const ICONS: Record<NavKey, LucideIcon> = {
   settings: Settings,
   team: UserCog,
 };
+
+/** הפריט מסומן גם בעמודים ששייכים אליו (עמוד יחידה / מתחם תחת "יחידות") */
+function useNavActive(item: NavItem): boolean {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  return isNavActive(item, pathname);
+}
 
 // (span ולא Badge: ה-Badge המשותף הוא div, ואסור div בתוך span)
 function SoonBadge() {
@@ -48,6 +54,7 @@ function SoonBadge() {
 /** פריט ברשימה (צד / תפריט "עוד"); onNavigate — סוגר את תפריט "עוד" כשבוחרים מסך */
 function ListItem({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
   const Icon = ICONS[item.key];
+  const active = useNavActive(item);
   const base = "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm";
   if (!item.to) {
     return (
@@ -61,9 +68,8 @@ function ListItem({ item, onNavigate }: { item: NavItem; onNavigate?: () => void
   return (
     <Link
       to={item.to}
-      activeOptions={{ exact: true }}
-      className={cn(base, "font-medium hover:bg-muted")}
-      activeProps={{ className: "bg-primary/10 text-primary", "aria-current": "page" }}
+      className={cn(base, "font-medium hover:bg-muted", active && "bg-primary/10 text-primary")}
+      aria-current={active ? "page" : undefined}
       onClick={onNavigate}
     >
       <Icon className="size-5 shrink-0" aria-hidden="true" />
@@ -95,6 +101,7 @@ export function SideNav({ items, businessName }: { items: NavItem[]; businessNam
 /** פריט בשורה התחתונה (טלפון) */
 function BarItem({ item }: { item: NavItem }) {
   const Icon = ICONS[item.key];
+  const active = useNavActive(item);
   const base = "flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[11px]";
   if (!item.to) {
     return (
@@ -108,9 +115,8 @@ function BarItem({ item }: { item: NavItem }) {
   return (
     <Link
       to={item.to}
-      activeOptions={{ exact: true }}
-      className={cn(base, "font-medium text-foreground")}
-      activeProps={{ className: "text-primary", "aria-current": "page" }}
+      className={cn(base, "font-medium", active ? "text-primary" : "text-foreground")}
+      aria-current={active ? "page" : undefined}
     >
       <Icon className="size-5" aria-hidden="true" />
       <span>{item.label}</span>

@@ -93,6 +93,18 @@ const fn = (
 
 const revisionOf = (site: string) =>
   Number(sql(`SELECT revision FROM hospitality.settings WHERE tenant_id = '${site}'`));
+const unitRev = (id: string) =>
+  Number(sql(`SELECT revision FROM hospitality.units WHERE id = '${id}'`));
+const propertyRev = (id: string) =>
+  Number(sql(`SELECT revision FROM hospitality.properties WHERE id = '${id}'`));
+const wholeRev = (property: string) => {
+  const r = sql(`SELECT revision FROM hospitality.units
+                  WHERE property_id = '${property}' AND kind = 'whole_property'`);
+  return r === "" ? null : Number(r);
+};
+const activeIdsOf = (property: string) =>
+  sql(`SELECT string_agg(id::text, ',' ORDER BY sort_order, created_at) FROM hospitality.units
+        WHERE property_id = '${property}' AND kind <> 'whole_property' AND is_active`).split(",");
 
 test.beforeAll(async ({ request }, testInfo) => {
   const mobile = testInfo.project.name === "mobile";
@@ -186,6 +198,12 @@ test("permission matrix: every management function × every kind of account", as
     entitlements: {},
     catalogView: {},
     catalogCreateProperty: {},
+    catalogSetActive: {},
+    catalogReorder: {},
+    catalogWholeProperty: {},
+    catalogDeleteUnit: {},
+    catalogArchive: {},
+    catalogDeleteProperty: {},
     addManager: {},
     removeManager: {},
   };
@@ -202,10 +220,30 @@ test("permission matrix: every management function × every kind of account", as
     // properties and units (2c.2): owner and managers alike
     expected["catalogView"]![who] = may(staff);
     expected["catalogCreateProperty"]![who] = may(staff);
+    // 2c.3: activation, order and "the whole property" — owner and managers; archive and
+    // permanent delete — owners only (the platform admin acts as the owner)
+    expected["catalogSetActive"]![who] = may(staff);
+    expected["catalogReorder"]![who] = may(staff);
+    expected["catalogWholeProperty"]![who] = may(staff);
+    expected["catalogDeleteUnit"]![who] = may(owners);
+    expected["catalogArchive"]![who] = may(owners);
+    expected["catalogDeleteProperty"]![who] = may(owners);
     // mutations of the team: run for the owner only on a temporary addition (below)
     expected["addManager"]![who] = may(["owner"]);
     expected["removeManager"]![who] = may(["owner"]);
   }
+
+  // a property with two units for the 2c.3 actions (written directly — test data)
+  const table =
+    sql(`INSERT INTO hospitality.properties (tenant_id, name, slug, status, property_type)
+                     VALUES ('${siteA}', 'מתחם הטבלה', 'matrix', 'active', 'other') RETURNING id`);
+  for (const [n, name] of ["יחידה א", "יחידה ב"].entries())
+    sql(`INSERT INTO hospitality.units (tenant_id, property_id, kind, unit_type, name, slug, sort_order)
+         VALUES ('${siteA}', '${table}', 'unit', 'zimmer', '${name}', 'matrix-${n}', ${n})`);
+  const tableUnit = sql(
+    `SELECT id FROM hospitality.units WHERE property_id = '${table}' AND name = 'יחידה א'`,
+  );
+  const originalOrder = activeIdsOf(table);
 
   const managerId = sql(`SELECT id FROM auth.users WHERE email = '${MANAGER_A.email}'`);
   const extraId = sql(`SELECT id FROM auth.users WHERE email = '${EXTRA.email}'`);
@@ -236,6 +274,38 @@ test("permission matrix: every management function × every kind of account", as
     observed["catalogCreateProperty"]![who] = await call("catalog", "hospitalityCreateProperty", {
       data: { data: { name: `מתחם של ${who}`, property_type: "other" } },
     });
+    // 2c.3 actions (each with the current revision / order, so "ok" means it was really done)
+    observed["catalogSetActive"]![who] = await call("catalog", "hospitalitySetUnitActive", {
+      data: { id: tableUnit, active: true, revision: unitRev(tableUnit) },
+    });
+    const order = activeIdsOf(table);
+    observed["catalogReorder"]![who] = await call("catalog", "hospitalityReorderUnits", {
+      data: { propertyId: table, expected: order, ids: [...order].reverse() },
+    });
+    observed["catalogWholeProperty"]![who] = await call("catalog", "hospitalitySetWholeProperty", {
+      data: { propertyId: table, enabled: true, memberIds: order, revision: wholeRev(table) },
+    });
+    // archive and delete: each staff caller on the property it created above (with a unit in
+    // it); everyone else on the table's property and unit
+    const own =
+      sql(
+        `SELECT id FROM hospitality.properties WHERE tenant_id = '${siteA}' AND name = 'מתחם של ${who}'`,
+      ) || table;
+    const ownUnit =
+      own === table
+        ? tableUnit
+        : sql(`INSERT INTO hospitality.units (tenant_id, property_id, kind, unit_type, name, slug)
+               VALUES ('${siteA}', '${own}', 'unit', 'zimmer', 'יחידה של ${who}', 'mx-${who.toLowerCase()}')
+               RETURNING id`);
+    observed["catalogDeleteUnit"]![who] = await call("catalog", "hospitalityDeleteUnit", {
+      data: { id: ownUnit, revision: unitRev(ownUnit) },
+    });
+    observed["catalogArchive"]![who] = await call("catalog", "hospitalityArchiveProperty", {
+      data: { id: own, revision: propertyRev(own) },
+    });
+    observed["catalogDeleteProperty"]![who] = await call("catalog", "hospitalityDeleteProperty", {
+      data: { id: own, revision: propertyRev(own) },
+    });
     if (who === "platformAdmin") {
       observed["addManager"]![who] = R; // not exercised (see above)
       observed["removeManager"]![who] = R;
@@ -263,16 +333,28 @@ test("permission matrix: every management function × every kind of account", as
   expect(
     sql(`SELECT notification_emails::text FROM hospitality.settings WHERE tenant_id = '${siteA}'`),
   ).toBe("{owner@int.test}");
-  // properties: only staff created one (platform admin, manager, shared manager, owner)
+  // properties: only staff created one (platform admin, manager, shared manager, owner); the
+  // owners deleted theirs (after archiving them); the managers' are still here as created
+  // (draft, not archived), with their unit — archive and delete were refused
   expect(
     sql(
-      `SELECT string_agg(name, ',' ORDER BY name) FROM hospitality.properties WHERE tenant_id = '${siteA}'`,
+      `SELECT string_agg(p.name || ':' || p.status || ':' || (SELECT count(*) FROM hospitality.units u
+                                                              WHERE u.property_id = p.id), ','
+                         ORDER BY p.name)
+         FROM hospitality.properties p WHERE p.tenant_id = '${siteA}'`,
     ),
   ).toBe(
-    ["מתחם של owner", "מתחם של manager", "מתחם של platformAdmin", "מתחם של sharedManager"]
+    ["מתחם הטבלה:active:3", "מתחם של manager:draft:1", "מתחם של sharedManager:draft:1"]
       .sort()
       .join(","),
   );
+  // the table's property: reversed by each of the four staff callers (back to the start), and
+  // "the whole property" made once with both units
+  expect(activeIdsOf(table)).toEqual(originalOrder);
+  expect(
+    sql(`SELECT count(*) || ':' || bool_and(w.is_active) FROM hospitality.unit_members m
+           JOIN hospitality.units w ON w.id = m.parent_unit_id WHERE w.property_id = '${table}'`),
+  ).toBe("2:true");
 });
 
 test("between sites: a site's owner has no power on another site; Hospitality functions do not exist on a store", async ({

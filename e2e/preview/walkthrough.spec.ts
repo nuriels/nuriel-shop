@@ -1,8 +1,15 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 import { ACCOUNTS, DEMO_PASSWORD, SITES } from "../../scripts/preview/demo-data.mjs";
+import { loadSession, passwordSession } from "../tests/hospitality-helpers";
 
 // סיור מוקלט בתצוגה המקומית של Hospitality (P0): התהליכים האמיתיים בממשק — מחשב
 // וטלפון — עם צילומי מסך וסרטונים. רץ מול Supabase המקומי ונתוני ההדגמה בלבד.
@@ -62,6 +69,24 @@ async function manageLogin(page: Page, slug: string, email: string) {
   await pause(page, 400);
   await page.getByRole("button", { name: "כניסה" }).click();
   await page.waitForURL((url) => url.pathname === "/manage");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await quiet(page);
+}
+
+/**
+ * כניסה בלי מסך הכניסה (פרקים 08 ואילך): הסשן מהשירות של Supabase המקומי, כמו בבדיקות
+ * ה-E2E. מסך הכניסה עצמו מוצג בפרקים 02–06; כניסה דרך המסך מוגבלת ל-15 ב-15 דקות לכל IP,
+ * וכל הסיור רץ מאותה כתובת.
+ */
+async function signedIn(
+  page: Page,
+  request: APIRequestContext,
+  slug: string,
+  email: string,
+  path: string,
+) {
+  const session = await passwordSession(request, site(slug), { email, password: DEMO_PASSWORD });
+  await loadSession(page, session, path);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await quiet(page);
 }
@@ -294,4 +319,107 @@ test("07 the store (Ecommerce) is unchanged", async ({ page, context }, info) =>
   await pause(page, 1200);
   await shot(page, p, "19-store-home", false);
   await finish(context, p, "07-store-unchanged", [page]);
+});
+
+// ---------------------------------------------------------------- Stage 2c.3
+
+test("08 zimmer complex owner: the property page — 'rent the whole property' with chosen units; a unit page; switching a unit off", async ({
+  page,
+  context,
+  request,
+}, info) => {
+  const p = info.project.name;
+  await signedIn(page, request, "demo-zimmer", ACCOUNTS.zimmerOwner, "/manage/units");
+  await page
+    .locator('[data-property="צימרי הגליל"]')
+    .getByRole("link", { name: /^ניהול המתחם/ })
+    .click();
+  await expect(page.getByRole("heading", { level: 1, name: "צימרי הגליל" })).toBeVisible();
+  await pause(page);
+  await shot(page, p, "20-zimmer-property");
+
+  // "כל המתחם" כולל עכשיו ארבע יחידות — מוציאים את סוויטת הנוף
+  const whole = page.locator('[data-section="whole"]');
+  await whole.scrollIntoViewIfNeeded();
+  await expect(page.getByRole("switch", { name: "השכרת המתחם כולו" })).toBeChecked();
+  await page.getByRole("checkbox", { name: "סוויטת הנוף" }).click();
+  await pause(page);
+  await page.getByRole("button", { name: "שמירת ההשכרה" }).click();
+  await expect(page.getByText('היחידות של "כל המתחם" עודכנו')).toBeVisible();
+  await quiet(page);
+  await whole.scrollIntoViewIfNeeded();
+  await shot(page, p, "21-zimmer-whole-property", false);
+
+  // עמוד הסוויטה — והשבתה (למשל לשיפוץ)
+  await page.locator('[data-section="units"]').getByRole("link", { name: "סוויטת הנוף" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "סוויטת הנוף" })).toBeVisible();
+  await pause(page);
+  await shot(page, p, "22-zimmer-unit-page");
+  await page.getByRole("button", { name: "השבתת היחידה" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("להשבית את סוויטת הנוף?");
+  await pause(page);
+  await shot(page, p, "23-zimmer-deactivate-confirm", false);
+  await page.getByRole("alertdialog").getByRole("button", { name: "השבתה" }).click();
+  await expect(page.getByText("היחידה הושבתה")).toBeVisible();
+  await quiet(page);
+
+  // ברשימה: הסוויטה תחת "יחידות לא פעילות", ו"כל המתחם" עם שלוש יחידות
+  await page.getByRole("link", { name: "חזרה ליחידות ומתחמים" }).click();
+  const card = page.locator('[data-property="צימרי הגליל"]');
+  await card.getByRole("button", { name: "יחידות לא פעילות (1)" }).click();
+  await expect(unitRow(page, "סוויטת הנוף")).toContainText("לא פעילה");
+  await expect(unitRow(page, "כל המתחם — צימרי הגליל")).toContainText("הזמנה אחת ל-3 יחידות");
+  await expect(page.getByTestId("units-limit")).toHaveText("3 מתוך 5 יחידות פעילות בחבילה");
+  await pause(page);
+  await shot(page, p, "24-zimmer-list-inactive");
+  await finish(context, p, "08-zimmer-property-whole-inactive", [page]);
+});
+
+test("09 boutique hotel owner: ordering the rooms — arrows, and drag on the computer; saved at once", async ({
+  page,
+  context,
+  request,
+}, info) => {
+  const p = info.project.name;
+  const phone = p === "phone";
+  const suite = "סוויטה 302 — ג׳קוזי";
+  const hotelOrder = () =>
+    sql(`SELECT string_agg(u.name, ',' ORDER BY u.sort_order, u.created_at) FROM hospitality.units u
+           JOIN public.tenants t ON t.id = u.tenant_id
+          WHERE t.slug = 'demo-hotel' AND u.kind <> 'whole_property' AND u.is_active`);
+  await signedIn(page, request, "demo-hotel", ACCOUNTS.hotelOwner, "/manage/units");
+  await page
+    .locator('[data-property="מלון הנמל"]')
+    .getByRole("button", { name: /^סידור היחידות/ })
+    .click();
+  const order = page.getByTestId("unit-order");
+  const hotel = SITES.find((s) => s.slug === "demo-hotel")!;
+  // שמונת החדרים מההדגמה + החדר שנוסף בתהליך 04
+  await expect(order.locator("li")).toHaveCount(hotel.units.length + 1);
+  await order.scrollIntoViewIfNeeded();
+  await pause(page);
+  await shot(page, p, "25-hotel-order", false);
+
+  // סוויטת הג'קוזי למעלה: בחצים (ובמחשב — את השאר בגרירה)
+  const up = order.getByRole("button", { name: `הזזת ${suite} למעלה` });
+  for (let i = 0; i < (phone ? 7 : 2); i++) {
+    await expect(up).toBeEnabled();
+    await up.click();
+    await pause(page, 400);
+  }
+  if (!phone) {
+    await expect(up).toBeEnabled();
+    await order.locator(`li[data-unit="${suite}"]`).dragTo(order.locator("li").first());
+  }
+  await expect.poll(hotelOrder).toMatch(new RegExp(`^${suite},`));
+  await expect(order.locator("li").first()).toHaveAttribute("data-unit", suite);
+  await pause(page);
+  await shot(page, p, "26-hotel-order-moved", false);
+  await order.getByRole("button", { name: "סיום הסידור" }).click();
+  await expect(
+    page.getByRole("list", { name: "היחידות במלון הנמל" }).locator("li").first(),
+  ).toHaveAttribute("data-unit", suite);
+  await quiet(page);
+  await shot(page, p, "27-hotel-rooms-ordered");
+  await finish(context, p, "09-hotel-room-order", [page]);
 });

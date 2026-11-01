@@ -1,10 +1,22 @@
 // מסך "יחידות ומתחמים" (/manage/units): בלי מקום אירוח — מצב ריק והקמה ראשונה;
-// אחרת רשימה מקובצת לפי מתחם, עם הוספה ועריכה. כל שינוי דרך פונקציות השרת (מיגרציה 10).
-import { useState } from "react";
+// אחרת רשימה מקובצת לפי מתחם, עם הוספה ועריכה מהירה, קישור לעמוד של כל יחידה ומתחם,
+// סידור היחידות, יחידות לא פעילות בנפרד, ומתחמים בארכיון (לבעלים). כל שינוי דרך פונקציות
+// השרת (מיגרציה 10).
+import { useId, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { MapPin, Pencil, Plus } from "lucide-react";
+import {
+  ArrowUpDown,
+  ChevronDown,
+  ChevronLeft,
+  MapPin,
+  Pencil,
+  Plus,
+  Settings2,
+} from "lucide-react";
 import {
   Button,
+  buttonVariants,
   Card,
   CardContent,
   CardHeader,
@@ -18,11 +30,13 @@ import { manageKeys } from "../lib/query-keys";
 import { PropertySheet, UnitSheet } from "./CatalogSheets";
 import { FirstRun } from "./FirstRun";
 import { PROPERTY_ICONS, UNIT_ICONS } from "./icons";
-import { BUSINESS_TYPES, PROPERTY_TYPE_LABELS, UNIT_TYPE_LABELS, setupUnitType } from "./labels";
+import { PROPERTY_TYPE_LABELS, UNIT_TYPE_LABELS } from "./labels";
 import {
+  activeUnits,
   archivedCount,
+  inactiveUnits,
   missingForBooking,
-  nextUnitName,
+  newUnitDefaults,
   physicalUnits,
   unitSummary,
   unitsLimit,
@@ -30,6 +44,8 @@ import {
   wholeUnit,
   type UnitForm,
 } from "./model";
+import { StatusPill } from "./parts";
+import { UnitOrder } from "./UnitOrder";
 
 type SheetState =
   | { kind: "property-new" }
@@ -75,26 +91,49 @@ export function CatalogPage() {
   );
 }
 
+/** מתחמים בארכיון: לבעלים — רשימה שנפתחת (קישור לעמוד המתחם להחזרה או מחיקה); למנהל — רק מספר */
 function ArchivedNote({ view }: { view: CatalogView }) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  const archived = view.properties.filter((p) => p.status === "archived");
   const n = archivedCount(view);
   if (n === 0) return null;
+  if (!view.can_owner)
+    return (
+      <p className="text-sm text-muted-foreground">
+        {count(n, "מתחם אחד בארכיון", "מתחמים בארכיון")} — לא מוצג כאן.
+      </p>
+    );
   return (
-    <p className="text-sm text-muted-foreground">
-      {count(n, "מתחם אחד בארכיון", "מתחמים בארכיון")} — לא מוצג כאן.
-    </p>
+    <div className="flex flex-col gap-2">
+      <Button
+        variant="ghost"
+        className="min-h-11 w-fit gap-2"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <ChevronDown className={open ? "size-4 rotate-180" : "size-4"} aria-hidden="true" />
+        {count(n, "מתחם אחד בארכיון", "מתחמים בארכיון")}
+      </Button>
+      {open && (
+        <ul id={listId} className="divide-y rounded-md border">
+          {archived.map((p) => (
+            <li key={p.id} className="flex flex-wrap items-center gap-2 p-3" data-archived={p.name}>
+              <Link
+                to="/manage/properties/$propertyId"
+                params={{ propertyId: p.id }}
+                className="min-w-0 flex-1 font-medium text-primary hover:underline"
+              >
+                {p.name}
+              </Link>
+              <StatusPill tone="muted">בארכיון</StatusPill>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
-}
-
-function newUnitDefaults(p: CatalogProperty | undefined): Partial<UnitForm> {
-  if (!p) return {};
-  const word = BUSINESS_TYPES[p.property_type].unitWord;
-  return {
-    unit_type: setupUnitType(p.property_type),
-    name: nextUnitName(
-      word,
-      p.units.map((u) => u.name),
-    ),
-  };
 }
 
 function CatalogList({ view }: { view: CatalogView }) {
@@ -202,7 +241,12 @@ function PropertyCard(props: {
   const p = props.property;
   const Icon = PROPERTY_ICONS[p.property_type];
   const units = physicalUnits(p);
+  const active = activeUnits(p);
+  const inactive = inactiveUnits(p);
   const whole = wholeUnit(p);
+  const [ordering, setOrdering] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
+  const inactiveId = useId();
   return (
     <Card data-property={p.name}>
       <CardHeader className="flex flex-row flex-wrap items-start gap-3 space-y-0">
@@ -214,7 +258,15 @@ function PropertyCard(props: {
         </span>
         <div className="min-w-0 flex-1">
           <CardTitle className="text-lg">
-            <h2 className="break-words">{p.name}</h2>
+            <h2 className="break-words">
+              <Link
+                to="/manage/properties/$propertyId"
+                params={{ propertyId: p.id }}
+                className="hover:underline"
+              >
+                {p.name}
+              </Link>
+            </h2>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             {PROPERTY_TYPE_LABELS[p.property_type]} · {count(units.length, "יחידה אחת", "יחידות")}
@@ -231,33 +283,89 @@ function PropertyCard(props: {
             </span>
           )}
         </div>
-        <Button variant="outline" className="min-h-11 gap-2" onClick={props.onEdit}>
-          <Pencil className="size-4" aria-hidden="true" />
-          עריכה<span className="sr-only"> של המתחם {p.name}</span>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/manage/properties/$propertyId"
+            params={{ propertyId: p.id }}
+            className={buttonVariants({ variant: "outline", className: "min-h-11 gap-2" })}
+          >
+            <Settings2 className="size-4" aria-hidden="true" />
+            ניהול המתחם<span className="sr-only"> {p.name}</span>
+          </Link>
+          <Button variant="outline" className="min-h-11 gap-2" onClick={props.onEdit}>
+            <Pencil className="size-4" aria-hidden="true" />
+            עריכה<span className="sr-only"> של המתחם {p.name}</span>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        {units.length === 0 && !whole ? (
+        {ordering ? (
+          <UnitOrder property={p} onDone={() => setOrdering(false)} />
+        ) : units.length === 0 && !whole ? (
           <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
             אין עדיין יחידות במתחם הזה.
           </p>
         ) : (
-          <ul aria-label={`היחידות ב${p.name}`} className="divide-y rounded-md border">
-            {units.map((u) => (
-              <UnitRow key={u.id} unit={u} onEdit={() => props.onEditUnit(u)} />
-            ))}
-            {whole && <WholeRow unit={whole} onEdit={() => props.onEditUnit(whole)} />}
-          </ul>
+          (active.length > 0 || whole) && (
+            <ul aria-label={`היחידות ב${p.name}`} className="divide-y rounded-md border">
+              {active.map((u) => (
+                <UnitRow key={u.id} unit={u} onEdit={() => props.onEditUnit(u)} />
+              ))}
+              {whole && <WholeRow unit={whole} onEdit={() => props.onEditUnit(whole)} />}
+            </ul>
+          )
         )}
-        <Button
-          variant="ghost"
-          className="min-h-11 w-fit gap-2"
-          disabled={!props.canAdd}
-          onClick={props.onAddUnit}
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          הוספת יחידה<span className="sr-only"> ל{p.name}</span>
-        </Button>
+        {!ordering && inactive.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="ghost"
+              className="min-h-11 w-fit gap-2"
+              aria-expanded={showInactive}
+              aria-controls={inactiveId}
+              onClick={() => setShowInactive((o) => !o)}
+            >
+              <ChevronDown
+                className={showInactive ? "size-4 rotate-180" : "size-4"}
+                aria-hidden="true"
+              />
+              יחידות לא פעילות ({inactive.length})
+            </Button>
+            {showInactive && (
+              <ul
+                id={inactiveId}
+                aria-label={`יחידות לא פעילות ב${p.name}`}
+                className="divide-y rounded-md border"
+              >
+                {inactive.map((u) => (
+                  <UnitRow key={u.id} unit={u} onEdit={() => props.onEditUnit(u)} />
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {!ordering && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="ghost"
+              className="min-h-11 w-fit gap-2"
+              disabled={!props.canAdd}
+              onClick={props.onAddUnit}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              הוספת יחידה<span className="sr-only"> ל{p.name}</span>
+            </Button>
+            {active.length >= 2 && (
+              <Button
+                variant="ghost"
+                className="min-h-11 w-fit gap-2"
+                onClick={() => setOrdering(true)}
+              >
+                <ArrowUpDown className="size-4" aria-hidden="true" />
+                סידור היחידות<span className="sr-only"> ב{p.name}</span>
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -276,7 +384,14 @@ function UnitRow({ unit: u, onEdit }: { unit: CatalogUnit; onEdit: () => void })
       </span>
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-2 font-medium">
-          <span className="break-words">{u.name}</span>
+          <Link
+            to="/manage/units/$unitId"
+            params={{ unitId: u.id }}
+            className="inline-flex items-center gap-1 break-words hover:underline"
+          >
+            {u.name}
+            <ChevronLeft className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </Link>
           {!u.is_active && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
               לא פעילה
@@ -305,7 +420,14 @@ function WholeRow({ unit: u, onEdit }: { unit: CatalogUnit; onEdit: () => void }
     <li className="flex flex-wrap items-center gap-3 bg-muted/30 p-3" data-unit={u.name}>
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-2 font-medium">
-          <span className="break-words">{u.name}</span>
+          <Link
+            to="/manage/units/$unitId"
+            params={{ unitId: u.id }}
+            className="inline-flex items-center gap-1 break-words hover:underline"
+          >
+            {u.name}
+            <ChevronLeft className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </Link>
           {!u.is_active && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
               לא פעיל

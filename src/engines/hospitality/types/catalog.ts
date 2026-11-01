@@ -114,6 +114,30 @@ export type CatalogSaveResult =
   | { status: "saved"; id: string; revision: number }
   | { status: "conflict"; message: string; view: CatalogView };
 
+/**
+ * פעולה (הפעלה / השבתה, ארכיון, מחיקה, "השכרת המתחם כולו", סדר) — Stage 2c.3.
+ * done: בוצעה (revision — הגרסה החדשה של מה שהשתנה, אם יש); conflict: מישהו אחר שינה
+ * בינתיים — לא בוצע דבר, ומוחזרים הנתונים העדכניים.
+ */
+export type CatalogActionResult =
+  | { status: "done"; revision: number | null }
+  | { status: "conflict"; message: string; view: CatalogView };
+
+/** "השכרת המתחם כולו": מצב, היחידות, והגרסה של "כל המתחם" כפי שנטענה (null — עוד לא קיים) */
+export interface WholePropertyInput {
+  propertyId: string;
+  enabled: boolean;
+  memberIds: string[];
+  revision: number | null;
+}
+
+/** סדר היחידות הפעילות של מתחם: הסדר שנטען (expected) והסדר החדש (ids) */
+export interface ReorderInput {
+  propertyId: string;
+  expected: string[];
+  ids: string[];
+}
+
 /** ההקמה הראשונה: מקום האירוח והיחידות הראשונות שלו */
 export interface SetupUnit {
   name: string;

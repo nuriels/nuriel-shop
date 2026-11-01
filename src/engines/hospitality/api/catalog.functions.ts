@@ -2,16 +2,27 @@
 // של המשתמש — ההרשאה, מגבלת החבילה וכללי המבנה נאכפים שם. כאן: בדיקת הקלט (אותם
 // כללים והודעות), ו"עודכן בינתיים" כתשובה ולא כשגיאה.
 import { createServerFn } from "@tanstack/react-start";
-import type { CatalogSaveResult, CatalogView, SetupResult, UnitFields } from "../types/catalog";
+import type {
+  CatalogActionResult,
+  CatalogSaveResult,
+  CatalogView,
+  SetupResult,
+  UnitFields,
+} from "../types/catalog";
 import {
   parseCreateProperty,
   parseCreateUnit,
+  parseReorder,
+  parseSetActive,
   parseSetup,
+  parseTarget,
   parseUpdateProperty,
   parseUpdateUnit,
+  parseWholeProperty,
 } from "../validation/catalog";
 
 type Saved = { id: string; revision: number };
+type Rpc = <T>(fn: string, args: Record<string, unknown>) => Promise<T>;
 
 /** יחידה מסוג "חדר" נשמרת כחדר; השאר — יחידה. נקבע ביצירה בלבד (לא משנה התנהגות) */
 const kindFor = (unitType: UnitFields["unit_type"] | undefined) =>
@@ -126,4 +137,120 @@ export const hospitalitySetupPlace = createServerFn({ method: "POST" })
       }
     }
     return { propertyId: property.id, created, requested: data.units.length, message: null };
+  });
+
+// ---------------------------------------------------------------- Stage 2c.3: פעולות
+
+/**
+ * פעולה עם בדיקת "עודכן בינתיים": קודם המצב הנוכחי מהמסד; אם מישהו אחר שינה בינתיים את
+ * מה שהמשתמש ראה — לא נעשה דבר, ומוחזרים הנתונים העדכניים (לא שגיאה). ההרשאה (בעלים /
+ * מנהל) וכללי המבנה — בפונקציות המסד עצמן.
+ */
+async function guardedAction(
+  stale: (view: CatalogView) => string | null,
+  act: (rpc: Rpc) => Promise<number | null>,
+): Promise<CatalogActionResult> {
+  const [{ manageRpc }, { HospitalityError }] = await Promise.all([
+    import("../server/manage.server"),
+    import("../server/rpc.server"),
+  ]);
+  const view = await manageRpc<CatalogView>("catalog_view", {});
+  const message = stale(view);
+  if (message) return { status: "conflict", message, view };
+  try {
+    return { status: "done", revision: await act(manageRpc) };
+  } catch (error) {
+    if (error instanceof HospitalityError && error.code === "HS409")
+      return {
+        status: "conflict",
+        message: error.message,
+        view: await manageRpc<CatalogView>("catalog_view", {}),
+      };
+    throw error;
+  }
+}
+
+const model = () => import("../management/catalog/model");
+
+/** הפעלה / השבתה של יחידה (בעלים ומנהלים) */
+export const hospitalitySetUnitActive = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseSetActive(input))
+  .handler(async ({ data }): Promise<CatalogActionResult> => {
+    const { staleUnit } = await model();
+    return guardedAction(
+      (view) => staleUnit(view, data.id, data.revision),
+      async (rpc) =>
+        (await rpc<Saved>("unit_set_active", { _id: data.id, _active: data.active })).revision,
+    );
+  });
+
+/** מחיקה לצמיתות של יחידה שלא הוזמנה / נחסמה (בעלים בלבד — נאכף במסד) */
+export const hospitalityDeleteUnit = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseTarget(input, "היחידה"))
+  .handler(async ({ data }): Promise<CatalogActionResult> => {
+    const { staleUnit } = await model();
+    return guardedAction(
+      (view) => staleUnit(view, data.id, data.revision),
+      async (rpc) => {
+        await rpc<boolean>("unit_delete", { _id: data.id });
+        return null;
+      },
+    );
+  });
+
+/** העברת מתחם לארכיון — היחידות שלו מושבתות (בעלים בלבד — נאכף במסד) */
+export const hospitalityArchiveProperty = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseTarget(input, "המתחם"))
+  .handler(async ({ data }): Promise<CatalogActionResult> => {
+    const { staleProperty } = await model();
+    return guardedAction(
+      (view) => staleProperty(view, data.id, data.revision),
+      async (rpc) => (await rpc<Saved>("property_archive", { _id: data.id })).revision,
+    );
+  });
+
+/** מחיקה לצמיתות של מתחם שאף יחידה בו לא הוזמנה / נחסמה (בעלים בלבד — נאכף במסד) */
+export const hospitalityDeleteProperty = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseTarget(input, "המתחם"))
+  .handler(async ({ data }): Promise<CatalogActionResult> => {
+    const { staleProperty } = await model();
+    return guardedAction(
+      (view) => staleProperty(view, data.id, data.revision),
+      async (rpc) => {
+        await rpc<boolean>("property_delete", { _id: data.id });
+        return null;
+      },
+    );
+  });
+
+/** "השכרת המתחם כולו": הפעלה עם היחידות שנבחרו, או כיבוי (בעלים ומנהלים) */
+export const hospitalitySetWholeProperty = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseWholeProperty(input))
+  .handler(async ({ data }): Promise<CatalogActionResult> => {
+    const { staleWhole } = await model();
+    return guardedAction(
+      (view) => staleWhole(view, data.propertyId, data.revision),
+      async (rpc) =>
+        (
+          await rpc<{ id: string | null; revision: number | null }>("whole_property_set", {
+            _property_id: data.propertyId,
+            _enabled: data.enabled,
+            _member_ids: data.memberIds,
+          })
+        ).revision,
+    );
+  });
+
+/** סדר היחידות הפעילות של מתחם — בטרנזקציה אחת (בעלים ומנהלים) */
+export const hospitalityReorderUnits = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseReorder(input))
+  .handler(async ({ data }): Promise<CatalogActionResult> => {
+    const { staleOrder } = await model();
+    return guardedAction(
+      (view) => staleOrder(view, data.propertyId, data.expected),
+      async (rpc) => {
+        await rpc<boolean>("catalog_reorder", { _kind: "units", _ids: data.ids });
+        return null;
+      },
+    );
   });

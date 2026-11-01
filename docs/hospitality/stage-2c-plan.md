@@ -1,6 +1,44 @@
 # Hospitality Stage 2c — Properties and units (detailed plan)
 
-Status: **approved (D-2c-1 … D-2c-6). 2c.1 (database, `0efc471`) approved; 2c.2 (screens) implemented — awaiting review; 2c.3 and 2c.4 not started.**
+Status: **approved (D-2c-1 … D-2c-6). 2c.1 (database, `0efc471`) and 2c.2 (screens) approved; 2c.3 (unit and property pages) implemented — awaiting review; 2c.4 not started.**
+
+### 2c.3 — as implemented
+- **No migration** — every action uses the migration 10 functions.
+- **Unit page** `/manage/units/$unitId` (link from the list and from the property page):
+  cards "פרטים" (name, type, description), "אורחים" (maximum, included, child age), "חדרים"
+  (bedrooms, bathrooms) — future sections hidden (D-2c-4); sticky save bar, a question before
+  leaving with unsaved changes, Hebrew messages next to the field; "updated in the meantime"
+  → merged without overwriting (as settings). "מצב היחידה": switch off (with confirmation)
+  / on; explained in advance when not allowed (in an active "whole property", archived
+  property, plan limit). "מחיקת היחידה" — owner only, only a unit never booked or blocked and
+  not in a "whole property". The "whole property" unit shows its members and links to the
+  property page.
+- **Property page** `/manage/properties/$propertyId`: details (name, type, address,
+  description, active / draft); its units (links, add, order); **"השכרת המתחם כולו"** (from
+  two units): switch + the units it includes (inactive ones shown, not selectable; at least
+  two), saved separately; owner card: archive (confirmation; the database refuses while there
+  are future bookings / blocks), restore (units stay off until switched on), permanent delete
+  (only when no unit was ever booked / blocked). A manager sees no owner card; an archived
+  property is read-only for a manager.
+- **List:** names link to the unit page; "ניהול המתחם" opens the property page (the quick-edit
+  sheets of 2c.2 stay); **"סידור היחידות"** per property — arrows (keyboard, screen reader,
+  phone) and drag on the computer, each move saved at once in one database call; inactive
+  units in a collapsed "יחידות לא פעילות (N)"; archived properties under "בארכיון" for the
+  owner (a count for managers). "יחידות" stays marked in the navigation on both pages.
+- **Actions and "updated in the meantime":** the new server functions (set active, delete
+  unit, archive / delete property, whole property, order) first read the current state; if
+  what the user saw has changed (unit / property revision, the whole property's revision, the
+  order of the active units) nothing is done and the latest data comes back with a Hebrew
+  message. Residual (documented): a change landing in the milliseconds between that check and
+  the action is not detected for activation, whole property and order — their database
+  functions take no revision. Closing it needs an additive migration (an
+  `_expected_revision` parameter) — proposed, not done.
+- **Shared kit:** the platform UI adapter re-exports two more shadcn components (`Switch`,
+  `Checkbox`) — re-export only.
+- **Tests:** Vitest `hospitality-catalog-pages.test.ts` (21); E2E `manage-catalog-pages.spec.ts`
+  (13 desktop + phone); the permission matrix (`manage-integration.spec.ts`) now includes the
+  six new actions × eight kinds of account; preview chapters 08 (whole property, unit page,
+  switching a unit off) and 09 (room order).
 
 ### 2c.2 — as implemented
 - `/manage/units` ("יחידות" in the navigation, owner and managers): without a property —

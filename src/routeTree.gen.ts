@@ -68,6 +68,8 @@ import { Route as ApiUnsubscribeTokenRouteImport } from './routes/api.unsubscrib
 import { Route as ApiWebhooksGrowRouteImport } from './routes/api.webhooks.grow'
 import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$orderId'
 import { Route as CheckoutGrowOrderIdRouteImport } from './routes/checkout_.grow.$orderId'
+import { Route as ManagePropertiesPropertyIdRouteImport } from './routes/manage.properties.$propertyId'
+import { Route as ManageUnitsUnitIdRouteImport } from './routes/manage.units_.$unitId'
 import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -367,6 +369,17 @@ const CheckoutGrowOrderIdRoute = CheckoutGrowOrderIdRouteImport.update({
   path: '/checkout/grow/$orderId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManagePropertiesPropertyIdRoute =
+  ManagePropertiesPropertyIdRouteImport.update({
+    id: '/properties/$propertyId',
+    path: '/properties/$propertyId',
+    getParentRoute: () => ManageRoute,
+  } as any)
+const ManageUnitsUnitIdRoute = ManageUnitsUnitIdRouteImport.update({
+  id: '/units_/$unitId',
+  path: '/units/$unitId',
+  getParentRoute: () => ManageRoute,
+} as any)
 const PlatformCustomersTenantIdRoute =
   PlatformCustomersTenantIdRouteImport.update({
     id: '/platform_/customers/$tenantId',
@@ -434,6 +447,8 @@ export interface FileRoutesByFullPath {
   '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
   '/checkout/grow/$orderId': typeof CheckoutGrowOrderIdRoute
+  '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
+  '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
 }
 export interface FileRoutesByTo {
@@ -495,6 +510,8 @@ export interface FileRoutesByTo {
   '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
   '/checkout/grow/$orderId': typeof CheckoutGrowOrderIdRoute
+  '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
+  '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
 }
 export interface FileRoutesById {
@@ -558,6 +575,8 @@ export interface FileRoutesById {
   '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout_/bit/$orderId': typeof CheckoutBitOrderIdRoute
   '/checkout_/grow/$orderId': typeof CheckoutGrowOrderIdRoute
+  '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
+  '/manage/units_/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
 }
 export interface FileRouteTypes {
@@ -622,6 +641,8 @@ export interface FileRouteTypes {
     | '/api/webhooks/grow'
     | '/checkout/bit/$orderId'
     | '/checkout/grow/$orderId'
+    | '/manage/properties/$propertyId'
+    | '/manage/units/$unitId'
     | '/platform/customers/$tenantId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -683,6 +704,8 @@ export interface FileRouteTypes {
     | '/api/webhooks/grow'
     | '/checkout/bit/$orderId'
     | '/checkout/grow/$orderId'
+    | '/manage/properties/$propertyId'
+    | '/manage/units/$unitId'
     | '/platform/customers/$tenantId'
   id:
     | '__root__'
@@ -745,6 +768,8 @@ export interface FileRouteTypes {
     | '/api/webhooks/grow'
     | '/checkout_/bit/$orderId'
     | '/checkout_/grow/$orderId'
+    | '/manage/properties/$propertyId'
+    | '/manage/units_/$unitId'
     | '/platform_/customers/$tenantId'
   fileRoutesById: FileRoutesById
 }
@@ -1222,6 +1247,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CheckoutGrowOrderIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/properties/$propertyId': {
+      id: '/manage/properties/$propertyId'
+      path: '/properties/$propertyId'
+      fullPath: '/manage/properties/$propertyId'
+      preLoaderRoute: typeof ManagePropertiesPropertyIdRouteImport
+      parentRoute: typeof ManageRoute
+    }
+    '/manage/units_/$unitId': {
+      id: '/manage/units_/$unitId'
+      path: '/units/$unitId'
+      fullPath: '/manage/units/$unitId'
+      preLoaderRoute: typeof ManageUnitsUnitIdRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/platform_/customers/$tenantId': {
       id: '/platform_/customers/$tenantId'
       path: '/platform/customers/$tenantId'
@@ -1237,6 +1276,8 @@ interface ManageRouteChildren {
   ManageTeamRoute: typeof ManageTeamRoute
   ManageUnitsRoute: typeof ManageUnitsRoute
   ManageIndexRoute: typeof ManageIndexRoute
+  ManagePropertiesPropertyIdRoute: typeof ManagePropertiesPropertyIdRoute
+  ManageUnitsUnitIdRoute: typeof ManageUnitsUnitIdRoute
 }
 
 const ManageRouteChildren: ManageRouteChildren = {
@@ -1244,6 +1285,8 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManageTeamRoute: ManageTeamRoute,
   ManageUnitsRoute: ManageUnitsRoute,
   ManageIndexRoute: ManageIndexRoute,
+  ManagePropertiesPropertyIdRoute: ManagePropertiesPropertyIdRoute,
+  ManageUnitsUnitIdRoute: ManageUnitsUnitIdRoute,
 }
 
 const ManageRouteWithChildren =

@@ -84,9 +84,11 @@ src/
       api/team.functions.ts         team (owner only): members, recent activity, add / remove a manager   [2b.3]
       api/site.functions.ts         the business name for the page head (site_identity)                   [R-1]
       api/catalog.functions.ts      properties and units: view, first run, create / edit (with revision)   [2c.2]
+                                    activate, archive, delete, whole property, order (checked fresh)  [2c.3]
       server/manage.server.ts       management call: area enabled + signed-in user + the user's token     [2b.2]
       management/                   owner area (Stage 2): shell/, login/, dashboard/, settings/, team/, catalog/, lib/ (incl. shared form fields), route-guard.ts
-  routes/manage.tsx manage.index.tsx manage_.login.tsx manage.settings.tsx manage.team.tsx manage.units.tsx   thin route adapters
+  routes/manage.tsx manage.index.tsx manage_.login.tsx manage.settings.tsx manage.team.tsx manage.units.tsx
+         manage.units_.$unitId.tsx manage.properties.$propertyId.tsx   thin route adapters (unit / property pages: 2c.3)
 ```
 
 Stage 2a existing-file changes (approved, Hospitality-only branches): `src/routes/__root.tsx`

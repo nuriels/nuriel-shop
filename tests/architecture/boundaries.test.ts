@@ -187,10 +187,12 @@ describe("architecture: dependency boundaries", () => {
     const adapters = FILES.filter((f) => HOSPITALITY_ROUTE.test(f));
     expect(adapters).toEqual([
       "src/routes/manage.index.tsx",
+      "src/routes/manage.properties.$propertyId.tsx",
       "src/routes/manage.settings.tsx",
       "src/routes/manage.team.tsx",
       "src/routes/manage.tsx",
       "src/routes/manage.units.tsx",
+      "src/routes/manage.units_.$unitId.tsx",
       "src/routes/manage_.login.tsx",
     ]);
     for (const f of adapters) {

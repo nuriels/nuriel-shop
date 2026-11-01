@@ -13,12 +13,21 @@ export interface NavItem {
   /** בניווט התחתון בטלפון (השאר תחת "עוד") */
   primary?: boolean;
   permission?: string;
+  /** מסכים נוספים ששייכים לפריט (מסומן גם בהם), לפי תחילת הנתיב */
+  also?: readonly string[];
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: "dashboard", label: "לוח בקרה", to: "/manage", primary: true },
   { key: "bookings", label: "הזמנות", primary: true, permission: "bookings" },
-  { key: "units", label: "יחידות", to: "/manage/units", primary: true, permission: "catalog" },
+  {
+    key: "units",
+    label: "יחידות",
+    to: "/manage/units",
+    primary: true,
+    permission: "catalog",
+    also: ["/manage/units/", "/manage/properties/"],
+  },
   { key: "pricing", label: "מחירים", permission: "pricing" },
   { key: "guests", label: "אורחים", permission: "guests" },
   { key: "emails", label: "מיילים", permission: "bookings" },
@@ -28,6 +37,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
 
 export function visibleNav(permissions: Record<string, boolean>): NavItem[] {
   return NAV_ITEMS.filter((item) => !item.permission || permissions[item.permission] === true);
+}
+
+/** הפריט מסומן כמסך הנוכחי: הנתיב שלו בדיוק, או מסך ששייך אליו (עמוד יחידה / מתחם) */
+export function isNavActive(item: NavItem, pathname: string): boolean {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  if (item.to === path) return true;
+  return (item.also ?? []).some((prefix) => path.startsWith(prefix));
 }
 
 /** בטלפון: הפריטים הראשיים בשורה התחתונה, וכל השאר בתפריט "עוד" */

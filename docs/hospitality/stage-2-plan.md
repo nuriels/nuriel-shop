@@ -1,6 +1,6 @@
 # Nuriel Hospitality — Stage 2 plan: owner management system
 
-Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, `6b279f4`) implemented and approved; R-1 fixed before 2c (migration 9); 2c approved (`stage-2c-plan.md`), 2c.1 (database, migration 10, `0efc471`) approved, 2c.2 (screens) implemented; P0 local preview kit (`238995e`) approved. Next: 2c.3 — after approval.** Open items: §7.
+Status: **breakdown approved; 2a (`3e246f2`) and 2b (`d119a02`, `24973aa`, `9d95676`, `6b279f4`) implemented and approved; R-1 fixed before 2c (migration 9); 2c approved (`stage-2c-plan.md`), 2c.1 (database, migration 10, `0efc471`) approved, 2c.2 (screens) implemented; P0 local preview kit (`238995e`) approved; 2c.3 (unit and property pages, whole property, order, activation, archive / delete) implemented — awaiting review (`stage-2c-plan.md`). Next: 2c.4 — after approval.** Open items: §7.
 **Round 7 (31/10/2026, after the requirements audit — roadmap D19–D30):** approved order
 2c.3 → 2c.4 → 2d → 2e → 2f → **3a** → 2h → 2i → **3b** → 2j → 2k; 2g merged into 3a; 2d and
 2e scopes extended (§3); house rules at property level (2d). Every requirement and its

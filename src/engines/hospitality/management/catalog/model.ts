@@ -13,7 +13,7 @@ import type {
 } from "../../types/catalog";
 import { PROPERTY_KEYS, UNIT_KEYS } from "../../types/catalog";
 import { propertyErrors, unitErrors } from "../../validation/catalog";
-import { BUSINESS_TYPES } from "./labels";
+import { BUSINESS_TYPES, setupUnitType as setupUnitTypeFor } from "./labels";
 
 // ---------- הרשימה ----------
 
@@ -238,4 +238,192 @@ export function findUnit(view: CatalogView, id: string): CatalogUnit | null {
     if (u) return u;
   }
   return null;
+}
+
+// ---------- Stage 2c.3: עמודי יחידה ומתחם, סדר, הפעלה, ארכיון ומחיקה ----------
+
+/** היחידות הפיזיות הפעילות של מתחם — בסדר שנקבע (רק אותן מסדרים) */
+export function activeUnits(p: CatalogProperty): CatalogUnit[] {
+  return physicalUnits(p).filter((u) => u.is_active);
+}
+
+/** היחידות הפיזיות שלא פעילות (מוצגות בנפרד) */
+export function inactiveUnits(p: CatalogProperty): CatalogUnit[] {
+  return physicalUnits(p).filter((u) => !u.is_active);
+}
+
+export function propertyOf(view: CatalogView, unit: CatalogUnit): CatalogProperty | null {
+  return findProperty(view, unit.property_id);
+}
+
+/** הזזה ברשימה (גרירה או חץ) — רשימה חדשה; מחוץ לטווח — בלי שינוי */
+export function moveItem<T>(list: readonly T[], from: number, to: number): T[] {
+  const out = [...list];
+  if (from === to || from < 0 || to < 0 || from >= out.length || to >= out.length) return out;
+  const [item] = out.splice(from, 1);
+  out.splice(to, 0, item as T);
+  return out;
+}
+
+export const sameOrder = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** אחרי סדר חדש: היחידות הפעילות בסדר החדש, אחריהן הלא פעילות, ו"כל המתחם" בסוף (כמו המסד) */
+export function withUnitOrder(
+  view: CatalogView,
+  propertyId: string,
+  ids: readonly string[],
+): CatalogView {
+  return {
+    ...view,
+    properties: view.properties.map((p) => {
+      if (p.id !== propertyId) return p;
+      const byId = new Map(p.units.map((u) => [u.id, u]));
+      const ordered = ids.map((id) => byId.get(id)).filter((u): u is CatalogUnit => Boolean(u));
+      const rest = physicalUnits(p).filter((u) => !ids.includes(u.id));
+      const whole = wholeUnit(p);
+      const units = [...ordered, ...rest].map((u, i) => ({ ...u, sort_order: i }));
+      return { ...p, units: whole ? [...units, whole] : units };
+    }),
+  };
+}
+
+// ---------- מה מונע פעולה (ההסבר מוצג מראש; המסד בודק שוב) ----------
+
+/** היחידה בתוך "כל המתחם" פעיל? */
+export function inActiveWhole(p: CatalogProperty, unitId: string): boolean {
+  const w = wholeUnit(p);
+  return Boolean(w?.is_active && w.member_ids?.includes(unitId));
+}
+
+export function inAnyWhole(p: CatalogProperty, unitId: string): boolean {
+  return Boolean(wholeUnit(p)?.member_ids?.includes(unitId));
+}
+
+export const DEACTIVATE_IN_WHOLE =
+  'היחידה כלולה ב"כל המתחם" הפעיל — יש להשבית את "כל המתחם" או להסיר ממנו את היחידה קודם';
+export const DELETE_WITH_HISTORY = "ליחידה יש הזמנות או חסימות — אפשר להשבית אותה במקום למחוק";
+export const DELETE_IN_WHOLE = 'היחידה כלולה ב"כל המתחם" — יש להסיר אותה משם קודם';
+export const PROPERTY_DELETE_WITH_HISTORY =
+  "במתחם יש יחידות עם הזמנות או חסימות — אפשר להעביר אותו לארכיון במקום למחוק";
+export const ARCHIVED_FOR_MANAGER = "המתחם בארכיון — רק בעל העסק יכול לשנות אותו או להחזיר אותו.";
+
+/** למה אי אפשר להשבית את היחידה עכשיו (או null) */
+export function deactivateBlock(p: CatalogProperty, unit: CatalogUnit): string | null {
+  return unit.kind !== "whole_property" && inActiveWhole(p, unit.id) ? DEACTIVATE_IN_WHOLE : null;
+}
+
+/** למה אי אפשר להפעיל את היחידה עכשיו (או null) */
+export function activateBlock(view: CatalogView, p: CatalogProperty): string | null {
+  if (p.status === "archived") return "המתחם בארכיון — יש להחזיר אותו מהארכיון קודם";
+  return unitsLimit(view.limits).canAdd ? null : unitsLimit(view.limits).reason;
+}
+
+/** למה אי אפשר למחוק את היחידה (או null) — מחיקה לבעלים בלבד */
+export function unitDeleteBlock(p: CatalogProperty, unit: CatalogUnit): string | null {
+  if (unit.has_history) return DELETE_WITH_HISTORY;
+  if (inAnyWhole(p, unit.id)) return DELETE_IN_WHOLE;
+  return null;
+}
+
+/** למה אי אפשר למחוק את המתחם (או null) */
+export function propertyDeleteBlock(p: CatalogProperty): string | null {
+  return p.units.some((u) => u.has_history) ? PROPERTY_DELETE_WITH_HISTORY : null;
+}
+
+// ---------- "השכרת המתחם כולו" ----------
+
+export interface MemberChoice {
+  unit: CatalogUnit;
+  /** אפשר לבחור (יחידה פעילה); אחרת — למה לא */
+  disabledReason: string | null;
+}
+
+/** היחידות שאפשר לכלול ב"כל המתחם": הפיזיות של המתחם; לא פעילה — מוצגת ולא ניתנת לבחירה */
+export function memberChoices(p: CatalogProperty): MemberChoice[] {
+  return physicalUnits(p).map((unit) => ({
+    unit,
+    disabledReason: unit.is_active ? null : "לא פעילה — יש להפעיל אותה קודם",
+  }));
+}
+
+/**
+ * מצב ההתחלה של הבחירה: היחידות הנוכחיות (הפעילות שבהן), או — אם עוד אין לפחות שתיים —
+ * כל היחידות הפעילות
+ */
+export function initialMembers(p: CatalogProperty): string[] {
+  const active = activeUnits(p).map((u) => u.id);
+  const current = (wholeUnit(p)?.member_ids ?? []).filter((id) => active.includes(id));
+  return current.length >= 2 ? current : active;
+}
+
+export const sameSet = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((x) => b.includes(x));
+
+/** ברירות המחדל ליחידה חדשה במתחם: הסוג לפי סוג המקום ושם פנוי ("צימר 3") */
+export function newUnitDefaults(p: CatalogProperty | undefined): Partial<UnitForm> {
+  if (!p) return {};
+  return {
+    unit_type: setupUnitTypeFor(p.property_type),
+    name: nextUnitName(
+      BUSINESS_TYPES[p.property_type].unitWord,
+      p.units.map((u) => u.name),
+    ),
+  };
+}
+
+/** "השכרת המתחם כולו" אפשרית רק כשיש במתחם לפחות שתי יחידות */
+export const canRentWhole = (p: CatalogProperty) => physicalUnits(p).length >= 2;
+
+// ---------- "עודכן בינתיים" בפעולות (נבדק בשרת לפני הפעולה) ----------
+
+export const STALE_UNIT = "היחידה עודכנה בינתיים על ידי משתמש אחר — הפרטים רועננו. בדקו ונסו שוב.";
+export const GONE_UNIT = "היחידה נמחקה בינתיים.";
+export const STALE_PROPERTY =
+  "המתחם עודכן בינתיים על ידי משתמש אחר — הפרטים רועננו. בדקו ונסו שוב.";
+export const GONE_PROPERTY = "המתחם נמחק בינתיים.";
+export const STALE_WHOLE =
+  '"השכרת המתחם כולו" עודכנה בינתיים על ידי משתמש אחר — הבחירה רועננה. בדקו ונסו שוב.';
+export const STALE_ORDER = "סדר היחידות שונה בינתיים על ידי משתמש אחר — הרשימה רועננה. נסו שוב.";
+
+export function staleUnit(view: CatalogView, id: string, revision: number): string | null {
+  const u = findUnit(view, id);
+  if (!u) return GONE_UNIT;
+  return u.revision === revision ? null : STALE_UNIT;
+}
+
+export function staleProperty(view: CatalogView, id: string, revision: number): string | null {
+  const p = findProperty(view, id);
+  if (!p) return GONE_PROPERTY;
+  return p.revision === revision ? null : STALE_PROPERTY;
+}
+
+/** הגרסה של "כל המתחם" כפי שנטענה — null אם עוד לא נוצר */
+export function wholeRevision(p: CatalogProperty): number | null {
+  return wholeUnit(p)?.revision ?? null;
+}
+
+export function staleWhole(
+  view: CatalogView,
+  propertyId: string,
+  revision: number | null,
+): string | null {
+  const p = findProperty(view, propertyId);
+  if (!p) return GONE_PROPERTY;
+  return wholeRevision(p) === revision ? null : STALE_WHOLE;
+}
+
+export function staleOrder(
+  view: CatalogView,
+  propertyId: string,
+  expected: readonly string[],
+): string | null {
+  const p = findProperty(view, propertyId);
+  if (!p) return GONE_PROPERTY;
+  return sameOrder(
+    activeUnits(p).map((u) => u.id),
+    expected,
+  )
+    ? null
+    : STALE_ORDER;
 }
