@@ -255,3 +255,22 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Functions | staff (`catalog`): `room_types_view`, `room_type_save` (revision), `room_type_delete` (only without rooms), `room_type_assign`, `room_type_apply` (price / min nights / capacity / max adults / max children to every room of the type) — logged. Guests: `public_room_types`, `public_type_availability` (nights with no free room of the type), `quote_type` (first room free for all nights — the quoted room first), `request_booking_type` (inside the inventory lock: a free room of the type whose terms match the accepted `policy_hash`, then the existing `request_booking`). No existing function changed |
 | Rollback | `supabase/rollbacks/20261102160000_hosp_room_types.down.sql` — drops the functions, the column and the table (bookings keep their rooms); exact migration-21 schema (`rollback-check.sh`, M22) |
 | Production | nothing to configure |
+
+## 20261102170000_hosp_payments.sql — payments infrastructure (Stage 8, part 1)
+
+| | |
+|---|---|
+| Table | `payments` — per booking: kind (deposit / balance / full / refund / other), method (cash, transfer, Bit, card, check, provider, other), amount, currency, date, note, provider + provider reference (unique — idempotent provider webhooks later), status. Immutable: the only change allowed is recorded → voided with a reason (trigger). RLS (tenant + database flag, RESTRICTIVE), no grants, tenant guard |
+| Functions | staff (`bookings`): `booking_payments` (total, paid, balance due, refund due, rows), `payment_record`, `payment_void` — booking history + action log. Server only: `payment_provider_record` (idempotent by provider reference). `bookings.amount_paid` (existing column) = payments − refunds, so the existing cancellation maths (refund / charge due) use what was actually paid |
+| Rollback | `supabase/rollbacks/20261102170000_hosp_payments.down.sql` — drops the functions and the table (`amount_paid` keeps its last value); exact migration-22 schema (`rollback-check.sh`, M23) |
+| Production | nothing to configure; no payment provider is connected (OD-16) |
+
+## 20261102180000_hosp_channels.sql — channel sync infrastructure (iCal, Stage 12)
+
+| | |
+|---|---|
+| Tables | `channel_feeds` (one secret export token per unit, rotatable); `channel_calendars` (external iCal links per unit: channel, https URL, status, last error, events, conflicts, back-off; removed = archived, not deleted, so history stays linked). RLS (tenant + database flag, RESTRICTIVE), no grants, tenant guard |
+| Columns | `blocks.channel_calendar_id`, `blocks.external_uid` (+ partial unique index per calendar and UID) — an imported event is an ordinary block, held by the same EXCLUDE as every booking |
+| Functions | export: `channel_feed(tenant, token)` (server only: busy nights, no personal data). Staff (`bookings`): `channels_view`, `channel_feed_token` (create / rotate, logged), `channel_calendar_add` (https, up to 5 per unit, logged), `channel_calendar_remove` (releases its blocks, archives, logged), `channel_sync_apply`. Server only: `channel_sync_service`, `channel_calendars_due` (10-minute lease, `SKIP LOCKED`). Apply rules: overlap → not written, listed as a conflict; changed / vanished event → only its own block moves / is released; our bookings are never changed |
+| Rollback | `supabase/rollbacks/20261102180000_hosp_channels.down.sql` — drops the functions, tables and block columns (synced blocks stay as ordinary blocks); exact migration-23 schema (`rollback-check.sh`, M24) |
+| Production | nothing to configure; the sync runs in the existing worker (`HOSPITALITY_ENGINE=on`) |

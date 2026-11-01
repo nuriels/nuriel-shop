@@ -8,6 +8,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { Check, ChevronRight, LogIn, LogOut, Mail, Phone, UserX, X } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from "@/platform/ui";
+import { PaymentsCard } from "./PaymentsCard";
 import {
   hospitalityApproveBooking,
   hospitalityBookingDetail,
@@ -307,6 +308,8 @@ function Booking({ b }: { b: BookingDetail }) {
         />
         {b.price_manual && <p className="mt-2 text-sm text-muted-foreground">המחיר נקבע ידנית.</p>}
       </Section>
+
+      <PaymentsCard bookingId={b.id} today={b.today} timezone={ctx.business.timezone} />
 
       <Section title={`מדיניות ביטול${b.policy.name ? ` — ${b.policy.name}` : ""}`}>
         <p className="text-sm">

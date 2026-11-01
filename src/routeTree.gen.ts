@@ -45,6 +45,7 @@ import { Route as CourierTokenRouteImport } from './routes/courier.$token'
 import { Route as ManageIndexRouteImport } from './routes/manage.index'
 import { Route as ManageBookingsRouteImport } from './routes/manage.bookings'
 import { Route as ManageCalendarRouteImport } from './routes/manage.calendar'
+import { Route as ManageChannelsRouteImport } from './routes/manage.channels'
 import { Route as ManageEmailsRouteImport } from './routes/manage.emails'
 import { Route as ManageGuestsRouteImport } from './routes/manage.guests'
 import { Route as ManagePhotosRouteImport } from './routes/manage.photos'
@@ -273,6 +274,11 @@ const ManageBookingsRoute = ManageBookingsRouteImport.update({
 const ManageCalendarRoute = ManageCalendarRouteImport.update({
   id: '/calendar',
   path: '/calendar',
+  getParentRoute: () => ManageRoute,
+} as any)
+const ManageChannelsRoute = ManageChannelsRouteImport.update({
+  id: '/channels',
+  path: '/channels',
   getParentRoute: () => ManageRoute,
 } as any)
 const ManageEmailsRoute = ManageEmailsRouteImport.update({
@@ -561,6 +567,7 @@ export interface FileRoutesByFullPath {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
+  '/manage/channels': typeof ManageChannelsRoute
   '/manage/emails': typeof ManageEmailsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/photos': typeof ManagePhotosRoute
@@ -646,6 +653,7 @@ export interface FileRoutesByTo {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
+  '/manage/channels': typeof ManageChannelsRoute
   '/manage/emails': typeof ManageEmailsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/photos': typeof ManagePhotosRoute
@@ -734,6 +742,7 @@ export interface FileRoutesById {
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
+  '/manage/channels': typeof ManageChannelsRoute
   '/manage/emails': typeof ManageEmailsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/photos': typeof ManagePhotosRoute
@@ -823,6 +832,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/bookings'
     | '/manage/calendar'
+    | '/manage/channels'
     | '/manage/emails'
     | '/manage/guests'
     | '/manage/photos'
@@ -908,6 +918,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/bookings'
     | '/manage/calendar'
+    | '/manage/channels'
     | '/manage/emails'
     | '/manage/guests'
     | '/manage/photos'
@@ -995,6 +1006,7 @@ export interface FileRouteTypes {
     | '/courier/$token'
     | '/manage/bookings'
     | '/manage/calendar'
+    | '/manage/channels'
     | '/manage/emails'
     | '/manage/guests'
     | '/manage/photos'
@@ -1363,6 +1375,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageCalendarRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/channels': {
+      id: '/manage/channels'
+      path: '/channels'
+      fullPath: '/manage/channels'
+      preLoaderRoute: typeof ManageChannelsRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/emails': {
       id: '/manage/emails'
       path: '/emails'
@@ -1712,6 +1731,7 @@ declare module '@tanstack/react-router' {
 interface ManageRouteChildren {
   ManageBookingsRoute: typeof ManageBookingsRoute
   ManageCalendarRoute: typeof ManageCalendarRoute
+  ManageChannelsRoute: typeof ManageChannelsRoute
   ManageEmailsRoute: typeof ManageEmailsRoute
   ManageGuestsRoute: typeof ManageGuestsRoute
   ManagePhotosRoute: typeof ManagePhotosRoute
@@ -1733,6 +1753,7 @@ interface ManageRouteChildren {
 const ManageRouteChildren: ManageRouteChildren = {
   ManageBookingsRoute: ManageBookingsRoute,
   ManageCalendarRoute: ManageCalendarRoute,
+  ManageChannelsRoute: ManageChannelsRoute,
   ManageEmailsRoute: ManageEmailsRoute,
   ManageGuestsRoute: ManageGuestsRoute,
   ManagePhotosRoute: ManagePhotosRoute,

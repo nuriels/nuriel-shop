@@ -17,6 +17,7 @@ import {
   UserCog,
   type LucideIcon,
   Palette,
+  Share2,
 } from "lucide-react";
 import {
   Sheet,
@@ -39,6 +40,7 @@ const ICONS: Record<NavKey, LucideIcon> = {
   pricing: Tag,
   guests: Users,
   emails: Mail,
+  channels: Share2,
   website: Palette,
   settings: Settings,
   team: UserCog,

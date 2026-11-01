@@ -4,8 +4,10 @@
 //   2. תור המיילים — claim_notifications → מייל בעברית בשם העסק (שירות המיילים של נוריאל,
 //      Idempotency-Key = מזהה ההודעה) → mark_notification. כישלון: ניסיון חוזר במרווחים
 //      הולכים וגדלים (במסד), ואחרי 5 — "נכשל". מייל שנכשל לא מבטל אף פעולה;
-//   3. פעם ביום — apply_retention (מחיקת פרטי אורחים ישנים לפי ההגדרה של כל עסק).
+//   3. פעם ביום — apply_retention (מחיקת פרטי אורחים ישנים לפי ההגדרה של כל עסק);
+//   4. כל 5 דקות — סנכרון יומנים חיצוניים (iCal) שהגיע זמנם (channels/sync.server.ts).
 // הקריאות למסד במפתח השירות — אלה פונקציות שרק השרת רשאי להריץ.
+import { createServerOnlyFn } from "@tanstack/react-start";
 import { escapeHtml, sendBusinessEmail } from "@/platform/email/send.server";
 import { serviceHeaders, supabaseUrl } from "@/platform/supabase/env.server";
 import { siteOrigin } from "@/platform/tenancy/current-site.server";
@@ -30,6 +32,13 @@ let started = false;
 let running = false;
 let again = false;
 let lastRetention = 0;
+let lastChannels = 0;
+// ההורדה של יומנים חיצוניים (המוריד המוגן של הפלטפורמה) — בשרת בלבד; הקוד לא נכנס לבאנדל של הדפדפן
+const runChannelSyncs = createServerOnlyFn(async () => {
+  const { runDueChannelSyncs } = await import("../channels/import.server");
+  await runDueChannelSyncs();
+});
+const CHANNELS_MS = 5 * 60 * 1000;
 
 export function startOutboxWorker(): void {
   if (started || !hospitalitySwitchOn()) return;
@@ -82,6 +91,10 @@ async function tick(): Promise<void> {
       if (Date.now() - lastRetention > DAY_MS) {
         lastRetention = Date.now();
         await rpc("apply_retention", {});
+      }
+      if (Date.now() - lastChannels > CHANNELS_MS) {
+        lastChannels = Date.now();
+        await runChannelSyncs();
       }
     } while (again);
   } catch (error) {

@@ -20,13 +20,15 @@ export const hospitalityEngine: Engine = {
     return backendEnabled(site.id);
   },
   async gate(site: SiteRef, request: EdgeRequest) {
-    const [{ hospitalityGate }, { managementEnabled, siteEnabled }] = await Promise.all([
-      import("./edge/gate"),
-      import("./access.server"),
-    ]);
+    const [{ hospitalityGate }, { backendEnabled, managementEnabled, siteEnabled }] =
+      await Promise.all([import("./edge/gate"), import("./access.server")]);
     return hospitalityGate(site, request, {
       managementOpen: () => managementEnabled(site.id),
       siteOpen: () => siteEnabled(site.id),
+      icalFeed: async (token) =>
+        (await backendEnabled(site.id))
+          ? (await import("./channels/feed.server")).icalFeedResponse(site.id, token)
+          : null,
     });
   },
 };

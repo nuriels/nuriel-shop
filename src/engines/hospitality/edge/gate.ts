@@ -31,12 +31,16 @@ const html = (body: string, status: number) =>
     },
   });
 
+// בלי סיומת קובץ: נתיב עם סיומת (.ics) נחשב בשרת לקובץ סטטי ולא מגיע לשער של האתר
+const ICAL_PATH = /^\/ical\/([0-9a-f]{40})$/;
 const ROBOTS_CLOSED = "User-agent: *\nDisallow: /\n";
 const ROBOTS_OPEN = `User-agent: *\nAllow: ${SITE_PATH}$\nAllow: ${SITE_PATH}/units/\nAllow: ${SITE_PATH}/rooms/\nDisallow: /\n`;
 
 export interface GateOptions {
   /** אזור הניהול פעיל לאתר */
   managementOpen: () => Promise<boolean>;
+  /** יומן הייצוא של יחידה (/ical/<token>) — null: טוקן לא מוכר / המנוע כבוי */
+  icalFeed?: (token: string) => Promise<Response | null>;
   /** האתר הציבורי פתוח (Stage 4) */
   siteOpen?: () => Promise<boolean>;
 }
@@ -48,6 +52,18 @@ export async function hospitalityGate(
 ): Promise<Response | null> {
   const siteOpen = opts.siteOpen ?? (async () => false);
   if (request.pathname.startsWith("/_serverFn")) return null;
+  // סנכרון ערוצים: יומן הייצוא של יחידה — לילות תפוסים בלבד, לפי טוקן סודי
+  const ical = ICAL_PATH.exec(request.pathname);
+  if (ical) {
+    const feed = request.method === "GET" && opts.icalFeed ? await opts.icalFeed(ical[1]!) : null;
+    return (
+      feed ??
+      new Response("Not found\n", {
+        status: 404,
+        headers: { "content-type": "text/plain; charset=utf-8", "x-robots-tag": "noindex" },
+      })
+    );
+  }
   if (request.pathname === "/robots.txt") {
     const open = site.status === "active" && (await siteOpen());
     return new Response(open ? ROBOTS_OPEN : ROBOTS_CLOSED, {

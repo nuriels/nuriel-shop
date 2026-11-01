@@ -128,6 +128,9 @@ export function eventText(e: { kind: string; from: string | null; to: string | n
       : (EVENT_STATUS_TEXT[e.to ?? ""] ?? "ההזמנה נוצרה");
   if (e.kind === "modified") return "ההזמנה שונתה";
   if (e.kind === "policy_accepted") return "תנאי הביטול אושרו";
+  if (e.kind === "payment_recorded") return "נרשם תשלום";
+  if (e.kind === "refund_recorded") return "נרשם החזר";
+  if (e.kind === "payment_voided") return "רישום תשלום בוטל";
   if (e.to && e.to !== e.from) return EVENT_STATUS_TEXT[e.to] ?? `${e.from ?? ""} ← ${e.to}`;
   return e.kind.replace(/_/g, " ");
 }

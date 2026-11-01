@@ -229,6 +229,7 @@ describe("navigation", () => {
       "policies",
       "guests",
       "emails",
+      "channels",
       "website",
       "settings",
       "team",
