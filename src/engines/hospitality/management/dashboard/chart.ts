@@ -153,14 +153,15 @@ export function chartGeometry(
     const v = top * f;
     return {
       y: Y(v),
+      // בלי "0" בתחתית — הקו התחתון מדבר בעד עצמו, והתווית מתנגשת בציר הזמן
       label:
-        metric === "occupancy"
-          ? `${Math.round(v)}%`
-          : metric === "revenue"
-            ? f === 0
-              ? "0"
-              : compactMoney(v, currency)
-            : String(Math.round(v * 10) / 10),
+        f === 0
+          ? ""
+          : metric === "occupancy"
+            ? `${Math.round(v)}%`
+            : metric === "revenue"
+              ? compactMoney(v, currency)
+              : String(Math.round(v * 10) / 10),
     };
   });
 

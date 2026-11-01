@@ -59,7 +59,9 @@ export function PageHeader({
           <p className="mt-2 max-w-2xl text-[15px] text-muted-foreground">{description}</p>
         )}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && (
+        <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">{actions}</div>
+      )}
     </header>
   );
 }
@@ -100,7 +102,9 @@ export function SectionCard({
             {title && <Heading className="text-base font-bold">{title}</Heading>}
             {description && <p className="mt-1 text-[13px] text-muted-foreground">{description}</p>}
           </div>
-          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+          {actions && (
+            <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">{actions}</div>
+          )}
         </div>
       )}
       <div className={cn("px-5 pt-4 pb-5 sm:px-6", bodyClassName)}>{children}</div>
@@ -183,7 +187,7 @@ export function TrendBadge({
 }) {
   if (value === null || !Number.isFinite(value)) {
     return (
-      <span className="inline-flex items-center rounded-full bg-[var(--hm-neutral-bg)] px-2 py-0.5 text-xs font-semibold text-[var(--hm-neutral)]">
+      <span className="inline-flex items-center rounded-full bg-[var(--hm-neutral-bg)] px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-[var(--hm-neutral)]">
         אין השוואה
       </span>
     );
@@ -199,7 +203,7 @@ export function TrendBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap",
         t.bg,
         t.text,
       )}
@@ -247,7 +251,8 @@ export function Sparkline({
       viewBox={`0 0 ${W} ${H}`}
       width={W}
       height={H}
-      className={cn("shrink-0", className)}
+      preserveAspectRatio="none"
+      className={cn("h-8 shrink-0", className)}
     >
       <path
         d={d}
@@ -256,6 +261,7 @@ export function Sparkline({
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );

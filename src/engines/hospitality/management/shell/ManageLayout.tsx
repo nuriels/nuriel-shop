@@ -1,19 +1,24 @@
-// המעטפת של אזור הניהול (/manage): בודקת מי מחובר ומה מותר לו (בשרת ובמסד),
-// ומציגה כותרת, הודעת מנוי, ניווט (צד במחשב, שורה תחתונה בטלפון) והמסך עצמו.
-import { useEffect } from "react";
-import { Outlet, useNavigate } from "@tanstack/react-router";
+// המעטפת של אזור הניהול (/manage): בודקת מי מחובר ומה מותר לו (בשרת ובמסד), ומציגה
+// (שלב F2b, "Deep Lagoon & Champagne"): סרגל צד כהה בקבוצות (מחשב) / שורה תחתונה + "עוד" (טלפון),
+// סרגל עליון (חיפוש מהיר Ctrl+K, "+ חדש", "דורש טיפול", צפייה באתר), הודעת מנוי, והמסך עצמו —
+// עם מסך שגיאה בעברית בתוך המעטפת (המסך נשבר — הניווט נשאר).
+import { useEffect, useState, type ReactNode } from "react";
+import { CatchBoundary, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Info, LogOut, TriangleAlert } from "lucide-react";
+import { Info, TriangleAlert } from "lucide-react";
 import { onSessionChange, signOutHere } from "@/platform/auth/browser-session";
-import { Button, cn } from "@/platform/ui";
+import { cn } from "@/platform/ui";
 import { hospitalityManagementContext } from "../../api/management.functions";
 import type { ManagementContext } from "../../types/management";
 import { visibleNav } from "../lib/nav";
 import { planNotice } from "../lib/plan-notice";
 import { manageKeys } from "../lib/query-keys";
+import { CommandMenu } from "./CommandMenu";
 import { ManagementCtx } from "./management-context";
 import { BottomNav, SideNav } from "./Navigation";
-import { ErrorScreen, ForbiddenScreen, LoadingScreen } from "./StatusScreens";
+import { ErrorScreen, ForbiddenScreen, LoadingScreen, ManageRouteError } from "./StatusScreens";
+import { navBadges, useDashboardTasks } from "./tasks";
+import { TopBar } from "./TopBar";
 
 export function ManageLayout() {
   const navigate = useNavigate();
@@ -74,45 +79,47 @@ function Shell({
 }: {
   context: ManagementContext;
   onSignOut: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const items = visibleNav(context.permissions);
   const notice = planNotice(context);
+  const roleText = context.role === "owner" ? "בעלים" : "מנהל/ת";
+  const tasks = useDashboardTasks(context.permissions["bookings"] === true);
+  const badges = navBadges(tasks.data);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Ctrl+K / ⌘K — חיפוש מהיר
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
-    <div className="min-h-dvh bg-background text-foreground md:grid md:grid-cols-[16rem_minmax(0,1fr)]">
-      <SideNav items={items} businessName={context.business.name} />
+    <div className="min-h-dvh bg-background text-foreground md:grid md:grid-cols-[16.5rem_minmax(0,1fr)]">
+      <SideNav
+        items={items}
+        badges={badges}
+        businessName={context.business.name}
+        roleText={roleText}
+        onSignOut={onSignOut}
+      />
       <div className="flex min-h-dvh min-w-0 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b bg-card/95 px-4 py-3 backdrop-blur md:px-8">
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold md:hidden">{context.business.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {context.role === "owner" ? "בעלים" : "מנהל/ת"}
-            </p>
-          </div>
-          {context.flags.frontend && (
-            <a
-              href="/stay"
-              target="_blank"
-              rel="noopener"
-              className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium text-primary hover:bg-muted"
-            >
-              <ExternalLink className="size-4" aria-hidden="true" />
-              <span>האתר שלי</span>
-            </a>
-          )}
-          <Button variant="ghost" onClick={onSignOut} className="min-h-11 gap-2">
-            <LogOut className="size-4" aria-hidden="true" />
-            <span>התנתקות</span>
-          </Button>
-        </header>
+        <TopBar items={items} roleText={roleText} onSearch={() => setSearchOpen(true)} />
         {notice && (
           <div
             role="status"
             className={cn(
               "flex items-start gap-2 border-b px-4 py-3 text-sm md:px-8",
               notice.tone === "warning"
-                ? "bg-destructive/10 text-destructive"
-                : "bg-primary/5 text-foreground",
+                ? "bg-[var(--hm-danger-bg)] text-[var(--hm-danger)]"
+                : "bg-[var(--hm-champagne-100)] text-[var(--hm-champagne-700)]",
             )}
           >
             {notice.tone === "warning" ? (
@@ -123,11 +130,19 @@ function Shell({
             <p>{notice.text}</p>
           </div>
         )}
-        <main id="main-content" className="flex-1 px-4 pb-24 pt-5 md:px-8 md:pb-10">
-          {children}
+        <main id="main-content" className="flex-1 px-4 pt-6 pb-28 md:px-8 md:pb-12">
+          <CatchBoundary getResetKey={() => pathname} errorComponent={ManageRouteError}>
+            {children}
+          </CatchBoundary>
         </main>
       </div>
-      <BottomNav items={items} />
+      <BottomNav
+        items={items}
+        badges={badges}
+        siteOpen={context.flags.frontend}
+        onSignOut={onSignOut}
+      />
+      <CommandMenu open={searchOpen} onOpenChange={setSearchOpen} items={items} />
     </div>
   );
 }

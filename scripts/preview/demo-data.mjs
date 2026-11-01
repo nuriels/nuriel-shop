@@ -17,7 +17,7 @@ export const SITES = [
     slug: "demo-zimmer",
     name: "צימרי הגליל",
     owner: ACCOUNTS.zimmerOwner,
-    plan: "basic",
+    plan: "premium", // 4 יחידות — מאז E3 "בסיסית" עד 3
     // האתר הציבורי והזמנות מהאתר (Stage 4) — פתוחים רק בעסק הזה בהדגמה
     website: true,
     settings: {

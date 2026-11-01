@@ -15,11 +15,12 @@ export const TABS: { key: Exclude<BookingTab, "all">; label: string; empty: stri
   { key: "cancelled", label: "בוטלו", empty: "אין הזמנות שבוטלו." },
 ];
 
-/** ?tab= בכתובת (קישור ישיר ללשונית, למשל מ"דורש טיפול" בלוח הבקרה) */
-export type BookingsSearch = { tab?: Exclude<BookingTab, "all"> };
+/** ?tab= / ?q= בכתובת (קישור ישיר ללשונית מ"דורש טיפול", חיפוש מהיר מהסרגל העליון) */
+export type BookingsSearch = { tab?: Exclude<BookingTab, "all">; q?: string };
 export function parseBookingsSearch(s: Record<string, unknown>): BookingsSearch {
   const tab = TABS.find((t) => t.key === s["tab"])?.key;
-  return tab ? { tab } : {};
+  const q = typeof s["q"] === "string" ? s["q"].trim().slice(0, 100) : "";
+  return { ...(tab ? { tab } : {}), ...(q ? { q } : {}) };
 }
 
 export const STATE_LABELS: Record<BookingState, string> = {

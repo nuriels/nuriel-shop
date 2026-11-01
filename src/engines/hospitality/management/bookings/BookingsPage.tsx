@@ -40,13 +40,17 @@ const PAGE = 30;
 
 export function BookingsPage() {
   const ctx = useManagement();
-  // ?tab= — קישור ישיר ללשונית (למשל "ממתינות לטיפול" מלוח הבקרה)
-  const linked = parseBookingsSearch(useSearch({ strict: false }) as Record<string, unknown>).tab;
+  // ?tab= — קישור ישיר ללשונית (למשל "ממתינות לטיפול" מלוח הבקרה); ?q= — מהחיפוש המהיר
+  const params = parseBookingsSearch(useSearch({ strict: false }) as Record<string, unknown>);
+  const linked = params.tab;
   const [tab, setTab] = useState<Exclude<BookingTab, "all">>(linked ?? "pending");
   useEffect(() => {
     if (linked) setTab(linked);
   }, [linked]);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(params.q ?? "");
+  useEffect(() => {
+    if (params.q) setText(params.q);
+  }, [params.q]);
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(PAGE);
   // חיפוש: מחכים רגע אחרי ההקלדה; בחיפוש מציגים את כל הלשוניות

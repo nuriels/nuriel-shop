@@ -81,8 +81,8 @@ export function OccupancyBoard({ today }: { today: string }) {
             role="region"
           >
             <div
-              className="grid min-w-[760px] text-xs"
-              style={{ gridTemplateColumns: `9.5rem repeat(${BOARD_DAYS}, minmax(0, 1fr))` }}
+              className="grid min-w-[620px] text-xs"
+              style={{ gridTemplateColumns: `7.5rem repeat(${BOARD_DAYS}, minmax(0, 1fr))` }}
             >
               {/* כותרת: הימים */}
               <div className="sticky start-0 z-10 bg-card" />
@@ -189,7 +189,7 @@ function BoardBarView({ bar }: { bar: BoardBar }) {
     "relative z-[1] row-start-1 mx-0.5 flex min-h-8 items-center overflow-hidden px-2 text-[11px] font-semibold whitespace-nowrap shadow-sm",
     bar.clippedStart ? "rounded-s-none" : "rounded-s-lg",
     bar.clippedEnd ? "rounded-e-none" : "rounded-e-lg",
-    bar.via && "opacity-80",
+    bar.via && "outline-1 -outline-offset-[3px] outline-white/70 outline-dashed",
     s.className,
   );
   const style: CSSProperties = { gridColumn: `${bar.start + 1} / span ${bar.span}`, ...s.style };

@@ -13,7 +13,15 @@ import { hospitalityGate } from "@/engines/hospitality/edge/gate";
 import { clientRouteRedirect, isManagementPath } from "@/engines/hospitality/edge/paths";
 import { engineRouteRedirect } from "@/app/site-routes";
 import { hospitalitySiteOnly } from "@/engines/hospitality/management/route-guard";
-import { NAV_ITEMS, splitForMobile, visibleNav } from "@/engines/hospitality/management/lib/nav";
+import {
+  NAV_ITEMS,
+  currentNav,
+  groupedNav,
+  monogram,
+  splitForMobile,
+  visibleNav,
+} from "@/engines/hospitality/management/lib/nav";
+import { navBadges } from "@/engines/hospitality/management/shell/tasks";
 import { CHECKLIST_STEPS, checklistProgress } from "@/engines/hospitality/management/lib/checklist";
 import { planNotice } from "@/engines/hospitality/management/lib/plan-notice";
 import {
@@ -234,6 +242,51 @@ describe("navigation", () => {
       "settings",
       "team",
     ]);
+  });
+});
+
+describe("shell (F2b): grouped navigation, current screen, badges", () => {
+  const all = Object.fromEntries(NAV_ITEMS.map((i) => [i.permission ?? "", true]));
+  it("groups in order: operations, the place, site & channels, account — no empty group", () => {
+    const groups = groupedNav(visibleNav(all));
+    expect(groups.map((g) => g.title)).toEqual(["תפעול", "המקום", "האתר והערוצים", "חשבון"]);
+    expect(groups[0]!.items.map((i) => i.key)).toEqual([
+      "dashboard",
+      "calendar",
+      "bookings",
+      "guests",
+    ]);
+    expect(groups.flatMap((g) => g.items)).toHaveLength(NAV_ITEMS.length);
+    expect(groupedNav(visibleNav({})).map((g) => g.title)).toEqual(["תפעול"]);
+  });
+
+  it("the current screen for the top bar (sub-pages belong to their item)", () => {
+    expect(currentNav(NAV_ITEMS, "/manage")?.key).toBe("dashboard");
+    expect(currentNav(NAV_ITEMS, "/manage/bookings/abc")?.key).toBe("bookings");
+    expect(currentNav(NAV_ITEMS, "/manage/properties/x")?.key).toBe("units");
+    expect(currentNav(NAV_ITEMS, "/manage/nothing")).toBeNull();
+  });
+
+  it("badges: pending + cancel requests on bookings, channel problems, failed emails", () => {
+    expect(
+      navBadges({
+        count: 4,
+        items: [
+          { kind: "pending", severity: "high", count: 2 },
+          { kind: "cancel_requests", severity: "high", count: 1 },
+          { kind: "channels", severity: "high", count: 1, conflicts: 2, failing: 1 },
+          { kind: "emails", severity: "medium", count: 3 },
+          { kind: "prices", severity: "low", count: 1 },
+        ],
+      }),
+    ).toEqual({ bookings: 3, channels: 3, emails: 3 });
+    expect(navBadges(undefined)).toEqual({});
+  });
+
+  it("monogram for the business card", () => {
+    expect(monogram("צימרי הגליל")).toBe("צה");
+    expect(monogram("מלון")).toBe("מל");
+    expect(monogram("  ")).toBe("?");
   });
 });
 

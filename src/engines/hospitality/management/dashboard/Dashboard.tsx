@@ -182,13 +182,13 @@ function QuickActions() {
   const ctx = useManagement();
   const p = ctx.permissions;
   const cls =
-    "group flex h-full min-h-[4.5rem] items-center gap-3 rounded-2xl border bg-card px-4 py-3 shadow-[var(--hm-shadow-card)] transition-shadow hover:shadow-[var(--hm-shadow-lift)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--hm-lagoon-500)]";
+    "group flex h-full min-h-[4.5rem] items-center gap-2.5 rounded-2xl border bg-card px-3 py-3 shadow-[var(--hm-shadow-card)] transition-shadow hover:shadow-[var(--hm-shadow-lift)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--hm-lagoon-500)] sm:gap-3 sm:px-4";
   const body = (label: string, hint: string, icon: LucideIcon, tone: Tone) => (
     <>
       <IconTile icon={icon} tone={tone} size="lg" />
       <span className="min-w-0">
         <span className="block text-sm font-bold">{label}</span>
-        <span className="block truncate text-xs text-muted-foreground">{hint}</span>
+        <span className="hidden truncate text-xs text-muted-foreground sm:block">{hint}</span>
       </span>
     </>
   );
@@ -233,7 +233,7 @@ function QuickActions() {
   if (actions.length === 0) return null;
   return (
     <nav aria-label="פעולות מהירות">
-      <ul className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
+      <ul className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
         {actions.map((a) => (
           <li key={a.key} data-action={a.key}>
             {a.node}

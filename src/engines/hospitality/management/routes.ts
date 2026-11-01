@@ -5,6 +5,7 @@ import { MANAGE_SECURITY_HEADERS } from "../security/headers";
 import { ManageLogin } from "./login/ManageLogin";
 import { hospitalitySiteOnly } from "./route-guard";
 import { ManageLayout } from "./shell/ManageLayout";
+import { ManageNotFound } from "./shell/StatusScreens";
 import manageCss from "./styles/manage.css?url";
 
 const noindex = (title: string) => ({
@@ -18,6 +19,8 @@ export const manageLayoutRoute = {
   head: () => noindex("ניהול העסק"),
   headers: () => MANAGE_SECURITY_HEADERS,
   component: ManageLayout,
+  // F2b: כתובת לא מוכרת בתוך /manage — בעברית ובתוך המעטפת (לא עמוד ה-404 הכללי)
+  notFoundComponent: ManageNotFound,
 };
 
 /** הכניסה — מחוץ למעטפת (בלי בדיקת הרשאה) */

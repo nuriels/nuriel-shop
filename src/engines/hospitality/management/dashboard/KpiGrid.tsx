@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router";
 import {
   BedDouble,
   Banknote,
+  LockKeyhole,
   CalendarCheck,
   ChartPie,
   Clock,
@@ -134,13 +135,22 @@ export function KpiGrid({ data, period }: { data: DashboardOverview; period: Per
   return (
     <ul
       className={cn(
-        "grid gap-3 sm:grid-cols-2",
+        "grid grid-cols-2 gap-2 sm:gap-3",
         items.length === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4",
       )}
       aria-label="המספרים של התקופה"
     >
       {items.map((k, i) => (
-        <li key={k.key} data-kpi={k.key} data-rise="" style={{ animationDelay: `${i * 40}ms` }}>
+        <li
+          key={k.key}
+          data-kpi={k.key}
+          data-rise=""
+          style={{ animationDelay: `${i * 40}ms` }}
+          // מספר אי-זוגי של כרטיסים: האחרון לרוחב כל השורה (עד שיש 5 עמודות)
+          className={cn(
+            i === items.length - 1 && items.length % 2 === 1 && "col-span-2 xl:col-span-1",
+          )}
+        >
           <KpiCard k={k} />
         </li>
       ))}
@@ -151,29 +161,30 @@ export function KpiGrid({ data, period }: { data: DashboardOverview; period: Per
 function KpiCard({ k }: { k: Kpi }) {
   const body = (
     <>
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2.5 text-[13px] font-semibold text-[var(--hm-ink-2)]">
-          <IconTile icon={k.icon} tone={k.tone} size="sm" />
+      <div className="flex items-center gap-2.5">
+        <IconTile icon={k.icon} tone={k.tone} size="sm" />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--hm-ink-2)]">
           {k.label}
         </span>
         {k.finance && (
-          <span className="rounded-full bg-[var(--hm-champagne-100)] px-2 py-0.5 text-[11px] font-semibold text-[var(--hm-champagne-700)]">
-            כספי
+          <span title="נתון כספי — לבעלים ולמי שקיבל הרשאה" className="shrink-0">
+            <LockKeyhole className="size-3.5 text-[var(--hm-champagne-600)]" aria-hidden="true" />
+            <span className="sr-only">נתון כספי — לבעלים ולמי שקיבל הרשאה</span>
           </span>
         )}
       </div>
       <div className="mt-3 flex items-end justify-between gap-2">
-        <div className="min-w-0">
-          <p
-            className="text-[1.75rem] leading-none font-bold tracking-tight text-[var(--hm-lagoon-900)]"
-            data-num=""
-          >
-            {k.value}
-          </p>
-          <div className="mt-2 min-h-6">{k.trend}</div>
-        </div>
-        {k.spark && <Sparkline values={k.spark} color={k.sparkColor} className="mb-1" />}
+        <p
+          className="shrink-0 text-[1.6rem] leading-none font-bold tracking-tight whitespace-nowrap text-[var(--hm-lagoon-900)]"
+          data-num=""
+        >
+          {k.value}
+        </p>
+        {k.spark && (
+          <Sparkline values={k.spark} color={k.sparkColor} className="w-20 min-w-0 shrink" />
+        )}
       </div>
+      <div className="mt-2.5 min-h-6">{k.trend}</div>
       {k.meter && (
         <MeterBar value={k.meter.value} label={k.meter.label} tone="success" className="mt-3" />
       )}
@@ -181,7 +192,7 @@ function KpiCard({ k }: { k: Kpi }) {
     </>
   );
   const cls =
-    "flex h-full flex-col rounded-2xl border bg-card p-4 shadow-[var(--hm-shadow-card)] sm:p-5";
+    "flex h-full flex-col rounded-2xl border bg-card p-3.5 shadow-[var(--hm-shadow-card)] sm:p-5";
   if (!k.link) return <div className={cls}>{body}</div>;
   const linkCls = cn(
     cls,
