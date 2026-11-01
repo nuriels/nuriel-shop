@@ -22,6 +22,7 @@ export interface NavItem {
   to?:
     | "/manage"
     | "/manage/calendar"
+    | "/manage/bookings"
     | "/manage/settings"
     | "/manage/team"
     | "/manage/units"
@@ -38,7 +39,14 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: "dashboard", label: "לוח בקרה", to: "/manage", primary: true },
   { key: "calendar", label: "יומן", to: "/manage/calendar", primary: true, permission: "bookings" },
-  { key: "bookings", label: "הזמנות", primary: true, permission: "bookings" },
+  {
+    key: "bookings",
+    label: "הזמנות",
+    to: "/manage/bookings",
+    primary: true,
+    permission: "bookings",
+    also: ["/manage/bookings/"],
+  },
   {
     key: "units",
     label: "יחידות",

@@ -196,3 +196,11 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Functions | `admin_sites` (list for the panel), `admin_platform_flags` (engine switches + plans), `admin_open_site` (site + its database / management flags + plan), `admin_set_owner` (owner by email; `needs_account` → the server opens a password-less account) — platform admin only, `platform_audit_log`. No new table or column |
 | Rollback | `supabase/rollbacks/20261102090000_hosp_platform_open.down.sql` — drops the functions; exact migration-14 schema (`rollback-check.sh`, M15) |
 | Production | nothing to configure beyond the existing `TENANT_BASE_DOMAIN`; the platform-wide switches are turned on from the new tab when Hospitality goes live |
+
+## 20261102100000_hosp_bookings_staff.sql — Stages 2h / 2i (hospitality)
+
+| | |
+|---|---|
+| Functions | `staff_bookings` (tabs, counts, search, masked contact), `staff_booking_detail` (nights, saved policy, house rules, history, emails; full contact only with `guests`), helpers `_booking_state`, `_booking_tab` — read only; the actions are the Stage 1f functions |
+| Rollback | `supabase/rollbacks/20261102100000_hosp_bookings_staff.down.sql` — drops them; exact migration-15 schema (`rollback-check.sh`, M16) |
+| Production | nothing to configure |

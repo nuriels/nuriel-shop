@@ -222,6 +222,7 @@ describe("navigation", () => {
     expect(NAV_ITEMS.filter((i) => i.to).map((i) => i.key)).toEqual([
       "dashboard",
       "calendar",
+      "bookings",
       "units",
       "photos",
       "pricing",

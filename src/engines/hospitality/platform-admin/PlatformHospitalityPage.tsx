@@ -411,7 +411,9 @@ function OpenedNotice({ result, onClose }: { result: OpenSiteResult; onClose: ()
       )}
       {ownerOk && (
         <>
-          <pre className="whitespace-pre-wrap rounded bg-background p-3 text-sm">{message}</pre>
+          <pre className="whitespace-pre-wrap rounded bg-background p-3 font-sans text-sm">
+            {message}
+          </pre>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"

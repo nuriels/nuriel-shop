@@ -6,7 +6,7 @@
 // בדיקת שינוי זולה כל 30 שניות כשהדף פתוח, בחזרה ללשונית ואחרי כל פעולה. שורות וירטואליות.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearch } from "@tanstack/react-router";
+import { Link, useSearch } from "@tanstack/react-router";
 import { CalendarPlus, ChevronLeft, ChevronRight, Lock, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -755,7 +755,7 @@ function BookingPanel({
   return (
     <SidePanel
       title={`הזמנה #${b.number}`}
-      description="לקריאה בלבד — אישור, שינוי וביטול יתווספו במסך ההזמנות."
+      description="אישור, שינוי, הגעה וביטול — בעמוד ההזמנה."
       onClose={onClose}
     >
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm" data-testid="booking-panel">
@@ -780,6 +780,13 @@ function BookingPanel({
           {b.channel ?? (b.source === "site" ? "האתר" : b.source === "phone" ? "טלפון" : b.source)}
         </dd>
       </dl>
+      <Link
+        to="/manage/bookings/$bookingId"
+        params={{ bookingId: b.id }}
+        className="inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+      >
+        לעמוד ההזמנה
+      </Link>
     </SidePanel>
   );
 }
@@ -934,6 +941,16 @@ function BlockSheet(props: {
       onSubmit={() => void submit()}
       onClose={props.onClose}
     >
+      {/* 3b: אותם תאריכים — כהזמנה במקום חסימה */}
+      {props.view.units.some((u) => u.id === f.unitId && u.is_active) && f.to > f.from && (
+        <Link
+          to="/manage/bookings/new"
+          search={{ unit: f.unitId, from: f.from, to: f.to }}
+          className="inline-flex min-h-11 w-fit items-center rounded-md border px-3 text-sm font-medium text-primary hover:bg-primary/5"
+        >
+          הוספת הזמנה בתאריכים האלה במקום חסימה
+        </Link>
+      )}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="bs-unit">יחידה</Label>
         <select
