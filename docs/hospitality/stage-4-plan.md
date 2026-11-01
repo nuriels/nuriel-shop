@@ -67,7 +67,7 @@ booking requests from guests.
 - **`copy/`** — per-locale text catalogue (D22). Hebrew now; another language is a new
   file, with no component change. Business content comes from the business.
 - **Nuriel credit (D6)** — `src/platform/branding/NurielCredit.tsx`, placed by the layout
-  outside the content: "כל הזכויות שמורות לנוריאל מחשבים" → `https://nuriel-app2.nuri1.fit`.
+  outside the content: "כל הזכויות שמורות לנוריאל מחשבים" → `https://m.nuri1.fit` (since stage F1; was `https://nuriel-app2.nuri1.fit`).
 
 ### Pages
 

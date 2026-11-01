@@ -7,18 +7,37 @@
 //   • אתר מושעה (כשאזור הניהול פעיל) → עמוד "האתר מושעה" (403);
 //   • האתר הציבורי (Stage 4; /stay/**) → ממשיך, רק כשהאתר פתוח (מתג הסביבה + דגל המסד +
 //     hospitality_frontend_enabled); "/" → 302 ל-/stay; אתר מושעה → "האתר מושעה" (403);
-//   • כל עמוד / קובץ אחר → 404 — אף עמוד של החנויות לא מוצג בכתובת של אתר אירוח.
+//   • כל עמוד / קובץ אחר → 404 — אף עמוד של החנויות לא מוצג בכתובת של אתר אירוח. כשהאתר פתוח —
+//     "העמוד לא נמצא" עם קישור לדף הבית; כשהוא סגור — "האתר עדיין לא פתוח".
+//   • בכל העמודים הסטטיים — קרדיט נוריאל הקבוע (F1), כמו בכל עמוד של האתר.
+import { nurielCreditHtml } from "@/platform/branding/credit";
 import type { EdgeRequest, SiteRef } from "@/platform/engines/contract";
 import { MANAGE_PATH, SITE_PATH } from "../config";
 import { ADMIN_LANDING, isManagementPath, isSitePath } from "./paths";
 
-const page = (title: string, text: string) => `<!doctype html>
+// עמוד סטטי (בלי React ובלי נתוני העסק): צבעי ערכת "יוקרה", גופני מערכת, ניגודיות AA
+const page = (title: string, text: string, homeLink = false) => `<!doctype html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8" /><title>${title}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="robots" content="noindex" />
-<style>body{font:15px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;padding:1.5rem;background:#fafafa;color:#111}</style>
-</head><body><main><h1>${title}</h1><p>${text}</p></main></body></html>`;
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Heebo,Arial,sans-serif;background:#fbf9f4;color:#2b2621}
+main{flex:1;display:flex;align-items:center;justify-content:center;padding:4rem 1.5rem;text-align:center}
+.box{max-width:28rem}
+.rule{display:block;width:3.5rem;height:1px;margin:0 auto 2rem;background:#8a6a2f}
+h1{margin:0;font-size:2rem;font-weight:500;line-height:1.25}
+p.text{margin:1rem 0 0;color:#5e544a}
+a.home{display:inline-flex;align-items:center;min-height:2.75rem;margin-top:2rem;padding:0 1.5rem;border-radius:.375rem;background:#2b2621;color:#fbf9f4;text-decoration:none;font-size:.9rem}
+footer{background:#221d19;color:#ede7dc;padding:1.25rem 1rem;font-size:.75rem;text-align:center}
+footer a{color:inherit;display:inline-flex;flex-direction:column;gap:.15rem;text-decoration:none}
+footer a:hover{text-decoration:underline}
+</style>
+</head><body><main><div class="box"><span class="rule" aria-hidden="true"></span><h1>${title}</h1><p class="text">${text}</p>${
+  homeLink ? `<a class="home" href="${SITE_PATH}">לדף הבית של האתר</a>` : ""
+}</div></main><footer>${nurielCreditHtml()}</footer></body></html>`;
 
 const NOT_OPEN_HTML = page("האתר עדיין לא פתוח", "האתר בהקמה. נסו שוב בקרוב.");
+const NOT_FOUND_HTML = page("העמוד לא נמצא", "ייתכן שהקישור השתנה או שהעמוד הוסר.", true);
 const SUSPENDED_HTML = page("האתר מושעה", "האתר הושעה זמנית. לבירור פנו לתמיכה של נוריאל.");
 
 const html = (body: string, status: number) =>
@@ -95,5 +114,8 @@ export async function hospitalityGate(
     }
     return null;
   }
-  return html(NOT_OPEN_HTML, 404);
+  // עמוד שלא קיים: באתר פתוח — "העמוד לא נמצא" (עם קישור הביתה); אחרת — "האתר עדיין לא פתוח"
+  // (הדגלים במטמון קצר, כך שבקשות אקראיות לא מעמיסות על המסד)
+  const open = site.status === "active" && (await siteOpen());
+  return html(open ? NOT_FOUND_HTML : NOT_OPEN_HTML, 404);
 }

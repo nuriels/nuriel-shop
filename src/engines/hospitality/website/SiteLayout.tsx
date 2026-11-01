@@ -1,5 +1,5 @@
 // המעטפת של האתר הציבורי (/stay): הערכה (משתני CSS), הטקסטים לפי שפה, הכותרת, הפוטר עם
-// קרדיט נוריאל (D6 — מחוץ לתוכן, לא ניתן להסרה) ושורת פעולות קבועה בנייד.
+// קרדיט נוריאל (D6 / F1 — מחוץ לתוכן, לא ניתן להסרה) ושורת פעולות קבועה בנייד.
 import { Link, Outlet, useLoaderData, useLocation } from "@tanstack/react-router";
 import { Mail, Menu, MessageCircle, Phone } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -8,6 +8,7 @@ import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger, cn } from "@
 import type { PublicSite } from "../types/website";
 import { CopyContext, siteCopy, useCopy } from "./copy";
 import { findUnit, telHref, whatsappHref } from "./lib/format";
+import { FOOTER_BAR_SPACE, hasActionBar } from "./lib/action-bar";
 import { findType } from "./lib/listing";
 import { mediaById } from "./lib/media";
 import { SiteContext, useSite } from "./lib/site-context";
@@ -94,7 +95,7 @@ export function SiteShell({
             {copy.nav.skip}
           </a>
           <SiteHeader />
-          <main id="main-content" tabIndex={-1} className="pb-20 outline-none md:pb-0">
+          <main id="main-content" tabIndex={-1} className="outline-none">
             {children}
           </main>
           <SiteFooter />
@@ -298,11 +299,20 @@ function ContactButtons({ className }: { className?: string }) {
 
 function SiteFooter() {
   const t = useCopy();
-  const { site } = useSite();
+  const { site, preview } = useSite();
+  const { pathname } = useLocation();
   const b = site.business;
   const year = Number(site.today.slice(0, 4)) || new Date().getFullYear();
   return (
-    <footer className="bg-[var(--site-deep)] text-[var(--site-deep-foreground)]">
+    <footer
+      data-site-footer=""
+      className={cn(
+        "bg-[var(--site-deep)] text-[var(--site-deep-foreground)]",
+        // F1: בטלפון שורת הפעולות הקבועה יושבת מעל תחתית העמוד — ריפוד בגובהה, כך שהקרדיט וקישורי
+        // הפרטיות והנגישות גלויים ונגישים
+        hasActionBar(pathname) && FOOTER_BAR_SPACE,
+      )}
+    >
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-8 md:grid-cols-3">
         <div>
           <p className="font-display text-2xl font-medium">{b.name}</p>
@@ -318,34 +328,42 @@ function SiteFooter() {
         <ContactButtons className="[&_svg]:text-[var(--site-gold)]" />
       </div>
       <div className="border-t border-white/10">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs opacity-70 sm:flex-row sm:px-8">
-          <p>{t.footer.rights(b.name, year)}</p>
-          <nav aria-label={t.footer.legal} className="flex gap-4">
-            <Link to="/stay/privacy" className="hover:underline">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs sm:flex-row sm:px-8">
+          <p className="opacity-80">{t.footer.rights(b.name, year)}</p>
+          <nav aria-label={t.footer.legal} className="flex gap-1">
+            <Link
+              to="/stay/privacy"
+              className="inline-flex min-h-11 items-center px-2 opacity-90 hover:underline"
+            >
               {t.footer.privacy}
             </Link>
-            <Link to="/stay/accessibility" className="hover:underline">
+            <Link
+              to="/stay/accessibility"
+              className="inline-flex min-h-11 items-center px-2 opacity-90 hover:underline"
+            >
               {t.footer.accessibility}
             </Link>
           </nav>
-          <NurielCredit />
         </div>
+      </div>
+      <div className="border-t border-white/10">
+        <NurielCredit
+          locked={preview}
+          className="mx-auto flex max-w-7xl justify-center px-4 py-4 text-xs sm:px-8"
+        />
       </div>
     </footer>
   );
 }
 
-/** בנייד: חיוג, WhatsApp ומעבר ליחידות — תמיד בהישג יד */
-/** עמודים עם פעולה משלהם — בלי שורת הפעולות הקבועה */
-const NO_ACTION_BAR = /^\/stay\/(book|booking-received|my-booking)(\/|$)/;
-
+/** בנייד: חיוג, WhatsApp ומעבר ליחידות — תמיד בהישג יד (לא בעמודי ההזמנה, שיש להם פעולה משלהם) */
 function MobileActionBar() {
   const t = useCopy();
   const { site } = useSite();
   const { pathname } = useLocation();
   const b = site.business;
   const wa = b.whatsapp || b.phone;
-  if (NO_ACTION_BAR.test(pathname)) return null;
+  if (!hasActionBar(pathname)) return null;
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md md:hidden">
       <div className="flex items-center gap-2">

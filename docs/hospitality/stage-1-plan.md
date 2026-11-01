@@ -29,7 +29,7 @@ copied).
 | D3 | Demo images only from sources allowing commercial use, with documented source and licence, marked "demo" until replaced | A4 Stage 4 |
 | D4 | No Realtime infrastructure now: auto-refresh every 30–60 s, immediate refresh after own actions, refresh on tab focus, no duplicates/stale edits; Realtime later via a platform adapter | A4 Stage 3, B6 |
 | D5 | Guests can **request** cancellation from the site; owner approves/declines under the snapshotted policy; dates released only on approval (or automatic cancellation if the policy allows it) | A5, B7 |
-| D6 | Fixed Nuriel credit in every Hospitality site footer: "כל הזכויות שמורות לנוריאל מחשבים" → `https://nuriel-app2.nuri1.fit`; styling adapts, removal impossible | A4 Stage 4 |
+| D6 | Fixed Nuriel credit in every Hospitality site footer (wording of stage F1): "האתר נבנה באמצעות Nuriel Hospitality מבית נוריאל מחשבים" / "© כל הזכויות שמורות לנוריאל מחשבים" → `https://m.nuri1.fit` (`rel="nofollow"`); styling adapts, removal impossible | A4 Stage 4, F1 |
 | D7 | Reliable email on top of the existing Nuriel email infrastructure: outbox, status, retries, no duplicates, error log, visibility; an email failure never undoes a saved booking | A5, B6 |
 | D8 | Manual bookings may be **confirmed immediately** (availability-checked, saved, dates held, on the calendar at once, optional guest email) | A5 |
 | D9 | Booking **without an account**; later login with Google/email; past bookings linked only after **verified** identity | A4 Stage 6, B7 |
@@ -229,7 +229,7 @@ Notation: tables are in schema `hospitality` unless prefixed `public.`.
   map, FAQ, contact, WhatsApp); public booking flow (A5); **Nuriel credit (D6)**;
   **demo media pack (D3)**; **Nofei Dorit showcase tenant** seeded with demo data.
 - **Nuriel credit (D6):** "כל הזכויות שמורות לנוריאל מחשבים" linking to
-  `https://nuriel-app2.nuri1.fit`. It is a platform branding component
+  `https://m.nuri1.fit` (since stage F1; was `https://nuriel-app2.nuri1.fit`). It is a platform branding component
   (`src/platform/branding/credit`) that the Hospitality renderer places **outside** the
   editable sections, so the site document and the editor cannot remove it. Themes may
   style it (colour, alignment, size within limits) through tokens. A test renders every
@@ -1142,7 +1142,7 @@ end of development as `docs/hospitality/runbook-install.md`.
 | No Supabase Realtime in production | "real-time" calendar | refetch/polling + DB-validated writes (Stage 3 — built as 3a / 3b, D19); Realtime is an optional infra decision |
 | `current_tenant_id()` returns NULL for members of other tenants | logged-in guests who are staff elsewhere | guest RPCs use `hospitality.request_tenant()` + `auth.uid()` (designed in Stage 1) |
 | Grow webhook bound to Ecommerce orders | Hospitality payments | platform Grow client adapter + Hospitality's own table and webhook (Stage 8) |
-| Ecommerce footer links to `nuriel-shop.co.il` | branding | Hospitality themes render their own footer with `https://nuriel-app2.nuri1.fit`; Ecommerce unchanged |
+| Ecommerce footer links to `nuriel-shop.co.il` | branding | Hospitality themes render their own footer with `https://m.nuri1.fit` (since stage F1; was `https://nuriel-app2.nuri1.fit`); Ecommerce unchanged |
 | Ecommerce has no theme/section editor | editor reuse | Hospitality editor is new; only generic helpers shared via platform adapters |
 | Video upload size | videos | short clips uploaded (limit set by storage config — to verify on the server; banners use 15 MB today); long videos via YouTube/Vimeo embed section |
 | Stock images not reachable from the sandbox | demo media pack | images selected and licence-checked with your approval, stored with a licence manifest |

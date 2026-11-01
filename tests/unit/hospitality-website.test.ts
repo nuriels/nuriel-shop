@@ -43,7 +43,7 @@ import {
 } from "@/engines/hospitality/website/design/schema";
 import { siteCopy } from "@/engines/hospitality/website/copy";
 import { he } from "@/engines/hospitality/website/copy/he";
-import { NURIEL_CREDIT_TEXT, NURIEL_CREDIT_URL } from "@/platform/branding/NurielCredit";
+import { NURIEL_CREDIT_LINES, NURIEL_CREDIT_URL } from "@/platform/branding/credit";
 import type {
   PublicMedia,
   PublicProperty,
@@ -413,9 +413,12 @@ describe("themes and the fixed credit", () => {
     expect(contrast("#000000", "#ffffff")).toBeCloseTo(21, 0);
   });
 
-  it("the Nuriel credit text and link are fixed (D6)", () => {
-    expect(NURIEL_CREDIT_TEXT).toBe("כל הזכויות שמורות לנוריאל מחשבים");
-    expect(NURIEL_CREDIT_URL).toBe("https://nuriel-app2.nuri1.fit");
+  it("the Nuriel credit text and link are fixed (D6, wording of stage F1)", () => {
+    expect(NURIEL_CREDIT_LINES).toEqual([
+      "האתר נבנה באמצעות Nuriel Hospitality מבית נוריאל מחשבים",
+      "© כל הזכויות שמורות לנוריאל מחשבים",
+    ]);
+    expect(NURIEL_CREDIT_URL).toBe("https://m.nuri1.fit");
   });
 
   it("the copy catalogue is complete Hebrew, RTL", () => {

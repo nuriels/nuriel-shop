@@ -16,6 +16,7 @@ import {
   EyeOff,
   GripVertical,
   History,
+  LockKeyhole,
   Monitor,
   Plus,
   Smartphone,
@@ -802,6 +803,19 @@ function DesignPanel({
       </fieldset>
 
       <FontField design={design} onChange={onChange} />
+
+      {/* F1: הקרדיט בתחתית האתר — חלק מהפלטפורמה, לא מהעיצוב */}
+      <div
+        className="flex items-start gap-2 rounded-md border border-dashed p-3 text-xs text-muted-foreground"
+        data-credit-note=""
+      >
+        <LockKeyhole className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        <p>
+          <span className="font-medium text-foreground">קרדיט הפלטפורמה בתחתית האתר</span> — "האתר
+          נבנה באמצעות Nuriel Hospitality מבית נוריאל מחשבים". הוא מופיע בכל הערכות ובכל העמודים,
+          קבוע ולא ניתן להסרה. הזכויות על התמונות והתוכן שלכם נשארות שלכם.
+        </p>
+      </div>
     </div>
   );
 }
