@@ -127,15 +127,15 @@ mkdir -p /root/backups/nuriel-shop/before-f && chmod 700 /root/backups/nuriel-sh
 3. `2e53763 …`.
 4. התגים `latest`, `pre-hospitality`, `before-e1-e2-e3`, `before-f`.
 
-### FU2 — הקוד (נעוץ ב-`6b9b704`, הקוד של שלב F; מה שאחריו בענף — מסמכים בלבד)
+### FU2 — הקוד (נעוץ ב-`2d0b5f0`, הקוד של שלב F כולל תיקוני הנגישות; מה שאחריו בענף — מסמכים בלבד)
 
 ```bash
-cd /root/nuriel-shop-git && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge --ff-only 6b9b704 && git log --oneline -1 && cp -r supabase/rollbacks /root/backups/nuriel-shop/before-f/rollbacks && ls /root/backups/nuriel-shop/before-f/rollbacks | grep -c 20261105
+cd /root/nuriel-shop-git && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge --ff-only 2d0b5f0 && git log --oneline -1 && cp -r supabase/rollbacks /root/backups/nuriel-shop/before-f/rollbacks && ls /root/backups/nuriel-shop/before-f/rollbacks | grep -c 20261105
 ```
 
 **מצופה:**
-- `Updating 2e53763..6b9b704`, `Fast-forward`;
-- `6b9b704 Hospitality F4/F5: …`;
+- `Updating 2e53763..2d0b5f0`, `Fast-forward`;
+- `2d0b5f0 Hospitality F2b: accessibility fixes found by CI (E2E run 73)`;
 - `1`.
 
 ### FU3 — בדיקה יבשה: בדיוק מיגרציה אחת ממתינה
@@ -209,7 +209,7 @@ docker logs --since 5m nuriel-shop-app 2>&1 | grep -iE "error|fatal" | tail -20
    ```
 
    - **ה-image הקודם עולה מיד, בלי בנייה.**
-   - **התיקייה נשארת על `6b9b704`.** לא בונים ממנה שוב עד שמחליטים איך ממשיכים.
+   - **התיקייה נשארת על `2d0b5f0`.** לא בונים ממנה שוב עד שמחליטים איך ממשיכים.
 
 2. **המסד, רק אם צריך:**
 
