@@ -214,10 +214,45 @@ only. URL: `http://demo-zimmer.shop.localhost:3100/`.
 
 Done at 1440 px and 390 px, with no horizontal scroll and no console errors.
 
-## 4c — switches and links (next)
+## 4c — switches and links (built)
 
-- Platform tab switches for the site and booking flags of a business.
-- A "view my site" link in the management area.
+### Platform panel ("ניהול Hospitality")
+
+- **Platform-wide switches:**
+  - "האתרים הציבוריים של העסקים" (`hospitality_frontend_enabled`);
+  - "בקשות הזמנה מהאתרים" (`hospitality_booking_enabled`);
+  - these sit next to the database and management-area switches.
+- **On each business card:**
+  - "האתר הציבורי פתוח לגולשים" — the business's website flag;
+  - "מקבל בקשות הזמנה מהאתר" — the business's bookings flag; enabled only once its
+    website is on;
+  - a warning when the platform switch is still off, and when the plan is not active
+    (requests are refused);
+  - an "האתר" link to `<site>/stay`.
+- **Behaviour:**
+  - each switch is logged (`platform_set_flag`);
+  - turning on a website also turns on the business's database flag.
+- **Data:** read through migration 20 `admin_site_switches()` (platform admin only).
+
+### Management area
+
+- An "האתר שלי" link in the header (new tab) while the business's website is open.
+
+### How a real zimmer business goes live (local or, later, on the secure server)
+
+1. Platform panel → "ניהול Hospitality": the four platform switches on (database,
+   management areas, websites, booking requests).
+2. "פתיחת עסק": name, address (sub-domain), owner email, plan → the owner gets an account
+   and the management link.
+3. The owner fills in, in "ניהול העסק":
+   - business details and contact;
+   - the property and units;
+   - photos, prices and the cancellation policy.
+
+   The setup checklist leads the way.
+4. On the business card: "האתר הציבורי פתוח לגולשים", then "מקבל בקשות הזמנה מהאתר".
+5. Send the owner the site link (`https://<sub-domain>/`). Guests book, the owner
+   approves in "הזמנות", and emails go out through the worker.
 
 ## Not in Stage 4 (planned later)
 

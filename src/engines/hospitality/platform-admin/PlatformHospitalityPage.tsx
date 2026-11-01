@@ -33,6 +33,7 @@ import type {
   OpenSiteResult,
   PlanOption,
   PlatformHospitalityView,
+  SiteFlagKey,
 } from "../types/platform-admin";
 import { emailError, slugError, suggestSlug } from "../validation/platform-admin";
 import { FormSheet } from "../management/catalog/CatalogSheets";
@@ -161,7 +162,7 @@ function useRefresh() {
 function EngineSwitches({ view }: { view: PlatformHospitalityView }) {
   const refresh = useRefresh();
   const [busy, setBusy] = useState(false);
-  const set = async (key: "backend" | "management", enabled: boolean) => {
+  const set = async (key: SiteFlagKey, enabled: boolean) => {
     setBusy(true);
     try {
       await hospitalityPlatformSetFlag({ data: { siteId: null, key, enabled } });
@@ -205,6 +206,27 @@ function EngineSwitches({ view }: { view: PlatformHospitalityView }) {
           />
           אזורי הניהול של העסקים
         </label>
+        <label className="flex min-h-11 items-center gap-3">
+          <Switch
+            checked={view.flags.frontend}
+            disabled={busy}
+            onCheckedChange={(v) => void set("frontend", v)}
+            aria-label="האתרים הציבוריים של העסקים"
+          />
+          האתרים הציבוריים של העסקים
+        </label>
+        <label className="flex min-h-11 items-center gap-3">
+          <Switch
+            checked={view.flags.booking}
+            disabled={busy}
+            onCheckedChange={(v) => void set("booking", v)}
+            aria-label="בקשות הזמנה מהאתרים"
+          />
+          בקשות הזמנה מהאתרים
+        </label>
+        <p className="basis-full text-sm text-muted-foreground">
+          האתר הציבורי ובקשות ההזמנה נפתחים לעסק רק כשהמתג כאן דלוק וגם המתג של העסק (בכרטיס שלו).
+        </p>
       </CardContent>
     </Card>
   );
@@ -481,6 +503,28 @@ function SiteCard(props: { site: HospitalitySiteRow; onOwner: () => void; onPlan
   const s = props.site;
   const refresh = useRefresh();
   const [busy, setBusy] = useState(false);
+  const setSite = async (key: "frontend" | "booking", enabled: boolean) => {
+    setBusy(true);
+    try {
+      await hospitalityPlatformSetFlag({ data: { siteId: s.id, key, enabled } });
+      if (enabled && !s.site_flags.backend)
+        await hospitalityPlatformSetFlag({ data: { siteId: s.id, key: "backend", enabled: true } });
+      toast.success(
+        key === "frontend"
+          ? enabled
+            ? `האתר של ${s.name} פתוח לגולשים`
+            : `האתר של ${s.name} נסגר`
+          : enabled
+            ? `${s.name} מקבל בקשות הזמנה מהאתר`
+            : `בקשות ההזמנה מהאתר של ${s.name} נסגרו`,
+      );
+      refresh();
+    } catch (e) {
+      toast.error(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const toggle = async (enabled: boolean) => {
     setBusy(true);
     try {
@@ -550,6 +594,34 @@ function SiteCard(props: { site: HospitalitySiteRow; onOwner: () => void; onPlan
             />
             אזור הניהול פתוח לבעלים
           </label>
+          <label className="flex min-h-11 items-center gap-3">
+            <Switch
+              checked={s.site_flags.frontend}
+              disabled={busy}
+              onCheckedChange={(v) => void setSite("frontend", v)}
+              aria-label={`האתר הציבורי של ${s.name}`}
+            />
+            האתר הציבורי פתוח לגולשים
+          </label>
+          <label className="flex min-h-11 items-center gap-3">
+            <Switch
+              checked={s.site_flags.booking}
+              disabled={busy || !s.site_flags.frontend}
+              onCheckedChange={(v) => void setSite("booking", v)}
+              aria-label={`בקשות הזמנה מהאתר של ${s.name}`}
+            />
+            מקבל בקשות הזמנה מהאתר
+          </label>
+          {s.site_flags.frontend && !s.frontend_enabled && (
+            <p className="text-xs text-amber-800">
+              האתר יופעל כשהאתרים הציבוריים יודלקו בפלטפורמה (למעלה).
+            </p>
+          )}
+          {s.site_flags.booking && !s.subscription_active && (
+            <p className="text-xs text-amber-800">
+              המנוי לא פעיל — בקשות הזמנה לא יתקבלו עד שיחודש.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             {!s.owner_email && (
               <Button type="button" className="min-h-11" onClick={props.onOwner}>
@@ -559,6 +631,17 @@ function SiteCard(props: { site: HospitalitySiteRow; onOwner: () => void; onPlan
             <Button type="button" variant="outline" className="min-h-11" onClick={props.onPlan}>
               שינוי חבילה
             </Button>
+            {s.site_url && s.frontend_enabled && (
+              <a
+                href={s.site_url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex min-h-11 items-center gap-2 px-2 font-medium text-primary hover:underline"
+              >
+                <ExternalLink className="size-4" aria-hidden="true" />
+                האתר
+              </a>
+            )}
             {s.manage_url && (
               <a
                 href={s.manage_url}

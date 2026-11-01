@@ -95,7 +95,8 @@ export function parseSetFlag(input: Raw): {
 } {
   const i = input ?? {};
   const key = i["key"];
-  if (key !== "backend" && key !== "management") throw new InputError("דגל לא מוכר");
+  if (key !== "backend" && key !== "management" && key !== "frontend" && key !== "booking")
+    throw new InputError("דגל לא מוכר");
   if (typeof i["enabled"] !== "boolean") throw new InputError("ערך לא תקין");
   const siteId =
     i["siteId"] === null || i["siteId"] === undefined ? null : uuid(i["siteId"], "האתר");

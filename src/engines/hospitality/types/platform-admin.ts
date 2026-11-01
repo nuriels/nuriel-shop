@@ -10,6 +10,8 @@ export interface PlatformFlags {
   backend: boolean;
   management: boolean;
   booking: boolean;
+  /** האתרים הציבוריים (Stage 4) */
+  frontend: boolean;
   plans: PlanOption[];
 }
 
@@ -36,9 +38,12 @@ export interface HospitalitySiteRow {
   backend_enabled: boolean;
   management_enabled: boolean;
   booking_enabled: boolean;
-  site_flags: { backend: boolean; management: boolean; booking: boolean };
-  /** נוסף בשרת: כתובת האתר ואזור הניהול (null — הדומיין לא הוגדר) */
+  /** האתר הציבורי פתוח בפועל (פלטפורמה + אתר) */
+  frontend_enabled: boolean;
+  site_flags: { backend: boolean; management: boolean; booking: boolean; frontend: boolean };
+  /** נוסף בשרת: כתובת האתר, האתר הציבורי ואזור הניהול (null — הדומיין לא הוגדר) */
   url: string | null;
+  site_url: string | null;
   manage_url: string | null;
 }
 
@@ -60,4 +65,4 @@ export type OwnerResult =
   | { status: "added" | "already_owner"; account_created: boolean }
   | { status: "failed"; message: string };
 
-export type SiteFlagKey = "backend" | "management";
+export type SiteFlagKey = "backend" | "management" | "frontend" | "booking";

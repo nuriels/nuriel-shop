@@ -228,3 +228,11 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Functions | `public_site()` (anon: business details, `booking_open`, galleries, default policy, active properties — description, coordinates, parking, house rules, public guest info, amenities, photos — and active units — capacity, rooms, beds, amenities, photos, "from" price, minimum nights, own policy), `public_availability(unit, from, to)` (anon: busy nights only, ≤ 120 days; an expired request does not hold the night); helpers `_public_site_tenant` (request tenant + database flag + `hospitality_frontend_enabled`), `_public_media`, `_public_amenities`, `_public_policy`. Never returned: guests, private arrival info, notes, staff emails, rate rules. No new table or column |
 | Rollback | `supabase/rollbacks/20261102130000_hosp_public_site.down.sql` — exact migration-18 schema (`rollback-check.sh`, M19) |
 | Production | nothing to configure; a business's site opens with the platform switch + the business's `hospitality_frontend_enabled` (and requests with `hospitality_booking_enabled`) |
+
+## 20261102140000_hosp_site_switches.sql — Stage 4c (hospitality)
+
+| | |
+|---|---|
+| Functions | `admin_site_switches()` — platform admin only: the platform-wide website / bookings switches and, per Hospitality site, its own website flag and whether the website is open in practice. The switching itself is the existing `platform_set_flag` (logged). No new table or column |
+| Rollback | `supabase/rollbacks/20261102140000_hosp_site_switches.down.sql` — exact migration-19 schema (`rollback-check.sh`, M20) |
+| Production | nothing to configure |

@@ -463,3 +463,14 @@ describe("4b: booking flow helpers", () => {
     expect(access).toContain("פניות בנושא נגישות");
   });
 });
+
+describe("4c: platform switches", () => {
+  it("the platform tab may switch the site and booking flags, and nothing else", async () => {
+    const { parseSetFlag } = await import("@/engines/hospitality/validation/platform-admin");
+    for (const key of ["backend", "management", "frontend", "booking"])
+      expect(parseSetFlag({ key, enabled: true, siteId: null }).key).toBe(key);
+    expect(() => parseSetFlag({ key: "themes", enabled: true })).toThrow("דגל לא מוכר");
+    expect(() => parseSetFlag({ key: "hospitality_frontend_enabled", enabled: true })).toThrow();
+    expect(() => parseSetFlag({ key: "frontend", enabled: "yes" })).toThrow();
+  });
+});

@@ -20,7 +20,16 @@ type ParentMatch = Promise<{ loaderData?: unknown }>;
 
 export const siteLayoutRoute = {
   beforeLoad: hospitalitySiteOnly,
-  loader: (): Promise<PublicSite> => hospitalityPublicSite(),
+  // אתר שנסגר (הדגל כבוי, או עוד לא פתוח) → 404 "האתר עדיין לא פתוח", לא שגיאת שרת
+  loader: async (): Promise<PublicSite> => {
+    try {
+      return await hospitalityPublicSite();
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("לא פתוח"))
+        throw notFound({ data: { closed: true } });
+      throw e;
+    }
+  },
   // ניווט בין עמודי האתר — בלי לטעון שוב (הזמינות והמחיר נבדקים בנפרד, בזמן אמת)
   staleTime: 5 * 60_000,
   component: SiteLayout,

@@ -38,7 +38,9 @@ export function SiteError({ error }: { error: unknown }) {
   return <Message title={t.errors.notOpenTitle} text={t.errors.generic} home={false} />;
 }
 
-export function SiteNotFound() {
+export function SiteNotFound({ data }: { data?: unknown }) {
   const t = siteCopy("he");
+  if ((data as { closed?: boolean } | undefined)?.closed)
+    return <Message title={t.errors.notOpenTitle} text={t.errors.notOpen} home={false} />;
   return <Message title={t.errors.notFoundTitle} text={t.errors.notFound} home />;
 }

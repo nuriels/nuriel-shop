@@ -22,14 +22,31 @@ type RpcOwner = { status: "added" | "already_owner" | "needs_account"; user_id?:
 const FLAG_KEYS = {
   backend: "hospitality_backend_enabled",
   management: "hospitality_management_enabled",
+  frontend: "hospitality_frontend_enabled",
+  booking: "hospitality_booking_enabled",
 } as const;
 
-async function withUrls(
-  row: Omit<HospitalitySiteRow, "url" | "manage_url">,
-): Promise<HospitalitySiteRow> {
+type RawSiteRow = Omit<
+  HospitalitySiteRow,
+  "url" | "site_url" | "manage_url" | "frontend_enabled" | "site_flags"
+> & { site_flags: Omit<HospitalitySiteRow["site_flags"], "frontend"> };
+type SiteSwitches = {
+  platform: { frontend: boolean; booking: boolean };
+  sites: Record<string, { frontend: boolean; frontend_enabled: boolean }>;
+};
+
+async function withUrls(row: RawSiteRow, switches: SiteSwitches): Promise<HospitalitySiteRow> {
   const { siteOrigin } = await import("@/platform/tenancy/current-site.server");
   const url = await siteOrigin(row);
-  return { ...row, url, manage_url: url ? `${url}/manage` : null };
+  const web = switches.sites[row.id] ?? { frontend: false, frontend_enabled: false };
+  return {
+    ...row,
+    frontend_enabled: web.frontend_enabled,
+    site_flags: { ...row.site_flags, frontend: web.frontend },
+    url,
+    site_url: url ? `${url}/stay` : null,
+    manage_url: url ? `${url}/manage` : null,
+  };
 }
 
 /** שיוך הבעלים; חשבון חדש (אימייל מאומת, בלי סיסמה) רק כשהמסד מחזיר needs_account */
@@ -60,13 +77,14 @@ export const hospitalityPlatformView = createServerFn({ method: "GET" }).handler
       import("../server/platform-admin.server"),
       import("@/platform/tenancy/current-site.server"),
     ]);
-    const [flags, rows] = await Promise.all([
-      platformRpc<PlatformFlags>("admin_platform_flags", {}),
-      platformRpc<Omit<HospitalitySiteRow, "url" | "manage_url">[]>("admin_sites", {}),
+    const [flags, rows, switches] = await Promise.all([
+      platformRpc<Omit<PlatformFlags, "frontend">>("admin_platform_flags", {}),
+      platformRpc<RawSiteRow[]>("admin_sites", {}),
+      platformRpc<SiteSwitches>("admin_site_switches", {}),
     ]);
     return {
-      flags,
-      sites: await Promise.all(rows.map(withUrls)),
+      flags: { ...flags, frontend: switches.platform.frontend },
+      sites: await Promise.all(rows.map((r) => withUrls(r, switches))),
       base_domain: await sitesBaseDomain(),
     };
   },

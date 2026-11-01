@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { Outlet, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Info, LogOut, TriangleAlert } from "lucide-react";
+import { ExternalLink, Info, LogOut, TriangleAlert } from "lucide-react";
 import { onSessionChange, signOutHere } from "@/platform/auth/browser-session";
 import { Button, cn } from "@/platform/ui";
 import { hospitalityManagementContext } from "../../api/management.functions";
@@ -89,6 +89,17 @@ function Shell({
               {context.role === "owner" ? "בעלים" : "מנהל/ת"}
             </p>
           </div>
+          {context.flags.frontend && (
+            <a
+              href="/stay"
+              target="_blank"
+              rel="noopener"
+              className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium text-primary hover:bg-muted"
+            >
+              <ExternalLink className="size-4" aria-hidden="true" />
+              <span>האתר שלי</span>
+            </a>
+          )}
           <Button variant="ghost" onClick={onSignOut} className="min-h-11 gap-2">
             <LogOut className="size-4" aria-hidden="true" />
             <span>התנתקות</span>
