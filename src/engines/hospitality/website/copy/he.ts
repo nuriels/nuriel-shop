@@ -215,6 +215,8 @@ export const he = {
     submit: "שליחת בקשת הזמנה",
     submitInstant: "אישור הזמנה",
     sending: "שולחים…",
+    verifying: "מאמתים את הבקשה… זה לוקח רגע.",
+    trapLabel: "לא למילוי",
     required: "שדה חובה",
     mustAccept: "יש לאשר את תנאי הביטול וכללי המקום",
     termsChanged: "התנאים או המחיר התעדכנו — עיינו בהם שוב ואשרו.",

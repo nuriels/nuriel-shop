@@ -63,6 +63,8 @@ BEGIN
   END IF;
   RETURN NEW;
 END $$;
+-- פונקציית טריגר — לא נקראת מה-API
+REVOKE ALL ON FUNCTION hospitality.payments_immutable() FROM PUBLIC, anon, authenticated;
 DROP TRIGGER IF EXISTS payments_immutable ON hospitality.payments;
 CREATE TRIGGER payments_immutable BEFORE UPDATE ON hospitality.payments
   FOR EACH ROW EXECUTE FUNCTION hospitality.payments_immutable();

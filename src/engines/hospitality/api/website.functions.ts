@@ -4,7 +4,8 @@
 //   • 4b: הצעת מחיר, בקשת הזמנה (רק כשההזמנות פתוחות — hospitality_booking_enabled + מנוי),
 //     ההזמנה שלי בקישור המאובטח, הצעת ביטול ובקשת ביטול.
 // המחיר, הזמינות והמדיניות — רק מהמסד (quote / request_booking); מניעת הזמנה כפולה — במסד
-// (EXCLUDE); הגבלת קצב לכל כתובת IP מעל המגבלות של המסד (עד 2 בקשות פתוחות לאותם פרטי קשר).
+// (EXCLUDE). D1: הגבלת קצב משותפת לכל השרתים (מונה במסד — security/), ובקשת הזמנה רק אחרי
+// אימות נגד בוטים (CAPTCHA — הוכחת עבודה) ושדה מלכודת; המסד מקבל בקשה רק מהשרת (מיגרציה 25).
 import { createServerFn } from "@tanstack/react-start";
 import type {
   BookingRequestResult,
@@ -21,6 +22,9 @@ import type {
   RawPublicSite,
   SiteGuestBooking,
 } from "../types/website";
+import type { LimitAction } from "../security/limits";
+import { TRAP_FIELD } from "../security/messages";
+import { parsePowSolution, type PowChallenge } from "../security/pow";
 import { toPublicSite } from "../website/lib/site-map";
 import {
   InputError,
@@ -32,19 +36,29 @@ import {
   uuid,
 } from "../validation/input";
 
-const TOO_MANY = "יותר מדי בקשות מהכתובת הזו — נסו שוב בעוד כמה דקות";
+/** הגבלת קצב משותפת (מונה במסד) לפעולה של גולש — לפי כתובת / רשת / העסק */
+async function throttle(action: LimitAction): Promise<void> {
+  const [{ guardPublic }, { hospitalitySiteId }] = await Promise.all([
+    import("../security/guard.server"),
+    import("../server/rpc.server"),
+  ]);
+  await guardPublic(action, await hospitalitySiteId());
+}
 
-/** הגבלת קצב לפי IP (בזיכרון השרת; מעל המגבלות של המסד) */
-async function throttle(action: string, limit: number, windowMs: number): Promise<void> {
-  const { allowAction, requestIp } = await import("@/platform/security/rate-limit.server");
-  if (!allowAction(`hosp-site:${action}:${await requestIp()}`, limit, windowMs))
-    throw new InputError(TOO_MANY);
+/** האימות נגד בוטים של בקשת הזמנה: הפתרון של האתגר ושדה המלכודת */
+function botCheckInput(input: Record<string, unknown>) {
+  const trap = input?.[TRAP_FIELD];
+  return {
+    captcha: parsePowSolution(input?.["captcha"]),
+    trap: typeof trap === "string" ? trap.slice(0, 200) : "",
+  };
 }
 
 const MAX_RANGE_DAYS = 120;
 
 export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
   async (): Promise<PublicSite> => {
+    await throttle("site");
     const [{ callRpc }, { publicUrl }] = await Promise.all([
       import("../server/rpc.server"),
       import("../server/media.server"),
@@ -67,6 +81,7 @@ export const hospitalityPublicAvailability = createServerFn({ method: "POST" })
     return { unitId, from, to };
   })
   .handler(async ({ data }): Promise<PublicAvailability> => {
+    await throttle("availability");
     const { callRpc } = await import("../server/rpc.server");
     return callRpc<PublicAvailability>("public_availability", {
       _unit_id: data.unitId,
@@ -77,12 +92,10 @@ export const hospitalityPublicAvailability = createServerFn({ method: "POST" })
 
 // ---------- 4b: הזמנה מהאתר ----------
 
-const MINUTE = 60_000;
-
 export const hospitalitySiteQuote = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseQuote(input))
   .handler(async ({ data }): Promise<Quote> => {
-    await throttle("quote", 120, 10 * MINUTE);
+    await throttle("quote");
     const { callRpc } = await import("../server/rpc.server");
     return callRpc<Quote>("quote", {
       _unit_id: data.unitId,
@@ -94,31 +107,64 @@ export const hospitalitySiteQuote = createServerFn({ method: "POST" })
     });
   });
 
+/**
+ * אתגר האימות נגד בוטים לטופס ההזמנה (הדפדפן פותר אותו ברקע בזמן שהאורח ממלא את הפרטים).
+ * מוגבל לפי כתובת; כתובת שמבקשת הרבה אתגרים מקבלת אתגר כבד יותר.
+ */
+export const hospitalitySiteChallenge = createServerFn({ method: "POST" }).handler(
+  async (): Promise<PowChallenge> => {
+    const [{ guardChallenge }, { issuePow }, { hospitalitySiteId }] = await Promise.all([
+      import("../security/guard.server"),
+      import("../security/captcha.server"),
+      import("../server/rpc.server"),
+    ]);
+    const siteId = await hospitalitySiteId();
+    const { difficulty } = await guardChallenge(siteId);
+    return issuePow(siteId, "request", { difficulty });
+  },
+);
+
+/** הבדיקות לפני בקשת הזמנה (מלכודת, CAPTCHA, הגבלת קצב) — והפרטים של הגולש לתיעוד התנאים */
+async function guardRequest(bot: ReturnType<typeof botCheckInput>) {
+  const [{ guardBookingRequest }, { hospitalitySiteId }] = await Promise.all([
+    import("../security/guard.server"),
+    import("../server/rpc.server"),
+  ]);
+  return guardBookingRequest(await hospitalitySiteId(), bot);
+}
+
 export const hospitalitySiteRequestBooking = createServerFn({ method: "POST" })
-  .inputValidator((input: Record<string, unknown>) => parseRequestBooking(input))
+  .inputValidator((input: Record<string, unknown>) => ({
+    ...parseRequestBooking(input),
+    ...botCheckInput(input),
+  }))
   .handler(async ({ data }): Promise<BookingRequestResult> => {
-    await throttle("request", 6, 60 * MINUTE);
-    const [{ callRpc }, { kickOutbox }] = await Promise.all([
+    const client = await guardRequest(data);
+    const [{ callServerRpc }, { kickOutbox }] = await Promise.all([
       import("../server/rpc.server"),
       import("../outbox/worker.server"),
     ]);
-    const result = await callRpc<BookingRequestResult>("request_booking", {
-      _unit_id: data.unitId,
-      _check_in: data.checkIn,
-      _check_out: data.checkOut,
-      _full_name: data.fullName,
-      _email: data.email,
-      _phone: data.phone,
-      _idempotency_key: data.idempotencyKey,
-      _policy_accepted: true,
-      _policy_hash: data.policyHash,
-      _adults: data.adults,
-      _children: data.children,
-      _special_requests: data.specialRequests,
-      _promo_code: data.promoCode,
-      _marketing_consent: data.marketingConsent,
-      _language: data.language,
-    });
+    const result = await callServerRpc<BookingRequestResult>(
+      "request_booking",
+      {
+        _unit_id: data.unitId,
+        _check_in: data.checkIn,
+        _check_out: data.checkOut,
+        _full_name: data.fullName,
+        _email: data.email,
+        _phone: data.phone,
+        _idempotency_key: data.idempotencyKey,
+        _policy_accepted: true,
+        _policy_hash: data.policyHash,
+        _adults: data.adults,
+        _children: data.children,
+        _special_requests: data.specialRequests,
+        _promo_code: data.promoCode,
+        _marketing_consent: data.marketingConsent,
+        _language: data.language,
+      },
+      client,
+    );
     // מייל לאורח (עם קישור ניהול ההזמנה) ולעסק — מיד, בלי לחכות לסבב של ה-worker
     kickOutbox();
     return result;
@@ -132,7 +178,7 @@ export const hospitalitySiteBooking = createServerFn({ method: "POST" })
     return { token: ref.token };
   })
   .handler(async ({ data }): Promise<SiteGuestBooking> => {
-    await throttle("booking", 60, 10 * MINUTE);
+    await throttle("booking");
     const { callRpc } = await import("../server/rpc.server");
     const booking = await callRpc<GuestBookingView>("get_booking_by_token", { _token: data.token });
     let arrival: GuestArrival | null = null;
@@ -151,7 +197,7 @@ export const hospitalitySiteCancellationQuote = createServerFn({ method: "POST" 
     return { token: ref.token };
   })
   .handler(async ({ data }): Promise<CancellationQuote> => {
-    await throttle("cancel-quote", 30, 10 * MINUTE);
+    await throttle("cancelQuote");
     const { callRpc } = await import("../server/rpc.server");
     return callRpc<CancellationQuote>("cancellation_quote", {
       _token: data.token,
@@ -166,7 +212,7 @@ export const hospitalitySiteRequestCancellation = createServerFn({ method: "POST
     return { token: parsed.token, reason: parsed.reason };
   })
   .handler(async ({ data }): Promise<GuestBookingView> => {
-    await throttle("cancel", 6, 60 * MINUTE);
+    await throttle("cancel");
     const [{ callRpc }, { kickOutbox }] = await Promise.all([
       import("../server/rpc.server"),
       import("../outbox/worker.server"),
@@ -198,6 +244,7 @@ export const hospitalityPublicTypeAvailability = createServerFn({ method: "POST"
     return { categoryId, from, to };
   })
   .handler(async ({ data }): Promise<PublicTypeAvailability> => {
+    await throttle("availability");
     const { callRpc } = await import("../server/rpc.server");
     return callRpc<PublicTypeAvailability>("public_type_availability", {
       _category_id: data.categoryId,
@@ -213,7 +260,7 @@ export const hospitalitySiteQuoteType = createServerFn({ method: "POST" })
     return { ...parseQuote({ ...input, unitId: c.categoryId }), ...c };
   })
   .handler(async ({ data }): Promise<Quote & { category_id: string }> => {
-    await throttle("quote", 120, 10 * MINUTE);
+    await throttle("quote");
     const { callRpc } = await import("../server/rpc.server");
     return callRpc<Quote & { category_id: string }>("quote_type", {
       _category_id: data.categoryId,
@@ -230,32 +277,40 @@ export const hospitalitySiteQuoteType = createServerFn({ method: "POST" })
 export const hospitalitySiteRequestBookingType = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => {
     const c = categoryInput(input);
-    return { ...parseRequestBooking({ ...input, unitId: c.categoryId }), ...c };
+    return {
+      ...parseRequestBooking({ ...input, unitId: c.categoryId }),
+      ...c,
+      ...botCheckInput(input),
+    };
   })
   .handler(async ({ data }): Promise<BookingRequestResult> => {
-    await throttle("request", 6, 60 * MINUTE);
-    const [{ callRpc }, { kickOutbox }] = await Promise.all([
+    const client = await guardRequest(data);
+    const [{ callServerRpc }, { kickOutbox }] = await Promise.all([
       import("../server/rpc.server"),
       import("../outbox/worker.server"),
     ]);
-    const result = await callRpc<BookingRequestResult>("request_booking_type", {
-      _category_id: data.categoryId,
-      _check_in: data.checkIn,
-      _check_out: data.checkOut,
-      _full_name: data.fullName,
-      _email: data.email,
-      _phone: data.phone,
-      _idempotency_key: data.idempotencyKey,
-      _policy_accepted: true,
-      _policy_hash: data.policyHash,
-      _adults: data.adults,
-      _children: data.children,
-      _special_requests: data.specialRequests,
-      _promo_code: data.promoCode,
-      _marketing_consent: data.marketingConsent,
-      _language: data.language,
-      _preferred_unit: data.preferredUnit,
-    });
+    const result = await callServerRpc<BookingRequestResult>(
+      "request_booking_type",
+      {
+        _category_id: data.categoryId,
+        _check_in: data.checkIn,
+        _check_out: data.checkOut,
+        _full_name: data.fullName,
+        _email: data.email,
+        _phone: data.phone,
+        _idempotency_key: data.idempotencyKey,
+        _policy_accepted: true,
+        _policy_hash: data.policyHash,
+        _adults: data.adults,
+        _children: data.children,
+        _special_requests: data.specialRequests,
+        _promo_code: data.promoCode,
+        _marketing_consent: data.marketingConsent,
+        _language: data.language,
+        _preferred_unit: data.preferredUnit,
+      },
+      client,
+    );
     kickOutbox();
     return result;
   });

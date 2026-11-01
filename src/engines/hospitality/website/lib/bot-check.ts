@@ -1,0 +1,48 @@
+// האימות נגד בוטים בטופס ההזמנה (security/pow.ts): ברגע שהטופס מוצג — מבקשים אתגר מהשרת
+// ופותרים אותו ברקע, בזמן שהאורח ממלא את הפרטים. האורח לא רואה כלום (אין תמונה, אין שאלה, אין
+// עוגייה); אם לחץ "שליחה" לפני שהחישוב הסתיים — השליחה מחכה לו.
+import { useCallback, useEffect, useRef, useState } from "react";
+import { hospitalitySiteChallenge } from "../../api/website.functions";
+import { isPowChallenge, solvePow, type PowSolution } from "../../security/pow";
+
+export type BotCheckState = "working" | "ready" | "failed";
+
+export function useBotCheck() {
+  const [state, setState] = useState<BotCheckState>("working");
+  const pending = useRef<Promise<PowSolution | null> | null>(null);
+  const abort = useRef<AbortController | null>(null);
+
+  const start = useCallback((): Promise<PowSolution | null> => {
+    abort.current?.abort();
+    const controller = new AbortController();
+    abort.current = controller;
+    setState("working");
+    const run = (async () => {
+      try {
+        const challenge: unknown = await hospitalitySiteChallenge();
+        if (!isPowChallenge(challenge)) throw new Error("invalid challenge");
+        const solution = await solvePow(challenge, { signal: controller.signal });
+        if (!controller.signal.aborted) setState(solution ? "ready" : "failed");
+        return solution;
+      } catch {
+        if (!controller.signal.aborted) setState("failed");
+        return null;
+      }
+    })();
+    pending.current = run;
+    return run;
+  }, []);
+
+  useEffect(() => {
+    void start();
+    return () => abort.current?.abort();
+  }, [start]);
+
+  /** הפתרון לשליחה: מחכה לחישוב שברקע; אם נכשל — ניסיון אחד נוסף מההתחלה */
+  const solution = useCallback(async (): Promise<PowSolution | null> => {
+    const ready = await (pending.current ?? start());
+    return ready ?? (await start());
+  }, [start]);
+
+  return { state, solution, renew: start };
+}

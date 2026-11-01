@@ -5,7 +5,8 @@
 //      Idempotency-Key = מזהה ההודעה) → mark_notification. כישלון: ניסיון חוזר במרווחים
 //      הולכים וגדלים (במסד), ואחרי 5 — "נכשל". מייל שנכשל לא מבטל אף פעולה;
 //   3. פעם ביום — apply_retention (מחיקת פרטי אורחים ישנים לפי ההגדרה של כל עסק);
-//   4. כל 5 דקות — סנכרון יומנים חיצוניים (iCal) שהגיע זמנם (channels/sync.server.ts).
+//   4. כל 5 דקות — סנכרון יומנים חיצוניים (iCal) שהגיע זמנם (channels/import.server.ts);
+//   5. כל 10 דקות — ניקוי מוני הגבלת הקצב שפג תוקפם (rate_sweep, מיגרציה 25).
 // הקריאות למסד במפתח השירות — אלה פונקציות שרק השרת רשאי להריץ.
 import { createServerOnlyFn } from "@tanstack/react-start";
 import { escapeHtml, sendBusinessEmail } from "@/platform/email/send.server";
@@ -33,6 +34,8 @@ let running = false;
 let again = false;
 let lastRetention = 0;
 let lastChannels = 0;
+let lastSweep = 0;
+const SWEEP_MS = 10 * 60 * 1000;
 // ההורדה של יומנים חיצוניים (המוריד המוגן של הפלטפורמה) — בשרת בלבד; הקוד לא נכנס לבאנדל של הדפדפן
 const runChannelSyncs = createServerOnlyFn(async () => {
   const { runDueChannelSyncs } = await import("../channels/import.server");
@@ -95,6 +98,10 @@ async function tick(): Promise<void> {
       if (Date.now() - lastChannels > CHANNELS_MS) {
         lastChannels = Date.now();
         await runChannelSyncs();
+      }
+      if (Date.now() - lastSweep > SWEEP_MS) {
+        lastSweep = Date.now();
+        await rpc("rate_sweep", {});
       }
     } while (again);
   } catch (error) {

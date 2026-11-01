@@ -4,6 +4,7 @@ import { notFound } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { hospitalityPublicSite } from "../api/website.functions";
 import { hospitalitySiteOnly } from "../management/route-guard";
+import { MANAGE_SECURITY_HEADERS, SITE_SECURITY_HEADERS } from "../security/headers";
 import type { PublicSite } from "../types/website";
 import { privatePageMeta, siteHomeMeta, siteUnitMeta } from "./head";
 import { validateBookSearch } from "./lib/booking";
@@ -22,6 +23,8 @@ type ParentMatch = Promise<{ loaderData?: unknown }>;
 
 export const siteLayoutRoute = {
   beforeLoad: hospitalitySiteOnly,
+  // כותרות אבטחה לכל עמודי האתר (security/headers.ts)
+  headers: () => SITE_SECURITY_HEADERS,
   // אתר שנסגר (הדגל כבוי, או עוד לא פתוח) → 404 "האתר עדיין לא פתוח", לא שגיאת שרת
   loader: async (): Promise<PublicSite> => {
     try {
@@ -92,6 +95,7 @@ export const siteAccessibilityRoute = privateRoute("הצהרת נגישות", Ac
 /** התצוגה המקדימה של העורך (/manage/preview) — רק באתר אירוח, לצוות המחובר; בלי אינדוקס */
 export const sitePreviewRoute = {
   beforeLoad: hospitalitySiteOnly,
+  headers: () => MANAGE_SECURITY_HEADERS,
   ssr: false as const,
   validateSearch: (raw: Record<string, unknown>) => ({
     ...(raw["page"] === "unit" ? { page: "unit" as const } : {}),

@@ -62,6 +62,8 @@ BEGIN
   END IF;
   RETURN NEW;
 END $$;
+-- פונקציית טריגר — לא נקראת מה-API
+REVOKE ALL ON FUNCTION hospitality.site_versions_immutable() FROM PUBLIC, anon, authenticated;
 DROP TRIGGER IF EXISTS site_versions_immutable ON hospitality.site_versions;
 CREATE TRIGGER site_versions_immutable BEFORE UPDATE ON hospitality.site_versions
   FOR EACH ROW EXECUTE FUNCTION hospitality.site_versions_immutable();

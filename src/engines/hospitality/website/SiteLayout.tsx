@@ -76,6 +76,13 @@ export function SiteShell({
           data-site-theme={theme.id}
         >
           <style>{DISPLAY_CSS}</style>
+          {/* נגישות: הקישור הראשון בעמוד — מדלג על התפריט ישר לתוכן (מוצג רק בפוקוס מהמקלדת) */}
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-sm focus:bg-background focus:px-4 focus:py-2 focus:text-foreground focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {copy.nav.skip}
+          </a>
           <SiteHeader />
           <main id="main-content" tabIndex={-1} className="pb-20 outline-none md:pb-0">
             {children}

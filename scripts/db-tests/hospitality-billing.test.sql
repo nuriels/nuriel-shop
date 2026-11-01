@@ -24,12 +24,26 @@ BEGIN
   PERFORM set_config('request.jwt.claim.sub', '', true);
   RETURN r;
 END $f$;
+-- the application server's call (service role): since migration 25 (D1) the only way a booking
+-- request reaches the database — after the anti-bot check and the shared rate limit in the app
+CREATE OR REPLACE FUNCTION pg_temp.srv(_site text, _sql text) RETURNS jsonb LANGUAGE plpgsql AS $f$
+DECLARE r jsonb;
+BEGIN
+  PERFORM set_config('request.headers', json_build_object('x-tenant-id', _site, 'user-agent', 'db-test',
+                                                          'x-forwarded-for', '203.0.113.7')::text, true);
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  SET LOCAL ROLE service_role;
+  EXECUTE _sql INTO r;
+  RESET ROLE;
+  PERFORM set_config('request.headers', '', true);
+  RETURN r;
+END $f$;
 CREATE OR REPLACE FUNCTION pg_temp.req(_site text, _unit uuid, _in date, _out date, _email text, _key text,
                                        _code text DEFAULT NULL) RETURNS jsonb LANGUAGE plpgsql AS $f$
 DECLARE q jsonb;
 BEGIN
   q := pg_temp.call(_site, NULL, format('SELECT hospitality.quote(%L, %L, %L, 2, 0, %L)', _unit, _in, _out, _code));
-  RETURN pg_temp.call(_site, NULL, format(
+  RETURN pg_temp.srv(_site, format(
     'SELECT hospitality.request_booking(_unit_id => %L, _check_in => %L, _check_out => %L, _full_name => %L,
        _email => %L, _phone => %L, _idempotency_key => %L, _policy_accepted => true, _policy_hash => %L, _promo_code => %L)',
     _unit, _in, _out, 'אורח', _email, '05' || lpad((abs(hashtext(_email)) % 100000000)::text, 8, '0'), _key,

@@ -59,14 +59,14 @@ export const hospitalityChannelSyncNow = createServerFn({ method: "POST" })
       events?: number;
       conflicts?: { uid: string; from: string; to: string }[];
     }> => {
-      const [{ manageRpc }, { fetchCalendar, CalendarFetchError }, { allowAction, requestIp }] =
+      const [{ manageRpc, manageSession }, { fetchCalendar, CalendarFetchError }, { guardStaff }] =
         await Promise.all([
           import("../server/manage.server"),
           import("../channels/import.server"),
-          import("@/platform/security/rate-limit.server"),
+          import("../security/guard.server"),
         ]);
-      if (!allowAction(`hosp-channel-sync:${await requestIp()}`, 30, 10 * 60 * 1000))
-        throw new InputError("יותר מדי סנכרונים — נסו שוב בעוד כמה דקות");
+      const session = await manageSession();
+      await guardStaff("channelSync", { userId: session.userId, siteId: session.siteId });
       // הקישור — רק מהיומנים של העסק (הרשאה במסד)
       const units = await manageRpc<ChannelUnit[]>("channels_view", {});
       const calendar = units.flatMap((u) => u.calendars).find((c) => c.id === data.id);

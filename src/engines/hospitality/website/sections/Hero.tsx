@@ -145,7 +145,7 @@ export function Hero({ section }: { section?: Section | undefined }) {
       </div>
       {!centered && (
         <ScrollHint label={t.hero.scroll}>
-          <ChevronDown className="size-7 animate-bounce" aria-hidden="true" />
+          <ChevronDown className="size-7 motion-safe:animate-bounce" aria-hidden="true" />
         </ScrollHint>
       )}
     </section>

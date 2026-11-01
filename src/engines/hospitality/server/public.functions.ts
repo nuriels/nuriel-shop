@@ -1,6 +1,7 @@
 // פונקציות שרת לאורחים (בלי חשבון) — האתר לפי x-tenant-id (request_tenant במסד).
-// אורח מחובר נשלח עם הטוקן שלו (קישור לכרטיס האורח רק עם אימייל מאומת — במסד).
-// בלי ממשק בשלב הזה; פעילות רק באתר אירוח עם המנוע והדגלים פתוחים (engine-guard).
+// אורח מחובר נשלח עם הטוקן שלו; שיוך הזמנה לחשבון — claim_guest_bookings (אימייל מאומת).
+// בלי ממשק (ה-API של Stage 1; האתר משתמש ב-api/website.functions.ts) — אבל נגישות בכתובת שלהן,
+// ולכן עם אותן הגנות (D1): הגבלת קצב משותפת, ובקשת הזמנה רק עם אתגר CAPTCHA ודרך השרת.
 import { createServerFn } from "@tanstack/react-start";
 import {
   parseGuestBookingRef,
@@ -8,12 +9,23 @@ import {
   parseRequestBooking,
   parseRequestCancellation,
 } from "../validation/input";
+import type { LimitAction } from "../security/limits";
+import { TRAP_FIELD } from "../security/messages";
+import { parsePowSolution } from "../security/pow";
 import type {
   BookingRequestResult,
   CancellationQuote,
   GuestBookingView,
   Quote,
 } from "../types/domain";
+
+async function throttle(action: LimitAction): Promise<void> {
+  const [{ guardPublic }, { hospitalitySiteId }] = await Promise.all([
+    import("../security/guard.server"),
+    import("./rpc.server"),
+  ]);
+  await guardPublic(action, await hospitalitySiteId());
+}
 
 async function optionalToken(): Promise<string | null> {
   const { sessionFromRequest } = await import("@/platform/auth/session.server");
@@ -23,6 +35,7 @@ async function optionalToken(): Promise<string | null> {
 export const hospitalityQuote = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseQuote(input))
   .handler(async ({ data }) => {
+    await throttle("quote");
     const { callRpc } = await import("./rpc.server");
     return callRpc<Quote>(
       "quote",
@@ -39,10 +52,21 @@ export const hospitalityQuote = createServerFn({ method: "POST" })
   });
 
 export const hospitalityRequestBooking = createServerFn({ method: "POST" })
-  .inputValidator((input: Record<string, unknown>) => parseRequestBooking(input))
+  .inputValidator((input: Record<string, unknown>) => {
+    const trap = input?.[TRAP_FIELD];
+    return {
+      ...parseRequestBooking(input),
+      captcha: parsePowSolution(input?.["captcha"]),
+      trap: typeof trap === "string" ? trap.slice(0, 200) : "",
+    };
+  })
   .handler(async ({ data }) => {
-    const { callRpc } = await import("./rpc.server");
-    return callRpc<BookingRequestResult>(
+    const [{ guardBookingRequest }, { callServerRpc, hospitalitySiteId }] = await Promise.all([
+      import("../security/guard.server"),
+      import("./rpc.server"),
+    ]);
+    const client = await guardBookingRequest(await hospitalitySiteId(), data);
+    return callServerRpc<BookingRequestResult>(
       "request_booking",
       {
         _unit_id: data.unitId,
@@ -61,13 +85,14 @@ export const hospitalityRequestBooking = createServerFn({ method: "POST" })
         _marketing_consent: data.marketingConsent,
         _language: data.language,
       },
-      { accessToken: await optionalToken() },
+      client,
     );
   });
 
 export const hospitalityGetBooking = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseGuestBookingRef(input))
   .handler(async ({ data }) => {
+    await throttle("booking");
     const { callRpc } = await import("./rpc.server");
     if (data.token)
       return callRpc<GuestBookingView>("get_booking_by_token", { _token: data.token });
@@ -86,6 +111,7 @@ export const hospitalityGetBooking = createServerFn({ method: "POST" })
 export const hospitalityCancellationQuote = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseGuestBookingRef(input))
   .handler(async ({ data }) => {
+    await throttle("cancelQuote");
     const { callRpc } = await import("./rpc.server");
     return callRpc<CancellationQuote>(
       "cancellation_quote",
@@ -97,6 +123,7 @@ export const hospitalityCancellationQuote = createServerFn({ method: "POST" })
 export const hospitalityRequestCancellation = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseRequestCancellation(input))
   .handler(async ({ data }) => {
+    await throttle("cancel");
     const { callRpc } = await import("./rpc.server");
     return callRpc<GuestBookingView>(
       "request_cancellation",

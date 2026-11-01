@@ -32,7 +32,8 @@ q() { "${Q[@]}" -c "$1"; }
 check() { # check <label> <sql returning t>
   if [ "$(q "$2")" = "t" ]; then echo "  ok   $1"; PASSED=$((PASSED + 1)); else echo "  FAIL $1"; FAILED=$((FAILED + 1)); fi
 }
-as_guest() { echo "SET ROLE anon; SELECT set_config('request.headers', '{\"x-tenant-id\": \"$SITE\"}', false);"; }
+# a guest's booking request reaches the database only through the app server (service role, migration 25)
+as_guest() { echo "SET ROLE service_role; SELECT set_config('request.headers', '{\"x-tenant-id\": \"$SITE\"}', false);"; }
 as_staff() { echo "SET ROLE authenticated; SELECT set_config('request.headers', '{\"x-tenant-id\": \"$SITE\"}', false);
                    SELECT set_config('request.jwt.claim.sub', '$1', false);"; }
 
@@ -218,7 +219,7 @@ check "17 expiry releases the dates atomically: a request during the sweep waits
 
 # ---- 18/19. the booking lock is per site ----
 SITE2=$(q "SELECT id FROM public.tenants WHERE slug = 'conc-site-2'")
-as_guest2() { echo "SET ROLE anon; SELECT set_config('request.headers', '{\"x-tenant-id\": \"$SITE2\"}', false);"; }
+as_guest2() { echo "SET ROLE service_role; SELECT set_config('request.headers', '{\"x-tenant-id\": \"$SITE2\"}', false);"; }
 held c18 "$(as_guest) BEGIN; SELECT conc.req(conc.unit(19), 190, 191, 'c18a@example.com', 'c18-key-a'); SELECT pg_sleep(2); COMMIT;" \
          "$(as_guest) SELECT conc.req(conc.unit(20), 190, 191, 'c18b@example.com', 'c18-key-b');"
 check "18 same site: a second booking (other unit) waits for the first transaction, then succeeds" \

@@ -2,6 +2,8 @@
 // (לילות, סה"כ, מקדמה, לוח ביטול מדויק) → פרטי האורח + אישור התנאים → בקשת הזמנה.
 // המחיר, הזמינות והתנאים נבדקים שוב במסד בזמן השליחה (policy_hash; EXCLUDE נגד הזמנה כפולה).
 // מזהה בקשה קבוע לכל ניסיון — לחיצה כפולה / רענון לא יוצרים שתי בקשות.
+// אימות נגד בוטים (D1): אתגר שנפתר ברקע (lib/bot-check) + שדה מלכודת מוסתר — בלי שום פעולה
+// מהאורח ובלי עוגיות.
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Minus, Plus } from "lucide-react";
@@ -13,6 +15,7 @@ import {
   hospitalitySiteRequestBooking,
   hospitalitySiteRequestBookingType,
 } from "../../api/website.functions";
+import { CAPTCHA_RETRY, TRAP_FIELD } from "../../security/messages";
 import type { PublicUnit } from "../../types/website";
 import { AvailabilityCalendar, type DateRange } from "../components/AvailabilityCalendar";
 import { Photo } from "../components/Photo";
@@ -28,6 +31,7 @@ import {
   whatsappHref,
 } from "../lib/format";
 import type { BookSearch } from "../lib/booking";
+import { useBotCheck } from "../lib/bot-check";
 import {
   findType,
   listingId,
@@ -242,7 +246,8 @@ export function BookingPage() {
                 disabled={!canContinue}
                 onClick={() => {
                   setStep("details");
-                  window.scrollTo({ top: 0, behavior: "smooth" });
+                  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+                  window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
                 }}
                 className="inline-flex h-12 w-full items-center justify-center rounded-sm bg-primary px-8 text-base font-medium text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
               >
@@ -577,8 +582,15 @@ function GuestForm({
   const [accept, setAccept] = useState(false);
   const [marketing, setMarketing] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [trap, setTrap] = useState("");
+  const bot = useBotCheck();
+  // נגישות: הכפתור "המשך" נעלם במעבר לשלב הזה — הפוקוס עובר לכותרת השלב (קורא מסך מקריא אותה)
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []);
   const send = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
+      const captcha = await bot.solution();
+      if (!captcha) throw new Error(CAPTCHA_RETRY);
       const guest = {
         checkIn: quote.check_in,
         checkOut: quote.check_out,
@@ -593,6 +605,8 @@ function GuestForm({
         policyAccepted: accept,
         marketingConsent: marketing,
         language: t.locale,
+        captcha,
+        [TRAP_FIELD]: trap,
       };
       // סוג חדר: המסד בוחר חדר פנוי מהסוג (החדר מההצעה קודם) באותה טרנזקציה
       return roomType
@@ -609,6 +623,8 @@ function GuestForm({
     },
     onError: (e) => {
       if (e instanceof Error && e.message.includes("התנאים")) onTermsChanged();
+      // האתגר פג / כבר נוצל — אתגר חדש מתחיל להיפתר כבר עכשיו, לקראת הלחיצה הבאה
+      if (e instanceof Error && e.message === CAPTCHA_RETRY) void bot.renew();
     },
   });
   const missing = (v: string) => touched && v.trim() === "";
@@ -628,7 +644,9 @@ function GuestForm({
           · {money(Number(quote.total), quote.currency)}
         </p>
       </div>
-      <h2 className="text-xl font-medium">{t.book.details}</h2>
+      <h2 ref={heading} tabIndex={-1} className="text-xl font-medium outline-none">
+        {t.book.details}
+      </h2>
       <label className="block">
         <span className="text-sm font-medium">{t.book.fullName}</span>
         <input
@@ -720,6 +738,25 @@ function GuestForm({
           .
         </p>
       </div>
+      {/* מלכודת לבוטים: מוסתר מהעין, מקוראי מסך ומהמקלדת; אדם לא ממלא אותו */}
+      <div aria-hidden="true" className="sr-only">
+        <label>
+          {t.book.trapLabel}
+          <input
+            type="text"
+            name={TRAP_FIELD}
+            tabIndex={-1}
+            autoComplete="off"
+            value={trap}
+            onChange={(e) => setTrap(e.target.value)}
+          />
+        </label>
+      </div>
+      {send.isPending && bot.state === "working" && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {t.book.verifying}
+        </p>
+      )}
       {send.isError && (
         <p role="alert" className="rounded-sm bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {errText(send.error, t.book.error)}

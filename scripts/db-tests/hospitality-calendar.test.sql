@@ -93,13 +93,27 @@ $f$;
 CREATE OR REPLACE FUNCTION pg_temp.last_audit(_site uuid, _action text) RETURNS jsonb LANGUAGE sql AS $f$
   SELECT to_jsonb(a) FROM hospitality.audit_log a WHERE tenant_id = _site AND action = _action ORDER BY id DESC LIMIT 1;
 $f$;
--- a site request (quote first, then the request with the quote's policy hash) as an anonymous visitor
+-- the application server's call (service role): since migration 25 (D1) the only way a booking
+-- request reaches the database — after the anti-bot check and the shared rate limit in the app
+CREATE OR REPLACE FUNCTION pg_temp.srv(_site text, _sql text) RETURNS jsonb LANGUAGE plpgsql AS $f$
+DECLARE r jsonb;
+BEGIN
+  PERFORM set_config('request.headers', json_build_object('x-tenant-id', _site, 'user-agent', 'db-test',
+                                                          'x-forwarded-for', '203.0.113.7')::text, true);
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  SET LOCAL ROLE service_role;
+  EXECUTE _sql INTO r;
+  RESET ROLE;
+  PERFORM set_config('request.headers', '', true);
+  RETURN r;
+END $f$;
+-- a site request (quote first, then the request with the quote's policy hash) — an anonymous visitor, sent by the app server
 CREATE OR REPLACE FUNCTION pg_temp.req(_site text, _unit uuid, _in date, _out date, _email text, _phone text, _key text,
                                        _adults integer DEFAULT 2, _children integer DEFAULT 0) RETURNS jsonb LANGUAGE plpgsql AS $f$
 DECLARE q jsonb;
 BEGIN
   q := pg_temp.call(_site, NULL, format('SELECT hospitality.quote(%L, %L, %L, %s, %s)', _unit, _in, _out, _adults, _children));
-  RETURN pg_temp.call(_site, NULL, format(
+  RETURN pg_temp.srv(_site, format(
     'SELECT hospitality.request_booking(_unit_id => %L, _check_in => %L, _check_out => %L, _full_name => %L,
        _email => %L, _phone => %L, _idempotency_key => %L, _policy_accepted => true, _policy_hash => %L,
        _adults => %s, _children => %s)',

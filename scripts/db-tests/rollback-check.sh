@@ -60,6 +60,7 @@ M21=20261102150000_hosp_site_design
 M22=20261102160000_hosp_room_types
 M23=20261102170000_hosp_payments
 M24=20261102180000_hosp_channels
+M25=20261103090000_hosp_security
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -80,6 +81,29 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- D1 security: shared rate counters, server-only booking requests (migration 25) ----------
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M25" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M25"
+q "SELECT hospitality.rate_check('[{\"key\": \"rollback-check-key-0001\", \"limit\": 5, \"window\": 60}]')" >/dev/null
+down "$M25"
+expect "the counters and their functions are gone; booking requests are callable by the API roles again" \
+  "SELECT to_regclass('hospitality.rate_buckets') IS NULL AND to_regprocedure('hospitality.rate_check(jsonb)') IS NULL
+      AND has_function_privilege('anon', 'hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)', 'EXECUTE')"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m24.sql"
+schema_dump "$SCHEMA_DIR/after-m25-down.sql"
+if diff -q "$SCHEMA_DIR/m24.sql" "$SCHEMA_DIR/after-m25-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 24, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 24:"; diff "$SCHEMA_DIR/m24.sql" "$SCHEMA_DIR/after-m25-down.sql" | head -20; exit 1
+fi
 
 # ---------- channel sync (migration 24) ----------
 psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
@@ -640,6 +664,7 @@ up "$M21"
 up "$M22"
 up "$M23"
 up "$M24"
+up "$M25"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -648,8 +673,8 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 28 tables (incl. the action log, arrival info, site versions, room types, payments and channels), RLS on all, role admin, 6 flags off (incl. management)" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 28
+expect "Hospitality schema back: 29 tables (incl. the action log, arrival info, site versions, room types, payments, channels and the rate counters), RLS on all, role admin, 6 flags off (incl. management)" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 29
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
       AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 6"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
@@ -674,14 +699,16 @@ expect "site identity back: public name only, anon may call it" \
 expect "plans back (4 unpublished placeholders), unit limit and terms guard active" \
   "SELECT (SELECT count(*) FROM hospitality.plans WHERE NOT is_published AND price_monthly IS NULL) = 4
      AND (SELECT count(*) FROM pg_trigger WHERE tgname IN ('units_limit_guard', 'bookings_terms_guard')) = 2"
-expect "booking engine back: EXCLUDE constraint, deferred integrity checks, guest functions" \
+expect "booking engine back: EXCLUDE constraint, deferred integrity checks, guest functions (booking requests: app server only, migration 25)" \
   "SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unit_occupancy_no_overlap')
      AND (SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%consistency' AND tgdeferrable) = 3
-     AND has_function_privilege('anon', 'hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)', 'EXECUTE')"
+     AND has_function_privilege('anon', 'hospitality.quote(uuid,date,date,integer,integer,text)', 'EXECUTE')
+     AND has_function_privilege('service_role', 'hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)', 'EXECUTE')
+     AND NOT has_function_privilege('anon', 'hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)', 'EXECUTE')"
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 24 → 1 and re-apply 1 → 24 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 25 → 1 and re-apply 1 → 25 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi

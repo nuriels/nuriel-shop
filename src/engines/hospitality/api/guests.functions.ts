@@ -32,7 +32,13 @@ export const hospitalitySaveGuestNotes = createServerFn({ method: "POST" })
 export const hospitalityExportGuest = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseGuestId(input))
   .handler(async ({ data }): Promise<GuestExport> => {
-    const { manageRpc } = await import("../server/manage.server");
+    const [{ manageRpc, manageSession }, { guardStaff }] = await Promise.all([
+      import("../server/manage.server"),
+      import("../security/guard.server"),
+    ]);
+    // מידע אישי — הגבלה לפי המשתמש (גם חשבון שנפרץ לא "שואב" את כל כרטיסי האורחים בדקה)
+    const session = await manageSession();
+    await guardStaff("guestExport", { userId: session.userId, siteId: session.siteId });
     return manageRpc<GuestExport>("export_guest_logged", { _guest_id: data.id });
   });
 

@@ -231,8 +231,22 @@ SELECT pg_temp.after('checklist: all five steps done after prices, a photo and a
 -- ============================================================
 -- 3. Email outbox: no direct read, safe status
 -- ============================================================
+-- the application server's call (service role): since migration 25 (D1) the only way a booking
+-- request reaches the database — after the anti-bot check and the shared rate limit in the app
+CREATE OR REPLACE FUNCTION pg_temp.srv(_site text, _sql text) RETURNS jsonb LANGUAGE plpgsql AS $f$
+DECLARE r jsonb;
+BEGIN
+  PERFORM set_config('request.headers', json_build_object('x-tenant-id', _site, 'user-agent', 'db-test',
+                                                          'x-forwarded-for', '203.0.113.7')::text, true);
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  SET LOCAL ROLE service_role;
+  EXECUTE _sql INTO r;
+  RESET ROLE;
+  PERFORM set_config('request.headers', '', true);
+  RETURN r;
+END $f$;
 \set UM '''72a30000-0000-0000-0000-0000000000a1'''
-SELECT pg_temp.call(:'sm', NULL, format(
+SELECT pg_temp.srv(:'sm', format(
   $$SELECT hospitality.request_booking(_unit_id => %1$L, _check_in => %2$L, _check_out => %3$L, _full_name => 'דנה אורחת',
      _email => 'dana.guest@example.com', _phone => '0521234567', _idempotency_key => 'm2a-key-000001',
      _policy_accepted => true,
@@ -280,7 +294,7 @@ SELECT tests.check('outbox: after sending, no row of the booking holds the token
 -- ============================================================
 SELECT guest_id AS gm FROM hospitality.bookings WHERE id = :'bm' \gset
 SELECT pg_temp.expect_error('privacy: a manager cannot export a guest',
-  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.export_guest(%%L)', %L))$$, :'sm', :MGR1, :'gm'),
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.export_guest_logged(%%L)', %L))$$, :'sm', :MGR1, :'gm'),
   'אין הרשאה');
 SELECT pg_temp.expect_error('privacy: a manager cannot anonymise a guest',
   format($$SELECT pg_temp.call(%L, %L, format('SELECT to_jsonb(hospitality.anonymize_guest(%%L))', %L))$$, :'sm', :MGR1, :'gm'),
@@ -288,11 +302,16 @@ SELECT pg_temp.expect_error('privacy: a manager cannot anonymise a guest',
 SELECT tests.check('privacy: the refused anonymisation changed nothing',
   format($$SELECT anonymized_at IS NULL AND email IS NOT NULL FROM hospitality.guests WHERE id = %L$$, :'gm'));
 SELECT pg_temp.after('privacy: the owner exports the guest',
-  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.export_guest(%%L)', %L))$$, :'sm', :OWNER_M, :'gm'),
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.export_guest_logged(%%L)', %L))$$, :'sm', :OWNER_M, :'gm'),
   $$SELECT $1 -> 'guest' ->> 'full_name' = 'דנה אורחת' AND jsonb_array_length($1 -> 'bookings') = 1$$);
+-- (site N has the management area off — the export is refused before anything else; the same attempt
+-- with management on in both sites: hospitality-security.test.sql, "cross-tenant: export a guest")
 SELECT pg_temp.expect_error('privacy: the owner of another site cannot export this guest',
-  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.export_guest(%%L)', %L))$$, :'sn', :OWNER_N, :'gm'),
-  'האורח לא נמצא');
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.export_guest_logged(%%L)', %L))$$, :'sn', :OWNER_N, :'gm'),
+  'אזור הניהול אינו פעיל');
+SELECT pg_temp.expect_error('privacy: the unlogged export is not callable by staff (every export goes to the activity log, 2j)',
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.export_guest(%%L)', %L))$$, :'sm', :OWNER_M, :'gm'),
+  'permission denied');
 -- a guest with an active booking cannot be erased (Stage 1 rule): the owner declines it first
 SELECT pg_temp.call(:'sm', :OWNER_M, format($$SELECT hospitality.decline_booking(%L, 'בדיקה', NULL)$$, :'bm')) IS NOT NULL AS ok \gset
 SELECT pg_temp.after('privacy: the owner anonymises the guest',

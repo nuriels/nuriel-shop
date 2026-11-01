@@ -24,9 +24,14 @@ const TOKEN = /^[0-9a-f]{40}$/;
 /** הקובץ של יחידה לפי הטוקן; null — טוקן לא מוכר / לא של העסק הזה / המנוע כבוי */
 export async function icalFeedResponse(siteId: string, token: string): Promise<Response | null> {
   if (!TOKEN.test(token)) return null;
-  const { allowAction } = await import("@/platform/security/rate-limit.server");
-  if (!allowAction(`hosp-ical:${token}`, 120, 60 * 60 * 1000))
-    return new Response("Too many requests\n", { status: 429, headers: { "retry-after": "600" } });
+  // הגבלה משותפת לכל השרתים, לפי הטוקן (Airbnb / Booking.com מושכים כל כמה דקות עד שעה)
+  const { checkRate } = await import("../security/rate-limit.server");
+  const rate = await checkRate("ical", { token });
+  if (!rate.ok)
+    return new Response("Too many requests\n", {
+      status: 429,
+      headers: { "retry-after": String(Math.max(60, rate.retryAfter)), "x-robots-tag": "noindex" },
+    });
   const feed = await serviceRpc<{
     unit_name: string;
     events: { uid: string; from: string; to: string }[];

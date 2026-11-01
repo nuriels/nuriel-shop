@@ -25,11 +25,11 @@ export const hospitalityTeamActivity = createServerFn({ method: "GET" }).handler
 export const hospitalityAddManager = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseAddManager(input))
   .handler(async ({ data }): Promise<AddManagerResult> => {
-    const [{ manageRpc }, { hospitalitySiteId }, { allowAction }, { ensureAccount }] =
+    const [{ manageRpc }, { hospitalitySiteId }, { guardStaff }, { ensureAccount }] =
       await Promise.all([
         import("../server/manage.server"),
         import("../server/rpc.server"),
-        import("@/platform/security/rate-limit.server"),
+        import("../security/guard.server"),
         import("@/platform/auth/accounts.server"),
       ]);
     const args = { _email: data.email, _display_name: data.displayName };
@@ -38,9 +38,8 @@ export const hospitalityAddManager = createServerFn({ method: "POST" })
     if (result.status === "needs_account") {
       // המסד כבר בדק: בעלים, מקום פנוי, מנוי פעיל. הגבלת קצב רק על פתיחת חשבונות
       // (אחרי בדיקת ההרשאה — מנהל לא יכול לנצל את המכסה של הבעלים)
-      if (!allowAction(`hosp-team-account:${await hospitalitySiteId()}`, 20, 60 * 60 * 1000)) {
-        throw new Error("יותר מדי חשבונות חדשים בזמן קצר. נסו שוב בעוד שעה.");
-      }
+      // משותף לכל השרתים, לפי העסק
+      await guardStaff("teamAccount", { siteId: await hospitalitySiteId() });
       created = (await ensureAccount(data.email, { signup_method: "hospitality_manager" })).created;
       result = await manageRpc<RpcAdd>("team_add_manager", args);
     }

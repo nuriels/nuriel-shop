@@ -36,6 +36,20 @@ BEGIN
 END $f$;
 
 -- quote, then request with the quote's policy hash (as the guest)
+-- the application server's call (service role): since migration 25 (D1) the only way a booking
+-- request reaches the database — after the anti-bot check and the shared rate limit in the app
+CREATE OR REPLACE FUNCTION pg_temp.srv(_site text, _sql text) RETURNS jsonb LANGUAGE plpgsql AS $f$
+DECLARE r jsonb;
+BEGIN
+  PERFORM set_config('request.headers', json_build_object('x-tenant-id', _site, 'user-agent', 'db-test',
+                                                          'x-forwarded-for', '203.0.113.7')::text, true);
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  SET LOCAL ROLE service_role;
+  EXECUTE _sql INTO r;
+  RESET ROLE;
+  PERFORM set_config('request.headers', '', true);
+  RETURN r;
+END $f$;
 CREATE OR REPLACE FUNCTION pg_temp.req(_site text, _uid uuid, _unit uuid, _in date, _out date, _email text,
                                        _phone text, _key text, _adults integer DEFAULT 2, _children integer DEFAULT 0,
                                        _code text DEFAULT NULL) RETURNS jsonb LANGUAGE plpgsql AS $f$
@@ -43,7 +57,7 @@ DECLARE q jsonb;
 BEGIN
   q := pg_temp.call(_site, _uid, format('SELECT hospitality.quote(%L, %L, %L, %s, %s, %L)',
                                         _unit, _in, _out, _adults, _children, _code));
-  RETURN pg_temp.call(_site, _uid, format(
+  RETURN pg_temp.srv(_site, format(
     'SELECT hospitality.request_booking(_unit_id => %L, _check_in => %L, _check_out => %L, _full_name => %L,
        _email => %L, _phone => %L, _idempotency_key => %L, _policy_accepted => true, _policy_hash => %L,
        _adults => %s, _children => %s, _promo_code => %L)',
@@ -125,6 +139,10 @@ SELECT pg_temp.as_platform(format($$SELECT public.platform_set_flag('hospitality
   public.platform_set_flag('hospitality_backend_enabled', true, %1$L), public.platform_set_flag('hospitality_booking_enabled', true, %1$L),
   public.platform_set_flag('hospitality_backend_enabled', true, %2$L), public.platform_set_flag('hospitality_booking_enabled', true, %2$L)$$,
   :'sx', :'sy'));
+-- the management area (2a) — the logged guest export (2j) runs only there
+SELECT pg_temp.as_platform(format($$SELECT public.platform_set_flag('hospitality_management_enabled', true),
+  public.platform_set_flag('hospitality_management_enabled', true, %1$L),
+  public.platform_set_flag('hospitality_management_enabled', true, %2$L)$$, :'sx', :'sy'));
 
 UPDATE hospitality.settings SET notification_emails = ARRAY['owner.x@test.local', 'desk.x@test.local'] WHERE tenant_id = :'sx';
 
@@ -174,9 +192,10 @@ SELECT tests.check('structure: staff cannot update the booking-number counter (n
   $$SELECT NOT has_column_privilege('authenticated', 'hospitality.settings', 'last_booking_number', 'UPDATE')
        AND NOT has_column_privilege('authenticated', 'hospitality.settings', 'check_in_time', 'UPDATE')
        AND NOT has_table_privilege('authenticated', 'hospitality.settings', 'UPDATE')$$);
-SELECT tests.check('structure: anon can execute only the public guest functions (+ the site name for the page head, R-1; the guest''s arrival info, 2d)',
-  $$SELECT array_agg(proname::text ORDER BY proname) = ARRAY['cancellation_quote', 'get_booking_by_token', 'guest_arrival_info', 'quote',
-      'request_booking', 'request_cancellation', 'request_tenant', 'site_identity']
+SELECT tests.check('structure: anon can execute only the public guest functions (+ the site name for the page head, R-1; the guest''s arrival info, 2d; the public site, 4a; room types, RT) — booking requests only through the app server (D1)',
+  $$SELECT array_agg(proname::text ORDER BY proname) = ARRAY['cancellation_quote', 'get_booking_by_token', 'guest_arrival_info',
+      'public_availability', 'public_room_types', 'public_site', 'public_type_availability', 'quote', 'quote_type',
+      'request_cancellation', 'request_tenant', 'site_identity']
       FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace AND has_function_privilege('anon', oid, 'EXECUTE')$$);
 SELECT tests.check('structure: system functions are service_role only',
   $$SELECT bool_and(NOT has_function_privilege('authenticated', p.oid, 'EXECUTE') AND has_function_privilege('service_role', p.oid, 'EXECUTE'))
@@ -338,12 +357,12 @@ SELECT pg_temp.expect_error('request: the same key from another contact is refus
 
 -- acceptance and input validation
 SELECT pg_temp.expect_error('request: refused without accepting the cancellation terms',
-  format($$SELECT pg_temp.call(%L, NULL, format('SELECT hospitality.request_booking(_unit_id => %%L, _check_in => %%L, _check_out => %%L,
+  format($$SELECT pg_temp.srv(%L, format('SELECT hospitality.request_booking(_unit_id => %%L, _check_in => %%L, _check_out => %%L,
      _full_name => %%L, _email => %%L, _phone => %%L, _idempotency_key => %%L, _policy_accepted => false, _policy_hash => %%L)',
      %L::uuid, pg_temp.d(50), pg_temp.d(51), 'אורח', 'x@example.com', '0520000001', 'key-noaccept', 'x'))$$, :'sx', :U2),
   'יש לאשר את תנאי הביטול');
 SELECT pg_temp.expect_error('request: refused when the accepted terms differ from the current ones (hash)',
-  format($$SELECT pg_temp.call(%L, NULL, format('SELECT hospitality.request_booking(_unit_id => %%L, _check_in => %%L, _check_out => %%L,
+  format($$SELECT pg_temp.srv(%L, format('SELECT hospitality.request_booking(_unit_id => %%L, _check_in => %%L, _check_out => %%L,
      _full_name => %%L, _email => %%L, _phone => %%L, _idempotency_key => %%L, _policy_accepted => true, _policy_hash => %%L)',
      %L::uuid, pg_temp.d(50), pg_temp.d(51), 'אורח', 'x@example.com', '0520000001', 'key-badhash', repeat('0', 64)))$$, :'sx', :U2),
   'תנאי ההזמנה השתנו');
@@ -373,17 +392,33 @@ SELECT tests.check('request: an Ecommerce store owner can book as a guest (reque
 SELECT tests.check('request: … without gaining any staff access to site X',
   format($$SELECT pg_temp.call(%L, %L, 'SELECT to_jsonb(count(*)) FROM hospitality.bookings')::integer = 0$$, :'sx', :ECOM_OWNER));
 
--- logged-in guests: linked only with a verified account email
+-- logged-in guests: the request itself is anonymous (sent by the app server only — migration 25, D1);
+-- an account is linked by claiming, and only with a verified account email
 SELECT pg_temp.req(:'sx', :GUEST_V, :U2, pg_temp.d(80), pg_temp.d(81), 'verified.guest@test.local', '0531111111', 'key-ver-0001') ->> 'booking_id' AS bv \gset
 SELECT pg_temp.req(:'sx', :GUEST_U, :U2, pg_temp.d(82), pg_temp.d(83), 'unverified.guest@test.local', '0532222222', 'key-unv-0001') AS ru \gset
 SELECT (:'ru'::jsonb) ->> 'booking_id' AS bu, (:'ru'::jsonb) ->> 'manage_token' AS tu \gset
-SELECT tests.check('identity: a logged-in guest with a verified matching email is linked',
-  format($$SELECT g.user_id = %L FROM hospitality.guests g JOIN hospitality.bookings b ON b.guest_id = g.id WHERE b.id = %L$$, :GUEST_V, :'bv'));
+SELECT tests.check('identity: a request links no account by itself (server-only requests, D1)',
+  format($$SELECT g.user_id IS NULL FROM hospitality.guests g JOIN hospitality.bookings b ON b.guest_id = g.id WHERE b.id = %L$$, :'bv'));
+SELECT pg_temp.req(:'sx', :GUEST_V, :U2, pg_temp.d(84), pg_temp.d(85), 'someone.else@test.local', '0533333333', 'key-ver-0002') ->> 'booking_id' AS bo \gset
+SELECT pg_temp.after('identity: a logged-in guest with a verified matching email claims and is linked',
+  format($$SELECT pg_temp.call(%L, %L, 'SELECT to_jsonb(hospitality.claim_guest_bookings())')$$, :'sx', :GUEST_V),
+  format($$SELECT $1::integer = 1
+             AND (SELECT g.user_id = %L FROM hospitality.guests g JOIN hospitality.bookings b ON b.guest_id = g.id WHERE b.id = %L)$$,
+         :GUEST_V, :'bv'));
 SELECT tests.check('identity: an unverified account is not linked',
   format($$SELECT g.user_id IS NULL FROM hospitality.guests g JOIN hospitality.bookings b ON b.guest_id = g.id WHERE b.id = %L$$, :'bu'));
-SELECT pg_temp.req(:'sx', :GUEST_V, :U2, pg_temp.d(84), pg_temp.d(85), 'someone.else@test.local', '0533333333', 'key-ver-0002') ->> 'booking_id' AS bo \gset
 SELECT tests.check('identity: a typed email of someone else does not link the logged-in account',
   format($$SELECT g.user_id IS NULL FROM hospitality.guests g JOIN hospitality.bookings b ON b.guest_id = g.id WHERE b.id = %L$$, :'bo'));
+SELECT pg_temp.expect_error('identity: anon cannot send a booking request through the API (app server only, D1)',
+  format($$SELECT pg_temp.call(%L, NULL, format('SELECT hospitality.request_booking(_unit_id => %%L, _check_in => %%L, _check_out => %%L,
+     _full_name => %%L, _email => %%L, _phone => %%L, _idempotency_key => %%L, _policy_accepted => true, _policy_hash => %%L)',
+     %L::uuid, pg_temp.d(86), pg_temp.d(87), 'בוט', 'bot@example.com', '0520000009', 'key-bot-0001', 'x'))$$, :'sx', :U2),
+  'permission denied');
+SELECT pg_temp.expect_error('identity: … nor a logged-in account (anyone can sign up)',
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.request_booking(_unit_id => %%L, _check_in => %%L, _check_out => %%L,
+     _full_name => %%L, _email => %%L, _phone => %%L, _idempotency_key => %%L, _policy_accepted => true, _policy_hash => %%L)',
+     %L::uuid, pg_temp.d(86), pg_temp.d(87), 'בוט', 'bot@example.com', '0520000009', 'key-bot-0002', 'x'))$$, :'sx', :GUEST_V, :U2),
+  'permission denied');
 
 -- instant mode
 UPDATE hospitality.settings SET booking_mode = 'instant' WHERE tenant_id = :'sy';
@@ -972,7 +1007,7 @@ UPDATE auth.users SET email_confirmed_at = NULL WHERE id = :ECOM_OWNER;
 SELECT tests.check('staff isolation: owner Y on the site X host reads no bookings',
   format($$SELECT (pg_temp.call(%L, %L, 'SELECT to_jsonb(count(*)) FROM hospitality.bookings'))::integer = 0$$, :'sx', :OWNER_Y));
 SELECT pg_temp.expect_error('staff isolation: owner Y cannot export a guest of site X',
-  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.export_guest(%%L)', (SELECT guest_id FROM hospitality.bookings WHERE id = %L)))$$,
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.export_guest_logged(%%L)', (SELECT guest_id FROM hospitality.bookings WHERE id = %L)))$$,
          :'sy', :OWNER_Y, :'b1'),
   'האורח לא נמצא');
 SELECT tests.check('staff: the owner reads only site X bookings',
@@ -1046,7 +1081,7 @@ SELECT tests.check('outbox: the owner sees the email status of their bookings (r
 -- 11. Privacy
 -- ============================================================
 SELECT tests.check('privacy: the owner exports a guest card with their bookings',
-  format($$SELECT jsonb_array_length(pg_temp.call(%L, %L, format('SELECT hospitality.export_guest(%%L)',
+  format($$SELECT jsonb_array_length(pg_temp.call(%L, %L, format('SELECT hospitality.export_guest_logged(%%L)',
                   (SELECT guest_id FROM hospitality.bookings WHERE id = %L))) -> 'bookings') >= 1$$, :'sx', :OWNER_X, :'b1'));
 SELECT pg_temp.expect_error('privacy: a guest with a live booking cannot be anonymised',
   format($$SELECT pg_temp.call(%L, %L, format('SELECT to_jsonb(hospitality.anonymize_guest(%%L))', (SELECT guest_id FROM hospitality.bookings WHERE id = %L)))$$,

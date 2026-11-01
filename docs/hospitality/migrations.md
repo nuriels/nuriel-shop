@@ -274,3 +274,14 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Functions | export: `channel_feed(tenant, token)` (server only: busy nights, no personal data). Staff (`bookings`): `channels_view`, `channel_feed_token` (create / rotate, logged), `channel_calendar_add` (https, up to 5 per unit, logged), `channel_calendar_remove` (releases its blocks, archives, logged), `channel_sync_apply`. Server only: `channel_sync_service`, `channel_calendars_due` (10-minute lease, `SKIP LOCKED`). Apply rules: overlap → not written, listed as a conflict; changed / vanished event → only its own block moves / is released; our bookings are never changed |
 | Rollback | `supabase/rollbacks/20261102180000_hosp_channels.down.sql` — drops the functions, tables and block columns (synced blocks stay as ordinary blocks); exact migration-23 schema (`rollback-check.sh`, M24) |
 | Production | nothing to configure; the sync runs in the existing worker (`HOSPITALITY_ENGINE=on`) |
+
+## 20261103090000_hosp_security.sql — D1, security before opening to the public
+
+| | |
+|---|---|
+| Table | `rate_buckets` — shared rate-limit counters for all app servers (key = HMAC computed by the app: no raw IPs, tokens or contact details; fixed window; UNLOGGED). RLS on, no grants at all (functions only) |
+| Functions | server only: `rate_check(_rules jsonb)` — counts and checks up to 8 rules atomically in one call (locks in key order — no deadlock; every attempt counts), `rate_sweep()` — removes expired counters (the worker, every 10 minutes) |
+| Grants | `request_booking` and `request_booking_type` — **service_role only** (were callable by anon / authenticated through the public REST API, bypassing the site's anti-bot check). The app server calls them after the CAPTCHA and the shared rate limit, forwarding the guest's IP and user agent for the terms-acceptance record. `quote_type` also granted to service_role |
+| Fixes in earlier migrations (not deployed anywhere yet) | `site_versions_immutable()` (M21) and `payments_immutable()` (M23): `REVOKE … FROM PUBLIC` like every other trigger function |
+| Rollback | `supabase/rollbacks/20261103090000_hosp_security.down.sql` — drops the counters and functions, restores the grants of migrations 4 / 22; exact migration-24 schema (`rollback-check.sh`, M25) |
+| Production | `HOSPITALITY_SECRET` (recommended — see `install-guide.md`); nothing else |

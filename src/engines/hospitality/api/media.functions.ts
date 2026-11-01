@@ -129,6 +129,12 @@ async function storeAndRecord(
 export const hospitalityUploadMedia = createServerFn({ method: "POST" })
   .inputValidator((data: FormData) => parseUploadForm(data))
   .handler(async ({ data }): Promise<Gallery> => {
+    const [{ guardStaff }, { manageSession }] = await Promise.all([
+      import("../security/guard.server"),
+      import("../server/manage.server"),
+    ]);
+    const session = await manageSession();
+    await guardStaff("mediaUpload", { userId: session.userId, siteId: session.siteId });
     const bytes = Buffer.from(await data.file.arrayBuffer());
     return storeAndRecord(data.gallery, data.replaceId, bytes, { alt: data.alt }, true);
   });
@@ -137,14 +143,16 @@ export const hospitalityUploadMedia = createServerFn({ method: "POST" })
 export const hospitalityImportMedia = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseImportInput(input))
   .handler(async ({ data }): Promise<Gallery> => {
-    const [{ fetchRemoteImage, describeImageError }, { allowAction, requestIp }] =
+    const [{ fetchRemoteImage, describeImageError }, { guardStaff }, { manageSession }] =
       await Promise.all([
         import("@/platform/media/remote-image.server"),
-        import("@/platform/security/rate-limit.server"),
+        import("../security/guard.server"),
+        import("../server/manage.server"),
       ]);
     const { HospitalityError } = await import("../server/rpc.server");
-    if (!allowAction(`hosp-media-import:${await requestIp()}`, 30, 10 * 60 * 1000))
-      throw new HospitalityError("יותר מדי ייבואים בזמן קצר — נסו שוב בעוד כמה דקות", "53400");
+    // הגבלה משותפת לכל השרתים, לפי המשתמש (אחרי שהוא מזוהה כצוות של העסק)
+    const session = await manageSession();
+    await guardStaff("mediaImport", { userId: session.userId, siteId: session.siteId });
     let bytes: Buffer;
     try {
       bytes = (await fetchRemoteImage(data.url)).bytes;

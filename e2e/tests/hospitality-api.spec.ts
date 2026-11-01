@@ -58,13 +58,16 @@ async function rest(
     profile?: string | null;
     method?: string;
     body?: unknown;
+    /** the application server's call (service key) — the only way a booking request reaches the database (migration 25) */
+    asServer?: boolean;
   } = {},
 ): Promise<Rest> {
   const { url, anonKey } = supabaseEnv();
   const method = opts.method ?? "GET";
+  const key = opts.asServer ? process.env["SUPABASE_SERVICE_ROLE_KEY"]! : anonKey;
   const headers: Record<string, string> = {
-    apikey: anonKey,
-    Authorization: `Bearer ${opts.token ?? anonKey}`,
+    apikey: key,
+    Authorization: `Bearer ${opts.token ?? key}`,
   };
   if (opts.site) headers["x-tenant-id"] = opts.site;
   const profile = opts.profile === undefined ? "hospitality" : opts.profile;
@@ -295,7 +298,7 @@ const message = (r: Rest) => JSON.stringify(r.json);
 let bookingId = "";
 let manageToken = "";
 
-test("a guest books without an account; of 5 parallel requests for the same dates exactly one wins", async () => {
+test("a guest books without an account (through the app server); of 5 parallel requests for the same dates exactly one wins", async () => {
   sql(`UPDATE public.platform_feature_flags SET enabled = true WHERE key = 'hospitality_booking_enabled';
        INSERT INTO public.tenant_feature_flags (tenant_id, key, enabled)
        VALUES ('${siteA}', 'hospitality_booking_enabled', true);
@@ -307,11 +310,28 @@ test("a guest books without an account; of 5 parallel requests for the same date
   const q = quote.json as { available: boolean; policy_hash: string; total: number };
   expect(q.available).toBe(true);
 
+  // a direct call with the public key (a bot skipping the site's anti-bot check) is refused
+  const direct = await rest("rpc/request_booking", {
+    method: "POST",
+    site: siteA,
+    body: {
+      ...stay,
+      _full_name: "בוט",
+      _email: "h1d.bot@e2e.test",
+      _phone: "0501110999",
+      _idempotency_key: `h1d-bot-${Date.now()}`,
+      _policy_accepted: true,
+      _policy_hash: q.policy_hash,
+    },
+  });
+  expect(direct.status).not.toBe(200);
+
   const attempts = await Promise.all(
     [1, 2, 3, 4, 5].map((n) =>
       rest("rpc/request_booking", {
         method: "POST",
         site: siteA,
+        asServer: true,
         body: {
           ...stay,
           _full_name: `אורח ${n}`,
