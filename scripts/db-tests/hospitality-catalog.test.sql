@@ -137,9 +137,10 @@ SELECT tests.check('catalog: no direct INSERT / UPDATE / DELETE for authenticate
   $$SELECT bool_and(NOT has_table_privilege('authenticated', t, 'INSERT') AND NOT has_table_privilege('authenticated', t, 'UPDATE')
                     AND NOT has_table_privilege('authenticated', t, 'DELETE') AND has_table_privilege('authenticated', t, 'SELECT'))
       FROM unnest(ARRAY['hospitality.properties', 'hospitality.units', 'hospitality.unit_members']) t$$);
-SELECT tests.check('catalog: beds and amenities stay as they were (until 2d)',
-  $$SELECT has_table_privilege('authenticated', 'hospitality.unit_beds', 'INSERT')
-       AND has_table_privilege('authenticated', 'hospitality.amenities', 'UPDATE')$$);
+SELECT tests.check('catalog: beds and amenities — read with RLS; writes only through the 2d functions (migration 11)',
+  $$SELECT has_table_privilege('authenticated', 'hospitality.unit_beds', 'SELECT')
+       AND NOT has_table_privilege('authenticated', 'hospitality.unit_beds', 'INSERT')
+       AND NOT has_table_privilege('authenticated', 'hospitality.amenities', 'UPDATE')$$);
 SELECT tests.check('catalog: every catalog function is SECURITY DEFINER, callable by authenticated, never by anon / PUBLIC',
   $$SELECT bool_and(p.prosecdef AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
                     AND NOT has_function_privilege('anon', p.oid, 'EXECUTE'))

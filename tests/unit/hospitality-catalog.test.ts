@@ -68,6 +68,11 @@ const unit = (over: Partial<CatalogUnit> = {}): CatalogUnit => ({
   has_photo: false,
   has_history: false,
   member_ids: null,
+  separate_toilets: 0,
+  max_adults: null,
+  max_children: null,
+  beds: [],
+  amenities: [],
   ...over,
 });
 const property = (over: Partial<CatalogProperty> = {}): CatalogProperty => ({
@@ -80,6 +85,22 @@ const property = (over: Partial<CatalogProperty> = {}): CatalogProperty => ({
   sort_order: 0,
   revision: 1,
   units: [],
+  latitude: null,
+  longitude: null,
+  parking: null,
+  parking_type: null,
+  parking_spaces: null,
+  parking_fee_note: null,
+  parking_instructions: null,
+  guest_info: null,
+  rules_smoking: null,
+  rules_pets: null,
+  rules_pets_note: null,
+  rules_events: null,
+  quiet_from: null,
+  quiet_to: null,
+  rules_custom: [],
+  amenities: [],
   ...over,
 });
 
@@ -268,6 +289,10 @@ describe("units screen model", () => {
     const view: CatalogView = {
       limits: { max_units: 20, units_used: 1, active: true },
       can_owner: true,
+      check_in_time: "15:00",
+      check_out_time: "11:00",
+      amenities: [],
+      amenity_presets: [],
       properties: [property({ units: [unit(), whole] }), property({ id: "b", status: "archived" })],
     };
     expect(visibleProperties(view)).toHaveLength(1);

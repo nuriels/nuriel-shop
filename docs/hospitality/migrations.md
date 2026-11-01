@@ -145,3 +145,14 @@ Migrations are applied only locally and in CI until a deployment is explicitly a
 | Tests | `scripts/db-tests/hospitality-catalog.test.sql` (90 assertions; +3 in the updated Stage 1 file), concurrency 27–32 (+ an invariant for blocks), Stage 1 assertions updated (13 permissions; direct unit writes now "permission denied", RLS checks moved to still-writable tables), `rollback-check.sh` (M10 first, refusal, restore, re-apply, whole-schema comparison), `e2e/tests/catalog-api.spec.ts` (real PostgREST / GoTrue) |
 | Production | nothing to configure |
 
+## 20261101190000_hosp_details.sql — Stage 2d (hospitality)
+
+| | |
+|---|---|
+| Columns | `units.separate_toilets` / `max_adults` / `max_children`; `properties` parking (5), `guest_info`, house rules (`rules_smoking`, `rules_pets`, `rules_pets_note`, `rules_events`, `quiet_from`, `quiet_to`, `rules_custom`); `amenities.preset_code`; `bookings.house_rules_snapshot`. Additive, neutral defaults, one consistency constraint per table |
+| Private data | table `arrival_info` (codes, Wi-Fi, arrival instructions; property and per unit) — RLS, no privileges at all, only DEFINER functions; never in public functions or snapshots; the action log stores field names only |
+| Writes | staff lose direct writes on `unit_beds`, `amenities`, `unit_amenities` (SELECT + RLS kept) |
+| Functions | redefined: `unit_create`, `unit_update`, `_unit_apply`, `_unit_json`, `property_create`, `property_update`, `catalog_view`, `_quote` (max adults / children). New: `amenity_presets`, `amenity_add_preset`, `amenity_create`, `amenity_update`, `amenity_delete`, `arrival_info_view`, `arrival_info_set`, `guest_arrival_info` (anon / authenticated — valid manage link or the booking's signed-in guest, confirmed stay, 48 h before check-in → check-out), trigger `bookings_house_rules` |
+| Rollback | `supabase/rollbacks/20261101190000_hosp_details.down.sql` — refuses while any 2d data is saved; restores the exact migration-10 schema (verified by a full schema comparison in `rollback-check.sh`) |
+| Tests | `scripts/db-tests/hospitality-details.test.sql` (96 assertions), concurrency 39/39 unchanged, Stage 1 / 2c / booking files updated, `rollback-check.sh` (M11), `tests/unit/hospitality-details.test.ts`, `e2e/tests/manage-details.spec.ts` |
+| Production | nothing to configure; not applied anywhere but local / CI databases |

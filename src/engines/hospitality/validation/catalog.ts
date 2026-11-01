@@ -2,16 +2,21 @@
 // (מיגרציה 10; המסד נשאר הסמכות הסופית, כולל ההרשאה). משמש את הטפסים (הודעה ליד
 // השדה) ואת פונקציות השרת.
 import {
+  PROPERTY_DETAIL_KEYS,
   PROPERTY_TYPES,
   UNIT_TYPES,
+  type PropertyChanges,
+  type PropertyDetailKey,
   type PropertyFields,
   type PropertyKey,
   type ReorderInput,
   type SetupInput,
+  type UnitChanges,
   type UnitFields,
   type UnitKey,
   type WholePropertyInput,
 } from "../types/catalog";
+import { cleanAmenities, cleanBeds, cleanPropertyDetail } from "./details";
 import { InputError, uuid } from "./input";
 
 export const PROPERTY_LABELS: Record<PropertyKey, string> = {
@@ -31,6 +36,9 @@ export const UNIT_LABELS: Record<UnitKey, string> = {
   child_age_limit: "גיל ילד עד",
   bedrooms: "חדרי שינה",
   bathrooms: "חדרי רחצה",
+  separate_toilets: "שירותים נפרדים",
+  max_adults: "מקסימום מבוגרים",
+  max_children: "מקסימום ילדים",
 };
 
 const TEXT_MAX: Partial<Record<PropertyKey | UnitKey, number>> = {
@@ -44,7 +52,12 @@ const INT_RANGES: Partial<Record<UnitKey, [number, number]>> = {
   child_age_limit: [0, 17],
   bedrooms: [0, 50],
   bathrooms: [0, 50],
+  separate_toilets: [0, 50],
+  max_adults: [1, 100],
+  max_children: [0, 100],
 };
+/** null = רק המקסימום הכולל חל */
+const NULLABLE_INTS: readonly UnitKey[] = ["max_adults", "max_children"];
 export const MAX_SETUP_UNITS = 30;
 
 function textError(label: string, value: unknown, max: number, required: boolean): string | null {
@@ -88,8 +101,12 @@ export function unitFieldError(key: UnitKey, value: unknown): string | null {
     return (UNIT_TYPES as readonly unknown[]).includes(value)
       ? null
       : `${label} — יש לבחור מהרשימה`;
+  if (value === null && NULLABLE_INTS.includes(key)) return null;
   return intError(label, value, INT_RANGES[key]!);
 }
+
+export const MAX_ADULTS_ERROR = "מקסימום המבוגרים לא יכול להיות גדול ממספר האורחים המרבי";
+export const MAX_CHILDREN_ERROR = "מקסימום הילדים לא יכול להיות גדול ממספר האורחים המרבי";
 
 export const OCCUPANCY_ERROR = "מספר האורחים הכלולים במחיר לא יכול להיות גדול ממספר האורחים המרבי";
 
@@ -102,6 +119,20 @@ export function unitErrors(fields: UnitFields): Partial<Record<UnitKey, string>>
   }
   if (!errors.capacity && !errors.base_occupancy && fields.base_occupancy > fields.capacity)
     errors.base_occupancy = OCCUPANCY_ERROR;
+  if (
+    !errors.capacity &&
+    !errors.max_adults &&
+    fields.max_adults !== null &&
+    fields.max_adults > fields.capacity
+  )
+    errors.max_adults = MAX_ADULTS_ERROR;
+  if (
+    !errors.capacity &&
+    !errors.max_children &&
+    fields.max_children !== null &&
+    fields.max_children > fields.capacity
+  )
+    errors.max_children = MAX_CHILDREN_ERROR;
   return errors;
 }
 
@@ -125,9 +156,13 @@ const textOrNull = (v: unknown) => {
   return t === "" || t === undefined ? null : t;
 };
 
-function cleanProperty(input: Record<string, unknown>, partial: boolean): Partial<PropertyFields> {
+function cleanProperty(input: Record<string, unknown>, partial: boolean): PropertyChanges {
   const out: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(input)) {
+    if ((PROPERTY_DETAIL_KEYS as readonly string[]).includes(key)) {
+      out[key] = cleanPropertyDetail(key as PropertyDetailKey, raw);
+      continue;
+    }
     if (!(key in PROPERTY_LABELS)) throw new InputError(`שדה לא מוכר: ${key.slice(0, 40)}`);
     const k = key as PropertyKey;
     const value = k === "description" || k === "address" ? textOrNull(raw) : trimmed(raw);
@@ -139,12 +174,20 @@ function cleanProperty(input: Record<string, unknown>, partial: boolean): Partia
     for (const k of ["name", "property_type"] as const)
       if (!(k in out)) throw new InputError(propertyFieldError(k, undefined)!);
   }
-  return out as Partial<PropertyFields>;
+  return out as PropertyChanges;
 }
 
-function cleanUnit(input: Record<string, unknown>, partial: boolean): Partial<UnitFields> {
+function cleanUnit(input: Record<string, unknown>, partial: boolean): UnitChanges {
   const out: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(input)) {
+    if (key === "beds") {
+      out[key] = cleanBeds(raw);
+      continue;
+    }
+    if (key === "amenities") {
+      out[key] = cleanAmenities(raw);
+      continue;
+    }
     if (!(key in UNIT_LABELS)) throw new InputError(`שדה לא מוכר: ${key.slice(0, 40)}`);
     const k = key as UnitKey;
     const value = k === "description" ? textOrNull(raw) : trimmed(raw);
@@ -160,7 +203,13 @@ function cleanUnit(input: Record<string, unknown>, partial: boolean): Partial<Un
   const inc = out["base_occupancy"];
   if (typeof cap === "number" && typeof inc === "number" && inc > cap)
     throw new InputError(OCCUPANCY_ERROR);
-  return out as Partial<UnitFields>;
+  const adults = out["max_adults"];
+  const kids = out["max_children"];
+  if (typeof cap === "number" && typeof adults === "number" && adults > cap)
+    throw new InputError(MAX_ADULTS_ERROR);
+  if (typeof cap === "number" && typeof kids === "number" && kids > cap)
+    throw new InputError(MAX_CHILDREN_ERROR);
+  return out as UnitChanges;
 }
 
 const revisionOf = (v: unknown) => {
@@ -174,13 +223,13 @@ const changesOf = (v: unknown) => {
   return changes;
 };
 
-export function parseCreateProperty(input: Raw): { data: Partial<PropertyFields> } {
+export function parseCreateProperty(input: Raw): { data: PropertyChanges } {
   return { data: cleanProperty(obj((input ?? {})["data"], "פרטי המתחם"), false) };
 }
 
 export function parseUpdateProperty(input: Raw): {
   id: string;
-  changes: Partial<PropertyFields>;
+  changes: PropertyChanges;
   revision: number;
 } {
   const i = input ?? {};
@@ -191,7 +240,7 @@ export function parseUpdateProperty(input: Raw): {
   };
 }
 
-export function parseCreateUnit(input: Raw): { propertyId: string; data: Partial<UnitFields> } {
+export function parseCreateUnit(input: Raw): { propertyId: string; data: UnitChanges } {
   const i = input ?? {};
   return {
     propertyId: uuid(i["propertyId"], "המתחם"),
@@ -201,7 +250,7 @@ export function parseCreateUnit(input: Raw): { propertyId: string; data: Partial
 
 export function parseUpdateUnit(input: Raw): {
   id: string;
-  changes: Partial<UnitFields>;
+  changes: UnitChanges;
   revision: number;
 } {
   const i = input ?? {};

@@ -69,6 +69,11 @@ const unit = (n: number, over: Partial<CatalogUnit> = {}): CatalogUnit => ({
   has_photo: false,
   has_history: false,
   member_ids: null,
+  separate_toilets: 0,
+  max_adults: null,
+  max_children: null,
+  beds: [],
+  amenities: [],
   ...over,
 });
 const whole = (members: number[], over: Partial<CatalogUnit> = {}): CatalogUnit =>
@@ -91,6 +96,22 @@ const property = (units: CatalogUnit[], over: Partial<CatalogProperty> = {}): Ca
   sort_order: 0,
   revision: 5,
   units,
+  latitude: null,
+  longitude: null,
+  parking: null,
+  parking_type: null,
+  parking_spaces: null,
+  parking_fee_note: null,
+  parking_instructions: null,
+  guest_info: null,
+  rules_smoking: null,
+  rules_pets: null,
+  rules_pets_note: null,
+  rules_events: null,
+  quiet_from: null,
+  quiet_to: null,
+  rules_custom: [],
+  amenities: [],
   ...over,
 });
 const view = (
@@ -99,6 +120,10 @@ const view = (
 ): CatalogView => ({
   limits: { max_units: 5, units_used: 3, active: true, ...limits },
   can_owner: true,
+  check_in_time: "15:00",
+  check_out_time: "11:00",
+  amenities: [],
+  amenity_presets: [],
   properties,
 });
 

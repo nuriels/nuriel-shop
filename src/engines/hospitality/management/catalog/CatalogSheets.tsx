@@ -41,7 +41,9 @@ import { useRefresh } from "./refresh";
 import { PROPERTY_TYPE_LABELS, UNIT_TYPE_LABELS } from "./labels";
 import {
   PROPERTY_FORM_KEYS,
+  PROPERTY_FORM_LABELS,
   UNIT_FORM_KEYS,
+  UNIT_FORM_LABELS,
   findProperty,
   findUnit,
   mergeAfterConflict,
@@ -61,7 +63,7 @@ const errorText = (e: unknown) =>
   e instanceof Error && e.message ? e.message : "השמירה נכשלה — נסו שוב";
 
 /** המעטפת המשותפת: חלונית, הודעות, שמירה, ושאלה לפני סגירה עם שינויים */
-function FormSheet(props: {
+export function FormSheet(props: {
   open: boolean;
   title: string;
   description: string;
@@ -106,6 +108,8 @@ function FormSheet(props: {
             className="mt-4 flex flex-col gap-4"
             onSubmit={(e) => {
               e.preventDefault();
+              // החלונית מוצגת ב-portal: בלי זה השליחה "מבעבעת" לטופס של העמוד שמאחוריה
+              e.stopPropagation();
               if (!props.busy) props.onSubmit();
             }}
           >
@@ -267,8 +271,8 @@ export function PropertySheet(props: {
       setForm(merged.form);
       setRevision(latest.revision);
       setNotice({
-        changed: merged.remoteChanged.map((k) => PROPERTY_LABELS[k]),
-        dropped: merged.dropped.map((k) => PROPERTY_LABELS[k]),
+        changed: merged.remoteChanged.map((k) => PROPERTY_FORM_LABELS[k]),
+        dropped: merged.dropped.map((k) => PROPERTY_FORM_LABELS[k]),
       });
     } catch (e) {
       setServerError(errorText(e));
@@ -427,8 +431,8 @@ export function UnitSheet(props: {
       setForm(merged.form);
       setRevision(latest.revision);
       setNotice({
-        changed: merged.remoteChanged.map((k) => UNIT_LABELS[k]),
-        dropped: merged.dropped.map((k) => UNIT_LABELS[k]),
+        changed: merged.remoteChanged.map((k) => UNIT_FORM_LABELS[k]),
+        dropped: merged.dropped.map((k) => UNIT_FORM_LABELS[k]),
       });
     } catch (e) {
       setServerError(errorText(e));

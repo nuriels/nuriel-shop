@@ -1,5 +1,6 @@
 // עמוד היחידה (/manage/units/$unitId) — Stage 2c.3: כל הפרטים בכרטיסים (פרטים, אורחים,
-// חדרים), מצב היחידה (הפעלה / השבתה) ומחיקה לצמיתות (בעלים בלבד). שמירה עם הגרסה
+// חדרים), מצב היחידה (הפעלה / השבתה) ומחיקה לצמיתות (בעלים בלבד). Stage 2d: מקסימום
+// מבוגרים / ילדים, שירותים נפרדים, מיטות לפי חדר ומתקנים ביחידה — באותה שמירה. שמירה עם הגרסה
 // שנטענה; "עודכן בינתיים" — מיזוג בלי לדרוס את השינוי של המשתמש האחר. כל פעולה נבדקת
 // שוב במסד (הרשאה, מגבלת החבילה, "כל המתחם", הזמנות).
 import { useEffect, useState } from "react";
@@ -22,6 +23,8 @@ import {
 } from "../../types/catalog";
 import { UNIT_LABELS } from "../../validation/catalog";
 import { NumberField, SelectField, TextAreaField, TextField } from "../lib/fields";
+import { AmenityPicker } from "../details/AmenityPicker";
+import { BedsEditor } from "../details/BedsEditor";
 import { manageKeys } from "../lib/query-keys";
 import { ConflictNotice } from "./CatalogSheets";
 import { PROPERTY_TYPE_LABELS, UNIT_TYPE_LABELS } from "./labels";
@@ -29,6 +32,7 @@ import {
   ARCHIVED_FOR_MANAGER,
   GONE_UNIT,
   UNIT_FORM_KEYS,
+  UNIT_FORM_LABELS,
   activateBlock,
   deactivateBlock,
   findProperty,
@@ -139,8 +143,8 @@ function UnitEditor({
     setForm(merged.form);
     setRevision(latest.revision);
     setNotice({
-      changed: merged.remoteChanged.map((k) => UNIT_LABELS[k]),
-      dropped: merged.dropped.map((k) => UNIT_LABELS[k]),
+      changed: merged.remoteChanged.map((k) => UNIT_FORM_LABELS[k]),
+      dropped: merged.dropped.map((k) => UNIT_FORM_LABELS[k]),
       skipped,
     });
   };
@@ -345,15 +349,41 @@ function UnitEditor({
               error={err("child_age_limit")}
               hint="עד הגיל הזה האורח נחשב ילד במחיר"
             />
+            <NumberField
+              idPrefix="unit"
+              name="max_adults"
+              label={`${UNIT_LABELS.max_adults} (לא חובה)`}
+              min={1}
+              max={100}
+              value={form.max_adults}
+              onChange={(v) => set("max_adults", v)}
+              error={err("max_adults")}
+              hint="ריק — רק המספר הכולל חל"
+            />
+            <NumberField
+              idPrefix="unit"
+              name="max_children"
+              label={`${UNIT_LABELS.max_children} (לא חובה)`}
+              min={0}
+              max={100}
+              value={form.max_children}
+              onChange={(v) => set("max_children", v)}
+              error={err("max_children")}
+              hint="0 — היחידה לא מתאימה לילדים; ריק — בלי הגבלה נפרדת"
+            />
           </CardContent>
         </Card>
 
         <Card data-section="rooms">
           <CardHeader>
             <CardTitle className="text-lg">
-              <h2>חדרים</h2>
+              <h2>חדרים ומיטות</h2>
             </CardTitle>
-            <CardDescription>מיטות ומתקנים — בשלב הבא.</CardDescription>
+            <CardDescription>
+              {whole
+                ? "המיטות נקבעות בכל אחת מהיחידות הכלולות."
+                : "חדרי שינה ורחצה, ומיטות לפי חדר — האורחים יראו בדיוק איך ישנים."}
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <NumberField
@@ -376,8 +406,52 @@ function UnitEditor({
               onChange={(v) => set("bathrooms", v)}
               error={err("bathrooms")}
             />
+            <NumberField
+              idPrefix="unit"
+              name="separate_toilets"
+              label={UNIT_LABELS.separate_toilets}
+              min={0}
+              max={50}
+              value={form.separate_toilets}
+              onChange={(v) => set("separate_toilets", v)}
+              error={err("separate_toilets")}
+              hint="בנוסף לחדרי הרחצה"
+            />
+            {!whole && (
+              <div className="sm:col-span-2">
+                <BedsEditor
+                  rows={form.beds}
+                  onChange={(v) => set("beds", v)}
+                  capacity={/^\d+$/.test(form.capacity) ? Number(form.capacity) : null}
+                  error={err("beds")}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        {!whole && (
+          <Card data-section="amenities">
+            <CardHeader>
+              <CardTitle className="text-lg">
+                <h2>מתקנים ביחידה</h2>
+              </CardTitle>
+              <CardDescription>
+                מה יש ביחידה עצמה (פרטי). מתקנים משותפים — בעמוד המתחם.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AmenityPicker
+                view={view}
+                scope="unit"
+                value={form.amenities}
+                onChange={(v) => set("amenities", v)}
+                readOnly={readOnly}
+                error={err("amenities")}
+              />
+            </CardContent>
+          </Card>
+        )}
       </fieldset>
 
       {whole && (

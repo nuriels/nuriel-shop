@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_details (2d): הגנה (נשמרו פרטים חדשים — חניה / מידע פרטי להגעה / כללים בהזמנה),
+#     rollback → הצוות כותב שוב ישירות למיטות ולמתקנים, הסכמה זהה בדיוק למצב של מיגרציה 10
 #   • hosp_catalog (2c.1): הגנה (נשמרו סוגי מתחם / יחידה), rollback → הצוות כותב שוב ישירות,
 #     12 הרשאות, פונקציות הקטלוג והעמודות נעלמו
 #   • hosp_site_identity (R-1): rollback → site_identity נעלמה, ההגדרות והצוות במקומם
@@ -38,6 +40,7 @@ M7=20261101150000_hosp_management_foundation
 M8=20261101160000_hosp_settings_team
 M9=20261101170000_hosp_site_identity
 M10=20261101180000_hosp_catalog
+M11=20261101190000_hosp_details
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -58,6 +61,41 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- 2d: unit and property details (migration 11) ----------
+echo "rollback guard: $M11 refuses while 2d details are saved"
+q "INSERT INTO public.tenants (id, slug, name, site_type) VALUES ('72d10000-0000-0000-0000-000000000001', 'rb-stay-2d', 'x', 'hospitality')" >/dev/null
+q "INSERT INTO hospitality.properties (id, tenant_id, name, slug, parking, parking_type) VALUES ('72d10000-0000-0000-0000-0000000000a1', '72d10000-0000-0000-0000-000000000001', 'x', 'x', 'free', 'shared')" >/dev/null
+if down "$M11" 2>/dev/null; then
+  echo "  FAIL rollback ran although a property has parking details"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT to_regclass('hospitality.arrival_info') IS NOT NULL AND to_regprocedure('hospitality.amenity_presets()') IS NOT NULL"
+q "DELETE FROM public.tenants WHERE id = '72d10000-0000-0000-0000-000000000001'" >/dev/null
+# the exact schema of migration 10: a second database with every migration up to M10
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M11" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M11"
+down "$M11"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m10.sql"
+schema_dump "$SCHEMA_DIR/after-m11-down.sql"
+if diff -q "$SCHEMA_DIR/m10.sql" "$SCHEMA_DIR/after-m11-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 10, exactly (functions, grants, columns)"
+else
+  echo "  FAIL schema after the rollback differs from migration 10:"; diff "$SCHEMA_DIR/m10.sql" "$SCHEMA_DIR/after-m11-down.sql" | head -20; exit 1
+fi
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres -c "DROP DATABASE IF EXISTS rollback_ref" >/dev/null
+expect "staff write beds and amenities directly again; no arrival info; _quote without guest limits" \
+  "SELECT has_table_privilege('authenticated', 'hospitality.unit_beds', 'INSERT')
+     AND has_table_privilege('authenticated', 'hospitality.amenities', 'UPDATE')
+     AND to_regclass('hospitality.arrival_info') IS NULL
+     AND (SELECT prosrc NOT LIKE '%max_adults%' FROM pg_proc WHERE oid = 'hospitality._quote(uuid, uuid, date, date, integer, integer, text, boolean, uuid, uuid)'::regprocedure)"
 
 # ---------- 2c.1: properties and units (migration 10) ----------
 echo "rollback guard: $M10 refuses while a property / unit has a saved type"
@@ -290,7 +328,7 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1 … $M10"
+echo "re-apply: $M1 … $M11"
 up "$M1"
 up "$M2"
 up "$M3"
@@ -301,6 +339,7 @@ up "$M7"
 up "$M8"
 up "$M9"
 up "$M10"
+up "$M11"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -309,8 +348,8 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 22 tables (incl. the action log), RLS on all, role admin, 6 flags off (incl. management)" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 22
+expect "Hospitality schema back: 23 tables (incl. the action log and arrival info), RLS on all, role admin, 6 flags off (incl. management)" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 23
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
       AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 6"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
@@ -342,7 +381,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 10 → 1 and re-apply 1 → 10 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 11 → 1 and re-apply 1 → 11 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi

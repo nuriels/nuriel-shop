@@ -256,7 +256,7 @@ describe("architecture: server-function ownership", () => {
 
   it("Hospitality server functions live only in src/engines/hospitality/{server,api}", () => {
     const hosp = serverFnFiles.filter((f) => registry.ownerOf(f) === "hospitality");
-    expect(hosp.length).toBe(8);
+    expect(hosp.length).toBe(9); // + api/details.functions.ts (2d)
     // api/ = נקראות מהדפדפן (מחוץ ל-server/, import protection); server/ = בלי ממשק עדיין
     for (const f of hosp)
       expect(f).toMatch(/^src\/engines\/hospitality\/(server|api)\/[\w-]+\.functions\.ts$/);

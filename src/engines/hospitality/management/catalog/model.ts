@@ -1,18 +1,38 @@
 // מודל המסך "יחידות ומתחמים": קיבוץ לפי מתחם, המגבלה בחבילה, טקסטים, טפסים (ערכי
 // טקסט בזמן ההקלדה → שדות לשמירה), מה השתנה, ומיזוג אחרי "עודכן בינתיים".
 import type {
+  AllowRule,
+  AmenityLink,
+  BedRow,
+  BedType,
   CatalogProperty,
   CatalogUnit,
   CatalogView,
+  Parking,
+  ParkingType,
+  PropertyChanges,
+  PropertyDetailFields,
+  PropertyDetailKey,
   PropertyFields,
   PropertyKey,
   PropertyType,
+  SmokingRule,
+  UnitChanges,
   UnitFields,
   UnitKey,
   UnitType,
 } from "../../types/catalog";
-import { PROPERTY_KEYS, UNIT_KEYS } from "../../types/catalog";
-import { propertyErrors, unitErrors } from "../../validation/catalog";
+import { PROPERTY_DETAIL_KEYS, PROPERTY_KEYS, UNIT_KEYS } from "../../types/catalog";
+import { PROPERTY_LABELS, UNIT_LABELS, propertyErrors, unitErrors } from "../../validation/catalog";
+import {
+  MAP_PARSE_MESSAGES,
+  PROPERTY_DETAIL_LABELS,
+  amenitiesError,
+  bedsError,
+  parseMapLocation,
+  propertyDetailCrossErrors,
+  propertyDetailError,
+} from "../../validation/details";
 import { BUSINESS_TYPES, setupUnitType as setupUnitTypeFor } from "./labels";
 
 // ---------- הרשימה ----------
@@ -117,6 +137,23 @@ export type PropertyForm = {
   description: string;
   address: string;
   status: "draft" | "active";
+  // ---- פרטי המתחם (2d) ----
+  /** קישור למפה או "32.79, 35.53" כפי שהוקלד */
+  location: string;
+  parking: "" | Parking;
+  parking_type: "" | ParkingType;
+  parking_spaces: string;
+  parking_fee_note: string;
+  parking_instructions: string;
+  guest_info: string;
+  rules_smoking: "" | SmokingRule;
+  rules_pets: "" | AllowRule;
+  rules_pets_note: string;
+  rules_events: "" | AllowRule;
+  quiet_from: string;
+  quiet_to: string;
+  rules_custom: string[];
+  amenities: AmenityLink[];
 };
 
 export function propertyFormFrom(p: CatalogProperty | null, type?: PropertyType): PropertyForm {
@@ -126,6 +163,64 @@ export function propertyFormFrom(p: CatalogProperty | null, type?: PropertyType)
     description: p?.description ?? "",
     address: p?.address ?? "",
     status: p && p.status === "draft" ? "draft" : "active",
+    location:
+      p?.latitude !== null && p?.latitude !== undefined && p.longitude !== null
+        ? `${Number(p.latitude)}, ${Number(p.longitude)}`
+        : "",
+    parking: p?.parking ?? "",
+    parking_type: p?.parking_type ?? "",
+    parking_spaces:
+      p?.parking_spaces === null || p?.parking_spaces === undefined ? "" : String(p.parking_spaces),
+    parking_fee_note: p?.parking_fee_note ?? "",
+    parking_instructions: p?.parking_instructions ?? "",
+    guest_info: p?.guest_info ?? "",
+    rules_smoking: p?.rules_smoking ?? "",
+    rules_pets: p?.rules_pets ?? "",
+    rules_pets_note: p?.rules_pets_note ?? "",
+    rules_events: p?.rules_events ?? "",
+    quiet_from: p?.quiet_from ?? "",
+    quiet_to: p?.quiet_to ?? "",
+    rules_custom: p?.rules_custom ?? [],
+    amenities: p?.amenities ?? [],
+  };
+}
+
+const blankToNull = (s: string) => (s.trim() === "" ? null : s.trim());
+const choiceOrNull = <T extends string>(s: "" | T): T | null => (s === "" ? null : s);
+
+/** הערות המתקנים: רווחים בקצוות, ריק = בלי הערה */
+export const amenityLinks = (items: readonly AmenityLink[]): AmenityLink[] =>
+  items.map((a) => ({
+    amenity_id: a.amenity_id,
+    note: a.note === null ? null : blankToNull(a.note),
+  }));
+
+/** פרטי המתחם לשמירה — מנורמלים כמו במסד (בלי חניה: בלי סוג / מקומות / מחיר) */
+export function propertyDetailFields(f: PropertyForm): PropertyDetailFields {
+  const loc = parseMapLocation(f.location);
+  const parking = choiceOrNull(f.parking);
+  const hasType = parking === "free" || parking === "paid";
+  const spaces = f.parking_spaces.trim();
+  return {
+    location: loc.ok
+      ? { lat: loc.lat, lng: loc.lng }
+      : loc.reason === "empty"
+        ? null
+        : { lat: Number.NaN, lng: Number.NaN },
+    parking,
+    parking_type: hasType ? choiceOrNull(f.parking_type) : null,
+    parking_spaces: hasType && spaces !== "" ? toInt(spaces) : null,
+    parking_fee_note: parking === "paid" ? blankToNull(f.parking_fee_note) : null,
+    parking_instructions: parking === null ? null : blankToNull(f.parking_instructions),
+    guest_info: blankToNull(f.guest_info),
+    rules_smoking: choiceOrNull(f.rules_smoking),
+    rules_pets: choiceOrNull(f.rules_pets),
+    rules_pets_note: blankToNull(f.rules_pets_note),
+    rules_events: choiceOrNull(f.rules_events),
+    quiet_from: blankToNull(f.quiet_from),
+    quiet_to: blankToNull(f.quiet_to),
+    rules_custom: f.rules_custom.map((r) => r.trim()).filter((r) => r !== ""),
+    amenities: amenityLinks(f.amenities),
   };
 }
 
@@ -140,6 +235,8 @@ export function propertyFields(f: PropertyForm): PropertyFields {
   };
 }
 
+export type BedFormRow = { bed_type: BedType; quantity: string; room_label: string };
+
 export type UnitForm = {
   name: string;
   unit_type: UnitType;
@@ -149,6 +246,12 @@ export type UnitForm = {
   child_age_limit: string;
   bedrooms: string;
   bathrooms: string;
+  separate_toilets: string;
+  /** ריק — רק המקסימום הכולל חל */
+  max_adults: string;
+  max_children: string;
+  beds: BedFormRow[];
+  amenities: AmenityLink[];
 };
 
 export function unitFormFrom(u: CatalogUnit | null, defaults?: Partial<UnitForm>): UnitForm {
@@ -161,8 +264,26 @@ export function unitFormFrom(u: CatalogUnit | null, defaults?: Partial<UnitForm>
     child_age_limit: String(u?.child_age_limit ?? "12"),
     bedrooms: String(u?.bedrooms ?? defaults?.bedrooms ?? "1"),
     bathrooms: String(u?.bathrooms ?? defaults?.bathrooms ?? "1"),
+    separate_toilets: String(u?.separate_toilets ?? "0"),
+    max_adults: u?.max_adults === null || u?.max_adults === undefined ? "" : String(u.max_adults),
+    max_children:
+      u?.max_children === null || u?.max_children === undefined ? "" : String(u.max_children),
+    beds: (u?.beds ?? []).map((b) => ({
+      bed_type: b.bed_type,
+      quantity: String(b.quantity),
+      room_label: b.room_label ?? "",
+    })),
+    amenities: u?.amenities ?? [],
   };
 }
+
+/** שורות המיטות לשמירה */
+export const bedRows = (rows: readonly BedFormRow[]): BedRow[] =>
+  rows.map((r) => ({
+    bed_type: r.bed_type,
+    quantity: toInt(r.quantity),
+    room_label: blankToNull(r.room_label),
+  }));
 
 export function unitFields(f: UnitForm): UnitFields {
   return {
@@ -174,6 +295,9 @@ export function unitFields(f: UnitForm): UnitFields {
     child_age_limit: toInt(f.child_age_limit),
     bedrooms: toInt(f.bedrooms),
     bathrooms: toInt(f.bathrooms),
+    separate_toilets: toInt(f.separate_toilets),
+    max_adults: f.max_adults.trim() === "" ? null : toInt(f.max_adults),
+    max_children: f.max_children.trim() === "" ? null : toInt(f.max_children),
   };
 }
 
@@ -188,24 +312,55 @@ export function changedKeys<K extends string>(
   return keys.filter((k) => !same(a[k], b[k]));
 }
 
-export function propertyChanges(base: PropertyForm, form: PropertyForm): Partial<PropertyFields> {
+export function propertyChanges(base: PropertyForm, form: PropertyForm): PropertyChanges {
   const a = propertyFields(base);
   const b = propertyFields(form);
-  const out: Partial<Record<PropertyKey, unknown>> = {};
+  const out: Partial<Record<PropertyKey | PropertyDetailKey, unknown>> = {};
   for (const k of changedKeys(PROPERTY_KEYS, a, b)) out[k] = b[k];
-  return out as Partial<PropertyFields>;
+  const da = propertyDetailFields(base);
+  const db = propertyDetailFields(form);
+  for (const k of changedKeys(PROPERTY_DETAIL_KEYS, da, db)) out[k] = db[k];
+  return out as PropertyChanges;
 }
 
-export function unitChanges(base: UnitForm, form: UnitForm): Partial<UnitFields> {
+export function unitChanges(base: UnitForm, form: UnitForm): UnitChanges {
   const a = unitFields(base);
   const b = unitFields(form);
-  const out: Partial<Record<UnitKey, unknown>> = {};
+  const out: Partial<Record<UnitKey | "beds" | "amenities", unknown>> = {};
   for (const k of changedKeys(UNIT_KEYS, a, b)) out[k] = b[k];
-  return out as Partial<UnitFields>;
+  if (!same(bedRows(base.beds), bedRows(form.beds))) out.beds = bedRows(form.beds);
+  if (!same(amenityLinks(base.amenities), amenityLinks(form.amenities)))
+    out.amenities = amenityLinks(form.amenities);
+  return out as UnitChanges;
 }
 
-export const propertyFormErrors = (f: PropertyForm) => propertyErrors(propertyFields(f));
-export const unitFormErrors = (f: UnitForm) => unitErrors(unitFields(f));
+export type PropertyFormErrors = Partial<Record<keyof PropertyForm, string>>;
+export function propertyFormErrors(f: PropertyForm): PropertyFormErrors {
+  const errors: PropertyFormErrors = { ...propertyErrors(propertyFields(f)) };
+  const d = propertyDetailFields(f);
+  for (const k of PROPERTY_DETAIL_KEYS) {
+    if (k === "location") continue;
+    const e = propertyDetailError(k, d[k]);
+    if (e) errors[k] = e;
+  }
+  if (f.parking_spaces.trim() !== "" && (f.parking === "free" || f.parking === "paid")) {
+    const e = propertyDetailError("parking_spaces", toInt(f.parking_spaces));
+    if (e) errors.parking_spaces = e;
+  }
+  const loc = parseMapLocation(f.location);
+  if (!loc.ok && loc.reason !== "empty") errors.location = MAP_PARSE_MESSAGES[loc.reason];
+  return { ...propertyDetailCrossErrors(d), ...errors };
+}
+
+export type UnitFormErrors = Partial<Record<keyof UnitForm, string>>;
+export function unitFormErrors(f: UnitForm): UnitFormErrors {
+  const errors: UnitFormErrors = { ...unitErrors(unitFields(f)) };
+  const beds = bedsError(bedRows(f.beds));
+  if (beds) errors.beds = beds;
+  const amen = amenitiesError(amenityLinks(f.amenities));
+  if (amen) errors.amenities = amen;
+  return errors;
+}
 
 /**
  * מישהו אחר שמר בינתיים: הטופס החדש = הערכים העדכניים, ועליהם השינויים שלי בשדות
@@ -225,8 +380,22 @@ export function mergeAfterConflict<F extends Record<string, unknown>>(
   return { form: merged, remoteChanged, dropped };
 }
 
-export const PROPERTY_FORM_KEYS = PROPERTY_KEYS as readonly (keyof PropertyForm & string)[];
-export const UNIT_FORM_KEYS = UNIT_KEYS as readonly (keyof UnitForm & string)[];
+export const PROPERTY_FORM_KEYS = [
+  ...PROPERTY_KEYS,
+  ...PROPERTY_DETAIL_KEYS,
+] as readonly (keyof PropertyForm & string)[];
+export const UNIT_FORM_KEYS = [...UNIT_KEYS, "beds", "amenities"] as readonly (keyof UnitForm &
+  string)[];
+/** שמות השדות בעברית — להודעת "עודכן בינתיים" */
+export const PROPERTY_FORM_LABELS: Record<keyof PropertyForm, string> = {
+  ...PROPERTY_LABELS,
+  ...PROPERTY_DETAIL_LABELS,
+};
+export const UNIT_FORM_LABELS: Record<keyof UnitForm, string> = {
+  ...UNIT_LABELS,
+  beds: "מיטות",
+  amenities: "מתקנים ביחידה",
+};
 
 export function findProperty(view: CatalogView, id: string): CatalogProperty | null {
   return view.properties.find((p) => p.id === id) ?? null;

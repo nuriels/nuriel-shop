@@ -333,7 +333,7 @@ INSERT INTO hospitality.promotions (tenant_id, name, code, discount_kind, value)
 SELECT pg_temp.run_at(:hosp_a, 'flags: with every flag off, even the owner sees no rows',
   $$SELECT 1 FROM hospitality.units$$, :H_OWNER_A, NULL, 0);
 SELECT pg_temp.run_at(:hosp_a, 'flags: with every flag off, the owner cannot insert',
-  format($$INSERT INTO hospitality.amenities (tenant_id, name) VALUES (%s, 'בריכה')$$, :'hosp_a'),
+  format($$INSERT INTO hospitality.promotions (tenant_id, name, discount_kind, value) VALUES (%s, 'בריכה', 'percent', 5)$$, :'hosp_a'),
   :H_OWNER_A, 'row-level security');
 -- turn the backend on: platform-wide, and for sites A and B only (platform admin, audited)
 SELECT pg_temp.run_at(NULL, 'flags: platform admin enables hospitality_backend_enabled for the platform',
@@ -361,10 +361,10 @@ SELECT pg_temp.run_at(:hosp_c, 'flags: site C (flag off) — owner sees no rows'
   $$SELECT 1 FROM hospitality.units UNION ALL SELECT 1 FROM hospitality.settings UNION ALL SELECT 1 FROM hospitality.policies$$,
   :H_OWNER_C, NULL, 0);
 SELECT pg_temp.run_at(:hosp_c, 'flags: site C (flag off) — owner cannot write',
-  format($$INSERT INTO hospitality.amenities (tenant_id, name) VALUES (%s, 'בריכה')$$, :'hosp_c'),
+  format($$INSERT INTO hospitality.promotions (tenant_id, name, discount_kind, value) VALUES (%s, 'בריכה', 'percent', 5)$$, :'hosp_c'),
   :H_OWNER_C, 'row-level security');
 SELECT pg_temp.run_at(:hosp_c, 'flags: site C (flag off) — owner cannot update',
-  $$UPDATE hospitality.unit_beds SET quantity = 2$$, :H_OWNER_C, NULL, 0);
+  $$UPDATE hospitality.rate_rules SET value = 2$$, :H_OWNER_C, NULL, 0);
 SELECT pg_temp.run_at(:hosp_c, 'flags: site C — units are not writable directly at all (only the catalog functions, 2c.1)',
   $$UPDATE hospitality.units SET name = 'x'$$, :H_OWNER_C, 'permission denied');
 SELECT tests.check('flags: hospitality.flag_for() is server-only (not executable by authenticated)',
@@ -390,9 +390,9 @@ SELECT pg_temp.run_at(:hosp_b, 'rls: owner A on site B (not a member) sees nothi
 SELECT pg_temp.run_at(:hosp_b, 'rls: owner B sees only site B (1 unit)',
   $$SELECT 1 FROM hospitality.units$$, :H_OWNER_B, NULL, 1);
 SELECT pg_temp.run_at(:hosp_a, 'rls: owner A cannot insert a row for site B',
-  format($$INSERT INTO hospitality.amenities (tenant_id, name) VALUES (%s, 'חדירה')$$, :'hosp_b'), :H_OWNER_A, 'row-level security');
+  format($$INSERT INTO hospitality.promotions (tenant_id, name, discount_kind, value) VALUES (%s, 'חדירה', 'percent', 5)$$, :'hosp_b'), :H_OWNER_A, 'row-level security');
 SELECT pg_temp.run_at(:hosp_a, 'rls: owner A cannot update site B rows (0 rows)',
-  $$UPDATE hospitality.amenities SET icon = 'x' WHERE id = '71c40000-0000-0000-0000-0000000000b1'$$, :H_OWNER_A, NULL, 0);
+  format($$UPDATE hospitality.promotions SET value = 5 WHERE tenant_id = %s$$, :'hosp_b'), :H_OWNER_A, NULL, 0);
 SELECT pg_temp.run_at(:hosp_a, 'rls: owner A cannot write site B units directly (no direct unit writes since 2c.1)',
   $$UPDATE hospitality.units SET base_price = 1 WHERE id = '71c30000-0000-0000-0000-0000000000b1'$$, :H_OWNER_A, 'permission denied');
 SELECT pg_temp.run_at(:hosp_b, 'rls: owner B cannot delete site A rows (0 rows)',
@@ -401,13 +401,13 @@ SELECT tests.check('rls: site A promotion is still there after owner B deleted "
   format($$SELECT EXISTS (SELECT 1 FROM hospitality.promotions WHERE tenant_id = %s)$$, :'hosp_a'));
 INSERT INTO hospitality.promotions (tenant_id, name, code, discount_kind, value) VALUES (:hosp_b, 'קופון', 'SUMMER10', 'percent', 10);
 SELECT pg_temp.run_at(:hosp_a, 'rls: owner A cannot move a row to site B',
-  $$UPDATE hospitality.amenities SET tenant_id = (SELECT id FROM public.tenants WHERE slug = 'hc1c-b')
-     WHERE id = '71c40000-0000-0000-0000-0000000000a1'$$, :H_OWNER_A, 'אי אפשר להעביר נתונים בין אתרים');
+  format($$UPDATE hospitality.promotions SET tenant_id = (SELECT id FROM public.tenants WHERE slug = 'hc1c-b')
+     WHERE tenant_id = %s$$, :'hosp_a'), :H_OWNER_A, 'אי אפשר להעביר נתונים בין אתרים');
 SELECT pg_temp.run_at(:hosp_a, 'rls: owner A cannot move a unit to site B (no direct unit writes since 2c.1)',
   $$UPDATE hospitality.units SET tenant_id = (SELECT id FROM public.tenants WHERE slug = 'hc1c-b')
      WHERE id = '71c30000-0000-0000-0000-0000000000a1'$$, :H_OWNER_A, 'permission denied');
-SELECT pg_temp.run_at(:hosp_a, 'rls: owner A can create, edit and delete catalog rows',
-  format($$WITH i AS (INSERT INTO hospitality.amenities (tenant_id, name) VALUES (%s, 'בריכה') RETURNING id)
+SELECT pg_temp.run_at(:hosp_a, 'rls: owner A can create rows directly where the plan still allows it (promotions; catalog only through functions since 2c.1 / 2d)',
+  format($$WITH i AS (INSERT INTO hospitality.promotions (tenant_id, name, discount_kind, value, is_active) VALUES (%s, 'בריכה', 'percent', 5, false) RETURNING id)
           SELECT 1 FROM i$$, :'hosp_a'), :H_OWNER_A, NULL, 1);
 SELECT pg_temp.run_at(:hosp_a, 'rls: manager A can edit pricing',
   $$UPDATE hospitality.rate_rules SET value = 1150$$, :H_MANAGER_A, NULL, 1);
@@ -423,11 +423,11 @@ SELECT pg_temp.run_at(:hosp_a, 'rls: a guest sees no Hospitality rows',
   $$SELECT 1 FROM hospitality.units UNION ALL SELECT 1 FROM hospitality.settings UNION ALL SELECT 1 FROM hospitality.media$$,
   :GUEST, NULL, 0);
 SELECT pg_temp.run_at(:hosp_a, 'rls: a guest cannot write',
-  format($$INSERT INTO hospitality.amenities (tenant_id, name) VALUES (%s, 'אורח')$$, :'hosp_a'), :GUEST, 'row-level security');
+  format($$INSERT INTO hospitality.promotions (tenant_id, name, discount_kind, value) VALUES (%s, 'אורח', 'percent', 5)$$, :'hosp_a'), :GUEST, 'row-level security');
 SELECT pg_temp.run_at(:hosp_a, 'rls: an Ecommerce owner sees no Hospitality rows on the site',
   $$SELECT 1 FROM hospitality.units UNION ALL SELECT 1 FROM hospitality.settings$$, :ECOM_OWNER_A, NULL, 0);
 SELECT pg_temp.run_at(:hosp_a, 'rls: an Ecommerce owner cannot write Hospitality rows',
-  format($$INSERT INTO hospitality.amenities (tenant_id, name) VALUES (%s, 'חנות')$$, :'hosp_a'), :ECOM_OWNER_A, 'row-level security');
+  format($$INSERT INTO hospitality.promotions (tenant_id, name, discount_kind, value) VALUES (%s, 'חנות', 'percent', 5)$$, :'hosp_a'), :ECOM_OWNER_A, 'row-level security');
 SELECT pg_temp.run_at(:STORE_A, 'rls: an Ecommerce owner on its own store sees no Hospitality rows',
   $$SELECT 1 FROM hospitality.units UNION ALL SELECT 1 FROM hospitality.settings$$, :ECOM_OWNER_A, NULL, 0);
 SELECT pg_temp.run_at(:hosp_a, 'rls: an Ecommerce customer sees no Hospitality rows',

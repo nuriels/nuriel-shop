@@ -6,4 +6,6 @@ export const manageKeys = {
   team: ["hospitality", "manage", "team"] as const,
   activity: ["hospitality", "manage", "activity"] as const,
   catalog: ["hospitality", "manage", "catalog"] as const,
+  /** מידע פרטי להגעה של מתחם (2d) — נפרד מהקטלוג, לא נשמר בשום מטמון משותף */
+  arrival: (propertyId: string) => ["hospitality", "manage", "arrival", propertyId] as const,
 };

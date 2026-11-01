@@ -27,6 +27,8 @@ import {
 } from "../../api/catalog.functions";
 import { PROPERTY_TYPES, type CatalogProperty, type CatalogView } from "../../types/catalog";
 import { PROPERTY_LABELS, WHOLE_MEMBERS_ERROR } from "../../validation/catalog";
+import { ArrivalInfoCard } from "../details/ArrivalInfoCard";
+import { PropertyDetailSections } from "../details/PropertySections";
 import { ChoiceField, SelectField, TextAreaField, TextField } from "../lib/fields";
 import { manageKeys } from "../lib/query-keys";
 import { ConflictNotice, UnitSheet } from "./CatalogSheets";
@@ -35,6 +37,7 @@ import {
   ARCHIVED_FOR_MANAGER,
   GONE_PROPERTY,
   PROPERTY_FORM_KEYS,
+  PROPERTY_FORM_LABELS,
   activeUnits,
   canRentWhole,
   findProperty,
@@ -102,6 +105,7 @@ function PropertyEditor({ view, property }: { view: CatalogView; property: Catal
   const [notice, setNotice] = useState<Notice | null>(null);
   const [gone, setGone] = useState(false);
   const [wholeDirty, setWholeDirty] = useState(false);
+  const [arrivalDirty, setArrivalDirty] = useState(false);
   const [adding, setAdding] = useState(false);
 
   const errors = propertyFormErrors(form);
@@ -140,8 +144,8 @@ function PropertyEditor({ view, property }: { view: CatalogView; property: Catal
     setForm(merged.form);
     setRevision(latest.revision);
     setNotice({
-      changed: merged.remoteChanged.map((k) => PROPERTY_LABELS[k]),
-      dropped: merged.dropped.map((k) => PROPERTY_LABELS[k]),
+      changed: merged.remoteChanged.map((k) => PROPERTY_FORM_LABELS[k]),
+      dropped: merged.dropped.map((k) => PROPERTY_FORM_LABELS[k]),
       skipped,
     });
   };
@@ -329,6 +333,16 @@ function PropertyEditor({ view, property }: { view: CatalogView; property: Catal
           </Card>
         </fieldset>
 
+        <fieldset disabled={readOnly} className="flex flex-col gap-5">
+          <PropertyDetailSections
+            view={view}
+            form={form}
+            set={set}
+            errors={errors}
+            readOnly={readOnly}
+          />
+        </fieldset>
+
         <UnitsCard
           view={view}
           property={property}
@@ -416,8 +430,14 @@ function PropertyEditor({ view, property }: { view: CatalogView; property: Catal
             }}
           />
         )}
-        <LeaveGuard dirty={(dirty || wholeDirty) && !gone} what="המתחם" />
+        <LeaveGuard dirty={(dirty || wholeDirty || arrivalDirty) && !gone} what="המתחם" />
       </form>
+      {/* מחוץ לטופס של העמוד: שמירה משלו, ו-Enter בשדות הקודים לא שומר את העמוד */}
+      {!gone && (
+        <div className="mx-auto mt-5 flex max-w-3xl flex-col gap-5">
+          <ArrivalInfoCard propertyId={property.id} onDirty={setArrivalDirty} />
+        </div>
+      )}
       {adding && (
         <UnitSheet
           open
