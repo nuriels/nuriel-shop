@@ -367,3 +367,99 @@ describe("themes and the fixed credit", () => {
     expect(siteCopy("xx")).toBe(he);
   });
 });
+
+describe("4b: booking flow helpers", () => {
+  it("accepts only valid booking search params", async () => {
+    const { validateBookSearch } = await import("@/engines/hospitality/website/lib/booking");
+    expect(
+      validateBookSearch({
+        unit: "צימר-הגפן",
+        from: "2026-11-20",
+        to: "2026-11-22",
+        adults: "2",
+        children: 1,
+      }),
+    ).toEqual({ unit: "צימר-הגפן", from: "2026-11-20", to: "2026-11-22", adults: 2, children: 1 });
+    expect(validateBookSearch({ from: "20/11/2026", adults: 0, children: -1, unit: 5 })).toEqual(
+      {},
+    );
+    expect(validateBookSearch({ unit: "x".repeat(300) })).toEqual({});
+  });
+
+  it("the cancellation schedule comes from the server snapshot, with exact times", async () => {
+    const { scheduleLines } = await import("@/engines/hospitality/website/lib/format");
+    const lines = scheduleLines(
+      {
+        currency: "ILS",
+        timezone: "Asia/Jerusalem",
+        schedule: {
+          periods: [
+            { fee: 0, from: null, kind: "free", until: "2026-11-13T13:00:00Z" },
+            {
+              fee: 825,
+              from: "2026-11-13T13:00:00Z",
+              kind: "percent_total",
+              until: "2026-11-18T13:00:00Z",
+            },
+            { fee: 1650, from: "2026-11-18T13:00:00Z", kind: "full", until: null },
+          ],
+          no_show_fee: 1650,
+        },
+      },
+      siteCopy("he"),
+    );
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toMatch(/^ביטול ללא עלות עד 13\.11\.2026/);
+    expect(lines[0]).toContain("15:00");
+    expect(lines[1]).toContain("825");
+    expect(lines[3]).toMatch(/^אי-הגעה — /);
+  });
+
+  it("the guest email carries the manage link only for the guest, with a well-formed token", async () => {
+    const { guestManageUrl, renderBookingEmail } =
+      await import("@/engines/hospitality/outbox/templates");
+    const token = "a".repeat(64);
+    expect(guestManageUrl("guest", { manage_token: token }, "https://z.example")).toBe(
+      `https://z.example/stay/my-booking#t=${token}`,
+    );
+    expect(guestManageUrl("owner", { manage_token: token }, "https://z.example")).toBeNull();
+    expect(guestManageUrl("guest", { manage_token: "x" }, "https://z.example")).toBeNull();
+    expect(guestManageUrl("guest", {}, "https://z.example")).toBeNull();
+    expect(guestManageUrl("guest", { manage_token: token }, null)).toBeNull();
+    const email = renderBookingEmail(
+      "request_received",
+      "guest",
+      { booking_number: 1007, manage_token: token },
+      {
+        business: {
+          name: "צימרי הגליל",
+          phone: null,
+          email: null,
+          address: null,
+          checkInTime: null,
+          checkOutTime: null,
+        },
+        bookingUrl: null,
+        siteOrigin: "https://z.example",
+        escape: (s) => s,
+      },
+    );
+    expect(email?.html).toContain(`/stay/my-booking#t=${token}`);
+  });
+
+  it("legal drafts are filled with the business details and carry the draft banner", async () => {
+    const { LEGAL_DRAFT_BANNER, accessibilitySections, privacySections } =
+      await import("@/engines/hospitality/website/lib/legal");
+    expect(LEGAL_DRAFT_BANNER).toBe("טיוטה – טרם אושרה לפרסום (ממתינה לבדיקה משפטית)");
+    const s = site();
+    const privacy = privacySections(s)
+      .flatMap((x) => x.body)
+      .join(" ");
+    expect(privacy).toContain("צימרי הגליל");
+    expect(privacy).toContain("050-0000101");
+    expect(privacy).toContain("אין באתר עוגיות פרסום או מעקב");
+    const access = accessibilitySections(s).map((x) => x.title);
+    expect(access).toContain("נגישות המקום");
+    expect(access).toContain("פניות בנושא נגישות");
+  });
+});

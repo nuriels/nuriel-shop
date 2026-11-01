@@ -32,14 +32,8 @@ export function SiteLayout(): ReactNode {
           className="min-h-screen bg-background font-sans text-foreground antialiased"
           data-site-theme={theme.id}
         >
-          <a
-            href="#main"
-            className="sr-only z-[60] rounded-sm bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:start-3 focus:top-3"
-          >
-            {copy.nav.skip}
-          </a>
           <SiteHeader />
-          <main id="main" tabIndex={-1} className="pb-20 outline-none md:pb-0">
+          <main id="main-content" tabIndex={-1} className="pb-20 outline-none md:pb-0">
             <Outlet />
           </main>
           <SiteFooter />
@@ -127,6 +121,19 @@ function SiteHeader() {
               <span dir="ltr">{site.business.phone}</span>
             </a>
           )}
+          {site.booking_open && (
+            <Link
+              to="/stay/book"
+              className={cn(
+                "hidden h-10 items-center rounded-sm px-5 text-sm font-medium transition-colors sm:inline-flex",
+                overlay
+                  ? "bg-white text-[var(--site-deep)] hover:bg-white/90"
+                  : "bg-primary text-primary-foreground hover:opacity-90",
+              )}
+            >
+              {t.nav.book}
+            </Link>
+          )}
           <Sheet>
             <SheetTrigger
               className={cn(
@@ -147,6 +154,16 @@ function SiteHeader() {
                 {site.business.name}
               </SheetTitle>
               <nav aria-label={t.nav.menu} className="flex flex-col px-3 py-4">
+                {site.booking_open && (
+                  <SheetClose asChild>
+                    <Link
+                      to="/stay/book"
+                      className="mb-2 rounded-sm bg-primary px-3 py-3 text-center text-lg font-medium text-primary-foreground"
+                    >
+                      {t.nav.book}
+                    </Link>
+                  </SheetClose>
+                )}
                 <SheetClose asChild>
                   <Link to="/stay" className="rounded-sm px-3 py-3 text-lg hover:bg-muted">
                     {t.nav.home}
@@ -230,6 +247,14 @@ function SiteFooter() {
       <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs opacity-70 sm:flex-row sm:px-8">
           <p>{t.footer.rights(b.name, year)}</p>
+          <nav aria-label={t.footer.legal} className="flex gap-4">
+            <Link to="/stay/privacy" className="hover:underline">
+              {t.footer.privacy}
+            </Link>
+            <Link to="/stay/accessibility" className="hover:underline">
+              {t.footer.accessibility}
+            </Link>
+          </nav>
           <NurielCredit />
         </div>
       </div>
@@ -238,11 +263,16 @@ function SiteFooter() {
 }
 
 /** בנייד: חיוג, WhatsApp ומעבר ליחידות — תמיד בהישג יד */
+/** עמודים עם פעולה משלהם — בלי שורת הפעולות הקבועה */
+const NO_ACTION_BAR = /^\/stay\/(book|booking-received|my-booking)(\/|$)/;
+
 function MobileActionBar() {
   const t = useCopy();
   const { site } = useSite();
+  const { pathname } = useLocation();
   const b = site.business;
   const wa = b.whatsapp || b.phone;
+  if (NO_ACTION_BAR.test(pathname)) return null;
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md md:hidden">
       <div className="flex items-center gap-2">
@@ -266,13 +296,22 @@ function MobileActionBar() {
             <MessageCircle className="size-5" aria-hidden="true" />
           </a>
         )}
-        <Link
-          to="/stay"
-          hash="units"
-          className="inline-flex h-12 flex-1 items-center justify-center rounded-sm bg-primary text-base font-medium text-primary-foreground"
-        >
-          {t.hero.cta}
-        </Link>
+        {site.booking_open ? (
+          <Link
+            to="/stay/book"
+            className="inline-flex h-12 flex-1 items-center justify-center rounded-sm bg-primary text-base font-medium text-primary-foreground"
+          >
+            {t.nav.book}
+          </Link>
+        ) : (
+          <Link
+            to="/stay"
+            hash="units"
+            className="inline-flex h-12 flex-1 items-center justify-center rounded-sm bg-primary text-base font-medium text-primary-foreground"
+          >
+            {t.hero.cta}
+          </Link>
+        )}
       </div>
     </div>
   );

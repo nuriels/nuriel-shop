@@ -147,3 +147,67 @@ export function rulesLines(p: PublicProperty, t: SiteCopy): string[] {
   for (const line of (r.custom ?? []).map((x) => x.trim()).filter(Boolean)) out.push(line);
   return out;
 }
+
+/** "13.11.2026, 15:00" באזור הזמן של העסק */
+export function dateTimeText(iso: string, timeZone = "Asia/Jerusalem", locale = "he"): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(LOCALE_TAG[locale] ?? locale, {
+    timeZone,
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+/** "ו׳ 20.11 – א׳ 22.11.2026" */
+export function stayText(from: string, to: string, locale = "he"): string {
+  const f = (iso: string, year: boolean) =>
+    new Date(`${iso}T12:00:00Z`).toLocaleDateString(LOCALE_TAG[locale] ?? locale, {
+      weekday: "short",
+      day: "numeric",
+      month: "numeric",
+      ...(year ? { year: "numeric" } : {}),
+      timeZone: "UTC",
+    });
+  return `${f(from, false)} – ${f(to, true)}`;
+}
+
+/**
+ * לוח הביטול לאורח — מהחישוב של השרת (ה-snapshot שבהצעה / בהזמנה), עם תאריכים ושעות
+ * מדויקים: "ביטול ללא עלות עד …", "מ-… — דמי ביטול …", "אי-הגעה — …".
+ */
+export function scheduleLines(
+  policy: {
+    currency: string;
+    timezone: string;
+    schedule: {
+      periods: { from: string | null; until: string | null; fee: number; kind: string }[];
+      no_show_fee: number;
+    };
+  },
+  t: SiteCopy,
+): string[] {
+  const tz = policy.timezone || "Asia/Jerusalem";
+  const lines: string[] = [];
+  for (const p of policy.schedule.periods ?? []) {
+    const fee = Number(p.fee);
+    if (fee <= 0) {
+      lines.push(
+        p.until ? t.book.freeUntil(dateTimeText(p.until, tz, t.locale)) : t.book.freeAlways,
+      );
+      continue;
+    }
+    lines.push(
+      p.from
+        ? t.book.feeFrom(dateTimeText(p.from, tz, t.locale), money(fee, policy.currency, t.locale))
+        : `${t.terms.cancellation}: ${money(fee, policy.currency, t.locale)}`,
+    );
+  }
+  const noShow = Number(policy.schedule.no_show_fee);
+  if (noShow > 0) lines.push(t.book.noShow(money(noShow, policy.currency, t.locale)));
+  return lines;
+}

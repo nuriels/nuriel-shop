@@ -63,6 +63,11 @@ import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrade
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
 import { Route as PwaIconRouteImport } from './routes/pwa.$icon'
 import { Route as StayIndexRouteImport } from './routes/stay.index'
+import { Route as StayAccessibilityRouteImport } from './routes/stay.accessibility'
+import { Route as StayBookRouteImport } from './routes/stay.book'
+import { Route as StayBookingReceivedRouteImport } from './routes/stay.booking-received'
+import { Route as StayMyBookingRouteImport } from './routes/stay.my-booking'
+import { Route as StayPrivacyRouteImport } from './routes/stay.privacy'
 import { Route as UnsubscribeTokenRouteImport } from './routes/unsubscribe.$token'
 import { Route as AdminInventoryLabelsRouteImport } from './routes/admin_.inventory_.labels'
 import { Route as AdminInventorySerialsRouteImport } from './routes/admin_.inventory_.serials'
@@ -356,6 +361,31 @@ const StayIndexRoute = StayIndexRouteImport.update({
   path: '/',
   getParentRoute: () => StayRoute,
 } as any)
+const StayAccessibilityRoute = StayAccessibilityRouteImport.update({
+  id: '/accessibility',
+  path: '/accessibility',
+  getParentRoute: () => StayRoute,
+} as any)
+const StayBookRoute = StayBookRouteImport.update({
+  id: '/book',
+  path: '/book',
+  getParentRoute: () => StayRoute,
+} as any)
+const StayBookingReceivedRoute = StayBookingReceivedRouteImport.update({
+  id: '/booking-received',
+  path: '/booking-received',
+  getParentRoute: () => StayRoute,
+} as any)
+const StayMyBookingRoute = StayMyBookingRouteImport.update({
+  id: '/my-booking',
+  path: '/my-booking',
+  getParentRoute: () => StayRoute,
+} as any)
+const StayPrivacyRoute = StayPrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => StayRoute,
+} as any)
 const UnsubscribeTokenRoute = UnsubscribeTokenRouteImport.update({
   id: '/unsubscribe/$token',
   path: '/unsubscribe/$token',
@@ -524,6 +554,11 @@ export interface FileRoutesByFullPath {
   '/platform/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/stay/accessibility': typeof StayAccessibilityRoute
+  '/stay/book': typeof StayBookRoute
+  '/stay/booking-received': typeof StayBookingReceivedRoute
+  '/stay/my-booking': typeof StayMyBookingRoute
+  '/stay/privacy': typeof StayPrivacyRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/manage/': typeof ManageIndexRoute
   '/stay/': typeof StayIndexRoute
@@ -600,6 +635,11 @@ export interface FileRoutesByTo {
   '/platform/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/stay/accessibility': typeof StayAccessibilityRoute
+  '/stay/book': typeof StayBookRoute
+  '/stay/booking-received': typeof StayBookingReceivedRoute
+  '/stay/my-booking': typeof StayMyBookingRoute
+  '/stay/privacy': typeof StayPrivacyRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/manage': typeof ManageIndexRoute
   '/stay': typeof StayIndexRoute
@@ -679,6 +719,11 @@ export interface FileRoutesById {
   '/platform_/upgrades': typeof PlatformUpgradesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
+  '/stay/accessibility': typeof StayAccessibilityRoute
+  '/stay/book': typeof StayBookRoute
+  '/stay/booking-received': typeof StayBookingReceivedRoute
+  '/stay/my-booking': typeof StayMyBookingRoute
+  '/stay/privacy': typeof StayPrivacyRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/manage/': typeof ManageIndexRoute
   '/stay/': typeof StayIndexRoute
@@ -759,6 +804,11 @@ export interface FileRouteTypes {
     | '/platform/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/stay/accessibility'
+    | '/stay/book'
+    | '/stay/booking-received'
+    | '/stay/my-booking'
+    | '/stay/privacy'
     | '/unsubscribe/$token'
     | '/manage/'
     | '/stay/'
@@ -835,6 +885,11 @@ export interface FileRouteTypes {
     | '/platform/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/stay/accessibility'
+    | '/stay/book'
+    | '/stay/booking-received'
+    | '/stay/my-booking'
+    | '/stay/privacy'
     | '/unsubscribe/$token'
     | '/manage'
     | '/stay'
@@ -913,6 +968,11 @@ export interface FileRouteTypes {
     | '/platform_/upgrades'
     | '/product/$productId'
     | '/pwa/$icon'
+    | '/stay/accessibility'
+    | '/stay/book'
+    | '/stay/booking-received'
+    | '/stay/my-booking'
+    | '/stay/privacy'
     | '/unsubscribe/$token'
     | '/manage/'
     | '/stay/'
@@ -1380,6 +1440,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StayIndexRouteImport
       parentRoute: typeof StayRoute
     }
+    '/stay/accessibility': {
+      id: '/stay/accessibility'
+      path: '/accessibility'
+      fullPath: '/stay/accessibility'
+      preLoaderRoute: typeof StayAccessibilityRouteImport
+      parentRoute: typeof StayRoute
+    }
+    '/stay/book': {
+      id: '/stay/book'
+      path: '/book'
+      fullPath: '/stay/book'
+      preLoaderRoute: typeof StayBookRouteImport
+      parentRoute: typeof StayRoute
+    }
+    '/stay/booking-received': {
+      id: '/stay/booking-received'
+      path: '/booking-received'
+      fullPath: '/stay/booking-received'
+      preLoaderRoute: typeof StayBookingReceivedRouteImport
+      parentRoute: typeof StayRoute
+    }
+    '/stay/my-booking': {
+      id: '/stay/my-booking'
+      path: '/my-booking'
+      fullPath: '/stay/my-booking'
+      preLoaderRoute: typeof StayMyBookingRouteImport
+      parentRoute: typeof StayRoute
+    }
+    '/stay/privacy': {
+      id: '/stay/privacy'
+      path: '/privacy'
+      fullPath: '/stay/privacy'
+      preLoaderRoute: typeof StayPrivacyRouteImport
+      parentRoute: typeof StayRoute
+    }
     '/unsubscribe/$token': {
       id: '/unsubscribe/$token'
       path: '/unsubscribe/$token'
@@ -1579,11 +1674,21 @@ const ManageRouteWithChildren =
   ManageRoute._addFileChildren(ManageRouteChildren)
 
 interface StayRouteChildren {
+  StayAccessibilityRoute: typeof StayAccessibilityRoute
+  StayBookRoute: typeof StayBookRoute
+  StayBookingReceivedRoute: typeof StayBookingReceivedRoute
+  StayMyBookingRoute: typeof StayMyBookingRoute
+  StayPrivacyRoute: typeof StayPrivacyRoute
   StayIndexRoute: typeof StayIndexRoute
   StayUnitsUnitSlugRoute: typeof StayUnitsUnitSlugRoute
 }
 
 const StayRouteChildren: StayRouteChildren = {
+  StayAccessibilityRoute: StayAccessibilityRoute,
+  StayBookRoute: StayBookRoute,
+  StayBookingReceivedRoute: StayBookingReceivedRoute,
+  StayMyBookingRoute: StayMyBookingRoute,
+  StayPrivacyRoute: StayPrivacyRoute,
   StayIndexRoute: StayIndexRoute,
   StayUnitsUnitSlugRoute: StayUnitsUnitSlugRoute,
 }

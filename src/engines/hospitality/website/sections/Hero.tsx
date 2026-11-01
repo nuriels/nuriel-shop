@@ -45,20 +45,34 @@ export function Hero() {
           </p>
         )}
         <div className="mt-9 flex flex-wrap items-center gap-3">
+          {site.booking_open ? (
+            <Link
+              to="/stay/book"
+              className="inline-flex h-12 items-center justify-center rounded-sm bg-white px-8 text-base font-medium text-[var(--site-deep)] transition-colors hover:bg-white/90"
+            >
+              {t.hero.book}
+            </Link>
+          ) : null}
           <Link
             to="/stay"
             hash="units"
-            className="inline-flex h-12 items-center justify-center rounded-sm bg-white px-8 text-base font-medium text-[var(--site-deep)] transition-colors hover:bg-white/90"
+            className={
+              site.booking_open
+                ? "inline-flex h-12 items-center justify-center rounded-sm border border-white/60 px-8 text-base backdrop-blur-[2px] transition-colors hover:bg-white/10"
+                : "inline-flex h-12 items-center justify-center rounded-sm bg-white px-8 text-base font-medium text-[var(--site-deep)] transition-colors hover:bg-white/90"
+            }
           >
             {t.hero.cta}
           </Link>
-          <Link
-            to="/stay"
-            hash="contact"
-            className="inline-flex h-12 items-center justify-center rounded-sm border border-white/60 px-8 text-base backdrop-blur-[2px] transition-colors hover:bg-white/10"
-          >
-            {t.hero.contact}
-          </Link>
+          {!site.booking_open && (
+            <Link
+              to="/stay"
+              hash="contact"
+              className="inline-flex h-12 items-center justify-center rounded-sm border border-white/60 px-8 text-base backdrop-blur-[2px] transition-colors hover:bg-white/10"
+            >
+              {t.hero.contact}
+            </Link>
+          )}
         </div>
       </div>
       <Link

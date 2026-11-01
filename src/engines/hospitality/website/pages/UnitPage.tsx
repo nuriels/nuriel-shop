@@ -4,12 +4,12 @@ import { Link, useParams } from "@tanstack/react-router";
 import { ArrowRight, Bath, BedDouble, DoorOpen, Images, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { PublicUnit } from "../../types/website";
-import { AvailabilityCalendar } from "../components/AvailabilityCalendar";
+import { AvailabilityCalendar, type DateRange } from "../components/AvailabilityCalendar";
 import { Lightbox } from "../components/Lightbox";
 import { Photo } from "../components/Photo";
 import { PriceFrom } from "../components/PriceFrom";
 import { useCopy } from "../copy";
-import { findUnit } from "../lib/format";
+import { findUnit, stayText } from "../lib/format";
 import { unitMedia } from "../lib/media";
 import { useSite } from "../lib/site-context";
 import { AmenityGroups } from "../sections/Amenities";
@@ -28,6 +28,7 @@ export function UnitPage() {
   const media = unitMedia(unit, site);
   const images = media.filter((m) => m.kind === "image");
   const [open, setOpen] = useState<number | null>(null);
+  const [range, setRange] = useState<DateRange>({ from: null, to: null });
   const members = site.units.filter((u) => unit.member_ids?.includes(u.id));
   const type =
     unit.kind === "whole_property"
@@ -209,7 +210,35 @@ export function UnitPage() {
             </ul>
             <div className="mt-6 border-t border-border pt-6">
               <h2 className="mb-2 text-sm font-medium">{t.availability.title}</h2>
-              <AvailabilityCalendar unitId={unit.id} today={site.today} months={1} />
+              <AvailabilityCalendar
+                unitId={unit.id}
+                today={site.today}
+                months={1}
+                {...(site.booking_open
+                  ? { range, onSelect: setRange, minNights: unit.min_nights }
+                  : {})}
+              />
+              {site.booking_open && (
+                <>
+                  <p className="mt-3 text-sm text-muted-foreground" aria-live="polite">
+                    {!range.from
+                      ? t.book.pickArrival
+                      : !range.to
+                        ? t.book.pickDeparture
+                        : stayText(range.from, range.to, t.locale)}
+                  </p>
+                  <Link
+                    to="/stay/book"
+                    search={{
+                      unit: unit.slug,
+                      ...(range.from && range.to ? { from: range.from, to: range.to } : {}),
+                    }}
+                    className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-sm bg-primary text-base font-medium text-primary-foreground hover:opacity-90"
+                  >
+                    {range.from && range.to ? t.unitPage.priceAndBook : t.nav.book}
+                  </Link>
+                </>
+              )}
               <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
                 {t.availability.note}
               </p>

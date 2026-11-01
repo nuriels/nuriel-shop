@@ -211,7 +211,12 @@ describe("architecture: dependency boundaries", () => {
       "src/routes/manage.units_.$unitId.tsx",
       "src/routes/manage_.login.tsx",
       "src/routes/platform_.hospitality.tsx",
+      "src/routes/stay.accessibility.tsx",
+      "src/routes/stay.book.tsx",
+      "src/routes/stay.booking-received.tsx",
       "src/routes/stay.index.tsx",
+      "src/routes/stay.my-booking.tsx",
+      "src/routes/stay.privacy.tsx",
       "src/routes/stay.tsx",
       "src/routes/stay.units.$unitSlug.tsx",
     ]);

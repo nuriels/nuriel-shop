@@ -1,5 +1,7 @@
 // האתר הציבורי של העסק (Stage 4) — מה שהאתר מקבל מהשרת (public_site, מיגרציה 19).
 // רק מידע ציבורי: בלי פרטי אורחים, קודי כניסה, הערות פנימיות או כללי מחיר.
+import type { ArrivalValues } from "./catalog";
+import type { GuestBookingView } from "./domain";
 export interface PublicMedia {
   id: string;
   kind: "image" | "video" | "embed";
@@ -153,3 +155,19 @@ export type RawPublicSite = Omit<PublicSite, "gallery" | "properties" | "units">
   properties: (Omit<PublicProperty, "media"> & { media: RawPublicMedia[] })[];
   units: (Omit<PublicUnit, "media"> & { media: RawPublicMedia[] })[];
 };
+
+/** מידע ההגעה לאורח מורשה (guest_arrival_info): רק בהזמנה מאושרת, מ-48 שעות לפני ההגעה ועד היציאה */
+export interface GuestArrival {
+  available: boolean;
+  reason?: "not_confirmed" | "too_early" | "ended";
+  available_from?: string;
+  available_until?: string;
+  property?: ArrivalValues | null;
+  units?: { name: string; info: ArrivalValues | null }[];
+}
+
+/** עמוד "ההזמנה שלי" (קישור מאובטח) */
+export interface SiteGuestBooking {
+  booking: GuestBookingView;
+  arrival: GuestArrival | null;
+}

@@ -150,6 +150,7 @@ async function sendDue(): Promise<void> {
           business: ctx.business,
           bookingUrl:
             ctx.origin && n.booking_id ? `${ctx.origin}/manage/bookings/${n.booking_id}` : null,
+          siteOrigin: ctx.origin,
           escape: escapeHtml,
         });
         if (!email) {

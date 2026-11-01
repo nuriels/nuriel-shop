@@ -113,23 +113,109 @@ booking requests from guests.
 `scripts/preview/hospitality-demo.mjs` opens the site and booking requests for "צימרי הגליל"
 only. URL: `http://demo-zimmer.shop.localhost:3100/`.
 
-## 4b — booking flow (next)
+## 4b — booking requests from the site (built)
 
-- Booking page `/stay/book`: unit, dates (calendar with busy nights), guests.
-- Server quote showing the nights, the total and the cancellation policy with its hash.
-- Guest form (name, phone, email, requests) with explicit acceptance of the terms.
-- `request_booking` with an idempotency key. Double bookings are prevented in the
-  database (EXCLUDE).
-- A "request received" page.
-- A guest page through the secure link (`/stay/my-booking#t=…`): view the booking, ask to
-  cancel with the quote, and see arrival info inside its window.
-- The link is added to the guest emails.
-- Rate limit on public requests.
+### Pages
 
-## 4c — legal drafts and switches (next)
+- **Booking page `/stay/book`** (also reachable as `?unit=&from=&to=&adults=&children=`):
+  1. **Unit:** cards with photo, capacity and "from".
+  2. **Dates:** calendar with busy nights. A busy night cannot be the arrival or inside the
+     stay; it can be the departure day. The minimum nights is respected.
+  3. **Guests:** steppers, limited by the unit's capacity, maximum adults / children and
+     children's age.
+  - **Summary (server quote):** nights grouped by price, discount, total, deposit, the
+    exact cancellation schedule from the server snapshot (dates and times in the
+    business's time zone), the owner's policy text and house rules, and "sending a request
+    does not charge you".
+  - **Guest form:** name, mobile, email, special requests; terms acceptance (required),
+    marketing consent (optional); privacy link.
+  - **Sending:** `request_booking` with the quote's `policy_hash`. If the terms changed in
+    between, the database refuses and the page reloads the quote and asks again.
+- **Request received** `/stay/booking-received#t=…`:
+  - number, unit, dates, guests, total;
+  - "the business answers within N hours" (or "confirmed" in instant mode);
+  - a button to the booking page.
+- **My booking** `/stay/my-booking#t=…`:
+  - status, details, the answer deadline;
+  - the cancellation terms saved with the booking;
+  - **cancel / withdraw:**
+    - the quote is shown first (fee, refund, "sent to the business" or "cancelled
+      now");
+    - the reason is optional;
+  - **arrival info** (codes, Wi-Fi) only when confirmed, from 48 hours before arrival,
+    until departure;
+  - business contact.
+- **Entry points:**
+  - the hero's main button, a "להזמנה" button in the header, the phone menu and the phone
+    action bar (only when bookings are open);
+  - the unit page calendar: select dates, then "למחיר ולהזמנה".
+- **Bookings closed:** when the bookings flag or the plan is off, the booking page shows
+  "ההזמנות באתר עדיין לא פתוחות" with the phone and WhatsApp.
 
-- `/stay/privacy` and `/stay/accessibility`, editable templates, with the banner
-  "טיוטה – טרם אושרה לפרסום (ממתינה לבדיקה משפטית)". Not indexed.
+### Security and correctness
+
+- **Price, availability and terms:** come only from the database at sending time:
+  - `_quote` checks availability, minimum nights and capacity;
+  - the `EXCLUDE` constraint makes a double booking impossible, even with two guests
+    pressing at once;
+  - `policy_hash` prevents agreeing to terms that changed.
+- **Double sending:** one idempotency key per attempt. A double click, a network retry or
+  a refresh returns the same request; a changed choice starts a new key.
+- **Rate limits:**
+  - per IP (in-memory): quotes 120 / 10 min, requests 6 / hour, booking views 60 / 10 min,
+    cancellation quotes 30 / 10 min, cancellations 6 / hour;
+  - on top of the database limit of 2 open requests per contact.
+- **Secure link:**
+  - the token (128 bits) exists only in the guest's email and in the URL fragment (`#t=`),
+    which is not sent to the server with the page request, not logged and not passed in
+    `Referer`;
+  - the database stores only its hash; it expires 30 days after departure;
+  - only bookings of this business are reachable;
+  - a wrong token gets the same answer as a missing booking.
+- **Guest privacy:** the guest pages show only that booking. Nothing about other guests,
+  staff or internal notes.
+
+### Emails (2k worker)
+
+- The guest's first email ("request received" / "booking confirmed") now carries a
+  "לצפייה וניהול ההזמנה" button: `<site>/stay/my-booking#t=<token>`.
+- The worker drops the token from the outbox once sent (existing behaviour).
+- The owner keeps the management-area link.
+
+### Server functions
+
+`api/website.functions.ts`: `hospitalitySiteQuote`, `hospitalitySiteRequestBooking`
+(wakes the email worker), `hospitalitySiteBooking` (booking + arrival info),
+`hospitalitySiteCancellationQuote`, `hospitalitySiteRequestCancellation`.
+
+- They reuse the Stage 1 database functions: no new migration.
+- The Stage 1 `server/public.functions.ts` stays as it is; the E2E tests address it by
+  file.
+
+### Legal drafts (built with 4b, linked from the form and the footer)
+
+- `/stay/privacy` and `/stay/accessibility` are templates filled with the business's
+  details: name, contact, accessibility amenities.
+- Each carries the banner "טיוטה – טרם אושרה לפרסום (ממתינה לבדיקה משפטית)".
+- They are not indexed.
+- The text lives in `website/lib/legal.ts`. Owner editing comes later (settings / Stage 5).
+
+### Verified locally (browser)
+
+1. Home → "בדיקת זמינות והזמנה".
+2. Unit, dates and guests → quote (₪1,560 for 2 nights, exact cancellation schedule).
+3. Form: refused without accepting the terms; sent once accepted → request #1007.
+4. Request received page → my booking.
+5. Withdraw (no fee) → "בוטלה".
+6. Emails sent:
+   - to the guest, with the personal link;
+   - to the business;
+   - "request withdrawn" and "booking cancelled".
+
+Done at 1440 px and 390 px, with no horizontal scroll and no console errors.
+
+## 4c — switches and links (next)
+
 - Platform tab switches for the site and booking flags of a business.
 - A "view my site" link in the management area.
 

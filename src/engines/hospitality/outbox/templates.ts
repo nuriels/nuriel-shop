@@ -31,6 +31,8 @@ export interface EmailContext {
   business: EmailBusiness;
   /** לעסק: קישור להזמנה באזור הניהול (null — אין כתובת) */
   bookingUrl: string | null;
+  /** לאורח: הכתובת של האתר — קישור "ניהול ההזמנה" נבנה מהטוקן שבמייל (null — אין כתובת) */
+  siteOrigin?: string | null;
   escape: (s: string) => string;
 }
 
@@ -203,10 +205,15 @@ export function renderBookingEmail(
         )
         .join("")}</table>`
     : "";
+  const manageUrl = guestManageUrl(recipient, p, ctx.siteOrigin ?? null);
+  const link = (href: string, label: string) =>
+    `<p style="margin:20px 0"><a href="${e(href)}" style="background:#1f3d2b;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">${e(label)}</a></p>`;
   const button =
     recipient === "owner" && ctx.bookingUrl
-      ? `<p style="margin:20px 0"><a href="${e(ctx.bookingUrl)}" style="background:#1f3d2b;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">לפתיחת ההזמנה</a></p>`
-      : "";
+      ? link(ctx.bookingUrl, "לפתיחת ההזמנה")
+      : manageUrl
+        ? `${link(manageUrl, "לצפייה וניהול ההזמנה")}<p style="margin:0 0 8px;font-size:12px;color:#777">הקישור אישי — אין להעביר אותו לאחרים. הוא בתוקף עד 30 יום אחרי העזיבה.</p>`
+        : "";
   const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;background:#f5f5f2;font-family:Arial,Helvetica,sans-serif;color:#1d1d1b">
 <div dir="rtl" style="max-width:560px;margin:0 auto;padding:24px 16px;text-align:right">
@@ -220,4 +227,18 @@ ${copy.outro ? `<p style="margin:12px 0 0;font-size:14px;color:#444;line-height:
 <p style="margin:12px 0 0;font-size:12px;color:#888;text-align:center">נשלח ממערכת ההזמנות של ${e(ctx.business.name)}</p>
 </div></body></html>`;
   return { subject: copy.subject, html };
+}
+
+/**
+ * קישור "ניהול ההזמנה" לאורח (Stage 4b): רק במייל הראשון שלו, כשהטוקן בתור. הטוקן אחרי #
+ * — לא נשלח לשרת בבקשת העמוד, לא נשמר ביומני השרת ולא עובר ב-Referer.
+ */
+export function guestManageUrl(
+  recipient: "guest" | "owner",
+  p: EmailPayload,
+  origin: string | null,
+): string | null {
+  const token = typeof p["manage_token"] === "string" ? p["manage_token"] : null;
+  if (recipient !== "guest" || !origin || !token || !/^[0-9a-f]{64}$/.test(token)) return null;
+  return `${origin}/stay/my-booking#t=${token}`;
 }
