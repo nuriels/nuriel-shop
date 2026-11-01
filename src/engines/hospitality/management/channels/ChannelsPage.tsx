@@ -17,6 +17,8 @@ import {
 import type { ChannelCalendar, ChannelKind, ChannelUnit } from "../../types/channels";
 import { errorText } from "../catalog/refresh";
 import { formatDate, formatDateTime } from "../lib/format";
+import { planFeatureOpen } from "../lib/plan-features";
+import { PremiumNotice } from "../lib/PremiumNotice";
 import { manageKeys } from "../lib/query-keys";
 import { useManagement } from "../shell/management-context";
 
@@ -32,6 +34,8 @@ const CHANNEL_LABELS: Record<ChannelKind, string> = {
 export function ChannelsPage() {
   const ctx = useManagement();
   const query = useQuery({ queryKey: KEY, queryFn: () => hospitalityChannels() });
+  // שלב E3: בחבילה בלי סנכרון — אין הוספה; מה שכבר מחובר ממשיך (ומוצג)
+  const locked = !planFeatureOpen(ctx, "channels");
   if (!ctx.permissions["bookings"]) return <p className="p-4">אין לכם הרשאה לנהל ערוצי הזמנה.</p>;
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
@@ -45,6 +49,7 @@ export function ChannelsPage() {
           את שלהם כל 30 דקות. בימים עמוסים כדאי לסנכרן ידנית ולבדוק "התנגשויות".
         </p>
       </div>
+      {locked && <PremiumNotice feature="סנכרון יומנים עם Airbnb / Booking.com" />}
       {query.isError ? (
         <p role="alert" className="rounded-md border border-destructive/40 p-4 text-destructive">
           {errorText(query.error)}
@@ -54,13 +59,13 @@ export function ChannelsPage() {
       ) : query.data.length === 0 ? (
         <p className="text-muted-foreground">עוד אין יחידות.</p>
       ) : (
-        query.data.map((u) => <UnitChannels key={u.unit_id} unit={u} />)
+        query.data.map((u) => <UnitChannels key={u.unit_id} unit={u} locked={locked} />)
       )}
     </div>
   );
 }
 
-function UnitChannels({ unit }: { unit: ChannelUnit }) {
+function UnitChannels({ unit, locked }: { unit: ChannelUnit; locked: boolean }) {
   const qc = useQueryClient();
   const refresh = () => void qc.invalidateQueries({ queryKey: KEY });
   const [adding, setAdding] = useState(false);
@@ -75,10 +80,10 @@ function UnitChannels({ unit }: { unit: ChannelUnit }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5 text-sm">
-        <ExportLink unit={unit} onChange={refresh} />
+        <ExportLink unit={unit} locked={locked} onChange={refresh} />
         <section className="flex flex-col gap-2" aria-label={`יומנים לייבוא — ${unit.name}`}>
           <h3 className="font-medium">יומנים מהערוצים (ייבוא)</h3>
-          {unit.calendars.length === 0 && !adding && (
+          {unit.calendars.length === 0 && !adding && !locked && (
             <p className="text-muted-foreground">
               בכל ערוץ יש "ייצוא יומן" / "Export calendar" — מעתיקים משם את הקישור ומוסיפים כאן.
             </p>
@@ -96,6 +101,7 @@ function UnitChannels({ unit }: { unit: ChannelUnit }) {
               onCancel={() => setAdding(false)}
             />
           ) : (
+            !locked &&
             unit.calendars.length < 5 && (
               <Button
                 type="button"
@@ -115,7 +121,15 @@ function UnitChannels({ unit }: { unit: ChannelUnit }) {
   );
 }
 
-function ExportLink({ unit, onChange }: { unit: ChannelUnit; onChange: () => void }) {
+function ExportLink({
+  unit,
+  locked,
+  onChange,
+}: {
+  unit: ChannelUnit;
+  locked: boolean;
+  onChange: () => void;
+}) {
   const url = unit.feed_token ? `${window.location.origin}/ical/${unit.feed_token}` : null;
   const make = useMutation({
     mutationFn: (rotate: boolean) =>
@@ -176,6 +190,8 @@ function ExportLink({ unit, onChange }: { unit: ChannelUnit; onChange: () => voi
             אורחים. מי שיש לו את הקישור רואה את הזמינות; אם דלף — "קישור חדש".
           </p>
         </>
+      ) : locked ? (
+        <p className="text-muted-foreground">הקישור לייצוא זמין בחבילת פרימיום.</p>
       ) : (
         <Button
           type="button"

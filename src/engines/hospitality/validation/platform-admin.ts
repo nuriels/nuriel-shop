@@ -1,6 +1,6 @@
 // "ניהול Hospitality" (P1): בדיקת הקלט — אותן הודעות כמו המסד (מיגרציה 15). הכתובת עצמה
 // (מילים שמורות, כתובת תפוסה) נבדקת במסד ב-platform_slug_problem.
-import type { SiteFlagKey } from "../types/platform-admin";
+import type { SavePlanInput, SiteFlagKey } from "../types/platform-admin";
 import { InputError, uuid } from "./input";
 import { isThemeId, type ThemeId } from "../website/design/schema";
 
@@ -106,4 +106,52 @@ export function parseSetFlag(input: Raw): {
   const siteId =
     i["siteId"] === null || i["siteId"] === undefined ? null : uuid(i["siteId"], "האתר");
   return { siteId, key, enabled: i["enabled"] };
+}
+
+// ---- שלב E3: עריכת חבילה (אותם כללים כמו admin_save_plan במסד) ----
+
+const limitOf = (v: unknown, label: string, max: number): number | null => {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > max)
+    throw new InputError(`${label}: מספר שלם 1 עד ${max}, או ריק = ללא הגבלה`);
+  return v;
+};
+const moneyOf = (v: unknown, label: string): number | null => {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 100000)
+    throw new InputError(`${label}: 0 עד 100,000`);
+  return Math.round(v * 100) / 100;
+};
+
+export function parseSavePlan(input: Raw): SavePlanInput {
+  const i = input ?? {};
+  const code = text(i["code"]);
+  if (!/^[a-z][a-z0-9_]{1,30}$/.test(code)) throw new InputError("חבילה לא מוכרת");
+  const name = text(i["name"]).replace(/\s+/g, " ");
+  if (name.length < 1 || name.length > 60) throw new InputError("שם החבילה: 1 עד 60 תווים");
+  const tagline = text(i["tagline"]).replace(/\s+/g, " ");
+  if (tagline.length > 160) throw new InputError("המשפט: עד 160 תווים");
+  const rawList = Array.isArray(i["highlights"]) ? (i["highlights"] as unknown[]) : [];
+  const highlights = rawList.map((h) => text(h).replace(/\s+/g, " ")).filter((h) => h !== "");
+  if (highlights.length > 20 || highlights.some((h) => h.length > 80))
+    throw new InputError("עד 20 תכונות, כל אחת עד 80 תווים");
+  const f = (i["features"] ?? {}) as Record<string, unknown>;
+  return {
+    code,
+    name,
+    tagline,
+    price_monthly: moneyOf(i["price_monthly"], "מחיר חודשי"),
+    setup_fee: moneyOf(i["setup_fee"], "דמי הקמה"),
+    max_units: limitOf(i["max_units"], "יחידות", 9999),
+    max_properties: limitOf(i["max_properties"], "מתחמים", 9999),
+    max_media: limitOf(i["max_media"], "תמונות לגלריה", 60),
+    max_managers: limitOf(i["max_managers"], "מנהלים", 9999),
+    features: {
+      channels: f["channels"] === true,
+      room_types: f["room_types"] === true,
+      promotions: f["promotions"] === true,
+    },
+    highlights,
+    is_published: i["is_published"] === true,
+  };
 }

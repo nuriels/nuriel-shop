@@ -65,6 +65,7 @@ M26=20261103100000_hosp_site_theme
 M27=20261103110000_hosp_channel_alerts
 M28=20261103120000_hosp_phone_payments
 M29=20261104090000_portal_business_details
+M30=20261104100000_hosp_plans_pricing
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -85,6 +86,33 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- E3: plans with prices, setup fee, details and enforced limits (migration 30) ----------
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M30" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M30"
+down "$M30"
+expect "plan limits, plan editing and the new columns are gone; premium removed; placeholders back (no prices)" \
+  "SELECT to_regprocedure('hospitality.admin_save_plan(text,jsonb)') IS NULL
+      AND to_regprocedure('hospitality.public_plans()') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname LIKE '%plan_guard')
+      AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality'
+                        AND table_name = 'plans' AND column_name IN ('setup_fee', 'max_properties', 'max_media'))
+      AND (SELECT count(*) FROM hospitality.plans WHERE NOT is_published AND price_monthly IS NULL) = 4
+      AND (SELECT max_units = 5 AND max_managers = 2 FROM hospitality.plans WHERE code = 'basic')"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m29.sql"
+schema_dump "$SCHEMA_DIR/after-m30-down.sql"
+if diff -q "$SCHEMA_DIR/m29.sql" "$SCHEMA_DIR/after-m30-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 29, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 29:"; diff "$SCHEMA_DIR/m29.sql" "$SCHEMA_DIR/after-m30-down.sql" | head -20; exit 1
+fi
 
 # ---------- E1: business details when opening a store from the portal (migration 29) ----------
 psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
@@ -732,7 +760,7 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1 … $M29"
+echo "re-apply: $M1 … $M30"
 up "$M1"
 up "$M2"
 up "$M3"
@@ -762,6 +790,7 @@ up "$M26"
 up "$M27"
 up "$M28"
 up "$M29"
+up "$M30"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -780,7 +809,7 @@ expect "management foundation back: seat trigger, Ecommerce guard branch, no sta
   "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hospitality_admin_seat_guard')
      AND (SELECT prosrc LIKE '%site_type <> ''ecommerce''%' FROM pg_proc WHERE oid = 'public.user_roles_admin_seat_guard()'::regprocedure)
      AND NOT has_table_privilege('authenticated', 'hospitality.notifications', 'SELECT')
-     AND (SELECT max_managers FROM hospitality.plans WHERE code = 'basic') = 2"
+     AND (SELECT max_managers FROM hospitality.plans WHERE code = 'trial') = 3"
 expect "settings and team back: guard trigger, action log, no direct settings writes, 13 permissions (12 + catalog.owner of migration 10)" \
   "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hospitality_admin_row_guard')
      AND to_regclass('hospitality.audit_log') IS NOT NULL
@@ -793,8 +822,9 @@ expect "catalog back: functions, types, revision, no direct staff writes, 13 per
 expect "site identity back: public name only, anon may call it" \
   "SELECT has_function_privilege('anon', 'hospitality.site_identity()', 'EXECUTE')
      AND (SELECT prosecdef FROM pg_proc WHERE oid = 'hospitality.site_identity()'::regprocedure)"
-expect "plans back (4 unpublished placeholders), unit limit and terms guard active" \
-  "SELECT (SELECT count(*) FROM hospitality.plans WHERE NOT is_published AND price_monthly IS NULL) = 4
+expect "plans back (3 unpublished placeholders + basic and premium with prices, stage E3), unit limit and terms guard active" \
+  "SELECT (SELECT count(*) FROM hospitality.plans WHERE NOT is_published AND price_monthly IS NULL) = 3
+     AND (SELECT count(*) FROM hospitality.plans WHERE is_published AND price_monthly IN (200, 400)) = 2
      AND (SELECT count(*) FROM pg_trigger WHERE tgname IN ('units_limit_guard', 'bookings_terms_guard')) = 2"
 expect "booking engine back: EXCLUDE constraint, deferred integrity checks, guest functions (booking requests: app server only, migration 25)" \
   "SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unit_occupancy_no_overlap')
@@ -805,7 +835,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 29 → 1 and re-apply 1 → 29 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 30 → 1 and re-apply 1 → 30 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi

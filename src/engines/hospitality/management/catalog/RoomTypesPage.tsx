@@ -29,12 +29,17 @@ import {
 import type { CatalogProperty, CatalogUnit } from "../../types/catalog";
 import type { PublicRoomType } from "../../types/website";
 import { manageKeys } from "../lib/query-keys";
+import { planFeatureOpen } from "../lib/plan-features";
+import { PremiumNotice } from "../lib/PremiumNotice";
+import { useManagement } from "../shell/management-context";
 import { errorText } from "./refresh";
 
 const TYPES_KEY = [...manageKeys.all, "room-types"] as const;
 
 export function RoomTypesPage() {
   const qc = useQueryClient();
+  // שלב E3: סוגי חדרים — בחבילת פרימיום (מה שכבר קיים נשאר ומוצג)
+  const locked = !planFeatureOpen(useManagement(), "room_types");
   const catalog = useQuery({ queryKey: manageKeys.catalog, queryFn: () => hospitalityCatalog() });
   const types = useQuery({ queryKey: TYPES_KEY, queryFn: () => hospitalityRoomTypes() });
   const refresh = () => {
@@ -58,6 +63,7 @@ export function RoomTypesPage() {
           אחד, והזמנה נרשמת לחדר פנוי מהסוג. צימרים ווילות לא צריכים סוגים.
         </p>
       </div>
+      {locked && <PremiumNotice feature="סוגי חדרים" />}
       {catalog.isError || types.isError ? (
         <p role="alert" className="rounded-md border border-destructive/40 p-4 text-destructive">
           {errorText(catalog.error ?? types.error)}
@@ -73,6 +79,7 @@ export function RoomTypesPage() {
             property={p}
             types={types.data.filter((t) => t.property_id === p.id)}
             showName={properties.length > 1}
+            locked={locked}
             onChange={refresh}
           />
         ))
@@ -85,15 +92,17 @@ function PropertyTypes({
   property,
   types,
   showName,
+  locked,
   onChange,
 }: {
   property: CatalogProperty;
   types: PublicRoomType[];
   showName: boolean;
+  locked: boolean;
   onChange: () => void;
 }) {
   const rooms = property.units.filter((u) => u.kind !== "whole_property");
-  const [adding, setAdding] = useState(types.length === 0);
+  const [adding, setAdding] = useState(types.length === 0 && !locked);
   return (
     <section className="flex flex-col gap-4" aria-label={property.name}>
       {showName && <h2 className="text-lg font-semibold">{property.name}</h2>}
@@ -109,7 +118,7 @@ function PropertyTypes({
           }}
           onCancel={() => setAdding(false)}
         />
-      ) : (
+      ) : locked ? null : (
         <Button
           type="button"
           variant="outline"

@@ -7,11 +7,13 @@ import type {
   HospitalitySiteRow,
   OpenSiteResult,
   OwnerResult,
+  PlanOption,
   PlatformFlags,
   PlatformHospitalityView,
 } from "../types/platform-admin";
 import {
   parseOpenSite,
+  parseSavePlan,
   parseSetFlag,
   parseSetOwner,
   parseSetPlan,
@@ -158,4 +160,13 @@ export const hospitalityPlatformSetFlag = createServerFn({ method: "POST" })
       { schema: "public" },
     );
     return { saved: true };
+  });
+
+/** שלב E3: עריכת חבילה (מחיר, דמי הקמה, פירוט, הגבלות, מה פתוח, פרסום) — מנהל הפלטפורמה במסד */
+export const hospitalityPlatformSavePlan = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseSavePlan(input))
+  .handler(async ({ data }): Promise<PlanOption> => {
+    const { platformRpc } = await import("../server/platform-admin.server");
+    const { code, ...plan } = data;
+    return platformRpc<PlanOption>("admin_save_plan", { _code: code, _plan: plan });
   });

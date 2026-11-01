@@ -137,10 +137,10 @@ SELECT tests.check('flag: hospitality_management_enabled is registered and off b
 SELECT tests.check('flag: the management and public-website flags are independent (M: management on, website off)',
   format($$SELECT public.platform_feature_enabled('hospitality_management_enabled', %1$L)
              AND NOT public.platform_feature_enabled('hospitality_frontend_enabled', %1$L)$$, :'sm'));
-SELECT tests.check('seats: approved values per plan (trial 3, basic 2, pro 5, enterprise unlimited)',
+SELECT tests.check('seats: approved values per plan (trial 3, basic — owner only (E3), premium owner + 5, pro 5, enterprise unlimited)',
   $$SELECT (SELECT jsonb_object_agg(code, max_managers) FROM hospitality.plans
-             WHERE code IN ('trial', 'basic', 'pro', 'enterprise'))
-           = '{"trial": 3, "basic": 2, "pro": 5, "enterprise": null}'::jsonb$$);
+             WHERE code IN ('trial', 'basic', 'premium', 'pro', 'enterprise'))
+           = '{"trial": 3, "basic": 1, "premium": 6, "pro": 5, "enterprise": null}'::jsonb$$);
 SELECT tests.check('seats: the Hospitality guard is a trigger on user_roles, next to the unchanged Ecommerce guard',
   $$SELECT count(*) = 2 FROM pg_trigger WHERE tgrelid = 'public.user_roles'::regclass
      AND tgname IN ('hospitality_admin_seat_guard', 'user_roles_admin_seat_guard')$$);
@@ -350,7 +350,10 @@ SELECT pg_temp.expect_error('seats: moving an admin from another site into a ful
   format($$UPDATE public.user_roles SET tenant_id = %L WHERE tenant_id = %L AND user_id = %L$$, :'sm', :'sn', :MGR_N),
   'מגבלת המנהלים');
 
--- downgrade: basic (2) + 1 extra = 3 < 4 in use
+-- downgrade: basic (2) + 1 extra = 3 < 4 in use — the mechanism, with the original number of "basic"
+-- (stage E3 made it owner only; the commercial values — hospitality-plans-pricing.test.sql)
+CREATE TEMP TABLE m2_basic_plan AS SELECT code, max_managers FROM hospitality.plans WHERE code = 'basic';
+UPDATE hospitality.plans SET max_managers = 2 WHERE code = 'basic';
 SELECT pg_temp.as_platform(format($$SELECT hospitality.admin_set_subscription(%L, 'basic', 'active')$$, :'sm')) IS NOT NULL AS ok \gset
 SELECT tests.check('seats: a downgrade keeps every existing manager (4 in use, limit 3)',
   format($$SELECT (hospitality.entitlements(%1$L) ->> 'max_managers')::integer = 3
@@ -362,6 +365,9 @@ SELECT pg_temp.after('seats: once back under the limit an admin can be added aga
   format($$SELECT pg_temp.add_admin(%L, %L, 'm2a_mgr4')$$, :'sm', :MGR4), $$SELECT $1 = 'true'::jsonb$$);
 SELECT pg_temp.expect_error('seats: … and the limit holds again',
   format($$SELECT pg_temp.add_admin(%L, %L, 'm2a_mgr5')$$, :'sm', :MGR5), 'מגבלת המנהלים בחבילה (3)');
+
+UPDATE hospitality.plans p SET max_managers = b.max_managers FROM m2_basic_plan b WHERE p.code = b.code;
+DROP TABLE m2_basic_plan;
 
 -- upgrade: pro (5) + 1 = 6 — more than the Ecommerce rule (3) would ever allow on this site
 SELECT pg_temp.as_platform(format($$SELECT hospitality.admin_set_subscription(%L, 'pro', 'active')$$, :'sm')) IS NOT NULL AS ok \gset

@@ -129,8 +129,16 @@ SELECT tests.check('structure: staff can only read subscriptions and policy hist
        AND has_table_privilege('authenticated', 'hospitality.policy_versions', 'SELECT')
        AND NOT bool_or(has_table_privilege('authenticated', 'hospitality.' || t, p))
       FROM unnest(ARRAY['subscriptions', 'policy_versions']) t, unnest(ARRAY['INSERT', 'UPDATE', 'DELETE']) p$$);
-SELECT tests.check('structure: placeholder plans are unpublished and have no prices (prices need approval)',
-  $$SELECT count(*) = 4 AND bool_and(NOT is_published AND price_monthly IS NULL) FROM hospitality.plans$$);
+SELECT tests.check('structure: placeholder plans (trial / pro / enterprise) are unpublished and have no prices; basic and premium are published with the approved prices (stage E3)',
+  $$SELECT count(*) = 5
+       AND bool_and(NOT is_published AND price_monthly IS NULL) FILTER (WHERE code IN ('trial', 'pro', 'enterprise'))
+       AND bool_and(is_published AND price_monthly IS NOT NULL) FILTER (WHERE code IN ('basic', 'premium'))
+      FROM hospitality.plans$$);
+
+-- The limit mechanism below is tested with the original numbers of "basic" (5 units, 2 managers).
+-- The commercial values (stage E3: 3 units, owner only) — hospitality-plans-pricing.test.sql.
+CREATE TEMP TABLE he_basic_plan AS SELECT code, max_units, max_managers FROM hospitality.plans WHERE code = 'basic';
+UPDATE hospitality.plans SET max_units = 5, max_managers = 2 WHERE code = 'basic';
 SELECT tests.check('separation: no Hospitality object references Ecommerce billing tables',
   $$SELECT NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.connamespace = 'hospitality'::regnamespace
                          AND c.confrelid IN ('public.tenant_subscriptions'::regclass, 'public.tenant_addons'::regclass))
@@ -557,6 +565,9 @@ SELECT tests.check('ecommerce: store subscriptions are untouched by everything a
 SELECT pg_temp.as_platform($$SELECT to_jsonb(public.platform_set_flag('hospitality_backend_enabled', false)
                                     AND public.platform_set_flag('hospitality_booking_enabled', false))$$) IS NOT NULL AS ok \gset
 UPDATE auth.users SET email = 'owner.q@test.local' WHERE id = :OWNER_Q;
+UPDATE hospitality.plans p SET max_units = b.max_units, max_managers = b.max_managers
+  FROM he_basic_plan b WHERE p.code = b.code;
+DROP TABLE he_basic_plan;
 DROP TABLE he_ecom;
 DROP TABLE he_states;
 DROP TABLE he_terms;

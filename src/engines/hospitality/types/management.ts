@@ -17,6 +17,12 @@ export interface ManagementEntitlements {
   current_period_end?: string | null;
   max_managers?: number | null;
   managers_used?: number;
+  // ---- שלב E3 (מיגרציה 30) — לבעלים בלבד ----
+  max_properties?: number | null;
+  properties_used?: number;
+  /** תמונות וסרטונים לגלריה */
+  max_media?: number;
+  features?: { channels?: boolean; room_types?: boolean; promotions?: boolean };
 }
 
 export interface ManagementContext {

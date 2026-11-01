@@ -23,6 +23,7 @@ import {
 } from "@/platform/ui";
 import {
   hospitalityPlatformOpenSite,
+  hospitalityPlatformSavePlan,
   hospitalityPlatformSetFlag,
   hospitalityPlatformSetOwner,
   hospitalityPlatformSetPlan,
@@ -31,6 +32,7 @@ import {
 import type {
   HospitalitySiteRow,
   OpenSiteResult,
+  PlanFeatures,
   PlanOption,
   PlatformHospitalityView,
   SiteFlagKey,
@@ -149,6 +151,7 @@ function Content({ view }: { view: PlatformHospitalityView }) {
           </ul>
         )}
       </section>
+      <PlansCard plans={view.flags.plans} />
       {owner && <OwnerSheet site={owner} onClose={() => setOwner(null)} />}
       {plan && <PlanSheet site={plan} plans={view.flags.plans} onClose={() => setPlan(null)} />}
     </>
@@ -371,7 +374,7 @@ function OpenSiteCard({ view }: { view: PlatformHospitalityView }) {
             >
               {view.flags.plans.map((p) => (
                 <option key={p.code} value={p.code}>
-                  {p.name}
+                  {planLabel(p)}
                 </option>
               ))}
             </select>
@@ -451,12 +454,26 @@ function OpenSiteCard({ view }: { view: PlatformHospitalityView }) {
   );
 }
 
-const planHint = (p: PlanOption | undefined) =>
-  !p
-    ? undefined
-    : `${p.max_units === null ? "ללא הגבלת יחידות" : `עד ${p.max_units} יחידות`}${
-        p.trial_days ? ` · ${p.trial_days} ימי ניסיון` : ""
-      }`;
+const money = (n: number | null | undefined) =>
+  n === null || n === undefined ? null : `${Number(n).toLocaleString("he-IL")} ₪`;
+
+const planHint = (p: PlanOption | undefined) => {
+  if (!p) return undefined;
+  const parts: string[] = [];
+  const price = money(p.price_monthly);
+  if (price) parts.push(`${price} לחודש`);
+  const setup = money(p.setup_fee);
+  if (setup) parts.push(`הקמה ${setup}`);
+  parts.push(p.max_units === null ? "ללא הגבלת יחידות" : `עד ${p.max_units} יחידות`);
+  if (p.trial_days) parts.push(`${p.trial_days} ימי ניסיון`);
+  return parts.join(" · ");
+};
+
+/** בשם האפשרות ברשימה: "בסיסית — 200 ₪ לחודש" */
+const planLabel = (p: PlanOption) => {
+  const price = money(p.price_monthly);
+  return price ? `${p.name} — ${price} לחודש` : p.name;
+};
 
 function OpenedNotice({ result, onClose }: { result: OpenSiteResult; onClose: () => void }) {
   const ownerOk = result.owner.status !== "failed";
@@ -824,7 +841,7 @@ function PlanSheet(props: { site: HospitalitySiteRow; plans: PlanOption[]; onClo
         >
           {props.plans.map((p) => (
             <option key={p.code} value={p.code}>
-              {p.name}
+              {planLabel(p)}
             </option>
           ))}
         </select>
@@ -843,6 +860,281 @@ function PlanSheet(props: { site: HospitalitySiteRow; plans: PlanOption[]; onClo
           className="min-h-11"
         />
       </Field>
+    </FormSheet>
+  );
+}
+
+// ============================================================
+// שלב E3: החבילות לצימרים — מחיר, דמי הקמה, פירוט, הגבלות ומה פתוח.
+// עריכה כאן; ההגבלות נאכפות במסד (מה שכבר קיים נשאר — רק לא מוסיפים).
+// ============================================================
+
+const FEATURE_LABELS: [keyof PlanFeatures, string][] = [
+  ["channels", "סנכרון Airbnb / Booking"],
+  ["room_types", "סוגי חדרים"],
+  ["promotions", "קופונים ומבצעים"],
+];
+
+const limitText = (n: number | null | undefined) =>
+  n === null || n === undefined ? "ללא הגבלה" : String(n);
+
+function PlansCard({ plans }: { plans: PlanOption[] }) {
+  const [editing, setEditing] = useState<PlanOption | null>(null);
+  const sorted = [...plans].sort(
+    (a, b) =>
+      Number(b.is_published ?? false) - Number(a.is_published ?? false) ||
+      (a.sort_order ?? 0) - (b.sort_order ?? 0),
+  );
+  return (
+    <section className="flex flex-col gap-3" aria-labelledby="plans-title">
+      <h2 id="plans-title" className="text-xl font-semibold">
+        חבילות ומחירים לצימרים
+      </h2>
+      <p className="text-sm text-muted-foreground">
+        החבילות המפורסמות מוצגות בשער (פתיחת אתר לצימר) ובבחירת חבילה כאן. המגבלות נאכפות במסד: מה
+        שכבר קיים באתר נשאר, ורק אי אפשר להוסיף מעבר למגבלה.
+      </p>
+      <ul className="grid gap-3 md:grid-cols-2">
+        {sorted.map((p) => (
+          <li key={p.code}>
+            <Card className="h-full">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
+                  <h3>{p.name}</h3>
+                  {p.is_published ? (
+                    <Badge>מפורסמת</Badge>
+                  ) : (
+                    <Badge variant="secondary">לא מפורסמת</Badge>
+                  )}
+                </CardTitle>
+                {p.tagline ? <CardDescription>{p.tagline}</CardDescription> : null}
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 text-sm">
+                <p className="text-base font-semibold">
+                  {money(p.price_monthly) ? `${money(p.price_monthly)} לחודש` : "בלי מחיר"}
+                  {money(p.setup_fee) && (
+                    <span className="font-normal text-muted-foreground">
+                      {" "}
+                      · הקמה {money(p.setup_fee)}
+                    </span>
+                  )}
+                </p>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
+                  <dt className="text-muted-foreground">יחידות</dt>
+                  <dd>{limitText(p.max_units)}</dd>
+                  <dt className="text-muted-foreground">מתחמים</dt>
+                  <dd>{limitText(p.max_properties)}</dd>
+                  <dt className="text-muted-foreground">תמונות לגלריה</dt>
+                  <dd>{p.max_media ?? 60}</dd>
+                  <dt className="text-muted-foreground">מנהלים (כולל הבעלים)</dt>
+                  <dd>{limitText(p.max_managers)}</dd>
+                </dl>
+                <ul className="flex flex-wrap gap-1.5" aria-label="מה פתוח בחבילה">
+                  {FEATURE_LABELS.map(([key, label]) => (
+                    <li key={key}>
+                      <Badge variant={p.features?.[key] ? "default" : "outline"}>
+                        <span aria-hidden="true">{p.features?.[key] ? "✓ " : "— "}</span>
+                        {label}
+                        <span className="sr-only">
+                          {p.features?.[key] ? " — כלול" : " — לא כלול"}
+                        </span>
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+                {p.highlights && p.highlights.length > 0 && (
+                  <ul className="list-inside list-disc text-muted-foreground">
+                    {p.highlights.map((h) => (
+                      <li key={h}>{h}</li>
+                    ))}
+                  </ul>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11 self-start"
+                  onClick={() => setEditing(p)}
+                >
+                  עריכה
+                  <span className="sr-only"> — חבילת {p.name}</span>
+                </Button>
+              </CardContent>
+            </Card>
+          </li>
+        ))}
+      </ul>
+      {editing && <PlanEditorSheet plan={editing} onClose={() => setEditing(null)} />}
+    </section>
+  );
+}
+
+/** מספר מהשדה: ריק = null (ללא הגבלה / בלי מחיר) */
+const numberOrNull = (value: string) => {
+  const t = value.trim();
+  return t === "" ? null : Number(t);
+};
+const fieldOf = (n: number | null | undefined) => (n === null || n === undefined ? "" : String(n));
+
+function PlanEditorSheet({ plan, onClose }: { plan: PlanOption; onClose: () => void }) {
+  const refresh = useRefresh();
+  const initial = {
+    name: plan.name,
+    tagline: plan.tagline ?? "",
+    price: fieldOf(plan.price_monthly),
+    setup: fieldOf(plan.setup_fee),
+    units: fieldOf(plan.max_units),
+    properties: fieldOf(plan.max_properties),
+    media: fieldOf(plan.max_media),
+    managers: fieldOf(plan.max_managers),
+    channels: plan.features?.channels === true,
+    room_types: plan.features?.room_types === true,
+    promotions: plan.features?.promotions === true,
+    highlights: (plan.highlights ?? []).join("\n"),
+    published: plan.is_published === true,
+  };
+  const [f, setF] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const dirty = JSON.stringify(f) !== JSON.stringify(initial);
+  const nameError = f.name.trim() === "" ? "חובה" : null;
+  return (
+    <FormSheet
+      open
+      title={`עריכת חבילה — ${plan.name}`}
+      description="שינוי מחיר משפיע על מה שמוצג מעכשיו. מגבלה נמוכה יותר לא מוחקת כלום באתרים קיימים — רק לא מאפשרת להוסיף מעבר לה."
+      dirty={dirty}
+      busy={busy}
+      submitLabel="שמירה"
+      serverError={serverError}
+      notice={null}
+      hasErrors={Boolean(nameError)}
+      submitted={false}
+      onClose={onClose}
+      onSubmit={() => {
+        if (nameError) return;
+        setBusy(true);
+        setServerError(null);
+        void hospitalityPlatformSavePlan({
+          data: {
+            code: plan.code,
+            name: f.name,
+            tagline: f.tagline,
+            price_monthly: numberOrNull(f.price),
+            setup_fee: numberOrNull(f.setup),
+            max_units: numberOrNull(f.units),
+            max_properties: numberOrNull(f.properties),
+            max_media: numberOrNull(f.media),
+            max_managers: numberOrNull(f.managers),
+            features: { channels: f.channels, room_types: f.room_types, promotions: f.promotions },
+            highlights: f.highlights.split("\n"),
+            is_published: f.published,
+          },
+        })
+          .then(() => {
+            toast.success("החבילה נשמרה");
+            refresh();
+            onClose();
+          })
+          .catch((e: unknown) => setServerError(errorText(e)))
+          .finally(() => setBusy(false));
+      }}
+    >
+      <Field id="pe-name" label="שם החבילה" error={nameError}>
+        <Input
+          id="pe-name"
+          value={f.name}
+          maxLength={60}
+          onChange={(e) => setF((x) => ({ ...x, name: e.target.value }))}
+          className="min-h-11"
+        />
+      </Field>
+      <Field id="pe-tagline" label="משפט קצר (לא חובה)">
+        <Input
+          id="pe-tagline"
+          value={f.tagline}
+          maxLength={160}
+          onChange={(e) => setF((x) => ({ ...x, tagline: e.target.value }))}
+          className="min-h-11"
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field id="pe-price" label="מחיר חודשי (₪)" hint="ריק = בלי מחיר">
+          <Input
+            id="pe-price"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            dir="ltr"
+            value={f.price}
+            onChange={(e) => setF((x) => ({ ...x, price: e.target.value }))}
+            className="min-h-11"
+          />
+        </Field>
+        <Field id="pe-setup" label="דמי הקמה (₪)" hint="חד-פעמי; ריק = אין">
+          <Input
+            id="pe-setup"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            dir="ltr"
+            value={f.setup}
+            onChange={(e) => setF((x) => ({ ...x, setup: e.target.value }))}
+            className="min-h-11"
+          />
+        </Field>
+        {(
+          [
+            ["units", "יחידות", "ריק = ללא הגבלה"],
+            ["properties", "מתחמים", "ריק = ללא הגבלה"],
+            ["media", "תמונות לגלריה", "עד 60; ריק = 60"],
+            ["managers", "מנהלים כולל הבעלים", "ריק = ללא הגבלה"],
+          ] as const
+        ).map(([key, label, hint]) => (
+          <Field key={key} id={`pe-${key}`} label={label} hint={hint}>
+            <Input
+              id={`pe-${key}`}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={key === "media" ? 60 : undefined}
+              dir="ltr"
+              value={f[key]}
+              onChange={(e) => setF((x) => ({ ...x, [key]: e.target.value }))}
+              className="min-h-11"
+            />
+          </Field>
+        ))}
+      </div>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-1 text-sm font-medium">מה פתוח בחבילה</legend>
+        {FEATURE_LABELS.map(([key, label]) => (
+          <label key={key} className="flex min-h-11 items-center gap-3">
+            <Switch
+              checked={f[key]}
+              onCheckedChange={(v) => setF((x) => ({ ...x, [key]: v }))}
+              aria-label={label}
+            />
+            {label}
+          </label>
+        ))}
+      </fieldset>
+      <Field id="pe-highlights" label="רשימת התכונות לתצוגה" hint="שורה לכל תכונה, עד 20">
+        <textarea
+          id="pe-highlights"
+          rows={7}
+          value={f.highlights}
+          onChange={(e) => setF((x) => ({ ...x, highlights: e.target.value }))}
+          className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+        />
+      </Field>
+      <label className="flex min-h-11 items-center gap-3">
+        <Switch
+          checked={f.published}
+          onCheckedChange={(v) => setF((x) => ({ ...x, published: v }))}
+          aria-label="מפורסמת בשער"
+        />
+        מפורסמת בשער ובפתיחת עסק
+      </label>
     </FormSheet>
   );
 }

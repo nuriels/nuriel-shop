@@ -1,9 +1,49 @@
 // "ניהול Hospitality" בפאנל הפלטפורמה (P1) — מה שהמסך מקבל מהשרת (מיגרציה 15)
+/** מה פתוח בחבילה (שלב E3) */
+export interface PlanFeatures {
+  /** סנכרון יומנים עם Airbnb / Booking.com (ייבוא + קישור ייצוא) */
+  channels?: boolean;
+  /** סוגי חדרים (מצב מלון) */
+  room_types?: boolean;
+  /** קופונים ומבצעים */
+  promotions?: boolean;
+}
+
 export interface PlanOption {
   code: string;
   name: string;
   max_units: number | null;
   trial_days: number;
+  // ---- שלב E3 (מיגרציה 30): מחירים, פירוט והגבלות — חסרים במסד ישן ----
+  tagline?: string;
+  price_monthly?: number | null;
+  setup_fee?: number | null;
+  currency?: string;
+  max_properties?: number | null;
+  /** תמונות וסרטונים לגלריה (עד 60) */
+  max_media?: number;
+  /** מנהלים כולל הבעלים; null = ללא הגבלה */
+  max_managers?: number | null;
+  features?: PlanFeatures;
+  highlights?: string[];
+  is_published?: boolean;
+  sort_order?: number;
+}
+
+/** עריכת חבילה מהפאנל (admin_save_plan) */
+export interface SavePlanInput {
+  code: string;
+  name: string;
+  tagline: string;
+  price_monthly: number | null;
+  setup_fee: number | null;
+  max_units: number | null;
+  max_properties: number | null;
+  max_media: number | null;
+  max_managers: number | null;
+  features: Required<PlanFeatures>;
+  highlights: string[];
+  is_published: boolean;
 }
 
 export interface PlatformFlags {

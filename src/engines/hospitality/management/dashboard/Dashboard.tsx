@@ -148,7 +148,36 @@ function PlanCard() {
           <dd>{usageText(e.units_used, e.max_units)}</dd>
           <dt className="text-muted-foreground">מנהלים</dt>
           <dd>{usageText(e.managers_used ?? 0, e.max_managers)}</dd>
+          {e.max_properties !== undefined && (
+            <>
+              <dt className="text-muted-foreground">מתחמים</dt>
+              <dd>{usageText(e.properties_used ?? 0, e.max_properties)}</dd>
+            </>
+          )}
+          {e.max_media !== undefined && (
+            <>
+              <dt className="text-muted-foreground">תמונות לגלריה</dt>
+              <dd>עד {e.max_media}</dd>
+            </>
+          )}
         </dl>
+        {e.features && (
+          <ul className="mt-3 flex flex-col gap-1 text-sm" aria-label="מה כלול בחבילה">
+            {(
+              [
+                ["channels", "סנכרון Airbnb / Booking.com"],
+                ["room_types", "סוגי חדרים"],
+                ["promotions", "קופונים ומבצעים"],
+              ] as const
+            ).map(([key, label]) => (
+              <li key={key} className={e.features?.[key] ? "" : "text-muted-foreground"}>
+                <span aria-hidden="true">{e.features?.[key] ? "✓ " : "— "}</span>
+                {label}
+                {!e.features?.[key] && <span> (בפרימיום)</span>}
+              </li>
+            ))}
+          </ul>
+        )}
       </CardContent>
     </Card>
   );
