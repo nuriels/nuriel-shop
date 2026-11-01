@@ -783,7 +783,7 @@ function PreviewCard({ view }: { view: PricingView }) {
             <table className="w-full text-sm">
               <caption className="sr-only">מחיר לכל לילה</caption>
               <thead>
-                <tr className="text-muted-foreground">
+                <tr className="text-muted-foreground [&>th]:pe-3">
                   <th className="text-start font-normal">לילה</th>
                   <th className="text-start font-normal">מחיר</th>
                   <th className="text-start font-normal">תוספת אורחים</th>
@@ -792,10 +792,8 @@ function PreviewCard({ view }: { view: PricingView }) {
               </thead>
               <tbody>
                 {quote.nights.map((n) => (
-                  <tr key={n.night} className="border-t">
-                    <td dir="ltr" className="text-start">
-                      {n.night}
-                    </td>
+                  <tr key={n.night} className="border-t [&>td]:py-1 [&>td]:pe-3">
+                    <td className="whitespace-nowrap">{n.night.split("-").reverse().join(".")}</td>
                     <td>{money(n.base_rate, quote.currency)}</td>
                     <td>{n.extras > 0 ? money(n.extras, quote.currency) : "—"}</td>
                     <td>
