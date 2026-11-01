@@ -2,6 +2,11 @@
 -- Concurrency tests — data and small call wrappers (disposable DB only)
 -- One Hospitality site, flags on, an owner, units per scenario.
 -- ============================================================
+-- E3 (מיגרציה 30) הורידה את "בסיסית" ל-3 יחידות. התרחישים כאן בודקים את מנגנון ההגבלה במקביל על
+-- המספרים המקוריים (בסיסית: 5 יחידות; ניסיון: 20 — לא השתנה) — בתוך מסד הבדיקה בלבד, כמו בשאר
+-- בדיקות ההגבלה (hospitality-billing.test.sql).
+UPDATE hospitality.plans SET max_units = 5 WHERE code = 'basic';
+
 INSERT INTO auth.users (id, email, email_confirmed_at) VALUES
   ('c0000000-0000-0000-0000-0000000000a1', 'conc.owner@test.local', now()),
   ('c0000000-0000-0000-0000-0000000000a2', 'conc.manager@test.local', now())

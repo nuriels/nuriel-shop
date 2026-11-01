@@ -270,10 +270,11 @@ test("board: bookings coloured by status, the whole property and its units, filt
   await expect(
     row(page, "צימר האלון").locator('[data-bar="booking"][data-status="pending_approval"]').first(),
   ).toHaveAccessibleName(new RegExp(`#${n.p} יוסי לוי · ממתינה לאישור`));
-  // whole property: its booking on its own row, and on each of its units ("via")
+  // whole property: its booking on its own row, and on each of its units ("via").
+  // מאז D3 השם כולל גם את מקור ההזמנה ("· מקור: טלפון"); בשורה של כל המתחם — בלי "(דרך כל המתחם)"
   await expect(
     row(page, "כל המתחם — חוות הזית").getByRole("button", {
-      name: new RegExp(`^#${n.w} משפחת שמש · מאושרת$`),
+      name: new RegExp(`^#${n.w} משפחת שמש · מאושרת · מקור: [^()]+$`),
     }),
   ).toBeVisible();
   for (const u of ["צימר הזית", "צימר האלון"])

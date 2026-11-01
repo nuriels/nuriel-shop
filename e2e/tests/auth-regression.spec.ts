@@ -96,7 +96,7 @@ test.describe("email-code login (existing mechanism)", () => {
 });
 
 test.describe("store opening through the portal (existing flow)", () => {
-  test("email code → name + address → store, owner and seed rows created", async ({
+  test("email code → online store → name + address → business details → store, owner and seed rows created", async ({
     page,
     request,
   }) => {
@@ -109,9 +109,19 @@ test.describe("store opening through the portal (existing flow)", () => {
     await page.getByRole("button", { name: "שליחת קוד למייל" }).click();
     const code = await lastCodeFor(request, email);
     await page.locator("#portal-code").fill(code);
-    // the code field continues by itself on the 6th digit (existing behaviour)
-    await page.locator("#portal-store-name").fill(`חנות בדיקה ${stamp}`);
+    // the code field continues by itself on the 6th digit (existing behaviour).
+    // E2: "מה בונים?" — מוצג כשיש חבילות צימר מפורסמות; בלעדיהן ממשיכים ישר לחנות
+    const storeName = page.locator("#portal-store-name");
+    const onlineStore = page.getByRole("button", { name: /חנות אונליין/ });
+    await expect(storeName.or(onlineStore).first()).toBeVisible({ timeout: 20_000 });
+    if (await onlineStore.isVisible()) await onlineStore.click();
+    await storeName.fill(`חנות בדיקה ${stamp}`);
     await page.locator("#portal-store-slug").fill(slug);
+    await page.getByRole("button", { name: "המשך — פרטי העסק" }).click();
+    // E1: פרטי העסק — שם העסק מתמלא משם החנות; סוג, מספר עוסק (ספרת ביקורת תקינה) וטלפון
+    await page.locator("label", { hasText: "עוסק מורשה" }).click();
+    await page.locator("#portal-biz-tax_id").fill("034567891");
+    await page.locator("#portal-biz-phone").fill("0501234567");
     await page.getByRole("button", { name: "צור את החנות שלי" }).click();
     // after creation the portal moves on to the new store (https://<slug>…, not served locally) —
     // the result is checked in the database
