@@ -1,4 +1,5 @@
 // כותרת של חלק באתר: שורת-על קטנה בזהב, כותרת בגופן התצוגה, תת-כותרת.
+// F5: data-section-heading / data-eyebrow / data-heading-rule — החתימה של כל ערכה (theme/signature.ts).
 import { cn } from "@/platform/ui";
 import { useSite } from "../lib/site-context";
 import { Editable } from "./Editable";
@@ -26,10 +27,14 @@ export function SectionHeading({
   const align = alignProp ?? theme.layout.headingAlign;
   return (
     <div
+      data-section-heading=""
       className={cn(align === "center" ? "mx-auto max-w-2xl text-center" : "max-w-2xl", className)}
     >
       {eyebrow && (
-        <p className="mb-3 text-xs font-medium tracking-[0.06em] text-[var(--site-gold-ink)]">
+        <p
+          data-eyebrow=""
+          className="mb-3 text-xs font-medium tracking-[0.06em] text-[var(--site-gold-ink)]"
+        >
           <Editable section={section} field="eyebrow" value={eyebrow} />
         </p>
       )}
@@ -46,6 +51,7 @@ export function SectionHeading({
       )}
       <span
         aria-hidden="true"
+        data-heading-rule=""
         className={cn(
           "mt-6 block h-px w-14 bg-[var(--site-gold)]",
           align === "center" && "mx-auto",

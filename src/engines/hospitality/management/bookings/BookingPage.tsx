@@ -96,7 +96,7 @@ function Booking({ b }: { b: BookingDetail }) {
           <h1 className="text-2xl font-semibold">הזמנה #{b.number}</h1>
           <span
             className={cn(
-              "rounded px-2 py-0.5 text-sm font-medium",
+              "rounded-full px-3 py-0.5 text-sm font-semibold",
               TONE_CLASS[stateTone(b.state)],
             )}
             data-testid="booking-state"
@@ -109,6 +109,35 @@ function Booking({ b }: { b: BookingDetail }) {
         </p>
         {hold && <p className="font-medium text-amber-800">{hold}</p>}
       </header>
+
+      {/* שלב F4: תקציר השהייה במבט אחד — לילות, אורחים, סכום ומה כבר שולם */}
+      <dl
+        className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border bg-border shadow-[var(--hm-shadow-card)] sm:grid-cols-4"
+        data-section="stay-summary"
+      >
+        {[
+          { label: "לילות", value: String(b.nights) },
+          { label: "אורחים", value: String(b.adults + b.children) },
+          { label: "סה״כ להזמנה", value: money(b.total, b.currency) },
+          {
+            label: "שולם עד עכשיו",
+            value: money(b.amount_paid, b.currency),
+            tone:
+              b.payment_status === "paid"
+                ? "text-[var(--hm-success)]"
+                : b.payment_status === "deposit_paid"
+                  ? "text-[var(--hm-info)]"
+                  : "text-[var(--hm-warning)]",
+          },
+        ].map((x) => (
+          <div key={x.label} className="bg-card px-4 py-3">
+            <dt className="text-xs text-muted-foreground">{x.label}</dt>
+            <dd className={cn("mt-0.5 text-lg font-bold", x.tone)} data-num="">
+              {x.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
 
       <PageNotice error={error}>{null}</PageNotice>
 

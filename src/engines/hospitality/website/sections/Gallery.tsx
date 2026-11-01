@@ -81,6 +81,7 @@ export function MediaMosaic({
             >
               {m.kind === "image" ? (
                 <Photo
+                  framed
                   media={m}
                   alt={title}
                   sizes={

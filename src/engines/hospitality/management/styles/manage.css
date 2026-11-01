@@ -80,6 +80,57 @@ html:root {
   /* חסימה פנימית בלוח — פסים (לא לינה) */
   --hm-block-stripes: repeating-linear-gradient(135deg, #e8e2d7 0 6px, #f5f2ec 6px 12px);
 
+  /*
+   * שלב F4: צבעי הפלטה של Tailwind שהמסכים הוותיקים משתמשים בהם (amber / emerald / rose / sky /
+   * violet / slate) — ממופים לגוונים של המותג. Tailwind 4 מצייר אותם דרך המשתנים האלה, ולכן כל
+   * המסכים מקבלים אותה שפה בלי לגעת ב-markup. הקובץ נטען רק ב-/manage — החנויות והאתרים לא מושפעים.
+   * ניגודיות: טקסט 800–950 על רקע 50–200 ≥ 4.5:1.
+   */
+  --color-amber-50: #fff8ec;
+  --color-amber-100: #fff1db;
+  --color-amber-200: #fbe2b7;
+  --color-amber-300: #f2c77e;
+  --color-amber-400: #e6ad4c;
+  --color-amber-500: #d99a2b;
+  --color-amber-600: #b07a14;
+  --color-amber-700: #9a6408;
+  --color-amber-800: #8a5300;
+  --color-amber-900: #744600;
+  --color-amber-950: #5c3700;
+  --color-emerald-50: #f0f8f3;
+  --color-emerald-100: #e5f2eb;
+  --color-emerald-200: #c9e5d5;
+  --color-emerald-600: #2e8a63;
+  --color-emerald-700: #1e6b4e;
+  --color-emerald-800: #185a41;
+  --color-emerald-900: #154d38;
+  --color-rose-50: #fdf6f4;
+  --color-rose-100: #fbede9;
+  --color-rose-200: #f4d3cb;
+  --color-rose-700: #9a3a2b;
+  --color-rose-800: #873325;
+  --color-rose-900: #7a2e22;
+  --color-rose-950: #5e231a;
+  --color-sky-50: #f3f7fb;
+  --color-sky-100: #e7eef6;
+  --color-sky-200: #cddbec;
+  --color-sky-700: #1f4e8c;
+  --color-sky-800: #1b4479;
+  --color-sky-900: #173b6a;
+  --color-violet-50: #f4f0f8;
+  --color-violet-100: #ebe3f3;
+  --color-violet-300: #c7b5da;
+  --color-violet-700: #5d3e7a;
+  --color-violet-950: #2f1f3f;
+  --color-slate-100: #f0ede7;
+  --color-slate-200: #e7e1d7;
+  --color-slate-300: #d8d1c5;
+  --color-slate-400: #a39c91;
+  --color-slate-500: #6b6760;
+  --color-slate-600: #5e6b68;
+  --color-slate-800: #2e3836;
+  --color-slate-900: #17201f;
+
   /* עומק ותנועה */
   --hm-shadow-card: 0 1px 2px rgb(12 48 47 / 0.04), 0 10px 24px -18px rgb(12 48 47 / 0.3);
   --hm-shadow-lift: 0 2px 4px rgb(12 48 47 / 0.06), 0 18px 34px -20px rgb(12 48 47 / 0.38);
@@ -136,4 +187,28 @@ html:root body .font-display {
   [data-lift]:hover {
     transform: none;
   }
+}
+
+/*
+ * שלב F4: שפה אחת לכל המסכים בלי לגעת ב-markup (ולכן בלי לשבור תהליכים או בדיקות):
+ *   • כותרת המסך — בצבע המותג ובמשקל מלא (לא בברכה של לוח הבקרה, שמסומנת font-display);
+ *   • כרטיסי shadcn בתוך המסכים — פינות 16px, צל רך של המותג;
+ *   • שדות ובחירות — מסגרת חמה ומיקוד בצבע הלגונה.
+ * (CSS בלי שכבה גובר על כלי Tailwind שבשכבות — זה בכוונה, ורק בתוך #main-content של הניהול.)
+ */
+#main-content h1:not(.font-display) {
+  color: var(--hm-lagoon-900);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+#main-content .rounded-xl.border.bg-card.shadow {
+  border-radius: 1rem;
+  box-shadow: var(--hm-shadow-card);
+}
+#main-content input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible,
+#main-content select:focus-visible,
+#main-content textarea:focus-visible {
+  border-color: var(--hm-lagoon-500);
+  box-shadow: 0 0 0 3px rgb(31 111 107 / 0.16);
+  outline: none;
 }

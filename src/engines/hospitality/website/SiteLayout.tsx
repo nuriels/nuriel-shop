@@ -15,6 +15,7 @@ import { SiteContext, useSite } from "./lib/site-context";
 import { normalizeDesign, type SiteDesign } from "./design/schema";
 import { fontHref } from "./theme/fonts";
 import { themeFor, themeStyle } from "./theme/themes";
+import { SIGNATURE_CSS } from "./theme/signature";
 
 export type SitePage = "home" | "unit" | "other";
 
@@ -84,7 +85,7 @@ export function SiteShell({
           className="min-h-screen bg-background font-sans text-foreground antialiased"
           data-site-theme={theme.id}
         >
-          <style>{DISPLAY_CSS}</style>
+          <style>{DISPLAY_CSS + SIGNATURE_CSS}</style>
           {/* React מעביר את הגיליון ל-<head> (גם ב-SSR) ולא טוען אותו פעמיים */}
           {fontSheet && <link rel="stylesheet" href={fontSheet} precedence="default" />}
           {/* נגישות: הקישור הראשון בעמוד — מדלג על התפריט ישר לתוכן (מוצג רק בפוקוס מהמקלדת) */}

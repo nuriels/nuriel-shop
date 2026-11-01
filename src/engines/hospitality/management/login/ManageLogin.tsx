@@ -1,6 +1,7 @@
 // כניסה לאזור הניהול: קוד במייל או סיסמה — אותן פונקציות קיימות של הפלטפורמה.
 // בלי Google (ממצא ה-OAuth פתוח — docs/security/oauth-pkce-analysis.md).
 // אחרי הכניסה, ההרשאה נבדקת במסד; חשבון בלי הרשאה רואה "אין גישה".
+// שלב F4: מסך מותג (צד כהה במחשב, כותרת קטנה בטלפון) — אותם שדות, לשוניות וטקסטים.
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -41,34 +42,100 @@ export function ManageLogin() {
   return (
     <main
       id="main-content"
-      className="flex min-h-dvh items-start justify-center bg-background px-4 py-10 md:items-center"
+      className="grid min-h-dvh bg-background lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]"
     >
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>
-            <h1 className="text-2xl font-semibold">כניסה לניהול העסק</h1>
-          </CardTitle>
-          <CardDescription>לבעלי העסק ולמנהלים שקיבלו הרשאה.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="code" dir="rtl">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="code" className="min-h-10">
-                קוד למייל
-              </TabsTrigger>
-              <TabsTrigger value="password" className="min-h-10">
-                סיסמה
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="code" className="pt-4">
-              <CodeLogin onTokens={enter} />
-            </TabsContent>
-            <TabsContent value="password" className="pt-4">
-              <PasswordLogin onTokens={enter} />
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+      {/* שלב F4: צד המותג (מחשב) — "Deep Lagoon & Champagne" */}
+      <div className="relative hidden overflow-hidden bg-[var(--hm-lagoon-900)] text-[var(--hm-sidebar-text)] lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -start-40 -top-40 size-[34rem] rounded-full bg-[radial-gradient(closest-side,rgb(216_184_122/0.22),transparent)]"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-48 -end-32 size-[30rem] rounded-full bg-[radial-gradient(closest-side,rgb(31_111_107/0.45),transparent)]"
+        />
+        <p className="relative flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="inline-flex size-10 items-center justify-center rounded-xl bg-[var(--hm-champagne-500)] font-display text-xl font-bold text-[var(--hm-lagoon-900)]"
+          >
+            N
+          </span>
+          <span className="leading-tight">
+            <span className="block font-bold text-white" dir="ltr">
+              Nuriel Hospitality
+            </span>
+            <span className="block text-sm text-[var(--hm-sidebar-muted)]">מבית נוריאל מחשבים</span>
+          </span>
+        </p>
+        <div className="relative max-w-md">
+          <p className="font-display text-[2.6rem] leading-tight text-white">
+            כל מקום האירוח שלכם — במקום אחד.
+          </p>
+          <ul className="mt-8 flex flex-col gap-3 text-[15px]">
+            {[
+              "הזמנות, יומן ותפוסה — כולל Airbnb ו-Booking",
+              "אתר הזמנות משלכם, בעברית ובנגישות מלאה",
+              "תמונה ברורה של העסק בכל בוקר",
+            ].map((line) => (
+              <li key={line} className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="size-1.5 shrink-0 rounded-full bg-[var(--hm-champagne-500)]"
+                />
+                {line}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="relative text-xs text-[var(--hm-sidebar-muted)]">
+          החיבור מאובטח. אחרי הכניסה ההרשאות נבדקות בשרת.
+        </p>
+      </div>
+
+      <div className="flex items-start justify-center px-4 py-10 md:items-center">
+        <div className="w-full max-w-md">
+          <p className="mb-6 flex items-center justify-center gap-2.5 lg:hidden">
+            <span
+              aria-hidden="true"
+              className="inline-flex size-9 items-center justify-center rounded-xl bg-[var(--hm-lagoon-900)] font-display text-lg font-bold text-[var(--hm-champagne-500)]"
+            >
+              N
+            </span>
+            <span className="font-bold text-[var(--hm-lagoon-900)]" dir="ltr">
+              Nuriel Hospitality
+            </span>
+          </p>
+          <Card className="w-full rounded-2xl shadow-[var(--hm-shadow-lift)]">
+            <CardHeader>
+              <CardTitle>
+                <h1 className="text-[1.6rem] font-bold text-[var(--hm-lagoon-900)]">
+                  כניסה לניהול העסק
+                </h1>
+              </CardTitle>
+              <CardDescription>לבעלי העסק ולמנהלים שקיבלו הרשאה.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="code" dir="rtl">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="code" className="min-h-10">
+                    קוד למייל
+                  </TabsTrigger>
+                  <TabsTrigger value="password" className="min-h-10">
+                    סיסמה
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="code" className="pt-4">
+                  <CodeLogin onTokens={enter} />
+                </TabsContent>
+                <TabsContent value="password" className="pt-4">
+                  <PasswordLogin onTokens={enter} />
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </main>
   );
 }

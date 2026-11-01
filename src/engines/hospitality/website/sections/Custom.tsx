@@ -146,7 +146,7 @@ export function CtaBanner({ section }: { section: Section }) {
           {site.booking_open ? (
             <Link
               to="/stay/book"
-              className="inline-flex h-12 items-center justify-center rounded-[min(var(--radius),0.5rem)] bg-[var(--site-gold)] px-8 font-medium text-[var(--site-deep)] hover:opacity-90"
+              className="inline-flex h-12 items-center justify-center rounded-[var(--site-button-radius,0.5rem)] bg-[var(--site-gold)] px-8 font-medium text-[var(--site-deep)] hover:opacity-90"
             >
               {c.button ?? t.hero.book}
             </Link>
@@ -154,7 +154,7 @@ export function CtaBanner({ section }: { section: Section }) {
             <Link
               to="/stay"
               hash="contact"
-              className="inline-flex h-12 items-center justify-center rounded-[min(var(--radius),0.5rem)] bg-[var(--site-gold)] px-8 font-medium text-[var(--site-deep)] hover:opacity-90"
+              className="inline-flex h-12 items-center justify-center rounded-[var(--site-button-radius,0.5rem)] bg-[var(--site-gold)] px-8 font-medium text-[var(--site-deep)] hover:opacity-90"
             >
               {c.button ?? t.hero.contact}
             </Link>

@@ -58,6 +58,7 @@ export function Hero({ section }: { section?: Section | undefined }) {
             <div className="mt-8">{actions(false)}</div>
           </div>
           <Photo
+            framed
             media={image}
             alt={title}
             priority
@@ -93,6 +94,7 @@ export function Hero({ section }: { section?: Section | undefined }) {
             </div>
           </div>
           <Photo
+            framed
             media={image}
             alt={title}
             priority
@@ -191,7 +193,7 @@ function HeroActions({ light, button }: { light: boolean; button?: string | unde
     ? "border border-white/60 backdrop-blur-[2px] hover:bg-white/10"
     : "border border-foreground/25 hover:bg-foreground/5";
   const base =
-    "inline-flex h-12 items-center justify-center rounded-[min(var(--radius),0.5rem)] px-8 text-base transition-colors";
+    "inline-flex h-12 items-center justify-center rounded-[var(--site-button-radius,0.5rem)] px-8 text-base transition-colors";
   return (
     <div className="flex flex-wrap items-center gap-3">
       {site.booking_open && (

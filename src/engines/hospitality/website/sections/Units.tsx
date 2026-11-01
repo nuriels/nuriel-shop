@@ -112,6 +112,7 @@ function UnitCard({ unit, roomType }: { unit: PublicUnit; roomType?: TypeListing
       )}
     >
       <Photo
+        framed
         media={unitCover(unit, site)}
         alt={name}
         sizes={

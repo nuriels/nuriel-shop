@@ -5,13 +5,14 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
-import { Plus, Search } from "lucide-react";
+import { CalendarCheck, Plus, Search } from "lucide-react";
 import { Button, Card, CardContent, Input, Label, cn } from "@/platform/ui";
 import { hospitalityBookings } from "../../api/bookings.functions";
 import type { BookingRow, BookingTab } from "../../types/bookings";
 import { LoadError, PageSkeleton } from "../catalog/parts";
 import { money } from "../pricing/model";
 import { useManagement } from "../shell/management-context";
+import { EmptyState } from "../ui/kit";
 import {
   PAYMENT_LABELS,
   STATE_LABELS,
@@ -144,7 +145,7 @@ export function BookingsPage() {
           </p>
         )}
         {!q && data.items.length === 0 ? (
-          <p className="rounded-md border p-6 text-center text-muted-foreground">{current.empty}</p>
+          <EmptyState icon={CalendarCheck} title={current.empty} />
         ) : (
           <ul className="flex flex-col gap-2" data-testid="bookings-list">
             {data.items.map((b) => (
@@ -180,7 +181,10 @@ function BookingCard({ b }: { b: BookingRow }) {
         params={{ bookingId: b.id }}
         className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <Card className="transition-colors hover:border-primary" data-booking={b.number}>
+        <Card
+          className="transition-[border-color,box-shadow] hover:border-[var(--hm-lagoon-500)] hover:shadow-[var(--hm-shadow-lift)]"
+          data-booking={b.number}
+        >
           <CardContent className="flex flex-col gap-1.5 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-semibold">
@@ -188,7 +192,7 @@ function BookingCard({ b }: { b: BookingRow }) {
               </p>
               <span
                 className={cn(
-                  "rounded px-2 py-0.5 text-xs font-medium",
+                  "rounded-full px-2.5 py-0.5 text-xs font-semibold",
                   TONE_CLASS[stateTone(b.state)],
                 )}
               >

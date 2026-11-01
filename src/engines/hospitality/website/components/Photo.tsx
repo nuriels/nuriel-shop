@@ -13,6 +13,7 @@ export function Photo({
   className,
   imgClassName,
   placeholderTone,
+  framed = false,
 }: {
   media: PublicMedia | null | undefined;
   alt: string;
@@ -21,6 +22,8 @@ export function Photo({
   className?: string;
   imgClassName?: string;
   placeholderTone?: "light" | "dark" | undefined;
+  /** F5: מסגרת לפי הערכה (קו פנימי ביוקרה, הילה ברומנטי…) — לכרטיסים ולגלריה, לא לרקע מלא */
+  framed?: boolean;
 }) {
   const t = useCopy();
   if (!media?.url || media.kind !== "image") {
@@ -31,7 +34,10 @@ export function Photo({
     );
   }
   return (
-    <div className={cn("relative overflow-hidden bg-muted", className)}>
+    <div
+      className={cn("relative overflow-hidden bg-muted", className)}
+      data-site-photo={framed ? "" : undefined}
+    >
       <img
         src={media.url}
         srcSet={media.srcset ?? undefined}
