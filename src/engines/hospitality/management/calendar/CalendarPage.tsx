@@ -7,7 +7,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { CalendarPlus, ChevronLeft, ChevronRight, Lock, RefreshCw, Search } from "lucide-react";
+import {
+  CalendarPlus,
+  ChevronLeft,
+  ChevronRight,
+  Lock,
+  LogIn,
+  LogOut,
+  RefreshCw,
+  Search,
+  TriangleAlert,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   Button,
@@ -25,7 +35,9 @@ import {
   cn,
   useIsMobile,
 } from "@/platform/ui";
+import { hospitalityChannels } from "../../api/channels.functions";
 import { hospitalityRoomTypes } from "../../api/room-types.functions";
+import type { ChannelUnit } from "../../types/channels";
 import {
   hospitalityCalendar,
   hospitalityCalendarStamp,
@@ -72,7 +84,18 @@ import {
   visibleWindow,
   blockSource,
   bookingSource,
+  conflictMarks,
+  freeByNight,
+  maskGuests,
+  monthAnchor,
+  monthOptions,
+  shortDate,
+  unitCards,
+  NIGHT_LABELS,
   type Bar,
+  type ConflictMark,
+  type NightState,
+  type UnitCard,
   type Filters,
   type Row,
   type Tone,
@@ -80,6 +103,8 @@ import {
 } from "./model";
 
 const ROW_H = 44;
+/** שורת "פנויות" מתחת לתאריכים (Calendar Pro) */
+const SUM_H = 26;
 const COL_W = 40;
 const NAME_W = 150;
 const REFRESH_MS = 30_000;
@@ -127,6 +152,16 @@ export function CalendarPage() {
     null,
   );
   const view: ViewMode = mode ?? (isMobile && !filters.unitId ? "agenda" : "month");
+  // שמות אורחים — רק למי שיש לו הרשאת "אורחים" (אחרת רק מספר ההזמנה)
+  const showGuests = ctx.permissions["guests"] === true;
+  // התנגשויות עם יומנים חיצוניים (D3, קריאה בלבד) — אותו מטמון כמו מסך הערוצים
+  const channels = useQuery({
+    queryKey: [...manageKeys.all, "channels"],
+    queryFn: () => hospitalityChannels(),
+    enabled: ctx.permissions["bookings"] === true,
+    staleTime: 60_000,
+    retry: false,
+  });
   const { from, to } = rangeFor(view, anchor);
   const key = calendarKey(from, to, null, cancelled);
   const query = useQuery({
@@ -186,7 +221,7 @@ export function CalendarPage() {
     return <p className="p-4">אין לכם הרשאה לראות את היומן באתר הזה.</p>;
   if (query.isError && !query.data) return <LoadError error={query.error} />;
   if (!query.data) return <PageSkeleton label="טוען את היומן…" />;
-  const data = query.data;
+  const data = showGuests ? query.data : maskGuests(query.data);
   const found = search(data, q);
   const unitTypes = [
     ...new Set(data.units.filter((u) => u.kind !== "whole_property").map((u) => u.unit_type)),
@@ -197,7 +232,7 @@ export function CalendarPage() {
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">יומן</h1>
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="תצוגה">
-          {(["month", "week", "day", "agenda"] as ViewMode[]).map((m) => (
+          {(["month", "week", "day", "units", "agenda"] as ViewMode[]).map((m) => (
             <Button
               key={m}
               type="button"
@@ -206,7 +241,15 @@ export function CalendarPage() {
               aria-pressed={view === m}
               onClick={() => setMode(m)}
             >
-              {m === "month" ? "חודש" : m === "week" ? "שבוע" : m === "day" ? "יום" : "סדר יום"}
+              {m === "month"
+                ? "חודש"
+                : m === "week"
+                  ? "שבוע"
+                  : m === "day"
+                    ? "יום"
+                    : m === "units"
+                      ? "יחידות"
+                      : "סדר יום"}
             </Button>
           ))}
         </div>
@@ -246,6 +289,34 @@ export function CalendarPage() {
               ? `${dayLabel(anchor)}${anchor === data.today ? " — היום" : ""}`
               : `${dayLabel(from)} – ${dayLabel(addDays(to, -1))}`}
         </p>
+        {/* מעבר מהיר: לחודש (חודש / שבוע) או לתאריך */}
+        {view === "month" || view === "week" ? (
+          <select
+            aria-label="מעבר לחודש"
+            value={(view === "month" ? from : anchor).slice(0, 7)}
+            onChange={(e) => {
+              const a = monthAnchor(e.target.value);
+              if (a) setAnchor(a);
+            }}
+            className="min-h-11 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            {monthOptions(data.today, (view === "month" ? from : anchor).slice(0, 7)).map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type="date"
+            aria-label="מעבר לתאריך"
+            value={anchor}
+            onChange={(e) =>
+              /^\d{4}-\d{2}-\d{2}$/.test(e.target.value) && setAnchor(e.target.value)
+            }
+            className="min-h-11 rounded-md border border-input bg-background px-2 text-sm"
+          />
+        )}
         <span className="ms-auto flex items-center gap-2">
           {query.isFetching && (
             <span role="status" className="flex items-center">
@@ -403,6 +474,20 @@ export function CalendarPage() {
       <Legend />
       {view === "agenda" ? (
         <Agenda view={data} filters={filters} onBooking={setBooking} onBlock={setBlock} />
+      ) : view === "units" ? (
+        <UnitsView
+          view={data}
+          filters={filters}
+          onBooking={setBooking}
+          onBlock={setBlock}
+          onOpenUnit={(unitId) => {
+            setFilters((f) => ({ ...f, unitId }));
+            setMode("month");
+          }}
+          onNewBlock={(unitId) =>
+            setBlockForm({ unitId, from: data.today, to: addDays(data.today, 1) })
+          }
+        />
       ) : view === "day" ? (
         <DayView
           view={data}
@@ -416,6 +501,7 @@ export function CalendarPage() {
         <Board
           view={data}
           filters={filters}
+          channels={channels.data}
           onBooking={setBooking}
           onBlock={setBlock}
           onSelectRange={(unitId, a, b) => setBlockForm({ unitId, from: a, to: b })}
@@ -460,6 +546,8 @@ function Legend() {
 function Board(props: {
   view: CalendarView;
   filters: Filters;
+  /** יומנים חיצוניים (להתנגשויות); undefined — עוד לא נטען / אין הרשאה */
+  channels?: ChannelUnit[] | undefined;
   onBooking: (b: CalendarBooking) => void;
   onBlock: (k: CalendarBlock) => void;
   onSelectRange: (unitId: string, from: string, to: string) => void;
@@ -478,6 +566,22 @@ function Board(props: {
     [view, props.filters, groups],
   );
   const days = useMemo(() => daysOf(view.from, view.to), [view.from, view.to]);
+  // מבט אחד: כמה יחידות פנויות בכל לילה (לפי המתחם / היחידה שנבחרו, בלי סינון המצב)
+  const free = useMemo(
+    () => freeByNight(buildRows(view, { ...props.filters, tone: "" }, groups ?? []), days.length),
+    [view, props.filters, groups, days.length],
+  );
+  const fullNights = days.filter((_, i) => free[i]!.total > 0 && free[i]!.free === 0);
+  // התנגשויות עם יומנים חיצוניים בטווח (D3) — לכל יחידה
+  const marks = useMemo(
+    () => conflictMarks(props.channels ?? [], view.from, view.to),
+    [props.channels, view.from, view.to],
+  );
+  const marksByUnit = useMemo(() => {
+    const m = new Map<string, ConflictMark[]>();
+    for (const x of marks) (m.get(x.unitId) ?? m.set(x.unitId, []).get(x.unitId)!).push(x);
+    return m;
+  }, [marks]);
   const scroller = useRef<HTMLDivElement>(null);
   // וירטואליזציה: רק השורות שעל המסך (ועוד מרווח) מצוירות — מאות יחידות בלי האטה
   const [viewport, setViewport] = useState({ top: 0, height: 800 });
@@ -520,6 +624,29 @@ function Board(props: {
 
   return (
     <div className="flex flex-col gap-1">
+      {marks.length > 0 && (
+        <p
+          role="status"
+          data-testid="calendar-conflicts"
+          className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--hm-danger-bg)] bg-[var(--hm-danger-bg)] px-3 py-2 text-sm text-[var(--hm-danger)]"
+        >
+          <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            {marks.length === 1
+              ? "התנגשות אחת עם יומן חיצוני בטווח הזה"
+              : `${marks.length} התנגשויות עם יומנים חיצוניים בטווח הזה`}{" "}
+            — תאריכים שתפוסים אצלכם וגם בערוץ. לא נוצרה הזמנה כפולה; כדאי לסגור אותם בערוץ.
+          </span>
+          <Link to="/manage/channels" className="font-semibold underline underline-offset-2">
+            לבדיקה בערוצים
+          </Link>
+        </p>
+      )}
+      {fullNights.length > 0 && (
+        <p className="sr-only">
+          לילות שבהם אין יחידה פנויה: {fullNights.map((d) => dayLabel(d)).join(", ")}
+        </p>
+      )}
       {/* שורה אחת שהטקסט שלה מתחלף — בלי להזיז את הלוח בין הלחיצה הראשונה לשנייה */}
       <p
         className={cn(
@@ -544,31 +671,68 @@ function Board(props: {
         aria-describedby="board-help"
         tabIndex={0}
       >
-        <div style={{ width, height: rows.length * ROW_H + ROW_H }} className="relative">
-          {/* כותרת התאריכים — קבועה למעלה */}
-          <div className="sticky top-0 z-20 flex bg-background" style={{ height: ROW_H }}>
-            <div
-              className="sticky start-0 z-30 flex items-center border-b border-e bg-background px-2 text-xs font-medium"
-              style={{ width: NAME_W }}
-            >
-              יחידה
-            </div>
-            {days.map((d, i) => (
+        <div style={{ width, height: rows.length * ROW_H + ROW_H + SUM_H }} className="relative">
+          {/* כותרת התאריכים ושורת "פנויות" — קבועות למעלה */}
+          <div className="sticky top-0 z-20 bg-background">
+            <div className="flex bg-background" style={{ height: ROW_H }}>
               <div
-                key={d}
-                className={cn(
-                  "flex flex-col items-center justify-center border-b border-e text-[11px] leading-tight",
-                  weekend.has(dow(d)) && "bg-muted",
-                  i === todayIdx && "bg-primary/15 font-bold",
-                )}
-                style={{ width: COL_W }}
-                data-day={d}
-                aria-current={i === todayIdx ? "date" : undefined}
+                className="sticky start-0 z-30 flex items-center border-b border-e bg-background px-2 text-xs font-medium"
+                style={{ width: NAME_W }}
               >
-                <span>{DAY_SHORT[dow(d)]}</span>
-                <span>{Number(d.slice(8))}</span>
+                יחידה
               </div>
-            ))}
+              {days.map((d, i) => (
+                <div
+                  key={d}
+                  className={cn(
+                    "flex flex-col items-center justify-center border-b border-e text-[11px] leading-tight",
+                    weekend.has(dow(d)) && "bg-muted",
+                    i === todayIdx && "bg-primary/15 font-bold",
+                  )}
+                  style={{ width: COL_W }}
+                  data-day={d}
+                  aria-current={i === todayIdx ? "date" : undefined}
+                >
+                  <span>{DAY_SHORT[dow(d)]}</span>
+                  <span>{Number(d.slice(8))}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex bg-background" style={{ height: SUM_H }} data-testid="free-row">
+              <div
+                className="sticky start-0 z-30 flex items-center border-b border-e bg-background px-2 text-[11px] font-medium text-muted-foreground"
+                style={{ width: NAME_W }}
+              >
+                פנויות
+              </div>
+              {free.map((f, i) => (
+                <div
+                  key={days[i]}
+                  aria-hidden="true"
+                  title={
+                    f.total === 0
+                      ? undefined
+                      : f.free === 0
+                        ? `${dayLabel(days[i]!)}: הכול תפוס`
+                        : `${dayLabel(days[i]!)}: ${f.free} מתוך ${f.total} פנויות`
+                  }
+                  className={cn(
+                    "flex items-center justify-center border-b border-e text-[11px] font-semibold",
+                    f.total === 0
+                      ? "text-muted-foreground"
+                      : f.free === 0
+                        ? "bg-[var(--hm-danger-bg)] text-[var(--hm-danger)]"
+                        : f.free === f.total
+                          ? "text-[var(--hm-success)]"
+                          : "text-foreground",
+                  )}
+                  style={{ width: COL_W }}
+                  data-free={f.free}
+                >
+                  {f.total === 0 ? "" : f.free === 0 ? "מלא" : f.free}
+                </div>
+              ))}
+            </div>
           </div>
           <div style={{ height: win.first * ROW_H }} />
           {shown.map((row) =>
@@ -625,6 +789,20 @@ function Board(props: {
                     onBlock={props.onBlock}
                   />
                 ))}
+                {(marksByUnit.get(row.unit.id) ?? []).map((m) => (
+                  <Link
+                    key={m.key}
+                    to="/manage/channels"
+                    data-conflict=""
+                    className="absolute bottom-0.5 z-[6] h-2 rounded-full bg-[var(--hm-danger-dot)] ring-1 ring-white hover:h-3"
+                    style={{
+                      insetInlineStart: NAME_W + m.start * COL_W + 2,
+                      width: m.span * COL_W - 4,
+                    }}
+                    aria-label={`התנגשות עם ${m.label}: ${shortDate(m.from)}–${shortDate(m.to)} — לבדיקה במסך הערוצים`}
+                    title={`התנגשות עם ${m.label}: ${shortDate(m.from)}–${shortDate(m.to)}`}
+                  />
+                ))}
               </div>
             ),
           )}
@@ -645,10 +823,11 @@ function BarView({
 }) {
   // D3: מקור התפוסה — באתר / טלפון / ערוץ / חסימה ידנית / סנכרון (לקורא מסך ובריחוף)
   const source = bar.booking ? bookingSource(bar.booking) : blockSource(bar.block!);
+  // Calendar Pro: גם תאריכי ההגעה והעזיבה (או החסימה) — בריחוף ולקורא מסך
   const text =
     bar.kind === "block"
-      ? `${bar.label} · ${source.label}`
-      : `${bar.label} · ${STATUS_LABELS[bar.booking!.status]} · מקור: ${source.label}`;
+      ? `${bar.label} · ${source.label} · ${shortDate(bar.block!.start_date)}–${shortDate(bar.block!.end_date)}`
+      : `${bar.label} · ${STATUS_LABELS[bar.booking!.status]} · מקור: ${source.label} · הגעה ${shortDate(bar.booking!.check_in)} · עזיבה ${shortDate(bar.booking!.check_out)}`;
   return (
     <button
       type="button"
@@ -673,6 +852,230 @@ function BarView({
         ))}
       <span className="truncate">{bar.label}</span>
     </button>
+  );
+}
+
+// ---------- תצוגת יחידות (Calendar Pro) ----------
+
+const STRIP_CLASS: Record<NightState, string> = {
+  free: "bg-card border-[var(--hm-line-soft)]",
+  booked: TONE_CLASS.confirmed,
+  pending: TONE_CLASS.pending,
+  block: TONE_CLASS.block,
+  external: TONE_CLASS.external,
+};
+
+/** כרטיס לכל יחידה: הלילה (פנוי / תפוס / חסום), מי מגיע ומי עוזב היום, ההגעה הבאה, ו-14 הלילות */
+function UnitsView({
+  view,
+  filters,
+  onBooking,
+  onBlock,
+  onOpenUnit,
+  onNewBlock,
+}: {
+  view: CalendarView;
+  filters: Filters;
+  onBooking: (b: CalendarBooking) => void;
+  onBlock: (k: CalendarBlock) => void;
+  onOpenUnit: (unitId: string) => void;
+  onNewBlock: (unitId: string) => void;
+}) {
+  const roomTypes = useQuery({
+    queryKey: [...manageKeys.all, "room-types"],
+    queryFn: () => hospitalityRoomTypes(),
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+  const cards = useMemo(
+    () => unitCards(view, filters, roomTypes.data ?? []),
+    [view, filters, roomTypes.data],
+  );
+  const days = daysOf(view.from, view.to);
+  const freeTonight = cards.filter((c) => c.tonight === "free").length;
+  if (cards.length === 0)
+    return (
+      <p className="rounded-md border p-4 text-sm text-muted-foreground">אין יחידות לפי הסינון.</p>
+    );
+  return (
+    <section
+      aria-labelledby="units-view-title"
+      className="flex flex-col gap-3"
+      data-testid="calendar-units"
+    >
+      <h2 id="units-view-title" className="text-base font-semibold">
+        {freeTonight === 0
+          ? "הלילה הכול תפוס"
+          : `הלילה ${freeTonight === 1 ? "יחידה אחת פנויה" : `${freeTonight} יחידות פנויות`} מתוך ${cards.length}`}
+      </h2>
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {cards.map((c) => (
+          <UnitCardView
+            key={c.unit.id}
+            card={c}
+            days={days}
+            today={view.today}
+            onBooking={onBooking}
+            onBlock={onBlock}
+            onOpenUnit={onOpenUnit}
+            onNewBlock={onNewBlock}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function UnitCardView({
+  card: c,
+  days,
+  today,
+  onBooking,
+  onBlock,
+  onOpenUnit,
+  onNewBlock,
+}: {
+  card: UnitCard;
+  days: string[];
+  today: string;
+  onBooking: (b: CalendarBooking) => void;
+  onBlock: (k: CalendarBlock) => void;
+  onOpenUnit: (unitId: string) => void;
+  onNewBlock: (unitId: string) => void;
+}) {
+  const titleId = `unit-card-${c.unit.id}`;
+  const pct = days.length ? Math.round(((days.length - c.freeNights) / days.length) * 100) : 0;
+  const guest = (b: CalendarBooking) => `#${b.number}${b.guest_name ? ` ${b.guest_name}` : ""}`;
+  return (
+    <li
+      aria-labelledby={titleId}
+      className="flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-[var(--hm-shadow-card)]"
+      data-unit-card={c.unit.name}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 id={titleId} className="truncate font-semibold">
+            {c.unit.name}
+          </h3>
+          <p className="truncate text-xs text-muted-foreground">{c.propertyName}</p>
+        </div>
+        <span
+          className={cn(
+            "shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+            c.tonight === "free"
+              ? "border-[var(--hm-success-bg)] bg-[var(--hm-success-bg)] text-[var(--hm-success)]"
+              : STRIP_CLASS[c.tonight],
+          )}
+        >
+          {c.tonight === "free" ? "פנוי הלילה" : `${NIGHT_LABELS[c.tonight]} הלילה`}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-1 text-sm">
+        {c.stay ? (
+          <button
+            type="button"
+            onClick={() => onBooking(c.stay!)}
+            className="min-h-10 rounded-lg px-2 text-start hover:bg-[var(--hm-surface-2)]"
+          >
+            {guest(c.stay)} · עד {shortDate(c.stay.check_out)}
+          </button>
+        ) : c.block ? (
+          <button
+            type="button"
+            onClick={() => onBlock(c.block!)}
+            className="min-h-10 rounded-lg px-2 text-start hover:bg-[var(--hm-surface-2)]"
+          >
+            {c.block.synced
+              ? `מ-${blockSource(c.block).label}`
+              : c.block.reason
+                ? `חסום — ${c.block.reason}`
+                : "חסום"}{" "}
+            · עד {shortDate(c.block.end_date)}
+          </button>
+        ) : (
+          <p className="px-2 text-muted-foreground">
+            {c.next
+              ? `ההגעה הבאה: ${dayLabel(c.next.check_in)} (${guest(c.next)})`
+              : "אין הגעות קרובות בטווח"}
+          </p>
+        )}
+        {(c.arriving || c.leaving) && (
+          <div className="flex flex-wrap gap-1.5 px-2">
+            {c.arriving && (
+              <button
+                type="button"
+                onClick={() => onBooking(c.arriving!)}
+                className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[var(--hm-success-bg)] px-2.5 text-xs font-semibold text-[var(--hm-success)]"
+              >
+                <LogIn className="size-3.5 rtl:-scale-x-100" aria-hidden="true" />
+                {c.arriving.check_in === today ? "מגיעים היום" : "מגיעים"}: {guest(c.arriving)}
+              </button>
+            )}
+            {c.leaving && (
+              <button
+                type="button"
+                onClick={() => onBooking(c.leaving!)}
+                className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[var(--hm-warning-bg)] px-2.5 text-xs font-semibold text-[var(--hm-warning)]"
+              >
+                <LogOut className="size-3.5 rtl:-scale-x-100" aria-hidden="true" />
+                {c.leaving.check_out === today ? "עוזבים היום" : "עוזבים"}: {guest(c.leaving)}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <ol
+          className="grid gap-0.5"
+          style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}
+          aria-label={`${days.length} הלילות מ-${dayLabel(days[0]!)}: ${c.freeNights} פנויים, ${days.length - c.freeNights} תפוסים או חסומים`}
+        >
+          {c.strip.map((n, i) => (
+            <li
+              key={days[i]}
+              title={`${dayLabel(days[i]!)}: ${NIGHT_LABELS[n]}`}
+              className={cn(
+                "h-6 rounded-sm border",
+                STRIP_CLASS[n],
+                days[i] === today && "ring-2 ring-[var(--hm-lagoon-500)]",
+              )}
+            >
+              <span className="sr-only">
+                {dayLabel(days[i]!)}: {NIGHT_LABELS[n]}
+              </span>
+            </li>
+          ))}
+        </ol>
+        <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
+          <span>{dayLabel(days[0]!)}</span>
+          <span>תפוסה {pct}%</span>
+          <span>{dayLabel(days[days.length - 1]!)}</span>
+        </div>
+      </div>
+
+      <div className="mt-auto flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="min-h-10"
+          onClick={() => onOpenUnit(c.unit.id)}
+        >
+          היומן של היחידה
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="min-h-10"
+          onClick={() => onNewBlock(c.unit.id)}
+        >
+          חסימת תאריכים
+        </Button>
+      </div>
+    </li>
   );
 }
 

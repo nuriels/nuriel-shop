@@ -15,6 +15,14 @@ import {
   shift,
   toneOf,
   visibleWindow,
+  conflictMarks,
+  freeByNight,
+  maskGuests,
+  monthAnchor,
+  monthOptions,
+  nightState,
+  shortDate,
+  unitCards,
   type Row,
 } from "@/engines/hospitality/management/calendar/model";
 import {
@@ -337,5 +345,125 @@ describe("input checks (same messages as the database)", () => {
     expect(() =>
       parseBlock({ unitId: U1, from: "2026-12-05", to: "2026-12-07", reason: 5 }),
     ).toThrow("ערך לא תקין");
+  });
+});
+
+// ---------- Calendar Pro ----------
+describe("Calendar Pro: one glance — free / occupied, conflicts, unit cards", () => {
+  const all = { propertyId: "", unitId: "", unitType: "", tone: "" as const };
+  const ix = (d: string) => Math.round((Date.parse(d) - Date.parse("2026-12-01")) / 86400000);
+
+  it("each night of a unit: booked / pending / blocked / external / free; cancelled does not occupy", () => {
+    const rows = units(
+      buildRows(
+        view({
+          blocks: [
+            ...view().blocks,
+            {
+              id: id(201),
+              unit_id: U2,
+              unit_name: "צימר ברוש",
+              start_date: "2026-12-15",
+              end_date: "2026-12-16",
+              reason: null,
+              synced: true,
+              channel: "airbnb",
+            },
+          ],
+        }),
+        all,
+      ),
+    );
+    const u1 = rows.find((r) => r.unit.id === U1)!;
+    const u2 = rows.find((r) => r.unit.id === U2)!;
+    const u3 = rows.find((r) => r.unit.id === U3)!;
+    expect(nightState(u1, ix("2026-12-02"))).toBe("booked");
+    expect(nightState(u1, ix("2026-12-03"))).toBe("free");
+    // the whole property's booking occupies its units ("via")
+    expect(nightState(u1, ix("2026-12-20"))).toBe("booked");
+    expect(nightState(u2, ix("2026-12-10"))).toBe("pending");
+    expect(nightState(u2, ix("2026-12-15"))).toBe("external");
+    expect(nightState(u3, ix("2026-12-05"))).toBe("block");
+    const withCancelled = units(buildRows(view(), all));
+    expect(
+      nightState(
+        withCancelled.find((r) => r.unit.id === U3)!,
+        ix("2026-12-30"),
+      ),
+    ).toBe("free");
+  });
+
+  it("the free row: active units only (not the whole property), per night", () => {
+    const free = freeByNight(buildRows(view(), all), 31);
+    expect(free[ix("2026-12-02")]).toEqual({ free: 2, total: 3 });
+    // the whole property is booked: both of its units are taken, the other property is free
+    expect(free[ix("2026-12-20")]).toEqual({ free: 1, total: 3 });
+    expect(free[ix("2026-12-05")]).toEqual({ free: 2, total: 3 });
+    expect(free[ix("2026-12-25")]).toEqual({ free: 3, total: 3 });
+  });
+
+  it("conflicts with external calendars: only inside the range, per unit, with the channel name", () => {
+    const marks = conflictMarks(
+      [
+        {
+          unit_id: U1,
+          calendars: [
+            {
+              id: "c1",
+              channel: "airbnb",
+              conflicts: [{ uid: "a", from: "2026-12-02", to: "2026-12-04" }],
+            },
+            {
+              id: "c2",
+              channel: "booking",
+              conflicts: [{ uid: "b", from: "2027-02-01", to: "2027-02-03" }],
+            },
+          ],
+        },
+      ],
+      "2026-12-01",
+      "2027-01-01",
+    );
+    expect(marks).toHaveLength(1);
+    expect(marks[0]).toMatchObject({ unitId: U1, label: "Airbnb", start: 1, span: 2 });
+  });
+
+  it("without the guests permission: no guest names anywhere (number only)", () => {
+    const masked = maskGuests(view());
+    expect(masked.bookings.every((b) => b.guest_name === null)).toBe(true);
+    expect(units(buildRows(masked, all)).find((r) => r.unit.id === U1)!.bars[0]!.label).toBe("#1");
+    expect(search(masked, "דנה")).toEqual([]);
+    expect(view().bookings[0]!.guest_name).toBe("דנה כהן");
+  });
+
+  it("unit cards: tonight, arriving / leaving today, the next arrival, the 14-night strip", () => {
+    const v = view({ from: "2026-12-03", to: "2026-12-17", today: "2026-12-03" });
+    const cards = unitCards(v, all);
+    expect(cards.map((c) => c.unit.id)).toEqual([U1, U2, U3]);
+    const u1 = cards[0]!;
+    expect(u1.tonight).toBe("free");
+    expect(u1.leaving?.number).toBe(1);
+    expect(u1.strip).toHaveLength(14);
+    const u2 = cards[1]!;
+    expect(u2.next?.number).toBe(2);
+    expect(u2.strip[ix("2026-12-10") - 2]).toBe("pending");
+    const u3 = cards[2]!;
+    expect(u3.strip[2]).toBe("block");
+    expect(u3.freeNights).toBe(12);
+  });
+
+  it("units view range and quick month navigation", () => {
+    expect(rangeFor("units", "2026-12-03")).toEqual({ from: "2026-12-03", to: "2026-12-17" });
+    expect(shift("units", "2026-12-03", 1)).toBe("2026-12-17");
+    expect(monthAnchor("2027-03")).toBe("2027-03-01");
+    expect(monthAnchor("2027-13")).toBeNull();
+    expect(monthAnchor("x")).toBeNull();
+    expect(shortDate("2026-12-05")).toBe("5.12");
+    const opts = monthOptions("2026-12-03", "2026-12");
+    expect(opts).toHaveLength(31);
+    expect(opts[0]).toEqual({ value: "2025-12", label: "דצמבר 2025" });
+    expect(opts.find((o) => o.value === "2026-12")?.label).toBe("דצמבר 2026");
+    // a month far away (navigated with "next") is still in the list
+    expect(monthOptions("2026-12-03", "2029-04").some((o) => o.value === "2029-04")).toBe(true);
   });
 });

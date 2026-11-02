@@ -22,7 +22,8 @@ export const diffDays = (a: string, b: string) =>
   Math.round((toDate(b).getTime() - toDate(a).getTime()) / DAY);
 export const dow = (isoDate: string) => toDate(isoDate).getUTCDay();
 
-export type ViewMode = "month" | "week" | "day" | "agenda";
+/** units (Calendar Pro) — כרטיס לכל יחידה: הלילה, הגעה / עזיבה, ההזמנה הבאה ו-14 הלילות הקרובים */
+export type ViewMode = "month" | "week" | "day" | "agenda" | "units";
 
 /** החודש של התאריך: מהראשון לחודש עד הראשון לחודש הבא; שבוע: 7 ימים מיום ראשון */
 export function rangeFor(mode: ViewMode, anchor: string): { from: string; to: string } {
@@ -465,4 +466,178 @@ export function dayOverview(
         block,
       };
     });
+}
+
+// ---------- Calendar Pro: מבט אחד — פנוי / תפוס, התנגשויות, כרטיסי יחידות ----------
+
+/** מה יש בלילה ביחידה (לשורת "פנויות", לרצועת הלילות ולכרטיס היחידה) */
+export type NightState = "free" | "booked" | "pending" | "block" | "external";
+
+export const NIGHT_LABELS: Record<NightState, string> = {
+  free: "פנוי",
+  booked: "תפוס",
+  pending: "ממתינה לאישור",
+  block: "חסום",
+  external: "תפוס ביומן חיצוני",
+};
+
+type UnitRow = Extract<Row, { type: "unit" }>;
+const counts = (b: Bar) => !b.booking || b.booking.status !== "cancelled";
+
+/** הלילה ה-index בשורה: הזמנה / חסימה / יומן חיצוני (גם "דרך כל המתחם"), או פנוי. מבוטלת לא תופסת */
+export function nightState(row: UnitRow, index: number): NightState {
+  const covering = row.bars.filter(
+    (b) => index >= b.start && index < b.start + b.span && counts(b),
+  );
+  const own = covering.find((b) => !b.via) ?? covering[0];
+  if (!own) return "free";
+  if (own.kind === "block") return own.tone === "external" ? "external" : "block";
+  return own.tone === "pending" ? "pending" : "booked";
+}
+
+/** שורת "פנויות" בלוח: בכל לילה — כמה יחידות פעילות (בלי "כל המתחם") פנויות, מתוך כמה */
+export function freeByNight(rows: Row[], nights: number): { free: number; total: number }[] {
+  const units = rows.filter(
+    (r): r is UnitRow => r.type === "unit" && r.unit.kind !== "whole_property" && r.unit.is_active,
+  );
+  return Array.from({ length: nights }, (_, i) => ({
+    total: units.length,
+    free: units.filter((r) => nightState(r, i) === "free").length,
+  }));
+}
+
+/** בלי הרשאת "אורחים": בלי שמות אורחים בכל היומן (רק מספר ההזמנה) */
+export function maskGuests(view: CalendarView): CalendarView {
+  return { ...view, bookings: view.bookings.map((b) => ({ ...b, guest_name: null })) };
+}
+
+export interface ConflictMark {
+  key: string;
+  unitId: string;
+  channel: string;
+  /** "Airbnb" / "Booking.com"… */
+  label: string;
+  from: string;
+  to: string;
+  start: number;
+  span: number;
+}
+
+/**
+ * התנגשויות עם יומנים חיצוניים (D3, קריאה בלבד): תאריכים שתפוסים אצלנו ותפוסים גם בערוץ — לא
+ * נכתבו (אין הזמנה כפולה), אבל צריך לסגור אותם בערוץ. בטווח שעל המסך, לכל יחידה.
+ */
+export function conflictMarks(
+  units: {
+    unit_id: string;
+    calendars: {
+      id: string;
+      channel: string;
+      conflicts: { uid: string; from: string; to: string }[];
+    }[];
+  }[],
+  from: string,
+  to: string,
+): ConflictMark[] {
+  const out: ConflictMark[] = [];
+  for (const u of units)
+    for (const c of u.calendars)
+      for (const x of c.conflicts ?? []) {
+        const geo = bar(from, to, x.from, x.to);
+        if (!geo) continue;
+        out.push({
+          key: `${c.id}-${x.uid}-${x.from}`,
+          unitId: u.unit_id,
+          channel: c.channel,
+          label: CHANNEL_LABELS[c.channel] ?? c.channel,
+          from: x.from,
+          to: x.to,
+          start: geo.start,
+          span: geo.span,
+        });
+      }
+  return out;
+}
+
+export interface UnitCard {
+  unit: CalendarUnit;
+  propertyName: string;
+  /** הלילה של היום (או של היום הראשון בטווח, כשהיום לא בו) */
+  tonight: NightState;
+  stay: CalendarBooking | null;
+  block: CalendarBlock | null;
+  arriving: CalendarBooking | null;
+  leaving: CalendarBooking | null;
+  /** ההגעה הבאה (אחרי היום) בטווח */
+  next: CalendarBooking | null;
+  /** הלילות בטווח (14 בתצוגת היחידות) */
+  strip: NightState[];
+  freeNights: number;
+}
+
+/** תצוגת היחידות: כרטיס לכל יחידה פעילה (בלי "כל המתחם" — התפוסה שלו מופיעה ביחידות שלו) */
+export function unitCards(
+  view: CalendarView,
+  filters: Filters,
+  groups: RoomGroup[] = [],
+): UnitCard[] {
+  const rows = buildRows(view, { ...filters, tone: "" }, groups);
+  const nights = diffDays(view.from, view.to);
+  const idx = Math.min(Math.max(0, diffDays(view.from, view.today)), Math.max(0, nights - 1));
+  const day = addDays(view.from, idx);
+  const property = new Map(view.properties.map((p) => [p.id, p.name]));
+  const wholeOf = new Map<string, string>();
+  for (const u of view.units) for (const m of u.member_ids ?? []) wholeOf.set(m, u.id);
+  const live = view.bookings.filter((b) => holding(b));
+  return rows
+    .filter((r): r is UnitRow => r.type === "unit" && r.unit.kind !== "whole_property")
+    .filter((r) => r.unit.is_active)
+    .map((r) => {
+      const ids = new Set([r.unit.id]);
+      const w = wholeOf.get(r.unit.id);
+      if (w) ids.add(w);
+      const mine = live.filter((b) => ids.has(b.unit_id));
+      const covering = r.bars.filter((b) => idx >= b.start && idx < b.start + b.span && counts(b));
+      const own = covering.find((b) => !b.via) ?? covering[0];
+      const strip = Array.from({ length: nights }, (_, i) => nightState(r, i));
+      return {
+        unit: r.unit,
+        propertyName: property.get(r.unit.property_id) ?? "",
+        tonight: nightState(r, idx),
+        stay: own?.booking ?? null,
+        block: own?.block ?? null,
+        arriving: mine.find((b) => b.check_in === day) ?? null,
+        leaving: mine.find((b) => b.check_out === day) ?? null,
+        next:
+          mine
+            .filter((b) => b.check_in > day)
+            .sort((a, b) => a.check_in.localeCompare(b.check_in))[0] ?? null,
+        strip,
+        freeNights: strip.filter((n) => n === "free").length,
+      };
+    });
+}
+
+/** "10.12" — תאריך קצר לתוויות */
+export const shortDate = (isoDate: string) => {
+  const d = toDate(isoDate);
+  return `${d.getUTCDate()}.${d.getUTCMonth() + 1}`;
+};
+
+/** "2026-11" → הראשון בחודש (מעבר מהיר לחודש); לא תקין → null */
+export function monthAnchor(value: string): string | null {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? `${value}-01` : null;
+}
+
+/** מעבר מהיר לחודש: שנה אחורה ושנה וחצי קדימה מהיום (והחודש שעל המסך, אם הוא רחוק יותר) */
+export function monthOptions(today: string, current: string): { value: string; label: string }[] {
+  const d = toDate(today);
+  const out: { value: string; label: string }[] = [];
+  for (let i = -12; i <= 18; i++) {
+    const m = iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + i, 1)));
+    out.push({ value: m.slice(0, 7), label: monthTitle(m) });
+  }
+  if (monthAnchor(current) && !out.some((o) => o.value === current))
+    out.push({ value: current, label: monthTitle(`${current}-01`) });
+  return out.sort((a, b) => a.value.localeCompare(b.value));
 }
