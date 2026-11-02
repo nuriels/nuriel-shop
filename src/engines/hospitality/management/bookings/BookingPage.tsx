@@ -8,6 +8,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { Check, ChevronRight, LogIn, LogOut, Mail, Phone, UserX, X } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from "@/platform/ui";
+import { GroupCard } from "./GroupCard";
 import { PaymentsCard } from "./PaymentsCard";
 import { PhonePaymentCard } from "./PhonePaymentCard";
 import {
@@ -140,6 +141,9 @@ function Booking({ b }: { b: BookingDetail }) {
       </dl>
 
       <PageNotice error={error}>{null}</PageNotice>
+
+      {/* מיגרציה 44: חלק מבקשה אחת לכמה חדרים — החדרים, ואישור / דחייה של כולם */}
+      <GroupCard bookingId={b.id} onError={setError} />
 
       {/* D4: תשלום טלפוני — בקשה / אישור / תשלום, והטלפון של האורח */}
       <PhonePaymentCard b={b} />

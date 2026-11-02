@@ -143,3 +143,43 @@ export interface Entitlements {
   units_used: number;
   features: JsonObject;
 }
+
+/** מיגרציה 44: בקשה אחת לכמה חדרים — התשובה (לכל חדר: ההזמנה והקישור האישי שלה) */
+export interface GroupRequestRoom {
+  booking_id: string;
+  number: number;
+  unit_id: string;
+  unit_name: string;
+  adults: number;
+  children: number;
+  total: number;
+  manage_token: string | null;
+}
+export interface GroupRequestResult {
+  group_id: string;
+  duplicate: boolean;
+  status: string;
+  total: number;
+  currency: string;
+  hold_expires_at: string | null;
+  bookings: GroupRequestRoom[];
+}
+
+/** מיגרציה 44: לצוות — החדרים של בקשה לכמה חדרים */
+export interface BookingGroupRoom {
+  id: string;
+  number: number;
+  unit_name: string;
+  status: string;
+  check_in: string;
+  check_out: string;
+  adults: number;
+  children: number;
+  total: number;
+  currency: string;
+  revision: number;
+}
+export interface BookingGroup {
+  group_id: string;
+  bookings: BookingGroupRoom[];
+}

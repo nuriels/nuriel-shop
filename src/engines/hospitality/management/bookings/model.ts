@@ -174,6 +174,11 @@ export const EMAIL_EVENT: Record<string, string> = {
   channel_conflict: "לעסק: התנגשות ביומן חיצוני",
   support_reply: "לעסק: תשובה מהתמיכה",
   open_dates_reminder: "לעסק: תזכורת לפתיחת תאריכים",
+  group_request_received: "לאורח: בקשה לכמה חדרים התקבלה",
+  group_booking_confirmed: "לאורח: ההזמנה לכמה חדרים אושרה",
+  group_booking_declined: "לאורח: הבקשה לכמה חדרים לא אושרה",
+  new_group_request: "לעסק: בקשה חדשה לכמה חדרים",
+  new_group_booking: "לעסק: הזמנה חדשה לכמה חדרים",
 };
 
 /** סוגי תשלום ואמצעי תשלום (כרטיס התשלומים, הדוחות) */

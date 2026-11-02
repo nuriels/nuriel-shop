@@ -10,6 +10,7 @@ import { createServerFn } from "@tanstack/react-start";
 import type {
   BookingRequestResult,
   CancellationQuote,
+  GroupRequestResult,
   GuestBookingView,
   Quote,
 } from "../types/domain";
@@ -34,6 +35,8 @@ import {
   parseQuote,
   parseRequestBooking,
   parseRequestCancellation,
+  parseRequestGroup,
+  stay,
   uuid,
 } from "../validation/input";
 
@@ -171,6 +174,56 @@ export const hospitalitySiteRequestBooking = createServerFn({ method: "POST" })
       client,
     );
     // מייל לאורח (עם קישור ניהול ההזמנה) ולעסק — מיד, בלי לחכות לסבב של ה-worker
+    kickOutbox();
+    return result;
+  });
+
+/** מיגרציה 44: יחידות שפנויות ופתוחות בתאריכים — להוספת חדר לאותה בקשה */
+export const hospitalitySiteFreeUnits = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => stay(input?.["checkIn"], input?.["checkOut"]))
+  .handler(async ({ data }): Promise<{ check_in: string; check_out: string; units: string[] }> => {
+    await throttle("availability");
+    const { callRpc } = await import("../server/rpc.server");
+    return callRpc("public_free_units", { _check_in: data.checkIn, _check_out: data.checkOut });
+  });
+
+/**
+ * מיגרציה 44: בקשה אחת לכמה חדרים — אותן בדיקות כמו לחדר אחד (מלכודת, CAPTCHA, הגבלת קצב), ואז
+ * המסד: כל החדרים יחד או אף אחד, מייל אחד לאורח (קישור אישי לכל חדר) ומייל אחד לעסק
+ */
+export const hospitalitySiteRequestGroup = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => ({
+    ...parseRequestGroup(input),
+    ...botCheckInput(input),
+  }))
+  .handler(async ({ data }): Promise<GroupRequestResult> => {
+    const client = await guardRequest(data);
+    const [{ callServerRpc }, { kickOutbox }] = await Promise.all([
+      import("../server/rpc.server"),
+      import("../outbox/worker.server"),
+    ]);
+    const result = await callServerRpc<GroupRequestResult>(
+      "request_booking_group",
+      {
+        _rooms: data.rooms.map((r) => ({
+          unit_id: r.unitId,
+          adults: r.adults,
+          children: r.children,
+          policy_hash: r.policyHash,
+        })),
+        _check_in: data.checkIn,
+        _check_out: data.checkOut,
+        _full_name: data.fullName,
+        _email: data.email,
+        _phone: data.phone,
+        _idempotency_key: data.idempotencyKey,
+        _policy_accepted: true,
+        _special_requests: data.specialRequests,
+        _marketing_consent: data.marketingConsent,
+        _language: data.language,
+      },
+      client,
+    );
     kickOutbox();
     return result;
   });

@@ -163,6 +163,46 @@ export function parseRequestBooking(input: Raw) {
   };
 }
 
+/** מיגרציה 44: בקשה אחת לכמה חדרים — 2 עד 8 חדרים שונים, לכל חדר האורחים והתנאים שאושרו */
+export const GROUP_MAX_ROOMS = 8;
+export function parseRequestGroup(input: Raw) {
+  const key = String(field(input, "idempotencyKey") ?? "");
+  // מזהי ההזמנות של החדרים: המזהה + "-1", "-2"…
+  if (!/^[A-Za-z0-9_-]{8,90}$/.test(key)) throw new InputError("חסר מזהה בקשה");
+  if (field(input, "policyAccepted") !== true)
+    throw new InputError("יש לאשר את תנאי הביטול לפני שליחת הבקשה");
+  const raw = field(input, "rooms");
+  if (!Array.isArray(raw) || raw.length < 2 || raw.length > GROUP_MAX_ROOMS)
+    throw new InputError(`בקשה לכמה חדרים — בין 2 ל-${GROUP_MAX_ROOMS} חדרים`);
+  const rooms = raw.map((r) => {
+    const o = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+    const hash = String(o["policyHash"] ?? "");
+    if (!/^[0-9a-f]{64}$/.test(hash))
+      throw new InputError("יש לאשר את תנאי הביטול לפני שליחת הבקשה");
+    return {
+      unitId: uuid(o["unitId"], "היחידה"),
+      adults: intInRange(o["adults"], 1, 100, "מספר המבוגרים", 2),
+      children: intInRange(o["children"], 0, 100, "מספר הילדים", 0),
+      policyHash: hash,
+    };
+  });
+  if (new Set(rooms.map((r) => r.unitId)).size !== rooms.length)
+    throw new InputError("כל חדר — פעם אחת בבקשה");
+  return {
+    ...stay(field(input, "checkIn"), field(input, "checkOut")),
+    rooms,
+    fullName: text(field(input, "fullName"), 120, "השם", { min: 2 }),
+    email: email(field(input, "email")),
+    phone: phone(field(input, "phone")),
+    idempotencyKey: key,
+    specialRequests: noCardData(
+      optionalText(field(input, "specialRequests"), 2000, "הבקשות המיוחדות"),
+    ),
+    marketingConsent: field(input, "marketingConsent") === true,
+    language: oneOf(field(input, "language"), ["he", "en", "ar", "ru"] as const, "השפה", "he"),
+  };
+}
+
 /** קישור "ניהול ההזמנה" (טוקן) או הזמנה של אורח מחובר (מזהה) — אחד מהשניים */
 export function parseGuestBookingRef(input: Raw) {
   const token = field(input, "token");

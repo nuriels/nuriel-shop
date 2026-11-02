@@ -2,6 +2,7 @@
 // הכללים (מי, מתי, revision, נעילה, יומן אירועים, מיילים בתור) — במסד (Stage 1f + מיגרציה 16).
 import { createServerFn } from "@tanstack/react-start";
 import type { BookingChange, BookingDetail, BookingList } from "../types/bookings";
+import type { BookingGroup } from "../types/domain";
 import {
   parseBookingId,
   parseBookingsQuery,
@@ -190,6 +191,30 @@ export const hospitalityDeclineCancellation = createServerFn({ method: "POST" })
       _reason: data.reason,
       _expected_revision: data.revision,
     });
+    await sendQueued();
+    return result;
+  });
+
+/** מיגרציה 44: החדרים של בקשה לכמה חדרים (null — הזמנה של חדר אחד) */
+export const hospitalityBookingGroup = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseBookingId(input))
+  .handler(async ({ data }): Promise<BookingGroup | null> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<BookingGroup | null>("booking_group", { _booking_id: data.id });
+  });
+
+/** מיגרציה 44: אישור / דחייה של כל החדרים שממתינים בקבוצה — מייל אחד לאורח */
+export const hospitalityDecideGroup = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => ({
+    ...parseDecision(input),
+    approve: (input ?? {})["approve"] === true,
+  }))
+  .handler(async ({ data }): Promise<{ group_id: string; decided: number; status: string }> => {
+    const { manageRpc } = await import("../server/manage.server");
+    const result = await manageRpc<{ group_id: string; decided: number; status: string }>(
+      "booking_group_decide",
+      { _booking_id: data.id, _approve: data.approve, _reason: data.reason },
+    );
     await sendQueued();
     return result;
   });

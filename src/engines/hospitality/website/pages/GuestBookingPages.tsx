@@ -43,14 +43,22 @@ const PAYABLE = new Set([
 ]);
 
 /** הטוקן / מספר הבקשה מה-# של הכתובת (רק בדפדפן) */
-function useHashParams(): { token: string | null; number: number | null; ready: boolean } {
+function useHashParams(): {
+  token: string | null;
+  number: number | null;
+  /** מיגרציה 44: בקשה לכמה חדרים — מספר החדרים */
+  rooms: number | null;
+  ready: boolean;
+} {
   const [state, setState] = useState<{
     token: string | null;
     number: number | null;
+    rooms: number | null;
     ready: boolean;
   }>({
     token: null,
     number: null,
+    rooms: null,
     ready: false,
   });
   useEffect(() => {
@@ -58,9 +66,11 @@ function useHashParams(): { token: string | null; number: number | null; ready: 
       const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
       const token = params.get("t");
       const n = Number(params.get("n"));
+      const rooms = Number(params.get("rooms"));
       setState({
         token: token && /^[0-9a-f]{64}$/i.test(token) ? token.toLowerCase() : null,
         number: Number.isInteger(n) && n > 0 ? n : null,
+        rooms: Number.isInteger(rooms) && rooms > 1 && rooms <= 8 ? rooms : null,
         ready: true,
       });
     };
@@ -107,10 +117,34 @@ function Notice({ children }: { children: ReactNode }) {
 
 // ---------- הבקשה התקבלה ----------
 
+/** מיגרציה 44: החדרים של הבקשה ששלחתם עכשיו (נשמרו בדפדפן הזה בשליחה) */
+function groupRoomsFromSession(): { number: number; unit_name: string; total: number }[] {
+  try {
+    const raw = JSON.parse(sessionStorage.getItem("hosp-group-request") ?? "[]") as unknown;
+    return Array.isArray(raw)
+      ? (raw as Record<string, unknown>[])
+          .filter((r) => typeof r?.["unit_name"] === "string")
+          .map((r) => ({
+            number: Number(r["number"]),
+            unit_name: String(r["unit_name"]),
+            total: Number(r["total"]),
+          }))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export function BookingReceivedPage() {
   const t = useCopy();
   const { site } = useSite();
-  const { token, number, ready } = useHashParams();
+  const { token, number, rooms, ready } = useHashParams();
+  const [groupRooms, setGroupRooms] = useState<
+    { number: number; unit_name: string; total: number }[]
+  >([]);
+  useEffect(() => {
+    if (rooms) setGroupRooms(groupRoomsFromSession());
+  }, [rooms]);
   const query = useGuestBooking(token);
   const b = query.data?.booking;
   const confirmed = b?.status === "confirmed";
@@ -124,7 +158,13 @@ export function BookingReceivedPage() {
         <h1 className="font-display mt-5 text-3xl font-medium sm:text-4xl">
           {confirmed ? t.received.titleConfirmed : t.received.title}
         </h1>
-        {shownNumber && <p className="mt-3 text-lg">{t.received.lead(shownNumber)}</p>}
+        {rooms ? (
+          <p className="mt-3 text-lg" data-testid="group-lead">
+            {t.received.groupLead(rooms)}
+          </p>
+        ) : (
+          shownNumber && <p className="mt-3 text-lg">{t.received.lead(shownNumber)}</p>
+        )}
         {!ready || (token && query.isPending) ? (
           <p className="mt-6 text-muted-foreground">{t.my.loading}</p>
         ) : !shownNumber ? (
@@ -151,7 +191,29 @@ export function BookingReceivedPage() {
               <Phone className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               {instructions ? t.received.noOnlineAny : t.received.noOnline}
             </p>
-            {b && (
+            {rooms && groupRooms.length > 0 && b && (
+              <dl
+                className="mx-auto mt-8 grid max-w-md gap-3 rounded-sm bg-[var(--site-sand)] p-5 text-start text-sm"
+                data-testid="group-rooms"
+              >
+                {groupRooms.map((r) => (
+                  <Row
+                    key={r.number}
+                    label={`#${r.number}`}
+                    value={`${r.unit_name} · ${money(r.total, b.currency)}`}
+                  />
+                ))}
+                <Row label={t.my.dates} value={stayText(b.check_in, b.check_out, t.locale)} />
+                <Row
+                  label={t.my.total}
+                  value={money(
+                    groupRooms.reduce((s, r) => s + r.total, 0),
+                    b.currency,
+                  )}
+                />
+              </dl>
+            )}
+            {b && !(rooms && groupRooms.length > 0) && (
               <dl className="mx-auto mt-8 grid max-w-md gap-3 rounded-sm bg-[var(--site-sand)] p-5 text-start text-sm">
                 <Row label={t.my.unit} value={b.unit_name} />
                 <Row label={t.my.dates} value={stayText(b.check_in, b.check_out, t.locale)} />
@@ -161,7 +223,7 @@ export function BookingReceivedPage() {
             )}
             <p className="mx-auto mt-6 flex max-w-md items-start justify-center gap-2 text-sm text-muted-foreground">
               <Mail className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              {t.received.email}
+              {rooms ? t.received.groupEmail : t.received.email}
             </p>
           </>
         )}

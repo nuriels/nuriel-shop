@@ -249,6 +249,19 @@ export function copyFor(event: string, p: EmailPayload, b: EmailBusiness): Copy 
         button: "לפתיחת תאריכים",
       };
     }
+    // מיגרציה 44: בקשה אחת לכמה חדרים — אותו נוסח כמו לחדר אחד (בלי המספר של חדר אחד), ומספר החדרים;
+    // הפירוט (חדר, מספר הזמנה, אורחים, מחיר — ולאורח קישור אישי לכל חדר) בטבלה
+    case "group_request_received":
+    case "group_booking_confirmed":
+    case "group_booking_declined":
+    case "new_group_request":
+    case "new_group_booking": {
+      const { booking_number: _one, ...rest } = p;
+      const base = copyFor(event.replace("group_", ""), rest, b);
+      if (!base) return null;
+      const count = Number(p["room_count"] ?? (Array.isArray(p["rooms"]) ? p["rooms"].length : 0));
+      return { ...base, subject: `${base.subject} · ${count} חדרים` };
+    }
     // E4: צוות התמיכה ענה — בלי תוכן התשובה (המייל עלול להיות מועבר); קריאה באזור הניהול
     case "support_reply": {
       const num = p["ticket_number"] ? ` #${String(p["ticket_number"])}` : "";
@@ -278,13 +291,20 @@ export function renderBookingEmail(
   const from = copy.platform ? "Nuriel Hospitality" : ctx.business.name;
   const e = ctx.escape;
   const rows: [string, string][] = [];
-  if (p.booking_number) rows.push(["מספר הזמנה", `#${p.booking_number}`]);
-  if (p.unit_name) rows.push(["יחידה", p.unit_name]);
+  const rooms = groupRooms(p);
+  if (p.booking_number && !rooms.length) rows.push(["מספר הזמנה", `#${p.booking_number}`]);
+  if (p.unit_name && !rooms.length) rows.push(["יחידה", p.unit_name]);
   if (p.check_in) rows.push(["הגעה", dateText(p.check_in)]);
   if (p.check_out) rows.push(["עזיבה", dateText(p.check_out)]);
   if (p.nights) rows.push(["לילות", String(p.nights)]);
-  if (p.adults)
+  if (p.adults && !rooms.length)
     rows.push(["אורחים", `${p.adults} מבוגרים${p.children ? `, ${p.children} ילדים` : ""}`]);
+  // מיגרציה 44: כל חדר — מספר ההזמנה, היחידה, האורחים והמחיר
+  for (const r of rooms)
+    rows.push([
+      `#${r.number} · ${r.unit_name}`,
+      `${r.adults} מבוגרים${r.children ? `, ${r.children} ילדים` : ""} · ${money(r.total, p.currency)}`,
+    ]);
   if (p.total !== undefined) rows.push(["סה״כ", money(p.total, p.currency)]);
   if (recipient === "owner" && p.guest_name) rows.unshift(["אורח", p.guest_name]);
   // D3: התנגשויות ביומן חיצוני — רק התאריכים
@@ -328,12 +348,28 @@ export function renderBookingEmail(
   const manageUrl = guestManageUrl(recipient, p, ctx.siteOrigin ?? null);
   const link = (href: string, label: string) =>
     `<p style="margin:20px 0"><a href="${e(href)}" style="background:#1f3d2b;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">${e(label)}</a></p>`;
+  // מיגרציה 44: לאורח — קישור אישי לכל חדר בבקשה
+  const roomLinks =
+    recipient === "guest" && ctx.siteOrigin
+      ? rooms
+          .filter((r) => r.manage_token)
+          .map((r) =>
+            link(
+              `${ctx.siteOrigin}/stay/my-booking#t=${r.manage_token}`,
+              `לניהול ההזמנה — ${r.unit_name}`,
+            ),
+          )
+          .join("")
+      : "";
+  const personal = `<p style="margin:0 0 8px;font-size:12px;color:#777">הקישור אישי — אין להעביר אותו לאחרים. הוא בתוקף עד 30 יום אחרי העזיבה.</p>`;
   const button =
     recipient === "owner" && ctx.bookingUrl
       ? link(ctx.bookingUrl, copy.button ?? "לפתיחת ההזמנה")
-      : manageUrl
-        ? `${link(manageUrl, "לצפייה וניהול ההזמנה")}<p style="margin:0 0 8px;font-size:12px;color:#777">הקישור אישי — אין להעביר אותו לאחרים. הוא בתוקף עד 30 יום אחרי העזיבה.</p>`
-        : "";
+      : roomLinks
+        ? `${roomLinks}${personal.replace("הקישור אישי", "הקישורים אישיים").replace("אותו", "אותם").replace("הוא בתוקף", "הם בתוקף")}`
+        : manageUrl
+          ? `${link(manageUrl, "לצפייה וניהול ההזמנה")}${personal}`
+          : "";
   const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;background:#f5f5f2;font-family:Arial,Helvetica,sans-serif;color:#1d1d1b">
 <div dir="rtl" style="max-width:560px;margin:0 auto;padding:24px 16px;text-align:right">
@@ -355,7 +391,35 @@ ${copy.outro ? `<p style="margin:12px 0 0;font-size:14px;color:#444;line-height:
 
 /** במייל יש טוקן אישי (המייל הראשון לאורח, ומיגרציה 39 — גם מייל האישור) */
 export function hasManageToken(p: EmailPayload): boolean {
-  return typeof p["manage_token"] === "string" && /^[0-9a-f]{64}$/.test(p["manage_token"]);
+  return (
+    (typeof p["manage_token"] === "string" && /^[0-9a-f]{64}$/.test(p["manage_token"])) ||
+    groupRooms(p).some((r) => r.manage_token)
+  );
+}
+
+/** מיגרציה 44: החדרים של בקשה לכמה חדרים (רק שדות תקינים; קישור — רק טוקן תקין) */
+export function groupRooms(p: EmailPayload): {
+  number: number;
+  unit_name: string;
+  adults: number;
+  children: number;
+  total: number;
+  manage_token: string | null;
+}[] {
+  if (!Array.isArray(p["rooms"])) return [];
+  return (p["rooms"] as Record<string, unknown>[])
+    .filter((r) => r && typeof r["unit_name"] === "string")
+    .map((r) => ({
+      number: Number(r["number"] ?? 0),
+      unit_name: String(r["unit_name"]),
+      adults: Number(r["adults"] ?? 0),
+      children: Number(r["children"] ?? 0),
+      total: Number(r["total"] ?? 0),
+      manage_token:
+        typeof r["manage_token"] === "string" && /^[0-9a-f]{64}$/.test(r["manage_token"])
+          ? r["manage_token"]
+          : null,
+    }));
 }
 
 /**

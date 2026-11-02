@@ -2,20 +2,24 @@
 // (לילות, סה"כ, מקדמה, לוח ביטול מדויק) → פרטי האורח + אישור התנאים → בקשת הזמנה.
 // המחיר, הזמינות והתנאים נבדקים שוב במסד בזמן השליחה (policy_hash; EXCLUDE נגד הזמנה כפולה).
 // מזהה בקשה קבוע לכל ניסיון — לחיצה כפולה / רענון לא יוצרים שתי בקשות.
+// מיגרציה 44: אפשר להוסיף חדרים נוספים באותם תאריכים — בקשה אחת לכל החדרים (כולם או אף אחד).
 // אימות נגד בוטים (D1): אתגר שנפתר ברקע (lib/bot-check) + שדה מלכודת מוסתר — בלי שום פעולה
 // מהאורח ובלי עוגיות.
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Minus, Phone, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { cn } from "@/platform/ui";
 import {
+  hospitalitySiteFreeUnits,
   hospitalitySiteQuote,
   hospitalitySiteQuoteType,
   hospitalitySiteRequestBooking,
   hospitalitySiteRequestBookingType,
+  hospitalitySiteRequestGroup,
   hospitalitySitePaymentMethods,
 } from "../../api/website.functions";
+import type { GroupRequestResult } from "../../types/domain";
 import { CAPTCHA_RETRY, TRAP_FIELD } from "../../security/messages";
 import type { PublicUnit } from "../../types/website";
 import { AvailabilityCalendar, type DateRange } from "../components/AvailabilityCalendar";
@@ -105,6 +109,12 @@ export function BookingPage() {
   const [children, setChildren] = useState(search.children ?? 0);
   const [step, setStep] = useState<"choose" | "details">("choose");
   const keyRef = useRef(newKey());
+  // מיגרציה 44: חדרים נוספים לאותה בקשה (יחידות — לא סוגי חדרים ולא "כל המתחם")
+  const [extras, setExtras] = useState<ExtraRoom[]>([]);
+  const canAddRooms = selection?.kind === "unit" && !!unit && unit.kind !== "whole_property";
+  useEffect(() => {
+    setExtras([]);
+  }, [unit?.id, roomType?.type.id, range.from, range.to]);
 
   // הכתובת משקפת את הבחירה (רענון / שיתוף שומרים אותה)
   useEffect(() => {
@@ -123,9 +133,10 @@ export function BookingPage() {
   }, [unit, roomType, range.from, range.to, adults, children, navigate]);
 
   // שינוי בבחירה = ניסיון חדש (מזהה בקשה חדש)
+  const extrasKey = extras.map((x) => `${x.unitId}:${x.adults}:${x.children}`).join(",");
   useEffect(() => {
     keyRef.current = newKey();
-  }, [unit?.id, roomType?.type.id, range.from, range.to, adults, children]);
+  }, [unit?.id, roomType?.type.id, range.from, range.to, adults, children, extrasKey]);
 
   const maxAdults = Math.min(unit?.max_adults ?? capacity, capacity);
   const maxChildren = Math.min(
@@ -164,6 +175,38 @@ export function BookingPage() {
     retry: false,
     staleTime: 30_000,
   });
+  // הצעת מחיר לכל חדר נוסף — אותה בדיקה כמו לחדר הראשי
+  const extraQuotes = useQueries({
+    queries: extras.map((x) => ({
+      queryKey: [
+        "hospitality",
+        "site",
+        "quote",
+        x.unitId,
+        range.from,
+        range.to,
+        x.adults,
+        x.children,
+      ],
+      queryFn: () =>
+        hospitalitySiteQuote({
+          data: {
+            unitId: x.unitId,
+            checkIn: range.from!,
+            checkOut: range.to!,
+            adults: x.adults,
+            children: x.children,
+          },
+        }),
+      enabled: ready && site.booking_open,
+      retry: false,
+      staleTime: 30_000,
+    })),
+  });
+  const extraRooms: ExtraRoomView[] = extras.flatMap((x, i) => {
+    const u = units.find((v) => v.id === x.unitId);
+    return u ? [{ ...x, unit: u, quote: extraQuotes[i]! }] : [];
+  });
 
   if (!site.booking_open) return <BookingClosed />;
   if (units.length === 0)
@@ -174,7 +217,8 @@ export function BookingPage() {
     );
 
   const q = quote.data;
-  const canContinue = ready && !!q?.available;
+  const extrasOk = extraRooms.every((r) => r.quote.data?.available === true);
+  const canContinue = ready && !!q?.available && extrasOk;
 
   return (
     <PageFrame>
@@ -252,6 +296,17 @@ export function BookingPage() {
                   )}
                 </div>
               </Field>
+              {canAddRooms && ready && q?.available && (
+                <Field title={t.book.moreRooms} index={4}>
+                  <ExtraRoomsPicker
+                    mainUnitId={unit!.id}
+                    checkIn={range.from!}
+                    checkOut={range.to!}
+                    rooms={extraRooms}
+                    onChange={setExtras}
+                  />
+                </Field>
+              )}
               <div className="lg:hidden">
                 <Summary
                   unit={unit}
@@ -259,6 +314,7 @@ export function BookingPage() {
                   quote={quote}
                   adults={adults}
                   children={children}
+                  extras={extraRooms}
                 />
               </div>
               <button
@@ -279,11 +335,15 @@ export function BookingPage() {
               unit={unit!}
               roomType={roomType}
               quote={q!}
+              extras={extraRooms.flatMap((r) =>
+                r.quote.data?.available ? [{ ...r, quote: r.quote.data }] : [],
+              )}
               idempotencyKey={keyRef.current}
               onBack={() => setStep("choose")}
               onTermsChanged={() => {
                 setStep("choose");
                 void quote.refetch();
+                for (const r of extraRooms) void r.quote.refetch();
               }}
             />
           )}
@@ -295,6 +355,7 @@ export function BookingPage() {
             quote={quote}
             adults={adults}
             children={children}
+            extras={extraRooms}
           />
         </aside>
       </div>
@@ -450,12 +511,14 @@ function Summary({
   quote,
   adults,
   children,
+  extras = [],
 }: {
   unit: PublicUnit | undefined;
   name: string | undefined;
   quote: QuoteState;
   adults: number;
   children: number;
+  extras?: ExtraRoomView[];
 }) {
   const t = useCopy();
   const { site } = useSite();
@@ -486,9 +549,203 @@ function Summary({
             {q.open === false ? t.book.notOpen : t.book.unavailable}
           </p>
         ) : (
-          <QuoteDetails quote={q} rules={rules} />
+          <>
+            <QuoteDetails quote={q} rules={rules} />
+            {extras.length > 0 && <ExtraRoomsSummary main={q} extras={extras} />}
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ---------- מיגרציה 44: חדרים נוספים באותם תאריכים ----------
+
+interface ExtraRoom {
+  unitId: string;
+  adults: number;
+  children: number;
+}
+type SiteQuote = Awaited<ReturnType<typeof hospitalitySiteQuote>>;
+interface ExtraRoomView extends ExtraRoom {
+  unit: PublicUnit;
+  quote: QuoteState;
+}
+
+/** היחידות שפנויות ופתוחות בתאריכים (חוץ מהחדר שנבחר) — סימון, ואורחים לכל חדר */
+function ExtraRoomsPicker({
+  mainUnitId,
+  checkIn,
+  checkOut,
+  rooms,
+  onChange,
+}: {
+  mainUnitId: string;
+  checkIn: string;
+  checkOut: string;
+  rooms: ExtraRoomView[];
+  onChange: (rooms: ExtraRoom[]) => void;
+}) {
+  const t = useCopy();
+  const { site } = useSite();
+  const free = useQuery({
+    queryKey: ["hospitality", "site", "free-units", checkIn, checkOut],
+    queryFn: () => hospitalitySiteFreeUnits({ data: { checkIn, checkOut } }),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const candidates = site.units.filter(
+    (u) => u.id !== mainUnitId && (free.data?.units ?? []).includes(u.id),
+  );
+  const plain = (r: ExtraRoomView[]): ExtraRoom[] =>
+    r.map(({ unitId, adults, children }) => ({ unitId, adults, children }));
+  const set = (unitId: string, patch: Partial<ExtraRoom> | null) => {
+    const current = plain(rooms);
+    if (patch === null) onChange(current.filter((r) => r.unitId !== unitId));
+    else if (current.some((r) => r.unitId === unitId))
+      onChange(current.map((r) => (r.unitId === unitId ? { ...r, ...patch } : r)));
+    else onChange([...current, { unitId, adults: 2, children: 0, ...patch }]);
+  };
+  return (
+    <div className="space-y-4" data-testid="extra-rooms">
+      <p className="text-sm text-muted-foreground">{t.book.moreRoomsHint}</p>
+      {free.isPending ? (
+        <p className="text-sm text-muted-foreground">{t.book.moreRoomsLoading}</p>
+      ) : candidates.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t.book.noMoreRooms}</p>
+      ) : (
+        <ul className="grid gap-3">
+          {candidates.map((u) => {
+            const picked = rooms.find((r) => r.unitId === u.id);
+            const q = picked?.quote.data;
+            const maxAdults = Math.min(u.max_adults ?? u.capacity, u.capacity);
+            const adults = picked?.adults ?? 2;
+            const maxChildren = Math.min(
+              u.max_children ?? Math.max(0, u.capacity - 1),
+              Math.max(0, u.capacity - adults),
+            );
+            return (
+              <li
+                key={u.id}
+                className={cn(
+                  "rounded-[var(--radius)] border bg-card p-4",
+                  picked ? "border-primary" : "border-border",
+                )}
+                data-extra-room={u.name}
+              >
+                <label className="flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    className="size-5 accent-[var(--site-gold-ink)]"
+                    checked={!!picked}
+                    onChange={(e) =>
+                      set(
+                        u.id,
+                        e.target.checked ? { adults: Math.min(2, Math.max(1, maxAdults)) } : null,
+                      )
+                    }
+                    aria-label={t.book.addRoom(u.name)}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">{u.name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t.book.capacity(u.capacity)}
+                    </span>
+                  </span>
+                  {picked && (
+                    <span className="text-sm tabular-nums" aria-live="polite">
+                      {picked.quote.isFetching && !q
+                        ? t.book.calculating
+                        : q?.available
+                          ? money(Number(q.total), q.currency)
+                          : picked.quote.isError || q
+                            ? t.book.roomUnavailable
+                            : ""}
+                    </span>
+                  )}
+                </label>
+                {picked && (
+                  <fieldset className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <legend className="sr-only">{t.book.roomGuests(u.name)}</legend>
+                    <Stepper
+                      label={t.book.adults}
+                      value={adults}
+                      min={1}
+                      max={Math.max(1, maxAdults)}
+                      onChange={(n) => set(u.id, { adults: n })}
+                    />
+                    {(u.max_children ?? 1) > 0 && (
+                      <Stepper
+                        label={t.book.children}
+                        value={Math.min(picked.children, Math.max(0, maxChildren))}
+                        min={0}
+                        max={Math.max(0, maxChildren)}
+                        onChange={(n) => set(u.id, { children: n })}
+                      />
+                    )}
+                  </fieldset>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** בסיכום: כל חדר נוסף — המחיר (ותנאי הביטול שלו, כשהם שונים), והסכום של כל החדרים */
+function ExtraRoomsSummary({ main, extras }: { main: SiteQuote; extras: ExtraRoomView[] }) {
+  const t = useCopy();
+  const all = extras.every((r) => r.quote.data?.available);
+  const total =
+    Number(main.total) + extras.reduce((s, r) => s + Number(r.quote.data?.total ?? 0), 0);
+  const policyOf = (q: SiteQuote) =>
+    `${String(q.policy.rules["policy_id"] ?? "")}:${scheduleLines(q.policy, t).join("|")}`;
+  return (
+    <div className="mt-5 space-y-3 border-t border-border pt-5 text-sm" data-testid="extra-summary">
+      <h3 className="font-medium">{t.book.extraRooms}</h3>
+      <ul className="space-y-3">
+        {extras.map((r) => {
+          const q = r.quote.data;
+          return (
+            <li key={r.unitId}>
+              <div className="flex justify-between gap-4">
+                <span>
+                  {r.unit.name} · {t.my.guestsText(r.adults, r.children)}
+                </span>
+                <span className="tabular-nums">
+                  {!q
+                    ? r.quote.isError
+                      ? t.book.roomUnavailable
+                      : t.book.calculating
+                    : q.available
+                      ? money(Number(q.total), q.currency)
+                      : q.open === false
+                        ? t.book.notOpen
+                        : t.book.roomUnavailable}
+                </span>
+              </div>
+              {q?.available && policyOf(q) !== policyOf(main) && (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  <p>{t.book.otherTerms}</p>
+                  <ul>
+                    {scheduleLines(q.policy, t).map((l) => (
+                      <li key={l}>{l}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {all && (
+        <div className="flex items-baseline justify-between gap-4 border-t border-border pt-3 text-base">
+          <span className="font-medium">{t.book.groupTotal(extras.length + 1)}</span>
+          <span className="font-display text-2xl tabular-nums">{money(total, main.currency)}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -590,6 +847,7 @@ function GuestForm({
   unit,
   roomType,
   quote,
+  extras,
   idempotencyKey,
   onBack,
   onTermsChanged,
@@ -597,6 +855,8 @@ function GuestForm({
   unit: PublicUnit;
   roomType: TypeListing | undefined;
   quote: Awaited<ReturnType<typeof hospitalitySiteQuote>>;
+  /** מיגרציה 44: חדרים נוספים (עם הצעת המחיר שלהם) — בקשה אחת לכל החדרים */
+  extras: (ExtraRoom & { unit: PublicUnit; quote: SiteQuote })[];
   idempotencyKey: string;
   onBack: () => void;
   onTermsChanged: () => void;
@@ -638,6 +898,27 @@ function GuestForm({
         captcha,
         [TRAP_FIELD]: trap,
       };
+      // מיגרציה 44: כמה חדרים — בקשה אחת (כל החדרים יחד או אף אחד)
+      if (extras.length > 0)
+        return hospitalitySiteRequestGroup({
+          data: {
+            ...guest,
+            rooms: [
+              {
+                unitId: unit.id,
+                adults: quote.adults,
+                children: quote.children,
+                policyHash: quote.policy_hash,
+              },
+              ...extras.map((x) => ({
+                unitId: x.unitId,
+                adults: x.quote.adults,
+                children: x.quote.children,
+                policyHash: x.quote.policy_hash,
+              })),
+            ],
+          },
+        });
       // סוג חדר: המסד בוחר חדר פנוי מהסוג (החדר מההצעה קודם) באותה טרנזקציה
       return roomType
         ? hospitalitySiteRequestBookingType({
@@ -646,6 +927,32 @@ function GuestForm({
         : hospitalitySiteRequestBooking({ data: { unitId: unit.id, ...guest } });
     },
     onSuccess: (r) => {
+      if ("group_id" in r) {
+        const group = r as GroupRequestResult;
+        const first = group.bookings[0];
+        // הפירוט של החדרים לעמוד "הבקשה התקבלה" (בדפדפן הזה בלבד; הקישורים האישיים — במייל)
+        try {
+          sessionStorage.setItem(
+            "hosp-group-request",
+            JSON.stringify(
+              group.bookings.map((b) => ({
+                number: b.number,
+                unit_name: b.unit_name,
+                total: b.total,
+              })),
+            ),
+          );
+        } catch {
+          /* בלי — העמוד יציג את החדר הראשון */
+        }
+        void navigate({
+          to: "/stay/booking-received",
+          hash: first?.manage_token
+            ? `t=${first.manage_token}&rooms=${group.bookings.length}`
+            : `n=${first?.number ?? ""}&rooms=${group.bookings.length}`,
+        });
+        return;
+      }
       void navigate({
         to: "/stay/booking-received",
         hash: r.manage_token ? `t=${r.manage_token}` : `n=${r.number}`,
@@ -672,8 +979,14 @@ function GuestForm({
     <form onSubmit={submit} noValidate className="max-w-xl space-y-6">
       <div className="lg:hidden">
         <p className="text-sm text-muted-foreground">
-          {roomType?.type.name ?? unit.name} · {stayText(quote.check_in, quote.check_out, t.locale)}{" "}
-          · {money(Number(quote.total), quote.currency)}
+          {extras.length > 0
+            ? t.book.groupLine(extras.length + 1)
+            : (roomType?.type.name ?? unit.name)}{" "}
+          · {stayText(quote.check_in, quote.check_out, t.locale)} ·{" "}
+          {money(
+            Number(quote.total) + extras.reduce((s, x) => s + Number(x.quote.total), 0),
+            quote.currency,
+          )}
         </p>
       </div>
       <h2 ref={heading} tabIndex={-1} className="text-xl font-medium outline-none">
