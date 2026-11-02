@@ -92,7 +92,9 @@ test("closed until opened: the dashboard task → open for a month → the calen
   await expect(page).toHaveURL(/\/manage\/calendar$/);
   const sheet = page.getByRole("dialog", { name: "פתיחת תאריכים להזמנה" });
   await expect(sheet).toBeVisible();
-  await expect(sheet.locator('[data-open-unit="יחידת אדיר"] [data-open-state="closed"]')).toBeVisible();
+  await expect(
+    sheet.locator('[data-open-unit="יחידת אדיר"] [data-open-state="closed"]'),
+  ).toBeVisible();
   await expect(sheet.locator('[data-open-unit="יחידת מוריה"] input')).toBeChecked();
   await sheet.getByRole("button", { name: "חודש קדימה" }).click();
   await expect(sheet.getByTestId("open-dates-summary")).toContainText("2 יחידות יהיו פתוחות");
@@ -105,8 +107,10 @@ test("closed until opened: the dashboard task → open for a month → the calen
     )
     .toBe("true");
   await expect(page.getByTestId("open-dates-alert")).toHaveCount(0);
-  expect(sql(`SELECT count(*) FROM hospitality.audit_log WHERE tenant_id = '${siteId}'
-                AND action = 'calendar.dates_opened'`)).toBe("1");
+  expect(
+    sql(`SELECT count(*) FROM hospitality.audit_log WHERE tenant_id = '${siteId}'
+                AND action = 'calendar.dates_opened'`),
+  ).toBe("1");
 
   // the board: two months ahead — every night after the last open one is "not open"
   await page.getByRole("button", { name: "חודש" }).click();
@@ -116,10 +120,9 @@ test("closed until opened: the dashboard task → open for a month → the calen
   await expect(cells.first()).toHaveAttribute("data-closed", "true");
   await expect(cells.last()).toHaveAttribute("data-closed", "true");
   await page.getByRole("button", { name: "היום" }).click();
-  await expect(page.locator('[data-unit-row="יחידת אדיר"] [data-cell]').first()).not.toHaveAttribute(
-    "data-closed",
-    "true",
-  );
+  await expect(
+    page.locator('[data-unit-row="יחידת אדיר"] [data-cell]').first(),
+  ).not.toHaveAttribute("data-closed", "true");
 });
 
 test("the size of the board is remembered", async ({ page, request }) => {
@@ -152,5 +155,7 @@ test("the site: after the last open night — not open yet, and it cannot be pic
   await expect(calendar.locator('[data-night="free"]')).toHaveCount(0);
   await expect(closed.first()).toBeDisabled();
   await expect(closed.first()).toHaveAccessibleName(/עוד לא נפתח/);
-  await expect(page.getByTestId("calendar-closed-note")).toContainText("התאריכים שאחריו עוד לא נפתחו");
+  await expect(page.getByTestId("calendar-closed-note")).toContainText(
+    "התאריכים שאחריו עוד לא נפתחו",
+  );
 });
