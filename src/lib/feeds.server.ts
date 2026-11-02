@@ -514,6 +514,19 @@ export async function renderFeed(pathname: string, request: Request): Promise<Re
     if (pathname === "/sitemap.xml") {
       return textResponse(await cachedSitemap(origin), "application/xml; charset=utf-8", 3600);
     }
+    // דף הנחיתה של השער: תקציר ציבורי (מי אנחנו, שלושת התחומים, מחירים וימי ניסיון מהמסד,
+    // דוגמאות ויצירת קשר) — רק לשער; בחנויות שום דבר לא משתנה
+    if (pathname === "/llms.txt" && maybeCurrentTenant()?.slug === PORTAL_STORE_SLUG) {
+      const body = await cachedFeed("llms", origin, async () => {
+        const [{ loadPortalLanding }, { landingLlmsTxt }] = await Promise.all([
+          import("@/lib/portal-landing.server"),
+          import("@/lib/portal-landing"),
+        ]);
+        const data = await loadPortalLanding();
+        return data ? landingLlmsTxt({ ...data, origin: data.origin || origin }) : "";
+      });
+      if (body !== "") return textResponse(body, "text/plain; charset=utf-8", 3600);
+    }
     if (pathname === "/llms.txt" && maybeCurrentTenant()?.slug !== PORTAL_STORE_SLUG) {
       const body = await cachedFeed("llms", origin, async () => (await llmsTxt(origin)) ?? "");
       // גוף ריק = הפיצ'ר כבוי בחנות הזו

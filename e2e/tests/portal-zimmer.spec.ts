@@ -62,7 +62,8 @@ test("portal → zimmer → the business opens (30-day trial) → management →
   const name = `צימרי הבדיקה ${stamp}`;
 
   await page.goto(PORTAL);
-  await page.getByRole("button", { name: "התחבר או פתח חנות בחינם" }).first().click();
+  // דף הנחיתה החדש: "כניסה" בכותרת — כניסה רגילה, בלי מסלול שנבחר מראש ("מה מקימים?")
+  await page.getByRole("button", { name: "כניסה", exact: true }).click();
   await page.locator("#portal-email").fill(email);
   await page.getByRole("button", { name: "שליחת קוד למייל" }).click();
   await page.locator("#portal-code").fill(await lastCodeFor(request, email));

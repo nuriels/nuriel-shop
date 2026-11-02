@@ -429,3 +429,25 @@ export function storeReadiness(
   if (!Number.isFinite(seen) || now - seen > SSL_AGENT_STALE_MS) return "ready";
   return "waiting";
 }
+
+// ------------------------------------------------------------
+// דף הנחיתה → חלון הכניסה
+// ------------------------------------------------------------
+
+/** המסלול שנבחר בדף הנחיתה לפני הכניסה */
+export type PortalIntent = "store" | "zimmer" | null;
+
+/**
+ * השלב אחרי האימות: יש חנויות (או אי אפשר לפתוח) → החנויות; אחרת — המסלול שנבחר בדף הנחיתה
+ * (חנות → "צור את החנות שלך", צימר → אתר לצימר, אם יש חבילות מפורסמות), ובלי בחירה — "מה מקימים?"
+ */
+export function stepAfterLogin(
+  account: Pick<PortalAccount, "stores" | "canCreate">,
+  intent: PortalIntent,
+  zimmerPlanCount: number,
+): "stores" | "product" | "create" | "zimmer" {
+  if (account.stores.length > 0 || !account.canCreate) return "stores";
+  if (intent === "store") return "create";
+  if (intent === "zimmer" && zimmerPlanCount > 0) return "zimmer";
+  return "product";
+}

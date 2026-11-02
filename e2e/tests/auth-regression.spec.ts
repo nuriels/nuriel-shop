@@ -104,7 +104,8 @@ test.describe("store opening through the portal (existing flow)", () => {
     const email = `owner.${stamp}@e2e.test`;
     const slug = `e2e-open-${stamp}`;
     await page.goto(PORTAL);
-    await page.getByRole("button", { name: "התחבר או פתח חנות בחינם" }).first().click();
+    // דף הנחיתה החדש: "כניסה" בכותרת — כניסה רגילה, בלי מסלול שנבחר מראש ("מה מקימים?")
+    await page.getByRole("button", { name: "כניסה", exact: true }).click();
     await page.locator("#portal-email").fill(email);
     await page.getByRole("button", { name: "שליחת קוד למייל" }).click();
     const code = await lastCodeFor(request, email);
@@ -159,7 +160,7 @@ test.describe("Google OAuth (no settings changed)", () => {
       await page.route(`${url}/auth/v1/authorize**`, (route) => route.abort());
       await page.goto(site);
       if (site.includes("nuriel-app2")) {
-        await page.getByRole("button", { name: "התחבר או פתח חנות בחינם" }).first().click();
+        await page.getByRole("button", { name: "כניסה", exact: true }).click();
         await page.getByRole("button", { name: "התחברות עם Google" }).click();
       } else {
         await page.getByRole("button", { name: "המשך עם Google" }).click();

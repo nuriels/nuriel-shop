@@ -68,11 +68,14 @@ import {
   type PortalZimmerPlan,
   ZIMMER_AREA_MAX,
   ZIMMER_MESSAGE_MAX,
+  stepAfterLogin,
+  type PortalIntent,
   cleanZimmerRequest,
   zimmerRequestProblems,
   type ZimmerRequestField,
 } from "@/lib/portal";
 import { compressLogoImage } from "@/lib/image";
+import { TRIAL_DAYS } from "@/lib/subscription";
 
 /**
  * תהליך הכניסה בשער הפלטפורמה (חלק 12), בחלון אחד:
@@ -151,11 +154,18 @@ export function PortalOnboarding({
   open,
   onOpenChange,
   baseDomain,
+  intent = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** nuri1.fit — לתצוגת הכתובת של החנות החדשה */
   baseDomain: string;
+  /**
+   * דף הנחיתה: מה בחרו לפני שנפתח החלון — "store" (חנות אינטרנטית, 14 ימי ניסיון) או
+   * "zimmer" (Nuriel Hospitality, 30 ימי ניסיון). אחרי האימות ממשיכים ישר למסלול שנבחר
+   * (במקום "מה מקימים?"); null — כניסה רגילה, בלי בחירה מראש.
+   */
+  intent?: PortalIntent;
 }) {
   const [step, setStep] = useState<Step>("email");
   // האימייל נשמר כאן (לא בשלב עצמו) — סגירה ופתיחה של החלון לא מוחקות אותו
@@ -175,6 +185,13 @@ export function PortalOnboarding({
   // מרנדר מחדש את השלבים (חזרה עם "אחורה" מאתר החנות)
   const [resetKey, setResetKey] = useState(0);
   const loadAccountFn = useServerFn(getPortalAccount);
+  // resume יציב (useCallback) — הבחירה מדף הנחיתה ומספר החבילות נקראים מ-ref
+  const intentRef = useRef<PortalIntent>(intent);
+  const zimmerCountRef = useRef(0);
+  useEffect(() => {
+    intentRef.current = intent;
+    zimmerCountRef.current = zimmerPlans?.length ?? 0;
+  }, [intent, zimmerPlans]);
 
   /** אימות שמור בלשונית → החנויות (או פתיחת חנות), עם רשימה עדכנית מהשרת */
   const resume = useCallback(
@@ -185,9 +202,7 @@ export function PortalOnboarding({
       loadAccountFn({ data: { token: saved.token } })
         .then((result) => {
           setAccount(result.account);
-          setStep(
-            result.account.stores.length > 0 || !result.account.canCreate ? "stores" : "product",
-          );
+          setStep(stepAfterLogin(result.account, intentRef.current, zimmerCountRef.current));
         })
         .catch((thrown: unknown) => {
           saveSession(null);
@@ -254,7 +269,7 @@ export function PortalOnboarding({
     setSession(next);
     setEmail(next.email);
     setAccount(nextAccount);
-    setStep(nextAccount.stores.length > 0 || !nextAccount.canCreate ? "stores" : "product");
+    setStep(stepAfterLogin(nextAccount, intent, zimmerPlans?.length ?? 0));
   };
 
   // חזרה מ-Google (?portal_google=1): Google אימת את המייל — מקבלים אסימון
@@ -297,10 +312,23 @@ export function PortalOnboarding({
   const busyStep = step === "preparing" || step === "zimmer-opening" || leaving;
 
   const titles: Record<Step, { title: string; description: string }> = {
-    email: {
-      title: "כניסה או פתיחת חנות",
-      description: "הכי מהיר — עם חשבון Google. אפשר גם עם קוד חד-פעמי למייל. בלי סיסמאות.",
-    },
+    email:
+      intent === "store"
+        ? {
+            title: `חנות אינטרנטית — ${TRIAL_DAYS} ימי ניסיון בחינם`,
+            description:
+              "מתחילים בכניסה: עם חשבון Google, או עם קוד חד-פעמי למייל. בלי סיסמאות ובלי כרטיס אשראי.",
+          }
+        : intent === "zimmer"
+          ? {
+              title: `Nuriel Hospitality — ${trialDays ? `${trialDays} ימי ניסיון` : "תקופת ניסיון"} בחינם`,
+              description:
+                "מתחילים בכניסה: עם חשבון Google, או עם קוד חד-פעמי למייל. בלי סיסמאות ובלי תשלום עכשיו.",
+            }
+          : {
+              title: "כניסה או פתיחת חנות",
+              description: "הכי מהיר — עם חשבון Google. אפשר גם עם קוד חד-פעמי למייל. בלי סיסמאות.",
+            },
     code: { title: "בדקו את המייל", description: "הזינו את הקוד בן 6 הספרות ששלחנו אליכם." },
     loading: { title: "רק רגע…", description: "טוענים את החנויות שלכם." },
     stores: {

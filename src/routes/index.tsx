@@ -63,6 +63,8 @@ import { loadHomeBanners, type BannerSet } from "@/lib/banners";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { CatalogSections } from "@/components/CatalogSections";
 import { PlatformLanding } from "@/components/portal/PlatformLanding";
+import { getPortalLanding, isPortalSite } from "@/lib/portal-landing.functions";
+import { LANDING_TITLE, landingDescription, landingJsonLd } from "@/lib/portal-landing";
 import { groupBySubcategory } from "@/lib/catalog-sections";
 import { evaluateCartPromotions, type PromotionEvaluation } from "@/lib/cart-promotions";
 import { EMPTY_SALES, loadSalesData, type SalesData } from "@/lib/sales-data";
@@ -87,12 +89,17 @@ export const Route = createFileRoute("/")({
   // חלק 21: "data-only" (במקום false) — פרטי החנות לתגיות (כותרת, קנונית,
   // JSON-LD) נטענים בשרת ונשמרים במצב שהדפדפן ממשיך ממנו, כך שהתגיות זהות בשרת
   // ובדפדפן (בלי אי-התאמה בהידרציה). הקטלוג עצמו עדיין נטען ומוצג בדפדפן בלבד.
-  ssr: "data-only",
+  //
+  // דף הנחיתה של שער הפלטפורמה (nuriel-app2): SSR מלא — התוכן כבר ב-HTML הראשוני (גוגל, Bing
+  // וכלי AI רואים את הדף בלי JavaScript). בכל חנות אחרת — "data-only" בדיוק כמו קודם.
+  ssr: async () => ((await isPortalSite()) ? true : "data-only"),
   // פעם אחת לטעינת עמוד — מעבר בין קטגוריות לא טוען שוב (התגיות לפי ?category=).
   // חלק 31: גם קטגוריות האב — לפירורי לחם היררכיים בעמודי הקטגוריה
   loader: async () => {
     const [site, categoryParents] = await Promise.all([getSiteSeo(), getCategoryParents()]);
-    return { ...site, categoryParents };
+    // דף הנחיתה: המחירים וימי הניסיון מהמסד (רק בשער; בחנויות — בלי קריאה נוספת)
+    const landing = site.isPortal ? await getPortalLanding().catch(() => null) : null;
+    return { ...site, categoryParents, landing };
   },
   staleTime: Infinity,
   // הקטגוריה והתצוגה בכתובת: כל בחירה נרשמת בהיסטוריה, ו"חזור" בדפדפן מחזיר
@@ -115,6 +122,28 @@ export const Route = createFileRoute("/")({
   // שגוגל, ווטסאפ ופייסבוק רואים אותן מיד. מסך הבית: כתובת קנונית + JSON-LD
   // של האתר והעסק; עמוד קטגוריה: כותרת ותיאור משלו + פירורי לחם.
   head: ({ match, loaderData: site }) => {
+    // דף הנחיתה של השער: כותרת, תיאור, כתובת קנונית ו-JSON-LD משלו (העסק, השירותים והמחירים
+    // מהמסד, ושאלות נפוצות — זהות לאלה שבדף)
+    if (site?.isPortal && site.landing?.origin) {
+      const landing = site.landing;
+      const url = `${landing.origin}/`;
+      const description = landingDescription(landing);
+      return {
+        meta: [
+          { title: LANDING_TITLE },
+          { name: "description", content: description },
+          { property: "og:title", content: LANDING_TITLE },
+          { property: "og:description", content: description },
+          { property: "og:url", content: url },
+          { property: "og:site_name", content: "נוריאל מחשבים" },
+          { name: "twitter:title", content: LANDING_TITLE },
+          { name: "twitter:description", content: description },
+          { name: "robots", content: "index, follow, max-image-preview:large" },
+        ],
+        links: [{ rel: "canonical", href: url }],
+        scripts: [{ type: "application/ld+json", children: jsonLdText(landingJsonLd(landing)) }],
+      };
+    }
     const schema = site?.schema ?? null;
     if (!site || site.isPortal || !schema) return {};
     const siteName = site.siteName || DEFAULT_STORE_NAME;
@@ -174,8 +203,9 @@ export const Route = createFileRoute("/")({
  */
 function Index() {
   const site = useLoaderData({ from: "__root__" });
+  const { landing } = Route.useLoaderData();
   if (site?.isPortal) {
-    return <PlatformLanding siteName={site.siteName || DEFAULT_STORE_NAME} />;
+    return <PlatformLanding siteName={site.siteName || DEFAULT_STORE_NAME} landing={landing} />;
   }
   return <StoreCatalog />;
 }
