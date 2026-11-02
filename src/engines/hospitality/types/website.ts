@@ -138,6 +138,8 @@ export interface PublicSite {
   design: SiteDesignRecord | null;
   /** סוגי חדרים (מלונות): הסוג נמכר במקום כל חדר; ההזמנה — לחדר פנוי מהסוג */
   room_types: PublicRoomType[];
+  /** E5: הכתובת הקנונית של האתר (https://…, בלי / בסוף) — לכתובות הקנוניות ולשיתוף; null — לא ידוע */
+  origin?: string | null;
 }
 
 export interface PublicRoomType {

@@ -1,6 +1,8 @@
 // שער הבקשות לאתר אירוח (plan B2 "Edge"; Stage 2a):
 //   • פונקציות שרת → ממשיכות (המתג engine-guard מחליט לכל קריאה);
-//   • robots.txt → Disallow: / כל עוד האתר הציבורי סגור; כשהוא פתוח — רק /stay נסרק;
+//   • robots.txt → Disallow: / כל עוד האתר הציבורי סגור; כשהוא פתוח — רק /stay נסרק (+ הקבצים
+//     של העמודים ומפת האתר, E5), עם שורת Sitemap בכתובת הקנונית;
+//   • sitemap.xml (E5) → רק כשהאתר פתוח: העמודים הציבוריים בלבד (website/seo.ts); סגור → 404;
 //   • אזור הניהול (/manage/**) ועמוד הכניסה מהשער (/admin-handoff) → ממשיכים לאפליקציה,
 //     רק כשאזור הניהול פעיל לאתר (מתג הסביבה + דגל המסד + דגל הניהול);
 //     /admin (כתובת הנחיתה של ה-handoff הקיים) → 302 ל-/manage;
@@ -13,6 +15,7 @@
 import { nurielCreditHtml } from "@/platform/branding/credit";
 import type { EdgeRequest, SiteRef } from "@/platform/engines/contract";
 import { MANAGE_PATH, SITE_PATH } from "../config";
+import { robotsTxt } from "../website/seo";
 import { ADMIN_LANDING, isManagementPath, isSitePath } from "./paths";
 
 // עמוד סטטי (בלי React ובלי נתוני העסק): צבעי ערכת "יוקרה", גופני מערכת, ניגודיות AA
@@ -52,8 +55,6 @@ const html = (body: string, status: number) =>
 
 // בלי סיומת קובץ: נתיב עם סיומת (.ics) נחשב בשרת לקובץ סטטי ולא מגיע לשער של האתר
 const ICAL_PATH = /^\/ical\/([0-9a-f]{40})$/;
-const ROBOTS_CLOSED = "User-agent: *\nDisallow: /\n";
-const ROBOTS_OPEN = `User-agent: *\nAllow: ${SITE_PATH}$\nAllow: ${SITE_PATH}/units/\nAllow: ${SITE_PATH}/rooms/\nDisallow: /\n`;
 
 export interface GateOptions {
   /** אזור הניהול פעיל לאתר */
@@ -62,6 +63,10 @@ export interface GateOptions {
   icalFeed?: (token: string) => Promise<Response | null>;
   /** האתר הציבורי פתוח (Stage 4) */
   siteOpen?: () => Promise<boolean>;
+  /** E5: הכתובת הקנונית של האתר (לשורת Sitemap ב-robots.txt); null — בלי השורה */
+  siteOrigin?: () => Promise<string | null>;
+  /** E5: מפת האתר; null — לא זמינה (404) */
+  sitemap?: () => Promise<Response | null>;
 }
 
 export async function hospitalityGate(
@@ -85,10 +90,17 @@ export async function hospitalityGate(
   }
   if (request.pathname === "/robots.txt") {
     const open = site.status === "active" && (await siteOpen());
-    return new Response(open ? ROBOTS_OPEN : ROBOTS_CLOSED, {
+    const origin = open && opts.siteOrigin ? await opts.siteOrigin() : null;
+    return new Response(robotsTxt(open, origin), {
       status: 200,
       headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
     });
+  }
+  if (request.pathname === "/sitemap.xml") {
+    const open = site.status === "active" && (await siteOpen());
+    const map = open && request.method === "GET" && opts.sitemap ? await opts.sitemap() : null;
+    if (map) return map;
+    return html(open ? NOT_FOUND_HTML : NOT_OPEN_HTML, 404);
   }
   // האתר הציבורי: הבית ("/" → /stay), עמודי היחידות, ההזמנה וניהול ההזמנה של האורח
   if ((request.pathname === "/" || isSitePath(request.pathname)) && (await siteOpen())) {

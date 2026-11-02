@@ -30,3 +30,25 @@ export async function sitesBaseDomain(): Promise<string | null> {
   const { tenantBaseDomain } = await import("@/integrations/supabase/tenant.server");
   return tenantBaseDomain();
 }
+
+/**
+ * הכתובות של האתר של הבקשה הנוכחית (לכתובת קנונית ולמפת אתר): הראשית — הדומיין של האתר אם
+ * יש (כמו בקישורים במיילים), ותת-הדומיין בפלטפורמה. מרשומת האתר במסד, לא מכותרות הבקשה.
+ */
+export async function currentSiteAddresses(): Promise<{
+  primary: string | null;
+  subdomain: string | null;
+}> {
+  const { maybeCurrentTenant, originForTenant, tenantBaseDomain } =
+    await import("@/integrations/supabase/tenant.server");
+  const tenant = maybeCurrentTenant();
+  if (!tenant) return { primary: null, subdomain: null };
+  let primary: string | null = null;
+  try {
+    primary = originForTenant(tenant);
+  } catch {
+    primary = null;
+  }
+  const base = tenantBaseDomain();
+  return { primary, subdomain: base ? `https://${tenant.slug}.${base}` : null };
+}

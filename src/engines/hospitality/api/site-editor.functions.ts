@@ -19,9 +19,11 @@ export interface SiteEditorView {
   unpublished: boolean;
   site_open: boolean;
   versions: { version: number; theme: string; note: string | null; published_at: string }[];
+  /** E5: הכתובות של האתר — לבחירת הכתובת הקנונית ולתצוגה המקדימה של גוגל */
+  addresses: { primary: string | null; subdomain: string | null };
 }
 
-type RawEditor = Omit<SiteEditorView, "draft" | "published"> & {
+type RawEditor = Omit<SiteEditorView, "draft" | "published" | "addresses"> & {
   draft: (Omit<NonNullable<SiteEditorView["draft"]>, "document"> & { document: unknown }) | null;
   published:
     (Omit<NonNullable<SiteEditorView["published"]>, "document"> & { document: unknown }) | null;
@@ -37,10 +39,17 @@ function revision(v: unknown): number {
 
 export const hospitalitySiteEditor = createServerFn({ method: "GET" }).handler(
   async (): Promise<SiteEditorView> => {
-    const { manageRpc } = await import("../server/manage.server");
-    const raw = await manageRpc<RawEditor>("site_editor", {});
+    const [{ manageRpc }, { currentSiteAddresses }] = await Promise.all([
+      import("../server/manage.server"),
+      import("@/platform/tenancy/current-site.server"),
+    ]);
+    const [raw, addresses] = await Promise.all([
+      manageRpc<RawEditor>("site_editor", {}),
+      currentSiteAddresses(),
+    ]);
     return {
       ...raw,
+      addresses,
       draft: raw.draft
         ? { ...raw.draft, document: JSON.stringify(raw.draft.document ?? {}) }
         : null,

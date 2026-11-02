@@ -78,6 +78,28 @@ export interface ColorOverrides {
   accent?: string;
 }
 
+/**
+ * E5: גוגל ושיתוף — חלק ממסמך האתר, ולכן נכנס לאתר רק בפרסום (טיוטה לא מוצגת לגולשים).
+ * כל שדה עובר normalizeDesign: טקסט בלבד באורך מוגבל, תמונה — מזהה, קוד האימות — אותיות,
+ * ספרות, _ ו-- בלבד. התגיות עצמן נבנות בשרת מהערכים — אף פעם לא HTML שהוזן.
+ */
+export interface SiteSeo {
+  /** כותרת דף הבית בגוגל (Meta Title); ריק — שם העסק | סוג המקום */
+  title?: string;
+  /** התיאור בגוגל (Meta Description); ריק — המשפט הראשון בתיאור המתחם */
+  description?: string;
+  /** תמונת השיתוף (Open Graph / Twitter) — מזהה תמונה מתמונות האתר; ריק — תמונת הפתיח */
+  image?: string;
+  /** אימות Google Search Console — רק הקוד (ה-content של התגית) */
+  google?: string;
+  /** הכתובת הקנונית: ריק — הדומיין של העסק (אם יש), "subdomain" — הכתובת בפלטפורמה */
+  canonical?: "subdomain";
+}
+
+export const SEO_LIMITS = { title: 70, description: 200 } as const;
+/** קוד האימות של Google Search Console (בפועל ~43 תווים: אותיות, ספרות, _ ו--) */
+export const GOOGLE_TOKEN = /^[A-Za-z0-9_-]{10,100}$/;
+
 export interface SiteDesign {
   v: 1;
   theme: ThemeId;
@@ -89,6 +111,8 @@ export interface SiteDesign {
   logo?: string;
   /** D2: להציג גם את שם העסק ליד הלוגו */
   logoName?: boolean;
+  /** E5: גוגל ושיתוף */
+  seo?: SiteSeo;
   sections: Section[];
 }
 
@@ -275,7 +299,28 @@ export function normalizeDesign(input: unknown, themeHint?: unknown): SiteDesign
     out.logo = d["logo"].toLowerCase();
     if (d["logoName"] === true) out.logoName = true;
   }
+  const seo = normalizeSeo(d["seo"]);
+  if (seo) out.seo = seo;
   return out;
+}
+
+/** E5: הגדרות גוגל ושיתוף — רק ערכים תקינים; בלי ערכים — undefined */
+export function normalizeSeo(raw: unknown): SiteSeo | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: SiteSeo = {};
+  // בלי שבירות שורה ובלי סימני תגיות — זו שורה אחת בתוצאות החיפוש
+  const line = (v: unknown, max: number) =>
+    str(typeof v === "string" ? v.replace(/[\r\n\t]+/g, " ").replace(/[<>]/g, "") : v, max);
+  const title = line(r["title"], SEO_LIMITS.title);
+  if (title) out.title = title;
+  const description = line(r["description"], SEO_LIMITS.description);
+  if (description) out.description = description;
+  if (typeof r["image"] === "string" && UUID.test(r["image"])) out.image = r["image"].toLowerCase();
+  if (typeof r["google"] === "string" && GOOGLE_TOKEN.test(r["google"].trim()))
+    out.google = r["google"].trim();
+  if (r["canonical"] === "subdomain") out.canonical = "subdomain";
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** מזהה למקטע חדש (לא קיים כבר במסמך) */

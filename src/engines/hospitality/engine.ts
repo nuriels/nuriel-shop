@@ -29,6 +29,9 @@ export const hospitalityEngine: Engine = {
         (await backendEnabled(site.id))
           ? (await import("./channels/feed.server")).icalFeedResponse(site.id, token)
           : null,
+      // E5: מפת האתר והכתובת הקנונית (robots.txt) — רק כשהאתר פתוח (השער בודק)
+      siteOrigin: async () => (await import("./website/seo.server")).canonicalSiteOrigin(site.id),
+      sitemap: async () => (await import("./website/seo.server")).sitemapResponse(site.id),
     });
   },
 };

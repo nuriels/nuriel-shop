@@ -63,11 +63,15 @@ export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
       import("../server/rpc.server"),
       import("../server/media.server"),
     ]);
-    const [raw, types] = await Promise.all([
+    const [raw, types, { currentSiteAddresses }, { canonicalOrigin, siteSeo }] = await Promise.all([
       callRpc<RawPublicSite>("public_site", {}),
       callRpc<PublicRoomType[]>("public_room_types", {}),
+      import("@/platform/tenancy/current-site.server"),
+      import("../website/seo"),
     ]);
-    return toPublicSite(raw, publicUrl, types);
+    const site = toPublicSite(raw, publicUrl, types);
+    // E5: הכתובת הקנונית — מרשומת האתר + הבחירה בגרסה המפורסמת
+    return { ...site, origin: canonicalOrigin(await currentSiteAddresses(), siteSeo(site)) };
   },
 );
 

@@ -75,6 +75,7 @@ import { formatDateTime } from "../lib/format";
 import { manageKeys } from "../lib/query-keys";
 import { FontField, LogoField } from "./BrandFields";
 import { SectionFields } from "./SectionFields";
+import { SeoPanel } from "./SeoFields";
 import {
   CUSTOM_TYPES,
   SECTION_HINTS,
@@ -245,10 +246,19 @@ function Editor({
       <div className="grid gap-4 lg:grid-cols-[24rem_minmax(0,1fr)]">
         <div className="min-w-0 rounded-lg border bg-card">
           <Tabs value={tab} onValueChange={setTab} dir="rtl">
-            <TabsList className="m-2 grid grid-cols-3">
-              <TabsTrigger value="sections">מקטעים</TabsTrigger>
-              <TabsTrigger value="design">עיצוב</TabsTrigger>
-              <TabsTrigger value="publish">פרסום</TabsTrigger>
+            <TabsList className="m-2 grid h-auto grid-cols-4">
+              <TabsTrigger value="sections" className="min-h-9">
+                מקטעים
+              </TabsTrigger>
+              <TabsTrigger value="design" className="min-h-9">
+                עיצוב
+              </TabsTrigger>
+              <TabsTrigger value="seo" className="min-h-9 px-1">
+                גוגל ושיתוף
+              </TabsTrigger>
+              <TabsTrigger value="publish" className="min-h-9">
+                פרסום
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="sections" className="p-3 pt-0">
               <SectionsPanel
@@ -265,6 +275,14 @@ function Editor({
                 site={site}
                 onChange={setDesign}
                 onMediaAdded={reloadPreview}
+              />
+            </TabsContent>
+            <TabsContent value="seo" className="p-3 pt-0">
+              <SeoPanel
+                design={design}
+                site={site}
+                addresses={view.addresses}
+                onChange={setDesign}
               />
             </TabsContent>
             <TabsContent value="publish" className="p-3 pt-0">

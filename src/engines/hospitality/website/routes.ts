@@ -6,7 +6,8 @@ import { hospitalityPublicSite } from "../api/website.functions";
 import { hospitalitySiteOnly } from "../management/route-guard";
 import { MANAGE_SECURITY_HEADERS, SITE_SECURITY_HEADERS } from "../security/headers";
 import type { PublicSite } from "../types/website";
-import { privatePageMeta, siteHomeMeta, siteUnitMeta } from "./head";
+import { SITE_PATH } from "../config";
+import { privatePageMeta, siteHomeHead, siteUnitHead, type PageHead } from "./head";
 import { validateBookSearch } from "./lib/booking";
 import { BookingPage } from "./pages/BookingPage";
 import { BookingReceivedPage, MyBookingPage } from "./pages/GuestBookingPages";
@@ -43,13 +44,12 @@ export const siteLayoutRoute = {
 };
 
 export const siteHomeRoute = {
-  head: ({ matches }: { matches: { routeId: string; loaderData?: unknown }[] }) => ({
-    meta: siteHomeMeta(
-      matches.find((m) => m.routeId === "/stay")?.loaderData as PublicSite | undefined,
-    ),
-  }),
+  head: ({ matches }: { matches: { routeId: string; loaderData?: unknown }[] }) =>
+    siteHomeHead(matches.find((m) => m.routeId === "/stay")?.loaderData as PublicSite | undefined),
   component: HomePage,
 };
+
+const seg = (slug: string) => encodeURIComponent(slug);
 
 export const siteUnitRoute = {
   loader: async ({
@@ -62,11 +62,15 @@ export const siteUnitRoute = {
     const site = (await parentMatchPromise).loaderData as PublicSite | undefined;
     const unit = site ? findUnit(site.units, params.unitSlug) : undefined;
     if (!site || !unit) throw notFound();
-    return { meta: siteUnitMeta(site, unit) };
+    // חדר ששייך לסוג (מלון) — העמוד הקנוני הוא עמוד הסוג (בלי תוכן כפול בגוגל)
+    const type = (site.room_types ?? []).find((t) => t.room_ids.includes(unit.id));
+    const path = type
+      ? `${SITE_PATH}/rooms/${seg(type.slug)}`
+      : `${SITE_PATH}/units/${seg(unit.slug)}`;
+    return { head: siteUnitHead(site, unit, path) };
   },
-  head: ({ loaderData }: { loaderData?: { meta: ReturnType<typeof siteUnitMeta> } }) => ({
-    meta: loaderData?.meta ?? [],
-  }),
+  head: ({ loaderData }: { loaderData?: { head: PageHead } }) =>
+    loaderData?.head ?? { meta: [], links: [] },
   component: UnitPage,
   notFoundComponent: SiteNotFound,
 };
@@ -119,18 +123,21 @@ export const siteRoomTypeRoute = {
     const site = (await parentMatchPromise).loaderData as PublicSite | undefined;
     const type = site ? findType(site, params.typeSlug) : undefined;
     if (!site || !type) throw notFound();
-    const meta = siteUnitMeta(site, {
-      ...type.lead,
-      name: type.type.name,
-      description: type.type.description ?? type.lead.description,
-      seo_title: null,
-      seo_description: null,
-    });
-    return { meta };
+    const head = siteUnitHead(
+      site,
+      {
+        ...type.lead,
+        name: type.type.name,
+        description: type.type.description ?? type.lead.description,
+        seo_title: null,
+        seo_description: null,
+      },
+      `${SITE_PATH}/rooms/${seg(type.type.slug)}`,
+    );
+    return { head };
   },
-  head: ({ loaderData }: { loaderData?: { meta: ReturnType<typeof siteUnitMeta> } }) => ({
-    meta: loaderData?.meta ?? [],
-  }),
+  head: ({ loaderData }: { loaderData?: { head: PageHead } }) =>
+    loaderData?.head ?? { meta: [], links: [] },
   component: UnitPage,
   notFoundComponent: SiteNotFound,
 };

@@ -202,7 +202,8 @@ export function themeColors(theme: SiteTheme, overrides?: ColorOverrides) {
     primary,
     primaryForeground: readableOn(primary, "#ffffff", p.foreground),
     accent,
-    accentInk: ensureContrast(accent, p.background, 4.5),
+    // טקסט בצבע ההדגשה (כותרות קטנות): קריא גם על הרקע וגם על מקטע החול הכהה יותר (AA)
+    accentInk: ensureContrast(ensureContrast(accent, p.background, 4.5), p.sand, 4.5),
     // על הרקע הכהה (פוטר, מתקנים): ההדגשה בהירה מספיק
     accentOnDeep: ensureContrast(accent, p.deep, 4.5),
     sand: p.sand,
