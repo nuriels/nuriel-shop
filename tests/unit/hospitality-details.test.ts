@@ -336,6 +336,24 @@ describe("forms: what changed", () => {
       amenities: [{ amenity_id: A1, note: null }],
     });
   });
+  it("unit: the size (migration 41) — empty is no size, a number is sent, out of range is an error", () => {
+    const base = unitFormFrom(unit({}));
+    expect(base.size_sqm).toBe("");
+    expect(unitChanges(base, { ...base, size_sqm: "34" })).toEqual({ size_sqm: 34 });
+    const sized = unitFormFrom({ ...unit({}), size_sqm: 34 });
+    expect(sized.size_sqm).toBe("34");
+    expect(unitChanges(sized, { ...sized, size_sqm: " " })).toEqual({ size_sqm: null });
+    expect(unitFormErrors({ ...base, size_sqm: "3" }).size_sqm).toMatch(/גודל היחידה/);
+    expect(parseUpdateUnit({ id: ID, revision: 2, changes: { size_sqm: 31 } }).changes).toEqual({
+      size_sqm: 31,
+    });
+    expect(parseUpdateUnit({ id: ID, revision: 2, changes: { size_sqm: null } }).changes).toEqual({
+      size_sqm: null,
+    });
+    expect(() => parseUpdateUnit({ id: ID, revision: 2, changes: { size_sqm: 6000 } })).toThrow(
+      /גודל היחידה/,
+    );
+  });
   it("unit: max adults above the maximum guests is an error next to the field", () => {
     const f = { ...unitFormFrom(unit({ capacity: 2 })), max_adults: "3" };
     expect(unitFormErrors(f).max_adults).toMatch(/מקסימום המבוגרים/);

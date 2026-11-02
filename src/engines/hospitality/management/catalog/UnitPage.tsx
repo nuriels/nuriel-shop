@@ -447,6 +447,17 @@ function UnitEditor({
                 error={err("separate_toilets")}
                 hint="בנוסף לחדרי הרחצה"
               />
+              <NumberField
+                idPrefix="unit"
+                name="size_sqm"
+                label={UNIT_LABELS.size_sqm}
+                min={5}
+                max={5000}
+                value={form.size_sqm}
+                onChange={(v) => set("size_sqm", v)}
+                error={err("size_sqm")}
+                hint="לא חובה — מוצג באתר בכרטיס היחידה"
+              />
               {!whole && (
                 <div className="sm:col-span-2">
                   <BedsEditor

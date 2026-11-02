@@ -39,6 +39,7 @@ export const UNIT_LABELS: Record<UnitKey, string> = {
   separate_toilets: "שירותים נפרדים",
   max_adults: "מקסימום מבוגרים",
   max_children: "מקסימום ילדים",
+  size_sqm: 'גודל היחידה (מ"ר)',
 };
 
 const TEXT_MAX: Partial<Record<PropertyKey | UnitKey, number>> = {
@@ -55,9 +56,10 @@ const INT_RANGES: Partial<Record<UnitKey, [number, number]>> = {
   separate_toilets: [0, 50],
   max_adults: [1, 100],
   max_children: [0, 100],
+  size_sqm: [5, 5000],
 };
 /** null = רק המקסימום הכולל חל */
-const NULLABLE_INTS: readonly UnitKey[] = ["max_adults", "max_children"];
+const NULLABLE_INTS: readonly UnitKey[] = ["max_adults", "max_children", "size_sqm"];
 export const MAX_SETUP_UNITS = 30;
 
 function textError(label: string, value: unknown, max: number, required: boolean): string | null {

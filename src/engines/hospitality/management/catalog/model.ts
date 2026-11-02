@@ -250,6 +250,8 @@ export type UnitForm = {
   /** ריק — רק המקסימום הכולל חל */
   max_adults: string;
   max_children: string;
+  /** מיגרציה 41: ריק — לא מוצג */
+  size_sqm: string;
   beds: BedFormRow[];
   amenities: AmenityLink[];
 };
@@ -268,6 +270,7 @@ export function unitFormFrom(u: CatalogUnit | null, defaults?: Partial<UnitForm>
     max_adults: u?.max_adults === null || u?.max_adults === undefined ? "" : String(u.max_adults),
     max_children:
       u?.max_children === null || u?.max_children === undefined ? "" : String(u.max_children),
+    size_sqm: u?.size_sqm === null || u?.size_sqm === undefined ? "" : String(u.size_sqm),
     beds: (u?.beds ?? []).map((b) => ({
       bed_type: b.bed_type,
       quantity: String(b.quantity),
@@ -298,6 +301,7 @@ export function unitFields(f: UnitForm): UnitFields {
     separate_toilets: toInt(f.separate_toilets),
     max_adults: f.max_adults.trim() === "" ? null : toInt(f.max_adults),
     max_children: f.max_children.trim() === "" ? null : toInt(f.max_children),
+    size_sqm: f.size_sqm.trim() === "" ? null : toInt(f.size_sqm),
   };
 }
 

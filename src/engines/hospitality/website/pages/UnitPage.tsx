@@ -1,7 +1,7 @@
 // עמוד יחידה: תמונה גדולה, עובדות (אורחים, חדרים, מיטות), תיאור, תמונות, מיטות לפי חדר,
 // מתקנים, תנאי השהייה של המתחם, מיקום — ובצד: "החל מ-", מינימום לילות ולוח זמינות.
 import { Link, useParams } from "@tanstack/react-router";
-import { ArrowRight, Bath, BedDouble, DoorOpen, Images, Users } from "lucide-react";
+import { ArrowRight, Bath, BedDouble, DoorOpen, Images, Ruler, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { PublicUnit } from "../../types/website";
 import { AvailabilityCalendar, type DateRange } from "../components/AvailabilityCalendar";
@@ -106,6 +106,7 @@ export function UnitPage({
             <Fact icon={<Users />} text={t.units.guests(capacity)} />
             {!!unit.bedrooms && <Fact icon={<DoorOpen />} text={t.units.bedrooms(unit.bedrooms)} />}
             {!!unit.bathrooms && <Fact icon={<Bath />} text={t.units.bathrooms(unit.bathrooms)} />}
+            {!!unit.size_sqm && <Fact icon={<Ruler />} text={t.units.size(unit.size_sqm)} />}
             {rooms.length > 0 && (
               <Fact
                 icon={<BedDouble />}

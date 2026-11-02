@@ -89,7 +89,7 @@ describe("the credit itself (F1)", () => {
     expect(NURIEL_CREDIT_BUILT).toBe("האתר נבנה באמצעות Nuriel Hospitality מבית נוריאל מחשבים");
     expect(NURIEL_CREDIT_RIGHTS).toBe("© כל הזכויות שמורות לנוריאל מחשבים");
     expect(NURIEL_CREDIT_LINES).toEqual([NURIEL_CREDIT_BUILT, NURIEL_CREDIT_RIGHTS]);
-    expect(NURIEL_CREDIT_URL).toBe("https://m.nuri1.fit");
+    expect(NURIEL_CREDIT_URL).toBe("https://nuriel-app2.nuri1.fit");
     expect(NURIEL_CREDIT_REL.split(" ")).toContain("nofollow");
   });
 

@@ -42,6 +42,11 @@ export const he = {
     guests: (n: number) => (n === 1 ? "אורח אחד" : `עד ${n} אורחים`),
     bedrooms: (n: number) => (n === 1 ? "חדר שינה" : `${n} חדרי שינה`),
     bathrooms: (n: number) => (n === 1 ? "חדר רחצה" : `${n} חדרי רחצה`),
+    size: (n: number) => `${n.toLocaleString("he-IL")} מ״ר`,
+    /** מה שמיוחד ביחידה (ג׳קוזי, בריכה…) — ביחידה עצמה / במתחם */
+    inUnit: (name: string) => `${name} ביחידה`,
+    inComplex: (name: string) => `${name} במתחם`,
+    highlights: "מה מיוחד ביחידה",
     beds: "מיטות",
     wholeProperty: "המתחם כולו",
     roomsOfType: (n: number) => (n === 1 ? "חדר אחד מהסוג" : `${n} חדרים מהסוג`),

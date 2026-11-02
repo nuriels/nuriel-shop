@@ -1,6 +1,12 @@
 // עיצוב ערכים לאתר הציבורי (שפה ומטבע של העסק) — טהור, נבדק ביחידה.
 import type { SiteCopy } from "../copy/he";
-import type { PublicBed, PublicPolicy, PublicProperty, PublicUnit } from "../../types/website";
+import type {
+  PublicAmenity,
+  PublicBed,
+  PublicPolicy,
+  PublicProperty,
+  PublicUnit,
+} from "../../types/website";
 
 const LOCALE_TAG: Record<string, string> = { he: "he-IL" };
 
@@ -43,12 +49,48 @@ export function bedsText(beds: PublicBed[], t: SiteCopy): string {
     .join(" · ");
 }
 
-/** "עד 4 אורחים · 2 חדרי שינה · חדר רחצה" */
+/** "עד 4 אורחים · 2 חדרי שינה · חדר רחצה · 34 מ״ר" */
 export function unitFacts(u: PublicUnit, t: SiteCopy): string[] {
   const out = [t.units.guests(u.capacity)];
   if (u.bedrooms) out.push(t.units.bedrooms(u.bedrooms));
   if (u.bathrooms) out.push(t.units.bathrooms(u.bathrooms));
+  if (u.size_sqm) out.push(t.units.size(u.size_sqm));
   return out;
+}
+
+/** הקבוצות של המתקנים שמודגשים בכרטיס היחידה (ג׳קוזי, בריכה, ספא…) */
+export const HIGHLIGHT_CATEGORIES: readonly string[] = ["pool_spa"];
+
+export interface UnitHighlight {
+  name: string;
+  icon: string | null;
+  /** unit — ביחידה עצמה; property — במתחם (משותף) */
+  where: "unit" | "property";
+}
+
+/**
+ * מה שמיוחד ביחידה, לכרטיס: המתקנים מקבוצת הבריכה / הספא שבעל העסק סימן — קודם של היחידה
+ * ("ג׳קוזי ביחידה"), אחר כך של המתחם ("בריכה במתחם"); אותו שם פעם אחת (של היחידה גובר). עד max.
+ */
+export function unitHighlights(
+  unit: Pick<PublicUnit, "amenities">,
+  property: Pick<PublicProperty, "amenities"> | undefined,
+  max = 3,
+): UnitHighlight[] {
+  const out: UnitHighlight[] = [];
+  const seen = new Set<string>();
+  const add = (items: readonly PublicAmenity[], where: UnitHighlight["where"]) => {
+    for (const a of items) {
+      if (!a.category || !HIGHLIGHT_CATEGORIES.includes(a.category)) continue;
+      const key = a.name.trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ name: a.name.trim(), icon: a.icon, where });
+    }
+  };
+  add(unit.amenities, "unit");
+  add(property?.amenities ?? [], "property");
+  return out.slice(0, max);
 }
 
 /** הטקסט של המדיניות לאורח: הטקסט של העסק אם כתב; אחרת — נבנה מהמדרגות */

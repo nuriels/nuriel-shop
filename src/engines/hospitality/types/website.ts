@@ -81,6 +81,8 @@ export interface PublicUnit {
   bedrooms: number | null;
   bathrooms: number | null;
   separate_toilets: number | null;
+  /** מיגרציה 41: גודל במ"ר; null / חסר — לא מוצג */
+  size_sqm?: number | null;
   /** מחיר בסיס ללילה ("החל מ-"); המחיר הסופי — רק מהצעת המחיר בשרת */
   base_price: number;
   min_nights: number;

@@ -3,7 +3,8 @@
 //   • הקרדיט מתייחס לפלטפורמה. הזכויות על התמונות והתוכן נשארות של העסק (השורה "© שנה, שם העסק"
 //     שבפוטר).
 //   • קישור אחד, בחלון חדש, עם rel="nofollow" (קישור שמופיע בפוטר של אתרים רבים).
-export const NURIEL_CREDIT_URL = "https://m.nuri1.fit";
+// דף הנחיתה של הפלטפורמה (השער — nuriel-app2), שם פותחים חנות או אתר לצימר
+export const NURIEL_CREDIT_URL = "https://nuriel-app2.nuri1.fit";
 export const NURIEL_CREDIT_REL = "nofollow noopener";
 export const NURIEL_PRODUCT = "Nuriel Hospitality";
 /** שורה 1: "האתר נבנה באמצעות Nuriel Hospitality מבית נוריאל מחשבים" */

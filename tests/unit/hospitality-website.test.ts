@@ -12,6 +12,8 @@ import {
   policyLines,
   rulesLines,
   telHref,
+  unitFacts,
+  unitHighlights,
   unitPath,
   wazeHref,
   whatsappHref,
@@ -360,6 +362,54 @@ describe("website helpers", () => {
   });
 });
 
+describe("migration 41: the unit card — size and what is special", () => {
+  const amenity = (name: string, category: string | null, icon: string | null = null) => ({
+    name,
+    category,
+    icon,
+    note: null,
+  });
+  it("the size joins the facts only when it is set", () => {
+    expect(unitFacts(unit("u1", { size_sqm: 34 }), he)).toEqual([
+      "עד 2 אורחים",
+      "חדר שינה",
+      "חדר רחצה",
+      "34 מ״ר",
+    ]);
+    expect(unitFacts(unit("u1", { size_sqm: null }), he)).not.toContain("מ״ר");
+    expect(unitFacts(unit("u1"), he).join(" ")).not.toContain("מ״ר");
+  });
+  it("pool / spa amenities: the unit's own first, then the shared ones, no repeats, at most three", () => {
+    const u = unit("u1", {
+      amenities: [amenity("ג׳קוזי", "pool_spa", "bath"), amenity("מיזוג", "room", "air-vent")],
+    });
+    const p = property({
+      amenities: [
+        amenity("בריכה", "pool_spa", "waves"),
+        amenity("ג׳קוזי", "pool_spa", "bath"),
+        amenity("Wi-Fi", "room", "wifi"),
+      ],
+    });
+    expect(unitHighlights(u, p)).toEqual([
+      { name: "ג׳קוזי", icon: "bath", where: "unit" },
+      { name: "בריכה", icon: "waves", where: "property" },
+    ]);
+    expect(he.units.inUnit("ג׳קוזי")).toBe("ג׳קוזי ביחידה");
+    expect(he.units.inComplex("בריכה")).toBe("בריכה במתחם");
+    expect(
+      unitHighlights(
+        unit("u2", {
+          amenities: ["ג׳קוזי", "סאונה", "בריכה מחוממת", "מקלחת אדים"].map((n) =>
+            amenity(n, "pool_spa"),
+          ),
+        }),
+        undefined,
+      ),
+    ).toHaveLength(3);
+    expect(unitHighlights(unit("u3"), property())).toEqual([]);
+  });
+});
+
 describe("themes and the fixed credit", () => {
   it("Luxury is the default; an unknown theme falls back to it; four themes, all complete", () => {
     expect(DEFAULT_THEME).toBe("luxury");
@@ -418,7 +468,7 @@ describe("themes and the fixed credit", () => {
       "האתר נבנה באמצעות Nuriel Hospitality מבית נוריאל מחשבים",
       "© כל הזכויות שמורות לנוריאל מחשבים",
     ]);
-    expect(NURIEL_CREDIT_URL).toBe("https://m.nuri1.fit");
+    expect(NURIEL_CREDIT_URL).toBe("https://nuriel-app2.nuri1.fit");
   });
 
   it("the copy catalogue is complete Hebrew, RTL", () => {

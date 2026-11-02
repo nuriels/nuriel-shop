@@ -1,15 +1,17 @@
-// היחידות: כרטיס לכל יחידה פעילה — תמונה, סוג, אורחים / חדרים / מיטות, "החל מ-" ומינימום לילות.
+// היחידות: כרטיס לכל יחידה פעילה — תמונה, סוג, אורחים / חדרים / גודל / מיטות, מה מיוחד ביחידה
+// (ג׳קוזי ביחידה, בריכה במתחם — מיגרציה 41), "החל מ-" ומינימום לילות.
 // ארבעה סגנונות כרטיס לפי הערכה (portrait / landscape / minimal / soft). "כל המתחם" מוצג כיחידה.
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/platform/ui";
+import { AmenityIcon } from "../../management/details/AmenityIcon";
 import type { PublicUnit } from "../../types/website";
 import type { Section } from "../design/schema";
 import { Photo } from "../components/Photo";
 import { PriceFrom } from "../components/PriceFrom";
 import { SectionHeading } from "../components/SectionHeading";
 import { useCopy } from "../copy";
-import { bedsText, unitFacts } from "../lib/format";
+import { bedsText, unitFacts, unitHighlights } from "../lib/format";
 import { listingId, siteListing, type TypeListing } from "../lib/listing";
 import { unitCover } from "../lib/media";
 import { useSite } from "../lib/site-context";
@@ -96,6 +98,10 @@ function UnitCard({ unit, roomType }: { unit: PublicUnit; roomType?: TypeListing
     ? ({ to: "/stay/rooms/$typeSlug", params: { typeSlug: roomType.type.slug } } as const)
     : ({ to: "/stay/units/$unitSlug", params: { unitSlug: unit.slug } } as const);
   const beds = bedsText(unit.beds, t);
+  const highlights = unitHighlights(
+    unit,
+    site.properties.find((p) => p.id === unit.property_id),
+  );
   const landscape = variant === "landscape";
   const minimal = variant === "minimal";
   const soft = variant === "soft";
@@ -135,6 +141,22 @@ function UnitCard({ unit, roomType }: { unit: PublicUnit; roomType?: TypeListing
         <h3 className="font-display text-2xl leading-snug">{name}</h3>
         <p className="text-sm text-muted-foreground">{facts.join(" · ")}</p>
         {beds && <p className="text-sm text-muted-foreground">{beds}</p>}
+        {highlights.length > 0 && (
+          <ul
+            aria-label={t.units.highlights}
+            className={cn(
+              "flex flex-wrap gap-x-4 gap-y-1.5 text-sm font-medium text-[var(--site-gold-ink)]",
+              soft && "justify-center",
+            )}
+          >
+            {highlights.map((h) => (
+              <li key={`${h.where}-${h.name}`} className="inline-flex items-center gap-1.5">
+                <AmenityIcon name={h.icon} className="size-4 shrink-0" />
+                {h.where === "unit" ? t.units.inUnit(h.name) : t.units.inComplex(h.name)}
+              </li>
+            ))}
+          </ul>
+        )}
         <div
           className={cn(
             "mt-2 flex items-end justify-between gap-4 border-t border-border pt-4",

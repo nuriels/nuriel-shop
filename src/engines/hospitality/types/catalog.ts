@@ -106,6 +106,8 @@ export interface CatalogUnit {
   /** null — רק המקסימום הכולל חל */
   max_adults: number | null;
   max_children: number | null;
+  /** מיגרציה 41: גודל במ"ר; null — לא הוזן (חסר — מסד בלי 41) */
+  size_sqm?: number | null;
   beds: BedRow[];
   amenities: AmenityLink[];
   is_active: boolean;
@@ -230,6 +232,8 @@ export interface UnitFields {
   separate_toilets: number;
   max_adults: number | null;
   max_children: number | null;
+  /** מיגרציה 41: גודל במ"ר (לא חובה) */
+  size_sqm: number | null;
 }
 export type UnitKey = keyof UnitFields;
 export const UNIT_KEYS: readonly UnitKey[] = [
@@ -244,6 +248,7 @@ export const UNIT_KEYS: readonly UnitKey[] = [
   "separate_toilets",
   "max_adults",
   "max_children",
+  "size_sqm",
 ];
 /** מה נשלח בשמירת היחידה: שדות, ו / או המיטות והמתקנים (כל הרשימה) */
 export type UnitChanges = Partial<UnitFields> & { beds?: BedRow[]; amenities?: AmenityLink[] };
