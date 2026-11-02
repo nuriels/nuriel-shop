@@ -1,5 +1,6 @@
 // האייקון של כל מסך בניווט ובחיפוש המהיר (שלב F2b)
 import {
+  BarChart3,
   BedDouble,
   CalendarCheck,
   CalendarDays,
@@ -33,4 +34,5 @@ export const NAV_ICONS: Record<NavKey, LucideIcon> = {
   settings: Settings,
   team: UserCog,
   support: LifeBuoy,
+  reports: BarChart3,
 };

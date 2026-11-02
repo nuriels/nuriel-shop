@@ -129,7 +129,7 @@ export const CHANNEL_LABELS: Record<string, string> = {
   other: "יומן חיצוני",
 };
 
-const BOOKING_SOURCE_LABELS: Record<string, string> = {
+export const BOOKING_SOURCE_LABELS: Record<string, string> = {
   site: "האתר",
   phone: "טלפון",
   walk_in: "הגיעו למקום",

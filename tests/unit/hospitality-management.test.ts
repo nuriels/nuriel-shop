@@ -236,6 +236,7 @@ describe("navigation", () => {
       "pricing",
       "policies",
       "guests",
+      "reports",
       "emails",
       "channels",
       "website",
@@ -256,6 +257,7 @@ describe("shell (F2b): grouped navigation, current screen, badges", () => {
       "calendar",
       "bookings",
       "guests",
+      "reports",
     ]);
     expect(groups.flatMap((g) => g.items)).toHaveLength(NAV_ITEMS.length);
     expect(groupedNav(visibleNav({})).map((g) => g.title)).toEqual(["תפעול"]);

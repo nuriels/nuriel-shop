@@ -51,6 +51,7 @@ import { Route as ManageGuestsRouteImport } from './routes/manage.guests'
 import { Route as ManagePhotosRouteImport } from './routes/manage.photos'
 import { Route as ManagePoliciesRouteImport } from './routes/manage.policies'
 import { Route as ManagePricingRouteImport } from './routes/manage.pricing'
+import { Route as ManageReportsRouteImport } from './routes/manage.reports'
 import { Route as ManageRoomTypesRouteImport } from './routes/manage.room-types'
 import { Route as ManageSettingsRouteImport } from './routes/manage.settings'
 import { Route as ManageSupportRouteImport } from './routes/manage.support'
@@ -306,6 +307,11 @@ const ManagePoliciesRoute = ManagePoliciesRouteImport.update({
 const ManagePricingRoute = ManagePricingRouteImport.update({
   id: '/pricing',
   path: '/pricing',
+  getParentRoute: () => ManageRoute,
+} as any)
+const ManageReportsRoute = ManageReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => ManageRoute,
 } as any)
 const ManageRoomTypesRoute = ManageRoomTypesRouteImport.update({
@@ -585,6 +591,7 @@ export interface FileRoutesByFullPath {
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
+  '/manage/reports': typeof ManageReportsRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/support': typeof ManageSupportRoute
@@ -673,6 +680,7 @@ export interface FileRoutesByTo {
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
+  '/manage/reports': typeof ManageReportsRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/support': typeof ManageSupportRoute
@@ -764,6 +772,7 @@ export interface FileRoutesById {
   '/manage/photos': typeof ManagePhotosRoute
   '/manage/policies': typeof ManagePoliciesRoute
   '/manage/pricing': typeof ManagePricingRoute
+  '/manage/reports': typeof ManageReportsRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/support': typeof ManageSupportRoute
@@ -856,6 +865,7 @@ export interface FileRouteTypes {
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
+    | '/manage/reports'
     | '/manage/room-types'
     | '/manage/settings'
     | '/manage/support'
@@ -944,6 +954,7 @@ export interface FileRouteTypes {
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
+    | '/manage/reports'
     | '/manage/room-types'
     | '/manage/settings'
     | '/manage/support'
@@ -1034,6 +1045,7 @@ export interface FileRouteTypes {
     | '/manage/photos'
     | '/manage/policies'
     | '/manage/pricing'
+    | '/manage/reports'
     | '/manage/room-types'
     | '/manage/settings'
     | '/manage/support'
@@ -1441,6 +1453,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManagePricingRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/reports': {
+      id: '/manage/reports'
+      path: '/reports'
+      fullPath: '/manage/reports'
+      preLoaderRoute: typeof ManageReportsRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/room-types': {
       id: '/manage/room-types'
       path: '/room-types'
@@ -1775,6 +1794,7 @@ interface ManageRouteChildren {
   ManagePhotosRoute: typeof ManagePhotosRoute
   ManagePoliciesRoute: typeof ManagePoliciesRoute
   ManagePricingRoute: typeof ManagePricingRoute
+  ManageReportsRoute: typeof ManageReportsRoute
   ManageRoomTypesRoute: typeof ManageRoomTypesRoute
   ManageSettingsRoute: typeof ManageSettingsRoute
   ManageSupportRoute: typeof ManageSupportRoute
@@ -1799,6 +1819,7 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManagePhotosRoute: ManagePhotosRoute,
   ManagePoliciesRoute: ManagePoliciesRoute,
   ManagePricingRoute: ManagePricingRoute,
+  ManageReportsRoute: ManageReportsRoute,
   ManageRoomTypesRoute: ManageRoomTypesRoute,
   ManageSettingsRoute: ManageSettingsRoute,
   ManageSupportRoute: ManageSupportRoute,

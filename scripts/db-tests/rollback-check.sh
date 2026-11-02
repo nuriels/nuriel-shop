@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_reports (F7): בלי נתונים חדשים; rollback → פונקציות הדוחות נעלמו, הפונקציות של לוח הבקרה
+#     חוזרות לגרסה של מיגרציה 32 מילה במילה, הסכמה זהה בדיוק למצב של מיגרציה 33
 #   • hosp_support (E4): הגנה (נעצר כשיש פניות / קבצים), rollback → הטבלאות, הפונקציות והדלי
 #     הפרטי נעלמו, הסכמה זהה בדיוק למצב של מיגרציה 32
 #   • hosp_calendar (3a): בלי נתונים חדשים; rollback → הצוות כותב שוב ישירות לחסימות, _quote
@@ -71,6 +73,7 @@ M30=20261104100000_hosp_plans_pricing
 M31=20261104110000_hosp_site_requests
 M32=20261105090000_hosp_dashboard
 M33=20261105100000_hosp_support
+M34=20261105110000_hosp_reports
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -91,6 +94,29 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- F7: reports and export (migration 34) ----------
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M34" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M34"
+down "$M34"
+expect "report functions are gone; the dashboard helpers are the migration-32 versions again" \
+  "SELECT to_regprocedure('hospitality.reports_view(date,date,uuid[],text[],text[])') IS NULL
+      AND to_regprocedure('hospitality._report_nights(uuid,date,date,uuid[],text[])') IS NULL
+      AND (SELECT prosrc NOT LIKE '%_report_%' FROM pg_proc WHERE oid = 'hospitality._dashboard_numbers(uuid,text,date,date,integer,boolean)'::regprocedure)"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m33.sql"
+schema_dump "$SCHEMA_DIR/after-m34-down.sql"
+if diff -q "$SCHEMA_DIR/m33.sql" "$SCHEMA_DIR/after-m34-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 33, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 33:"; diff "$SCHEMA_DIR/m33.sql" "$SCHEMA_DIR/after-m34-down.sql" | head -20; exit 1
+fi
 
 # ---------- E4: the support system of the hospitality businesses (migration 33) ----------
 psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
@@ -874,6 +900,7 @@ up "$M30"
 up "$M31"
 up "$M32"
 up "$M33"
+up "$M34"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -919,7 +946,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 33 → 1 and re-apply 1 → 33 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 34 → 1 and re-apply 1 → 34 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi

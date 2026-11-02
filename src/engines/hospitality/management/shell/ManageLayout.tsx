@@ -103,20 +103,25 @@ function Shell({
   }, []);
 
   return (
-    <div className="min-h-dvh bg-background text-foreground md:grid md:grid-cols-[16.5rem_minmax(0,1fr)]">
-      <SideNav
-        items={items}
-        badges={badges}
-        businessName={context.business.name}
-        onSignOut={onSignOut}
-      />
+    <div className="min-h-dvh bg-background text-foreground md:grid md:grid-cols-[16.5rem_minmax(0,1fr)] print:block">
+      {/* בהדפסה (דוחות) — רק התוכן, בלי הניווט */}
+      <div className="contents print:hidden">
+        <SideNav
+          items={items}
+          badges={badges}
+          businessName={context.business.name}
+          onSignOut={onSignOut}
+        />
+      </div>
       <div className="flex min-h-dvh min-w-0 flex-col">
-        <TopBar items={items} roleText={roleText} onSearch={() => setSearchOpen(true)} />
+        <div className="contents print:hidden">
+          <TopBar items={items} roleText={roleText} onSearch={() => setSearchOpen(true)} />
+        </div>
         {notice && (
           <div
             role="status"
             className={cn(
-              "flex items-start gap-2 border-b px-4 py-3 text-sm md:px-8",
+              "flex items-start gap-2 border-b px-4 py-3 text-sm md:px-8 print:hidden",
               notice.tone === "warning"
                 ? "bg-[var(--hm-danger-bg)] text-[var(--hm-danger)]"
                 : "bg-[var(--hm-champagne-100)] text-[var(--hm-champagne-700)]",
@@ -130,18 +135,20 @@ function Shell({
             <p>{notice.text}</p>
           </div>
         )}
-        <main id="main-content" className="flex-1 px-4 pt-6 pb-28 md:px-8 md:pb-12">
+        <main id="main-content" className="flex-1 px-4 pt-6 pb-28 md:px-8 md:pb-12 print:p-0">
           <CatchBoundary getResetKey={() => pathname} errorComponent={ManageRouteError}>
             {children}
           </CatchBoundary>
         </main>
       </div>
-      <BottomNav
-        items={items}
-        badges={badges}
-        siteOpen={context.flags.frontend}
-        onSignOut={onSignOut}
-      />
+      <div className="contents print:hidden">
+        <BottomNav
+          items={items}
+          badges={badges}
+          siteOpen={context.flags.frontend}
+          onSignOut={onSignOut}
+        />
+      </div>
       <CommandMenu open={searchOpen} onOpenChange={setSearchOpen} items={items} />
     </div>
   );

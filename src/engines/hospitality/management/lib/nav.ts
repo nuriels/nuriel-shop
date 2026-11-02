@@ -16,7 +16,8 @@ export type NavKey =
   | "website"
   | "settings"
   | "team"
-  | "support";
+  | "support"
+  | "reports";
 
 export type NavGroupKey = "operations" | "place" | "site" | "account";
 
@@ -44,7 +45,8 @@ export type NavPath =
   | "/manage/photos"
   | "/manage/pricing"
   | "/manage/policies"
-  | "/manage/support";
+  | "/manage/support"
+  | "/manage/reports";
 
 export interface NavItem {
   key: NavKey;
@@ -130,6 +132,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: "guests",
     also: ["/manage/guests/"],
     keywords: "לקוחות פרטיות",
+  },
+  {
+    key: "reports",
+    label: "דוחות",
+    to: "/manage/reports",
+    group: "operations",
+    permission: "reports",
+    keywords: "הכנסות תפוסה ייצוא אקסל CSV ביטולים יתרות",
   },
   {
     key: "emails",

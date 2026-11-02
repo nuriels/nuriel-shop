@@ -304,3 +304,7 @@ SELECT tests.check('limit: up to 10 new tickets a day per business (the 11th is 
   format($$SELECT pg_temp.err_of(%1$L, %2$L, 'SELECT hospitality.support_open(''פנייה 11'', ''other'', ''low'', ''x'')') LIKE '%%הרבה פניות%%'
              AND pg_temp.err_of(%3$L, %4$L, 'SELECT hospitality.support_open(''פנייה נוספת'', ''other'', ''low'', ''x'')') IS NULL$$,
          :'sb', :OWNER_B, :'sa', :OWNER_A));
+
+-- ---------- cleanup: the platform-wide switches back off (other test files expect them off) ----------
+SELECT pg_temp.as_platform($$SELECT to_jsonb(ARRAY[public.platform_set_flag('hospitality_backend_enabled', false),
+                                    public.platform_set_flag('hospitality_management_enabled', false)])$$) IS NOT NULL AS ok \gset

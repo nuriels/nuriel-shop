@@ -171,3 +171,21 @@ export const EMAIL_EVENT: Record<string, string> = {
   channel_conflict: "לעסק: התנגשות ביומן חיצוני",
   support_reply: "לעסק: תשובה מהתמיכה",
 };
+
+/** סוגי תשלום ואמצעי תשלום (כרטיס התשלומים, הדוחות) */
+export const PAYMENT_KIND_LABELS: Record<string, string> = {
+  deposit: "מקדמה",
+  balance: "יתרה",
+  full: "תשלום מלא",
+  refund: "החזר",
+  other: "אחר",
+};
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: "מזומן",
+  transfer: "העברה בנקאית",
+  bit: "Bit",
+  card: "כרטיס אשראי (במסוף העסק)",
+  check: "צ'ק",
+  provider: "סליקה מקוונת",
+  other: "אחר",
+};

@@ -17,24 +17,11 @@ import type { BookingPayments, PaymentKind, PaymentMethod } from "../../types/pa
 import { errorText } from "../catalog/refresh";
 import { formatDate } from "../lib/format";
 import { manageKeys } from "../lib/query-keys";
-import { bookingKey } from "./model";
-
-const KIND_LABELS: Record<PaymentKind, string> = {
-  deposit: "מקדמה",
-  balance: "יתרה",
-  full: "תשלום מלא",
-  refund: "החזר",
-  other: "אחר",
-};
-const METHOD_LABELS: Record<PaymentMethod, string> = {
-  cash: "מזומן",
-  transfer: "העברה בנקאית",
-  bit: "Bit",
-  card: "כרטיס אשראי (במסוף העסק)",
-  check: "צ'ק",
-  provider: "סליקה מקוונת",
-  other: "אחר",
-};
+import {
+  PAYMENT_KIND_LABELS as KIND_LABELS,
+  PAYMENT_METHOD_LABELS as METHOD_LABELS,
+  bookingKey,
+} from "./model";
 
 const money = (n: number, currency: string) =>
   new Intl.NumberFormat("he-IL", { style: "currency", currency }).format(Number(n));
