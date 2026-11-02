@@ -17,7 +17,11 @@
 
 ALTER TABLE hospitality.units DISABLE TRIGGER tests_open_new_units;
 
-CREATE OR REPLACE FUNCTION pg_temp.d(_n integer) RETURNS date LANGUAGE sql AS $$ SELECT current_date + _n $$;
+-- "היום" של העסק — לפי אזור הזמן של העסק (ברירת המחדל Asia/Jerusalem), כמו בפונקציות עצמן
+-- (units_open_dates, dashboard_tasks…), ולא current_date של השרת (UTC): בין חצות בישראל לחצות
+-- UTC התאריכים שונים ביום, והבדיקות של "עבר" / "שנתיים קדימה" נפלו (CI run 111, 00:05 בישראל).
+CREATE OR REPLACE FUNCTION pg_temp.today() RETURNS date LANGUAGE sql AS $$ SELECT (now() AT TIME ZONE 'Asia/Jerusalem')::date $$;
+CREATE OR REPLACE FUNCTION pg_temp.d(_n integer) RETURNS date LANGUAGE sql AS $$ SELECT pg_temp.today() + _n $$;
 CREATE OR REPLACE FUNCTION pg_temp.call(_site text, _uid uuid, _sql text) RETURNS jsonb LANGUAGE plpgsql AS $f$
 DECLARE r jsonb;
 BEGIN
@@ -149,9 +153,9 @@ SELECT tests.check('the site calendar of a closed unit: no open dates, nothing b
 SELECT pg_temp.open(:'st', ARRAY[:'ua']::uuid[], pg_temp.d(30)) AS r \gset
 SELECT tests.check('open "Adir" for 30 days: saved, one unit updated, in the action log',
   format($$SELECT (%1$L::jsonb ->> 'updated')::integer = 1
-             AND (SELECT open_until = current_date + 30 FROM hospitality.units WHERE id = %2$L)
+             AND (SELECT open_until = pg_temp.today() + 30 FROM hospitality.units WHERE id = %2$L)
              AND EXISTS (SELECT 1 FROM hospitality.audit_log a WHERE a.tenant_id = %3$L AND a.action = 'calendar.dates_opened'
-                                                        AND a.target_label = 'יחידת אדיר' AND (a.changes ->> 'until')::date = current_date + 30)$$,
+                                                        AND a.target_label = 'יחידת אדיר' AND (a.changes ->> 'until')::date = pg_temp.today() + 30)$$,
          :'r', :'ua', :'st'));
 SELECT tests.check('the guest: inside the open dates — available; the last open night counts; one night past it — not open',
   format($$SELECT (pg_temp.gq(%1$L, %2$L, pg_temp.d(10), pg_temp.d(12)) ->> 'available')::boolean
@@ -159,7 +163,7 @@ SELECT tests.check('the guest: inside the open dates — available; the last ope
              AND (pg_temp.gq(%1$L, %2$L, pg_temp.d(29), pg_temp.d(31)) ->> 'available')::boolean
              AND NOT (pg_temp.gq(%1$L, %2$L, pg_temp.d(30), pg_temp.d(32)) ->> 'available')::boolean
              AND NOT (pg_temp.gq(%1$L, %2$L, pg_temp.d(30), pg_temp.d(32)) ->> 'open')::boolean
-             AND (pg_temp.gq(%1$L, %2$L, pg_temp.d(30), pg_temp.d(32)) ->> 'open_until')::date = current_date + 30$$,
+             AND (pg_temp.gq(%1$L, %2$L, pg_temp.d(30), pg_temp.d(32)) ->> 'open_until')::date = pg_temp.today() + 30$$,
          :'st', :'ua'));
 SELECT tests.check('opening the same again changes nothing (no extra log line)',
   format($$SELECT (pg_temp.open(%1$L, ARRAY[%2$L]::uuid[], pg_temp.d(30)) ->> 'updated')::integer = 0
@@ -168,9 +172,9 @@ SELECT tests.check('opening the same again changes nothing (no extra log line)',
 SELECT pg_temp.open(:'st', ARRAY[:'ua', :'ub', :'uw']::uuid[], pg_temp.d(60)) IS NOT NULL AS ok \gset
 SELECT pg_temp.open(:'st', ARRAY[:'ub']::uuid[], pg_temp.d(15)) IS NOT NULL AS ok \gset
 SELECT tests.check('several units at once (60 days), then one shortened (15 days)',
-  format($$SELECT (SELECT open_until FROM hospitality.units WHERE id = %1$L) = current_date + 60
-             AND (SELECT open_until FROM hospitality.units WHERE id = %2$L) = current_date + 15
-             AND (SELECT open_until FROM hospitality.units WHERE id = %3$L) = current_date + 60$$,
+  format($$SELECT (SELECT open_until FROM hospitality.units WHERE id = %1$L) = pg_temp.today() + 60
+             AND (SELECT open_until FROM hospitality.units WHERE id = %2$L) = pg_temp.today() + 15
+             AND (SELECT open_until FROM hospitality.units WHERE id = %3$L) = pg_temp.today() + 60$$,
          :'ua', :'ub', :'uw'));
 SELECT pg_temp.open(:'st', ARRAY[:'ub']::uuid[], NULL) IS NOT NULL AS ok \gset
 SELECT tests.check('close: no open dates again, "closed" in the action log; the guest cannot book it',
@@ -187,7 +191,7 @@ SELECT tests.check('refused: a past date, more than two years ahead, no units, a
              AND pg_temp.err_of(%1$L, %2$L, format('SELECT hospitality.units_open_dates(ARRAY[%%L]::uuid[], %%L)', %4$L, pg_temp.d(5))) LIKE '%%לא נמצאה%%'
              AND pg_temp.err_of(%1$L, NULL, format('SELECT hospitality.units_open_dates(ARRAY[%%L]::uuid[], %%L)', %3$L, pg_temp.d(5))) IS NOT NULL
              AND (SELECT open_until IS NULL FROM hospitality.units WHERE id = %4$L)
-             AND (SELECT open_until = current_date + 60 FROM hospitality.units WHERE id = %3$L)$$,
+             AND (SELECT open_until = pg_temp.today() + 60 FROM hospitality.units WHERE id = %3$L)$$,
          :'st', :OWNER43, :'ua', :'uo'));
 
 -- ============================================================
@@ -205,10 +209,10 @@ SELECT pg_temp.req(:'st', :'ua', pg_temp.d(10), pg_temp.d(12), 'm43-open-1') ->>
 SELECT tests.check('a request on open dates goes through',
   format($$SELECT EXISTS (SELECT 1 FROM hospitality.bookings WHERE id = %L AND status = 'pending_approval')$$, :'b1'));
 SELECT tests.check('the site calendar: "Adir" booked → the whole complex is busy those nights too; "Moriya" is not; open_until is there',
-  format($$SELECT pg_temp.busy(w) = ARRAY[current_date + 10, current_date + 11]
-             AND pg_temp.busy(a) = ARRAY[current_date + 10, current_date + 11]
+  format($$SELECT pg_temp.busy(w) = ARRAY[pg_temp.today() + 10, pg_temp.today() + 11]
+             AND pg_temp.busy(a) = ARRAY[pg_temp.today() + 10, pg_temp.today() + 11]
              AND pg_temp.busy(b) = '{}'
-             AND (w ->> 'open_until')::date = current_date + 60
+             AND (w ->> 'open_until')::date = pg_temp.today() + 60
             FROM (SELECT pg_temp.call(%1$L, NULL, format('SELECT hospitality.public_availability(%%L, %%L, %%L)', %2$L, pg_temp.d(0), pg_temp.d(30))) AS w,
                          pg_temp.call(%1$L, NULL, format('SELECT hospitality.public_availability(%%L, %%L, %%L)', %3$L, pg_temp.d(0), pg_temp.d(30))) AS a,
                          pg_temp.call(%1$L, NULL, format('SELECT hospitality.public_availability(%%L, %%L, %%L)', %4$L, pg_temp.d(0), pg_temp.d(30))) AS b) x$$,
@@ -216,14 +220,14 @@ SELECT tests.check('the site calendar: "Adir" booked → the whole complex is bu
 SELECT pg_temp.call(:'st', :OWNER43, format($q$SELECT hospitality.block_create(%L, %L, %L, 'שיפוץ')$q$, :'uw', pg_temp.d(20), pg_temp.d(22))) IS NOT NULL AS ok \gset
 SELECT tests.check('the other way round: the whole complex blocked → each of its units is busy those nights',
   format($$SELECT pg_temp.busy(pg_temp.call(%1$L, NULL, format('SELECT hospitality.public_availability(%%L, %%L, %%L)', %2$L, pg_temp.d(15), pg_temp.d(25))))
-                  = ARRAY[current_date + 20, current_date + 21]$$, :'st', :'ub'));
+                  = ARRAY[pg_temp.today() + 20, pg_temp.today() + 21]$$, :'st', :'ub'));
 
 -- ============================================================
 -- 4. The board and the iCal feed
 -- ============================================================
 SELECT tests.check('the board: every unit carries its open dates',
-  format($$SELECT (SELECT (x ->> 'open_until')::date FROM jsonb_array_elements(c -> 'units') x WHERE x ->> 'id' = %3$L) = current_date + 60
-             AND (SELECT (x ->> 'open_until')::date FROM jsonb_array_elements(c -> 'units') x WHERE x ->> 'id' = %4$L) = current_date + 60
+  format($$SELECT (SELECT (x ->> 'open_until')::date FROM jsonb_array_elements(c -> 'units') x WHERE x ->> 'id' = %3$L) = pg_temp.today() + 60
+             AND (SELECT (x ->> 'open_until')::date FROM jsonb_array_elements(c -> 'units') x WHERE x ->> 'id' = %4$L) = pg_temp.today() + 60
             FROM (SELECT pg_temp.call(%1$L, %2$L, format('SELECT hospitality.calendar(%%L, %%L)', pg_temp.d(0), pg_temp.d(30))) AS c) x$$,
          :'st', :OWNER43, :'ua', :'uw'));
 SELECT pg_temp.call(:'st', :OWNER43, format($q$SELECT to_jsonb(hospitality.channel_feed_token(%L))$q$, :'uw')) #>> '{}' AS feed \gset
@@ -246,13 +250,13 @@ SELECT pg_temp.call(:'st', :OWNER43, format($q$SELECT to_jsonb(hospitality.room_
 UPDATE hospitality.units SET base_price = 400 WHERE id IN (:'r1', :'r2');
 SELECT pg_temp.open(:'st', ARRAY[:'r1']::uuid[], pg_temp.d(20)) IS NOT NULL AS ok \gset
 SELECT tests.check('room type: open until the last open room; the nights after it are not free (room 2 is closed)',
-  format($$SELECT (t ->> 'open_until')::date = current_date + 20
-             AND pg_temp.busy(t) = ARRAY[current_date + 21, current_date + 22, current_date + 23, current_date + 24]
+  format($$SELECT (t ->> 'open_until')::date = pg_temp.today() + 20
+             AND pg_temp.busy(t) = ARRAY[pg_temp.today() + 21, pg_temp.today() + 22, pg_temp.today() + 23, pg_temp.today() + 24]
             FROM (SELECT pg_temp.call(%1$L, NULL, format('SELECT hospitality.public_type_availability(%%L, %%L, %%L)', %2$L, pg_temp.d(1), pg_temp.d(25))) AS t) x$$,
          :'st', :'cat'));
 SELECT pg_temp.call(:'st', :OWNER43, format($q$SELECT hospitality.block_create(%L, %L, %L)$q$, :'r1', pg_temp.d(5), pg_temp.d(6))) IS NOT NULL AS ok \gset
 SELECT tests.check('room type: room 1 blocked on a night → that night is not free (room 2 is closed); the guest quote skips the closed room',
-  format($$SELECT current_date + 5 = ANY (pg_temp.busy(pg_temp.call(%1$L, NULL, format('SELECT hospitality.public_type_availability(%%L, %%L, %%L)', %2$L, pg_temp.d(1), pg_temp.d(25)))))
+  format($$SELECT pg_temp.today() + 5 = ANY (pg_temp.busy(pg_temp.call(%1$L, NULL, format('SELECT hospitality.public_type_availability(%%L, %%L, %%L)', %2$L, pg_temp.d(1), pg_temp.d(25)))))
              AND NOT (pg_temp.call(%1$L, NULL, format('SELECT hospitality.quote_type(%%L, %%L, %%L)', %2$L, pg_temp.d(5), pg_temp.d(6))) ->> 'available')::boolean
              AND (SELECT (q ->> 'available')::boolean AND q ->> 'unit_id' = %3$L
                     FROM pg_temp.call(%1$L, NULL, format('SELECT hospitality.quote_type(%%L, %%L, %%L)', %2$L, pg_temp.d(7), pg_temp.d(8))) q)$$,
@@ -268,7 +272,7 @@ SELECT tests.check('dashboard: "open dates" — 1 unit closed (room 2), urgent',
 SELECT pg_temp.open(:'st', ARRAY[:'r2']::uuid[], pg_temp.d(10)) IS NOT NULL AS ok \gset
 SELECT tests.check('dashboard: room 2 open for 10 days → "ending soon", with the date',
   format($$SELECT (t ->> 'closed')::integer = 0 AND (t ->> 'ending')::integer = 1 AND t ->> 'severity' = 'medium'
-             AND (t ->> 'until')::date = current_date + 10
+             AND (t ->> 'until')::date = pg_temp.today() + 10
             FROM jsonb_array_elements(pg_temp.call(%L, %L, 'SELECT hospitality.dashboard_tasks()') -> 'items') t
            WHERE t ->> 'kind' = 'open_dates'$$, :'st', :OWNER43));
 
@@ -277,7 +281,7 @@ SELECT tests.check('reminder email: the live site gets one, to the owner — the
   format($$SELECT count(*) = 1
              AND bool_and(n.recipient_email = 'm43.owner@test.local' AND n.recipient_kind = 'owner' AND n.booking_id IS NULL
                           AND (n.payload ->> 'ending_count')::integer = 1 AND (n.payload ->> 'closed_count')::integer = 0
-                          AND n.payload -> 'units' = jsonb_build_array(jsonb_build_object('name', 'חדר 2', 'open_until', current_date + 10)))
+                          AND n.payload -> 'units' = jsonb_build_array(jsonb_build_object('name', 'חדר 2', 'open_until', pg_temp.today() + 10)))
             FROM hospitality.notifications n WHERE n.tenant_id = %L AND n.event = 'open_dates_reminder'$$, :'st'));
 SELECT pg_temp.srv(NULL, 'SELECT to_jsonb(hospitality.open_dates_remind())') IS NOT NULL AS ok \gset
 SELECT tests.check('reminder email: once a week — a second run the same week adds nothing; a site not open for bookings gets none',
