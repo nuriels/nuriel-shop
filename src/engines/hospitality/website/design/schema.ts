@@ -6,6 +6,12 @@
 export const THEME_IDS = ["luxury", "nature", "modern", "romantic"] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
+/** K3: הסגנון של לוח השנה באתר (בחירת תאריכים) — בעל העסק בוחר בעורך; ברירת מחדל: קלאסי */
+export const CALENDAR_STYLES = ["classic", "colors", "minimal"] as const;
+export type CalendarStyle = (typeof CALENDAR_STYLES)[number];
+export const isCalendarStyle = (v: unknown): v is CalendarStyle =>
+  typeof v === "string" && (CALENDAR_STYLES as readonly string[]).includes(v);
+
 /** זוגות הגופנים המאושרים (D2) — כולם עם עברית; הפרטים ב-theme/fonts.ts */
 export const FONT_PAIR_IDS = ["classic", "modern", "elegant", "soft", "bold", "literary"] as const;
 export type FontPairId = (typeof FONT_PAIR_IDS)[number];
@@ -113,6 +119,8 @@ export interface SiteDesign {
   logoName?: boolean;
   /** E5: גוגל ושיתוף */
   seo?: SiteSeo;
+  /** K3: הסגנון של לוח השנה באתר (חסר — קלאסי) */
+  calendar?: CalendarStyle;
   sections: Section[];
 }
 
@@ -301,6 +309,7 @@ export function normalizeDesign(input: unknown, themeHint?: unknown): SiteDesign
   }
   const seo = normalizeSeo(d["seo"]);
   if (seo) out.seo = seo;
+  if (isCalendarStyle(d["calendar"]) && d["calendar"] !== "classic") out.calendar = d["calendar"];
   return out;
 }
 

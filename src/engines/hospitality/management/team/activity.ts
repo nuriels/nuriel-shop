@@ -130,6 +130,17 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} שינה/תה חסימה ב${target}`;
     case "calendar.block_released":
       return `${actor} שחרר/ה חסימה ב${target}`;
+    // מיגרציה 43: פתיחת תאריכים להזמנה באתר / סגירה
+    case "calendar.dates_opened": {
+      const until = entry.changes["until"];
+      const day =
+        typeof until === "string" && /^\d{4}-\d{2}-\d{2}$/.test(until)
+          ? `${Number(until.slice(8))}.${Number(until.slice(5, 7))}.${until.slice(0, 4)}`
+          : "";
+      return `${actor} פתח/ה להזמנה באתר את ${target}${day ? ` עד ${day}` : ""}`;
+    }
+    case "calendar.dates_closed":
+      return `${actor} סגר/ה להזמנות באתר את ${target}`;
     case "guests.notes_updated":
       return `${actor} עדכן/ה הערות על האורח ${target}`;
     case "guests.exported":

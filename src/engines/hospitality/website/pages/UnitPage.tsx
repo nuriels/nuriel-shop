@@ -29,7 +29,7 @@ export function UnitPage({
   typeSlug,
 }: { slug?: string | undefined; typeSlug?: string | undefined } = {}) {
   const t = useCopy();
-  const { site } = useSite();
+  const { site, design } = useSite();
   const params = useParams({ strict: false }) as { unitSlug?: string; typeSlug?: string };
   const roomType = findType(site, typeSlug ?? params.typeSlug);
   const unit = roomType?.lead ?? findUnit(site.units, slug ?? params.unitSlug)!;
@@ -231,6 +231,7 @@ export function UnitPage({
               <AvailabilityCalendar
                 {...(roomType ? { typeId: roomType.type.id } : { unitId: unit.id })}
                 today={site.today}
+                calendarStyle={design.calendar}
                 months={1}
                 {...(site.booking_open ? { range, onSelect: setRange, minNights } : {})}
               />

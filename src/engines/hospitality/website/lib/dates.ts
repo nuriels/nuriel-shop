@@ -31,3 +31,19 @@ export function monthGrid(year: number, month: number): (string | null)[][] {
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   return weeks;
 }
+
+/** מיגרציה 43: מצב לילה בלוח השנה באתר */
+export type NightKind = "past" | "busy" | "closed" | "free";
+
+/** עבר / תפוס / עוד לא נפתח להזמנה (openUntil: undefined — השרת לא מגביל) / פנוי */
+export function nightKind(
+  day: string,
+  today: string,
+  busy: Set<string>,
+  openUntil: string | null | undefined,
+): NightKind {
+  if (day < today) return "past";
+  if (busy.has(day)) return "busy";
+  if (openUntil !== undefined && (openUntil === null || day > openUntil)) return "closed";
+  return "free";
+}

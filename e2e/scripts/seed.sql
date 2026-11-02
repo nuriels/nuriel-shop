@@ -35,4 +35,20 @@ ON CONFLICT (id) DO NOTHING;
 -- llms.txt אופציונלי — מופעל רק בחנות B (בדיקת שני המצבים)
 UPDATE public.site_settings SET llms_txt_enabled = true
  WHERE tenant_id = '7e2e0000-0000-0000-0000-00000000000b';
+
+-- מיגרציה 43: יחידה נפתחת להזמנה באתר רק כשבעל המקום פותח לה תאריכים (ברירת מחדל — סגור). בדיקות
+-- הדפדפן שנכתבו לפני כן בודקות את ההזמנה עצמה — ליחידה שהן יוצרות נפתחות שנתיים קדימה. בדיקת פתיחת
+-- התאריכים (manage-open-dates.spec.ts) מכבה את זה בזמן שהיא רצה.
+CREATE SCHEMA IF NOT EXISTS e2e;
+REVOKE ALL ON SCHEMA e2e FROM PUBLIC;
+CREATE OR REPLACE FUNCTION e2e.open_new_units() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.open_until IS NULL THEN
+    NEW.open_until := current_date + 730;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS e2e_open_new_units ON hospitality.units;
+CREATE TRIGGER e2e_open_new_units BEFORE INSERT ON hospitality.units
+  FOR EACH ROW EXECUTE FUNCTION e2e.open_new_units();
 COMMIT;

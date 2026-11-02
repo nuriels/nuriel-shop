@@ -164,8 +164,10 @@ export interface PublicTypeAvailability {
   from: string;
   to: string;
   rooms: number;
-  /** לילות שבהם אף חדר מהסוג לא פנוי */
+  /** לילות שבהם אין חדר מהסוג שגם פתוח להזמנה וגם פנוי */
   busy: string[];
+  /** מיגרציה 43: הלילה האחרון שחדר כלשהו מהסוג פתוח בו להזמנה; null — אף חדר לא נפתח */
+  open_until?: string | null;
 }
 
 export interface SiteDesignRecord {
@@ -182,8 +184,10 @@ export interface PublicAvailability {
   unit_id: string;
   from: string;
   to: string;
-  /** לילות תפוסים (YYYY-MM-DD) — בלי מי / למה */
+  /** לילות תפוסים (YYYY-MM-DD) — בלי מי / למה; ב"כל המתחם" — גם כשאחת היחידות שלו תפוסה */
   busy: string[];
+  /** מיגרציה 43: הלילה האחרון שפתוח להזמנה (כולל); null — עוד לא נפתחו תאריכים */
+  open_until?: string | null;
 }
 
 /** הצורה הגולמית מהמסד (נתיבי אחסון במקום כתובות) */

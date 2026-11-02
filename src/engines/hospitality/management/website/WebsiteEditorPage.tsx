@@ -75,7 +75,7 @@ import { errorText } from "../catalog/refresh";
 import { formatDateTime } from "../lib/format";
 import { manageKeys } from "../lib/query-keys";
 import { editorTab } from "../setup/model";
-import { FontField, LogoField } from "./BrandFields";
+import { CalendarStyleField, FontField, LogoField } from "./BrandFields";
 import { SectionFields } from "./SectionFields";
 import { SeoPanel } from "./SeoFields";
 import {
@@ -825,6 +825,7 @@ function DesignPanel({
       </fieldset>
 
       <FontField design={design} onChange={onChange} />
+      <CalendarStyleField design={design} onChange={onChange} />
 
       {/* F1: הקרדיט בתחתית האתר — חלק מהפלטפורמה, לא מהעיצוב */}
       <div

@@ -59,6 +59,10 @@ export interface PolicySnapshot {
 
 export interface Quote {
   available: boolean;
+  /** מיגרציה 43: כל הלילות פתוחים להזמנה באתר (אורח — זמין רק כשפתוח) */
+  open?: boolean;
+  /** מיגרציה 43: הלילה האחרון שפתוח להזמנה; null — עוד לא נפתחו תאריכים */
+  open_until?: string | null;
   unit_id: string;
   unit_name: string;
   unit_kind: string;

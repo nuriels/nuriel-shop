@@ -74,7 +74,7 @@ const errText = (e: unknown, fallback: string) =>
 
 export function BookingPage() {
   const t = useCopy();
-  const { site } = useSite();
+  const { site, design } = useSite();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as BookSearch;
   const listing = useMemo(() => siteListing(site), [site]);
@@ -214,6 +214,7 @@ export function BookingPage() {
                     <AvailabilityCalendar
                       {...(roomType ? { typeId: roomType.type.id } : { unitId: unit.id })}
                       today={site.today}
+                      calendarStyle={design.calendar}
                       range={range}
                       onSelect={setRange}
                       minNights={roomType?.minNights ?? unit.min_nights}
@@ -482,7 +483,7 @@ function Summary({
           )
         ) : !q.available ? (
           <p role="alert" className="text-sm text-destructive">
-            {t.book.unavailable}
+            {q.open === false ? t.book.notOpen : t.book.unavailable}
           </p>
         ) : (
           <QuoteDetails quote={q} rules={rules} />

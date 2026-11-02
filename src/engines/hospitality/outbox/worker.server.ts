@@ -34,6 +34,8 @@ let started = false;
 let running = false;
 let again = false;
 let lastRetention = 0;
+// מיגרציה 43: תזכורת לפתיחת תאריכים — פעם ביום (המסד שולח לכל היותר מייל בשבוע לכל כתובת)
+let lastOpenDates = 0;
 let lastChannels = 0;
 let lastSweep = 0;
 const SWEEP_MS = 10 * 60 * 1000;
@@ -91,6 +93,16 @@ async function tick(): Promise<void> {
     do {
       again = false;
       await rpc("expire_holds", { _limit: 200 });
+      if (Date.now() - lastOpenDates > DAY_MS) {
+        lastOpenDates = Date.now();
+        // בנפרד: תקלה כאן לא עוצרת את שליחת המיילים ואת שאר הסבב
+        await rpc("open_dates_remind", {}).catch((error: unknown) =>
+          console.error(
+            "[hospitality/worker] open_dates_remind",
+            error instanceof Error ? error.message : error,
+          ),
+        );
+      }
       await sendDue();
       if (Date.now() - lastRetention > DAY_MS) {
         lastRetention = Date.now();
@@ -178,16 +190,19 @@ async function sendDue(): Promise<void> {
         const ctx = await sites.get(n.tenant_id)!;
         const email = renderBookingEmail(n.event, n.recipient_kind, n.payload, {
           business: ctx.business,
-          // לעסק: ההזמנה; התנגשות ביומן חיצוני (D3) — מסך הערוצים; תשובה מהתמיכה (E4) — הפנייה
+          // לעסק: ההזמנה; התנגשות ביומן חיצוני (D3) — מסך הערוצים; תזכורת לפתיחת תאריכים (43) —
+          // היומן; תשובה מהתמיכה (E4) — הפנייה
           bookingUrl: !ctx.origin
             ? null
             : n.booking_id
               ? `${ctx.origin}/manage/bookings/${n.booking_id}`
               : n.event === "channel_conflict"
                 ? `${ctx.origin}/manage/channels`
-                : n.event === "support_reply" && UUID.test(String(n.payload["ticket_id"] ?? ""))
-                  ? `${ctx.origin}/manage/support/${String(n.payload["ticket_id"])}`
-                  : null,
+                : n.event === "open_dates_reminder"
+                  ? `${ctx.origin}/manage/calendar?open=1`
+                  : n.event === "support_reply" && UUID.test(String(n.payload["ticket_id"] ?? ""))
+                    ? `${ctx.origin}/manage/support/${String(n.payload["ticket_id"])}`
+                    : null,
           siteOrigin: ctx.origin,
           escape: escapeHtml,
         });

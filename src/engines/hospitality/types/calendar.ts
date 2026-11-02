@@ -17,6 +17,8 @@ export interface CalendarUnit {
   unit_type: string;
   is_active: boolean;
   member_ids: string[] | null;
+  /** מיגרציה 43: הלילה האחרון שפתוח להזמנה באתר (כולל); null — עוד לא נפתחו תאריכים */
+  open_until?: string | null;
 }
 
 export interface CalendarBooking {
@@ -58,6 +60,17 @@ export interface CalendarView {
   units: CalendarUnit[];
   bookings: CalendarBooking[];
   blocks: CalendarBlock[];
+}
+
+/** מיגרציה 43: פתיחת תאריכים — עד הלילה האחרון (כולל); null — סגירה */
+export interface OpenDatesInput {
+  unitIds: string[];
+  until: string | null;
+}
+
+export interface OpenDatesResult {
+  updated: number;
+  units: { id: string; open_until: string | null }[];
 }
 
 export interface CalendarQuery {

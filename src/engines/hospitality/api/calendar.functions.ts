@@ -1,8 +1,8 @@
 // לוח היומן וחסימות (Stage 3a). קריאה אחת לטווח שעל המסך (calendar), בדיקת שינוי זולה
 // (calendar_stamp) לרענון האוטומטי, וחסימות רק דרך פונקציות המסד (מיגרציה 14).
 import { createServerFn } from "@tanstack/react-start";
-import type { CalendarBlock, CalendarView } from "../types/calendar";
-import { parseBlock, parseCalendarQuery } from "../validation/calendar";
+import type { CalendarBlock, CalendarView, OpenDatesResult } from "../types/calendar";
+import { parseBlock, parseCalendarQuery, parseOpenDates } from "../validation/calendar";
 import { InputError, uuid } from "../validation/input";
 
 export const hospitalityCalendar = createServerFn({ method: "POST" })
@@ -69,3 +69,14 @@ export const hospitalityUpcomingBlocks = createServerFn({ method: "GET" }).handl
     return manageRpc<CalendarBlock[]>("blocks_upcoming", {});
   },
 );
+
+/** מיגרציה 43: פתיחת תאריכים להזמנה באתר (עד הלילה האחרון, כולל) — או סגירה (until: null) */
+export const hospitalityOpenDates = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseOpenDates(input))
+  .handler(async ({ data }): Promise<OpenDatesResult> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<OpenDatesResult>("units_open_dates", {
+      _unit_ids: data.unitIds,
+      _until: data.until,
+    });
+  });

@@ -230,6 +230,25 @@ export function copyFor(event: string, p: EmailPayload, b: EmailBusiness): Copy 
         button: "לבדיקת היומנים",
       };
     }
+    // מיגרציה 43: תזכורת (לכל היותר פעם בשבוע) — יחידות שלא פתוחות להזמנה באתר / שהתאריכים הפתוחים
+    // שלהן נגמרים בתוך שבועיים
+    case "open_dates_reminder": {
+      const closed = Number(p["closed_count"] ?? 0);
+      return {
+        subject:
+          closed > 0
+            ? "יש יחידות שלא פתוחות להזמנה באתר"
+            : "התאריכים הפתוחים להזמנה באתר נגמרים בקרוב",
+        intro:
+          closed > 0
+            ? "אורחים יכולים להזמין באתר רק בתאריכים שפתחתם, ובחלק מהיחידות עוד אין תאריכים פתוחים. אפשר לפתוח תאריכים לכמה יחידות בבת אחת, מהיומן."
+            : "אורחים יכולים להזמין באתר רק בתאריכים שפתחתם, ובחלק מהיחידות נשארו פחות משבועיים של תאריכים פתוחים. כדאי לפתוח עוד, מהיומן.",
+        details: true,
+        outro:
+          "יחידה שלא משכירים כרגע — אפשר לסגור אותה להזמנות באתר, או להשבית אותה במסך היחידות. התזכורת נשלחת לכל היותר פעם בשבוע.",
+        button: "לפתיחת תאריכים",
+      };
+    }
     // E4: צוות התמיכה ענה — בלי תוכן התשובה (המייל עלול להיות מועבר); קריאה באזור הניהול
     case "support_reply": {
       const num = p["ticket_number"] ? ` #${String(p["ticket_number"])}` : "";
@@ -282,6 +301,22 @@ export function renderBookingEmail(
     const more = Number(p["conflict_count"] ?? conflicts.length) - conflicts.length;
     if (more > 0) rows.push(["ועוד", `${more} התנגשויות נוספות`]);
   }
+  // מיגרציה 43: היחידות בתזכורת לפתיחת תאריכים — השם, ועד מתי פתוח (או שלא פתוח)
+  const units = Array.isArray(p["units"])
+    ? (p["units"] as { name?: unknown; open_until?: unknown }[]).filter(
+        (u) => typeof u?.name === "string",
+      )
+    : [];
+  const today = typeof p["today"] === "string" ? p["today"] : "";
+  for (const u of units) {
+    const until = typeof u.open_until === "string" ? u.open_until : null;
+    rows.push([
+      String(u.name),
+      until && until >= today ? `פתוח עד ${dateText(until)}` : "לא פתוחה להזמנה",
+    ]);
+  }
+  const moreUnits = Number(p["unit_count"] ?? units.length) - units.length;
+  if (units.length && moreUnits > 0) rows.push(["ועוד", `${moreUnits} יחידות`]);
   const table = copy.details
     ? `<table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0;font-size:15px">${rows
         .map(

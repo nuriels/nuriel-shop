@@ -215,6 +215,7 @@ export type TaskLink =
   | { to: "/manage/emails"; search: { filter: "failed" } }
   | { to: "/manage/pricing" }
   | { to: "/manage/website" }
+  | { to: "/manage/calendar"; search: { open: "1" } }
   | { to: "/manage"; hash: "plan" };
 
 export interface TaskView {
@@ -326,6 +327,24 @@ export function taskView(task: DashboardTask, now: number = Date.now()): TaskVie
         cta: "לפרסום",
         link: { to: "/manage/website" },
         tone: "info",
+      };
+    case "open_dates":
+      return {
+        title: task.closed
+          ? plural(task.closed, "יחידה לא פתוחה להזמנה באתר", "יחידות לא פתוחות להזמנה באתר")
+          : plural(
+              task.ending ?? task.count,
+              "יחידה שהתאריכים הפתוחים שלה נגמרים",
+              "יחידות שהתאריכים הפתוחים שלהן נגמרים",
+            ),
+        detail: task.closed
+          ? "אורחים יכולים להזמין רק בתאריכים שפתחתם"
+          : task.until
+            ? `פתוח עד ${shortDate(task.until)} — כדאי לפתוח עוד`
+            : "כדאי לפתוח עוד תאריכים",
+        cta: "פתיחת תאריכים",
+        link: { to: "/manage/calendar", search: { open: "1" } },
+        tone: task.closed ? "danger" : "warning",
       };
     case "plan":
       return task.inactive

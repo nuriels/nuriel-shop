@@ -88,7 +88,15 @@ export interface DashboardToday {
 }
 
 export type DashboardTaskKind =
-  "pending" | "cancel_requests" | "deposits" | "channels" | "emails" | "prices" | "site" | "plan";
+  | "pending"
+  | "cancel_requests"
+  | "deposits"
+  | "channels"
+  | "emails"
+  | "prices"
+  | "site"
+  | "plan"
+  | "open_dates";
 
 export interface DashboardTask {
   kind: DashboardTaskKind;
@@ -100,6 +108,11 @@ export interface DashboardTask {
   conflicts?: number;
   failing?: number;
   inactive?: boolean;
+  /** מיגרציה 43 (open_dates): יחידות שאין בהן תאריכים פתוחים / שנשארו להן פחות מ-14 לילות פתוחים */
+  closed?: number;
+  ending?: number;
+  /** הלילה האחרון הפתוח הקרוב ביותר */
+  until?: string | null;
 }
 
 export interface DashboardTasks {

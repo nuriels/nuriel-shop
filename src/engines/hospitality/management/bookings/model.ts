@@ -173,6 +173,7 @@ export const EMAIL_EVENT: Record<string, string> = {
   request_withdrawn: "לעסק: הבקשה נמשכה",
   channel_conflict: "לעסק: התנגשות ביומן חיצוני",
   support_reply: "לעסק: תשובה מהתמיכה",
+  open_dates_reminder: "לעסק: תזכורת לפתיחת תאריכים",
 };
 
 /** סוגי תשלום ואמצעי תשלום (כרטיס התשלומים, הדוחות) */

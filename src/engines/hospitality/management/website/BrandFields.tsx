@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Button, cn } from "@/platform/ui";
 import { hospitalityUploadMedia } from "../../api/media.functions";
 import type { PublicSite } from "../../types/website";
-import type { SiteDesign } from "../../website/design/schema";
+import { CALENDAR_STYLES, type CalendarStyle, type SiteDesign } from "../../website/design/schema";
 import { mediaById } from "../../website/lib/media";
 import { FONT_PAIR_LIST, fontHref } from "../../website/theme/fonts";
 import { THEMES } from "../../website/theme/themes";
@@ -247,5 +247,100 @@ export function FontField({
         כל הגופנים כוללים עברית מלאה ונבדקו לקריאות. הבחירה נשמרת לכל ערכה בנפרד.
       </p>
     </fieldset>
+  );
+}
+
+const CALENDAR_LABELS: Record<CalendarStyle, { label: string; description: string }> = {
+  classic: { label: "קלאסי", description: "נקי ושקט — תפוס מסומן בקו, לא פתוח בפסים" },
+  colors: { label: "צבעוני", description: "פנוי בירוק, תפוס באדום, לא פתוח באפור — ברור במבט אחד" },
+  minimal: { label: "מינימלי", description: "מספרים בלבד, ונקודה צבעונית מתחת לכל יום" },
+};
+
+/** K3: הסגנון של לוח השנה באתר (בחירת תאריכים) — שלוש אפשרויות, עם דוגמה קטנה */
+export function CalendarStyleField({
+  design,
+  onChange,
+}: {
+  design: SiteDesign;
+  onChange: (d: SiteDesign) => void;
+}) {
+  const current: CalendarStyle = design.calendar ?? "classic";
+  const set = (s: CalendarStyle) => {
+    const next: SiteDesign = { ...design };
+    if (s === "classic") delete next.calendar;
+    else next.calendar = s;
+    onChange(next);
+  };
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-1 text-sm font-medium">לוח השנה באתר</legend>
+      <div className="grid gap-1.5" role="radiogroup" aria-label="לוח השנה באתר">
+        {CALENDAR_STYLES.map((s) => {
+          const selected = current === s;
+          return (
+            <button
+              key={s}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => set(s)}
+              data-calendar-option={s}
+              className={cn(
+                "flex items-center gap-3 rounded-md border-2 px-3 py-2 text-start",
+                selected
+                  ? "border-primary"
+                  : "border-transparent ring-1 ring-border hover:ring-foreground/30",
+              )}
+            >
+              <CalendarSample look={s} />
+              <span className="flex min-w-0 flex-col">
+                <span className="text-sm font-medium">{CALENDAR_LABELS[s].label}</span>
+                <span className="text-xs text-muted-foreground">
+                  {CALENDAR_LABELS[s].description}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        כך האורחים רואים אילו תאריכים פנויים, תפוסים או עוד לא נפתחו להזמנה.
+      </p>
+    </fieldset>
+  );
+}
+
+/** דוגמה קטנה: פנוי, תפוס, לא פתוח */
+function CalendarSample({ look }: { look: CalendarStyle }) {
+  const cell = "relative flex size-6 items-center justify-center rounded-full text-[10px]";
+  const kinds = {
+    classic: [
+      "ring-1 ring-foreground/30",
+      "text-muted-foreground line-through",
+      "text-muted-foreground/60 bg-slate-100",
+    ],
+    colors: [
+      "bg-emerald-50 text-emerald-950 ring-1 ring-emerald-200",
+      "bg-rose-50 text-rose-900 line-through",
+      "bg-slate-100 text-slate-500",
+    ],
+    minimal: ["", "text-muted-foreground", "text-muted-foreground/40"],
+  }[look];
+  return (
+    <span className="flex shrink-0 gap-1" aria-hidden="true">
+      {kinds.map((k, i) => (
+        <span key={i} className={cn(cell, k)}>
+          {i + 7}
+          {look === "minimal" && i < 2 && (
+            <span
+              className={cn(
+                "absolute bottom-0.5 size-1 rounded-full",
+                i === 0 ? "bg-emerald-600" : "bg-rose-600",
+              )}
+            />
+          )}
+        </span>
+      ))}
+    </span>
   );
 }

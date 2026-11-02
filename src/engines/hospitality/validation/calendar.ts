@@ -1,5 +1,5 @@
 // לוח היומן (Stage 3a): בדיקת הקלט — אותם כללים והודעות כמו המסד (מיגרציה 14)
-import type { CalendarQuery } from "../types/calendar";
+import type { CalendarQuery, OpenDatesInput } from "../types/calendar";
 import { InputError, uuid } from "./input";
 
 type Raw = Record<string, unknown> | null | undefined;
@@ -29,6 +29,30 @@ export function parseCalendarQuery(input: Raw): CalendarQuery {
     unitIds = raw.map((x) => uuid(x, "היחידה"));
   }
   return { from, to, unitIds, includeCancelled: i["includeCancelled"] === true };
+}
+
+/** מיגרציה 43: עד כמה רחוק אפשר לפתוח תאריכים (כמו במסד) */
+export const OPEN_MAX_DAYS = 730;
+
+/** פתיחת תאריכים: יחידה אחת או יותר, ועד תאריך (כולל) — או null לסגירה */
+export function parseOpenDates(input: Raw): OpenDatesInput {
+  const i = input ?? {};
+  const raw = i["unitIds"];
+  if (!Array.isArray(raw) || raw.length === 0) throw new InputError("לא נבחרו יחידות");
+  if (raw.length > 500) throw new InputError("יותר מדי יחידות בבקשה אחת");
+  const unitIds = [...new Set(raw.map((x) => uuid(x, "היחידה")))];
+  const until =
+    i["until"] === null || i["until"] === undefined ? null : date(i["until"], "עד תאריך");
+  return { unitIds, until };
+}
+
+/** הודעה לטופס (לפני השליחה) — אותם כללים כמו המסד */
+export function openDatesError(until: string | null, today: string): string | null {
+  if (until === null) return null;
+  if (!DATE.test(until)) return "יש לבחור תאריך";
+  if (until < today) return "התאריך כבר עבר";
+  if (days(today, until) > OPEN_MAX_DAYS) return "אפשר לפתוח תאריכים עד שנתיים קדימה";
+  return null;
 }
 
 export function blockError(from: string, to: string, reason: string, today: string): string | null {

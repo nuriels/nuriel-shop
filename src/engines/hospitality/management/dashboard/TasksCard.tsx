@@ -1,9 +1,11 @@
 // "דורש טיפול" בלוח הבקרה (שלב F3): מה שמחכה לבעל העסק — בקשות לאישור, בקשות ביטול, מקדמות
 // לגבייה, יומנים חיצוניים, מיילים שנכשלו, יחידות בלי מחיר, שינויים באתר שלא פורסמו, וסוף תקופת
-// הניסיון. המסד מחזיר רק מה שמותר למשתמש לראות; כל שורה — כפתור ליעד אמיתי.
+// הניסיון, ותאריכים להזמנה שצריך לפתוח (מיגרציה 43). המסד מחזיר רק מה שמותר למשתמש לראות; כל שורה —
+// כפתור ליעד אמיתי.
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
+  CalendarCheck,
   CalendarClock,
   CircleCheckBig,
   Clock,
@@ -37,6 +39,7 @@ const ICONS: Record<DashboardTaskKind, LucideIcon> = {
   prices: Tag,
   site: Globe,
   plan: Receipt,
+  open_dates: CalendarCheck,
 };
 
 export function TasksCard({ canBookings }: { canBookings: boolean }) {

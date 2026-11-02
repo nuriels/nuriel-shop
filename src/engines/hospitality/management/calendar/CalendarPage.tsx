@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
+  CalendarCheck,
   CalendarPlus,
   ChevronLeft,
   ChevronRight,
@@ -47,6 +48,8 @@ import {
   hospitalityUpdateBlock,
 } from "../../api/calendar.functions";
 import type { CalendarBlock, CalendarBooking, CalendarView } from "../../types/calendar";
+import { OpenDatesSheet } from "./OpenDatesSheet";
+import { isClosedNight, openSummary } from "./open-dates";
 import { blockError } from "../../validation/calendar";
 import { FormSheet } from "../catalog/CatalogSheets";
 import { UNIT_TYPE_LABELS } from "../catalog/labels";
@@ -102,11 +105,38 @@ import {
   type ViewMode,
 } from "./model";
 
-const ROW_H = 44;
-/** שורת "פנויות" מתחת לתאריכים (Calendar Pro) */
-const SUM_H = 26;
-const COL_W = 40;
-const NAME_W = 150;
+// גודל הלוח (K3): קומפקטי (כמו קודם), רגיל וגדול — הבחירה נשמרת בדפדפן. row — גובה שורה,
+// col — רוחב לילה, name — עמודת השמות, sum — שורת "פנויות", bar — גובה פס ההזמנה
+export type BoardSize = "compact" | "regular" | "large";
+type BoardDims = { row: number; col: number; name: number; sum: number; bar: number; day: string };
+const SIZES: Record<BoardSize, BoardDims> = {
+  compact: { row: 44, col: 40, name: 150, sum: 26, bar: 32, day: "text-[11px]" },
+  regular: { row: 54, col: 52, name: 180, sum: 30, bar: 40, day: "text-xs" },
+  large: { row: 66, col: 66, name: 210, sum: 32, bar: 50, day: "text-sm" },
+};
+const SIZE_LABELS: Record<BoardSize, string> = {
+  compact: "קומפקטי",
+  regular: "רגיל",
+  large: "גדול",
+};
+const VIEW_KEY = "hosp-calendar-view";
+const SIZE_KEY = "hosp-calendar-size";
+const VIEW_MODES: ViewMode[] = ["month", "week", "day", "units", "agenda"];
+/** localStorage — לא תמיד זמין (גלישה פרטית); אז פשוט לא נשמר */
+const stored = (key: string): string | null => {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+const store = (key: string, value: string) => {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* לא נשמר — לא נורא */
+  }
+};
 const REFRESH_MS = 30_000;
 
 const TONE_CLASS: Record<Tone, string> = {
@@ -126,6 +156,10 @@ const TONE_CLASS: Record<Tone, string> = {
 // כדי שהניגודיות תישאר תקינה
 const VIA_CLASS = "bg-slate-100 text-slate-800 border-dashed border-slate-500";
 
+// מיגרציה 43: לילה שלא פתוח להזמנה באתר — פסים אפורים עדינים (התפוסה מעליו נשארת ברורה)
+const CLOSED_CLASS =
+  "[background:repeating-linear-gradient(135deg,transparent,transparent_5px,rgba(100,116,139,0.16)_5px,rgba(100,116,139,0.16)_8px)]";
+
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export function CalendarPage() {
@@ -133,10 +167,27 @@ export function CalendarPage() {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   // ?unit= — "היומן של היחידה" (מעמוד היחידה): חודש של יחידה אחת, גם בטלפון
-  const params = useSearch({ strict: false }) as { unit?: string; block?: string };
+  const params = useSearch({ strict: false }) as { unit?: string; block?: string; open?: string };
   const unitParam = params.unit ?? "";
   const navigate = useNavigate();
-  const [mode, setMode] = useState<ViewMode | null>(null);
+  const [mode, setModeState] = useState<ViewMode | null>(null);
+  const [size, setSizeState] = useState<BoardSize>("regular");
+  // K3: התצוגה והגודל שבחרתם נשמרים בדפדפן (בכניסה ליומן של יחידה — חודש, כמו קודם)
+  useEffect(() => {
+    const v = stored(VIEW_KEY) as ViewMode | null;
+    if (v && VIEW_MODES.includes(v) && !unitParam) setModeState(v);
+    const s = stored(SIZE_KEY) as BoardSize | null;
+    if (s && s in SIZES) setSizeState(s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const setMode = (m: ViewMode) => {
+    setModeState(m);
+    store(VIEW_KEY, m);
+  };
+  const setSize = (s: BoardSize) => {
+    setSizeState(s);
+    store(SIZE_KEY, s);
+  };
   const [anchor, setAnchor] = useState(todayIso());
   const [filters, setFilters] = useState<Filters>({
     propertyId: "",
@@ -151,6 +202,8 @@ export function CalendarPage() {
   const [blockForm, setBlockForm] = useState<{ unitId: string; from: string; to: string } | null>(
     null,
   );
+  // מיגרציה 43: פתיחת תאריכים להזמנה באתר
+  const [openForm, setOpenForm] = useState(false);
   const view: ViewMode = mode ?? (isMobile && !filters.unitId ? "agenda" : "month");
   // שמות אורחים — רק למי שיש לו הרשאת "אורחים" (אחרת רק מספר ההזמנה)
   const showGuests = ctx.permissions["guests"] === true;
@@ -218,6 +271,16 @@ export function CalendarPage() {
       replace: true,
     });
   }, [params.block, params.unit, loaded, navigate]);
+  // ?open=1 — "פתיחת תאריכים" מלוח הבקרה / מהמייל: פותח את הטופס פעם אחת ומנקה את הכתובת
+  useEffect(() => {
+    if (params.open !== "1" || !loaded) return;
+    setOpenForm(true);
+    void navigate({
+      to: "/manage/calendar",
+      search: params.unit ? { unit: params.unit } : {},
+      replace: true,
+    });
+  }, [params.open, params.unit, loaded, navigate]);
 
   if (!ctx.permissions["bookings"])
     return <p className="p-4">אין לכם הרשאה לראות את היומן באתר הזה.</p>;
@@ -234,7 +297,7 @@ export function CalendarPage() {
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">יומן</h1>
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="תצוגה">
-          {(["month", "week", "day", "units", "agenda"] as ViewMode[]).map((m) => (
+          {VIEW_MODES.map((m) => (
             <Button
               key={m}
               type="button"
@@ -319,6 +382,21 @@ export function CalendarPage() {
             className="min-h-11 rounded-md border border-input bg-background px-2 text-sm"
           />
         )}
+        {(view === "month" || view === "week") && (
+          <select
+            aria-label="גודל הלוח"
+            value={size}
+            onChange={(e) => setSize(e.target.value as BoardSize)}
+            className="min-h-11 rounded-md border border-input bg-background px-2 text-sm"
+            data-testid="board-size"
+          >
+            {(Object.keys(SIZES) as BoardSize[]).map((s) => (
+              <option key={s} value={s}>
+                גודל: {SIZE_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        )}
         <span className="ms-auto flex items-center gap-2">
           {query.isFetching && (
             <span role="status" className="flex items-center">
@@ -326,6 +404,16 @@ export function CalendarPage() {
               <span className="sr-only">מתעדכן</span>
             </span>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 gap-2"
+            onClick={() => setOpenForm(true)}
+            data-testid="open-dates-button"
+          >
+            <CalendarCheck className="size-4" aria-hidden="true" />
+            פתיחת תאריכים
+          </Button>
           <Button
             type="button"
             className="min-h-11 gap-2"
@@ -473,6 +561,7 @@ export function CalendarPage() {
         </ul>
       )}
 
+      <OpenDatesAlert view={data} onOpen={() => setOpenForm(true)} />
       <Legend />
       {view === "agenda" ? (
         <Agenda view={data} filters={filters} onBooking={setBooking} onBlock={setBlock} />
@@ -502,6 +591,7 @@ export function CalendarPage() {
       ) : (
         <Board
           view={data}
+          size={size}
           filters={filters}
           channels={channels.data}
           onBooking={setBooking}
@@ -519,6 +609,9 @@ export function CalendarPage() {
           onClose={() => setBlock(null)}
           onDone={afterAction}
         />
+      )}
+      {openForm && (
+        <OpenDatesSheet view={data} onClose={() => setOpenForm(false)} onDone={afterAction} />
       )}
       {blockForm && (
         <BlockSheet
@@ -541,13 +634,55 @@ function Legend() {
         </li>
       ))}
       <li className={cn("rounded border px-2 py-1", VIA_CLASS)}>דרך "כל המתחם"</li>
+      <li className={cn("rounded border border-slate-300 px-2 py-1 text-slate-700", CLOSED_CLASS)}>
+        לא פתוח להזמנה באתר
+      </li>
     </ul>
+  );
+}
+
+/** מיגרציה 43: יחידות שעוד לא פתוחות להזמנה באתר / שנשארו להן פחות מ-14 לילות פתוחים */
+function OpenDatesAlert({ view, onOpen }: { view: CalendarView; onOpen: () => void }) {
+  const { closed, ending } = openSummary(view.units, view.today);
+  if (closed.length === 0 && ending.length === 0) return null;
+  const parts: string[] = [];
+  if (closed.length === 1) parts.push(`${closed[0]!.name} עוד לא פתוחה להזמנה באתר`);
+  else if (closed.length > 1) parts.push(`${closed.length} יחידות עוד לא פתוחות להזמנה באתר`);
+  if (ending.length === 1) parts.push(`ב${ending[0]!.name} נשארו פחות מ-14 לילות פתוחים`);
+  else if (ending.length > 1) parts.push(`ב-${ending.length} יחידות נשארו פחות מ-14 לילות פתוחים`);
+  return (
+    <div
+      role="status"
+      data-testid="open-dates-alert"
+      className={cn(
+        "flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-sm",
+        closed.length > 0
+          ? "border-[var(--hm-danger-bg)] bg-[var(--hm-danger-bg)] text-[var(--hm-danger)]"
+          : "border-amber-200 bg-amber-50 text-amber-950",
+      )}
+    >
+      <CalendarCheck className="size-4 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        {parts.join(" · ")} — אורחים יכולים להזמין רק בתאריכים שפתחתם.
+      </span>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="min-h-10 bg-background"
+        onClick={onOpen}
+      >
+        פתיחת תאריכים
+      </Button>
+    </div>
   );
 }
 
 function Board(props: {
   view: CalendarView;
   filters: Filters;
+  /** K3: גודל הלוח */
+  size: BoardSize;
   /** יומנים חיצוניים (להתנגשויות); undefined — עוד לא נטען / אין הרשאה */
   channels?: ChannelUnit[] | undefined;
   onBooking: (b: CalendarBooking) => void;
@@ -555,6 +690,7 @@ function Board(props: {
   onSelectRange: (unitId: string, from: string, to: string) => void;
 }) {
   const { view } = props;
+  const dims = SIZES[props.size];
   // סוגי חדרים (מלונות) — לקיבוץ השורות; בלי הרשאת קטלוג / בלי סוגים — לוח רגיל
   const roomTypes = useQuery({
     queryKey: [...manageKeys.all, "room-types"],
@@ -601,7 +737,7 @@ function Board(props: {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const win = visibleWindow(viewport.top, viewport.height, ROW_H, rows.length);
+  const win = visibleWindow(viewport.top, viewport.height, dims.row, rows.length);
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setPick(null);
     window.addEventListener("keydown", esc);
@@ -609,7 +745,7 @@ function Board(props: {
   }, []);
   const todayIdx = diffDays(view.from, view.today);
   const weekend = new Set(view.weekend_nights);
-  const width = NAME_W + days.length * COL_W;
+  const width = dims.name + days.length * dims.col;
   const shown = rows.slice(win.first, win.last);
 
   const clickCell = (row: Extract<Row, { type: "unit" }>, index: number) => {
@@ -673,13 +809,16 @@ function Board(props: {
         aria-describedby="board-help"
         tabIndex={0}
       >
-        <div style={{ width, height: rows.length * ROW_H + ROW_H + SUM_H }} className="relative">
+        <div
+          style={{ width, height: rows.length * dims.row + dims.row + dims.sum }}
+          className="relative"
+        >
           {/* כותרת התאריכים ושורת "פנויות" — קבועות למעלה */}
           <div className="sticky top-0 z-20 bg-background">
-            <div className="flex bg-background" style={{ height: ROW_H }}>
+            <div className="flex bg-background" style={{ height: dims.row }}>
               <div
                 className="sticky start-0 z-30 flex items-center border-b border-e bg-background px-2 text-xs font-medium"
-                style={{ width: NAME_W }}
+                style={{ width: dims.name }}
               >
                 יחידה
               </div>
@@ -687,11 +826,12 @@ function Board(props: {
                 <div
                   key={d}
                   className={cn(
-                    "flex flex-col items-center justify-center border-b border-e text-[11px] leading-tight",
+                    "flex flex-col items-center justify-center border-b border-e leading-tight",
+                    dims.day,
                     weekend.has(dow(d)) && "bg-muted",
                     i === todayIdx && "bg-primary/15 font-bold",
                   )}
-                  style={{ width: COL_W }}
+                  style={{ width: dims.col }}
                   data-day={d}
                   aria-current={i === todayIdx ? "date" : undefined}
                 >
@@ -700,10 +840,10 @@ function Board(props: {
                 </div>
               ))}
             </div>
-            <div className="flex bg-background" style={{ height: SUM_H }} data-testid="free-row">
+            <div className="flex bg-background" style={{ height: dims.sum }} data-testid="free-row">
               <div
                 className="sticky start-0 z-30 flex items-center border-b border-e bg-background px-2 text-[11px] font-medium text-muted-foreground"
-                style={{ width: NAME_W }}
+                style={{ width: dims.name }}
               >
                 פנויות
               </div>
@@ -728,7 +868,7 @@ function Board(props: {
                           ? "text-[var(--hm-success)]"
                           : "text-foreground",
                   )}
-                  style={{ width: COL_W }}
+                  style={{ width: dims.col }}
                   data-free={f.free}
                 >
                   {f.total === 0 ? "" : f.free === 0 ? "מלא" : f.free}
@@ -736,13 +876,13 @@ function Board(props: {
               ))}
             </div>
           </div>
-          <div style={{ height: win.first * ROW_H }} />
+          <div style={{ height: win.first * dims.row }} />
           {shown.map((row) =>
             row.type === "property" ? (
               <div
                 key={row.key}
                 className="sticky start-0 flex items-center bg-muted/60 px-2 text-sm font-semibold"
-                style={{ height: ROW_H, width }}
+                style={{ height: dims.row, width }}
               >
                 <span className="sticky start-2">{row.name}</span>
               </div>
@@ -750,12 +890,12 @@ function Board(props: {
               <div
                 key={row.key}
                 className="relative flex"
-                style={{ height: ROW_H }}
+                style={{ height: dims.row }}
                 data-unit-row={row.unit.name}
               >
                 <div
                   className="sticky start-0 z-10 flex items-center border-b border-e bg-background px-2 text-sm"
-                  style={{ width: NAME_W }}
+                  style={{ width: dims.name }}
                 >
                   <span className="truncate">
                     {row.unit.kind === "whole_property"
@@ -766,6 +906,7 @@ function Board(props: {
                 {days.map((d, i) => {
                   const free = isFreeNight(row, i);
                   const picked = pick?.unitId === row.unit.id && pick.index === i;
+                  const closed = isClosedNight(row.unit, d);
                   return (
                     <div
                       key={d}
@@ -775,11 +916,13 @@ function Board(props: {
                         "border-b border-e",
                         weekend.has(dow(d)) && "bg-muted/50",
                         i === todayIdx && "bg-primary/5",
+                        closed && CLOSED_CLASS,
                         free && "cursor-pointer hover:bg-primary/10",
                         picked && "bg-primary/30",
                       )}
-                      style={{ width: COL_W }}
+                      style={{ width: dims.col }}
                       data-cell={d}
+                      data-closed={closed || undefined}
                     />
                   );
                 })}
@@ -787,6 +930,7 @@ function Board(props: {
                   <BarView
                     key={b.key}
                     bar={b}
+                    dims={dims}
                     onBooking={props.onBooking}
                     onBlock={props.onBlock}
                   />
@@ -798,8 +942,8 @@ function Board(props: {
                     data-conflict=""
                     className="absolute bottom-0.5 z-[6] h-2 rounded-full bg-[var(--hm-danger-dot)] ring-1 ring-white hover:h-3"
                     style={{
-                      insetInlineStart: NAME_W + m.start * COL_W + 2,
-                      width: m.span * COL_W - 4,
+                      insetInlineStart: dims.name + m.start * dims.col + 2,
+                      width: m.span * dims.col - 4,
                     }}
                     aria-label={`התנגשות עם ${m.label}: ${shortDate(m.from)}–${shortDate(m.to)} — לבדיקה במסך הערוצים`}
                     title={`התנגשות עם ${m.label}: ${shortDate(m.from)}–${shortDate(m.to)}`}
@@ -816,10 +960,12 @@ function Board(props: {
 
 function BarView({
   bar,
+  dims,
   onBooking,
   onBlock,
 }: {
   bar: Bar;
+  dims: BoardDims;
   onBooking: (b: CalendarBooking) => void;
   onBlock: (k: CalendarBlock) => void;
 }) {
@@ -835,12 +981,18 @@ function BarView({
       type="button"
       onClick={() => (bar.booking ? onBooking(bar.booking) : onBlock(bar.block!))}
       className={cn(
-        "absolute top-1.5 z-[5] flex h-8 items-center overflow-hidden whitespace-nowrap rounded border px-1.5 text-start text-xs font-medium",
+        "absolute z-[5] flex items-center overflow-hidden whitespace-nowrap rounded border px-1.5 text-start font-medium",
+        dims.bar >= 40 ? "text-sm" : "text-xs",
         bar.via ? VIA_CLASS : TONE_CLASS[bar.tone],
         bar.clippedStart && "rounded-s-none",
         bar.clippedEnd && "rounded-e-none",
       )}
-      style={{ insetInlineStart: NAME_W + bar.start * COL_W + 2, width: bar.span * COL_W - 4 }}
+      style={{
+        insetInlineStart: dims.name + bar.start * dims.col + 2,
+        width: bar.span * dims.col - 4,
+        top: (dims.row - dims.bar) / 2,
+        height: dims.bar,
+      }}
       data-bar={bar.kind}
       data-status={bar.booking?.status ?? "block"}
       aria-label={`${text}${bar.via ? " (דרך כל המתחם)" : ""}`}
@@ -1034,21 +1186,28 @@ function UnitCardView({
           style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}
           aria-label={`${days.length} הלילות מ-${dayLabel(days[0]!)}: ${c.freeNights} פנויים, ${days.length - c.freeNights} תפוסים או חסומים`}
         >
-          {c.strip.map((n, i) => (
-            <li
-              key={days[i]}
-              title={`${dayLabel(days[i]!)}: ${NIGHT_LABELS[n]}`}
-              className={cn(
-                "h-6 rounded-sm border",
-                STRIP_CLASS[n],
-                days[i] === today && "ring-2 ring-[var(--hm-lagoon-500)]",
-              )}
-            >
-              <span className="sr-only">
-                {dayLabel(days[i]!)}: {NIGHT_LABELS[n]}
-              </span>
-            </li>
-          ))}
+          {c.strip.map((n, i) => {
+            // מיגרציה 43: לילה פנוי שלא פתוח להזמנה באתר — פסים אפורים
+            const closed = n === "free" && isClosedNight(c.unit, days[i]!);
+            const label = closed ? "פנוי — לא פתוח להזמנה באתר" : NIGHT_LABELS[n];
+            return (
+              <li
+                key={days[i]}
+                title={`${dayLabel(days[i]!)}: ${label}`}
+                className={cn(
+                  "h-6 rounded-sm border",
+                  STRIP_CLASS[n],
+                  closed && CLOSED_CLASS,
+                  days[i] === today && "ring-2 ring-[var(--hm-lagoon-500)]",
+                )}
+                data-closed={closed || undefined}
+              >
+                <span className="sr-only">
+                  {dayLabel(days[i]!)}: {label}
+                </span>
+              </li>
+            );
+          })}
         </ol>
         <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
           <span>{dayLabel(days[0]!)}</span>
