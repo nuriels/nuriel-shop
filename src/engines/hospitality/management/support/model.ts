@@ -7,6 +7,7 @@ import type {
   SupportTicketRow,
   SupportTopic,
 } from "../../types/support";
+import { SUPPORT_TOPICS } from "../../validation/support";
 import type { Tone } from "../ui/tones";
 
 export const TOPIC_LABEL: Record<SupportTopic, string> = {
@@ -126,12 +127,24 @@ export function whatsappUrl(phone: string, text?: string): string {
   return `https://wa.me/${intl}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 }
 
-/** ?new=1 — לפתוח את טופס הפנייה החדשה */
+/**
+ * ?new=1 — לפתוח את טופס הפנייה החדשה; ואפשר גם תחום ונושא שימולאו מראש (למשל מכרטיס החבילה:
+ * "החשבון והחבילה" / "מעבר לחבילה בתשלום"). רק תחום מהרשימה ונושא קצר — השאר נזרק.
+ */
 export interface SupportSearch {
   new?: "1" | undefined;
+  topic?: SupportTopic | undefined;
+  subject?: string | undefined;
 }
 export function parseSupportSearch(search: Record<string, unknown>): SupportSearch {
-  return search["new"] === "1" || search["new"] === 1 ? { new: "1" } : {};
+  if (!(search["new"] === "1" || search["new"] === 1)) return {};
+  const out: SupportSearch = { new: "1" };
+  const topic = search["topic"];
+  if (typeof topic === "string" && (SUPPORT_TOPICS as readonly string[]).includes(topic))
+    out.topic = topic as SupportTopic;
+  const subject = typeof search["subject"] === "string" ? search["subject"].trim() : "";
+  if (subject.length >= 3 && subject.length <= 120) out.subject = subject;
+  return out;
 }
 
 export type SupportTab = "open" | "done" | "all";

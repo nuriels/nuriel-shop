@@ -311,6 +311,14 @@ describe("screens: statuses, times, tabs", () => {
   it("deep link ?new=1 and the WhatsApp link", () => {
     expect(parseSupportSearch({ new: "1" })).toEqual({ new: "1" });
     expect(parseSupportSearch({ new: "yes" })).toEqual({});
+    // משימה 4: תחום ונושא ממולאים מראש (מכרטיס החבילה) — רק תחום מהרשימה ונושא קצר
+    expect(
+      parseSupportSearch({ new: "1", topic: "account", subject: " מעבר לחבילה בתשלום " }),
+    ).toEqual({ new: "1", topic: "account", subject: "מעבר לחבילה בתשלום" });
+    expect(parseSupportSearch({ new: "1", topic: "admin", subject: "x".repeat(121) })).toEqual({
+      new: "1",
+    });
+    expect(parseSupportSearch({ topic: "account", subject: "מעבר לחבילה" })).toEqual({});
     expect(whatsappUrl("+972-50-123-4567", "שלום")).toBe(
       "https://wa.me/972501234567?text=%D7%A9%D7%9C%D7%95%D7%9D",
     );

@@ -1,5 +1,6 @@
 // הסרגל העליון של אזור הניהול (שלב F2b): שם המסך (בטלפון — שם העסק והתפקיד), חיפוש מהיר
-// (Ctrl+K), "+ חדש", פעמון "דורש טיפול" (אותם נתונים כמו בלוח הבקרה), וצפייה באתר.
+// (Ctrl+K), "+ חדש", פעמון "דורש טיפול" (אותם נתונים כמו בלוח הבקרה), עזרה ותמיכה (בכל מסך —
+// גם כשהפריט בתפריט הצד מתחת לגלילה), וצפייה באתר.
 // כל פעולה מוצגת רק למי שמורשה למסך שהיא פותחת; ההרשאה עצמה נאכפת במסד.
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
@@ -10,6 +11,7 @@ import {
   CircleCheckBig,
   ExternalLink,
   Images,
+  LifeBuoy,
   Plus,
   Search,
 } from "lucide-react";
@@ -34,10 +36,13 @@ import { useDashboardTasks } from "./tasks";
 export function TopBar({
   items,
   roleText,
+  supportUnread = 0,
   onSearch,
 }: {
   items: NavItem[];
   roleText: string;
+  /** פניות תמיכה עם תשובה שעוד לא נקראה */
+  supportUnread?: number;
   onSearch: () => void;
 }) {
   const ctx = useManagement();
@@ -88,6 +93,23 @@ export function TopBar({
         </Button>
         <NewMenu />
         {ctx.permissions["bookings"] && <TasksBell />}
+        {ctx.permissions["settings"] && (
+          <Link
+            to="/manage/support"
+            aria-label={supportUnread > 0 ? "עזרה ותמיכה — יש תשובה חדשה" : "עזרה ותמיכה"}
+            className="relative inline-flex size-11 shrink-0 items-center justify-center gap-1.5 rounded-xl text-[var(--hm-lagoon-700)] hover:bg-[var(--hm-lagoon-100)] xl:w-auto xl:px-3 xl:text-sm xl:font-semibold"
+            data-testid="topbar-support"
+          >
+            <LifeBuoy className="size-5" aria-hidden="true" />
+            <span className="hidden xl:inline">עזרה ותמיכה</span>
+            {supportUnread > 0 && (
+              <span
+                aria-hidden="true"
+                className="absolute top-2 end-2 size-2.5 rounded-full bg-[var(--hm-champagne-500)] ring-2 ring-background"
+              />
+            )}
+          </Link>
+        )}
         {ctx.flags.frontend && (
           <a
             href="/stay"

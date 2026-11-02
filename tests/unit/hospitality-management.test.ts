@@ -341,6 +341,52 @@ describe("plan notice", () => {
   it("a manager (no plan details) sees only the inactive warning", () => {
     expect(planNotice(ctx({}), NOW)).toBeNull();
   });
+
+  // משימה 4 (מוכנות מסחרית): מה קורה כשהמנוי לא פעיל, ומה עושים עכשיו
+  const owner = (e: Partial<ManagementContext["entitlements"]>): ManagementContext => ({
+    ...ctx(e),
+    permissions: { "billing.manage": true },
+  });
+  it("inactive: says what stops (new requests from the site) and what continues (the site, existing bookings)", () => {
+    const n = planNotice(ctx({ active: false, status: "active" }), NOW)!;
+    expect(n.text).toContain("האתר נשאר באוויר");
+    expect(n.text).toContain("ההזמנות הקיימות ממשיכות כרגיל");
+    expect(n.text).toContain("אורחים לא יכולים לשלוח מהאתר בקשות הזמנה חדשות");
+    // מנהל — בלי קישור (לא רואה את פרטי החבילה), ומי מטפל
+    expect(n.action).toBeUndefined();
+    expect(n.text).toContain("בעלי העסק פונים לנוריאל");
+  });
+  it("owner, inactive → a support request for renewal, with the topic and subject filled in", () => {
+    expect(planNotice(owner({ active: false, status: "active" }), NOW)?.action).toEqual({
+      kind: "support",
+      label: "לחידוש המנוי — פנייה לנוריאל",
+      subject: "חידוש המנוי",
+    });
+  });
+  it("trial over → 'the trial has ended' (not 'renew'), the owner is sent to the plans", () => {
+    const n = planNotice(
+      owner({ active: false, status: "trialing", trial_ends_at: "2026-10-30T10:00:00Z" }),
+      NOW,
+    )!;
+    expect(n.text.startsWith("תקופת הניסיון הסתיימה:")).toBe(true);
+    expect(n.action).toMatchObject({ kind: "plan" });
+    // הושעה בזמן הניסיון (הניסיון עוד לא נגמר) — לא "הניסיון הסתיים"
+    expect(
+      planNotice(
+        owner({ active: false, status: "trialing", trial_ends_at: "2026-11-10T10:00:00Z" }),
+        NOW,
+      )?.text,
+    ).toMatch(/^המנוי של העסק אינו פעיל/);
+  });
+  it("owner, trial running → 'what happens next?' to the plan card; at the unit limit → a request to grow the plan", () => {
+    expect(
+      planNotice(owner({ status: "trialing", trial_ends_at: "2026-11-04T10:00:00Z" }), NOW)?.action,
+    ).toEqual({ kind: "plan", label: "מה קורה אחר כך?" });
+    expect(planNotice(owner({ max_units: 3, units_used: 3 }), NOW)?.action).toMatchObject({
+      kind: "support",
+      subject: "הגדלת החבילה",
+    });
+  });
 });
 
 describe("formatting", () => {

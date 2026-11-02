@@ -5,6 +5,8 @@
 // כאן: בדיקת הקלט והקריאה עם הטוקן של המשתמש.
 import { createServerFn } from "@tanstack/react-start";
 import type { DashboardOverview, DashboardTasks, DashboardToday } from "../types/dashboard";
+import type { ManagementContext } from "../types/management";
+import type { PlanOption } from "../types/platform-admin";
 import type { ReportsView } from "../types/reports";
 import { parseDashboardRange } from "../validation/dashboard";
 import { parseReportsQuery } from "../validation/reports";
@@ -43,3 +45,24 @@ export const hospitalityReports = createServerFn({ method: "POST" })
       _statuses: data.statuses,
     });
   });
+
+/**
+ * החבילות המפורסמות (שם, מחיר לחודש, דמי הקמה, מה כלול — כפי שהפלטפורמה הגדירה) לכרטיס "החבילה
+ * שלי": בעל העסק רואה מה מקבלים ומה עולה המעבר מהניסיון. קודם — שהמשתמש הוא בעל העסק הזה (במסד,
+ * עם הטוקן שלו); הרשימה עצמה נפתחת במסד לשרת בלבד (public_plans). מנהלים — רשימה ריקה.
+ */
+export const hospitalityPlans = createServerFn({ method: "GET" }).handler(
+  async (): Promise<PlanOption[]> => {
+    const [{ manageRpc }, { callServerRpc }] = await Promise.all([
+      import("../server/manage.server"),
+      import("../server/rpc.server"),
+    ]);
+    const ctx = await manageRpc<ManagementContext>("management_context", {});
+    if (ctx.permissions["billing.manage"] !== true) return [];
+    return callServerRpc<PlanOption[]>(
+      "public_plans",
+      {},
+      { ip: "unknown", userAgent: "hospitality-manage" },
+    );
+  },
+);

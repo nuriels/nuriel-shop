@@ -17,11 +17,14 @@ import {
   Plus,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { cn } from "@/platform/ui";
-import { hospitalityDashboardOverview } from "../../api/dashboard.functions";
+import { hospitalityDashboardOverview, hospitalityPlans } from "../../api/dashboard.functions";
+import type { PlanOption } from "../../types/platform-admin";
 import { CHECKLIST_STEPS, checklistProgress } from "../lib/checklist";
-import { formatDate, usageText } from "../lib/format";
+import { formatDate, formatMoney, usageText } from "../lib/format";
+import { INACTIVE_EFFECTS, trialEnded } from "../lib/plan-notice";
+import { manageKeys } from "../lib/query-keys";
 import { useManagement } from "../shell/management-context";
 import {
   ErrorState,
@@ -376,6 +379,13 @@ function SiteStatusCard() {
 function PlanCard() {
   const ctx = useManagement();
   const e = ctx.entitlements;
+  // בניסיון / כשהמנוי לא פעיל: מה קורה אחר כך, החבילות (כפי שהפלטפורמה הגדירה) ואיך עוברים
+  const choose = e.status === "trialing" || !e.active;
+  // ההודעה שמעל המסכים מובילה לכאן (#plan) — גלילה אחרי שהכרטיס מוצג
+  useEffect(() => {
+    if (window.location.hash === "#plan")
+      document.getElementById("plan")?.scrollIntoView({ block: "start" });
+  }, []);
   const status =
     e.status === "trialing"
       ? `ניסיון עד ${formatDate(e.trial_ends_at, ctx.business.timezone)}`
@@ -383,7 +393,12 @@ function PlanCard() {
         ? "פעיל"
         : "לא פעיל";
   return (
-    <SectionCard id="plan" title="החבילה שלי" description={e.plan_name}>
+    <SectionCard
+      id="plan"
+      title="החבילה שלי"
+      description={e.plan_name}
+      className={cn("scroll-mt-20", choose && "md:col-span-2 xl:col-span-3")}
+    >
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         <dt className="text-muted-foreground">מצב</dt>
         <dd>
@@ -427,6 +442,98 @@ function PlanCard() {
           ))}
         </ul>
       )}
+      {choose && (
+        <PlanNext state={e.active ? "trial" : trialEnded(e) ? "trial_ended" : "inactive"} />
+      )}
     </SectionCard>
+  );
+}
+
+/** מה קורה בסוף הניסיון (או כשהמנוי לא פעיל), החבילות ואיך עוברים — בלי מחירים בקוד: מהמסד */
+function PlanNext({ state }: { state: "trial" | "trial_ended" | "inactive" }) {
+  const trial = state === "trial";
+  const ctx = useManagement();
+  const e = ctx.entitlements;
+  const plans = useQuery({
+    queryKey: [...manageKeys.all, "plans"],
+    queryFn: () => hospitalityPlans(),
+    staleTime: 10 * 60_000,
+  });
+  return (
+    <div className="mt-5 border-t pt-4" data-testid="plan-next">
+      <h3 className="text-sm font-semibold">
+        {trial
+          ? "אחרי תקופת הניסיון"
+          : state === "trial_ended"
+            ? "תקופת הניסיון הסתיימה"
+            : "חידוש המנוי"}
+      </h3>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {trial
+          ? `תקופת הניסיון פתוחה עד ${formatDate(e.trial_ends_at, ctx.business.timezone)}. כדי להמשיך לקבל הזמנות מהאתר אחריה, עוברים לאחת החבילות. בלי מעבר: ${INACTIVE_EFFECTS}`
+          : `${INACTIVE_EFFECTS} כדי לחזור לקבל הזמנות מהאתר, בוחרים חבילה.`}
+      </p>
+      {plans.isPending ? (
+        <SkeletonBlock className="mt-3 h-32 w-full" />
+      ) : plans.data?.length ? (
+        <ul className="mt-3 grid gap-3 md:grid-cols-2" aria-label="החבילות">
+          {plans.data.map((p) => (
+            <PlanOptionCard key={p.code} plan={p} current={p.code === e.plan} />
+          ))}
+        </ul>
+      ) : null}
+      <div className="mt-4 flex flex-col gap-1">
+        <Link
+          to="/manage/support"
+          search={{
+            new: "1",
+            topic: "account",
+            subject: state === "inactive" ? "חידוש המנוי" : "מעבר לחבילה בתשלום",
+          }}
+          className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-[var(--hm-lagoon-700)] px-4 text-sm font-semibold text-white hover:bg-[var(--hm-lagoon-900)]"
+        >
+          {state === "inactive"
+            ? "לחידוש המנוי — פנייה לנוריאל"
+            : "מעבר לחבילה בתשלום — פנייה לנוריאל"}
+        </Link>
+        <p className="text-xs text-muted-foreground">
+          המעבר בין חבילות נעשה מול נוריאל: פותחים פנייה בתחום "החשבון והחבילה".
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PlanOptionCard({ plan: p, current }: { plan: PlanOption; current: boolean }) {
+  const currency = p.currency ?? "ILS";
+  return (
+    <li className="flex flex-col gap-1 rounded-xl border p-3" data-plan={p.code}>
+      <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="font-semibold">
+          {p.name}
+          {current && (
+            <span className="ms-2 text-xs font-normal text-muted-foreground">(עכשיו)</span>
+          )}
+        </span>
+        {p.price_monthly != null && (
+          <span className="text-sm font-semibold" data-num="">
+            {formatMoney(Number(p.price_monthly), currency)} לחודש
+          </span>
+        )}
+      </p>
+      {p.tagline && <p className="text-[13px] text-muted-foreground">{p.tagline}</p>}
+      {p.setup_fee != null && Number(p.setup_fee) > 0 && (
+        <p className="text-[13px] text-muted-foreground" data-num="">
+          דמי הקמה: {formatMoney(Number(p.setup_fee), currency)}
+        </p>
+      )}
+      {p.highlights?.length ? (
+        <ul className="mt-1 list-disc space-y-0.5 ps-5 text-[13px]">
+          {p.highlights.map((h) => (
+            <li key={h}>{h}</li>
+          ))}
+        </ul>
+      ) : null}
+    </li>
   );
 }

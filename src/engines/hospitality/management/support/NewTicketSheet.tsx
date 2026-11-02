@@ -24,16 +24,29 @@ const EMPTY = {
 
 export function NewTicketSheet({
   open,
+  preset,
   onClose,
   onSubmit,
   onError,
 }: {
   open: boolean;
+  /** תחום / נושא שימולאו מראש (מקישור) — אפשר לשנות */
+  preset?: { topic?: SupportTopic | undefined; subject?: string | undefined } | undefined;
   onClose: () => void;
   onSubmit: (form: FormData) => Promise<void>;
   onError: (e: unknown) => void;
 }) {
   const [v, setV] = useState(EMPTY);
+  const presetTopic = preset?.topic;
+  const presetSubject = preset?.subject;
+  useEffect(() => {
+    if (open && (presetTopic || presetSubject))
+      setV((x) => ({
+        ...x,
+        topic: presetTopic ?? x.topic,
+        subject: presetSubject ?? x.subject,
+      }));
+  }, [open, presetTopic, presetSubject]);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);

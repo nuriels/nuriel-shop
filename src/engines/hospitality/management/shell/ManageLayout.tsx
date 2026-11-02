@@ -3,7 +3,7 @@
 // סרגל עליון (חיפוש מהיר Ctrl+K, "+ חדש", "דורש טיפול", צפייה באתר), הודעת מנוי, והמסך עצמו —
 // עם מסך שגיאה בעברית בתוך המעטפת (המסך נשבר — הניווט נשאר).
 import { useEffect, useState, type ReactNode } from "react";
-import { CatchBoundary, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { CatchBoundary, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, TriangleAlert } from "lucide-react";
 import { onSessionChange, signOutHere } from "@/platform/auth/browser-session";
@@ -115,7 +115,12 @@ function Shell({
       </div>
       <div className="flex min-h-dvh min-w-0 flex-col">
         <div className="contents print:hidden">
-          <TopBar items={items} roleText={roleText} onSearch={() => setSearchOpen(true)} />
+          <TopBar
+            items={items}
+            roleText={roleText}
+            supportUnread={support.data ?? 0}
+            onSearch={() => setSearchOpen(true)}
+          />
         </div>
         {notice && (
           <div
@@ -132,7 +137,31 @@ function Shell({
             ) : (
               <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             )}
-            <p>{notice.text}</p>
+            <p>
+              {notice.text}
+              {notice.action && (
+                <>
+                  {" "}
+                  {notice.action.kind === "plan" ? (
+                    <Link
+                      to="/manage"
+                      hash="plan"
+                      className="font-semibold underline underline-offset-2"
+                    >
+                      {notice.action.label}
+                    </Link>
+                  ) : (
+                    <Link
+                      to="/manage/support"
+                      search={{ new: "1", topic: "account", subject: notice.action.subject }}
+                      className="font-semibold underline underline-offset-2"
+                    >
+                      {notice.action.label}
+                    </Link>
+                  )}
+                </>
+              )}
+            </p>
           </div>
         )}
         <main id="main-content" className="flex-1 px-4 pt-6 pb-28 md:px-8 md:pb-12 print:p-0">

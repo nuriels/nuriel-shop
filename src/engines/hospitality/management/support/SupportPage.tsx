@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button, cn } from "@/platform/ui";
 import { hospitalitySupportList, hospitalitySupportOpen } from "../../api/support.functions";
-import type { SupportList, SupportTicketRow } from "../../types/support";
+import type { SupportList, SupportTicketRow, SupportTopic } from "../../types/support";
 import { errorText } from "../catalog/refresh";
 import { useManagement } from "../shell/management-context";
 import { EmptyState, ErrorState, NoAccess, PageHeader, SkeletonBlock, StatusPill } from "../ui/kit";
@@ -36,6 +36,11 @@ export function SupportPage() {
   const search = parseSupportSearch(useSearch({ strict: false }) as Record<string, unknown>);
   const [tab, setTab] = useState<SupportTab>("open");
   const [creating, setCreating] = useState(false);
+  // תחום ונושא שהגיעו בקישור (למשל "מעבר לחבילה בתשלום" מכרטיס החבילה) — ממולאים בטופס
+  const [preset, setPreset] = useState<{
+    topic?: SupportTopic | undefined;
+    subject?: string | undefined;
+  }>({});
   const allowed = ctx.permissions["settings"] === true;
   const query = useQuery({
     queryKey: supportKeys.list,
@@ -46,10 +51,11 @@ export function SupportPage() {
   // ?new=1 (מהחיפוש המהיר / "+ חדש") — פותח את הטופס פעם אחת
   useEffect(() => {
     if (search.new) {
+      setPreset({ topic: search.topic, subject: search.subject });
       setCreating(true);
       void navigate({ to: "/manage/support", search: {}, replace: true });
     }
-  }, [search.new, navigate]);
+  }, [search.new, search.topic, search.subject, navigate]);
 
   if (!allowed) return <NoAccess text="מסך התמיכה פתוח לבעלי העסק ולמנהלים." />;
 
@@ -167,7 +173,11 @@ export function SupportPage() {
 
       <NewTicketSheet
         open={creating}
-        onClose={() => setCreating(false)}
+        preset={preset}
+        onClose={() => {
+          setCreating(false);
+          setPreset({});
+        }}
         onSubmit={async (form) => {
           const r = await hospitalitySupportOpen({ data: form });
           void qc.invalidateQueries({ queryKey: supportKeys.all });
