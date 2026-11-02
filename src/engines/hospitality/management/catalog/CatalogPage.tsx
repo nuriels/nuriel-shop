@@ -7,6 +7,7 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpDown,
+  BedDouble,
   ChevronDown,
   ChevronLeft,
   MapPin,
@@ -45,7 +46,9 @@ import {
   type UnitForm,
 } from "./model";
 import { StatusPill } from "./parts";
+import { UnitCard } from "./UnitCard";
 import { UnitOrder } from "./UnitOrder";
+import { useUnitExtras, type UnitExtras } from "./useUnitExtras";
 
 type SheetState =
   | { kind: "property-new" }
@@ -64,7 +67,7 @@ export function CatalogPage() {
   const view = catalog.data;
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-5">
+    <div className="mx-auto flex max-w-5xl flex-col gap-5">
       <div>
         <h1 className="text-2xl font-semibold">יחידות ומתחמים</h1>
         <p className="mt-1 text-muted-foreground">המקומות שאתם משכירים — כל מתחם והיחידות שבו.</p>
@@ -144,6 +147,7 @@ function ArchivedNote({ view }: { view: CatalogView }) {
 
 function CatalogList({ view }: { view: CatalogView }) {
   const [sheet, setSheet] = useState<SheetState | null>(null);
+  const extras = useUnitExtras();
   const properties = visibleProperties(view);
   const limit = unitsLimit(view.limits);
   const close = () => setSheet(null);
@@ -210,6 +214,8 @@ function CatalogList({ view }: { view: CatalogView }) {
         <PropertyCard
           key={p.id}
           property={p}
+          amenities={view.amenities}
+          extras={extras}
           canAdd={limit.canAdd}
           onEdit={() => setSheet({ kind: "property-edit", property: p })}
           onAddUnit={() => addUnit(p)}
@@ -249,6 +255,8 @@ function CatalogList({ view }: { view: CatalogView }) {
 
 function PropertyCard(props: {
   property: CatalogProperty;
+  amenities: CatalogView["amenities"];
+  extras: UnitExtras;
   canAdd: boolean;
   onEdit: () => void;
   onAddUnit: () => void;
@@ -318,14 +326,33 @@ function PropertyCard(props: {
         {ordering ? (
           <UnitOrder property={p} onDone={() => setOrdering(false)} />
         ) : units.length === 0 && !whole ? (
-          <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-            אין עדיין יחידות במתחם הזה.
-          </p>
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed bg-[var(--hm-surface-2)] px-6 py-8 text-center">
+            <span
+              aria-hidden="true"
+              className="inline-flex size-12 items-center justify-center rounded-2xl bg-[var(--hm-lagoon-100)] text-[var(--hm-lagoon-700)]"
+            >
+              <BedDouble className="size-6" strokeWidth={1.7} />
+            </span>
+            <p className="font-semibold">אין עדיין יחידות במתחם הזה.</p>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              מוסיפים יחידה — שם, כמה אורחים, מיטות — ואחר כך מחיר ותמונות, והיא מוכנה להזמנות.
+            </p>
+          </div>
         ) : (
           (active.length > 0 || whole) && (
-            <ul aria-label={`היחידות ב${p.name}`} className="divide-y rounded-md border">
+            <ul
+              aria-label={`היחידות ב${p.name}`}
+              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+            >
               {active.map((u) => (
-                <UnitRow key={u.id} unit={u} onEdit={() => props.onEditUnit(u)} />
+                <UnitCard
+                  key={u.id}
+                  unit={u}
+                  property={p}
+                  amenities={props.amenities}
+                  extras={props.extras}
+                  onEdit={() => props.onEditUnit(u)}
+                />
               ))}
               {whole && <WholeRow unit={whole} onEdit={() => props.onEditUnit(whole)} />}
             </ul>
@@ -350,10 +377,17 @@ function PropertyCard(props: {
               <ul
                 id={inactiveId}
                 aria-label={`יחידות לא פעילות ב${p.name}`}
-                className="divide-y rounded-md border"
+                className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
               >
                 {inactive.map((u) => (
-                  <UnitRow key={u.id} unit={u} onEdit={() => props.onEditUnit(u)} />
+                  <UnitCard
+                    key={u.id}
+                    unit={u}
+                    property={p}
+                    amenities={props.amenities}
+                    extras={props.extras}
+                    onEdit={() => props.onEditUnit(u)}
+                  />
                 ))}
               </ul>
             )}
@@ -387,53 +421,13 @@ function PropertyCard(props: {
   );
 }
 
-function UnitRow({ unit: u, onEdit }: { unit: CatalogUnit; onEdit: () => void }) {
-  const Icon = UNIT_ICONS[u.unit_type];
-  const missing = missingForBooking(u);
-  return (
-    <li className="flex flex-wrap items-center gap-3 p-3" data-unit={u.name}>
-      <span
-        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary"
-        aria-hidden="true"
-      >
-        <Icon className="size-5" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="flex flex-wrap items-center gap-2 font-medium">
-          <Link
-            to="/manage/units/$unitId"
-            params={{ unitId: u.id }}
-            className="inline-flex items-center gap-1 break-words hover:underline"
-          >
-            {u.name}
-            <ChevronLeft className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </Link>
-          {!u.is_active && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              לא פעילה
-            </span>
-          )}
-        </p>
-        <p className="text-sm text-muted-foreground">
-          {UNIT_TYPE_LABELS[u.unit_type]} · {unitSummary(u)}
-        </p>
-        {missing.length > 0 && (
-          <p className="text-xs text-amber-800">עוד חסר כדי לקבל הזמנות: {missing.join(" ו")}</p>
-        )}
-      </div>
-      <Button variant="outline" className="min-h-11 min-w-11 gap-2 px-3 sm:px-4" onClick={onEdit}>
-        <Pencil className="size-4" aria-hidden="true" />
-        <span className="sr-only sm:not-sr-only">עריכה</span>
-        <span className="sr-only"> של {u.name}</span>
-      </Button>
-    </li>
-  );
-}
-
 function WholeRow({ unit: u, onEdit }: { unit: CatalogUnit; onEdit: () => void }) {
   const members = u.member_ids?.length ?? 0;
   return (
-    <li className="flex flex-wrap items-center gap-3 bg-muted/30 p-3" data-unit={u.name}>
+    <li
+      className="flex flex-wrap items-center gap-3 rounded-2xl border bg-[var(--hm-surface-2)] p-4 sm:col-span-2 lg:col-span-3"
+      data-unit={u.name}
+    >
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-2 font-medium">
           <Link

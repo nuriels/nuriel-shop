@@ -205,8 +205,10 @@ export function CalendarPage() {
   const loaded = query.data;
   useEffect(() => {
     if (params.block !== "1" || !loaded) return;
+    // ?unit= (מעמוד היחידה) — היחידה כבר נבחרת בטופס
+    const linked = params.unit && loaded.units.some((u) => u.id === params.unit) ? params.unit : "";
     setBlockForm({
-      unitId: loaded.units.find((u) => u.kind !== "whole_property")?.id ?? "",
+      unitId: linked || (loaded.units.find((u) => u.kind !== "whole_property")?.id ?? ""),
       from: loaded.today,
       to: addDays(loaded.today, 1),
     });

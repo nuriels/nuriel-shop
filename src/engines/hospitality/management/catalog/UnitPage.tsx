@@ -60,6 +60,7 @@ import {
   StatusPill,
 } from "./parts";
 import { errorText, useRefresh } from "./refresh";
+import { UnitPriceCard } from "./UnitPriceCard";
 
 export function UnitPage() {
   const params = useParams({ strict: false }) as { unitId?: string };
@@ -254,7 +255,19 @@ function UnitEditor({
           </p>
           {missing.length > 0 && (
             <p className="text-sm text-amber-800">
-              עוד חסר כדי לקבל הזמנות: {missing.join(" ו")} — יתווספו בשלבים הבאים.
+              עוד חסר כדי לקבל הזמנות:{" "}
+              {missing.map((m, i) => (
+                <span key={m}>
+                  {i > 0 ? " ו" : ""}
+                  <a
+                    href={m === "מחיר" ? "#pricing" : "#gallery"}
+                    className="font-semibold underline underline-offset-2"
+                  >
+                    {m}
+                  </a>
+                </span>
+              ))}{" "}
+              — ממלאים כאן למטה.
             </p>
           )}
         </header>
@@ -597,6 +610,12 @@ function UnitEditor({
         )}
         <LeaveGuard dirty={dirty && !gone} what="היחידה" />
       </form>
+      {/* מחוץ לטופס של העמוד: למחיר ולגלריה שמירה משלהם */}
+      {!gone && (
+        <div className="mx-auto mt-5 flex max-w-3xl flex-col gap-5">
+          <UnitPriceCard unit={unit} />
+        </div>
+      )}
       {/* מחוץ לטופס של העמוד: לגלריה פעולות משלה (כל פעולה נשמרת מיד) */}
       {!whole && canMedia && !gone && (
         <div id="gallery" className="mx-auto mt-5 flex max-w-3xl flex-col gap-5">
