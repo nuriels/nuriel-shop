@@ -7,6 +7,20 @@
 -- בדיקות ההגבלה (hospitality-billing.test.sql).
 UPDATE hospitality.plans SET max_units = 5 WHERE code = 'basic';
 
+-- מיגרציה 43: יחידה נפתחת להזמנה באתר רק כשבעל המקום פותח לה תאריכים (ברירת מחדל — סגור). התרחישים
+-- כאן בודקים הזמנות במקביל — ליחידות שהם יוצרים נפתחות שנתיים קדימה (כמו ב-test-helpers.sql)
+CREATE SCHEMA IF NOT EXISTS tests;
+CREATE OR REPLACE FUNCTION tests.open_new_units() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.open_until IS NULL THEN
+    NEW.open_until := current_date + 730;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS tests_open_new_units ON hospitality.units;
+CREATE TRIGGER tests_open_new_units BEFORE INSERT ON hospitality.units
+  FOR EACH ROW EXECUTE FUNCTION tests.open_new_units();
+
 INSERT INTO auth.users (id, email, email_confirmed_at) VALUES
   ('c0000000-0000-0000-0000-0000000000a1', 'conc.owner@test.local', now()),
   ('c0000000-0000-0000-0000-0000000000a2', 'conc.manager@test.local', now())
