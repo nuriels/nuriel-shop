@@ -16,6 +16,7 @@ import { HOSPITALITY_SCHEMA, hospitalitySwitchOn } from "../config";
 import { renderBookingEmail, type EmailBusiness, type EmailPayload } from "./templates";
 
 const TICK_MS = 30_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BATCH = 20;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -168,14 +169,16 @@ async function sendDue(): Promise<void> {
         const ctx = await sites.get(n.tenant_id)!;
         const email = renderBookingEmail(n.event, n.recipient_kind, n.payload, {
           business: ctx.business,
-          // לעסק: ההזמנה; התנגשות ביומן חיצוני (D3) — מסך הערוצים
+          // לעסק: ההזמנה; התנגשות ביומן חיצוני (D3) — מסך הערוצים; תשובה מהתמיכה (E4) — הפנייה
           bookingUrl: !ctx.origin
             ? null
             : n.booking_id
               ? `${ctx.origin}/manage/bookings/${n.booking_id}`
               : n.event === "channel_conflict"
                 ? `${ctx.origin}/manage/channels`
-                : null,
+                : n.event === "support_reply" && UUID.test(String(n.payload["ticket_id"] ?? ""))
+                  ? `${ctx.origin}/manage/support/${String(n.payload["ticket_id"])}`
+                  : null,
           siteOrigin: ctx.origin,
           escape: escapeHtml,
         });
@@ -186,7 +189,7 @@ async function sendDue(): Promise<void> {
             to: n.recipient_email,
             subject: email.subject,
             html: email.html,
-            senderName: ctx.business.name,
+            senderName: email.sender ?? ctx.business.name,
             // לאורח — המענה מגיע לעסק; לעסק — בלי כתובת מענה
             replyTo: n.recipient_kind === "guest" ? ctx.replyTo : null,
             idempotencyKey: `hosp-${n.id}`,

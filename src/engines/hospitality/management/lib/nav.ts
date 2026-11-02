@@ -15,11 +15,12 @@ export type NavKey =
   | "channels"
   | "website"
   | "settings"
-  | "team";
+  | "team"
+  | "support";
 
 export type NavGroupKey = "operations" | "place" | "site" | "account";
 
-/** ספירות ליד פריטים (ממתינות לאישור, ערוצים שדורשים בדיקה, מיילים שנכשלו) */
+/** ספירות ליד פריטים (ממתינות לאישור, ערוצים שדורשים בדיקה, מיילים שנכשלו, תשובות מהתמיכה) */
 export type NavBadges = Partial<Record<NavKey, number>>;
 
 export const NAV_GROUPS: readonly { key: NavGroupKey; title: string }[] = [
@@ -42,7 +43,8 @@ export type NavPath =
   | "/manage/units"
   | "/manage/photos"
   | "/manage/pricing"
-  | "/manage/policies";
+  | "/manage/policies"
+  | "/manage/support";
 
 export interface NavItem {
   key: NavKey;
@@ -168,6 +170,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: "account",
     permission: "staff.managers",
     keywords: "מנהלים הרשאות",
+  },
+  {
+    key: "support",
+    label: "תמיכה",
+    to: "/manage/support",
+    group: "account",
+    permission: "settings",
+    also: ["/manage/support/"],
+    keywords: "עזרה פנייה שאלה תקלה צור קשר",
   },
 ];
 

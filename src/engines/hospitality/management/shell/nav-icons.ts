@@ -6,6 +6,7 @@ import {
   FileText,
   Images,
   LayoutDashboard,
+  LifeBuoy,
   Mail,
   Palette,
   Settings,
@@ -31,4 +32,5 @@ export const NAV_ICONS: Record<NavKey, LucideIcon> = {
   website: Palette,
   settings: Settings,
   team: UserCog,
+  support: LifeBuoy,
 };

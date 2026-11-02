@@ -2,7 +2,7 @@
 // פעולות ("הזמנה חדשה", "חסימת תאריכים"…), וחיפוש הזמנה לפי מספר / שם / טלפון / אימייל
 // (פותח את מסך ההזמנות עם החיפוש). רק מסכים ופעולות שמותרים — ההרשאה עצמה נאכפת במסד.
 import { useNavigate } from "@tanstack/react-router";
-import { Ban, BedDouble, CalendarPlus, Search } from "lucide-react";
+import { Ban, BedDouble, CalendarPlus, LifeBuoy, Search } from "lucide-react";
 import { useState } from "react";
 import {
   CommandDialog,
@@ -95,6 +95,18 @@ export function CommandMenu({
               >
                 <BedDouble className="size-4 text-[var(--hm-lagoon-500)]" aria-hidden="true" />
                 יחידה חדשה
+              </CommandItem>
+            )}
+            {ctx.permissions["settings"] && (
+              <CommandItem
+                value="פנייה לתמיכה עזרה תקלה שאלה"
+                onSelect={() =>
+                  go(() => void navigate({ to: "/manage/support", search: { new: "1" } }))
+                }
+                className="min-h-11 gap-2"
+              >
+                <LifeBuoy className="size-4 text-[var(--hm-lagoon-500)]" aria-hidden="true" />
+                פנייה לתמיכה
               </CommandItem>
             )}
           </CommandGroup>

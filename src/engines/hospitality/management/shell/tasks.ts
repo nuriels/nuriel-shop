@@ -2,9 +2,11 @@
 // לפעמון שבסרגל העליון ולספירות שליד "הזמנות" ו"ערוצי הזמנה" בניווט.
 import { useQuery } from "@tanstack/react-query";
 import { hospitalityDashboardTasks } from "../../api/dashboard.functions";
+import { hospitalitySupportUnread } from "../../api/support.functions";
 import type { DashboardTasks } from "../../types/dashboard";
 import { dashboardKeys } from "../dashboard/model";
 import type { NavBadges } from "../lib/nav";
+import { supportKeys } from "../support/keys";
 
 export function useDashboardTasks(enabled: boolean) {
   return useQuery({
@@ -26,4 +28,15 @@ export function navBadges(data: DashboardTasks | undefined): NavBadges {
     if (t.kind === "emails") out.emails = t.count;
   }
   return out;
+}
+
+/** תמיכה (E4): תשובות של צוות התמיכה שעוד לא נקראו — לתג ליד "תמיכה" */
+export function useSupportUnread(enabled: boolean) {
+  return useQuery({
+    queryKey: supportKeys.unread,
+    queryFn: () => hospitalitySupportUnread(),
+    enabled,
+    refetchInterval: 120_000,
+    staleTime: 60_000,
+  });
 }

@@ -1,7 +1,7 @@
 // "ניהול Hospitality" בפאנל הפלטפורמה (P1, /platform/hospitality, בכתובת הפאנל בלבד):
 // פתיחת עסק אירוח (שם, כתובת, אימייל הבעלים, חבילה) → האתר, המסד ואזור הניהול מוכנים,
 // והבעלים נכנס ל-/manage בקוד שנשלח למייל ומקים את העסק לבד. וגם: רשימת אתרי האירוח,
-// שיוך בעלים, חבילה, הדלקה / כיבוי של אתר, ומצב המנוע בפלטפורמה.
+// שיוך בעלים, חבילה, הדלקה / כיבוי של אתר, ומצב המנוע בפלטפורמה; ותמיכה לעסקים (E4, SupportInbox).
 // מסך של המנוע — מגיע לפאנל רק דרך קישור (בלי import מקוד החנויות); ההרשאה במסד.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -45,6 +45,7 @@ import type { ThemeId } from "../website/design/schema";
 import { THEME_LIST } from "../website/theme/themes";
 import { FormSheet } from "../management/catalog/CatalogSheets";
 import { errorText } from "../management/catalog/refresh";
+import { SupportInbox } from "./SupportInbox";
 
 const KEY = ["hospitality-platform"] as const;
 
@@ -150,6 +151,7 @@ function Content({ view }: { view: PlatformHospitalityView }) {
           }, 50);
         }}
       />
+      <SupportInbox />
       <OpenSiteCard key={prefill?.key ?? 0} view={view} prefill={prefill?.values ?? null} />
       <section className="flex flex-col gap-3" aria-labelledby="sites-title">
         <h2 id="sites-title" className="text-xl font-semibold">

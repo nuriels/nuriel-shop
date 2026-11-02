@@ -17,7 +17,7 @@ import { CommandMenu } from "./CommandMenu";
 import { ManagementCtx } from "./management-context";
 import { BottomNav, SideNav } from "./Navigation";
 import { ErrorScreen, ForbiddenScreen, LoadingScreen, ManageRouteError } from "./StatusScreens";
-import { navBadges, useDashboardTasks } from "./tasks";
+import { navBadges, useDashboardTasks, useSupportUnread } from "./tasks";
 import { TopBar } from "./TopBar";
 
 export function ManageLayout() {
@@ -85,7 +85,8 @@ function Shell({
   const notice = planNotice(context);
   const roleText = context.role === "owner" ? "בעלים" : "מנהל/ת";
   const tasks = useDashboardTasks(context.permissions["bookings"] === true);
-  const badges = navBadges(tasks.data);
+  const support = useSupportUnread(context.permissions["settings"] === true);
+  const badges = { ...navBadges(tasks.data), ...(support.data ? { support: support.data } : {}) };
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [searchOpen, setSearchOpen] = useState(false);
 

@@ -53,6 +53,7 @@ import { Route as ManagePoliciesRouteImport } from './routes/manage.policies'
 import { Route as ManagePricingRouteImport } from './routes/manage.pricing'
 import { Route as ManageRoomTypesRouteImport } from './routes/manage.room-types'
 import { Route as ManageSettingsRouteImport } from './routes/manage.settings'
+import { Route as ManageSupportRouteImport } from './routes/manage.support'
 import { Route as ManageTeamRouteImport } from './routes/manage.team'
 import { Route as ManageUnitsRouteImport } from './routes/manage.units'
 import { Route as ManageWebsiteRouteImport } from './routes/manage.website'
@@ -91,6 +92,7 @@ import { Route as ManageBookingsBookingIdRouteImport } from './routes/manage.boo
 import { Route as ManageBookingsNewRouteImport } from './routes/manage.bookings_.new'
 import { Route as ManageGuestsGuestIdRouteImport } from './routes/manage.guests_.$guestId'
 import { Route as ManagePropertiesPropertyIdRouteImport } from './routes/manage.properties.$propertyId'
+import { Route as ManageSupportTicketIdRouteImport } from './routes/manage.support_.$ticketId'
 import { Route as ManageUnitsUnitIdRouteImport } from './routes/manage.units_.$unitId'
 import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
 import { Route as StayRoomsTypeSlugRouteImport } from './routes/stay.rooms.$typeSlug'
@@ -316,6 +318,11 @@ const ManageSettingsRoute = ManageSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => ManageRoute,
 } as any)
+const ManageSupportRoute = ManageSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
+  getParentRoute: () => ManageRoute,
+} as any)
 const ManageTeamRoute = ManageTeamRouteImport.update({
   id: '/team',
   path: '/team',
@@ -509,6 +516,11 @@ const ManagePropertiesPropertyIdRoute =
     path: '/properties/$propertyId',
     getParentRoute: () => ManageRoute,
   } as any)
+const ManageSupportTicketIdRoute = ManageSupportTicketIdRouteImport.update({
+  id: '/support_/$ticketId',
+  path: '/support/$ticketId',
+  getParentRoute: () => ManageRoute,
+} as any)
 const ManageUnitsUnitIdRoute = ManageUnitsUnitIdRouteImport.update({
   id: '/units_/$unitId',
   path: '/units/$unitId',
@@ -575,6 +587,7 @@ export interface FileRoutesByFullPath {
   '/manage/pricing': typeof ManagePricingRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
+  '/manage/support': typeof ManageSupportRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
   '/manage/website': typeof ManageWebsiteRoute
@@ -614,6 +627,7 @@ export interface FileRoutesByFullPath {
   '/manage/bookings/new': typeof ManageBookingsNewRoute
   '/manage/guests/$guestId': typeof ManageGuestsGuestIdRoute
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
+  '/manage/support/$ticketId': typeof ManageSupportTicketIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
@@ -661,6 +675,7 @@ export interface FileRoutesByTo {
   '/manage/pricing': typeof ManagePricingRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
+  '/manage/support': typeof ManageSupportRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
   '/manage/website': typeof ManageWebsiteRoute
@@ -700,6 +715,7 @@ export interface FileRoutesByTo {
   '/manage/bookings/new': typeof ManageBookingsNewRoute
   '/manage/guests/$guestId': typeof ManageGuestsGuestIdRoute
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
+  '/manage/support/$ticketId': typeof ManageSupportTicketIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
@@ -750,6 +766,7 @@ export interface FileRoutesById {
   '/manage/pricing': typeof ManagePricingRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
+  '/manage/support': typeof ManageSupportRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
   '/manage/website': typeof ManageWebsiteRoute
@@ -789,6 +806,7 @@ export interface FileRoutesById {
   '/manage/bookings_/new': typeof ManageBookingsNewRoute
   '/manage/guests_/$guestId': typeof ManageGuestsGuestIdRoute
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
+  '/manage/support_/$ticketId': typeof ManageSupportTicketIdRoute
   '/manage/units_/$unitId': typeof ManageUnitsUnitIdRoute
   '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
@@ -840,6 +858,7 @@ export interface FileRouteTypes {
     | '/manage/pricing'
     | '/manage/room-types'
     | '/manage/settings'
+    | '/manage/support'
     | '/manage/team'
     | '/manage/units'
     | '/manage/website'
@@ -879,6 +898,7 @@ export interface FileRouteTypes {
     | '/manage/bookings/new'
     | '/manage/guests/$guestId'
     | '/manage/properties/$propertyId'
+    | '/manage/support/$ticketId'
     | '/manage/units/$unitId'
     | '/platform/customers/$tenantId'
     | '/stay/rooms/$typeSlug'
@@ -926,6 +946,7 @@ export interface FileRouteTypes {
     | '/manage/pricing'
     | '/manage/room-types'
     | '/manage/settings'
+    | '/manage/support'
     | '/manage/team'
     | '/manage/units'
     | '/manage/website'
@@ -965,6 +986,7 @@ export interface FileRouteTypes {
     | '/manage/bookings/new'
     | '/manage/guests/$guestId'
     | '/manage/properties/$propertyId'
+    | '/manage/support/$ticketId'
     | '/manage/units/$unitId'
     | '/platform/customers/$tenantId'
     | '/stay/rooms/$typeSlug'
@@ -1014,6 +1036,7 @@ export interface FileRouteTypes {
     | '/manage/pricing'
     | '/manage/room-types'
     | '/manage/settings'
+    | '/manage/support'
     | '/manage/team'
     | '/manage/units'
     | '/manage/website'
@@ -1053,6 +1076,7 @@ export interface FileRouteTypes {
     | '/manage/bookings_/new'
     | '/manage/guests_/$guestId'
     | '/manage/properties/$propertyId'
+    | '/manage/support_/$ticketId'
     | '/manage/units_/$unitId'
     | '/platform_/customers/$tenantId'
     | '/stay/rooms/$typeSlug'
@@ -1431,6 +1455,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageSettingsRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/support': {
+      id: '/manage/support'
+      path: '/support'
+      fullPath: '/manage/support'
+      preLoaderRoute: typeof ManageSupportRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/team': {
       id: '/manage/team'
       path: '/team'
@@ -1697,6 +1728,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManagePropertiesPropertyIdRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/support_/$ticketId': {
+      id: '/manage/support_/$ticketId'
+      path: '/support/$ticketId'
+      fullPath: '/manage/support/$ticketId'
+      preLoaderRoute: typeof ManageSupportTicketIdRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/units_/$unitId': {
       id: '/manage/units_/$unitId'
       path: '/units/$unitId'
@@ -1739,6 +1777,7 @@ interface ManageRouteChildren {
   ManagePricingRoute: typeof ManagePricingRoute
   ManageRoomTypesRoute: typeof ManageRoomTypesRoute
   ManageSettingsRoute: typeof ManageSettingsRoute
+  ManageSupportRoute: typeof ManageSupportRoute
   ManageTeamRoute: typeof ManageTeamRoute
   ManageUnitsRoute: typeof ManageUnitsRoute
   ManageWebsiteRoute: typeof ManageWebsiteRoute
@@ -1747,6 +1786,7 @@ interface ManageRouteChildren {
   ManageBookingsNewRoute: typeof ManageBookingsNewRoute
   ManageGuestsGuestIdRoute: typeof ManageGuestsGuestIdRoute
   ManagePropertiesPropertyIdRoute: typeof ManagePropertiesPropertyIdRoute
+  ManageSupportTicketIdRoute: typeof ManageSupportTicketIdRoute
   ManageUnitsUnitIdRoute: typeof ManageUnitsUnitIdRoute
 }
 
@@ -1761,6 +1801,7 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManagePricingRoute: ManagePricingRoute,
   ManageRoomTypesRoute: ManageRoomTypesRoute,
   ManageSettingsRoute: ManageSettingsRoute,
+  ManageSupportRoute: ManageSupportRoute,
   ManageTeamRoute: ManageTeamRoute,
   ManageUnitsRoute: ManageUnitsRoute,
   ManageWebsiteRoute: ManageWebsiteRoute,
@@ -1769,6 +1810,7 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManageBookingsNewRoute: ManageBookingsNewRoute,
   ManageGuestsGuestIdRoute: ManageGuestsGuestIdRoute,
   ManagePropertiesPropertyIdRoute: ManagePropertiesPropertyIdRoute,
+  ManageSupportTicketIdRoute: ManageSupportTicketIdRoute,
   ManageUnitsUnitIdRoute: ManageUnitsUnitIdRoute,
 }
 

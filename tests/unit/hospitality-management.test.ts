@@ -241,6 +241,7 @@ describe("navigation", () => {
       "website",
       "settings",
       "team",
+      "support",
     ]);
   });
 });

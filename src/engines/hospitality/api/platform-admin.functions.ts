@@ -12,6 +12,14 @@ import type {
   PlatformHospitalityView,
   SiteRequest,
 } from "../types/platform-admin";
+import type {
+  AdminSupportList,
+  AdminSupportTicket,
+  SupportSendResult,
+  SupportSettings,
+  SupportStatus,
+  SupportTicketRow,
+} from "../types/support";
 import {
   parseOpenSite,
   parseSavePlan,
@@ -20,6 +28,15 @@ import {
   parseSetPlan,
   parseSiteRequestSet,
 } from "../validation/platform-admin";
+import {
+  ADMIN_SUPPORT_PAGE,
+  parseAdminSupportFilter,
+  parseAdminSupportReplyForm,
+  parseAdminSupportStatus,
+  parseSupportFileId,
+  parseSupportSettingsInput,
+  parseSupportTicketId,
+} from "../validation/support";
 
 type RpcOwner = { status: "added" | "already_owner" | "needs_account"; user_id?: string };
 
@@ -189,5 +206,108 @@ export const hospitalityPlatformSiteRequestSet = createServerFn({ method: "POST"
       _id: data.id,
       _status: data.status,
       _note: data.note,
+    });
+  });
+
+// ---------- שלב E4: התמיכה של עסקי האירוח (מנהל הפלטפורמה; ההרשאה נבדקת במסד) ----------
+
+/** כל הפניות: סינון לפי סטטוס / דחיפות / תאריכים / חיפוש, "ממתינות למענה" */
+export const hospitalityAdminSupportTickets = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseAdminSupportFilter(input))
+  .handler(async ({ data }): Promise<AdminSupportList> => {
+    const { platformRpc } = await import("../server/platform-admin.server");
+    return platformRpc<AdminSupportList>("admin_support_tickets", {
+      _status: data.status,
+      _priority: data.priority,
+      _from: data.from,
+      _to: data.to,
+      _q: data.q,
+      _needs_reply: data.needsReply,
+      _limit: ADMIN_SUPPORT_PAGE,
+      _offset: data.page * ADMIN_SUPPORT_PAGE,
+    });
+  });
+
+/** פנייה עם ההערות הפנימיות ופרטי העסק (מסמנת כנקראה) */
+export const hospitalityAdminSupportTicket = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseSupportTicketId(input))
+  .handler(async ({ data }): Promise<AdminSupportTicket> => {
+    const { platformRpc } = await import("../server/platform-admin.server");
+    return platformRpc<AdminSupportTicket>("admin_support_ticket", { _id: data.id });
+  });
+
+/** מענה לעסק (מייל לעסק) או הערה פנימית; קבצים — נבדקים לפי התוכן ועולים לדלי הפרטי */
+export const hospitalityAdminSupportReply = createServerFn({ method: "POST" })
+  .inputValidator((data: FormData) => parseAdminSupportReplyForm(data))
+  .handler(async ({ data }): Promise<SupportSendResult> => {
+    const [{ platformRpc, platformSession }, { guardStaff }, support] = await Promise.all([
+      import("../server/platform-admin.server"),
+      import("../security/guard.server"),
+      import("../server/support.server"),
+    ]);
+    const session = await platformSession();
+    await guardStaff("supportWrite", { userId: session.userId });
+    const prepared = await support.prepareSupportFiles(data.files);
+    const r = await platformRpc<{
+      message_id: string;
+      status: SupportStatus;
+      uploads: { id: string; path: string; name: string; mime: string }[];
+    }>("admin_support_reply", {
+      _id: data.ticketId,
+      _body: data.body,
+      _internal: data.internal,
+      _status: data.status,
+      _files: support.fileMeta(prepared),
+    });
+    const up = await support.uploadSupportFiles(r.uploads ?? [], prepared);
+    if (up.ok.length) await platformRpc<number>("admin_support_files_ready", { _ids: up.ok });
+    // מענה לעסק — המייל לעסק כבר בתור; לשלוח עכשיו
+    if (!data.internal) {
+      const { kickOutbox } = await import("../outbox/worker.server");
+      kickOutbox();
+    }
+    return { ticketId: data.ticketId, status: r.status, failedFiles: up.failed };
+  });
+
+/** שינוי סטטוס (כולל סגירה ופתיחה מחדש) */
+export const hospitalityAdminSupportSetStatus = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseAdminSupportStatus(input))
+  .handler(async ({ data }): Promise<SupportTicketRow> => {
+    const { platformRpc } = await import("../server/platform-admin.server");
+    return platformRpc<SupportTicketRow>("admin_support_set_status", {
+      _id: data.id,
+      _status: data.status,
+    });
+  });
+
+/** קישור הורדה חתום (2 דקות) לקובץ מצורף */
+export const hospitalityAdminSupportFileUrl = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseSupportFileId(input))
+  .handler(async ({ data }): Promise<{ url: string }> => {
+    const [{ platformRpc }, { signedSupportUrl }] = await Promise.all([
+      import("../server/platform-admin.server"),
+      import("../server/support.server"),
+    ]);
+    const file = await platformRpc<{ path: string; name: string; mime: string }>(
+      "admin_support_file",
+      { _id: data.id },
+    );
+    return { url: await signedSupportUrl(file) };
+  });
+
+export const hospitalityAdminSupportSettings = createServerFn({ method: "GET" }).handler(
+  async (): Promise<SupportSettings> => {
+    const { platformRpc } = await import("../server/platform-admin.server");
+    return platformRpc<SupportSettings>("admin_support_settings", {});
+  },
+);
+
+export const hospitalityAdminSupportSaveSettings = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseSupportSettingsInput(input))
+  .handler(async ({ data }): Promise<SupportSettings> => {
+    const { platformRpc } = await import("../server/platform-admin.server");
+    return platformRpc<SupportSettings>("admin_support_settings", {
+      _whatsapp: data.whatsapp,
+      _save: true,
     });
   });

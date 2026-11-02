@@ -62,7 +62,12 @@ type Copy = {
   outro?: string;
   /** הכפתור לעסק (ברירת המחדל: "לפתיחת ההזמנה") */
   button?: string;
+  /** מייל של הפלטפורמה לעסק (תמיכה, שלב E4) — בשם Nuriel Hospitality, לא בשם העסק */
+  platform?: boolean;
 };
+
+/** השולח של מיילי הפלטפורמה לעסקים */
+export const PLATFORM_SENDER = "תמיכה — Nuriel Hospitality";
 
 /** הטקסט של כל אירוע; null — אירוע לא מוכר (לא שולחים) */
 export function copyFor(event: string, p: EmailPayload, b: EmailBusiness): Copy | null {
@@ -195,6 +200,19 @@ export function copyFor(event: string, p: EmailPayload, b: EmailBusiness): Copy 
         button: "לבדיקת היומנים",
       };
     }
+    // E4: צוות התמיכה ענה — בלי תוכן התשובה (המייל עלול להיות מועבר); קריאה באזור הניהול
+    case "support_reply": {
+      const num = p["ticket_number"] ? ` #${String(p["ticket_number"])}` : "";
+      const subj = typeof p["subject"] === "string" ? p["subject"] : "";
+      return {
+        subject: `תשובה חדשה מהתמיכה בפנייה${num}`,
+        intro: `צוות התמיכה של Nuriel Hospitality ענה בפנייה${subj ? ` "${subj}"` : ""}. אפשר לקרוא את התשובה ולהגיב באזור הניהול.`,
+        details: false,
+        outro: "מטעמי אבטחה התשובה עצמה לא נשלחת במייל — רק באזור הניהול, אחרי התחברות.",
+        button: "לקריאת התשובה",
+        platform: true,
+      };
+    }
     default:
       return null;
   }
@@ -205,9 +223,10 @@ export function renderBookingEmail(
   recipient: "guest" | "owner",
   p: EmailPayload,
   ctx: EmailContext,
-): { subject: string; html: string } | null {
+): { subject: string; html: string; sender: string | null } | null {
   const copy = copyFor(event, p, ctx.business);
   if (!copy) return null;
+  const from = copy.platform ? "Nuriel Hospitality" : ctx.business.name;
   const e = ctx.escape;
   const rows: [string, string][] = [];
   if (p.booking_number) rows.push(["מספר הזמנה", `#${p.booking_number}`]);
@@ -254,15 +273,19 @@ export function renderBookingEmail(
 <body style="margin:0;background:#f5f5f2;font-family:Arial,Helvetica,sans-serif;color:#1d1d1b">
 <div dir="rtl" style="max-width:560px;margin:0 auto;padding:24px 16px;text-align:right">
 <div style="background:#fff;border-radius:12px;padding:24px;border:1px solid #e5e5e0">
-<p style="margin:0 0 8px;font-size:13px;color:#777">${e(ctx.business.name)}</p>
+<p style="margin:0 0 8px;font-size:13px;color:#777">${e(from)}</p>
 <h1 style="margin:0 0 12px;font-size:20px">${e(copy.subject)}</h1>
 <p style="margin:0;font-size:15px;line-height:1.6">${e(copy.intro)}</p>
 ${table}${button}
 ${copy.outro ? `<p style="margin:12px 0 0;font-size:14px;color:#444;line-height:1.6">${e(copy.outro)}</p>` : ""}
 </div>
-<p style="margin:12px 0 0;font-size:12px;color:#888;text-align:center">נשלח ממערכת ההזמנות של ${e(ctx.business.name)}</p>
+<p style="margin:12px 0 0;font-size:12px;color:#888;text-align:center">${
+    copy.platform
+      ? `נשלח ממערכת התמיכה של Nuriel Hospitality ל${e(ctx.business.name)}`
+      : `נשלח ממערכת ההזמנות של ${e(ctx.business.name)}`
+  }</p>
 </div></body></html>`;
-  return { subject: copy.subject, html };
+  return { subject: copy.subject, html, sender: copy.platform ? PLATFORM_SENDER : null };
 }
 
 /**

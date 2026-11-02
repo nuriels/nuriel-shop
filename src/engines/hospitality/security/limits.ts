@@ -65,6 +65,11 @@ export const LIMITS = {
   guestExport: [{ per: "user", limit: 60, window: HOUR }],
   /** פתיחת חשבון בעלים מפאנל הפלטפורמה */
   platformAccount: [{ per: "user", limit: 30, window: HOUR }],
+  /** תמיכה (E4): פנייה / תגובה / קבצים — לעסק ולצוות הפלטפורמה (מעל המגבלות של המסד) */
+  supportWrite: [
+    { per: "user", limit: 30, window: 10 * MIN },
+    { per: "tenant", limit: 200, window: DAY },
+  ],
 } as const satisfies Record<string, readonly LimitRule[]>;
 
 export type LimitAction = keyof typeof LIMITS;
