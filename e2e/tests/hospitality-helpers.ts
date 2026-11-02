@@ -93,6 +93,24 @@ export async function expectAccessible(page: Page, label: string) {
   // הודעה קופצת (Sonner) נכנסת ויוצאת בשקיפות חלקית — axe היה מודד ניגודיות של טקסט
   // באמצע האנימציה. מחכים שההודעות ייעלמו (עד 10 שניות), ורק אז בודקים.
   await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 10_000 });
+  // כניסה רכה של כרטיסים (data-rise: שקיפות 0→1 בהשהיה מדורגת) — אותה בעיה: axe שרץ ברגע
+  // שהכרטיסים עולים מודד טקסט שקוף-למחצה. מחכים שכל האנימציות הסופיות יסתיימו (ספינרים
+  // ושלדי טעינה הם אינסופיים — לא מחכים להם). קודם נותנים לשלדי הטעינה להתחלף בתוכן (עד 5
+  // שניות, בלי להיכשל), כדי שהכרטיסים לא יעלו באמצע הבדיקה.
+  await page
+    .locator(".animate-pulse")
+    .first()
+    .waitFor({ state: "detached", timeout: 5_000 })
+    .catch(() => undefined);
+  await page.waitForFunction(
+    () =>
+      document.getAnimations().every((a) => {
+        const t = a.effect?.getComputedTiming();
+        return a.playState !== "running" || !t || t.endTime === Infinity;
+      }),
+    undefined,
+    { timeout: 10_000 },
+  );
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
