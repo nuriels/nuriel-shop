@@ -177,6 +177,19 @@ describe("setup guide: states and texts", () => {
     // פתיחת האתר — של הפלטפורמה
     expect(publishText(view({ publish: true })).open).toMatch(/סגור לגולשים/);
   });
+  it("a business opened from the portal: the site opens when the owner publishes (migration 40)", () => {
+    const portal = view({ template: true });
+    portal.steps.publish.opens_on_publish = true;
+    expect(publishText(portal).open).toBe("האתר ייפתח לגולשים ולהזמנות ברגע שתפרסמו אותו.");
+    expect(publishText(portal).open).not.toMatch(/צוות נוריאל/);
+    // אחרי הפרסום — מה שבאמת פתוח
+    const live = view({ publish: true });
+    live.steps.publish.site_open = true;
+    live.steps.publish.booking_open = true;
+    expect(publishText(live).open).toBe("האתר פתוח לגולשים, וקבלת הזמנות מהאתר פעילה.");
+    // מסד בלי מיגרציה 40 / עסק מהפאנל — כמו קודם
+    expect(publishText(view({ template: true })).open).toMatch(/צוות נוריאל פותח/);
+  });
   it("editor tab from the address: only known tabs", () => {
     expect(editorTab("seo")).toBe("seo");
     expect(editorTab("publish")).toBe("publish");

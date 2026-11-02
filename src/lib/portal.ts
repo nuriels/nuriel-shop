@@ -331,6 +331,24 @@ export function zimmerRequestProblems(
   return problems;
 }
 
+/**
+ * מיגרציה 40: כתובת מוצעת לעסק אירוח — כמו לחנות (suggestSlug), בלי "shop": שם בלי אותיות →
+ * ריק (בעל העסק בוחר), ושם קצר מקבל "-stay" במקום "-shop".
+ */
+export function suggestZimmerSlug(name: string): string {
+  const slug = suggestSlug(name);
+  if (slug === "my-shop") return "";
+  return /^[a-z0-9]{1,2}-shop$/.test(slug) ? slug.replace(/-shop$/, "-stay") : slug;
+}
+
+/** מה שהשער מקבל אחרי פתיחת עסק אירוח (portal_open_site) */
+export type PortalZimmerOpened = {
+  /** העסק — כמו חנות ברשימה (כניסה דרך אותו קוד כניסה, /admin-handoff → /manage) */
+  store: PortalStore;
+  /** סוף תקופת הניסיון (ISO) */
+  trialEndsAt: string | null;
+};
+
 /** "200 ₪" — בלי אגורות כשאין */
 export const shekels = (value: number | null | undefined): string | null =>
   value === null || value === undefined ? null : `${Number(value).toLocaleString("he-IL")} ₪`;

@@ -42,8 +42,8 @@ import {
   requestPortalCode,
   verifyPortalCode,
   portalFromGoogle,
-  getPortalZimmerPlans,
-  submitZimmerRequest,
+  getPortalZimmerOffer,
+  openPortalZimmer,
   uploadPortalStoreLogo,
 } from "@/lib/portal.functions";
 import {
@@ -59,10 +59,12 @@ import {
   STORE_NAME_MAX,
   storeNameProblem,
   suggestSlug,
+  suggestZimmerSlug,
   type PortalAccount,
   type PortalBusinessDetails,
   type PortalBusinessField,
   type PortalStore,
+  type PortalZimmerOpened,
   type PortalZimmerPlan,
   ZIMMER_AREA_MAX,
   ZIMMER_MESSAGE_MAX,
@@ -76,7 +78,9 @@ import { compressLogoImage } from "@/lib/image";
  * תהליך הכניסה בשער הפלטפורמה (חלק 12), בחלון אחד:
  *   אימייל → קוד בן 6 ספרות → החנויות שלכם (לחיצה = כניסה לניהול)
  *                            ↘ אתר חדש: מה מקימים? (שלב E2)
- *                              • אתר לצימר → החבילות + בקשה (ההקמה בתשלום — אנחנו מקימים)
+ *                              • אתר לצימר (מיגרציה 40) → שם, כתובת, טלפון, חבילה → העסק נפתח
+ *                                (ימי ניסיון) → מכינים את הכתובת (SSL) → ישר לאזור הניהול
+ *                                (מדריך ההקמה). במקביל הבקשה נשמרת ונוריאל חוזרים לבעל העסק.
  *                              • חנות אונליין → "צור את החנות שלך" (שם + כתובת)
  *                              → פרטי העסק (שלב E1: שם רשמי, ח.פ / ע.מ, סוג עוסק, מע"מ,
  *                                טלפון לשירות לקוחות; כתובת ולוגו — לא חובה)
@@ -92,7 +96,7 @@ type Step =
   | "stores"
   | "product"
   | "zimmer"
-  | "zimmer-sent"
+  | "zimmer-opening"
   | "create"
   | "business"
   | "preparing";
@@ -162,6 +166,9 @@ export function PortalOnboarding({
   const [draft, setDraft] = useState<StoreDraft | null>(null);
   // שלב E2: החבילות לצימרים (null = עוד נטען; ריק = רק חנות אונליין)
   const [zimmerPlans, setZimmerPlans] = useState<PortalZimmerPlan[] | null>(null);
+  // מיגרציה 40: כמה ימי ניסיון (null = לא ידוע — הטקסטים בלי מספר) ועסק האירוח שנפתח הרגע
+  const [trialDays, setTrialDays] = useState<number | null>(null);
+  const [newZimmer, setNewZimmer] = useState<PortalZimmerOpened | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // בדרך לאתר החנות (קוד כניסה נוצר, הדפדפן עובר) — לא סוגרים את החלון
   const [leaving, setLeaving] = useState(false);
@@ -203,14 +210,17 @@ export function PortalOnboarding({
     setStep("email");
   }, []);
 
-  // החבילות לצימרים — פעם אחת, בפתיחה הראשונה של החלון
-  const plansFn = useServerFn(getPortalZimmerPlans);
+  // החבילות לצימרים וימי הניסיון — פעם אחת, בפתיחה הראשונה של החלון
+  const offerFn = useServerFn(getPortalZimmerOffer);
   useEffect(() => {
     if (!open || zimmerPlans !== null) return;
-    plansFn()
-      .then(setZimmerPlans)
+    offerFn()
+      .then((offer) => {
+        setZimmerPlans(offer.plans);
+        setTrialDays(offer.trialDays);
+      })
       .catch(() => setZimmerPlans([]));
-  }, [open, zimmerPlans, plansFn]);
+  }, [open, zimmerPlans, offerFn]);
 
   // פתיחת החלון: אימות קודם בלשונית הזו → ישר לחנויות
   useEffect(() => {
@@ -230,6 +240,7 @@ export function PortalOnboarding({
       if (!event.persisted) return;
       setLeaving(false);
       setNewStore(null);
+      setNewZimmer(null);
       setResetKey((key) => key + 1);
       const saved = loadSession();
       if (saved) resume(saved);
@@ -283,7 +294,7 @@ export function PortalOnboarding({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- פעם אחת, בחזרה מ-Google
   }, []);
 
-  const busyStep = step === "preparing" || leaving;
+  const busyStep = step === "preparing" || step === "zimmer-opening" || leaving;
 
   const titles: Record<Step, { title: string; description: string }> = {
     email: {
@@ -301,15 +312,17 @@ export function PortalOnboarding({
     },
     product: {
       title: "מה מקימים?",
-      description: "חנות אונליין — פותחים לבד, תוך דקה. אתר לצימר — אנחנו מקימים בשבילכם.",
+      description: "חנות אונליין או אתר לצימר — פותחים לבד, תוך דקה.",
     },
     zimmer: {
       title: "אתר לצימר",
-      description: "בוחרים חבילה ומשאירים פרטים — נחזור אליכם לתיאום ההקמה.",
+      description: `${
+        trialDays ? `${trialDays} ימי ניסיון. ` : ""
+      }פותחים עכשיו וממשיכים להקים באזור הניהול — ונחזור אליכם לליווי.`,
     },
-    "zimmer-sent": {
-      title: "הבקשה נשלחה",
-      description: "תודה! נחזור אליכם בהקדם.",
+    "zimmer-opening": {
+      title: "העסק נפתח!",
+      description: "עוד רגע אתם באזור הניהול — ממשיכים שם להקים את האתר.",
     },
     create: {
       title: "צור את החנות שלך",
@@ -344,7 +357,7 @@ export function PortalOnboarding({
         <div className="bg-gradient-to-l from-primary to-primary/85 px-6 pb-5 pt-7 text-primary-foreground sm:rounded-t-2xl">
           <DialogHeader className="space-y-1.5 text-right sm:text-right">
             <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-              {step === "zimmer" || step === "zimmer-sent" ? (
+              {step === "zimmer" || step === "zimmer-opening" ? (
                 <BedDouble className="size-5 text-accent" aria-hidden="true" />
               ) : step === "create" || step === "business" || step === "product" ? (
                 <Sparkles className="size-5 text-accent" aria-hidden="true" />
@@ -401,6 +414,7 @@ export function PortalOnboarding({
           {step === "product" && session && account && (
             <ProductStep
               plans={zimmerPlans}
+              trialDays={trialDays}
               canCreateStore={account.canCreate}
               onStore={() => setStep("create")}
               onZimmer={() => setStep("zimmer")}
@@ -412,12 +426,25 @@ export function PortalOnboarding({
             <ZimmerStep
               session={session}
               plans={zimmerPlans}
+              baseDomain={baseDomain}
+              trialDays={trialDays}
               onBack={() => setStep("product")}
-              onSent={() => setStep("zimmer-sent")}
+              onOpened={(opened) => {
+                setNewZimmer(opened);
+                setStep("zimmer-opening");
+              }}
             />
           )}
 
-          {step === "zimmer-sent" && <ZimmerSentStep onClose={() => onOpenChange(false)} />}
+          {step === "zimmer-opening" && session && newZimmer && (
+            <PreparingStep
+              session={session}
+              store={newZimmer.store}
+              entering={leaving}
+              onLeaving={setLeaving}
+              texts={zimmerPreparingTexts(newZimmer.trialEndsAt)}
+            />
+          )}
 
           {step === "create" && session && account && (
             <CreateStep
@@ -891,17 +918,19 @@ type SlugCheck =
   | { state: "bad"; message: string; suggestion: string | null };
 
 // ============================================================
-// שלב E2: מה מקימים — חנות אונליין (פותחים לבד) או אתר לצימר (בקשה; ההקמה בתשלום)
+// שלב E2: מה מקימים — חנות אונליין או אתר לצימר (מיגרציה 40: שניהם נפתחים לבד)
 // ============================================================
 
 function ProductStep({
   plans,
+  trialDays,
   canCreateStore,
   onStore,
   onZimmer,
   onBack,
 }: {
   plans: PortalZimmerPlan[] | null;
+  trialDays: number | null;
   canCreateStore: boolean;
   onStore: () => void;
   onZimmer: () => void;
@@ -937,7 +966,8 @@ function ProductStep({
         <span>
           <span className="block font-semibold">אתר לצימר / מקום אירוח</span>
           <span className="block text-sm text-muted-foreground">
-            הזמנות, לוח זמינות, גלריה ותמיכה. אנחנו מקימים בשבילכם.
+            הזמנות, לוח זמינות, גלריה ותמיכה. פותחים עכשיו
+            {trialDays ? ` — ${trialDays} ימי ניסיון` : ""}, ונחזור אליכם לליווי.
           </span>
           {Number.isFinite(from) && (
             <span className="mt-1 block text-sm font-medium text-primary">
@@ -962,18 +992,90 @@ function ProductStep({
 
 const ZIMMER_FIELDS: ZimmerRequestField[] = ["business_name", "phone", "units", "area", "message"];
 
+/** מיגרציה 40: הכתובת פנויה? — בדיקה בשרת חצי שנייה אחרי ההקלדה האחרונה (כמו בפתיחת חנות) */
+function useSlugAvailability(token: string, slug: string): SlugCheck {
+  const checkSlug = useServerFn(checkPortalSlug);
+  const [check, setCheck] = useState<SlugCheck>({ state: "idle" });
+  const latest = useRef(0);
+  useEffect(() => {
+    const formatProblem = slugFormatProblem(slug);
+    if (slug === "") {
+      latest.current += 1;
+      setCheck({ state: "idle" });
+      return;
+    }
+    if (formatProblem) {
+      latest.current += 1;
+      setCheck({ state: "bad", message: formatProblem, suggestion: null });
+      return;
+    }
+    setCheck({ state: "checking" });
+    const ticket = ++latest.current;
+    const timer = setTimeout(() => {
+      checkSlug({ data: { token, slug } })
+        .then((result) => {
+          if (ticket !== latest.current) return;
+          setCheck(
+            result.available
+              ? { state: "ok" }
+              : {
+                  state: "bad",
+                  // ההודעה של המסד מדברת על "חנות" — כאן זה אתר
+                  message: (result.message ?? "הכתובת לא זמינה").replace(
+                    'ע"י חנות אחרת',
+                    'ע"י אתר אחר',
+                  ),
+                  suggestion: result.suggestion,
+                },
+          );
+        })
+        .catch((thrown: unknown) => {
+          if (ticket !== latest.current) return;
+          setCheck({
+            state: "bad",
+            message: errorText(thrown, "בדיקת הכתובת נכשלה"),
+            suggestion: null,
+          });
+        });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [slug, token, checkSlug]);
+  return check;
+}
+
+/** "5.12.2026" — שעון ישראל */
+function dateText(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("he-IL", {
+    timeZone: "Asia/Jerusalem",
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+/**
+ * מיגרציה 40: אתר לצימר — בעל המקום פותח את העסק בעצמו (ימי ניסיון) וממשיך ישר לאזור הניהול;
+ * במקביל הפרטים נשמרים כבקשה ונוריאל חוזרים אליו. הכתובת נבדקת כמו בפתיחת חנות.
+ */
 function ZimmerStep({
   session,
   plans,
+  baseDomain,
+  trialDays,
   onBack,
-  onSent,
+  onOpened,
 }: {
   session: PortalSession;
   plans: PortalZimmerPlan[];
+  baseDomain: string;
+  trialDays: number | null;
   onBack: () => void;
-  onSent: () => void;
+  onOpened: (opened: PortalZimmerOpened) => void;
 }) {
-  const submit = useServerFn(submitZimmerRequest);
+  const openFn = useServerFn(openPortalZimmer);
   const [form, setForm] = useState({
     business_name: "",
     phone: "",
@@ -982,6 +1084,10 @@ function ZimmerStep({
     area: "",
     message: "",
   });
+  const [slug, setSlug] = useState("");
+  // הכתובת נגזרת מהשם עד שעורכים אותה ידנית
+  const [slugEdited, setSlugEdited] = useState(false);
+  const check = useSlugAvailability(session.token, slug);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
@@ -992,7 +1098,12 @@ function ZimmerStep({
     setForm((current) => ({ ...current, [key]: value }));
     setError(null);
   };
+  const onNameChange = (value: string) => {
+    set("business_name", value);
+    if (!slugEdited) setSlug(value.trim() ? suggestZimmerSlug(value) : "");
+  };
   const setupFees = [...new Set(plans.map((p) => p.setup_fee).filter((f) => f !== null))];
+  const slugMissing = touched && slug === "";
 
   const send = async () => {
     setTouched(true);
@@ -1001,13 +1112,17 @@ function ZimmerStep({
       document.getElementById(`portal-zim-${first}`)?.focus();
       return;
     }
+    if (check.state !== "ok") {
+      document.getElementById("portal-zim-slug")?.focus();
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await submit({ data: { token: session.token, request } });
-      onSent();
+      const opened = await openFn({ data: { token: session.token, slug, request } });
+      onOpened(opened);
     } catch (thrown) {
-      setError(errorText(thrown, "הבקשה לא נשלחה. נסו שוב."));
+      setError(errorText(thrown, "פתיחת העסק נכשלה. נסו שוב."));
       setBusy(false);
     }
   };
@@ -1021,68 +1136,16 @@ function ZimmerStep({
       className="space-y-5"
       noValidate
     >
-      <fieldset className="space-y-2">
-        <legend className="mb-2 text-sm font-medium">החבילה</legend>
-        {plans.map((plan) => (
-          <label
-            key={plan.code}
-            className="flex cursor-pointer gap-3 rounded-xl border border-input p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
-          >
-            <input
-              type="radio"
-              name="portal-zim-plan"
-              value={plan.code}
-              checked={form.plan_code === plan.code}
-              onChange={() => set("plan_code", plan.code)}
-              className="mt-1 size-4 accent-[hsl(var(--primary))]"
-            />
-            <span className="min-w-0 flex-1">
-              <span className="flex flex-wrap items-baseline justify-between gap-x-2">
-                <span className="font-semibold">{plan.name}</span>
-                {plan.price_monthly !== null && (
-                  <span className="font-semibold text-primary">
-                    {shekels(plan.price_monthly)} לחודש
-                  </span>
-                )}
-              </span>
-              {plan.tagline && <span className="block text-muted-foreground">{plan.tagline}</span>}
-              {plan.highlights.length > 0 && (
-                <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-xs text-muted-foreground">
-                  {plan.highlights.map((h) => (
-                    <li key={h}>{h}</li>
-                  ))}
-                </ul>
-              )}
-            </span>
-          </label>
-        ))}
-        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-input p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5">
-          <input
-            type="radio"
-            name="portal-zim-plan"
-            value=""
-            checked={form.plan_code === ""}
-            onChange={() => set("plan_code", "")}
-            className="size-4 accent-[hsl(var(--primary))]"
-          />
-          עוד לא יודעים — נתייעץ בשיחה
-        </label>
-        {setupFees.length === 1 && (
-          <p className="text-xs text-muted-foreground">
-            בכל החבילות: הקמה ראשונית — {shekels(setupFees[0] ?? null)} חד-פעמי (דומיין, עיצוב, תוכן
-            והגדרות גוגל).
-          </p>
-        )}
-      </fieldset>
-
       <div className="space-y-2">
         <Label htmlFor="portal-zim-business_name">שם המקום / העסק</Label>
         <Input
           id="portal-zim-business_name"
+          autoFocus
           maxLength={BUSINESS_NAME_MAX}
           value={form.business_name}
-          onChange={(event) => set("business_name", event.target.value)}
+          onChange={(event) => onNameChange(event.target.value)}
           autoComplete="organization"
+          placeholder="למשל: צימרי הכרם"
           className="h-11"
           aria-invalid={problemOf("business_name") !== undefined}
         />
@@ -1092,7 +1155,79 @@ function ZimmerStep({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="portal-zim-phone">טלפון לחזרה</Label>
+        <Label htmlFor="portal-zim-slug">כתובת האתר (באנגלית)</Label>
+        <div
+          dir="ltr"
+          className="flex h-11 items-center overflow-hidden rounded-md border border-input bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring"
+        >
+          <span className="shrink-0 border-r border-input bg-muted px-3 text-sm text-muted-foreground">
+            https://
+          </span>
+          <input
+            id="portal-zim-slug"
+            dir="ltr"
+            value={slug}
+            onChange={(event) => {
+              setSlugEdited(true);
+              setSlug(cleanSlugInput(event.target.value));
+              setError(null);
+            }}
+            placeholder="my-zimmer"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={63}
+            className="h-full min-w-0 flex-1 bg-transparent px-2 text-base font-medium text-foreground outline-none"
+            aria-describedby="portal-zim-slug-status"
+            aria-invalid={slugMissing || check.state === "bad"}
+          />
+          <span className="shrink-0 pe-3 text-sm text-muted-foreground">.{baseDomain}</span>
+        </div>
+        <div id="portal-zim-slug-status" className="min-h-5 text-xs" aria-live="polite">
+          {check.state === "checking" && (
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              בודקים אם הכתובת פנויה…
+            </span>
+          )}
+          {check.state === "ok" && (
+            <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
+              <CheckCircle2 className="size-3.5" aria-hidden="true" />
+              הכתובת פנויה — היא תהיה שלכם
+            </span>
+          )}
+          {check.state === "bad" && (
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-destructive">
+              <span className="inline-flex items-center gap-1.5 font-medium">
+                <XCircle className="size-3.5 shrink-0" aria-hidden="true" />
+                {check.message}
+              </span>
+              {check.suggestion && (
+                <button
+                  type="button"
+                  className="font-semibold text-primary underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setSlugEdited(true);
+                    setSlug(check.suggestion ?? "");
+                  }}
+                >
+                  <span dir="ltr">{check.suggestion}</span> פנויה — לבחור בה?
+                </button>
+              )}
+            </span>
+          )}
+          {check.state === "idle" &&
+            (slugMissing ? (
+              <span className="font-medium text-destructive">יש להזין כתובת באנגלית</span>
+            ) : (
+              <span className="text-muted-foreground">
+                נוצרת אוטומטית מהשם — אפשר לשנות. אחר כך אפשר לחבר גם דומיין משלכם.
+              </span>
+            ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="portal-zim-phone">טלפון</Label>
         <Input
           id="portal-zim-phone"
           type="tel"
@@ -1147,6 +1282,60 @@ function ZimmerStep({
         </div>
       </div>
 
+      <fieldset className="space-y-2">
+        <legend className="mb-2 text-sm font-medium">איזו חבילה תתאים לכם אחרי הניסיון?</legend>
+        {plans.map((plan) => (
+          <label
+            key={plan.code}
+            className="flex cursor-pointer gap-3 rounded-xl border border-input p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
+          >
+            <input
+              type="radio"
+              name="portal-zim-plan"
+              value={plan.code}
+              checked={form.plan_code === plan.code}
+              onChange={() => set("plan_code", plan.code)}
+              className="mt-1 size-4 accent-[hsl(var(--primary))]"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-baseline justify-between gap-x-2">
+                <span className="font-semibold">{plan.name}</span>
+                {plan.price_monthly !== null && (
+                  <span className="font-semibold text-primary">
+                    {shekels(plan.price_monthly)} לחודש
+                  </span>
+                )}
+              </span>
+              {plan.tagline && <span className="block text-muted-foreground">{plan.tagline}</span>}
+              {plan.highlights.length > 0 && (
+                <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-xs text-muted-foreground">
+                  {plan.highlights.map((h) => (
+                    <li key={h}>{h}</li>
+                  ))}
+                </ul>
+              )}
+            </span>
+          </label>
+        ))}
+        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-input p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+          <input
+            type="radio"
+            name="portal-zim-plan"
+            value=""
+            checked={form.plan_code === ""}
+            onChange={() => set("plan_code", "")}
+            className="size-4 accent-[hsl(var(--primary))]"
+          />
+          עוד לא יודעים — נתייעץ בשיחה
+        </label>
+        {setupFees.length === 1 && (
+          <p className="text-xs text-muted-foreground">
+            בכל החבילות: הקמה ראשונית — {shekels(setupFees[0] ?? null)} חד-פעמי (דומיין, עיצוב, תוכן
+            והגדרות גוגל).
+          </p>
+        )}
+      </fieldset>
+
       <div className="space-y-2">
         <Label htmlFor="portal-zim-message">
           משהו שכדאי שנדע <span className="font-normal text-muted-foreground">(לא חובה)</span>
@@ -1161,9 +1350,19 @@ function ZimmerStep({
         />
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        נחזור אליכם בטלפון תוך יום עסקים לתיאום ההקמה. אישור יישלח גם ל-<bdi>{session.email}</bdi>.
-      </p>
+      <div className="space-y-1.5 rounded-xl border border-accent/40 bg-accent/10 p-3 text-xs leading-5 text-foreground">
+        <p className="font-medium">
+          {trialDays ? `${trialDays} ימי ניסיון` : "תקופת ניסיון"} — בלי תשלום עכשיו.
+        </p>
+        <p>
+          אחרי הפתיחה נכנסים ישר לאזור הניהול ומתחילים להקים: פרטים, יחידות, תמונות ומחירים. האתר
+          נפתח לגולשים כשאתם מפרסמים אותו.
+        </p>
+        <p>
+          נחזור אליכם בטלפון תוך יום עסקים כדי לעזור בהקמה. אישור יישלח ל-
+          <bdi>{session.email}</bdi>.
+        </p>
+      </div>
 
       {error && (
         <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -1175,10 +1374,18 @@ function ZimmerStep({
         type="submit"
         size="lg"
         className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-        disabled={busy}
+        disabled={busy || check.state === "checking"}
       >
-        {busy ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
-        {busy ? "שולחים…" : "שליחת בקשה"}
+        {busy ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Sparkles className="size-4" aria-hidden="true" />
+        )}
+        {busy
+          ? "פותחים את העסק…"
+          : trialDays
+            ? `פתיחת העסק — ${trialDays} ימי ניסיון`
+            : "פתיחת העסק"}
       </Button>
 
       <button
@@ -1194,19 +1401,15 @@ function ZimmerStep({
   );
 }
 
-function ZimmerSentStep({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="space-y-4 text-center" role="status">
-      <CheckCircle2 className="mx-auto size-12 text-emerald-600" aria-hidden="true" />
-      <p className="text-lg font-semibold">הבקשה נשלחה!</p>
-      <p className="text-sm text-muted-foreground">
-        נחזור אליכם בטלפון תוך יום עסקים כדי לתאם את ההקמה. בינתיים אפשר לסגור את החלון.
-      </p>
-      <Button type="button" size="lg" className="w-full" onClick={onClose}>
-        סגירה
-      </Button>
-    </div>
-  );
+/** הטקסטים של "מכינים את הכתובת" לעסק אירוח שנפתח מהשער */
+function zimmerPreparingTexts(trialEndsAt: string | null): PreparingTexts {
+  const until = dateText(trialEndsAt);
+  return {
+    created: until ? `העסק נפתח — ניסיון עד ${until}` : "העסק נפתח ואתם הבעלים שלו",
+    entering: "נכנסים לאזור הניהול — מדריך ההקמה",
+    enterAnyway: "להיכנס לאזור הניהול בכל זאת",
+    enterFailed: "הכניסה לאזור הניהול נכשלה",
+  };
 }
 
 function CreateStep({
@@ -1784,17 +1987,34 @@ function BusinessStep({
 // מקימים את החנות: מחכים לתעודת ה-SSL של הכתובת, ואז ישר לניהול
 // ============================================================
 
+/** הטקסטים של "מכינים את הכתובת" — ברירת המחדל: חנות (מיגרציה 40: גם עסק אירוח) */
+type PreparingTexts = {
+  created: string;
+  entering: string;
+  enterAnyway: string;
+  enterFailed: string;
+};
+
+const STORE_PREPARING_TEXTS: PreparingTexts = {
+  created: "החנות נוצרה ואתם המנהלים שלה",
+  entering: "נכנסים לפאנל הניהול",
+  enterAnyway: "להיכנס לחנות בכל זאת",
+  enterFailed: "הכניסה לחנות נכשלה",
+};
+
 function PreparingStep({
   session,
   store,
   entering,
   onLeaving,
+  texts = STORE_PREPARING_TEXTS,
 }: {
   session: PortalSession;
   store: PortalStore;
   /** קוד הכניסה נוצר והדפדפן בדרך לחנות */
   entering: boolean;
   onLeaving: (leaving: boolean) => void;
+  texts?: PreparingTexts;
 }) {
   const statusFn = useServerFn(getPortalStoreStatus);
   const enterStore = useEnterStore(session);
@@ -1815,9 +2035,9 @@ function PreparingStep({
     } catch (thrown) {
       entered.current = false;
       onLeaving(false);
-      setError(errorText(thrown, "הכניסה לחנות נכשלה"));
+      setError(errorText(thrown, texts.enterFailed));
     }
-  }, [enterStore, onLeaving, store.id]);
+  }, [enterStore, onLeaving, store.id, texts.enterFailed]);
 
   // בדיקה כל כמה שניות עד שהכתובת מאובטחת
   useEffect(() => {
@@ -1857,13 +2077,13 @@ function PreparingStep({
   }, [ssl, go]);
 
   const steps: { label: string; state: "done" | "active" | "todo" }[] = [
-    { label: "החנות נוצרה ואתם המנהלים שלה", state: "done" },
+    { label: texts.created, state: "done" },
     {
       label: "מאבטחים את הכתובת (תעודת SSL)",
       state: ssl === "waiting" ? "active" : "done",
     },
     {
-      label: "נכנסים לפאנל הניהול",
+      label: texts.entering,
       state: entering || (ssl === "ready" && error === null) ? "active" : "todo",
     },
   ];
@@ -1931,7 +2151,7 @@ function PreparingStep({
             אפשר להיכנס כבר עכשיו — אם הדפדפן מציג אזהרת אבטחה, חכו דקה ונסו שוב.
           </p>
           <Button type="button" className="w-full" onClick={() => void go()}>
-            להיכנס לחנות בכל זאת
+            {texts.enterAnyway}
             <ArrowLeft className="size-4" />
           </Button>
         </div>

@@ -893,6 +893,7 @@ function PublishPanel({
   revision: () => number;
   onDone: () => void;
 }) {
+  const qc = useQueryClient();
   const [note, setNote] = useState("");
   const [restore, setRestore] = useState<number | null>(null);
   const publish = useMutation({
@@ -901,9 +902,15 @@ function PublishPanel({
       return hospitalitySitePublish({ data: { revision: revision(), note: note.trim() || null } });
     },
     onSuccess: (r) => {
-      toast.success(`האתר פורסם (גרסה ${r.version})`);
+      toast.success(
+        view.opens_on_publish
+          ? `האתר פורסם (גרסה ${r.version}) ונפתח לגולשים`
+          : `האתר פורסם (גרסה ${r.version})`,
+      );
       setNote("");
       onDone();
+      // מיגרציה 40: הפרסום פתח את האתר — מצב האתר בכל אזור הניהול (לוח הבקרה, מדריך ההקמה)
+      if (view.opens_on_publish) void qc.invalidateQueries({ queryKey: manageKeys.all });
     },
     onError: (e) => toast.error(errorText(e)),
   });
@@ -933,7 +940,9 @@ function PublishPanel({
         </p>
         {!view.site_open && (
           <p className="mt-1 text-xs text-muted-foreground">
-            האתר עדיין סגור לגולשים — הפרסום יוצג כשהאתר ייפתח.
+            {view.opens_on_publish
+              ? "האתר ייפתח לגולשים ולהזמנות ברגע שתפרסמו."
+              : "האתר עדיין סגור לגולשים — הפרסום יוצג כשהאתר ייפתח."}
           </p>
         )}
         {view.site_open && (

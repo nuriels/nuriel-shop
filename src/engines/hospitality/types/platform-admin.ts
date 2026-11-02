@@ -122,4 +122,11 @@ export interface SiteRequest {
   admin_note: string | null;
   handled_at: string | null;
   created_at: string;
+  /**
+   * מיגרציה 40: העסק שבעל המקום פתח מהשער (ניסיון) — כתובת ומועד; null — בקשה בלבד (או שהעסק
+   * נמחק). חסר — מסד בלי מיגרציה 40.
+   */
+  opened_tenant_id?: string | null;
+  opened_slug?: string | null;
+  opened_at?: string | null;
 }

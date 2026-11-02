@@ -1243,8 +1243,13 @@ function SiteRequestItem({ request: r, onOpen }: { request: SiteRequest; onOpen:
           <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
             <h3>{r.business_name}</h3>
             {r.status === "new" ? <Badge>חדשה</Badge> : <Badge variant="secondary">טופלה</Badge>}
+            {r.opened_at && <Badge variant="outline">נפתח לניסיון</Badge>}
           </CardTitle>
-          <CardDescription>נשלחה {dateText(r.created_at)}</CardDescription>
+          <CardDescription>
+            {r.opened_at
+              ? `נפתח מהשער ${dateText(r.opened_at)} — בעל המקום כבר מקים את האתר; חזרו אליו לליווי`
+              : `נשלחה ${dateText(r.created_at)}`}
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
@@ -1260,7 +1265,17 @@ function SiteRequestItem({ request: r, onOpen }: { request: SiteRequest; onOpen:
                 {r.email}
               </a>
             </dd>
-            <dt className="text-muted-foreground">חבילה</dt>
+            {r.opened_at && (
+              <>
+                <dt className="text-muted-foreground">העסק</dt>
+                <dd dir="ltr" className="text-end">
+                  {r.opened_slug ?? "נמחק"}
+                </dd>
+              </>
+            )}
+            <dt className="text-muted-foreground">
+              {r.opened_at ? "חבילה (אחרי הניסיון)" : "חבילה"}
+            </dt>
             <dd>{r.plan_name ?? "עוד לא יודעים"}</dd>
             <dt className="text-muted-foreground">יחידות</dt>
             <dd>{r.units ?? "לא צוין"}</dd>
@@ -1282,9 +1297,12 @@ function SiteRequestItem({ request: r, onOpen }: { request: SiteRequest; onOpen:
             />
           </Field>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" className="min-h-11" onClick={onOpen}>
-              פתיחת עסק מהבקשה
-            </Button>
+            {/* עסק שכבר נפתח מהשער — לא פותחים שני (הוא ברשימת העסקים) */}
+            {!r.opened_at && (
+              <Button type="button" className="min-h-11" onClick={onOpen}>
+                פתיחת עסק מהבקשה
+              </Button>
+            )}
             {r.status === "new" ? (
               <Button
                 type="button"

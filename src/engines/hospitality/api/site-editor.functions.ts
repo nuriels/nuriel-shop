@@ -18,6 +18,8 @@ export interface SiteEditorView {
   published: { version: number; theme: string; document: string; published_at: string } | null;
   unpublished: boolean;
   site_open: boolean;
+  /** מיגרציה 40: הפרסום הבא יפתח את האתר לגולשים (עסק שנפתח מהשער); חסר — מסד בלי 40 */
+  opens_on_publish?: boolean;
   versions: { version: number; theme: string; note: string | null; published_at: string }[];
   /** E5: הכתובות של האתר — לבחירת הכתובת הקנונית ולתצוגה המקדימה של גוגל */
   addresses: { primary: string | null; subdomain: string | null };

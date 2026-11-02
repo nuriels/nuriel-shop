@@ -15,6 +15,7 @@ import {
   type PortalAccount,
   type PortalBusinessDetails,
   type PortalStore,
+  type PortalZimmerOpened,
   type PortalZimmerPlan,
   type StoreReadiness,
   zimmerRequestProblems,
@@ -40,7 +41,10 @@ import {
  *    באותה טרנזקציה (portal_create_store_business); התקנון מתמלא מהם.
  *    uploadPortalStoreLogo — לוגו שנבחר בהקמה (לא חובה), לחנות של האימייל בלבד.
  * 3ב. שלב E2 — אתר לצימר: getPortalZimmerPlans (החבילות המפורסמות) ו-submitZimmerRequest
- *    (בקשה; ההקמה בתשלום — מנהל הפלטפורמה מקים אותה). מייל למנהלי הפלטפורמה.
+ *    (בקשה בלבד — נשאר ללשוניות ישנות של השער). מייל למנהלי הפלטפורמה.
+ *    מיגרציה 40: openPortalZimmer — בעל המקום פותח את העסק בעצמו (כתובת + פרטים), מקבל ימי
+ *    ניסיון ונכנס ישר לאזור הניהול (אותו קוד כניסה כמו לחנות); הבקשה נשמרת ומנהלי הפלטפורמה
+ *    מקבלים מייל כדי לחזור אליו. getPortalZimmerOffer — החבילות + כמה ימי ניסיון.
  * 4. getPortalStoreStatus — חנות חדשה: האם תעודת ה-SSL של הכתובת כבר הונפקה.
  * 5. enterPortalStore — קוד כניסה חד-פעמי (2 דקות) לאתר החנות:
  *    https://<slug>.nuri1.fit/admin-handoff#code=... → מחובר → /admin.
@@ -626,31 +630,53 @@ async function hospitalityRpc<T>(fn: string, args: Record<string, unknown>): Pro
  * החבילות לצימרים שמפורסמות — לבחירה בשער. כשמנוע האירוח לא מותקן (אין סכמה / פונקציה) —
  * רשימה ריקה, והשער מציג רק "חנות אונליין".
  */
+async function loadZimmerPlans(): Promise<PortalZimmerPlan[]> {
+  try {
+    const raw = await hospitalityRpc<unknown>("public_plans", {});
+    if (!Array.isArray(raw)) return [];
+    return raw.map((value) => {
+      const p = obj(value);
+      const num = (v: unknown) => (typeof v === "number" ? v : null);
+      return {
+        code: str(p["code"]),
+        name: str(p["name"]),
+        tagline: str(p["tagline"]),
+        price_monthly: num(p["price_monthly"]),
+        setup_fee: num(p["setup_fee"]),
+        max_units: num(p["max_units"]),
+        highlights: Array.isArray(p["highlights"])
+          ? (p["highlights"] as unknown[]).filter((h): h is string => typeof h === "string")
+          : [],
+      };
+    });
+  } catch (error) {
+    logPortal("warn", "zimmer plans unavailable", { message: String(error) });
+    return [];
+  }
+}
+
 export const getPortalZimmerPlans = createServerFn({ method: "GET" }).handler(
   async (): Promise<PortalZimmerPlan[]> => {
     await requirePortal();
-    try {
-      const raw = await hospitalityRpc<unknown>("public_plans", {});
-      if (!Array.isArray(raw)) return [];
-      return raw.map((value) => {
-        const p = obj(value);
-        const num = (v: unknown) => (typeof v === "number" ? v : null);
-        return {
-          code: str(p["code"]),
-          name: str(p["name"]),
-          tagline: str(p["tagline"]),
-          price_monthly: num(p["price_monthly"]),
-          setup_fee: num(p["setup_fee"]),
-          max_units: num(p["max_units"]),
-          highlights: Array.isArray(p["highlights"])
-            ? (p["highlights"] as unknown[]).filter((h): h is string => typeof h === "string")
-            : [],
-        };
-      });
-    } catch (error) {
-      logPortal("warn", "zimmer plans unavailable", { message: String(error) });
-      return [];
-    }
+    return loadZimmerPlans();
+  },
+);
+
+/**
+ * מיגרציה 40: החבילות + כמה ימי ניסיון מקבל עסק חדש (null — לא ידוע: מסד בלי מיגרציה 40;
+ * השער מציג אז את הטקסטים בלי מספר).
+ */
+export const getPortalZimmerOffer = createServerFn({ method: "GET" }).handler(
+  async (): Promise<{ plans: PortalZimmerPlan[]; trialDays: number | null }> => {
+    await requirePortal();
+    const [plans, trialDays] = await Promise.all([
+      loadZimmerPlans(),
+      hospitalityRpc<unknown>("portal_trial_days", {}).then(
+        (days) => (typeof days === "number" && days > 0 ? days : null),
+        () => null,
+      ),
+    ]);
+    return { plans, trialDays };
   },
 );
 
@@ -698,6 +724,132 @@ export const submitZimmerRequest = createServerFn({ method: "POST" })
         : [],
     });
     return { ok: true as const };
+  });
+
+/**
+ * מיגרציה 40: פתיחת עסק אירוח מהשער — בעל המקום מתחיל מיד (ימי ניסיון, מדריך ההקמה), ובמקביל
+ * הבקשה נשמרת ומנהלי הפלטפורמה מקבלים את הפרטים כדי לחזור אליו. הכתובת, הפרטים והחשבון נבדקים
+ * במסד (portal_open_site) — בטרנזקציה אחת. מיילים: לבעל העסק (הקישור לאזור הניהול) ולמנהלי
+ * הפלטפורמה; כשל במייל לא מבטל את הפתיחה.
+ */
+export const openPortalZimmer = createServerFn({ method: "POST" })
+  .inputValidator((input: { token: string; slug: string; request: unknown }) => {
+    const slug = cleanSlugInput(String(input?.slug ?? ""));
+    const slugProblem = slugFormatProblem(slug);
+    if (slugProblem) throw new Error(slugProblem);
+    const request = cleanZimmerRequest(input?.request);
+    const problem = Object.values(zimmerRequestProblems(request))[0];
+    if (problem) throw new Error(problem);
+    return { token: tokenOf(input?.token), slug, request };
+  })
+  .handler(async ({ data }): Promise<PortalZimmerOpened> => {
+    const email = await verifiedEmail(data.token);
+    const { allowAction, requestIp } = await import("@/lib/rate-limit.server");
+    const ip = await requestIp();
+    if (!allowAction(`portal-zimmer:${ip}`, 5, 60 * 60 * 1000)) {
+      throw new Error("נפתחו כבר כמה עסקים מהמכשיר הזה בשעה האחרונה. נסו שוב מאוחר יותר.");
+    }
+
+    const account = await loadAccount(email);
+    if (!account.canCreate) {
+      throw new Error(
+        account.maxStores !== null && account.stores.length >= account.maxStores
+          ? `הגעתם למספר האתרים המרבי לחשבון אחד (${account.maxStores}). לאתרים נוספים פנו לתמיכה.`
+          : (account.blockedReason ?? "אי אפשר לפתוח עסק עם כתובת המייל הזו"),
+      );
+    }
+
+    const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
+    const { originForTenant } = await import("@/integrations/supabase/tenant.server");
+
+    // חשבון ההתחברות (אם אין עדיין) — בלי סיסמה: נכנסים בקוד למייל
+    let createdUserId: string | null = null;
+    if (!account.hasAccount) {
+      const { data: created, error: createError } =
+        await supabaseAdminUnscoped.auth.admin.createUser({
+          email,
+          email_confirm: true,
+          user_metadata: { signup_method: "hospitality_portal" },
+        });
+      // מרוץ (שתי לשוניות) — החשבון כבר נוצר; ממשיכים איתו
+      if (createError && !/already|exists|registered/i.test(createError.message)) {
+        logPortal("error", "create user failed", { ip, message: createError.message });
+        throw new Error("פתיחת החשבון נכשלה. נסו שוב בעוד רגע.");
+      }
+      createdUserId = created?.user?.id ?? null;
+    }
+
+    let opened: Record<string, unknown>;
+    try {
+      opened = await hospitalityRpc<Record<string, unknown>>("portal_open_site", {
+        _email: email,
+        _slug: data.slug,
+        _request: {
+          business_name: data.request.business_name,
+          phone: data.request.phone,
+          units: data.request.units,
+          plan_code: data.request.plan_code || null,
+          area: data.request.area,
+          message: data.request.message,
+        },
+      });
+    } catch (error) {
+      // לא משאירים חשבון חדש בלי עסק
+      if (createdUserId) await supabaseAdminUnscoped.auth.admin.deleteUser(createdUserId);
+      logPortal("warn", "zimmer open refused", {
+        ip,
+        email: maskEmail(email),
+        slug: data.slug,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error instanceof Error ? error : new Error("פתיחת העסק נכשלה. נסו שוב.");
+    }
+
+    const tenant = obj(opened["tenant"]);
+    const saved = obj(opened["request"]);
+    const target = {
+      slug: str(tenant["slug"]),
+      domain: strOrNull(tenant["domain"]),
+      is_default: tenant["is_default"] === true,
+      custom_domain: strOrNull(tenant["custom_domain"]),
+      custom_domain_status: strOrNull(tenant["custom_domain_status"]),
+    };
+    const url = originForTenant(target);
+    const store: PortalStore = {
+      id: str(tenant["id"]),
+      slug: target.slug,
+      name: str(tenant["name"]) || target.slug,
+      status: tenant["status"] === "suspended" ? "suspended" : "active",
+      isBlocked: false,
+      url,
+      createdAt: str(tenant["created_at"]),
+    };
+    const trialEndsAt = strOrNull(opened["trial_ends_at"]);
+    logPortal("info", "zimmer opened", { ip, email: maskEmail(email), slug: store.slug });
+
+    const { notifyPlatformOfZimmerRequest, welcomeZimmerOwner } =
+      await import("@/lib/portal-notify.server");
+    await welcomeZimmerOwner({
+      email,
+      business_name: store.name,
+      manage_url: `${url}/manage`,
+      trial_ends_at: trialEndsAt,
+    });
+    await notifyPlatformOfZimmerRequest({
+      id: str(saved["id"]),
+      email,
+      business_name: str(saved["business_name"]),
+      phone: str(saved["phone"]),
+      units: typeof saved["units"] === "number" ? saved["units"] : null,
+      plan_name: strOrNull(saved["plan_name"]),
+      area: strOrNull(saved["area"]),
+      message: strOrNull(saved["message"]),
+      notify: Array.isArray(saved["notify"])
+        ? (saved["notify"] as unknown[]).filter((v): v is string => typeof v === "string")
+        : [],
+      opened: { site_url: url, trial_ends_at: trialEndsAt },
+    });
+    return { store, trialEndsAt };
   });
 
 // ============================================================

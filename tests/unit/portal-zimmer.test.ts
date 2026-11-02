@@ -5,6 +5,7 @@ import { parseSiteRequestSet } from "@/engines/hospitality/validation/platform-a
 import {
   cleanZimmerRequest,
   shekels,
+  suggestZimmerSlug,
   ZIMMER_AREA_MAX,
   ZIMMER_MESSAGE_MAX,
   zimmerRequestProblems,
@@ -104,6 +105,20 @@ describe("zimmerRequestProblems", () => {
     expect(zimmerRequestProblems({ ...valid, message: "א".repeat(ZIMMER_MESSAGE_MAX) })).toEqual(
       {},
     );
+  });
+});
+
+describe("suggestZimmerSlug (migration 40: the address of a business opened from the portal)", () => {
+  it("transliterates like the store address", () => {
+    expect(suggestZimmerSlug("Galil Cabins")).toBe("galil-cabins");
+    expect(suggestZimmerSlug("צימרי הכרם")).toMatch(/^[a-z0-9-]{3,}$/);
+  });
+  it("never suggests a 'shop' address: short names get -stay, a name without letters — nothing", () => {
+    expect(suggestZimmerSlug("ab")).toBe("ab-stay");
+    expect(suggestZimmerSlug("!!!")).toBe("");
+    expect(suggestZimmerSlug("")).toBe("");
+    // "shop" that is part of the name stays
+    expect(suggestZimmerSlug("Coffee Shop")).toBe("coffee-shop");
   });
 });
 
