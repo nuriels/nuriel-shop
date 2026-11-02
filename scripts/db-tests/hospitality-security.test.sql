@@ -1,6 +1,7 @@
 -- ============================================================
 -- Hospitality D1 (migration 25): security before opening the public site
---   1. shared rate counters (rate_check / rate_sweep): semantics, server only, no raw data
+--   1. shared rate counters (rate_check / rate_sweep): semantics (migration 36: a refused attempt
+--      is not counted anywhere), server only, no raw data
 --   2. function coverage — runs on every function, including future ones: every API-callable
 --      function has a tenant / permission guard; booking requests only from the app server;
 --      the anon allowlist; DEFINER functions with a fixed search_path
@@ -189,15 +190,45 @@ SELECT pg_temp.after('rate: the first hits are allowed and counted per rule, in 
   format($$SELECT pg_temp.srv(NULL, format('SELECT hospitality.rate_check(%%L)', '[{"key": "%s", "limit": 2, "window": 600}, {"key": "%s", "limit": 5, "window": 600}]'))$$, :K1, :K2),
   $$SELECT ($1 ->> 'allowed')::boolean AND $1 -> 'hits' = '[1, 1]'::jsonb AND ($1 ->> 'retry_after')::integer = 0$$);
 SELECT pg_temp.srv(NULL, format($$SELECT hospitality.rate_check('[{"key": "%s", "limit": 2, "window": 600}]')$$, :K1)) IS NOT NULL AS ok \gset
-SELECT pg_temp.after('rate: over the limit → refused, with the seconds left in the window; every attempt counts',
+SELECT pg_temp.after('rate: over the limit → refused, with the seconds left in the window and the attempt number per rule',
   format($$SELECT pg_temp.srv(NULL, format('SELECT hospitality.rate_check(%%L)', '[{"key": "%s", "limit": 5, "window": 600}, {"key": "%s", "limit": 2, "window": 600}]'))$$, :K2, :K1),
   $$SELECT NOT ($1 ->> 'allowed')::boolean AND $1 -> 'hits' = '[2, 3]'::jsonb
            AND ($1 ->> 'retry_after')::integer BETWEEN 590 AND 600$$);
+-- migration 36: an attempt that does not go through is not counted anywhere
+\set K3 '''d1-rate-key-cccccccccccccccccccccccccccccccccccccccc'''
+\set K4 '''d1-rate-key-dddddddddddddddddddddddddddddddddddddddd'''
+\set K5 '''d1-rate-key-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'''
+SELECT tests.check('rate (36): a refused attempt uses up nothing — not the rule that refused it, not the others',
+  format($$SELECT (SELECT hits FROM hospitality.rate_buckets WHERE key = %L) = 1
+             AND (SELECT hits FROM hospitality.rate_buckets WHERE key = %L) = 2$$, :K2, :K1));
+SELECT pg_temp.after('rate (36): … so the other rule''s quota is intact — the next attempt there is number 2',
+  format($$SELECT pg_temp.srv(NULL, format('SELECT hospitality.rate_check(%%L)', '[{"key": "%s", "limit": 5, "window": 600}]'))$$, :K2),
+  $$SELECT ($1 ->> 'allowed')::boolean AND $1 -> 'hits' = '[2]'::jsonb$$);
+SELECT pg_temp.after('rate: a one-time token — the first use passes',
+  format($$SELECT pg_temp.srv(NULL, format('SELECT hospitality.rate_check(%%L)', '[{"key": "%s", "limit": 1, "window": 600}]'))$$, :K3),
+  $$SELECT ($1 ->> 'allowed')::boolean AND $1 -> 'hits' = '[1]'::jsonb$$);
+SELECT pg_temp.after('rate: … a second use is refused and reported as attempt 2 (the server answers "already used")',
+  format($$SELECT pg_temp.srv(NULL, format('SELECT hospitality.rate_check(%%L)', '[{"key": "%s", "limit": 1, "window": 600}]'))$$, :K3),
+  $$SELECT NOT ($1 ->> 'allowed')::boolean AND $1 -> 'hits' = '[2]'::jsonb$$);
+SELECT tests.check('rate (36): … and the token counter stays at 1',
+  format($$SELECT (SELECT hits FROM hospitality.rate_buckets WHERE key = %L) = 1$$, :K3));
+SELECT pg_temp.after('rate (36): an attempt that another rule refuses does not burn a one-time token',
+  format($$SELECT pg_temp.srv(NULL, format('SELECT hospitality.rate_check(%%L)', '[{"key": "%s", "limit": 2, "window": 600}, {"key": "%s", "limit": 1, "window": 600}]'))$$, :K1, :K4),
+  $$SELECT NOT ($1 ->> 'allowed')::boolean AND $1 -> 'hits' = '[3, 1]'::jsonb$$);
+SELECT tests.check('rate (36): … the token is still unused (no counter was written for it)',
+  format($$SELECT NOT EXISTS (SELECT 1 FROM hospitality.rate_buckets WHERE key = %L)$$, :K4));
 UPDATE hospitality.rate_buckets SET window_ends = now() - interval '1 second'
  WHERE key = 'd1-rate-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-SELECT pg_temp.after('rate: a new window starts from one',
-  format($$SELECT pg_temp.srv(NULL, format('SELECT hospitality.rate_check(%%L)', '[{"key": "%s", "limit": 2, "window": 600}]'))$$, :K1),
-  $$SELECT ($1 ->> 'allowed')::boolean AND $1 -> 'hits' = '[1]'::jsonb$$);
+SELECT pg_temp.after('rate: a new window starts from one (and the waiting token can now be used)',
+  format($$SELECT pg_temp.srv(NULL, format('SELECT hospitality.rate_check(%%L)', '[{"key": "%s", "limit": 2, "window": 600}, {"key": "%s", "limit": 1, "window": 600}]'))$$, :K1, :K4),
+  $$SELECT ($1 ->> 'allowed')::boolean AND $1 -> 'hits' = '[1, 1]'::jsonb$$);
+SELECT pg_temp.after('rate: the same key twice in one call counts twice (as before)',
+  format($$SELECT pg_temp.srv(NULL, format('SELECT hospitality.rate_check(%%L)', '[{"key": "%s", "limit": 2, "window": 600}, {"key": "%s", "limit": 2, "window": 600}]'))$$, :K5, :K5),
+  $$SELECT ($1 ->> 'allowed')::boolean AND $1 -> 'hits' = '[1, 2]'::jsonb$$);
+SELECT pg_temp.after('rate: … and a third time is over the limit (attempt 3, nothing counted)',
+  format($$SELECT pg_temp.srv(NULL, format('SELECT hospitality.rate_check(%%L)', '[{"key": "%s", "limit": 2, "window": 600}]'))$$, :K5),
+  $$SELECT NOT ($1 ->> 'allowed')::boolean AND $1 -> 'hits' = '[3]'::jsonb
+           AND (SELECT hits FROM hospitality.rate_buckets WHERE key = 'd1-rate-key-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') = 2$$);
 SELECT pg_temp.expect_error('rate: an invalid rule (key format) is refused',
   $$SELECT pg_temp.srv(NULL, $q$SELECT hospitality.rate_check('[{"key": "1.2.3.4", "limit": 2, "window": 600}]')$q$)$$,
   'invalid rule');

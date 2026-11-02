@@ -23,6 +23,47 @@ export interface RateResult {
 
 let lastWarning = 0;
 
+// גיבוי כשהמסד לא זמין: מונים בזיכרון של השרת הזה בלבד — באותה התנהגות כמו rate_check (מיגרציה 36):
+// קודם בודקים את כל הכללים, ונספר רק ניסיון שעבר את כולם (ניסיון שנחסם לא "שורף" כללים אחרים).
+const local = new Map<string, { hits: number; ends: number }>();
+const LOCAL_MAX_KEYS = 20_000;
+
+export function localCheck(rules: RateRule[], now: number = Date.now()): RateResult {
+  const pending = new Map<string, number>();
+  const live = rules.map((r) => {
+    const b = local.get(r.key);
+    return b && b.ends > now ? b : null;
+  });
+  const hits = rules.map((r, i) => {
+    const n = (pending.get(r.key) ?? 0) + 1;
+    pending.set(r.key, n);
+    return (live[i]?.hits ?? 0) + n;
+  });
+  const ok = hits.every((h, i) => h <= rules[i]!.limit);
+  if (ok) {
+    rules.forEach((r, i) =>
+      local.set(r.key, { hits: hits[i]!, ends: live[i]?.ends ?? now + r.window * 1000 }),
+    );
+    if (local.size > LOCAL_MAX_KEYS) {
+      for (const [k, b] of local) if (b.ends <= now) local.delete(k);
+      // עדיין גדול מדי (הצפה במפתחות רבים) — מוותרים על הוותיקים ביותר
+      for (const k of local.keys()) {
+        if (local.size <= LOCAL_MAX_KEYS * 0.75) break;
+        local.delete(k);
+      }
+    }
+  }
+  const retryAfter = ok
+    ? 0
+    : Math.max(
+        1,
+        ...rules.map((r, i) =>
+          hits[i]! > r.limit ? Math.ceil(((live[i]?.ends ?? now) - now) / 1000) : 0,
+        ),
+      );
+  return { ok, retryAfter, hits };
+}
+
 /** בדיקה + ספירה של כללים גולמיים (מפתח HMAC מוכן) — קריאה אחת למסד */
 export async function checkRules(rules: RateRule[]): Promise<RateResult> {
   if (!rules.length) return { ok: true, retryAfter: 0, hits: [] };
@@ -50,12 +91,7 @@ export async function checkRules(rules: RateRule[]): Promise<RateResult> {
       lastWarning = Date.now();
       console.error("[hospitality] shared rate limit unavailable — local fallback", String(e));
     }
-    const { allowAction } = await import("@/platform/security/rate-limit.server");
-    const hits = rules.map((r) =>
-      allowAction(`hosp-shared:${r.key}`, r.limit, r.window * 1000) ? 1 : r.limit + 1,
-    );
-    const ok = hits.every((h, i) => h <= rules[i]!.limit);
-    return { ok, retryAfter: ok ? 0 : 60, hits };
+    return localCheck(rules);
   }
 }
 

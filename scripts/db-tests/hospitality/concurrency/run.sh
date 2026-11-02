@@ -396,6 +396,28 @@ check "invariant: every active block holds exactly its units (the whole property
      AND (SELECT count(*) FROM hospitality.unit_occupancy o WHERE o.block_id = b.id)
          <> cardinality(hospitality._fanout_units(b.tenant_id, b.unit_id)))"
 
+# ---- 35–38. the shared rate counter (migration 36): parallel calls, no overshoot, nothing burnt ----
+# each session: the server's call (service role) → prints "true" (allowed) or "false" (refused)
+rate() { echo "SET ROLE service_role; SELECT (hospitality.rate_check('$1'::jsonb) ->> 'allowed');"; }
+allowed_count() { grep -lx 'true' "$TMP/$1"/*.out 2>/dev/null | wc -l | tr -d ' '; }
+args=(); for i in $(seq 1 10); do args+=("$(rate '[{"key": "conc-rate-same-key-000000", "limit": 3, "window": 600}]')"); done
+parallel r35 "${args[@]}"
+check "35 10 parallel calls on one counter with a limit of 3 → exactly 3 allowed, and the counter is 3" \
+  "SELECT $(allowed_count r35) = 3 AND (SELECT hits FROM hospitality.rate_buckets WHERE key = 'conc-rate-same-key-000000') = 3"
+args=(); for i in $(seq 1 6); do args+=("$(rate '[{"key": "conc-rate-one-time-token-01", "limit": 1, "window": 600}]')"); done
+parallel r36 "${args[@]}"
+check "36 a one-time token used by 6 parallel calls (also when its counter does not exist yet) → exactly one passes" \
+  "SELECT $(allowed_count r36) = 1 AND (SELECT hits FROM hospitality.rate_buckets WHERE key = 'conc-rate-one-time-token-01') = 1"
+args=(); for i in $(seq 1 10); do args+=("$(rate '[{"key": "conc-rate-flooding-ip-0001", "limit": 2, "window": 600}, {"key": "conc-rate-business-total-01", "limit": 50, "window": 600}]')"); done
+parallel r37 "${args[@]}"
+check "37 one address floods (10 parallel, its limit 2) → 2 allowed, and the business counter is 2, not 10" \
+  "SELECT $(allowed_count r37) = 2 AND (SELECT hits FROM hospitality.rate_buckets WHERE key = 'conc-rate-business-total-01') = 2"
+args=(); for i in $(seq 1 8); do args+=("$(rate "[{\"key\": \"conc-rate-address-$(printf %06d "$i")\", \"limit\": 5, \"window\": 600}, {\"key\": \"conc-rate-business-total-02\", \"limit\": 3, \"window\": 600}]")"); done
+parallel r38 "${args[@]}"
+check "38 8 addresses in parallel against a business limit of 3 → exactly 3 allowed; only their addresses were counted" \
+  "SELECT $(allowed_count r38) = 3 AND (SELECT hits FROM hospitality.rate_buckets WHERE key = 'conc-rate-business-total-02') = 3
+          AND (SELECT count(*) FROM hospitality.rate_buckets WHERE key LIKE 'conc-rate-address-%') = 3"
+
 # ---- final invariants ----
 check "invariant: no two occupancy rows overlap on any physical unit" \
   "SELECT NOT EXISTS (SELECT 1 FROM hospitality.unit_occupancy a JOIN hospitality.unit_occupancy b

@@ -314,6 +314,26 @@ describe("booking request guard: trap → challenge → one shared database call
     expect((await checkRules([rule])).ok).toBe(true);
     expect((await checkRules([rule])).ok).toBe(false);
   });
+
+  it("the local fallback counts like the database (36): a refused attempt uses up nothing", async () => {
+    const { localCheck } = await import("@/engines/hospitality/security/rate-limit.server");
+    const ip = { key: "local-ip-".padEnd(43, "a"), limit: 2, window: 60 };
+    const business = { key: "local-business-".padEnd(43, "b"), limit: 50, window: 60 };
+    const token = { key: "local-token-".padEnd(43, "c"), limit: 1, window: 60 };
+    const now = 1_000_000;
+    expect(localCheck([ip, business], now)).toMatchObject({ ok: true, hits: [1, 1] });
+    expect(localCheck([ip, business], now)).toMatchObject({ ok: true, hits: [2, 2] });
+    // the address is over its limit: refused, and the business counter is not used up
+    const refused = localCheck([ip, business, token], now + 1000);
+    expect(refused).toMatchObject({ ok: false, hits: [3, 3, 1] });
+    expect(refused.retryAfter).toBe(59);
+    expect(localCheck([business], now + 2000)).toMatchObject({ ok: true, hits: [3] });
+    // the one-time token was not burnt by the refused attempt
+    expect(localCheck([token], now + 3000)).toMatchObject({ ok: true, hits: [1] });
+    expect(localCheck([token], now + 4000)).toMatchObject({ ok: false, hits: [2] });
+    // a new window starts from one
+    expect(localCheck([ip], now + 61_000)).toMatchObject({ ok: true, hits: [1] });
+  });
 });
 
 describe("security headers on Hospitality pages", () => {
