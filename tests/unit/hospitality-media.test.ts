@@ -10,7 +10,9 @@ import {
   parseGallery,
   parseImportInput,
   parseMediaOrder,
+  parseUploadForm,
   parseVideoLink,
+  parseVideoLinkInput,
 } from "@/engines/hospitality/validation/media";
 import {
   assertFetchableUrl,
@@ -168,6 +170,22 @@ describe("video links and gallery input", () => {
       ownerId: A,
     });
     expect(() => parseGallery({ ownerKind: "bucket" })).toThrow(/הגלריה/);
+    // the logo (migration 42): only where asked for (the logo upload), and without an id
+    expect(() => parseGallery({ ownerKind: "brand" })).toThrow(/הגלריה/);
+    expect(parseGallery({ ownerKind: "brand", ownerId: A }, { brand: true })).toEqual({
+      ownerKind: "brand",
+      ownerId: null,
+    });
+    const logo = new FormData();
+    logo.set("ownerKind", "brand");
+    logo.set("file", new File([new Uint8Array([1, 2, 3])], "logo.png", { type: "image/png" }));
+    expect(parseUploadForm(logo).gallery).toEqual({ ownerKind: "brand", ownerId: null });
+    expect(() =>
+      parseVideoLinkInput({ ownerKind: "brand", url: "https://youtu.be/dQw4w9WgXcQ" }),
+    ).toThrow(/הגלריה/);
+    expect(() =>
+      parseImportInput({ ownerKind: "brand", url: "https://example.com/a.png" }),
+    ).toThrow(/הגלריה/);
     expect(() =>
       parseMediaOrder({ ownerKind: "unit", ownerId: A, expected: [A, B], ids: [A, A] }),
     ).toThrow(/רשימת הסדר/);

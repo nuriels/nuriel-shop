@@ -1,5 +1,6 @@
-// תמונות וגלריות (Stage 2e) — מה שפונקציות המסד מחזירות (מיגרציה 12), עם הקישורים הציבוריים
-export type GalleryKind = "site" | "property" | "unit";
+// תמונות וגלריות (Stage 2e) — מה שפונקציות המסד מחזירות (מיגרציה 12), עם הקישורים הציבוריים.
+// "brand" — הלוגו (מיגרציה 42): נשמר בנפרד, לא מוצג ב"תמונות" ולא נהיה תמונה ראשית.
+export type GalleryKind = "site" | "property" | "unit" | "brand";
 
 export interface MediaItem {
   id: string;

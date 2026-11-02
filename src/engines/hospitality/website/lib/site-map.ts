@@ -39,6 +39,7 @@ export function toPublicSite(
       ? { ...raw.design, document: JSON.stringify(raw.design.document ?? {}) }
       : null,
     gallery: raw.gallery.map(urls),
+    brand: (raw.brand ?? []).map(urls),
     properties: raw.properties.map((p) => ({ ...p, media: p.media.map(urls) })),
     units: raw.units.map((u) => ({
       ...u,

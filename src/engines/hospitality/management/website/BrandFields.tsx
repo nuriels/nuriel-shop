@@ -1,7 +1,7 @@
 // עורך האתר — לוגו וגופנים (D2).
-//   • לוגו: העלאה (נשמר בתמונות האתר — אותו מנגנון בדיקה וקידוד כמו כל תמונה; שקיפות נשמרת)
-//     או בחירה מהתמונות הקיימות; אפשר להציג גם את שם העסק לידו. הלוגו לא מוצג בגלריה ולא
-//     משמש כתמונת הפתיח;
+//   • לוגו: העלאה — נשמר בנפרד מהתמונות ("brand", מיגרציה 42): לא ב"תמונות", לא בגלריה ולא
+//     נהיה תמונה ראשית (אותו מנגנון בדיקה וקידוד כמו כל תמונה; שקיפות נשמרת); או בחירה מהלוגואים
+//     שהועלו / מהתמונות הקיימות. אפשר להציג גם את שם העסק לידו. הלוגו לא משמש כתמונת הפתיח;
 //   • גופנים: זוג מאושר לכל ערכה (כמו הצבעים) — בלי בחירה, הגופנים של הערכה.
 import { ImagePlus, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
@@ -59,9 +59,9 @@ export function LogoField({
     }
     setBusy(true);
     try {
-      const before = new Set(site.gallery.map((m) => m.id));
+      const before = new Set((site.brand ?? []).map((m) => m.id));
       const fd = new FormData();
-      fd.set("ownerKind", "site");
+      fd.set("ownerKind", "brand");
       fd.set("alt", `הלוגו של ${site.business.name}`.slice(0, 200));
       fd.set("file", file, file.name);
       const gallery = await hospitalityUploadMedia({ data: fd });
@@ -125,7 +125,7 @@ export function LogoField({
             aria-expanded={picking}
             onClick={() => setPicking((v) => !v)}
           >
-            בחירה מהתמונות של האתר
+            בחירה מהלוגואים שהועלו או מהתמונות
           </button>
         </div>
       </div>
@@ -139,6 +139,8 @@ export function LogoField({
           site={site}
           value={design.logo}
           label="בחירת הלוגו"
+          extra={site.brand ?? []}
+          clearLabel="בלי לוגו (שם העסק בטקסט)"
           onChange={(id: string | undefined) => setLogo(id)}
         />
       )}
@@ -166,12 +168,13 @@ export function LogoField({
             onClick={() => setLogo(undefined)}
           >
             <Trash2 className="size-4" aria-hidden="true" />
-            הסרת הלוגו מהאתר (התמונה נשארת בתמונות)
+            הסרת הלוגו מהאתר
           </Button>
         </>
       )}
       <p className="text-xs text-muted-foreground">
-        מומלץ PNG עם רקע שקוף, ברוחב 400 פיקסלים לפחות. הלוגו מוצג בראש כל עמוד; הוא לא נכנס לגלריה.
+        מומלץ PNG עם רקע שקוף, ברוחב 400 פיקסלים לפחות. הלוגו מוצג בראש כל עמוד; הוא לא נכנס לגלריה
+        ולא מחליף את התמונה הראשית.
       </p>
     </fieldset>
   );

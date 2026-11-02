@@ -8,9 +8,11 @@ export const GALLERY_MAX = 60;
 
 type Raw = Record<string, unknown> | null | undefined;
 
-export function parseGallery(input: Raw): GalleryRef {
+/** הגלריה: האתר / מתחם / יחידה. הלוגו ("brand", מיגרציה 42) — רק כשמבקשים (העלאת לוגו) */
+export function parseGallery(input: Raw, opts: { brand?: boolean } = {}): GalleryRef {
   const i = input ?? {};
   const kind = i["ownerKind"];
+  if (kind === "brand" && opts.brand) return { ownerKind: "brand", ownerId: null };
   if (kind !== "site" && kind !== "property" && kind !== "unit")
     throw new InputError("הגלריה לא נמצאה");
   return {
@@ -101,7 +103,7 @@ export function parseMediaOrder(input: Raw): GalleryRef & { expected: string[]; 
   return { ...parseGallery(i), expected, ids };
 }
 
-/** העלאה / החלפה (FormData): הגלריה, הקובץ ו-ALT; או id לפריט שמוחלף */
+/** העלאה / החלפה (FormData): הגלריה (גם הלוגו), הקובץ ו-ALT; או id לפריט שמוחלף */
 export function parseUploadForm(data: unknown): {
   gallery: GalleryRef;
   replaceId: string | null;
@@ -116,7 +118,10 @@ export function parseUploadForm(data: unknown): {
   const str = (k: string) =>
     typeof data.get(k) === "string" ? (data.get(k) as string) : undefined;
   return {
-    gallery: parseGallery({ ownerKind: str("ownerKind"), ownerId: str("ownerId") || undefined }),
+    gallery: parseGallery(
+      { ownerKind: str("ownerKind"), ownerId: str("ownerId") || undefined },
+      { brand: true },
+    ),
     replaceId: replace ? uuid(replace, "התמונה") : null,
     file,
     alt: alt(str("alt") ?? null),

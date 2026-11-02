@@ -136,7 +136,9 @@ export const hospitalityUploadMedia = createServerFn({ method: "POST" })
     const session = await manageSession();
     await guardStaff("mediaUpload", { userId: session.userId, siteId: session.siteId });
     const bytes = Buffer.from(await data.file.arrayBuffer());
-    return storeAndRecord(data.gallery, data.replaceId, bytes, { alt: data.alt }, true);
+    // לוגו — תמונה בלבד (גם המסד בודק)
+    const allowVideo = data.gallery.ownerKind !== "brand";
+    return storeAndRecord(data.gallery, data.replaceId, bytes, { alt: data.alt }, allowVideo);
   });
 
 /** ייבוא מקישור: השרת מוריד (הגנת SSRF), בודק, מקודד מחדש ושומר עותק עצמאי */

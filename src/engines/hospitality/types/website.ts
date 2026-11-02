@@ -134,6 +134,8 @@ export interface PublicSite {
   /** אפשר לשלוח בקשת הזמנה מהאתר (דגל ההזמנות + מנוי פעיל) */
   booking_open: boolean;
   gallery: PublicMedia[];
+  /** הלוגואים של העסק (מיגרציה 42) — לא בגלריה ולא כתמונת הפתיח; נמצאים לפי המזהה שבמסמך העיצוב */
+  brand?: PublicMedia[];
   policy: PublicPolicy | null;
   properties: PublicProperty[];
   units: PublicUnit[];
@@ -192,10 +194,11 @@ export type RawPublicMedia = Omit<PublicMedia, "url" | "srcset" | "thumb_url"> &
 
 export type RawPublicSite = Omit<
   PublicSite,
-  "gallery" | "properties" | "units" | "design" | "room_types"
+  "gallery" | "brand" | "properties" | "units" | "design" | "room_types"
 > & {
   design: (Omit<SiteDesignRecord, "document"> & { document: unknown }) | null;
   gallery: RawPublicMedia[];
+  brand?: RawPublicMedia[];
   properties: (Omit<PublicProperty, "media"> & { media: RawPublicMedia[] })[];
   units: (Omit<PublicUnit, "media"> & { media: RawPublicMedia[] })[];
 };

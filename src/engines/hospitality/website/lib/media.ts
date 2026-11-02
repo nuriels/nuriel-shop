@@ -76,8 +76,11 @@ export function allMedia(site: PublicSite): PublicMedia[] {
   return siteGallery(site);
 }
 
-/** תמונה לפי מזהה (רק מתמונות האתר הזה) */
+/** תמונה לפי מזהה (רק מהתמונות של האתר הזה — וגם מהלוגואים שלו, מיגרציה 42) */
 export function mediaById(site: PublicSite, id: string | undefined): PublicMedia | null {
   if (!id) return null;
-  return allMedia(site).find((m) => m.id === id && m.kind === "image") ?? null;
+  return (
+    [...(site.brand ?? []), ...allMedia(site)].find((m) => m.id === id && m.kind === "image") ??
+    null
+  );
 }

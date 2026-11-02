@@ -90,6 +90,7 @@ M38=20261105150000_hosp_unit_photos_public
 M39=20261105160000_hosp_confirm_link
 M40=20261105170000_hosp_portal_open
 M41=20261105180000_hosp_unit_size
+M42=20261105190000_hosp_logo_brand
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -110,6 +111,38 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- the logo outside the galleries (migration 42) ----------
+expect "before the rollback: a logo is its own kind ('brand'), outside the site gallery" \
+  "SELECT pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conrelid = 'hospitality.media'::regclass AND conname = 'media_owner_kind_check')) LIKE '%brand%'
+      AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'hospitality.media'::regclass AND conname = 'media_owner_check')"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M42" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M42"
+down "$M42"
+expect "no logo kind left; the table checks are the original ones; the media functions are the migration-12 / 38 / 41 versions" \
+  "SELECT NOT EXISTS (SELECT 1 FROM hospitality.media WHERE owner_kind = 'brand')
+      AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'hospitality.media'::regclass AND conname = 'media_owner_check')
+      AND pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conrelid = 'hospitality.media'::regclass AND conname = 'media_owner_kind_check')) NOT LIKE '%brand%'
+      AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'hospitality.media'::regclass AND conname = 'media_check')
+      AND (SELECT bool_and(prosrc NOT LIKE '%brand%') FROM pg_proc
+            WHERE oid IN ('hospitality._media_owner(uuid,text,uuid)'::regprocedure,
+                          'hospitality._media_ensure_cover(uuid,text,uuid,uuid)'::regprocedure,
+                          'hospitality._public_media(uuid,text,uuid,uuid)'::regprocedure,
+                          'hospitality._site_payload(uuid)'::regprocedure))"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m41.sql"
+schema_dump "$SCHEMA_DIR/after-m42-down.sql"
+if diff -q "$SCHEMA_DIR/m41.sql" "$SCHEMA_DIR/after-m42-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 41, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 41:"; diff "$SCHEMA_DIR/m41.sql" "$SCHEMA_DIR/after-m42-down.sql" | head -20; exit 1
+fi
 
 # ---------- the size of a unit (migration 41) ----------
 psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
@@ -1060,7 +1093,7 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1 … $M41"
+echo "re-apply: $M1 … $M42"
 up "$M1"
 up "$M2"
 up "$M3"
@@ -1102,6 +1135,7 @@ up "$M38"
 up "$M39"
 up "$M40"
 up "$M41"
+up "$M42"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -1147,7 +1181,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 41 → 1 and re-apply 1 → 41 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 42 → 1 and re-apply 1 → 42 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi

@@ -14,6 +14,7 @@ import {
 } from "@/engines/hospitality/website/design/schema";
 import { SiteContext } from "@/engines/hospitality/website/lib/site-context";
 import { heroImage, mediaById, siteGallery } from "@/engines/hospitality/website/lib/media";
+import { toPublicSite } from "@/engines/hospitality/website/lib/site-map";
 import { siteHomeMeta } from "@/engines/hospitality/website/head";
 import {
   FONT_PAIRS,
@@ -163,6 +164,33 @@ describe("logo on the site", () => {
     expect(heroImage(s, LOGO)?.id).toBe(PHOTO);
     // without a logo: as before
     expect(siteGallery(s).map((m) => m.id)).toEqual([LOGO, PHOTO]);
+  });
+
+  it("an uploaded logo (migration 42) lives outside the gallery: found by id, never the hero or a gallery photo — even before the design with it is published", () => {
+    const s = site({ gallery: [media(PHOTO)], brand: [media(LOGO)] });
+    expect(mediaById(s, LOGO)?.id).toBe(LOGO);
+    // no logo id passed (the published design does not have it yet): still never the hero
+    expect(heroImage(s)?.id).toBe(PHOTO);
+    expect(siteGallery(s).map((m) => m.id)).toEqual([PHOTO]);
+    // a site with only a logo: no hero from the logo
+    expect(heroImage(site({ gallery: [], brand: [media(LOGO)] }))).toBeNull();
+    // an old payload without "brand": as before
+    expect(mediaById(site({ gallery: [media(PHOTO)] }), LOGO)).toBeNull();
+  });
+
+  it("the site data maps the logos to public links, separately from the gallery", () => {
+    const raw = {
+      ...site(),
+      gallery: [{ ...media(PHOTO), path: `t/${PHOTO}.webp`, variants: {} }],
+      brand: [{ ...media(LOGO), path: `t/${LOGO}.webp`, variants: {} }],
+      properties: [],
+      units: [],
+      design: null,
+    };
+    const s = toPublicSite(raw as never, (p) => (p ? `https://cdn.test/${p}` : null));
+    expect(s.gallery.map((m) => m.id)).toEqual([PHOTO]);
+    expect(s.brand?.map((m) => m.url)).toEqual([`https://cdn.test/t/${LOGO}.webp`]);
+    expect(toPublicSite({ ...raw, brand: undefined } as never, () => null).brand).toEqual([]);
   });
 
   it("structured data: the logo is the business logo, the share image is a photo", () => {

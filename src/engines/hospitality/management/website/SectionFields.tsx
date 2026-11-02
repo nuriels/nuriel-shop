@@ -379,14 +379,27 @@ export function ImagePicker({
   onChange,
   label,
   multiple = false,
+  extra = [],
+  clearLabel,
 }: {
   site: PublicSite;
   value: string | string[] | undefined;
   onChange: (v: never) => void;
   label: string;
   multiple?: boolean;
+  /** תמונות נוספות לבחירה, לפני התמונות של האתר (בלוגו: הלוגואים שהועלו) */
+  extra?: PublicMedia[];
+  /** הטקסט של ניקוי הבחירה (ברירת מחדל: "ברירת המחדל (תמונה אוטומטית)") */
+  clearLabel?: string;
 }) {
-  const images = allMedia(site).filter((m): m is PublicMedia => m.kind === "image" && !!m.url);
+  // תמונות בלבד, בלי כפילויות (הנוספות קודם)
+  const images: PublicMedia[] = [];
+  const seen = new Set<string>();
+  for (const m of [...extra, ...allMedia(site)]) {
+    if (m.kind !== "image" || !m.url || seen.has(m.id)) continue;
+    seen.add(m.id);
+    images.push(m);
+  }
   const selected = new Set(Array.isArray(value) ? value : value ? [value] : []);
   const pick = (id: string) => {
     if (multiple) {
@@ -439,7 +452,8 @@ export function ImagePicker({
               onClick={() => (onChange as (v: undefined) => void)(undefined)}
               className="self-start text-xs text-muted-foreground underline"
             >
-              {multiple ? "ניקוי הבחירה (כל התמונות)" : "ברירת המחדל (תמונה אוטומטית)"}
+              {clearLabel ??
+                (multiple ? "ניקוי הבחירה (כל התמונות)" : "ברירת המחדל (תמונה אוטומטית)")}
             </button>
           )}
         </>
