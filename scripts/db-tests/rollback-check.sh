@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_unit_photos_public (38): בלי נתונים חדשים; rollback → _public_media בגרסה של מיגרציה 19
+#     מילה במילה, הסכמה זהה בדיוק למצב של מיגרציה 37
 #   • hosp_reports (F7): בלי נתונים חדשים; rollback → פונקציות הדוחות נעלמו, הפונקציות של לוח הבקרה
 #     חוזרות לגרסה של מיגרציה 32 מילה במילה, הסכמה זהה בדיוק למצב של מיגרציה 33
 #   • hosp_support (E4): הגנה (נעצר כשיש פניות / קבצים), rollback → הטבלאות, הפונקציות והדלי
@@ -77,6 +79,7 @@ M34=20261105110000_hosp_reports
 M35=20261105120000_hosp_setup_guide
 M36=20261105130000_hosp_rate_check
 M37=20261105140000_hosp_payment_instructions
+M38=20261105150000_hosp_unit_photos_public
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -97,6 +100,28 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- unit photos on the public site (migration 38) ----------
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M38" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M38"
+down "$M38"
+expect "_public_media is the migration-19 version again (matches a unit photo by property and unit)" \
+  "SELECT (SELECT prosrc LIKE '%property_id IS NOT DISTINCT FROM _property%' AND prosrc NOT LIKE '%WHEN ''unit''%'
+             FROM pg_proc WHERE oid = 'hospitality._public_media(uuid,text,uuid,uuid)'::regprocedure)"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m37.sql"
+schema_dump "$SCHEMA_DIR/after-m38-down.sql"
+if diff -q "$SCHEMA_DIR/m37.sql" "$SCHEMA_DIR/after-m38-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 37, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 37:"; diff "$SCHEMA_DIR/m37.sql" "$SCHEMA_DIR/after-m38-down.sql" | head -20; exit 1
+fi
 
 # ---------- payment instructions for guests (migration 37) ----------
 psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
@@ -977,6 +1002,7 @@ up "$M34"
 up "$M35"
 up "$M36"
 up "$M37"
+up "$M38"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -1022,7 +1048,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 37 → 1 and re-apply 1 → 37 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 38 → 1 and re-apply 1 → 38 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi
