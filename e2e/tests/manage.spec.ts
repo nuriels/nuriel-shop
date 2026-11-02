@@ -1,9 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { toJSONAsync } from "seroval";
 import { AUTH, hostGet, hostOf, PORT, STORE_A, supabaseEnv, USERS } from "./helpers";
+// בדיקת axe המשותפת — מחכה להודעות קופצות, לשלדי טעינה ולאנימציות הכניסה לפני המדידה
+import { expectAccessible } from "./hospitality-helpers";
 
 // לוח הבקרה (F3): ברכה לפי השעה אצל העסק ושם המשתמש — "ערב טוב, דנה"
 const DASHBOARD_GREETING = /^(בוקר טוב|צהריים טובים|ערב טוב|לילה טוב), /;
@@ -108,16 +109,6 @@ async function enterViaHandoff(page: Page) {
                now() + interval '2 minutes', 'store_owner')`);
   await page.goto(HURL(`/admin-handoff#code=${code}&from=portal`));
   await expect(page).toHaveURL(/\/manage$/, { timeout: 20_000 });
-}
-
-async function expectAccessible(page: Page, label: string) {
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-    .analyze();
-  const summary = results.violations.map(
-    (v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`,
-  );
-  expect(summary, label).toEqual([]);
 }
 
 test.beforeAll(async ({ request }, testInfo) => {
