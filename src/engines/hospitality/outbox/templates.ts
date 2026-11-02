@@ -113,7 +113,12 @@ export function copyFor(event: string, p: EmailPayload, b: EmailBusiness): Copy 
       return {
         subject: `ההזמנה שלך${n} אושרה — ${b.name}`,
         intro: paymentWording(b).instructions
-          ? `שלום ${p.guest_name ?? ""}, שמחים לאשר את ההזמנה שלך. מחכים לראותך! אם התשלום עוד לא הושלם — פרטי התשלום (${paymentWording(b).names}) מחכים לך בעמוד ההזמנה — בקישור האישי שנשלח אליך במייל הקודם ("קיבלנו את בקשת ההזמנה שלך"). התשלום יסומן כשולם אחרי שהעסק יאשר שקיבל אותו.`
+          ? `שלום ${p.guest_name ?? ""}, שמחים לאשר את ההזמנה שלך. מחכים לראותך! אם התשלום עוד לא הושלם — פרטי התשלום (${paymentWording(b).names}) מחכים לך בעמוד ההזמנה — ${
+              // מיגרציה 39: במייל האישור יש קישור משלו; בלעדיו (הזמנה בלי קישור אישי) — המייל הקודם
+              hasManageToken(p)
+                ? "בכפתור שלמטה"
+                : 'בקישור האישי שנשלח אליך במייל הקודם ("קיבלנו את בקשת ההזמנה שלך")'
+            }. התשלום יסומן כשולם אחרי שהעסק יאשר שקיבל אותו.`
           : `שלום ${p.guest_name ?? ""}, שמחים לאשר את ההזמנה שלך. מחכים לראותך! אם התשלום עוד לא הושלם — נציג העסק יצור איתך קשר טלפונית (לא ניתן לשלם באתר).`,
         details: true,
         outro: [
@@ -313,9 +318,15 @@ ${copy.outro ? `<p style="margin:12px 0 0;font-size:14px;color:#444;line-height:
   return { subject: copy.subject, html, sender: copy.platform ? PLATFORM_SENDER : null };
 }
 
+/** במייל יש טוקן אישי (המייל הראשון לאורח, ומיגרציה 39 — גם מייל האישור) */
+export function hasManageToken(p: EmailPayload): boolean {
+  return typeof p["manage_token"] === "string" && /^[0-9a-f]{64}$/.test(p["manage_token"]);
+}
+
 /**
- * קישור "ניהול ההזמנה" לאורח (Stage 4b): רק במייל הראשון שלו, כשהטוקן בתור. הטוקן אחרי #
- * — לא נשלח לשרת בבקשת העמוד, לא נשמר ביומני השרת ולא עובר ב-Referer.
+ * קישור "ניהול ההזמנה" לאורח (Stage 4b): במייל הראשון שלו, ומיגרציה 39 — גם במייל "ההזמנה אושרה"
+ * (טוקן שני שנוצר באישור), כשהטוקן בתור. הטוקן אחרי # — לא נשלח לשרת בבקשת העמוד, לא נשמר ביומני
+ * השרת ולא עובר ב-Referer.
  */
 export function guestManageUrl(
   recipient: "guest" | "owner",

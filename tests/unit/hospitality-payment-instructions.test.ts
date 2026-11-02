@@ -6,7 +6,7 @@ import {
   guestPreview,
   valuesOf,
 } from "@/engines/hospitality/management/settings/payment-model";
-import { copyFor } from "@/engines/hospitality/outbox/templates";
+import { copyFor, renderBookingEmail } from "@/engines/hospitality/outbox/templates";
 import type { PaymentSettingsView } from "@/engines/hospitality/types/payment-instructions";
 import {
   parsePaymentSettingsSave,
@@ -88,8 +88,20 @@ describe("payment instructions: the emails", () => {
     expect(req.intro).not.toContain("123");
     const ok = copyFor("booking_confirmed", p, b)!;
     expect(ok.intro).toContain("מחכים לך בעמוד ההזמנה");
-    // המייל הזה בלי קישור (הטוקן רק במייל הראשון) — הנוסח מפנה לקישור האישי מהמייל הקודם
+    // בלי טוקן במייל (הזמנה בלי קישור אישי) — הנוסח מפנה לקישור האישי מהמייל הקודם
     expect(ok.intro).toContain("בקישור האישי שנשלח אליך במייל הקודם");
+    // מיגרציה 39: מייל האישור עם טוקן משלו — הנוסח מפנה לכפתור, והכפתור במייל
+    const token = "ab".repeat(32);
+    const withLink = copyFor("booking_confirmed", { ...p, manage_token: token }, b)!;
+    expect(withLink.intro).toContain("מחכים לך בעמוד ההזמנה — בכפתור שלמטה");
+    expect(withLink.intro).not.toContain("במייל הקודם");
+    const mail = renderBookingEmail(
+      "booking_confirmed",
+      "guest",
+      { ...p, manage_token: token },
+      { business: b, bookingUrl: null, siteOrigin: "https://site.example", escape: (x) => x },
+    )!;
+    expect(mail.html).toContain(`https://site.example/stay/my-booking#t=${token}`);
     expect(ok.intro).toContain("יסומן כשולם אחרי שהעסק יאשר שקיבל אותו");
   });
 });
