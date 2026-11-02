@@ -9,8 +9,8 @@
 1. **E1–E3** (U2–U8 ב-`release-f-deploy.md`), נעוץ ב-`2e53763` — **בלי שינוי**. U1 (גיבוי) כבר רץ.
    **הפקודה הבאה לשרת היא עדיין U2.**
 2. **F** (FU1–FU8 ב-`release-f-deploy.md`), נעוץ ב-`2d0b5f0` — מיגרציה 32 — **בלי שינוי**.
-3. **רק אחרי ש-F עובד ונבדק — G** (GU1–GU8 כאן), נעוץ ב-`b67f7ff`: שש מיגרציות (33–38) ובנייה
-   מחדש. (בגרסה הקודמת של המסמך: `f0c5bb9` ושלוש מיגרציות — הוחלף; שום דבר מזה עוד לא רץ בשרת.)
+3. **רק אחרי ש-F עובד ונבדק — G** (GU1–GU8 כאן), נעוץ ב-`f6bc626`: שבע מיגרציות (33–39) ובנייה
+   מחדש. (בגרסאות קודמות של המסמך: `f0c5bb9` / `b67f7ff` — הוחלף; שום דבר מזה עוד לא רץ בשרת.)
 
 כל שלב נבדק לבד, ולכל אחד גיבוי ותג image משלו (`before-e1-e2-e3`, `before-f`, `before-g`) — חזרה
 מהירה לנקודה האחרונה שעבדה.
@@ -29,6 +29,7 @@
 | אבטחה | `20261105130000_hosp_rate_check.sql` (36) | מונה הקצב המשותף: ניסיון שנחסם כבר לא "שורף" מכסות של כללים אחרים (העסק, הרשת, אסימון CAPTCHA); נעילה לכל מונה — נכון גם בבקשות מקבילות. אותן מגבלות |
 | תשלומים | `20261105140000_hosp_payment_instructions.sql` (37) | הוראות תשלום לאורחים: העברה בנקאית, Bit, תשלום טלפוני, הוראות משלכם. בעלי העסק בלבד עורכים; האורח רואה אותן בעמוד ההזמנה שלו אחרי האישור. ההוראות אינן אישור תשלום |
 | האתר | `20261105150000_hosp_unit_photos_public.sql` (38) | התמונות שבעל העסק מעלה ליחידה מופיעות באתר הציבורי, בתצוגה המקדימה ובתמונת השיתוף (עד עכשיו: "התמונות יעלו בקרוב") |
+| אורחים | `20261105160000_hosp_confirm_link.sql` (39) | קישור אישי לעמוד ההזמנה גם במייל "ההזמנה אושרה": טוקן שני שנוצר באישור (רק hash במסד, נמחק מהמייל אחרי השליחה); הקישור מהמייל הראשון ממשיך לעבוד |
 | מסלול עסק חדש | — | טופס ההזמנה לא דוחה אורח שממלא מהר; "הבקשה התקבלה" נפתח מלמעלה; התשלומים מתעדכנים אחרי אישור; רישום תשלום בלי ברירות מחדל שגויות; טקסטים |
 | מוכנות מסחרית | — | מה קורה אחרי הניסיון, החבילות כפי שהוגדרו בפלטפורמה, מעבר לחבילה בתשלום דרך פנייה, "עזרה ותמיכה" בכל מסך |
 
@@ -36,15 +37,17 @@
 
 - **G תלוי במיגרציה 32 (F):** מיגרציה 34 מגדירה מחדש את פונקציות העזר של לוח הבקרה ממיגרציה 32
   (אותן חתימות, אותן תוצאות — נבדק). לכן G רק אחרי F. אם 32 לא רצה, הבדיקה היבשה (GU3) תראה יותר
-  משש שורות — **עוצרים.**
-- **33–38 תואמות לאחור:** האפליקציה של F (`2d0b5f0`) ממשיכה לעבוד מעליהן.
+  משבע שורות — **עוצרים.**
+- **33–39 תואמות לאחור:** האפליקציה של F (`2d0b5f0`) ממשיכה לעבוד מעליהן.
   - היא לא קוראת לפונקציות החדשות;
   - לוח הבקרה מחזיר אותם מספרים;
   - ב-`management_context()` נוסף רק המפתח `site`, ו-`policy` נשאר;
   - `rate_check` (36) — אותה חתימה ואותה צורת תשובה;
-  - `_public_media` (38) פנימית — גם האתר של F יתחיל להציג את התמונות של היחידות.
+  - `_public_media` (38) פנימית — גם האתר של F יתחיל להציג את התמונות של היחידות;
+  - `approve_booking` ו-`get_booking_by_token` (39) — אותן חתימות ואותה תשובה; גם האפליקציה של F תציג
+    את הכפתור במייל האישור (הקישור עובד).
   - לכן המיגרציות קודם (GU4) והבנייה אחריהן (GU6–GU7), ובדקות שביניהן האתר ממשיך לעבוד.
-- **הגרסה החדשה של האפליקציה צריכה את 33–38.** אם היא עולה לפני המיגרציות:
+- **הגרסה החדשה של האפליקציה צריכה את 33–39.** אם היא עולה לפני המיגרציות:
   - "תמיכה", "דוחות" ו"הקמת העסק" יציגו "המסך לא נטען";
   - ב"הגדרות העסק" הכרטיס "תשלום מאורחים" לא ייטען; האורחים יראו את נוסח התשלום הטלפוני (כמו היום);
   - התמונות של היחידות לא יופיעו באתר (כמו היום);
@@ -80,26 +83,26 @@ mkdir -p /root/backups/nuriel-shop/before-g && chmod 700 /root/backups/nuriel-sh
 3. `2d0b5f0 …`.
 4. התגים `latest`, `pre-hospitality`, `before-e1-e2-e3`, `before-f`, `before-g`.
 
-### GU2 — הקוד (נעוץ ב-`b67f7ff`)
+### GU2 — הקוד (נעוץ ב-`f6bc626`)
 
 ```bash
-cd /root/nuriel-shop-git && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge --ff-only b67f7ff && git log --oneline -1 && cp -r supabase/rollbacks /root/backups/nuriel-shop/before-g/rollbacks && ls /root/backups/nuriel-shop/before-g/rollbacks | grep -c 20261105
+cd /root/nuriel-shop-git && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge --ff-only f6bc626 && git log --oneline -1 && cp -r supabase/rollbacks /root/backups/nuriel-shop/before-g/rollbacks && ls /root/backups/nuriel-shop/before-g/rollbacks | grep -c 20261105
 ```
 
 **מצופה:**
-- **שורת ה-fetch** תראה את ה-commit **האחרון** בענף (מסמכים שנוספו אחרי `b67f7ff`). זה בסדר: ה-merge
-  נעוץ ב-`b67f7ff`, הקוד של שלב G.
-- `Updating 2d0b5f0..b67f7ff`, `Fast-forward`;
-- `b67f7ff Hospitality commercial readiness: the trial, what happens after it, the plans, and support from every screen`;
-- `7` (קובצי ה-rollback של 32–38).
+- **שורת ה-fetch** תראה את ה-commit **האחרון** בענף (מסמכים שנוספו אחרי `f6bc626`). זה בסדר: ה-merge
+  נעוץ ב-`f6bc626`, הקוד של שלב G.
+- `Updating 2d0b5f0..f6bc626`, `Fast-forward`;
+- `f6bc626 Hospitality plan card: the real billing process — a payment link after the trial, billing outside the system`;
+- `8` (קובצי ה-rollback של 32–39).
 
-### GU3 — בדיקה יבשה: בדיוק שש מיגרציות ממתינות
+### GU3 — בדיקה יבשה: בדיוק שבע מיגרציות ממתינות
 
 ```bash
 cd /root/nuriel-shop-git && ls supabase/migrations/*.sql | xargs -n1 basename | LC_ALL=C sort > /root/backups/nuriel-shop/before-g/files.txt && LC_ALL=C comm -23 /root/backups/nuriel-shop/before-g/files.txt /root/backups/nuriel-shop/before-g/applied-before.txt
 ```
 
-**מצופה:** שש שורות בדיוק, בסדר הזה:
+**מצופה:** שבע שורות בדיוק, בסדר הזה:
 
 - `20261105100000_hosp_support.sql`
 - `20261105110000_hosp_reports.sql`
@@ -107,6 +110,7 @@ cd /root/nuriel-shop-git && ls supabase/migrations/*.sql | xargs -n1 basename | 
 - `20261105130000_hosp_rate_check.sql`
 - `20261105140000_hosp_payment_instructions.sql`
 - `20261105150000_hosp_unit_photos_public.sql`
+- `20261105160000_hosp_confirm_link.sql`
 
 **אחרת — עוצרים.**
 
@@ -163,20 +167,28 @@ cd /root/nuriel-shop-git && docker exec -i nuriel-shop-db psql -U postgres -d po
 
 **מצופה:** `38 ok`.
 
+**GU4g — מיגרציה 39 (קישור במייל האישור):**
+
+```bash
+cd /root/nuriel-shop-git && docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < supabase/migrations/20261105160000_hosp_confirm_link.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "INSERT INTO public._migrations_applied (filename) VALUES ('20261105160000_hosp_confirm_link.sql')" && echo "39 ok"
+```
+
+**מצופה:** `39 ok`.
+
 ### GU5 — בדיקה ורענון ה-API
 
 ```bash
-docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public._migrations_applied WHERE filename IN ('20261105100000_hosp_support.sql', '20261105110000_hosp_reports.sql', '20261105120000_hosp_setup_guide.sql', '20261105130000_hosp_rate_check.sql', '20261105140000_hosp_payment_instructions.sql', '20261105150000_hosp_unit_photos_public.sql')), (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r'), (SELECT relrowsecurity FROM pg_class WHERE oid = 'hospitality.setup_state'::regclass), (SELECT relrowsecurity FROM pg_class WHERE oid = 'hospitality.support_tickets'::regclass), (SELECT relrowsecurity FROM pg_class WHERE oid = 'hospitality.payment_settings'::regclass), (SELECT count(*) FROM storage.buckets WHERE id = 'hosp-support' AND NOT public), has_function_privilege('anon', 'hospitality.reports_view(date,date,uuid[],text[],text[])', 'EXECUTE'), has_function_privilege('anon', 'hospitality.setup_guide()', 'EXECUTE'), has_function_privilege('anon', 'hospitality.support_open(text,text,text,text,jsonb)', 'EXECUTE'), has_function_privilege('anon', 'hospitality.payment_settings_save(jsonb,integer)', 'EXECUTE'), has_function_privilege('anon', 'hospitality.rate_check(jsonb)', 'EXECUTE'), (SELECT prosrc LIKE '%pg_advisory_xact_lock%' FROM pg_proc WHERE oid = 'hospitality.rate_check(jsonb)'::regprocedure), (SELECT prosrc LIKE '%m.unit_id = _unit%' FROM pg_proc WHERE oid = 'hospitality._public_media(uuid,text,uuid,uuid)'::regprocedure)" && docker exec nuriel-shop-db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema'"
+docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public._migrations_applied WHERE filename IN ('20261105100000_hosp_support.sql', '20261105110000_hosp_reports.sql', '20261105120000_hosp_setup_guide.sql', '20261105130000_hosp_rate_check.sql', '20261105140000_hosp_payment_instructions.sql', '20261105150000_hosp_unit_photos_public.sql', '20261105160000_hosp_confirm_link.sql')), (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r'), (SELECT relrowsecurity FROM pg_class WHERE oid = 'hospitality.setup_state'::regclass), (SELECT relrowsecurity FROM pg_class WHERE oid = 'hospitality.support_tickets'::regclass), (SELECT relrowsecurity FROM pg_class WHERE oid = 'hospitality.payment_settings'::regclass), (SELECT count(*) FROM storage.buckets WHERE id = 'hosp-support' AND NOT public), has_function_privilege('anon', 'hospitality.reports_view(date,date,uuid[],text[],text[])', 'EXECUTE'), has_function_privilege('anon', 'hospitality.setup_guide()', 'EXECUTE'), has_function_privilege('anon', 'hospitality.support_open(text,text,text,text,jsonb)', 'EXECUTE'), has_function_privilege('anon', 'hospitality.payment_settings_save(jsonb,integer)', 'EXECUTE'), has_function_privilege('anon', 'hospitality.rate_check(jsonb)', 'EXECUTE'), (SELECT prosrc LIKE '%pg_advisory_xact_lock%' FROM pg_proc WHERE oid = 'hospitality.rate_check(jsonb)'::regprocedure), (SELECT prosrc LIKE '%m.unit_id = _unit%' FROM pg_proc WHERE oid = 'hospitality._public_media(uuid,text,uuid,uuid)'::regprocedure), (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'bookings' AND column_name = 'manage_token2_hash')" && docker exec nuriel-shop-db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema'"
 ```
 
 **מצופה:**
-- `6|37|t|t|t|1|f|f|f|f|f|t|t`:
-  - 6 מיגרציות נרשמו;
+- `7|37|t|t|t|1|f|f|f|f|f|t|t|1`:
+  - 7 מיגרציות נרשמו;
   - 37 טבלאות (31 + 4 של התמיכה + 1 של המדריך + 1 של הוראות התשלום);
   - RLS פעיל בטבלאות החדשות;
   - הדלי `hosp-support` קיים ופרטי;
   - אורח לא מחובר לא יכול לקרוא לפונקציות החדשות של הצוות, וגם לא למונה הקצב;
-  - מונה הקצב — הגרסה של 36 (עם נעילה); התמונות — הגרסה של 38.
+  - מונה הקצב — הגרסה של 36 (עם נעילה); התמונות — הגרסה של 38; הטוקן השני של 39 קיים.
 - אחריו `NOTIFY`.
 
 (נבדק על מסד מקומי עם כל המיגרציות: בדיוק הפלט הזה.)
@@ -240,10 +252,14 @@ docker logs --since 5m nuriel-shop-app 2>&1 | grep -iE "error|fatal" | tail -20
    docker tag nuriel-shop-app-app:before-g nuriel-shop-app-app:latest && cd /root/nuriel-shop-git && docker compose up -d && docker compose ps
    ```
 
-   - ה-image של F עולה מיד, בלי בנייה, והוא עובד מעל 33–38 (תואמות לאחור).
-   - **התיקייה נשארת על `b67f7ff`.** לא בונים ממנה שוב עד שמחליטים איך ממשיכים.
+   - ה-image של F עולה מיד, בלי בנייה, והוא עובד מעל 33–39 (תואמות לאחור).
+   - **התיקייה נשארת על `f6bc626`.** לא בונים ממנה שוב עד שמחליטים איך ממשיכים.
 
-2. **המסד — רק אם צריך, בסדר הפוך (38 → 37 → 36 → 35 → 34 → 33), פקודה לכל מיגרציה:**
+2. **המסד — רק אם צריך, בסדר הפוך (39 → 38 → 37 → 36 → 35 → 34 → 33), פקודה לכל מיגרציה:**
+
+   ```bash
+   docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 < /root/backups/nuriel-shop/before-g/rollbacks/20261105160000_hosp_confirm_link.down.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "DELETE FROM public._migrations_applied WHERE filename = '20261105160000_hosp_confirm_link.sql'" && echo "39 down"
+   ```
 
    ```bash
    docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 < /root/backups/nuriel-shop/before-g/rollbacks/20261105150000_hosp_unit_photos_public.down.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "DELETE FROM public._migrations_applied WHERE filename = '20261105150000_hosp_unit_photos_public.sql'" && echo "38 down"
@@ -280,6 +296,8 @@ docker logs --since 5m nuriel-shop-app 2>&1 | grep -iE "error|fatal" | tail -20
    ```
 
    **מה נמחק:**
+   - **39:** הטוקן השני — הקישורים שנשלחו במיילי האישור מפסיקים לעבוד; הקישורים מהמייל הראשון ממשיכים.
+     מיילי אישור חדשים — שוב בלי קישור.
    - **38:** פונקציה בלבד — התמונות של היחידות שוב לא מופיעות באתר (כמו לפני). התמונות עצמן נשארות.
    - **37:** הטבלה של הוראות התשלום (העותק נשמר בצעד שלפני) והפונקציות שלה. מצב התשלום של ההזמנות
      ויומן התשלומים לא נוגעים; האורחים רואים שוב את נוסח התשלום הטלפוני. מדריך ההקמה חוזר לגרסה של 35.
@@ -292,5 +310,5 @@ docker logs --since 5m nuriel-shop-app 2>&1 | grep -iE "error|fatal" | tail -20
 
    **מה נשאר:** הזמנות, תשלומים, אורחים, תמונות, האתר ושאר הנתונים.
 
-   (נבדק מקומית: rollback של כל מיגרציה מחזיר את הסכמה בדיוק למצב שלפניה, והמחזור 38 → 1 → 38
+   (נבדק מקומית: rollback של כל מיגרציה מחזיר את הסכמה בדיוק למצב שלפניה, והמחזור 39 → 1 → 39
    זהה למקור.)
