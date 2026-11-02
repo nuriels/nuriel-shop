@@ -92,6 +92,7 @@ M40=20261105170000_hosp_portal_open
 M41=20261105180000_hosp_unit_size
 M42=20261105190000_hosp_logo_brand
 M43=20261105200000_hosp_open_dates
+M44=20261105210000_hosp_booking_groups
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -112,6 +113,36 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- several rooms in one request (migration 44) ----------
+expect "before the rollback: bookings have a group; the group functions exist" \
+  "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'bookings' AND column_name = 'group_id')
+      AND to_regprocedure('hospitality.request_booking_group(jsonb,date,date,text,text,text,text,boolean,text,boolean,text)') IS NOT NULL
+      AND to_regprocedure('hospitality.booking_group_decide(uuid,boolean,text)') IS NOT NULL"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M44" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M44"
+down "$M44"
+expect "the group column, its index and the four functions are gone" \
+  "SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'bookings' AND column_name = 'group_id')
+      AND to_regclass('hospitality.bookings_group_idx') IS NULL
+      AND to_regprocedure('hospitality.public_free_units(date,date)') IS NULL
+      AND to_regprocedure('hospitality.request_booking_group(jsonb,date,date,text,text,text,text,boolean,text,boolean,text)') IS NULL
+      AND to_regprocedure('hospitality.booking_group(uuid)') IS NULL
+      AND to_regprocedure('hospitality.booking_group_decide(uuid,boolean,text)') IS NULL"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m43.sql"
+schema_dump "$SCHEMA_DIR/after-m44-down.sql"
+if diff -q "$SCHEMA_DIR/m43.sql" "$SCHEMA_DIR/after-m44-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 43, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 43:"; diff "$SCHEMA_DIR/m43.sql" "$SCHEMA_DIR/after-m44-down.sql" | head -20; exit 1
+fi
 
 # ---------- open dates (migration 43) ----------
 expect "before the rollback: units have an open-dates column; opening and the reminder exist" \
@@ -1128,7 +1159,7 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1 … $M43"
+echo "re-apply: $M1 … $M44"
 up "$M1"
 up "$M2"
 up "$M3"
@@ -1172,6 +1203,7 @@ up "$M40"
 up "$M41"
 up "$M42"
 up "$M43"
+up "$M44"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -1217,7 +1249,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 43 → 1 and re-apply 1 → 43 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 44 → 1 and re-apply 1 → 44 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi
