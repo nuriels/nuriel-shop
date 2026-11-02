@@ -17,7 +17,8 @@ export type NavKey =
   | "settings"
   | "team"
   | "support"
-  | "reports";
+  | "reports"
+  | "setup";
 
 export type NavGroupKey = "operations" | "place" | "site" | "account";
 
@@ -46,7 +47,8 @@ export type NavPath =
   | "/manage/pricing"
   | "/manage/policies"
   | "/manage/support"
-  | "/manage/reports";
+  | "/manage/reports"
+  | "/manage/setup";
 
 export interface NavItem {
   key: NavKey;
@@ -164,6 +166,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: "site",
     permission: "settings",
     keywords: "עורך תבנית",
+  },
+  {
+    key: "setup",
+    label: "הקמת העסק",
+    to: "/manage/setup",
+    group: "account",
+    permission: "settings",
+    keywords: "התחלה צעדים מדריך אשף פרסום מוכן",
   },
   {
     key: "settings",

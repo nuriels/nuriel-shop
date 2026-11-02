@@ -108,6 +108,13 @@ function SettingsForm({ initial }: { initial: SettingsView }) {
     if (notice || serverError) noticeRef.current?.focus();
   }, [notice, serverError]);
 
+  // מדריך ההקמה מוביל לאזור (#business / #times / #rules …): גלילה אליו אחרי שהטופס נטען
+  useEffect(() => {
+    const key = window.location.hash.slice(1);
+    if (!/^[a-z]{2,20}$/.test(key)) return;
+    document.getElementById(`settings-${key}`)?.scrollIntoView({ block: "start" });
+  }, []);
+
   const set = <K extends keyof FormValues>(key: K, value: FormValues[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
@@ -207,7 +214,12 @@ function SettingsForm({ initial }: { initial: SettingsView }) {
       )}
 
       {sections.map((section) => (
-        <Card key={section.key} data-section={section.key}>
+        <Card
+          key={section.key}
+          id={`settings-${section.key}`}
+          data-section={section.key}
+          className="scroll-mt-20"
+        >
           <CardHeader>
             <CardTitle className="text-lg">
               <h2>{section.title}</h2>

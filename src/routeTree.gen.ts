@@ -54,6 +54,7 @@ import { Route as ManagePricingRouteImport } from './routes/manage.pricing'
 import { Route as ManageReportsRouteImport } from './routes/manage.reports'
 import { Route as ManageRoomTypesRouteImport } from './routes/manage.room-types'
 import { Route as ManageSettingsRouteImport } from './routes/manage.settings'
+import { Route as ManageSetupRouteImport } from './routes/manage.setup'
 import { Route as ManageSupportRouteImport } from './routes/manage.support'
 import { Route as ManageTeamRouteImport } from './routes/manage.team'
 import { Route as ManageUnitsRouteImport } from './routes/manage.units'
@@ -322,6 +323,11 @@ const ManageRoomTypesRoute = ManageRoomTypesRouteImport.update({
 const ManageSettingsRoute = ManageSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => ManageRoute,
+} as any)
+const ManageSetupRoute = ManageSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
   getParentRoute: () => ManageRoute,
 } as any)
 const ManageSupportRoute = ManageSupportRouteImport.update({
@@ -594,6 +600,7 @@ export interface FileRoutesByFullPath {
   '/manage/reports': typeof ManageReportsRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
+  '/manage/setup': typeof ManageSetupRoute
   '/manage/support': typeof ManageSupportRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
@@ -683,6 +690,7 @@ export interface FileRoutesByTo {
   '/manage/reports': typeof ManageReportsRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
+  '/manage/setup': typeof ManageSetupRoute
   '/manage/support': typeof ManageSupportRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
@@ -775,6 +783,7 @@ export interface FileRoutesById {
   '/manage/reports': typeof ManageReportsRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
   '/manage/settings': typeof ManageSettingsRoute
+  '/manage/setup': typeof ManageSetupRoute
   '/manage/support': typeof ManageSupportRoute
   '/manage/team': typeof ManageTeamRoute
   '/manage/units': typeof ManageUnitsRoute
@@ -868,6 +877,7 @@ export interface FileRouteTypes {
     | '/manage/reports'
     | '/manage/room-types'
     | '/manage/settings'
+    | '/manage/setup'
     | '/manage/support'
     | '/manage/team'
     | '/manage/units'
@@ -957,6 +967,7 @@ export interface FileRouteTypes {
     | '/manage/reports'
     | '/manage/room-types'
     | '/manage/settings'
+    | '/manage/setup'
     | '/manage/support'
     | '/manage/team'
     | '/manage/units'
@@ -1048,6 +1059,7 @@ export interface FileRouteTypes {
     | '/manage/reports'
     | '/manage/room-types'
     | '/manage/settings'
+    | '/manage/setup'
     | '/manage/support'
     | '/manage/team'
     | '/manage/units'
@@ -1474,6 +1486,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageSettingsRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/setup': {
+      id: '/manage/setup'
+      path: '/setup'
+      fullPath: '/manage/setup'
+      preLoaderRoute: typeof ManageSetupRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/support': {
       id: '/manage/support'
       path: '/support'
@@ -1797,6 +1816,7 @@ interface ManageRouteChildren {
   ManageReportsRoute: typeof ManageReportsRoute
   ManageRoomTypesRoute: typeof ManageRoomTypesRoute
   ManageSettingsRoute: typeof ManageSettingsRoute
+  ManageSetupRoute: typeof ManageSetupRoute
   ManageSupportRoute: typeof ManageSupportRoute
   ManageTeamRoute: typeof ManageTeamRoute
   ManageUnitsRoute: typeof ManageUnitsRoute
@@ -1822,6 +1842,7 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManageReportsRoute: ManageReportsRoute,
   ManageRoomTypesRoute: ManageRoomTypesRoute,
   ManageSettingsRoute: ManageSettingsRoute,
+  ManageSetupRoute: ManageSetupRoute,
   ManageSupportRoute: ManageSupportRoute,
   ManageTeamRoute: ManageTeamRoute,
   ManageUnitsRoute: ManageUnitsRoute,

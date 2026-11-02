@@ -8,6 +8,7 @@ import {
   Images,
   LayoutDashboard,
   LifeBuoy,
+  ListChecks,
   Mail,
   Palette,
   Settings,
@@ -35,4 +36,5 @@ export const NAV_ICONS: Record<NavKey, LucideIcon> = {
   team: UserCog,
   support: LifeBuoy,
   reports: BarChart3,
+  setup: ListChecks,
 };

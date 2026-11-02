@@ -1,4 +1,5 @@
-// רשימת ההקמה בלוח הבקרה: חמישה צעדים שהמסד מחשב (management_context.checklist)
+// רשימת ההקמה בלוח הבקרה: חמש אבני הדרך שהמסד מחשב (management_context.checklist) — פרטים /
+// יחידה / תמונות / מחירים / האתר מוכן לפרסום. כל הצעדים בפירוט — במדריך ההקמה (/manage/setup).
 import type { ChecklistKey } from "../../types/management";
 
 export interface ChecklistStep {
@@ -7,11 +8,7 @@ export interface ChecklistStep {
   hint: string;
   /** המסך שבו משלימים את הצעד (כשכבר קיים) */
   to?:
-    | "/manage/settings"
-    | "/manage/units"
-    | "/manage/photos"
-    | "/manage/pricing"
-    | "/manage/policies";
+    "/manage/settings" | "/manage/units" | "/manage/photos" | "/manage/pricing" | "/manage/setup";
 }
 
 export const CHECKLIST_STEPS: readonly ChecklistStep[] = [
@@ -35,10 +32,10 @@ export const CHECKLIST_STEPS: readonly ChecklistStep[] = [
   },
   { key: "prices", title: "מחירים", hint: "מחיר ללילה ליחידה פעילה", to: "/manage/pricing" },
   {
-    key: "policy",
-    title: "מדיניות ביטול",
-    hint: "לבדוק את תנאי הביטול ולהתאים אותם לעסק",
-    to: "/manage/policies",
+    key: "site",
+    title: "האתר מוכן לפרסום",
+    hint: "תבנית, ויחידה פעילה עם מחיר ותמונה משלה",
+    to: "/manage/setup",
   },
 ];
 

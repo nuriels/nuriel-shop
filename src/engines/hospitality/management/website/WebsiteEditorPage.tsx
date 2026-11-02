@@ -6,6 +6,7 @@
 // כל שינוי מוצג מיד בתצוגה המקדימה (אותו רנדרר כמו האתר) ונשמר אוטומטית לטיוטה (revision —
 // עריכה מקבילה ממקום אחר מזוהה). הגולשים רואים רק מה שפורסם.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearch } from "@tanstack/react-router";
 import {
   ArrowDown,
   ArrowUp,
@@ -73,6 +74,7 @@ import { THEME_LIST, THEMES, themeColors } from "../../website/theme/themes";
 import { errorText } from "../catalog/refresh";
 import { formatDateTime } from "../lib/format";
 import { manageKeys } from "../lib/query-keys";
+import { editorTab } from "../setup/model";
 import { FontField, LogoField } from "./BrandFields";
 import { SectionFields } from "./SectionFields";
 import { SeoPanel } from "./SeoFields";
@@ -158,7 +160,9 @@ function Editor({
     [],
   );
   // הלשונית והמקטע הפתוח (לחיצה על מקטע בתצוגה המקדימה פותחת אותו כאן)
-  const [tab, setTab] = useState("sections");
+  // מדריך ההקמה מוביל ישר ללשונית (?tab=design / seo / publish)
+  const linkedTab = editorTab((useSearch({ strict: false }) as Record<string, unknown>)["tab"]);
+  const [tab, setTab] = useState<string>(linkedTab ?? "sections");
   const [openSection, setOpenSection] = useState<string | null>(null);
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {

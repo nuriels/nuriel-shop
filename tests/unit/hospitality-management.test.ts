@@ -240,6 +240,7 @@ describe("navigation", () => {
       "emails",
       "channels",
       "website",
+      "setup",
       "settings",
       "team",
       "support",
@@ -304,7 +305,7 @@ describe("setup checklist", () => {
       percent: 40,
     });
     expect(
-      checklistProgress({ business: true, units: true, photos: true, prices: true, policy: true }),
+      checklistProgress({ business: true, units: true, photos: true, prices: true, site: true }),
     ).toMatchObject({ done: 5, complete: true });
   });
 });
@@ -317,7 +318,7 @@ describe("plan notice", () => {
     flags: { management: true, frontend: false, booking: false },
     site: { name: "x", slug: "x", status: "active" },
     business: { name: "x", timezone: "Asia/Jerusalem", currency: "ILS" },
-    checklist: { business: false, units: false, photos: false, prices: false, policy: false },
+    checklist: { business: false, units: false, photos: false, prices: false, site: false },
     entitlements: { active: true, max_units: 5, units_used: 1, ...e },
   });
 

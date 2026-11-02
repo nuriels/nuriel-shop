@@ -296,6 +296,14 @@ function SetupChecklist() {
           העסק מוכן — {progress.done} מתוך {progress.total} צעדים הושלמו
         </summary>
         {list}
+        {ctx.permissions["settings"] === true && (
+          <Link
+            to="/manage/setup"
+            className="mt-3 inline-flex min-h-10 items-center rounded-lg px-1 text-sm font-semibold text-[var(--hm-lagoon-700)] hover:underline"
+          >
+            למדריך ההקמה המלא — לוגו, גוגל, מקדמה ועוד
+          </Link>
+        )}
       </details>
     );
   return (
@@ -303,9 +311,20 @@ function SetupChecklist() {
       title="הקמת העסק"
       description={`${progress.done} מתוך ${progress.total} צעדים הושלמו`}
       actions={
-        <span className="text-sm font-bold text-[var(--hm-lagoon-700)]" data-num="">
-          {progress.percent}%
-        </span>
+        <>
+          <span className="text-sm font-bold text-[var(--hm-lagoon-700)]" data-num="">
+            {progress.percent}%
+          </span>
+          {ctx.permissions["settings"] === true && (
+            <Link
+              to="/manage/setup"
+              className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-sm font-semibold text-[var(--hm-lagoon-700)] hover:underline"
+            >
+              למדריך ההקמה
+              <span className="sr-only"> — כל הצעדים, וממשיכים מאיפה שעצרתם</span>
+            </Link>
+          )}
+        </>
       }
       className="border-[var(--hm-champagne-100)] bg-[linear-gradient(180deg,#fffdf8,#fff)]"
     >

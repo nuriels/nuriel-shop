@@ -177,7 +177,7 @@ SELECT pg_temp.after('context: the owner gets role, every permission, full plan 
        AND $1 -> 'flags' = '{"management": true, "frontend": false, "booking": true}'::jsonb
        AND $1 -> 'business' ->> 'name' = 'אירוח M' AND $1 -> 'business' ->> 'timezone' = 'Asia/Jerusalem'
        AND $1 -> 'site' ->> 'slug' = 'h2a-m'
-       AND $1 -> 'checklist' = '{"business": false, "units": false, "photos": false, "prices": false, "policy": false}'::jsonb$$);
+       AND $1 -> 'checklist' = '{"business": false, "units": false, "photos": false, "prices": false, "policy": false, "site": false}'::jsonb$$);
 SELECT pg_temp.after('context: a manager gets no team / plan / guest-privacy permission and no plan details',
   format($$SELECT pg_temp.ctx(%L, %L)$$, :'sm', :MGR1),
   $$SELECT $1 ->> 'role' = 'manager'
@@ -219,14 +219,14 @@ INSERT INTO hospitality.units (id, tenant_id, property_id, name, slug, base_pric
 VALUES ('72a30000-0000-0000-0000-0000000000a1', :'sm', '72a20000-0000-0000-0000-0000000000a1', 'צימר M', 'zm', 0);
 SELECT pg_temp.after('checklist: business details and a unit are done; prices, photos and policy are not yet',
   format($$SELECT pg_temp.ctx(%L, %L)$$, :'sm', :OWNER_M),
-  $$SELECT $1 -> 'checklist' = '{"business": true, "units": true, "photos": false, "prices": false, "policy": false}'::jsonb$$);
+  $$SELECT $1 -> 'checklist' = '{"business": true, "units": true, "photos": false, "prices": false, "policy": false, "site": false}'::jsonb$$);
 UPDATE hospitality.units SET base_price = 650 WHERE id = '72a30000-0000-0000-0000-0000000000a1';
 INSERT INTO hospitality.media (tenant_id, owner_kind, kind, storage_path)
 VALUES (:'sm', 'site', 'image', :'sm' || '/cover.webp');
 UPDATE hospitality.policies SET free_cancel_days = 10 WHERE tenant_id = :'sm' AND is_default;
-SELECT pg_temp.after('checklist: all five steps done after prices, a photo and a reviewed policy',
+SELECT pg_temp.after('checklist: prices, a photo and a reviewed policy done; "site" (ready to publish, migration 35) not yet — no design, no unit photo',
   format($$SELECT pg_temp.ctx(%L, %L)$$, :'sm', :OWNER_M),
-  $$SELECT $1 -> 'checklist' = '{"business": true, "units": true, "photos": true, "prices": true, "policy": true}'::jsonb$$);
+  $$SELECT $1 -> 'checklist' = '{"business": true, "units": true, "photos": true, "prices": true, "policy": true, "site": false}'::jsonb$$);
 
 -- ============================================================
 -- 3. Email outbox: no direct read, safe status

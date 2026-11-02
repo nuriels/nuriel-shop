@@ -2,7 +2,8 @@
 
 export type ManagementRole = "owner" | "manager";
 
-export const CHECKLIST_KEYS = ["business", "units", "photos", "prices", "policy"] as const;
+/** רשימת ההקמה בלוח הבקרה — חמש אבני הדרך (מיגרציה 35: "site" — האתר מוכן לפרסום) */
+export const CHECKLIST_KEYS = ["business", "units", "photos", "prices", "site"] as const;
 export type ChecklistKey = (typeof CHECKLIST_KEYS)[number];
 
 /** המנוי — לבעלים במלואו; למנהל רק מה שהמסכים צריכים */
@@ -32,7 +33,8 @@ export interface ManagementContext {
   site: { name: string; slug: string; status: "active" | "suspended" };
   business: { name: string; timezone: string; currency: string };
   entitlements: ManagementEntitlements;
-  checklist: Record<ChecklistKey, boolean>;
+  /** policy — עוד מוחזר מהמסד (תאימות לגרסה הקודמת), לא מוצג ברשימה */
+  checklist: Record<ChecklistKey, boolean> & { policy?: boolean };
 }
 
 /** התשובה לפונקציית השרת: מחובר עם הרשאה / לא מחובר / מחובר בלי הרשאה */
