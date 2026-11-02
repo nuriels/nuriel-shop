@@ -119,11 +119,12 @@ export const SETUP_STEP_DEFS: readonly SetupStepDef[] = [
     key: "payments",
     group: "bookings",
     title: "תשלום ומקדמה",
-    hint: "מקדמה (אם יש) ומתי משלמים. התשלום נגבה בטלפון — בלי פרטי כרטיס באתר",
-    to: "/manage/policies",
-    permission: "policies",
+    hint: "איך האורחים משלמים לכם (העברה בנקאית, Bit, טלפון) — והמקדמה במדיניות הביטול",
+    to: "/manage/settings",
+    hash: "payments",
+    permission: "settings",
     kind: "review",
-    cta: "להגדרת המקדמה",
+    cta: "להוראות התשלום",
   },
   {
     key: "template",
@@ -293,14 +294,26 @@ export function stepFact(view: SetupGuideView, key: SetupStepKey): string {
               : " · בלי ביטול חינם"
           }`
         : "אין מדיניות ברירת מחדל";
-    case "payments":
-      return s.payments.deposit_kind === "none"
-        ? "בלי מקדמה — התשלום נגבה בטלפון"
-        : `מקדמה ${
-            s.payments.deposit_kind === "percent"
-              ? `${Number(s.payments.deposit_value)}%`
-              : `₪${Number(s.payments.deposit_value)}`
-          } · ${s.payments.deposit_due === "booking" ? "בהזמנה" : "באישור ההזמנה"}`;
+    case "payments": {
+      const names: Record<string, string> = {
+        bank: "העברה בנקאית",
+        bit: "Bit",
+        phone: "תשלום בטלפון",
+        note: "הוראות משלכם",
+      };
+      const methods = s.payments.methods?.length
+        ? s.payments.methods.map((m) => names[m] ?? m).join(" · ")
+        : "תשלום בטלפון";
+      const deposit =
+        s.payments.deposit_kind === "none"
+          ? "בלי מקדמה"
+          : `מקדמה ${
+              s.payments.deposit_kind === "percent"
+                ? `${Number(s.payments.deposit_value)}%`
+                : `₪${Number(s.payments.deposit_value)}`
+            } ${s.payments.deposit_due === "booking" ? "בהזמנה" : "באישור ההזמנה"}`;
+      return `${methods} · ${deposit}`;
+    }
     case "template":
       return s.template.theme
         ? `תבנית "${THEME_NAMES[s.template.theme] ?? s.template.theme}"`

@@ -267,8 +267,8 @@ SELECT tests.check('coverage: every SECURITY DEFINER function has a fixed, empty
       AND NOT COALESCE('search_path=""' = ANY (p.proconfig), false))$$);
 SELECT tests.check('coverage: anonymous visitors can call exactly the public functions (site, availability, quote, the guest''s own booking by its secret link)',
   $$SELECT array_agg(proname::text ORDER BY proname) = ARRAY['cancellation_quote', 'get_booking_by_token', 'guest_arrival_info',
-      'public_availability', 'public_room_types', 'public_site', 'public_type_availability', 'quote', 'quote_type',
-      'request_cancellation', 'request_tenant', 'site_identity']
+      'guest_payment_info', 'public_availability', 'public_payment_methods', 'public_room_types', 'public_site',
+      'public_type_availability', 'quote', 'quote_type', 'request_cancellation', 'request_tenant', 'site_identity']
       FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace AND has_function_privilege('anon', oid, 'EXECUTE')$$);
 DO $t$
 DECLARE _bad text;
@@ -291,7 +291,8 @@ BEGIN
   SELECT string_agg(f, ', ') INTO _bad
     FROM unnest(ARRAY['rate_check', 'rate_sweep', 'request_booking', 'request_booking_type', 'channel_feed',
                       'channel_sync_service', 'channel_calendars_due', 'payment_provider_record', 'claim_notifications',
-                      'mark_notification', 'expire_holds', 'apply_retention', 'export_guest', 'confirm_payment']) f
+                      'mark_notification', 'expire_holds', 'apply_retention', 'export_guest', 'confirm_payment',
+                      'email_payment_methods', 'support_platform_recipients']) f
    WHERE EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace AND p.proname = f
                     AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE')))
       OR NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace AND p.proname = f

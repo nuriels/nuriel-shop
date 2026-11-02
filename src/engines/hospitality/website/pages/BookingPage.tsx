@@ -14,6 +14,7 @@ import {
   hospitalitySiteQuoteType,
   hospitalitySiteRequestBooking,
   hospitalitySiteRequestBookingType,
+  hospitalitySitePaymentMethods,
 } from "../../api/website.functions";
 import { CAPTCHA_RETRY, TRAP_FIELD } from "../../security/messages";
 import type { PublicUnit } from "../../types/website";
@@ -40,7 +41,25 @@ import {
   type TypeListing,
 } from "../lib/listing";
 import { unitCover } from "../lib/media";
+import { hasInstructions, methodsText } from "../lib/payment";
 import { useSite } from "../lib/site-context";
+
+/**
+ * שורת התשלום בטופס: בלי הוראות תשלום — הנוסח של D4 (נציג העסק יתקשר); עם הוראות (העברה בנקאית /
+ * Bit / הוראות של העסק — מיגרציה 37) — "פרטי התשלום יופיעו בעמוד ההזמנה אחרי האישור".
+ */
+function usePayLine(): string {
+  const t = useCopy();
+  const methods = useQuery({
+    queryKey: ["hosp-site", "payment-methods"],
+    queryFn: () => hospitalitySitePaymentMethods(),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+  return hasInstructions(methods.data)
+    ? t.book.payByInstructions(methodsText(methods.data, t.my.methodNames))
+    : t.book.payByPhone;
+}
 
 function newKey(): string {
   try {
@@ -481,6 +500,7 @@ function QuoteDetails({
   rules: string[];
 }) {
   const t = useCopy();
+  const payLine = usePayLine();
   const { site } = useSite();
   const nights = useMemo(() => {
     // לילות באותו מחיר — שורה אחת ("2 לילות × ₪750")
@@ -540,7 +560,7 @@ function QuoteDetails({
         data-testid="pay-by-phone"
       >
         <Phone className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        {t.book.payByPhone}
+        {payLine}
       </p>
       <div>
         <h3 className="mb-2 font-medium">{t.book.cancellation}</h3>
@@ -581,6 +601,7 @@ function GuestForm({
   onTermsChanged: () => void;
 }) {
   const t = useCopy();
+  const payLine = usePayLine();
   const { site } = useSite();
   const navigate = useNavigate();
   const [fullName, setFullName] = useState("");
@@ -763,7 +784,7 @@ function GuestForm({
       {/* D4: לפני השליחה — שוב, שהתשלום לא כאן */}
       <p className="flex items-start gap-2 text-sm text-muted-foreground">
         <Phone className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        {t.book.payByPhone}
+        {payLine}
       </p>
       {send.isPending && bot.state === "working" && (
         <p role="status" className="text-sm text-muted-foreground">

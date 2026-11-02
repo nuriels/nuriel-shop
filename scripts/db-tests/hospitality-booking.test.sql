@@ -194,8 +194,8 @@ SELECT tests.check('structure: staff cannot update the booking-number counter (n
        AND NOT has_table_privilege('authenticated', 'hospitality.settings', 'UPDATE')$$);
 SELECT tests.check('structure: anon can execute only the public guest functions (+ the site name for the page head, R-1; the guest''s arrival info, 2d; the public site, 4a; room types, RT) — booking requests only through the app server (D1)',
   $$SELECT array_agg(proname::text ORDER BY proname) = ARRAY['cancellation_quote', 'get_booking_by_token', 'guest_arrival_info',
-      'public_availability', 'public_room_types', 'public_site', 'public_type_availability', 'quote', 'quote_type',
-      'request_cancellation', 'request_tenant', 'site_identity']
+      'guest_payment_info', 'public_availability', 'public_payment_methods', 'public_room_types', 'public_site',
+      'public_type_availability', 'quote', 'quote_type', 'request_cancellation', 'request_tenant', 'site_identity']
       FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace AND has_function_privilege('anon', oid, 'EXECUTE')$$);
 SELECT tests.check('structure: system functions are service_role only',
   $$SELECT bool_and(NOT has_function_privilege('authenticated', p.oid, 'EXECUTE') AND has_function_privilege('service_role', p.oid, 'EXECUTE'))

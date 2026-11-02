@@ -141,6 +141,14 @@ async function siteContext(tenantId: string): Promise<SiteContext> {
   const s = settings[0];
   const t = tenants[0];
   const hhmm = (v: string | null | undefined) => (v ? v.slice(0, 5) : null);
+  // מיגרציה 37: אילו אמצעי תשלום העסק מקבל (לנוסח המייל, בלי פרטים). לפני המיגרציה — טלפון, כמו היום
+  let paymentMethods: string[] = ["phone"];
+  try {
+    const m = await rpc<string[] | null>("email_payment_methods", { _tenant_id: tenantId });
+    if (Array.isArray(m)) paymentMethods = m;
+  } catch {
+    paymentMethods = ["phone"];
+  }
   return {
     business: {
       name: s?.business_name?.trim() || t?.name || "העסק",
@@ -149,6 +157,7 @@ async function siteContext(tenantId: string): Promise<SiteContext> {
       address: s?.address ?? null,
       checkInTime: hhmm(s?.check_in_time),
       checkOutTime: hhmm(s?.check_out_time),
+      paymentMethods,
     },
     origin: t ? await siteOrigin({ slug: t.slug, domain: t.domain }) : null,
     replyTo: s?.contact_email ?? null,

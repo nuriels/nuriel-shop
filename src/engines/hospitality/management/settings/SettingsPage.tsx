@@ -44,6 +44,7 @@ import {
   type FormValues,
 } from "./model";
 import { DaysField, EmailListField, SelectField, TextField } from "../lib/fields";
+import { PaymentInstructionsCard } from "./PaymentInstructionsCard";
 
 interface Notice {
   remoteChanged: SettingsKey[];
@@ -79,7 +80,15 @@ export function SettingsPage() {
       </div>
     );
   }
-  return <SettingsForm initial={settings.data} />;
+  return (
+    <>
+      <SettingsForm initial={settings.data} />
+      {/* מיגרציה 37: תשלום מאורחים — טופס נפרד (שמירה משלו, בעלי העסק בלבד) */}
+      <div className="mx-auto mt-6 w-full max-w-3xl">
+        <PaymentInstructionsCard />
+      </div>
+    </>
+  );
 }
 
 function SettingsForm({ initial }: { initial: SettingsView }) {

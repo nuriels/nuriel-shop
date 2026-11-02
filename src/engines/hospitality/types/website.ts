@@ -2,6 +2,7 @@
 // רק מידע ציבורי: בלי פרטי אורחים, קודי כניסה, הערות פנימיות או כללי מחיר.
 import type { ArrivalValues } from "./catalog";
 import type { GuestBookingView } from "./domain";
+import type { GuestPaymentInfo } from "./payment-instructions";
 export interface PublicMedia {
   id: string;
   kind: "image" | "video" | "embed";
@@ -211,4 +212,6 @@ export interface GuestArrival {
 export interface SiteGuestBooking {
   booking: GuestBookingView;
   arrival: GuestArrival | null;
+  /** מיגרציה 37: הוראות התשלום (לפני המיגרציה / כשהמסד לא ענה — null) */
+  payment: GuestPaymentInfo | null;
 }

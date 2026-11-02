@@ -151,9 +151,14 @@ describe("setup guide: states and texts", () => {
     expect(stepFact(v, "photos")).toBe("3 תמונות · יחידה אחת בלי תמונה משלה");
     expect(stepFact(v, "prices")).toBe("מחיר ל-1 מתוך 2 היחידות הפעילות");
     expect(stepFact(v, "template")).toBe('תבנית "טבע"');
-    expect(stepFact(v, "payments")).toBe("בלי מקדמה — התשלום נגבה בטלפון");
+    expect(stepFact(v, "payments")).toBe("תשלום בטלפון · בלי מקדמה");
     v.steps.payments = { ...v.steps.payments, deposit_kind: "percent", deposit_value: 30 };
-    expect(stepFact(v, "payments")).toBe("מקדמה 30% · באישור ההזמנה");
+    expect(stepFact(v, "payments")).toBe("תשלום בטלפון · מקדמה 30% באישור ההזמנה");
+    // מיגרציה 37: אמצעי התשלום שהוגדרו
+    v.steps.payments = { ...v.steps.payments, methods: ["bank", "bit", "phone", "note"] };
+    expect(stepFact(v, "payments")).toBe(
+      "העברה בנקאית · Bit · תשלום בטלפון · הוראות משלכם · מקדמה 30% באישור ההזמנה",
+    );
     expect(stepFact(v, "booking")).toBe("הגעה 15:00 · עזיבה 11:00 · אישור בקשה תוך 12 שעות");
   });
   it("never a draft as published", () => {

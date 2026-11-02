@@ -22,6 +22,7 @@ import type {
   RawPublicSite,
   SiteGuestBooking,
 } from "../types/website";
+import type { GuestPaymentInfo, PaymentMethodKey } from "../types/payment-instructions";
 import type { LimitAction } from "../security/limits";
 import { TRAP_FIELD } from "../security/messages";
 import { parsePowSolution, type PowChallenge } from "../security/pow";
@@ -191,8 +192,30 @@ export const hospitalitySiteBooking = createServerFn({ method: "POST" })
     } catch {
       arrival = null;
     }
-    return { booking, arrival };
+    // מיגרציה 37: הוראות התשלום להזמנה הזו (רק אחרי אישור ועם יתרה — המסד מחליט)
+    let payment: GuestPaymentInfo | null = null;
+    try {
+      payment = await callRpc<GuestPaymentInfo>("guest_payment_info", { _token: data.token });
+    } catch {
+      payment = null;
+    }
+    return { booking, arrival, payment };
   });
+
+/** אילו אמצעי תשלום העסק מקבל (בלי פרטים) — לנוסח בטופס ההזמנה ואחרי השליחה */
+export const hospitalitySitePaymentMethods = createServerFn({ method: "GET" }).handler(
+  async (): Promise<PaymentMethodKey[]> => {
+    await throttle("site");
+    const { callRpc } = await import("../server/rpc.server");
+    try {
+      const r = await callRpc<{ methods: PaymentMethodKey[] }>("public_payment_methods", {});
+      return Array.isArray(r?.methods) ? r.methods : ["phone"];
+    } catch {
+      // לפני מיגרציה 37 / המסד לא ענה — כמו היום: תשלום טלפוני
+      return ["phone"];
+    }
+  },
+);
 
 export const hospitalitySiteCancellationQuote = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => {

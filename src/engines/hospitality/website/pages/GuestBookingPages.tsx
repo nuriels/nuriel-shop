@@ -3,7 +3,18 @@
 // השרת מחזיר רק את ההזמנה שהטוקן שלה (hash) תואם, באתר הזה, עד 30 יום אחרי העזיבה.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { CheckCircle2, Clock, KeyRound, Mail, MessageCircle, Phone } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  Clock,
+  Copy,
+  KeyRound,
+  Landmark,
+  Mail,
+  MessageCircle,
+  Phone,
+  Smartphone,
+} from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/platform/ui";
 import {
@@ -13,9 +24,11 @@ import {
 } from "../../api/website.functions";
 import type { ArrivalValues } from "../../types/catalog";
 import type { GuestBookingView } from "../../types/domain";
+import type { GuestPaymentInfo } from "../../types/payment-instructions";
 import type { GuestArrival } from "../../types/website";
 import { useCopy } from "../copy";
 import { dateTimeText, money, scheduleLines, stayText, telHref, whatsappHref } from "../lib/format";
+import { hasInstructions, methodsText } from "../lib/payment";
 import { useSite } from "../lib/site-context";
 import { paymentState } from "../../payments/phone";
 
@@ -98,6 +111,8 @@ export function BookingReceivedPage() {
   const b = query.data?.booking;
   const confirmed = b?.status === "confirmed";
   const shownNumber = b?.number ?? number;
+  // מיגרציה 37: העסק הגדיר הוראות תשלום — הנוסח מפנה לעמוד ההזמנה; אחרת — התשלום הטלפוני של D4
+  const instructions = hasInstructions(query.data?.payment?.methods);
   return (
     <Frame narrow>
       <div className="rounded-[var(--radius)] border border-border bg-card p-8 text-center shadow-[var(--site-shadow)] sm:p-12">
@@ -117,14 +132,20 @@ export function BookingReceivedPage() {
               className="mx-auto mt-6 max-w-md text-lg leading-relaxed"
               data-testid="phone-payment-message"
             >
-              {confirmed ? t.received.phoneInstant : t.received.phone}
+              {instructions
+                ? confirmed
+                  ? t.received.instructionsInstant
+                  : t.received.instructions
+                : confirmed
+                  ? t.received.phoneInstant
+                  : t.received.phone}
             </p>
             <p className="mx-auto mt-3 max-w-md leading-relaxed text-muted-foreground">
               {confirmed ? t.received.confirmed : t.received.pending(site.business.approval_hours)}
             </p>
             <p className="mx-auto mt-4 flex max-w-md items-start justify-center gap-2 rounded-sm bg-[var(--site-sand)] px-3 py-2 text-sm">
               <Phone className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              {t.received.noOnline}
+              {instructions ? t.received.noOnlineAny : t.received.noOnline}
             </p>
             {b && (
               <dl className="mx-auto mt-8 grid max-w-md gap-3 rounded-sm bg-[var(--site-sand)] p-5 text-start text-sm">
@@ -210,7 +231,8 @@ export function MyBookingPage() {
         <Notice>{t.my.notFound}</Notice>
       </Frame>
     );
-  const { booking: b, arrival } = query.data;
+  const { booking: b, arrival, payment } = query.data;
+  const instructions = hasInstructions(payment?.methods);
   const tz = b.policy?.timezone || site.business.timezone;
   const pending = b.status === "pending_approval" || b.status === "pending_payment";
   return (
@@ -246,7 +268,13 @@ export function MyBookingPage() {
             {PAYABLE.has(b.status) && (
               <Row
                 label={t.my.payment}
-                value={t.my.paymentStates[paymentState(Number(b.total), Number(b.amount_paid))]}
+                value={
+                  instructions && paymentState(Number(b.total), Number(b.amount_paid)) === "unpaid"
+                    ? payment?.available
+                      ? t.my.unpaidInstructions
+                      : t.my.unpaidLater
+                    : t.my.paymentStates[paymentState(Number(b.total), Number(b.amount_paid))]
+                }
               />
             )}
           </dl>
@@ -270,6 +298,8 @@ export function MyBookingPage() {
           {b.can_request_cancellation && <CancelBooking token={token} booking={b} />}
         </section>
 
+        {payment && <PaymentCard payment={payment} />}
+
         {LIVE.includes(b.status) && <ArrivalCard arrival={arrival} timeZone={tz} />}
 
         <section className="rounded-[var(--radius)] border border-border bg-card p-6">
@@ -279,6 +309,144 @@ export function MyBookingPage() {
       </div>
       <p className="mt-8 text-center text-xs text-muted-foreground">{t.my.linkNote}</p>
     </Frame>
+  );
+}
+
+/**
+ * "איך משלמים" (מיגרציה 37): רק אחרי שההזמנה אושרה ונשאר סכום לתשלום (המסד מחליט). לפני האישור —
+ * הודעה שהפרטים יופיעו כאן. ההוראות אינן אישור תשלום: "שולם" רק לפי מה שהעסק רשם.
+ */
+function PaymentCard({ payment }: { payment: GuestPaymentInfo }) {
+  const t = useCopy();
+  if (!payment.available) {
+    if (payment.reason !== "not_confirmed" || !hasInstructions(payment.methods)) return null;
+    return (
+      <section
+        className="rounded-[var(--radius)] border border-border bg-card p-6"
+        data-testid="guest-payment"
+      >
+        <h2 className="mb-2 font-medium">{t.my.pay.title}</h2>
+        <p className="text-sm text-muted-foreground">{t.my.pay.notYet}</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {methodsText(payment.methods, t.my.methodNames)}
+        </p>
+      </section>
+    );
+  }
+  const currency = payment.currency ?? "ILS";
+  return (
+    <section
+      className="rounded-[var(--radius)] border border-border bg-card p-6 md:col-span-2"
+      data-testid="guest-payment"
+      aria-labelledby="guest-payment-title"
+    >
+      <h2 id="guest-payment-title" className="font-medium">
+        {t.my.pay.title}
+      </h2>
+      <dl className="mt-3 grid gap-2 rounded-sm bg-[var(--site-sand)] p-4 text-sm sm:grid-cols-2">
+        <Row label={t.my.pay.due} value={money(Number(payment.amount_due ?? 0), currency)} />
+        {Number(payment.deposit_due ?? 0) > 0 && (
+          <Row label={t.my.pay.depositNow} value={money(Number(payment.deposit_due), currency)} />
+        )}
+      </dl>
+      {payment.reference && (
+        <p className="mt-3 text-sm font-medium">{t.my.pay.reference(payment.reference)}</p>
+      )}
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        {payment.bank && (
+          <div className="rounded-sm border border-border p-4">
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+              <Landmark className="size-4" aria-hidden="true" />
+              {t.my.pay.bankTitle}
+            </h3>
+            <dl className="space-y-2 text-sm">
+              <Row label={t.my.pay.bankName} value={payment.bank.name} />
+              <Row
+                label={t.my.pay.branch}
+                value={<CopyValue value={payment.bank.branch} label={t.my.pay.branch} />}
+              />
+              <Row
+                label={t.my.pay.account}
+                value={<CopyValue value={payment.bank.account} label={t.my.pay.account} />}
+              />
+              <Row label={t.my.pay.holder} value={payment.bank.holder} />
+            </dl>
+          </div>
+        )}
+        {payment.bit && (
+          <div className="rounded-sm border border-border p-4">
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+              <Smartphone className="size-4" aria-hidden="true" />
+              {t.my.pay.bitTitle}
+            </h3>
+            <dl className="text-sm">
+              <Row
+                label={t.my.pay.bitTo}
+                value={<CopyValue value={payment.bit.phone} label={t.my.pay.bitTitle} />}
+              />
+            </dl>
+          </div>
+        )}
+        {payment.phone && (
+          <div className="rounded-sm border border-border p-4">
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+              <Phone className="size-4" aria-hidden="true" />
+              {t.my.pay.phoneTitle}
+            </h3>
+            <p className="text-sm text-muted-foreground">{t.my.pay.phoneText}</p>
+            {payment.phone.number && (
+              <p className="mt-2 text-sm">
+                {t.my.pay.phoneCall}:{" "}
+                <a href={telHref(payment.phone.number)} className="font-medium underline" dir="ltr">
+                  {payment.phone.number}
+                </a>
+              </p>
+            )}
+          </div>
+        )}
+        {payment.note && (
+          <div className="rounded-sm border border-border p-4 md:col-span-2">
+            <h3 className="mb-2 text-sm font-semibold">{t.my.pay.noteTitle}</h3>
+            <p className="text-sm whitespace-pre-line">{payment.note}</p>
+          </div>
+        )}
+      </div>
+      <p className="mt-4 text-sm text-muted-foreground">{t.my.pay.notReceipt}</p>
+    </section>
+  );
+}
+
+/** ערך עם כפתור העתקה (מספר חשבון, טלפון ל-Bit). השם הנגיש מתחיל בטקסט שעל הכפתור (WCAG 2.5.3) */
+function CopyValue({ value, label }: { value: string; label: string }) {
+  const t = useCopy();
+  const [copied, setCopied] = useState(false);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <span dir="ltr" className="font-medium tabular-nums">
+        {value}
+      </span>
+      <button
+        type="button"
+        onClick={() => {
+          void navigator.clipboard?.writeText(value).then(
+            () => {
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 2000);
+            },
+            () => setCopied(false),
+          );
+        }}
+        className="inline-flex min-h-11 items-center justify-center gap-1 rounded-sm border border-border px-3 text-xs hover:bg-foreground/5"
+      >
+        {copied ? (
+          <Check className="size-4" aria-hidden="true" />
+        ) : (
+          <Copy className="size-4" aria-hidden="true" />
+        )}
+        <span aria-live="polite">{copied ? t.my.pay.copied : t.my.pay.copyShort}</span>
+        <span className="sr-only"> — {label}</span>
+      </button>
+    </span>
   );
 }
 

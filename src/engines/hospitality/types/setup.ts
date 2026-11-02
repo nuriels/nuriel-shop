@@ -49,6 +49,9 @@ export interface SetupSteps {
   payments: {
     done: boolean;
     confirmed: boolean;
+    /** מיגרציה 37: הוראות התשלום לאורחים נשמרו, ואילו אמצעים פעילים (לפני 37 — חסר) */
+    configured?: boolean;
+    methods?: string[];
     deposit_kind: "none" | "percent" | "fixed";
     deposit_value: number;
     deposit_due: "booking" | "approval";

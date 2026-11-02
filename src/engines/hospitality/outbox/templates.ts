@@ -25,6 +25,24 @@ export interface EmailBusiness {
   address: string | null;
   checkInTime: string | null;
   checkOutTime: string | null;
+  /** מיגרציה 37: אמצעי התשלום שהעסק מקבל (בלי פרטים). חסר / רק "phone" — התשלום הטלפוני של D4 */
+  paymentMethods?: string[];
+}
+
+const METHOD_NAMES: Record<string, string> = {
+  bank: "העברה בנקאית",
+  bit: "Bit",
+  phone: "תשלום בטלפון",
+};
+/** יש הוראות תשלום מעבר לטלפון; ושמות האמצעים לתצוגה ("העברה בנקאית / Bit") */
+function paymentWording(b: EmailBusiness): { instructions: boolean; names: string } {
+  const m = b.paymentMethods ?? ["phone"];
+  const instructions = m.some((x) => x !== "phone");
+  const names = m
+    .filter((x) => x !== "note")
+    .map((x) => METHOD_NAMES[x] ?? x)
+    .join(" / ");
+  return { instructions, names: names || "לפי הוראות העסק" };
 }
 
 export interface EmailContext {
@@ -79,17 +97,24 @@ export function copyFor(event: string, p: EmailPayload, b: EmailBusiness): Copy 
     case "request_received":
       return {
         subject: `קיבלנו את בקשת ההזמנה שלך${n} — ${b.name}`,
-        // D4: תשלום טלפוני — אותה הודעה כמו באתר אחרי השליחה
-        intro: `שלום ${p.guest_name ?? ""}, תודה! בקשת ההזמנה התקבלה. נציג העסק יצור איתך קשר טלפונית להשלמת התשלום ואישור ההזמנה${
-          p.hold_expires_at ? ` (עד ${dateTimeText(p.hold_expires_at)})` : ""
-        }. עד אז הבקשה עוד לא מאושרת.`,
+        // D4: תשלום טלפוני — אותה הודעה כמו באתר אחרי השליחה. עם הוראות תשלום (מיגרציה 37) — הפרטים
+        // יופיעו בעמוד ההזמנה אחרי האישור
+        intro: paymentWording(b).instructions
+          ? `שלום ${p.guest_name ?? ""}, תודה! בקשת ההזמנה התקבלה, והעסק יחזור אליך${
+              p.hold_expires_at ? ` עד ${dateTimeText(p.hold_expires_at)}` : ""
+            }. אחרי האישור, פרטי התשלום (${paymentWording(b).names}) יופיעו בעמוד ההזמנה שלך. עד אז הבקשה עוד לא מאושרת.`
+          : `שלום ${p.guest_name ?? ""}, תודה! בקשת ההזמנה התקבלה. נציג העסק יצור איתך קשר טלפונית להשלמת התשלום ואישור ההזמנה${
+              p.hold_expires_at ? ` (עד ${dateTimeText(p.hold_expires_at)})` : ""
+            }. עד אז הבקשה עוד לא מאושרת.`,
         details: true,
         outro: `לא ניתן לשלם באתר, ולא נבקש ממך פרטי כרטיס אשראי באימייל. ${reach}`.trim(),
       };
     case "booking_confirmed":
       return {
         subject: `ההזמנה שלך${n} אושרה — ${b.name}`,
-        intro: `שלום ${p.guest_name ?? ""}, שמחים לאשר את ההזמנה שלך. מחכים לראותך! אם התשלום עוד לא הושלם — נציג העסק יצור איתך קשר טלפונית (לא ניתן לשלם באתר).`,
+        intro: paymentWording(b).instructions
+          ? `שלום ${p.guest_name ?? ""}, שמחים לאשר את ההזמנה שלך. מחכים לראותך! אם התשלום עוד לא הושלם — פרטי התשלום (${paymentWording(b).names}) מחכים לך בעמוד ההזמנה. התשלום יסומן כשולם אחרי שהעסק יאשר שקיבל אותו.`
+          : `שלום ${p.guest_name ?? ""}, שמחים לאשר את ההזמנה שלך. מחכים לראותך! אם התשלום עוד לא הושלם — נציג העסק יצור איתך קשר טלפונית (לא ניתן לשלם באתר).`,
         details: true,
         outro: [
           b.checkInTime ? `כניסה מ-${b.checkInTime}` : "",
