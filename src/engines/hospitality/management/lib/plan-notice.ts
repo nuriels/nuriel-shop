@@ -50,12 +50,11 @@ export function planNotice(ctx: ManagementContext, now: number = Date.now()): Pl
             action: ended
               ? ({
                   kind: "plan",
-                  label: "החבילות ואיך עוברים",
+                  label: "איך ממשיכים",
                 } as const)
               : ({
-                  kind: "support",
-                  label: "לחידוש המנוי — פנייה לנוריאל",
-                  subject: "חידוש המנוי",
+                  kind: "plan",
+                  label: "איך מחדשים",
                 } as const),
           }
         : {}),

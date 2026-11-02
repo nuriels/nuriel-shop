@@ -356,11 +356,10 @@ describe("plan notice", () => {
     expect(n.action).toBeUndefined();
     expect(n.text).toContain("בעלי העסק פונים לנוריאל");
   });
-  it("owner, inactive → a support request for renewal, with the topic and subject filled in", () => {
+  it("owner, inactive → to the plan card (renewal is by a payment link Nuriel sends; billing is outside the system)", () => {
     expect(planNotice(owner({ active: false, status: "active" }), NOW)?.action).toEqual({
-      kind: "support",
-      label: "לחידוש המנוי — פנייה לנוריאל",
-      subject: "חידוש המנוי",
+      kind: "plan",
+      label: "איך מחדשים",
     });
   });
   it("trial over → 'the trial has ended' (not 'renew'), the owner is sent to the plans", () => {

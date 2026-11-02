@@ -469,9 +469,12 @@ function PlanNext({ state }: { state: "trial" | "trial_ended" | "inactive" }) {
             : "חידוש המנוי"}
       </h3>
       <p className="mt-1 text-sm text-muted-foreground">
+        {/* החיוב — מחוץ למערכת: בסוף הניסיון נוריאל שולח קישור לתשלום על החבילה */}
         {trial
-          ? `תקופת הניסיון פתוחה עד ${formatDate(e.trial_ends_at, ctx.business.timezone)}. כדי להמשיך לקבל הזמנות מהאתר אחריה, עוברים לאחת החבילות. בלי מעבר: ${INACTIVE_EFFECTS}`
-          : `${INACTIVE_EFFECTS} כדי לחזור לקבל הזמנות מהאתר, בוחרים חבילה.`}
+          ? `תקופת הניסיון פתוחה עד ${formatDate(e.trial_ends_at, ctx.business.timezone)}. בסופה נוריאל ישלח אליכם קישור לתשלום על החבילה שבחרתם — החיוב נעשה מחוץ למערכת, ואחרי התשלום החבילה מופעלת. בלי תשלום: ${INACTIVE_EFFECTS}`
+          : state === "trial_ended"
+            ? `${INACTIVE_EFFECTS} כדי לחזור לקבל הזמנות מהאתר, משלמים על החבילה בקישור שנוריאל שולח (החיוב נעשה מחוץ למערכת).`
+            : `${INACTIVE_EFFECTS} כדי לחזור לקבל הזמנות מהאתר, מחדשים את המנוי בקישור לתשלום שנוריאל שולח (החיוב נעשה מחוץ למערכת).`}
       </p>
       {plans.isPending ? (
         <SkeletonBlock className="mt-3 h-32 w-full" />
@@ -488,16 +491,16 @@ function PlanNext({ state }: { state: "trial" | "trial_ended" | "inactive" }) {
           search={{
             new: "1",
             topic: "account",
-            subject: state === "inactive" ? "חידוש המנוי" : "מעבר לחבילה בתשלום",
+            subject: trial ? "בחירת חבילה" : "קישור לתשלום על החבילה",
           }}
           className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-[var(--hm-lagoon-700)] px-4 text-sm font-semibold text-white hover:bg-[var(--hm-lagoon-900)]"
         >
-          {state === "inactive"
-            ? "לחידוש המנוי — פנייה לנוריאל"
-            : "מעבר לחבילה בתשלום — פנייה לנוריאל"}
+          {trial ? "לבחירת חבילה — פנייה לנוריאל" : "לא קיבלתם קישור לתשלום? פנייה לנוריאל"}
         </Link>
         <p className="text-xs text-muted-foreground">
-          המעבר בין חבילות נעשה מול נוריאל: פותחים פנייה בתחום "החשבון והחבילה".
+          {trial
+            ? 'ספרו לנו איזו חבילה מתאימה לכם (או שאלו כל שאלה) בפנייה בתחום "החשבון והחבילה" — הקישור לתשלום יישלח לפי החבילה.'
+            : 'הפנייה נפתחת בתחום "החשבון והחבילה", ונחזור אליכם עם קישור לתשלום.'}
         </p>
       </div>
     </div>
