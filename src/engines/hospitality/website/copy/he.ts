@@ -48,6 +48,7 @@ export const he = {
     inComplex: (name: string) => `${name} במתחם`,
     highlights: "מה מיוחד ביחידה",
     beds: "מיטות",
+    bedsCount: (n: number) => (n === 1 ? "מיטה אחת" : `${n} מיטות`),
     wholeProperty: "המתחם כולו",
     roomsOfType: (n: number) => (n === 1 ? "חדר אחד מהסוג" : `${n} חדרים מהסוג`),
     roomType: "סוג חדר",

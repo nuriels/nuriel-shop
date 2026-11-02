@@ -395,6 +395,8 @@ describe("migration 41: the unit card — size and what is special", () => {
       { name: "בריכה", icon: "waves", where: "property" },
     ]);
     expect(he.units.inUnit("ג׳קוזי")).toBe("ג׳קוזי ביחידה");
+    expect(he.units.bedsCount(1)).toBe("מיטה אחת");
+    expect(he.units.bedsCount(3)).toBe("3 מיטות");
     expect(he.units.inComplex("בריכה")).toBe("בריכה במתחם");
     expect(
       unitHighlights(

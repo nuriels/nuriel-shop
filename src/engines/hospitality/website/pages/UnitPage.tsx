@@ -110,7 +110,9 @@ export function UnitPage({
             {rooms.length > 0 && (
               <Fact
                 icon={<BedDouble />}
-                text={`${rooms.reduce((n, r) => n + r.beds.reduce((k, b) => k + b.quantity, 0), 0)} ${t.units.beds}`}
+                text={t.units.bedsCount(
+                  rooms.reduce((n, r) => n + r.beds.reduce((k, b) => k + b.quantity, 0), 0),
+                )}
               />
             )}
           </ul>
