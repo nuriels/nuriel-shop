@@ -6,6 +6,7 @@
 //   • התראה במייל לצוות הפלטפורמה על פנייה חדשה / תגובה של עסק. הכתובות — ממשתנה הסביבה
 //     SUPPORT_NOTIFY_EMAIL (כמו בקשות לאתרי צימר, שלב E2) או ממנהלי הפלטפורמה במסד (פונקציה
 //     שרק מפתח השירות רשאי להריץ). כשל במייל לא מפיל את הפנייה — היא כבר שמורה ומופיעה בפאנל.
+import { constants as zlibConstants, inflateSync } from "node:zlib";
 import { escapeHtml, sendBusinessEmail } from "@/platform/email/send.server";
 import { serviceHeaders, supabaseUrl } from "@/platform/supabase/env.server";
 import { HOSPITALITY_SCHEMA } from "../config";
@@ -15,6 +16,7 @@ import {
   SUPPORT_MAX_BYTES,
   pdfHasActiveContent,
   sniffSupportFile,
+  supportFileName,
   type SupportMime,
 } from "../validation/support";
 import { HospitalityError } from "./rpc.server";
@@ -31,6 +33,15 @@ export interface PreparedFile {
   bytes: Uint8Array;
 }
 
+/** פענוח FlateDecode לבדיקת ה-PDF — עם תקרה לפלט (קובץ "פצצת דחיסה" נדחה) */
+const inflateCapped = (data: Uint8Array, maxBytes: number) =>
+  new Uint8Array(
+    inflateSync(data, {
+      maxOutputLength: Math.max(1, maxBytes),
+      finishFlush: zlibConstants.Z_SYNC_FLUSH,
+    }),
+  );
+
 /** בדיקת הקבצים לפני שנרשם משהו במסד — קובץ אחד לא תקין עוצר את כל השליחה */
 export async function prepareSupportFiles(files: File[]): Promise<PreparedFile[]> {
   const out: PreparedFile[] = [];
@@ -39,9 +50,12 @@ export async function prepareSupportFiles(files: File[]): Promise<PreparedFile[]
     const bytes = new Uint8Array(await f.arrayBuffer());
     const mime = sniffSupportFile(bytes);
     if (!mime) throw new InputError(`הקובץ "${f.name}" לא נתמך — תמונה (JPG / PNG / WebP) או PDF`);
-    if (mime === "application/pdf" && pdfHasActiveContent(bytes))
-      throw new InputError(`הקובץ "${f.name}" מכיל תוכן פעיל ולא ניתן לצרף אותו`);
-    out.push({ name: f.name.slice(0, 160), mime, size: bytes.byteLength, bytes });
+    if (mime === "application/pdf" && pdfHasActiveContent(bytes, inflateCapped))
+      throw new InputError(
+        `הקובץ "${f.name}" מכיל תוכן פעיל, קבצים מוטמעים או הצפנה — שמרו אותו מחדש כ-PDF רגיל`,
+      );
+    // השם שנשמר ושבו הקובץ יורד — הסיומת לפי התוכן שזוהה, בלי תווי בקרה / כיווניות
+    out.push({ name: supportFileName(f.name, mime), mime, size: bytes.byteLength, bytes });
   }
   return out;
 }

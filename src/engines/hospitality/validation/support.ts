@@ -48,13 +48,89 @@ export function sniffSupportFile(bytes: Uint8Array): SupportMime | null {
   return null;
 }
 
-/** PDF עם JavaScript או פעולת "הפעלה" (Launch) — לא מקבלים */
-export function pdfHasActiveContent(bytes: Uint8Array): boolean {
+// ---------- PDF: תוכן פעיל ----------
+// פעולות ומבנים שאסור שיגיעו לצוות (שפותח את הקובץ ב-Acrobat): סקריפט, הפעלת תוכנה, שליחת טופס /
+// ייבוא נתונים, מעבר לקובץ אחר או מוטמע, קבצים מוטמעים, מדיה עשירה, טופסי XFA — ו-PDF מוצפן (אי אפשר
+// לבדוק את התוכן שלו). קישורי URI רגילים מותרים.
+const PDF_ACTIVE =
+  /\/(JavaScript|JS|Launch|SubmitForm|ImportData|GoToE|GoToR|RichMedia|EmbeddedFiles?|XFA|Encrypt)(?![A-Za-z0-9])/;
+/** כל זרמי האובייקטים יחד — מעבר לזה לא בודקים (ודוחים) */
+export const PDF_MAX_INFLATED = 20 * 1024 * 1024;
+
+const latin1 = (b: Uint8Array) => {
   let s = "";
-  // latin1 — מספיק לחיפוש שמות האובייקטים של PDF
-  for (let i = 0; i < bytes.length; i += 65536)
-    s += String.fromCharCode(...bytes.subarray(i, Math.min(i + 65536, bytes.length)));
-  return /\/(JavaScript|JS|Launch)(?![A-Za-z0-9])/.test(s);
+  for (let i = 0; i < b.length; i += 65536)
+    s += String.fromCharCode(...b.subarray(i, Math.min(i + 65536, b.length)));
+  return s;
+};
+/** שמות ב-PDF יכולים להיכתב בקוד הקסה (#53 = S): ‎/Java#53cript = ‎/JavaScript */
+const decodeNames = (s: string) =>
+  s.replace(/#([0-9A-Fa-f]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+
+/**
+ * PDF עם תוכן פעיל — לא מקבלים. בודק את הקובץ עצמו (אחרי פענוח שמות בקוד הקסה), ואת זרמי
+ * האובייקטים (ObjStm) — שם מילון הפעולה יכול להסתתר דחוס. זרם אובייקטים שאי אפשר לפענח (מסנן אחר
+ * מ-FlateDecode, פרמטרים לפענוח, פענוח שנכשל או גדול מדי), או בלי פונקציית פענוח — נחשב פעיל
+ * (נכשל סגור). inflate: פענוח FlateDecode (בשרת — zlib), שזורק כשהפלט גדול מהמותר.
+ */
+export function pdfHasActiveContent(
+  bytes: Uint8Array,
+  inflate?: (data: Uint8Array, maxBytes: number) => Uint8Array,
+): boolean {
+  const s = latin1(bytes);
+  if (PDF_ACTIVE.test(decodeNames(s))) return true;
+  let budget = PDF_MAX_INFLATED;
+  const STREAM = /stream(\r\n|\n|\r)/g;
+  for (let m = STREAM.exec(s); m; m = STREAM.exec(s)) {
+    if (s.slice(Math.max(0, m.index - 3), m.index) === "end") continue; // "endstream"
+    const from = m.index + m[0].length;
+    const objAt = s.lastIndexOf("obj", m.index);
+    const dict = decodeNames(s.slice(Math.max(objAt, m.index - 4096, 0), m.index));
+    if (!/\/Type\s*\/ObjStm(?![A-Za-z0-9])/.test(dict)) continue;
+    const end = s.indexOf("endstream", from);
+    if (end < 0) return true;
+    const filter = dict.match(/\/Filter\s*(\[[^\]]*\]|\/[A-Za-z0-9]+)/)?.[1] ?? "";
+    const names = filter.match(/\/[A-Za-z0-9]+/g) ?? [];
+    const flate = names.length === 1 && /^\/(FlateDecode|Fl)$/.test(names[0]!);
+    if ((names.length && !flate) || /\/DecodeParms/.test(dict)) return true;
+    let text = s.slice(from, end);
+    if (flate) {
+      if (!inflate) return true;
+      try {
+        const out = inflate(bytes.subarray(from, end), budget);
+        budget -= out.byteLength;
+        text = latin1(out);
+      } catch {
+        return true;
+      }
+    }
+    if (PDF_ACTIVE.test(decodeNames(text))) return true;
+  }
+  return false;
+}
+
+/**
+ * השם שנשמר (ושבו הקובץ יורד): בלי תווי בקרה / כיווניות (U+202E ודומיו) ובלי מפרידי נתיב, עד 160
+ * תווים — והסיומת תמיד לפי הסוג שזוהה מהתוכן (לא לפי מה שהשם טוען).
+ */
+export function supportFileName(name: string, mime: SupportMime): string {
+  const ext =
+    mime === "application/pdf"
+      ? "pdf"
+      : mime === "image/png"
+        ? "png"
+        : mime === "image/webp"
+          ? "webp"
+          : "jpg";
+  const base = name
+    .normalize("NFC")
+    .replace(/[\p{Cc}\p{Cf}]/gu, "")
+    .replace(/[\\/:*?"<>|]/g, "_")
+    .replace(/\.[A-Za-z0-9]{1,8}$/, "")
+    .replace(/[.\s]+$/, "")
+    .trim()
+    .slice(0, 160 - ext.length - 1);
+  return `${base || "קובץ"}.${ext}`;
 }
 
 /** בדיקה מוקדמת בדפדפן (לפני השליחה): כמות, גודל, סיומת. הודעה למשתמש, או null */

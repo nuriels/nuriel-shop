@@ -37,6 +37,9 @@ async function send(
     import("../server/support.server"),
   ]);
   const session = await manageSession();
+  // קודם ההרשאה (קריאה זולה עם אותה בדיקה במסד — settings בעסק הזה), אחר כך המונים, ורק אז בדיקת
+  // הקבצים (היקרה). כך חשבון שאינו מהצוות לא נוגע במכסה של העסק ולא מעסיק את השרת.
+  await manageRpc<number | null>("support_unread", {});
   await guardStaff("supportWrite", { userId: session.userId, siteId: session.siteId });
   const prepared = await support.prepareSupportFiles(files);
   const r = await manageRpc<Sent>(fn, { ...args, _files: support.fileMeta(prepared) });
@@ -103,7 +106,11 @@ export const hospitalitySupportReply = createServerFn({ method: "POST" })
 export const hospitalitySupportSetOpen = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseSupportSetOpen(input))
   .handler(async ({ data }): Promise<SupportTicketRow> => {
-    const { manageRpc } = await import("../server/manage.server");
+    const [{ manageRpc, manageSession }, { guardStaff }] = await Promise.all([
+      import("../server/manage.server"),
+      import("../security/guard.server"),
+    ]);
+    await guardStaff("supportStatus", { userId: (await manageSession()).userId });
     return manageRpc<SupportTicketRow>("support_set_open", { _ticket: data.id, _open: data.open });
   });
 
@@ -111,10 +118,12 @@ export const hospitalitySupportSetOpen = createServerFn({ method: "POST" })
 export const hospitalitySupportFileUrl = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseSupportFileId(input))
   .handler(async ({ data }): Promise<{ url: string }> => {
-    const [{ manageRpc }, { signedSupportUrl }] = await Promise.all([
+    const [{ manageRpc, manageSession }, { signedSupportUrl }, { guardStaff }] = await Promise.all([
       import("../server/manage.server"),
       import("../server/support.server"),
+      import("../security/guard.server"),
     ]);
+    await guardStaff("supportFile", { userId: (await manageSession()).userId });
     const file = await manageRpc<{ path: string; name: string; mime: string }>("support_file", {
       _id: data.id,
     });

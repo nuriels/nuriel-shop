@@ -1,6 +1,7 @@
 // שלב E4: מערכת התמיכה — בדיקת הקבצים לפי התוכן (לא לפי הסיומת), הקלט של פונקציות השרת,
 // העזרים של המסכים (סטטוס, זמנים, לשוניות), המיילים (לעסק בלי תוכן התשובה; לפלטפורמה עם escape),
 // והניווט (פריט "תמיכה" למי שיש לו הרשאת הגדרות).
+import { constants as zlibConstants, deflateSync, inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { EMAIL_EVENT } from "@/engines/hospitality/management/bookings/model";
 import { NAV_ITEMS, isNavActive, visibleNav } from "@/engines/hospitality/management/lib/nav";
@@ -26,6 +27,7 @@ import {
   parseSupportSettingsInput,
   pdfHasActiveContent,
   sniffSupportFile,
+  supportFileName,
 } from "@/engines/hospitality/validation/support";
 
 const bytes = (...v: number[]) => new Uint8Array(v);
@@ -62,6 +64,90 @@ describe("attachments: the type comes from the content", () => {
     expect(pdfHasActiveContent(ascii("%PDF-1.4 << /S /Launch /F (cmd.exe) >>"))).toBe(true);
     // not a prefix of a longer name
     expect(pdfHasActiveContent(ascii("%PDF-1.4 << /JSONData 1 >>"))).toBe(false);
+  });
+
+  it("security review: escaped names, compressed object streams, more risky actions — refused", () => {
+    // the server's decoder (zlib, capped)
+    const inflate = (d: Uint8Array, max: number) =>
+      new Uint8Array(
+        inflateSync(d, { maxOutputLength: max, finishFlush: zlibConstants.Z_SYNC_FLUSH }),
+      );
+    const objStm = (content: string, dict = "/Filter /FlateDecode") => {
+      const data = dict.includes("FlateDecode")
+        ? deflateSync(Buffer.from(content))
+        : Buffer.from(content);
+      return new Uint8Array(
+        Buffer.concat([
+          Buffer.from(
+            `%PDF-1.7\n5 0 obj\n<< /Type /ObjStm /N 1 /First 4 ${dict} /Length ${data.length} >>\nstream\n`,
+          ),
+          data,
+          Buffer.from("\nendstream\nendobj\n%%EOF"),
+        ]),
+      );
+    };
+    // hex-escaped names: /Java#53cript = /JavaScript, /J#53 = /JS
+    expect(pdfHasActiveContent(ascii("%PDF-1.7 << /S /Java#53cript /J#53 (app.alert(1)) >>"))).toBe(
+      true,
+    );
+    // an action hidden in a compressed object stream
+    const hidden = objStm("1 0 << /S /JavaScript /JS (app.launchURL('x')) >>");
+    expect(pdfHasActiveContent(hidden, inflate)).toBe(true);
+    expect(pdfHasActiveContent(hidden)).toBe(true); // no decoder → cannot check → refused
+    // a normal compressed object stream (fonts, pages) is fine
+    expect(pdfHasActiveContent(objStm("1 0 << /Type /Page /Contents 2 0 R >>"), inflate)).toBe(
+      false,
+    );
+    // object streams we cannot decode — refused
+    expect(pdfHasActiveContent(objStm("1 0 << >>", "/Filter /ASCII85Decode"), inflate)).toBe(true);
+    expect(
+      pdfHasActiveContent(
+        objStm("1 0 << >>", "/Filter /FlateDecode /DecodeParms << /Predictor 12 >>"),
+        inflate,
+      ),
+    ).toBe(true);
+    // a decompression bomb — refused (over the cap)
+    const bomb = new Uint8Array(
+      Buffer.concat([
+        Buffer.from("%PDF-1.7\n5 0 obj\n<< /Type /ObjStm /Filter /FlateDecode >>\nstream\n"),
+        deflateSync(Buffer.alloc(25 * 1024 * 1024, 32)),
+        Buffer.from("\nendstream\nendobj"),
+      ]),
+    );
+    expect(pdfHasActiveContent(bomb, inflate)).toBe(true);
+    // more risky content: forms that send / import data, embedded files, rich media, XFA, encryption
+    for (const name of [
+      "SubmitForm",
+      "ImportData",
+      "GoToE",
+      "GoToR",
+      "EmbeddedFile",
+      "EmbeddedFiles",
+      "RichMedia",
+      "XFA",
+      "Encrypt",
+    ])
+      expect(pdfHasActiveContent(ascii(`%PDF-1.7 << /${name} 1 0 R >>`)), name).toBe(true);
+    // an ordinary web link is allowed
+    expect(pdfHasActiveContent(ascii("%PDF-1.7 << /S /URI /URI (https://example.com) >>"))).toBe(
+      false,
+    );
+  });
+
+  it("security review: the stored / download name — extension from the content, no control characters", () => {
+    // a long name that hides another extension before the cut
+    const trick = `${"A".repeat(156)}.hta${"x".repeat(20)}.pdf`;
+    const n = supportFileName(trick, "application/pdf");
+    expect(n.endsWith(".pdf")).toBe(true);
+    expect(n).not.toMatch(/\.hta$/);
+    expect(n.length).toBeLessThanOrEqual(160);
+    // right-to-left override (looks like "…fdp.exe") and path separators are removed
+    expect(supportFileName("invoice\u202Efdp.exe", "application/pdf")).toBe("invoicefdp.pdf");
+    expect(supportFileName("../../etc/passwd.png", "image/png")).toBe(".._.._etc_passwd.png");
+    // the extension follows the content, whatever the name says
+    expect(supportFileName("photo.pdf", "image/jpeg")).toBe("photo.jpg");
+    expect(supportFileName("חשבונית אוקטובר.PDF", "application/pdf")).toBe("חשבונית אוקטובר.pdf");
+    expect(supportFileName("   .pdf", "application/pdf")).toBe("קובץ.pdf");
   });
 
   it("checks count, size and extension before sending (the server checks again)", () => {

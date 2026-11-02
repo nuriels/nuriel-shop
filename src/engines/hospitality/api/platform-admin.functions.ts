@@ -246,6 +246,8 @@ export const hospitalityAdminSupportReply = createServerFn({ method: "POST" })
       import("../server/support.server"),
     ]);
     const session = await platformSession();
+    // מנהל פלטפורמה בלבד (קריאה זולה עם _require_platform_admin) — לפני המונה ובדיקת הקבצים
+    await platformRpc<unknown>("admin_support_settings", { _whatsapp: null, _save: false });
     await guardStaff("supportWrite", { userId: session.userId });
     const prepared = await support.prepareSupportFiles(data.files);
     const r = await platformRpc<{
@@ -284,10 +286,13 @@ export const hospitalityAdminSupportSetStatus = createServerFn({ method: "POST" 
 export const hospitalityAdminSupportFileUrl = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseSupportFileId(input))
   .handler(async ({ data }): Promise<{ url: string }> => {
-    const [{ platformRpc }, { signedSupportUrl }] = await Promise.all([
-      import("../server/platform-admin.server"),
-      import("../server/support.server"),
-    ]);
+    const [{ platformRpc, platformSession }, { signedSupportUrl }, { guardStaff }] =
+      await Promise.all([
+        import("../server/platform-admin.server"),
+        import("../server/support.server"),
+        import("../security/guard.server"),
+      ]);
+    await guardStaff("supportFile", { userId: (await platformSession()).userId });
     const file = await platformRpc<{ path: string; name: string; mime: string }>(
       "admin_support_file",
       { _id: data.id },

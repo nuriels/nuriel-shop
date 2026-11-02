@@ -14,6 +14,10 @@ export const hospitalitySetupGuide = createServerFn({ method: "GET" }).handler(
 export const hospitalitySetupSave = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => parseSetupSave(input))
   .handler(async ({ data }): Promise<SetupGuideView> => {
-    const { manageRpc } = await import("../server/manage.server");
+    const [{ manageRpc, manageSession }, { guardStaff }] = await Promise.all([
+      import("../server/manage.server"),
+      import("../security/guard.server"),
+    ]);
+    await guardStaff("setupWrite", { userId: (await manageSession()).userId });
     return manageRpc<SetupGuideView>("setup_save", { _step: data.step, _action: data.action });
   });

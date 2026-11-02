@@ -65,11 +65,20 @@ export const LIMITS = {
   guestExport: [{ per: "user", limit: 60, window: HOUR }],
   /** פתיחת חשבון בעלים מפאנל הפלטפורמה */
   platformAccount: [{ per: "user", limit: 30, window: HOUR }],
-  /** תמיכה (E4): פנייה / תגובה / קבצים — לעסק ולצוות הפלטפורמה (מעל המגבלות של המסד) */
+  /**
+   * תמיכה (E4): פנייה / תגובה / קבצים — לעסק ולצוות הפלטפורמה (מעל המגבלות של המסד). נבדק רק אחרי
+   * שהמסד אישר שהמשתמש מהצוות של העסק — אחרת חשבון זר היה "שורף" לעסק את המכסה היומית.
+   */
   supportWrite: [
     { per: "user", limit: 30, window: 10 * MIN },
     { per: "tenant", limit: 200, window: DAY },
   ],
+  /** תמיכה: סגירה / פתיחה מחדש של פנייה (כל אחת נרשמת ביומן ומחזירה את הפנייה לתור) */
+  supportStatus: [{ per: "user", limit: 30, window: HOUR }],
+  /** תמיכה: קישור הורדה חתום לקובץ (כל קישור — בקשת חתימה במפתח השירות) */
+  supportFile: [{ per: "user", limit: 120, window: 10 * MIN }],
+  /** מדריך ההקמה: מעבר בין צעדים, "בדקתי" ודילוג (אישור ודילוג נרשמים ביומן) */
+  setupWrite: [{ per: "user", limit: 120, window: 10 * MIN }],
 } as const satisfies Record<string, readonly LimitRule[]>;
 
 export type LimitAction = keyof typeof LIMITS;

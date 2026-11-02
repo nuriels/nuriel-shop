@@ -16,8 +16,11 @@
 --    ופתיחה מחדש, קבצים. הגבלה: 10 פניות חדשות ביממה לעסק.
 -- 3. צד הפלטפורמה (מנהל הפלטפורמה בלבד): כל הפניות עם סינון (סטטוס / דחיפות / תאריכים / חיפוש),
 --    "ממתינה למענה", פרטי העסק, מענה או הערה פנימית, שינוי סטטוס, סגירה ופתיחה מחדש.
--- 4. מיילים (תור ההודעות הקיים): לעסק כשהפלטפורמה עונה; לצוות הפלטפורמה על פנייה חדשה / תגובה.
+-- 4. מיילים (תור ההודעות הקיים): לעסק כשהפלטפורמה עונה (למי שפתח את הפנייה — אם עדיין בצוות;
+--    אחרת לבעלים); לצוות הפלטפורמה על פנייה חדשה / תגובה.
 -- 5. "דורש טיפול" בלוח הבקרה: תשובה חדשה מהתמיכה.
+-- 6. פרטיות: איש צוות בלי שם תצוגה מוצג בשרשור באימייל מוסתר (e•••@…); הערה פנימית לא מזיזה את
+--    "עודכן" שהעסק רואה.
 --
 -- אידמפוטנטי. Rollback: supabase/rollbacks/20261105100000_hosp_support.down.sql
 -- ============================================================
@@ -154,13 +157,14 @@ RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
 $$;
 REVOKE ALL ON FUNCTION hospitality._support_plan(uuid) FROM PUBLIC, anon, authenticated;
 
--- שם השולח לתצוגה: השם בצוות, או האימייל
+-- שם השולח לתצוגה: השם בצוות, או האימייל מוסתר (כמו בשאר המערכת — עמיתים לא רואים כתובת כניסה)
 CREATE OR REPLACE FUNCTION hospitality._support_sender_name(_tenant_id uuid, _user uuid)
 RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT left(COALESCE(
     (SELECT NULLIF(btrim(ur.display_name), '') FROM public.user_roles ur
       WHERE ur.tenant_id = _tenant_id AND ur.user_id = _user LIMIT 1),
-    (SELECT u.email::text FROM auth.users u WHERE u.id = _user)), 120);
+    (SELECT hospitality.mask_email(u.email::text) FROM auth.users u WHERE u.id = _user),
+    'הצוות'), 120);
 $$;
 REVOKE ALL ON FUNCTION hospitality._support_sender_name(uuid, uuid) FROM PUBLIC, anon, authenticated;
 
@@ -317,7 +321,12 @@ DECLARE
   _n integer := 0;
   _added integer;
 BEGIN
-  _emails := CASE WHEN tk.opened_by_email ~ '^[^\s@]+@[^\s@]+\.[^\s@]+$' THEN ARRAY[tk.opened_by_email]
+  -- מי שפתח את הפנייה — רק אם עדיין בצוות של העסק (לא הוסר / נחסם); אחרת לבעלים
+  _emails := CASE WHEN tk.opened_by_email ~ '^[^\s@]+@[^\s@]+\.[^\s@]+$'
+                   AND EXISTS (SELECT 1 FROM public.user_roles ur
+                                WHERE ur.tenant_id = tk.tenant_id AND ur.user_id = tk.opened_by
+                                  AND ur.is_approved AND NOT COALESCE(ur.is_blocked, false))
+                  THEN ARRAY[tk.opened_by_email]
                   ELSE hospitality._owner_emails(tk.tenant_id) END;
   FOREACH _email IN ARRAY COALESCE(_emails, '{}') LOOP
     INSERT INTO hospitality.notifications (tenant_id, booking_id, event, recipient_kind, recipient_email, dedupe_key, payload)
@@ -705,7 +714,8 @@ BEGIN
     IF _next <> tk.status THEN
       tk := hospitality._support_set_status(tk.id, _next);
     END IF;
-    UPDATE hospitality.support_tickets x SET platform_read_at = now(), updated_at = now()
+    -- הערה פנימית לא מזיזה את "עודכן" שהעסק רואה (בלי רמז לפעילות פנימית)
+    UPDATE hospitality.support_tickets x SET platform_read_at = now()
      WHERE x.id = tk.id RETURNING * INTO tk;
   ELSE
     tk := hospitality._support_set_status(tk.id, COALESCE(_status, 'waiting_customer'));

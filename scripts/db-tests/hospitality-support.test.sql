@@ -7,7 +7,9 @@
 --     are not shown to businesses; platform admin emails are server-only;
 --   • statuses: new → in_progress → waiting_customer → resolved → closed, reopen;
 --   • an email to the business (outbox) when the platform replies — without the message body;
---   • limits: 10 tickets a day per business, 5 files per message.
+--   • limits: 10 tickets a day per business, 5 files per message;
+--   • privacy (security review): masked email for staff without a name, internal notes leave
+--     "updated" alone, reply emails only to someone still on the team.
 -- ============================================================
 \set OWNER_A '''a0000000-0000-0000-0000-0000000e4a01'''
 \set MGR_A '''a0000000-0000-0000-0000-0000000e4a02'''
@@ -304,6 +306,34 @@ SELECT tests.check('limit: up to 10 new tickets a day per business (the 11th is 
   format($$SELECT pg_temp.err_of(%1$L, %2$L, 'SELECT hospitality.support_open(''פנייה 11'', ''other'', ''low'', ''x'')') LIKE '%%הרבה פניות%%'
              AND pg_temp.err_of(%3$L, %4$L, 'SELECT hospitality.support_open(''פנייה נוספת'', ''other'', ''low'', ''x'')') IS NULL$$,
          :'sb', :OWNER_B, :'sa', :OWNER_A));
+
+-- ---------- privacy fixes from the security review ----------
+-- a staff member without a display name: co-workers see a masked email, never the login email
+UPDATE public.user_roles SET display_name = NULL WHERE tenant_id = :'sa' AND user_id = :MGR_A;
+SELECT pg_temp.call(:'sa', :MGR_A, $$SELECT hospitality.support_open('שאלה על החשבונית', 'payments', 'normal', 'איפה רואים את החשבונית החודשית?')$$) AS opened3 \gset
+SELECT (:'opened3'::jsonb #>> '{ticket,id}') AS t3 \gset
+SELECT tests.check('privacy: a staff member without a display name appears with a masked email (e•••@…), not the login email',
+  format($$SELECT %1$L::jsonb #>> '{ticket,opened_by_name}' = 'e•••@test.local'
+             AND (SELECT opened_by_name FROM hospitality.support_tickets WHERE id = %2$L) = 'e•••@test.local'
+             AND NOT EXISTS (SELECT 1 FROM hospitality.support_messages m
+                              WHERE m.ticket_id = %2$L AND m.sender_name LIKE '%%e4.manager%%')$$, :'opened3', :'t3'));
+-- an internal note does not move the ticket's "updated" time that the business sees (the first one
+-- on a new ticket moves it to "in progress" — a status the business sees anyway; the next ones nothing)
+SELECT pg_temp.admin(format($$SELECT hospitality.admin_support_reply(%L, 'פנימי: לבדוק מול הנהלת החשבונות', true)$$, :'t3')) IS NOT NULL AS ok \gset
+SELECT updated_at::text AS t3_updated FROM hospitality.support_tickets WHERE id = :'t3' \gset
+SELECT pg_temp.admin(format($$SELECT hospitality.admin_support_reply(%L, 'פנימי: עוד הערה', true)$$, :'t3')) IS NOT NULL AS ok \gset
+SELECT tests.check('privacy: an internal note leaves "updated" as it was (no hint of internal activity)',
+  format($$SELECT (SELECT updated_at::text FROM hospitality.support_tickets WHERE id = %1$L) = %2$L$$, :'t3', :'t3_updated'));
+-- the opener left the team → the reply email goes to the business owner, not to the former manager
+DELETE FROM public.user_roles WHERE tenant_id = :'sa' AND user_id = :MGR_A;
+SELECT pg_temp.admin(format($$SELECT hospitality.admin_support_reply(%L, 'החשבונית נמצאת במסך החבילה.')$$, :'t3')) IS NOT NULL AS ok \gset
+SELECT tests.check('privacy: a reply on a ticket opened by someone no longer on the team is emailed to the owner only',
+  format($$SELECT (SELECT array_agg(n.recipient_email ORDER BY n.recipient_email) FROM hospitality.notifications n
+                    WHERE n.tenant_id = %1$L AND n.event = 'support_reply' AND n.payload ->> 'ticket_id' = %2$L)
+                  = hospitality._owner_emails(%1$L::uuid)
+             AND NOT EXISTS (SELECT 1 FROM hospitality.notifications n
+                              WHERE n.payload ->> 'ticket_id' = %2$L AND n.recipient_email = 'e4.manager@test.local')$$,
+         :'sa', :'t3'));
 
 -- ---------- cleanup: the platform-wide switches back off (other test files expect them off) ----------
 SELECT pg_temp.as_platform($$SELECT to_jsonb(ARRAY[public.platform_set_flag('hospitality_backend_enabled', false),

@@ -3,7 +3,7 @@
 // במטמון קצר לכל אתר (ברירת מחדל 5 דקות, SITEMAP_TTL_MS — כמו מפות האתר של החנויות), כך שבקשות
 // חוזרות לא מעמיסות על המסד. בלי קוד מתיקיות server/ (השער נטען גם בבאנדל של הדפדפן).
 import { currentSiteAddresses } from "@/platform/tenancy/current-site.server";
-import { serviceHeaders, supabaseUrl } from "@/platform/supabase/env.server";
+import { publishableKey, supabaseUrl } from "@/platform/supabase/env.server";
 import { HOSPITALITY_SCHEMA } from "../config";
 import type { PublicRoomType, PublicSite, RawPublicSite } from "../types/website";
 import { toPublicSite } from "./lib/site-map";
@@ -17,11 +17,22 @@ const TTL_MS =
     : 5 * 60 * 1000;
 const cache = new Map<string, { at: number; site: PublicSite }>();
 
+/**
+ * המפתח הציבורי (anon) — אותה גישה שיש לגולש: public_site / public_room_types פתוחות לאורחים, אז אין
+ * צורך במפתח השירות (פחות הרשאות לשרת בנתיב הזה). מפתחות sb_publishable_ אינם JWT — לא נשלחים כ-Bearer.
+ */
+function anonHeaders(): Record<string, string> {
+  const key = publishableKey();
+  const headers: Record<string, string> = { apikey: key, "Content-Type": "application/json" };
+  if (!key.startsWith("sb_publishable_")) headers["Authorization"] = `Bearer ${key}`;
+  return headers;
+}
+
 async function rpc<T>(siteId: string, fn: string): Promise<T> {
   const res = await fetch(`${supabaseUrl()}/rest/v1/rpc/${fn}`, {
     method: "POST",
     headers: {
-      ...serviceHeaders(),
+      ...anonHeaders(),
       "Content-Profile": HOSPITALITY_SCHEMA,
       "Accept-Profile": HOSPITALITY_SCHEMA,
       "x-tenant-id": siteId,
