@@ -504,8 +504,10 @@ test("plan limit: at the limit the add button is disabled with the reason; the s
   await openUnits(page, request, slugOf(DESKTOP_SITES.limit));
   await expect(page.getByTestId("units-limit")).toHaveText("20 מתוך 20 יחידות פעילות בחבילה");
   await expect(page.getByRole("button", { name: "הוספת יחידה", exact: true })).toBeDisabled();
+  // the message of the units page (the plan banner above every screen says it too — since the
+  // 30-day trial of migration 40 it is not hidden behind "the trial ends in N days")
   await expect(
-    page.getByRole("status").filter({ hasText: "הגעתם למגבלת היחידות בחבילה" }),
+    page.getByRole("status").filter({ hasText: "הגעתם למגבלת היחידות בחבילה. אפשר להשבית יחידה" }),
   ).toBeVisible();
   const res = await catalogFn(
     request,
