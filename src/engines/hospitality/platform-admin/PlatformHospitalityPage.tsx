@@ -247,6 +247,8 @@ function EngineSwitches({ view }: { view: PlatformHospitalityView }) {
         </label>
         <p className="basis-full text-sm text-muted-foreground">
           האתר הציבורי ובקשות ההזמנה נפתחים לעסק רק כשהמתג כאן דלוק וגם המתג של העסק (בכרטיס שלו).
+          עסק שנפתח מהשער: המתגים שלו נדלקים לבד כשהבעלים מפרסמים את האתר בפעם הראשונה (אם לא כיביתם
+          אותם קודם).
         </p>
       </CardContent>
     </Card>
