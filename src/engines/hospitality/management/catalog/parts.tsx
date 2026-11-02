@@ -1,7 +1,7 @@
 // חלקים משותפים לעמודי היחידה והמתחם (Stage 2c.3): קישור חזרה, הודעה (עודכן בינתיים /
 // שגיאה מהשרת), פס שמירה קבוע, שאלה לפני יציאה עם שינויים, ואישור לפעולה.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useBlocker } from "@tanstack/react-router";
+import { Link, useBlocker, useRouterState } from "@tanstack/react-router";
 import { ChevronRight, Info, Loader2, TriangleAlert } from "lucide-react";
 import {
   AlertDialog,
@@ -16,6 +16,8 @@ import {
   buttonVariants,
   cn,
 } from "@/platform/ui";
+import { backFor } from "../lib/back";
+import { ErrorState } from "../ui/kit";
 
 export function BackLink() {
   return (
@@ -221,13 +223,25 @@ export function PageSkeleton({ label }: { label: string }) {
   );
 }
 
+/** מסך שלא נטען: כותרת, ההודעה מהשרת, "לנסות שוב", וחזרה למקום הנכון (רשימה / לוח הבקרה) */
 export function LoadError({ error }: { error: unknown }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const back = backFor(pathname);
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <BackLink />
-      <p role="alert" className="rounded-md border border-destructive/40 p-4 text-destructive">
-        {error instanceof Error && error.message ? error.message : "הטעינה נכשלה — נסו שוב"}
-      </p>
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+      <Link
+        to={back.to}
+        className="inline-flex min-h-11 w-fit items-center gap-1 text-sm font-medium text-primary hover:underline"
+      >
+        <ChevronRight className="size-4" aria-hidden="true" />
+        {back.label}
+      </Link>
+      <h1 className="text-2xl font-bold text-[var(--hm-lagoon-900)]">המסך לא נטען</h1>
+      <ErrorState
+        title="הטעינה נכשלה"
+        message={error instanceof Error && error.message ? error.message : "נסו שוב בעוד רגע"}
+        onRetry={() => window.location.reload()}
+      />
     </div>
   );
 }

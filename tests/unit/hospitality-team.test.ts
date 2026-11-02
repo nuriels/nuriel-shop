@@ -1,5 +1,6 @@
 // Hospitality Stage 2b.3 — צוות הניהול: קלט הפונקציות, טקסט הפעילות והמקומות.
 // ההרשאות והמגבלות נאכפות במסד (hospitality-settings-team.test.sql); המסך — e2e.
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseAddManager, parseRemoveManager } from "@/engines/hospitality/validation/team";
 import { activityText, seatsText } from "@/engines/hospitality/management/team/activity";
@@ -55,6 +56,30 @@ describe("activity in plain Hebrew", () => {
         }),
       ),
     ).toBe("מנהל/ת עדכן/ה את ההגדרות: כתובת העסק, שעת הגעה");
+  });
+  it("every action the database writes to the log has a sentence (no raw codes on the team screen)", () => {
+    const dir = "supabase/migrations";
+    const sql = readdirSync(dir)
+      .filter((f) => f.endsWith(".sql"))
+      .map((f) => readFileSync(`${dir}/${f}`, "utf8"))
+      .join("\n");
+    // _audit(_t, 'x.y', …) and the CASE WHEN … THEN 'x.y' ELSE 'x.z' END forms
+    const codes = new Set<string>();
+    for (const m of sql.matchAll(/_audit\([^,]+,\s*(CASE[^,]*?END|'[a-z_.]+')/g))
+      for (const c of m[1]!.matchAll(/'([a-z_]+\.[a-z_]+)'/g)) codes.add(c[1]!);
+    // 'setup.' || _action (migration 35)
+    for (const a of ["confirm", "unconfirm", "skip", "unskip"]) codes.add(`setup.${a}`);
+    expect(codes.size).toBeGreaterThan(50);
+    for (const action of codes) {
+      const text = activityText(entry({ action, target: "יעד", changes: { step: "prices" } }));
+      expect(text, action).not.toContain(action);
+    }
+    expect(activityText(entry({ action: "setup.skip", changes: { step: "seo" } }))).toBe(
+      'דנה דילג/ה במדריך ההקמה על "גוגל ושיתוף"',
+    );
+    expect(activityText(entry({ action: "team.finance_granted", target: "נועה" }))).toBe(
+      "דנה נתן/ה לנועה גישה לנתונים הכספיים",
+    );
   });
   it("dates in the business timezone", () => {
     expect(formatDateTime("2026-11-01T10:05:00Z")).toBe("01.11.2026, 12:05");

@@ -354,3 +354,19 @@ describe("formatting", () => {
     expect(usageText(7, null)).toBe("7 (ללא הגבלה)");
   });
 });
+
+describe("a screen that did not load: back to the right place", () => {
+  it("details → their list; lists → the dashboard", async () => {
+    const { backFor } = await import("@/engines/hospitality/management/lib/back");
+    expect(backFor("/manage/bookings/7c1e").to).toBe("/manage/bookings");
+    expect(backFor("/manage/bookings/new")).toEqual({
+      to: "/manage/bookings",
+      label: "חזרה להזמנות",
+    });
+    expect(backFor("/manage/guests/abc/").to).toBe("/manage/guests");
+    expect(backFor("/manage/units/u1").to).toBe("/manage/units");
+    expect(backFor("/manage/properties/p1").label).toBe("חזרה ליחידות ומתחמים");
+    expect(backFor("/manage/pricing")).toEqual({ to: "/manage", label: "חזרה ללוח הבקרה" });
+    expect(backFor("/manage/bookings").to).toBe("/manage");
+  });
+});

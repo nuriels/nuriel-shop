@@ -4,6 +4,8 @@ import { SETTINGS_KEYS, type SettingsKey } from "../../types/settings";
 import { SETTINGS_LABELS } from "../../validation/settings";
 import { PROPERTY_LABELS, UNIT_LABELS } from "../../validation/catalog";
 import { ARRIVAL_LABELS, PROPERTY_DETAIL_LABELS } from "../../validation/details";
+import { EMAIL_EVENT } from "../bookings/model";
+import { SETUP_STEP_DEFS } from "../setup/model";
 
 /** שמות השדות שהשתנו (מהיומן) בעברית — בלי הערכים */
 const FIELD_LABELS: Record<string, string> = {
@@ -18,6 +20,12 @@ const fieldsText = (changes: Record<string, unknown>) =>
     .map((k) => FIELD_LABELS[k])
     .filter(Boolean)
     .join(", ");
+
+/** שם הצעד במדריך ההקמה (מיגרציה 35) */
+const setupStep = (entry: ActivityEntry) => {
+  const key = entry.changes["step"];
+  return SETUP_STEP_DEFS.find((d) => d.key === key)?.title ?? "צעד";
+};
 
 const ROLE_FALLBACK: Record<ActivityEntry["actor_role"], string> = {
   owner: "בעל/ת העסק",
@@ -128,6 +136,54 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} ייצא/ה את המידע על האורח ${target}`;
     case "guests.anonymized":
       return `${actor} מחק/ה פרטים אישיים של אורח`;
+    case "payments.recorded":
+      return `${actor} רשם/ה תשלום ב${target}`;
+    case "payments.refund_recorded":
+      return `${actor} רשם/ה החזר כספי ב${target}`;
+    case "payments.voided":
+      return `${actor} ביטל/ה רישום תשלום ב${target}`;
+    case "room_types.created":
+      return `${actor} הוסיף/ה את סוג החדר ${target}`;
+    case "room_types.updated":
+      return `${actor} עדכן/ה את סוג החדר ${target}`;
+    case "room_types.deleted":
+      return `${actor} מחק/ה את סוג החדר ${target}`;
+    case "room_types.assigned":
+      return `${actor} שייך/ה את ${target} לסוג חדר`;
+    case "room_types.applied":
+      return `${actor} החיל/ה את פרטי סוג החדר ${target} על החדרים שלו`;
+    case "channels.calendar_added":
+      return `${actor} חיבר/ה יומן חיצוני ל${target}`;
+    case "channels.calendar_removed":
+      return `${actor} ניתק/ה יומן חיצוני מ${target}`;
+    case "channels.feed_rotated":
+      return `${actor} החליף/ה את קישור הייצוא של ${target}`;
+    case "channels.conflict":
+      return `התנגשות תאריכים מיומן חיצוני ב${target}`;
+    case "emails.requeued":
+      return `${actor} שלח/ה שוב מייל: ${EMAIL_EVENT[target] ?? "מייל"}`;
+    case "site.published":
+      return `${actor} פרסם/ה את האתר (${target})`;
+    case "site.restored":
+      return `${actor} החזיר/ה לטיוטה את ${target} של האתר`;
+    case "support.opened":
+      return `${actor} פתח/ה פנייה לתמיכה ${target}`;
+    case "support.closed":
+      return `${actor} סגר/ה את הפנייה לתמיכה ${target}`;
+    case "support.reopened":
+      return `${actor} פתח/ה מחדש את הפנייה לתמיכה ${target}`;
+    case "team.finance_granted":
+      return `${actor} נתן/ה ל${target} גישה לנתונים הכספיים`;
+    case "team.finance_revoked":
+      return `${actor} הסיר/ה מ${target} את הגישה לנתונים הכספיים`;
+    case "setup.confirm":
+      return `${actor} סימן/ה במדריך ההקמה ש"${setupStep(entry)}" נבדק ומתאים`;
+    case "setup.unconfirm":
+      return `${actor} ביטל/ה במדריך ההקמה את האישור של "${setupStep(entry)}"`;
+    case "setup.skip":
+      return `${actor} דילג/ה במדריך ההקמה על "${setupStep(entry)}"`;
+    case "setup.unskip":
+      return `${actor} ביטל/ה במדריך ההקמה את הדילוג על "${setupStep(entry)}"`;
     default:
       return `${actor}: ${entry.action}`;
   }
