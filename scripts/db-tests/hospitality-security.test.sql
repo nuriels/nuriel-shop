@@ -292,13 +292,14 @@ BEGIN
     FROM unnest(ARRAY['rate_check', 'rate_sweep', 'request_booking', 'request_booking_type', 'channel_feed',
                       'channel_sync_service', 'channel_calendars_due', 'payment_provider_record', 'claim_notifications',
                       'mark_notification', 'expire_holds', 'apply_retention', 'export_guest', 'confirm_payment',
-                      'email_payment_methods', 'support_platform_recipients']) f
+                      'email_payment_methods', 'support_platform_recipients', 'site_request_submit',
+                      'portal_open_site', 'portal_trial_days']) f
    WHERE EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace AND p.proname = f
                     AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE')))
       OR NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace AND p.proname = f
                     AND has_function_privilege('service_role', p.oid, 'EXECUTE'));
   INSERT INTO tests.results (name, ok, detail)
-  VALUES ('coverage: the server-only functions (booking requests, counters, sync, outbox, retention, provider payments) are closed to the API roles',
+  VALUES ('coverage: the server-only functions (booking requests, counters, sync, outbox, retention, provider payments, portal requests / opening) are closed to the API roles',
           _bad IS NULL, COALESCE('open / missing: ' || _bad, 'ok'));
 END $t$;
 SELECT pg_temp.expect_error('coverage: a booking request straight through the API (anonymous) is refused',

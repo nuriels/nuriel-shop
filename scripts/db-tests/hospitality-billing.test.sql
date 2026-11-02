@@ -155,17 +155,17 @@ SELECT tests.check('separation: a Hospitality site gets no Ecommerce subscriptio
 -- ============================================================
 -- 2. Subscriptions and states
 -- ============================================================
-SELECT tests.check('subscription: a new site starts on the 14-day trial',
+SELECT tests.check('subscription: a new site starts on the 30-day trial (14 until migration 40)',
   format($$SELECT plan_code = 'trial' AND status = 'trialing'
-             AND trial_ends_at BETWEEN now() + interval '14 days' - interval '1 minute' AND now() + interval '14 days' + interval '1 minute'
+             AND trial_ends_at BETWEEN now() + interval '30 days' - interval '1 minute' AND now() + interval '30 days' + interval '1 minute'
           FROM hospitality.subscriptions WHERE tenant_id = %L$$, :'sp'));
 SELECT tests.check('entitlements: trial is active with the trial unit limit and current usage',
   format($$SELECT e ->> 'plan' = 'trial' AND (e ->> 'active')::boolean AND (e ->> 'max_units')::integer = 20
              AND (e ->> 'units_used')::integer = 2 AND NOT (e ->> 'implicit')::boolean
           FROM (SELECT hospitality.entitlements(%L) AS e) x$$, :'sp'));
 INSERT INTO public.tenants (id, slug, name, site_type, created_at) VALUES
-  ('71e10000-0000-0000-0000-0000000000d1', 'he1e-raw', 'בלי מנוי', 'hospitality', now() - interval '30 days');
-SELECT tests.check('entitlements: a site without a subscription row behaves as the trial from its opening day (expired after 14 days)',
+  ('71e10000-0000-0000-0000-0000000000d1', 'he1e-raw', 'בלי מנוי', 'hospitality', now() - interval '40 days');
+SELECT tests.check('entitlements: a site without a subscription row behaves as the trial from its opening day (expired after the trial days)',
   $$SELECT (e ->> 'implicit')::boolean AND e ->> 'plan' = 'trial' AND NOT (e ->> 'active')::boolean
       FROM (SELECT hospitality.entitlements('71e10000-0000-0000-0000-0000000000d1') AS e) x$$);
 SELECT tests.check('entitlements: not defined for an Ecommerce store',

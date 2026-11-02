@@ -91,6 +91,8 @@ SELECT pg_temp.as_platform(format($$SELECT to_jsonb(public.platform_set_flag('ho
    AND public.platform_set_flag('hospitality_management_enabled', true, %1$L)
    AND public.platform_set_flag('hospitality_backend_enabled', true, %2$L)
    AND public.platform_set_flag('hospitality_management_enabled', true, %2$L))$$, :'sf', :'so')) IS NOT NULL AS ok \gset
+-- the trial ends in 10 days (a new business gets 30 since migration 40; the task shows from 14 days before)
+UPDATE hospitality.subscriptions SET trial_ends_at = now() + interval '10 days' WHERE tenant_id = :'sf';
 SELECT (now() AT TIME ZONE 'Asia/Jerusalem')::date AS jt \gset
 
 INSERT INTO hospitality.properties (id, tenant_id, name, slug, status) VALUES (:PF, :'sf', 'מתחם F3', 'f3-p', 'active');

@@ -2,6 +2,9 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_portal_open (40): rollback → portal_open_site, portal_trial_days, טריגר "האתר נפתח בפרסום"
+#     ופונקציות העזר נעלמו, שתי העמודות של הבקשות נמחקו, _site_request_json / setup_guide / setup_save /
+#     site_editor בגרסאות של 31 / 35 / 35 / 21 מילה במילה, הניסיון חוזר ל-14 יום; הסכמה זהה בדיוק ל-39
 #   • hosp_confirm_link (39): rollback → הטוקן השני (עמודה, CHECK, אינדקס) נמחק, _guest_booking,
 #     approve_booking ו-_anonymize_guest בגרסה של מיגרציה 14 מילה במילה, הסכמה זהה בדיוק למצב של 38
 #   • hosp_unit_photos_public (38): בלי נתונים חדשים; rollback → _public_media בגרסה של מיגרציה 19
@@ -83,6 +86,7 @@ M36=20261105130000_hosp_rate_check
 M37=20261105140000_hosp_payment_instructions
 M38=20261105150000_hosp_unit_photos_public
 M39=20261105160000_hosp_confirm_link
+M40=20261105170000_hosp_portal_open
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -103,6 +107,40 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- the portal opens a zimmer business by itself (migration 40) ----------
+expect "before the rollback: a new business gets 30 days of trial" \
+  "SELECT (SELECT trial_days FROM hospitality.plans WHERE code = 'trial') = 30"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M40" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M40"
+down "$M40"
+expect "the portal opening, its trigger and helpers are gone; the request columns are dropped; the trial is 14 days again" \
+  "SELECT to_regprocedure('hospitality.portal_open_site(text,text,jsonb)') IS NULL
+      AND to_regprocedure('hospitality.portal_trial_days()') IS NULL
+      AND to_regprocedure('hospitality._opens_on_publish(uuid)') IS NULL
+      AND to_regprocedure('hospitality._portal_opened(uuid)') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'site_versions_portal_open')
+      AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'site_requests'
+                       AND column_name IN ('opened_tenant_id', 'opened_at'))
+      AND (SELECT trial_days FROM hospitality.plans WHERE code = 'trial') = 14
+      AND (SELECT bool_and(prosrc NOT LIKE '%opens_on_publish%' AND prosrc NOT LIKE '%opened_%') FROM pg_proc
+            WHERE oid IN ('hospitality.setup_guide()'::regprocedure, 'hospitality.setup_save(text,text)'::regprocedure,
+                          'hospitality.site_editor()'::regprocedure,
+                          'hospitality._site_request_json(hospitality.site_requests)'::regprocedure))"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m39.sql"
+schema_dump "$SCHEMA_DIR/after-m40-down.sql"
+if diff -q "$SCHEMA_DIR/m39.sql" "$SCHEMA_DIR/after-m40-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 39, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 39:"; diff "$SCHEMA_DIR/m39.sql" "$SCHEMA_DIR/after-m40-down.sql" | head -20; exit 1
+fi
 
 # ---------- a personal link in the booking-confirmed email (migration 39) ----------
 psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
@@ -992,7 +1030,7 @@ expect "stores and their data still there" \
   "SELECT count(*) > 0 FROM public.tenants WHERE EXISTS (SELECT 1 FROM public.shipping_methods WHERE name = 'rb-row')"
 
 # ---------- re-apply ----------
-echo "re-apply: $M1 … $M32"
+echo "re-apply: $M1 … $M40"
 up "$M1"
 up "$M2"
 up "$M3"
@@ -1032,6 +1070,7 @@ up "$M36"
 up "$M37"
 up "$M38"
 up "$M39"
+up "$M40"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
@@ -1077,7 +1116,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 39 → 1 and re-apply 1 → 39 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback 40 → 1 and re-apply 1 → 40 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi
