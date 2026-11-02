@@ -58,7 +58,7 @@ export function FirstRun({ view }: { view: CatalogView }) {
             {[
               "בוחרים מה אתם משכירים",
               "נותנים שם ומספר אורחים",
-              "מוסיפים מחירים ותמונות (בהמשך)",
+              "מוסיפים תמונות ומחיר — במסך היחידה",
             ].map((text, i) => (
               <li key={text} className="flex items-center gap-2 rounded-md bg-background p-3">
                 <span

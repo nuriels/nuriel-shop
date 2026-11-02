@@ -1,11 +1,14 @@
 // הזמנות (Stage 2h) — טקסטים וחישובים בלי React: לשוניות, מצבים, מקור, ספירה לאחור לאישור,
 // מה אפשר לעשות עכשיו, ותיאור האירועים בהיסטוריה.
 import type { BookingDetail, BookingRow, BookingState, BookingTab } from "../../types/bookings";
+import type { BookingPayments, PaymentKind } from "../../types/payments";
 import { manageKeys } from "../lib/query-keys";
 
 export const bookingsKey = (tab: BookingTab, q: string) =>
   [...manageKeys.all, "bookings", tab, q] as const;
 export const bookingKey = (id: string) => [...manageKeys.all, "booking", id] as const;
+/** יומן התשלומים של הזמנה (יתרה / החזר) — מתעדכן גם אחרי אישור, ביטול או שינוי של ההזמנה */
+export const paymentsKey = (id: string) => [...manageKeys.all, "payments", id] as const;
 
 export const TABS: { key: Exclude<BookingTab, "all">; label: string; empty: string }[] = [
   { key: "pending", label: "ממתינות לטיפול", empty: "אין בקשות שממתינות לאישור." },
@@ -180,6 +183,26 @@ export const PAYMENT_KIND_LABELS: Record<string, string> = {
   refund: "החזר",
   other: "אחר",
 };
+/**
+ * מה סביר שנרשם עכשיו (ברירת המחדל בטופס הרישום) — כדי שתשלום מלא לא יירשם בטעות כ"מקדמה":
+ * החזר שמגיע לאורח → החזר; עוד לא שולם כלום ויש מקדמה קטנה מהסכום → המקדמה; עוד לא שולם כלום →
+ * תשלום מלא; כבר שולם חלק → היתרה. בעל העסק יכול לשנות לפני הרישום.
+ */
+export function suggestedPayment(
+  p: Pick<BookingPayments, "deposit_amount" | "amount_paid" | "balance_due" | "refund_due">,
+): { kind: PaymentKind; amount: number } {
+  const n = (v: number) => Number(v) || 0;
+  if (n(p.refund_due) > 0) return { kind: "refund", amount: n(p.refund_due) };
+  const due = n(p.balance_due);
+  if (n(p.amount_paid) <= 0) {
+    const deposit = n(p.deposit_amount);
+    return deposit > 0 && deposit < due
+      ? { kind: "deposit", amount: deposit }
+      : { kind: "full", amount: due };
+  }
+  return { kind: "balance", amount: due };
+}
+
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash: "מזומן",
   transfer: "העברה בנקאית",

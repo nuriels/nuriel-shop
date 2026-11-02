@@ -21,6 +21,8 @@ import {
   PAYMENT_KIND_LABELS as KIND_LABELS,
   PAYMENT_METHOD_LABELS as METHOD_LABELS,
   bookingKey,
+  paymentsKey,
+  suggestedPayment,
 } from "./model";
 
 const money = (n: number, currency: string) =>
@@ -36,7 +38,7 @@ export function PaymentsCard({
   timezone: string;
 }) {
   const qc = useQueryClient();
-  const key = [...manageKeys.all, "payments", bookingId] as const;
+  const key = paymentsKey(bookingId);
   const query = useQuery({
     queryKey: key,
     queryFn: () => hospitalityBookingPayments({ data: { bookingId } }),
@@ -96,8 +98,7 @@ export function PaymentsCard({
               <RecordForm
                 bookingId={bookingId}
                 today={today}
-                suggestRefund={p.refund_due > 0}
-                suggestAmount={p.refund_due > 0 ? p.refund_due : p.balance_due}
+                suggestion={suggestedPayment(p)}
                 onDone={(r) => {
                   done(r);
                   setAdding(false);
@@ -226,28 +227,34 @@ function PaymentLine({
 function RecordForm({
   bookingId,
   today,
-  suggestRefund,
-  suggestAmount,
+  suggestion,
   onDone,
   onCancel,
 }: {
   bookingId: string;
   today: string;
-  suggestRefund: boolean;
-  suggestAmount: number;
+  suggestion: { kind: PaymentKind; amount: number };
   onDone: (r: BookingPayments) => void;
   onCancel: () => void;
 }) {
-  const [kind, setKind] = useState<PaymentKind>(suggestRefund ? "refund" : "deposit");
-  const [method, setMethod] = useState<PaymentMethod>("transfer");
-  const [amount, setAmount] = useState(suggestAmount > 0 ? String(suggestAmount) : "");
+  const [kind, setKind] = useState<PaymentKind>(suggestion.kind);
+  // האמצעי — בלי ברירת מחדל: הוא נכנס לדוחות, ו"העברה בנקאית" שנשארה בטעות על תשלום בכרטיס תטעה אותם
+  const [method, setMethod] = useState<PaymentMethod | "">("");
+  const [amount, setAmount] = useState(suggestion.amount > 0 ? String(suggestion.amount) : "");
   const [paidAt, setPaidAt] = useState(today);
   const [note, setNote] = useState("");
   const cardInNote = looksLikeCardNumber(note);
   const save = useMutation({
     mutationFn: () =>
       hospitalityPaymentRecord({
-        data: { bookingId, kind, method, amount: Number(amount), paidAt, note },
+        data: {
+          bookingId,
+          kind,
+          method: method as PaymentMethod,
+          amount: Number(amount),
+          paidAt,
+          note,
+        },
       }),
     onSuccess: (r) => {
       toast.success(kind === "refund" ? "ההחזר נרשם" : "התשלום נרשם");
@@ -278,8 +285,12 @@ function RecordForm({
           <select
             className={select}
             value={method}
-            onChange={(e) => setMethod(e.target.value as PaymentMethod)}
+            required
+            onChange={(e) => setMethod(e.target.value as PaymentMethod | "")}
           >
+            <option value="" disabled>
+              בחרו אמצעי…
+            </option>
             {(Object.keys(METHOD_LABELS) as PaymentMethod[])
               .filter((m) => m !== "provider")
               .map((m) => (
@@ -329,7 +340,7 @@ function RecordForm({
         <Button
           type="button"
           className="min-h-11"
-          disabled={!(Number(amount) > 0) || !paidAt || cardInNote || save.isPending}
+          disabled={!(Number(amount) > 0) || !method || !paidAt || cardInNote || save.isPending}
           onClick={() => save.mutate()}
         >
           רישום

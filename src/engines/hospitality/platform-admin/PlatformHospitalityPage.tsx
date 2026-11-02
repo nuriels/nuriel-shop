@@ -513,7 +513,7 @@ function OpenedNotice({ result, onClose }: { result: OpenSiteResult; onClose: ()
   const ownerOk = result.owner.status !== "failed";
   const message = `שלום, האתר של "${result.name}" במערכת נוריאל מוכן.\nכניסה לאזור הניהול: ${
     result.manage_url ?? `(כתובת האתר: ${result.slug})`
-  }\nהכניסה עם האימייל שלך — יישלח אליך קוד חד-פעמי. משם מקימים את העסק: פרטים, יחידות, תמונות, מחירים ומדיניות ביטול.`;
+  }\nהכניסה עם האימייל שלך — יישלח אליך קוד חד-פעמי. בפנים מחכה לך המדריך "הקמת העסק" (בתפריט), שמוביל צעד אחר צעד: פרטי העסק, יחידות, תמונות, מחירים, מדיניות ביטול, תשלום מאורחים ופרסום האתר.`;
   return (
     <div
       role="status"

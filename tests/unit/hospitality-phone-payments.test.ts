@@ -11,6 +11,7 @@ import {
 import { parseRequestBooking } from "@/engines/hospitality/validation/input";
 import { he } from "@/engines/hospitality/website/copy/he";
 import { renderBookingEmail } from "@/engines/hospitality/outbox/templates";
+import { suggestedPayment } from "@/engines/hospitality/management/bookings/model";
 
 const EXACT = "בקשת ההזמנה התקבלה. נציג העסק יצור איתך קשר טלפונית להשלמת התשלום ואישור ההזמנה";
 
@@ -61,6 +62,52 @@ describe("request / approved / paid are separate", () => {
       paid: true,
     });
     expect(phoneFlow({ status: "declined", payment_status: "unpaid" }).active).toBe(false);
+  });
+});
+
+describe("recording a payment: what the form suggests", () => {
+  const base = { deposit_amount: 0, amount_paid: 0, balance_due: 1500, refund_due: 0 };
+  it("nothing paid, no deposit → a full payment of the whole amount (not a 'deposit')", () => {
+    expect(suggestedPayment(base)).toEqual({ kind: "full", amount: 1500 });
+  });
+  it("nothing paid, a deposit smaller than the amount → the deposit", () => {
+    expect(suggestedPayment({ ...base, deposit_amount: 450 })).toEqual({
+      kind: "deposit",
+      amount: 450,
+    });
+    // מקדמה בגובה הסכום כולו — זה תשלום מלא
+    expect(suggestedPayment({ ...base, deposit_amount: 1500 })).toEqual({
+      kind: "full",
+      amount: 1500,
+    });
+  });
+  it("part already paid → the balance", () => {
+    expect(
+      suggestedPayment({ ...base, deposit_amount: 450, amount_paid: 450, balance_due: 1050 }),
+    ).toEqual({
+      kind: "balance",
+      amount: 1050,
+    });
+  });
+  it("a refund due to the guest → a refund of that amount", () => {
+    expect(
+      suggestedPayment({ ...base, amount_paid: 1500, balance_due: 0, refund_due: 750 }),
+    ).toEqual({
+      kind: "refund",
+      amount: 750,
+    });
+  });
+  it("amounts that arrive as text are read as numbers", () => {
+    const fromDb = {
+      deposit_amount: "0",
+      amount_paid: "0",
+      balance_due: "1500.00",
+      refund_due: "0",
+    };
+    expect(suggestedPayment(fromDb as unknown as typeof base)).toEqual({
+      kind: "full",
+      amount: 1500,
+    });
   });
 });
 

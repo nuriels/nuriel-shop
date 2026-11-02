@@ -65,6 +65,10 @@ function useHashParams(): { token: string | null; number: number | null; ready: 
       });
     };
     read();
+    // מה שאחרי ה-# כאן הוא טוקן, לא עוגן בעמוד: הנתב מחפש אלמנט בשם הזה, לא מוצא, ומשאיר את הגלילה
+    // של העמוד הקודם (בטופס ההזמנה — למטה, ליד כפתור השליחה) — והכותרת נשארת מתחת לכותרת הקבועה של
+    // האתר. העמודים האלה מתחילים תמיד מלמעלה.
+    window.scrollTo(0, 0);
     window.addEventListener("hashchange", read);
     return () => window.removeEventListener("hashchange", read);
   }, []);

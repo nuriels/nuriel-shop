@@ -88,6 +88,8 @@ describe("payment instructions: the emails", () => {
     expect(req.intro).not.toContain("123");
     const ok = copyFor("booking_confirmed", p, b)!;
     expect(ok.intro).toContain("מחכים לך בעמוד ההזמנה");
+    // המייל הזה בלי קישור (הטוקן רק במייל הראשון) — הנוסח מפנה לקישור האישי מהמייל הקודם
+    expect(ok.intro).toContain("בקישור האישי שנשלח אליך במייל הקודם");
     expect(ok.intro).toContain("יסומן כשולם אחרי שהעסק יאשר שקיבל אותו");
   });
 });
