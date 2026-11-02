@@ -40,6 +40,20 @@ export interface SaltInfo {
 /** התקרה של maxnumber — גם בקושי המוגבר (כדי שגם מכשיר חלש יסיים בזמן סביר) */
 export const POW_MAX_LIMIT = 2_000_000;
 
+/** בקשה שנשלחה פחות מ-2 שניות אחרי שהאתגר הונפק — לא אדם (השרת דוחה: captcha.server.ts) */
+export const POW_MIN_SECONDS = 2;
+/** מרווח ביטחון בדפדפן מעבר למינימום (הזמן עד שהבקשה מגיעה לשרת לא נספר לטובתנו) */
+const POW_SEND_MARGIN_MS = 300;
+
+/**
+ * כמה לחכות בדפדפן לפני שליחת הפתרון: אורח שממלא את הטופס במילוי אוטומטי ושולח מהר מהמינימום —
+ * השליחה מתעכבת עד שעבר הזמן (במקום שהשרת ידחה אותו). נמדד מהרגע שהאתגר הגיע לדפדפן — אחרי
+ * ההנפקה בשרת, ובלי תלות בשעון של המכשיר מול השרת.
+ */
+export function powSendDelay(receivedAt: number, now: number): number {
+  return Math.max(0, receivedAt + POW_MIN_SECONDS * 1000 + POW_SEND_MARGIN_MS - now);
+}
+
 const HEX = /^[0-9a-f]{64}$/;
 const SIG = /^[A-Za-z0-9_-]{20,100}$/;
 const SALT = /^v1\.([0-9a-f]{32})\.(\d{10})\.(\d{10})\.([a-z]{3,20})\.([A-Za-z0-9_-]{8,24})$/;

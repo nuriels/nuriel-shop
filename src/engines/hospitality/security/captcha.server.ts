@@ -5,6 +5,7 @@ import {
   buildSalt,
   parseSalt,
   POW_MAX_LIMIT,
+  POW_MIN_SECONDS,
   powHashMatches,
   sha256Hex,
   type PowChallenge,
@@ -15,8 +16,8 @@ import { hmac, safeEqual } from "./secret.server";
 
 /** תוקף האתגר — מספיק כדי למלא את הטופס בנחת */
 export const POW_TTL_SECONDS = 30 * 60;
-/** בקשה שנשלחה פחות מ-2 שניות אחרי שהטופס נטען — לא אדם */
-export const POW_MIN_SECONDS = 2;
+/** בקשה שנשלחה פחות מ-2 שניות אחרי שהטופס נטען — לא אדם (משותף לדפדפן, שמחכה לפני השליחה) */
+export { POW_MIN_SECONDS };
 /** הקושי הבסיסי: עד 50,000 ניסיונות (בממוצע 25,000 — שבריר שנייה במחשב, כשנייה בטלפון ישן) */
 export const POW_BASE_MAX = 50_000;
 

@@ -652,8 +652,10 @@ function GuestForm({
     },
     onError: (e) => {
       if (e instanceof Error && e.message.includes("התנאים")) onTermsChanged();
-      // האתגר פג / כבר נוצל — אתגר חדש מתחיל להיפתר כבר עכשיו, לקראת הלחיצה הבאה
-      if (e instanceof Error && e.message === CAPTCHA_RETRY) void bot.renew();
+      // האתגר חד-פעמי, והשרת מסמן אותו כמנוצל לפני שההזמנה נרשמת — כך שאחרי כל שגיאה (גם "התאריכים
+      // נתפסו" או "התנאים השתנו", לא רק אתגר שפג) הוא כבר לא תקף. אתגר חדש מתחיל להיפתר כבר עכשיו,
+      // לקראת הלחיצה הבאה — בלי "לא הצלחנו לאמת" מיותר בניסיון השני
+      void bot.renew();
     },
   });
   const missing = (v: string) => touched && v.trim() === "";

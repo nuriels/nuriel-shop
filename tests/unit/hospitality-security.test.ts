@@ -15,6 +15,7 @@ import {
   isPowChallenge,
   parsePowSolution,
   parseSalt,
+  powSendDelay,
   solvePow,
   type PowSolution,
 } from "@/engines/hospitality/security/pow";
@@ -140,6 +141,20 @@ describe("CAPTCHA: proof of work (no third party, no cookie, nothing to solve fo
     const s = await solved();
     expect(await verifyPow(s, SITE, "request", { now: later(POW_MIN_SECONDS + 1) })).toBe("ok");
     expect(await verifyPow(s, SITE, "request", { now: later(POW_TTL_SECONDS - 5) })).toBe("ok");
+  });
+
+  it("a guest who submits fast (browser autofill) is not refused: the browser waits out the minimum", async () => {
+    // האתגר הגיע לדפדפן מיד אחרי ההנפקה, והאורח שלח באותה שנייה
+    expect(powSendDelay(T0, T0)).toBe(POW_MIN_SECONDS * 1000 + 300);
+    expect(powSendDelay(T0, T0 + 1000)).toBe(POW_MIN_SECONDS * 1000 - 700);
+    expect(powSendDelay(T0, T0 + 60_000)).toBe(0);
+    // גם כשההנפקה הייתה בסוף שנייה (השרת מעגל לשניות שלמות) — אחרי ההמתנה השרת מקבל
+    for (const issuedAt of [T0, T0 + 1, T0 + 999]) {
+      const challenge = await issuePow(SITE, "request", { now: issuedAt });
+      const s = (await solvePow(challenge, { batch: 250 }))!;
+      const sentAt = issuedAt + powSendDelay(issuedAt, issuedAt);
+      expect(await verifyPow(s, SITE, "request", { now: sentAt })).toBe("ok");
+    }
   });
 
   it("refuses: too fast (a script), expired, another business, a wrong number, a forged signature", async () => {
