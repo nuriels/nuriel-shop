@@ -48,3 +48,19 @@ BEGIN
   VALUES (_name, COALESCE(v, false), COALESCE('ERROR: ' || err, 'value=' || COALESCE(v::text, 'null')));
 END;
 $$;
+
+-- מיגרציה 43: יחידה נפתחת להזמנה באתר רק כשבעל המקום פותח לה תאריכים (ברירת מחדל — סגור). הבדיקות
+-- שנכתבו לפני כן בודקות את ההזמנות עצמן — ליחידה שהן יוצרות נפתחות שנתיים קדימה. בדיקות פתיחת
+-- התאריכים (hospitality-open-dates.test.sql) מכבות את זה בזמן שהן רצות.
+CREATE OR REPLACE FUNCTION tests.open_new_units() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.open_until IS NULL THEN
+    NEW.open_until := current_date + 730;
+  END IF;
+  RETURN NEW;
+END $$;
+SET client_min_messages = warning;
+DROP TRIGGER IF EXISTS tests_open_new_units ON hospitality.units;
+RESET client_min_messages;
+CREATE TRIGGER tests_open_new_units BEFORE INSERT ON hospitality.units
+  FOR EACH ROW EXECUTE FUNCTION tests.open_new_units();
