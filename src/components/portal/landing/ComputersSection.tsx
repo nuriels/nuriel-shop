@@ -10,7 +10,7 @@ import {
   telHref,
   whatsappHref,
 } from "@/lib/portal-landing";
-import { NewTabNote, SectionHeading, WhatsAppIcon } from "./parts";
+import { BrandLogo, NewTabNote, SectionHeading, WhatsAppIcon } from "./parts";
 import { EXTERNAL, ctaNavy, ctaOutline } from "./styles";
 
 /**
@@ -21,11 +21,18 @@ export function ComputersSection() {
   return (
     <section id="computers" aria-labelledby="computers-title" className="scroll-mt-20 bg-white">
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-24">
-        <SectionHeading
-          id="computers-title"
-          title="נוריאל מחשבים — מחשבים, ציוד ושירות בבית שמש"
-          lead="מחשבים ניידים ונייחים, מחשבים מחודשים, רכיבים לשדרוג, מסכים, מדפסות וציוד היקפי — לבית ולעסק. מזמינים בחנות באתר, ולשירות, תיקון ושדרוג פונים אלינו ישירות."
-        />
+        <div className="flex items-center justify-between gap-10">
+          <SectionHeading
+            id="computers-title"
+            title="נוריאל מחשבים — מחשבים, ציוד ושירות בבית שמש"
+            lead="מחשבים ניידים ונייחים, מחשבים מחודשים, רכיבים לשדרוג, מסכים, מדפסות וציוד היקפי — לבית ולעסק. מזמינים בחנות באתר, ולשירות, תיקון ושדרוג פונים אלינו ישירות."
+          />
+          {/* הלוגו המלא — "מחשבים | תיקונים | שדרוגים | בניית אתרים" — בדיוק התחום של החלק הזה */}
+          <BrandLogo
+            sizes="176px"
+            className="hidden size-44 shadow-[0_14px_34px_-18px_rgba(2,19,82,0.45)] sm:block"
+          />
+        </div>
 
         <div className="mt-12 grid gap-12 lg:grid-cols-[1.15fr_1fr] lg:gap-16">
           <div>

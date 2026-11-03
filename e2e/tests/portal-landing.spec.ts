@@ -75,10 +75,27 @@ test.describe("landing page — server-rendered content", () => {
     expect(html).toMatch(/<link rel="canonical" href="[^"]+\/"/);
     const ld = /<script type="application\/ld\+json">(.+?)<\/script>/s.exec(html);
     expect(ld).not.toBeNull();
-    const types = (JSON.parse(ld![1]!)["@graph"] as { "@type": string }[]).map((n) => n["@type"]);
-    expect(types).toEqual(["ComputerStore", "WebSite", "Service", "Service", "FAQPage"]);
-    // every image has a text alternative
-    for (const img of html.match(/<img [^>]*>/g) ?? []) expect(img).toMatch(/ alt="[^"]+"/);
+    const graph = JSON.parse(ld![1]!)["@graph"] as { "@type": string; logo?: { url: string } }[];
+    expect(graph.map((n) => n["@type"])).toEqual([
+      "ComputerStore",
+      "WebSite",
+      "Service",
+      "Service",
+      "FAQPage",
+    ]);
+    expect(graph[0]!.logo?.url).toMatch(/\/brand\/nuriel-computers-logo-512\.jpg$/);
+    // every image has a text alternative; an empty one only for the logo next to the business name
+    const imgs = html.match(/<img [^>]*>/g) ?? [];
+    for (const img of imgs) {
+      expect(img).toMatch(/ alt="/);
+      if (/ alt=""/.test(img)) expect(img).toContain('data-testid="brand-logo"');
+    }
+    // the logo on its own (the computers section) is described with the text inside it
+    expect(html).toContain("הלוגו של נוריאל מחשבים: מחשבים, תיקונים, שדרוגים, בניית אתרים");
+    // the logo files are served (the original, and the web sizes made from it)
+    for (const file of ["nuriel-computers-logo-original.png", "nuriel-computers-logo-192.webp"]) {
+      expect((await siteGet(request, "nuriel-app2", `/brand/${file}`)).status(), file).toBe(200);
+    }
   });
 
   test("llms.txt and the sitemap of the portal; a regular store home page is unchanged", async ({

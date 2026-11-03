@@ -156,6 +156,10 @@ describe("JSON-LD", () => {
     expect(business["telephone"]).toBe(NURIEL_BUSINESS.phoneIntl);
     expect(business["email"]).toBe(NURIEL_BUSINESS.email);
     expect((business["address"] as Node)["addressLocality"]).toBe("בית שמש");
+    // the original logo (512px copy) — an absolute address on the landing page's own site
+    expect((business["logo"] as Node)["url"]).toBe(
+      "https://nuriel-app2.nuri1.fit/brand/nuriel-computers-logo-512.jpg",
+    );
     const text = JSON.stringify(landingJsonLd(data()));
     for (const unverified of ["aggregateRating", "review", "openingHours", "geo"]) {
       expect(text).not.toContain(unverified);

@@ -35,6 +35,9 @@ export const NURIEL_BUSINESS = {
 
 export const HOSPITALITY_PRODUCT = "Nuriel Hospitality";
 
+/** הלוגו לסורקים (JSON-LD) — 512px, מוקטן פרופורציונלית מהקובץ המקורי (public/brand) */
+export const BRAND_LOGO_PATH = "/brand/nuriel-computers-logo-512.jpg";
+
 /** החנות של נוריאל מחשבים — חנות אמיתית שבנויה על המערכת (גם החנות לדוגמה) */
 export const STORE_DEMO_URL = "https://nuriel-shop.nuri1.fit/";
 /** אתר צימרים אמיתי על Nuriel Hospitality (הבית של האתר — /stay) */
@@ -335,6 +338,13 @@ export function landingJsonLd(data: LandingData): JsonObject {
         name: NURIEL_BUSINESS.name,
         alternateName: NURIEL_BUSINESS.englishName,
         url,
+        logo: {
+          "@type": "ImageObject",
+          url: `${url}${BRAND_LOGO_PATH.replace(/^\//, "")}`,
+          width: 512,
+          height: 512,
+        },
+        image: `${url}${BRAND_LOGO_PATH.replace(/^\//, "")}`,
         telephone: NURIEL_BUSINESS.phoneIntl,
         email: NURIEL_BUSINESS.email,
         address: {

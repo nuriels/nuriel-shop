@@ -10,34 +10,95 @@ export function NewTabNote() {
 }
 
 // ------------------------------------------------------------
-// הסימן של נוריאל — עד שיגיע קובץ הלוגו המקורי: שם העסק בטקסט
+// הלוגו של נוריאל מחשבים — הקובץ המקורי (public/brand), בלי שינוי צורה
 // ------------------------------------------------------------
 
+/** הטקסט שבתוך הלוגו — לתמונה שמופיעה לבד (בלי שם העסק לידה) */
+const LOGO_ALT = "הלוגו של נוריאל מחשבים: מחשבים, תיקונים, שדרוגים, בניית אתרים";
+
 /**
- * הלוגו בכותרת ובפוטר. כשיגיע קובץ הלוגו המקורי — מחליפים כאן בלבד (תמונה ב-public/landing,
- * בלי לשנות פרופורציות), וכל הדף מתעדכן.
+ * הלוגו — הקובץ המקורי שהעסק מסר (public/brand/nuriel-computers-logo-original.png), מוקטן
+ * פרופורציונלית בלבד ל-WebP (96/192/384). הלוגו עגול על רקע לבן: עיגול החיתוך עובר בשוליים
+ * הלבנים שמחוץ לטבעת — כך על רקע כחול הוא נראה כתג לבן, בלי לגעת בלוגו עצמו.
+ * `decorative` — כשהשם "נוריאל מחשבים" כתוב ממש לידו (אז התמונה לא מוקראת פעמיים).
  */
+export function BrandLogo({
+  className,
+  sizes,
+  decorative = false,
+  eager = false,
+}: {
+  className?: string;
+  /** sizes של srcset — הגודל בפועל, למשל "48px" */
+  sizes: string;
+  decorative?: boolean;
+  eager?: boolean;
+}) {
+  return (
+    <img
+      src="/brand/nuriel-computers-logo-192.webp"
+      srcSet={[96, 192, 384].map((w) => `/brand/nuriel-computers-logo-${w}.webp ${w}w`).join(", ")}
+      sizes={sizes}
+      width={384}
+      height={384}
+      alt={decorative ? "" : LOGO_ALT}
+      loading={eager ? "eager" : "lazy"}
+      decoding="async"
+      className={cn("aspect-square shrink-0 rounded-full bg-white object-contain", className)}
+      data-testid="brand-logo"
+    />
+  );
+}
+
+/** הסימן בכותרת ובפוטר: הלוגו + שם העסק (בפוטר — על הרקע הכחול) */
 export function BrandMark({ tone = "dark" }: { tone?: "dark" | "light" }) {
   return (
-    <span className="flex flex-col leading-none" data-testid="brand-mark">
-      <span
-        className={cn(
-          "font-display text-[1.35rem] font-black tracking-tight",
-          tone === "dark" ? "text-(--l-ink)" : "text-white",
-        )}
-      >
-        {NURIEL_BUSINESS.name}
-      </span>
-      <span
-        dir="ltr"
-        className={cn(
-          "mt-1 text-end text-xs font-semibold tracking-[0.06em]",
-          tone === "dark" ? "text-(--l-blue)" : "text-(--l-on-navy)",
-        )}
-      >
-        {NURIEL_BUSINESS.englishName}
+    <span className="flex items-center gap-3" data-testid="brand-mark">
+      <BrandLogo
+        decorative
+        eager={tone === "dark"}
+        sizes={tone === "dark" ? "52px" : "64px"}
+        className={tone === "dark" ? "size-11 sm:size-[3.25rem]" : "size-16"}
+      />
+      <span className="flex flex-col leading-none">
+        <span
+          className={cn(
+            "font-display text-[1.3rem] font-black tracking-tight",
+            tone === "dark" ? "text-(--l-ink)" : "text-white",
+          )}
+        >
+          {NURIEL_BUSINESS.name}
+        </span>
+        <span
+          dir="ltr"
+          className={cn(
+            "mt-1 text-end text-xs font-semibold tracking-[0.06em]",
+            tone === "dark" ? "text-(--l-blue)" : "text-(--l-on-navy)",
+          )}
+        >
+          {NURIEL_BUSINESS.englishName}
+        </span>
       </span>
     </span>
+  );
+}
+
+/**
+ * טבעת המותג — אותה טבעת כמו בלוגו (תכלת → כחול → כחול עמוק), דקה ושקופה למחצה, מאחורי צילומי
+ * המסך בפתיחה. קישוט בלבד.
+ */
+export function BrandRing({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 200 200" aria-hidden="true" focusable="false" className={className}>
+      <defs>
+        <linearGradient id="landing-ring" x1="0.5" y1="0" x2="0.5" y2="1">
+          <stop offset="0" stopColor="#00aefe" />
+          <stop offset="0.5" stopColor="#005ada" />
+          <stop offset="1" stopColor="#001687" />
+        </linearGradient>
+      </defs>
+      <circle cx="100" cy="100" r="96" fill="none" stroke="url(#landing-ring)" strokeWidth="2.5" />
+    </svg>
   );
 }
 

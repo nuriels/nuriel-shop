@@ -1,7 +1,15 @@
 import { useState } from "react";
 import { ExternalLink, LockKeyhole, Menu, X } from "lucide-react";
 import { HOSPITALITY_PRODUCT, STORE_DEMO_URL, trialCta, whatsappHref } from "@/lib/portal-landing";
-import { BrandMark, BrowserFrame, NewTabNote, PhoneFrame, Shot, WhatsAppIcon } from "./parts";
+import {
+  BrandMark,
+  BrandRing,
+  BrowserFrame,
+  NewTabNote,
+  PhoneFrame,
+  Shot,
+  WhatsAppIcon,
+} from "./parts";
 import { EXTERNAL, ctaGold, ctaNavy } from "./styles";
 
 export type StartIntent = "store" | "zimmer" | null;
@@ -198,7 +206,9 @@ export function HeroSection({
         </div>
 
         <figure className="mx-auto w-full max-w-xl lg:max-w-none">
-          <div className="relative pb-14">
+          <div className="relative isolate pb-14">
+            {/* טבעת המותג מהלוגו — מאחורי צילומי המסך (במחשב בלבד) */}
+            <BrandRing className="pointer-events-none absolute -top-16 left-1/2 -z-10 hidden w-[118%] max-w-none -translate-x-1/2 opacity-40 lg:block" />
             <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-700">
               <BrowserFrame address="nofi-dorit.nuri1.fit">
                 <Shot
@@ -219,7 +229,7 @@ export function HeroSection({
               />
             </PhoneFrame>
           </div>
-          <figcaption className="mt-4 text-center text-sm leading-6 text-(--l-muted)">
+          <figcaption className="relative mx-auto mt-4 w-fit max-w-full rounded-lg bg-(--l-paper) px-3 py-1 text-center text-sm leading-6 text-(--l-muted)">
             צילומי מסך אמיתיים: אתר מתחם הצימרים נופי דורית והחנות של נוריאל מחשבים — שניהם בנויים
             על המערכת.
           </figcaption>
