@@ -13,25 +13,25 @@ export function NewTabNote() {
 // הלוגו של נוריאל מחשבים — הקובץ המקורי (public/brand), בלי שינוי צורה
 // ------------------------------------------------------------
 
-/** הטקסט שבתוך הלוגו — לתמונה שמופיעה לבד (בלי שם העסק לידה) */
+/** הטקסט שבתוך הלוגו — לתיאור התמונה (קוראי מסך, ומנועי חיפוש) */
 const LOGO_ALT = "הלוגו של נוריאל מחשבים: מחשבים, תיקונים, שדרוגים, בניית אתרים";
 
 /**
  * הלוגו — הקובץ המקורי שהעסק מסר (public/brand/nuriel-computers-logo-original.png), מוקטן
- * פרופורציונלית בלבד ל-WebP (96/192/384). הלוגו עגול על רקע לבן: עיגול החיתוך עובר בשוליים
+ * פרופורציונלית בלבד ל-WebP (96/192/384). הלוגו עגול על רקע לבן: עיגול התצוגה עובר בשוליים
  * הלבנים שמחוץ לטבעת — כך על רקע כחול הוא נראה כתג לבן, בלי לגעת בלוגו עצמו.
- * `decorative` — כשהשם "נוריאל מחשבים" כתוב ממש לידו (אז התמונה לא מוקראת פעמיים).
  */
 export function BrandLogo({
   className,
   sizes,
-  decorative = false,
+  label = LOGO_ALT,
   eager = false,
 }: {
   className?: string;
-  /** sizes של srcset — הגודל בפועל, למשל "48px" */
+  /** sizes של srcset — הגודל בפועל, למשל "64px" */
   sizes: string;
-  decorative?: boolean;
+  /** הטקסט החלופי (ברירת מחדל — הטקסט שבתוך הלוגו) */
+  label?: string;
   eager?: boolean;
 }) {
   return (
@@ -41,7 +41,7 @@ export function BrandLogo({
       sizes={sizes}
       width={384}
       height={384}
-      alt={decorative ? "" : LOGO_ALT}
+      alt={label}
       loading={eager ? "eager" : "lazy"}
       decoding="async"
       className={cn("aspect-square shrink-0 rounded-full bg-white object-contain", className)}
@@ -50,36 +50,20 @@ export function BrandLogo({
   );
 }
 
-/** הסימן בכותרת ובפוטר: הלוגו + שם העסק (בפוטר — על הרקע הכחול) */
+/**
+ * הסימן בכותרת ובפוטר — הלוגו המקורי בלבד, במקום שם העסק בטקסט (השם כתוב בתוך הלוגו). בכותרת
+ * הלוגו הוא קישור לראש הדף, ולכן הטקסט החלופי הוא שם העסק; בפוטר — הטקסט שבתוך הלוגו.
+ */
 export function BrandMark({ tone = "dark" }: { tone?: "dark" | "light" }) {
-  return (
-    <span className="flex items-center gap-3" data-testid="brand-mark">
-      <BrandLogo
-        decorative
-        eager={tone === "dark"}
-        sizes={tone === "dark" ? "52px" : "64px"}
-        className={tone === "dark" ? "size-11 sm:size-[3.25rem]" : "size-16"}
-      />
-      <span className="flex flex-col leading-none">
-        <span
-          className={cn(
-            "font-display text-[1.3rem] font-black tracking-tight",
-            tone === "dark" ? "text-(--l-ink)" : "text-white",
-          )}
-        >
-          {NURIEL_BUSINESS.name}
-        </span>
-        <span
-          dir="ltr"
-          className={cn(
-            "mt-1 text-end text-xs font-semibold tracking-[0.06em]",
-            tone === "dark" ? "text-(--l-blue)" : "text-(--l-on-navy)",
-          )}
-        >
-          {NURIEL_BUSINESS.englishName}
-        </span>
-      </span>
-    </span>
+  return tone === "dark" ? (
+    <BrandLogo
+      label={NURIEL_BUSINESS.name}
+      eager
+      sizes="(min-width: 640px) 64px, 52px"
+      className="size-13 sm:size-16"
+    />
+  ) : (
+    <BrandLogo sizes="112px" className="size-28" />
   );
 }
 

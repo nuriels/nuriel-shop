@@ -84,14 +84,26 @@ test.describe("landing page — server-rendered content", () => {
       "FAQPage",
     ]);
     expect(graph[0]!.logo?.url).toMatch(/\/brand\/nuriel-computers-logo-512\.jpg$/);
-    // every image has a text alternative; an empty one only for the logo next to the business name
-    const imgs = html.match(/<img [^>]*>/g) ?? [];
-    for (const img of imgs) {
-      expect(img).toMatch(/ alt="/);
-      if (/ alt=""/.test(img)) expect(img).toContain('data-testid="brand-logo"');
-    }
-    // the logo on its own (the computers section) is described with the text inside it
-    expect(html).toContain("הלוגו של נוריאל מחשבים: מחשבים, תיקונים, שדרוגים, בניית אתרים");
+    // every image has a text alternative
+    for (const img of html.match(/<img [^>]*>/g) ?? []) expect(img).toMatch(/ alt="[^"]+"/);
+    // the original logo instead of the business name in text: the header (a link to the top) and
+    // the computers section + the footer (described with the text inside the logo)
+    const logos = html.match(/<img [^>]*data-testid="brand-logo"[^>]*>/g) ?? [];
+    expect(logos).toHaveLength(3);
+    expect(logos.filter((l) => l.includes('alt="נוריאל מחשבים"'))).toHaveLength(1);
+    expect(
+      logos.filter((l) =>
+        l.includes('alt="הלוגו של נוריאל מחשבים: מחשבים, תיקונים, שדרוגים, בניית אתרים"'),
+      ),
+    ).toHaveLength(2);
+    // the WhatsApp number confirmed by the business — every WhatsApp and phone link
+    const wa = html.match(/href="https:\/\/wa\.me\/[^"?]+/g) ?? [];
+    expect(wa.length).toBeGreaterThanOrEqual(4);
+    for (const href of wa) expect(href).toBe('href="https://wa.me/972505492178');
+    const tel = html.match(/href="tel:[^"]+"/g) ?? [];
+    expect(tel.length).toBeGreaterThanOrEqual(3);
+    for (const href of tel) expect(href).toBe('href="tel:+972505492178"');
+    expect(html).toContain("050-5492178");
     // the logo files are served (the original, and the web sizes made from it)
     for (const file of ["nuriel-computers-logo-original.png", "nuriel-computers-logo-192.webp"]) {
       expect((await siteGet(request, "nuriel-app2", `/brand/${file}`)).status(), file).toBe(200);
@@ -147,6 +159,46 @@ test.describe("landing page — in the browser", () => {
     await page.locator("#portal-code").fill(await lastCodeFor(request, email));
     await expect(page.locator("#portal-zim-business_name")).toBeVisible({ timeout: 20_000 });
     await expect(dialog).toContainText("30 ימי ניסיון");
+  });
+
+  test("every trial button opens the onboarding on its own path — 14 days store, 30 days Hospitality", async ({
+    page,
+  }) => {
+    test.skip(test.info().project.name === "mobile", "desktop flow");
+    await page.goto(PORTAL);
+    const dialog = page.getByRole("dialog");
+    const buttons: [string, RegExp][] = [
+      ["hero-store-trial", /חנות אינטרנטית — 14 ימי ניסיון בחינם/],
+      ["store-trial", /חנות אינטרנטית — 14 ימי ניסיון בחינם/],
+      ["plan-cta-store-basic", /חנות אינטרנטית — 14 ימי ניסיון בחינם/],
+      ["plan-cta-store-premium", /חנות אינטרנטית — 14 ימי ניסיון בחינם/],
+      ["hero-zimmer-trial", /Nuriel Hospitality — 30 ימי ניסיון בחינם/],
+      ["zimmer-trial", /Nuriel Hospitality — 30 ימי ניסיון בחינם/],
+      ["plan-cta-zimmer-basic", /Nuriel Hospitality — 30 ימי ניסיון בחינם/],
+      ["plan-cta-zimmer-premium", /Nuriel Hospitality — 30 ימי ניסיון בחינם/],
+    ];
+    for (const [id, title] of buttons) {
+      const button = page.getByTestId(id);
+      await expect(button, id).toHaveText(/14|30/);
+      await button.click();
+      await expect(dialog.getByRole("heading", { name: title }), id).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+    }
+    // the header: the logo is the link to the top; "כניסה" opens the plain login
+    await expect(page.getByRole("link", { name: "נוריאל מחשבים — לראש הדף" })).toHaveAttribute(
+      "href",
+      "#top",
+    );
+    await page.getByRole("button", { name: "כניסה", exact: true }).click();
+    await expect(dialog.getByRole("heading", { name: "כניסה או פתיחת חנות" })).toBeVisible();
+  });
+
+  test("the footer pages answer: terms, privacy, accessibility", async ({ request }) => {
+    test.skip(test.info().project.name === "mobile", "server pages");
+    for (const path of ["/terms", "/privacy", "/accessibility"]) {
+      expect((await siteGet(request, "nuriel-app2", path)).status(), path).toBe(200);
+    }
   });
 
   test("the contact form is real: validates, sends, and the message reaches the portal inbox", async ({

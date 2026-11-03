@@ -164,7 +164,7 @@ export function PricingSection({
             ))}
           </ul>
           {(data.store.paymentNote || data.store.vatNote) && (
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-(--l-muted)">
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-(--l-muted)">
               {data.store.paymentNote} {data.store.vatNote}
             </p>
           )}
