@@ -406,7 +406,13 @@ test("plan limit: activation is not offered at the limit, and the server refuses
   const slug = slugOf(DESKTOP_SITES.limit);
   const unit = unitIdOf(ids.limit!, "חדר 21");
   await open(page, request, slug, `/manage/units/${unit}`);
-  await expect(page.getByText("הגעתם למגבלת היחידות בחבילה")).toBeVisible();
+  // the reason next to the activation button — exact: the plan notice at the top of the screen
+  // also says "הגעתם למגבלת היחידות בחבילה (20)." (a 30-day trial is not in its last 14 days)
+  await expect(
+    page.getByText(
+      "הגעתם למגבלת היחידות בחבילה. אפשר להשבית יחידה, או לבקש מנוריאל חבילה גדולה יותר",
+    ),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "הפעלת היחידה" })).toBeDisabled();
   const res = await catalogFn(
     request,
