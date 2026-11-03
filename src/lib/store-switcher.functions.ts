@@ -62,9 +62,8 @@ type MyStoreRow = {
 const ROLES: readonly StoreRole[] = ["admin", "agent", "warehouse", "cashier"];
 
 async function loadMyStores(supabase: SupabaseClient<Database>): Promise<MyStore[]> {
-  const { originForTenant, slugOriginForTenant } = await import(
-    "@/integrations/supabase/tenant.server"
-  );
+  const { originForTenant, slugOriginForTenant } =
+    await import("@/integrations/supabase/tenant.server");
   const { data, error } = await supabase.rpc("my_stores");
   if (error) {
     console.error("[store-switcher] my_stores failed", error.message);

@@ -19,7 +19,10 @@ describe("requestIp (shared rate limits) — SEC-M2", () => {
 
   it("prefers X-Real-IP (written by Nginx on every request)", async () => {
     const { requestIp } = await import("@/lib/rate-limit.server");
-    current = headersOf({ "x-real-ip": "198.51.100.7", "x-forwarded-for": "1.1.1.1, 198.51.100.7" });
+    current = headersOf({
+      "x-real-ip": "198.51.100.7",
+      "x-forwarded-for": "1.1.1.1, 198.51.100.7",
+    });
     expect(await requestIp()).toBe("198.51.100.7");
   });
 

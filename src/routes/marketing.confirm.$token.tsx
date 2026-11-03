@@ -19,7 +19,9 @@ import { confirmMarketing } from "@/lib/marketing-consent.functions";
  */
 export const Route = createFileRoute("/marketing/confirm/$token")({
   ssr: false,
-  head: () => ({ meta: [{ title: "אישור הצטרפות לדיוור" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({
+    meta: [{ title: "אישור הצטרפות לדיוור" }, { name: "robots", content: "noindex" }],
+  }),
   component: ConfirmMarketingPage,
 });
 
@@ -56,7 +58,11 @@ function ConfirmMarketingPage() {
         }}
       />
       <StorefrontMain width="5xl" className="py-8" contentClassName="space-y-4">
-        <Card className="mx-auto max-w-xl" data-testid="marketing-confirm-result" data-state={state}>
+        <Card
+          className="mx-auto max-w-xl"
+          data-testid="marketing-confirm-result"
+          data-state={state}
+        >
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
             {state === "working" ? (
               <>
@@ -69,8 +75,8 @@ function ConfirmMarketingPage() {
                 <h1 className="text-xl font-bold">ההצטרפות לדיוור אושרה</h1>
                 <p role="status" className="text-sm text-muted-foreground">
                   מעכשיו תקבלו מ{storeName} עדכונים והטבות במייל.
-                  {couponSent ? " הקופון שביקשתם בדרך אליכם במייל." : ""} אפשר להסיר את עצמכם
-                  בכל עת בקישור שבתחתית כל מייל.
+                  {couponSent ? " הקופון שביקשתם בדרך אליכם במייל." : ""} אפשר להסיר את עצמכם בכל עת
+                  בקישור שבתחתית כל מייל.
                 </p>
                 <Button asChild>
                   <Link to="/">לחנות</Link>

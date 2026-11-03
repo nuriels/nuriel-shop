@@ -62,9 +62,13 @@ export function MarketingConsentCard() {
             {marketingConsentText(storeName, "account")}
           </p>
           {pendingEmail ? (
-            <p role="status" className="text-sm font-medium" data-testid="account-marketing-pending">
-              כמעט סיימנו — שלחנו מייל אישור אל <bdi dir="ltr">{pendingEmail}</bdi>. ההצטרפות
-              תיכנס לתוקף אחרי הלחיצה על הקישור שבמייל.
+            <p
+              role="status"
+              className="text-sm font-medium"
+              data-testid="account-marketing-pending"
+            >
+              כמעט סיימנו — שלחנו מייל אישור אל <bdi dir="ltr">{pendingEmail}</bdi>. ההצטרפות תיכנס
+              לתוקף אחרי הלחיצה על הקישור שבמייל.
             </p>
           ) : null}
         </div>

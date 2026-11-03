@@ -19,7 +19,11 @@ async function mailsTo(request: APIRequestContext, email: string): Promise<Mail[
   return calls
     .filter((c) => c.url.startsWith("/emails"))
     .map((c) => JSON.parse(c.body) as { to: string[] | string; subject?: string; html?: string })
-    .map((m) => ({ to: ([] as string[]).concat(m.to), subject: m.subject ?? "", html: m.html ?? "" }))
+    .map((m) => ({
+      to: ([] as string[]).concat(m.to),
+      subject: m.subject ?? "",
+      html: m.html ?? "",
+    }))
     .filter((m) => m.to.includes(email));
 }
 
@@ -62,7 +66,10 @@ test.describe("marketing double opt-in (SEC-H5)", () => {
 
     // the click confirms
     await page.goto(A(`/marketing/confirm/${token}`));
-    await expect(page.getByTestId("marketing-confirm-result")).toHaveAttribute("data-state", "done");
+    await expect(page.getByTestId("marketing-confirm-result")).toHaveAttribute(
+      "data-state",
+      "done",
+    );
     await openAccountDetails(page);
     await expect(page.getByTestId("account-marketing-switch")).toBeChecked();
 

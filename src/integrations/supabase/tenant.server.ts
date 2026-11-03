@@ -261,9 +261,7 @@ export function originForTenant(
  * (admin-handoff#code=): קוד כניסה חייב לנחות על מארח שהפלטפורמה שולטת בו, לא על דומיין
  * שבעל-חנות מכוון את ה-DNS שלו (אחרת סקריפט על הדומיין שלו גונב את הקוד ואת הסשן).
  */
-export function slugOriginForTenant(
-  tenant: (Pick<Tenant, "slug" | "is_default">) | null,
-): string {
+export function slugOriginForTenant(tenant: Pick<Tenant, "slug" | "is_default"> | null): string {
   const { siteUrl, baseDomain } = platformEnv();
   if (tenant?.is_default && siteUrl) return siteUrl;
   if (tenant && baseDomain) return `https://${tenant.slug}.${baseDomain}`;

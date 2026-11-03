@@ -879,9 +879,8 @@ export const openPortalZimmer = createServerFn({ method: "POST" })
 
 async function loadStoreState(email: string, tenantId: string) {
   const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
-  const { originForTenant, slugOriginForTenant } = await import(
-    "@/integrations/supabase/tenant.server"
-  );
+  const { originForTenant, slugOriginForTenant } =
+    await import("@/integrations/supabase/tenant.server");
   const { data, error } = await supabaseAdminUnscoped.rpc("portal_store_state", {
     _email: email,
     _tenant: tenantId,
@@ -979,5 +978,8 @@ export const enterPortalStore = createServerFn({ method: "POST" })
     }
     logPortal("info", "enter store", { email: maskEmail(email), slug: state.slug });
     // SEC-H2: הכניסה עם הקוד תמיד על תת-הדומיין של הפלטפורמה (לא על דומיין מותאם)
-    return { url: `${state.handoffOrigin}/admin-handoff#code=${code}&from=portal`, name: state.name };
+    return {
+      url: `${state.handoffOrigin}/admin-handoff#code=${code}&from=portal`,
+      name: state.name,
+    };
   });

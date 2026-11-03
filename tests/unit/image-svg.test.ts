@@ -8,7 +8,8 @@ import {
   compressSideBannerImage,
 } from "@/lib/image";
 
-const svg = '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script></svg>';
+const svg =
+  '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script></svg>';
 
 describe("image upload refuses SVG (SEC-H4)", () => {
   const compressors = {
