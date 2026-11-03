@@ -146,6 +146,28 @@ test.describe("store opening through the portal (existing flow)", () => {
            from public.tenants t where t.slug = '${slug}'`,
       ),
     ).toBe("4");
+    // the landing page: the owner gets "the store opened" with the login button — a way back to
+    // management if the page closes (the portal login, no token in the email)
+    await expect
+      .poll(
+        async () => {
+          const calls = (await (await request.get(`${MOCK}/__calls`)).json()) as {
+            url: string;
+            body: string;
+          }[];
+          return calls
+            .filter((c) => c.url.startsWith("/emails") && c.body.includes(email))
+            .map((c) => JSON.parse(c.body) as { subject?: string; html?: string })
+            .filter(
+              (m) =>
+                (m.subject ?? "").includes("נפתחה") &&
+                (m.html ?? "").includes("כניסה לניהול החנות") &&
+                (m.html ?? "").includes("/#login"),
+            ).length;
+        },
+        { timeout: 20_000 },
+      )
+      .toBe(1);
   });
 });
 

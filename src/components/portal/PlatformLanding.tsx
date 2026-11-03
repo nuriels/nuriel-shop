@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouteContext } from "@tanstack/react-router";
 import { PortalOnboarding } from "@/components/portal/PortalOnboarding";
 import type { PortalIntent } from "@/lib/portal";
@@ -34,6 +34,26 @@ export function PlatformLanding({ landing }: { siteName?: string; landing: Landi
     setOpen(true);
   };
 
+  // הקישור מהמייל "החנות נפתחה" (`/#login`) — חלון הכניסה נפתח מיד; `#signup` — ההרשמה.
+  // גם בטעינה וגם כשהכתובת משתנה באותה לשונית (hashchange)
+  useEffect(() => {
+    const openFromHash = () => {
+      const hash = window.location.hash;
+      if (hash !== "#login" && hash !== "#signup") return;
+      setIntent(hash === "#login" ? "login" : "signup");
+      setOpen(true);
+      // בלי ה-# בכתובת — רענון לא פותח שוב; ה-state של הנתב נשמר (רק הכתובת משתנה)
+      window.history.replaceState(
+        window.history.state,
+        "",
+        window.location.pathname + window.location.search,
+      );
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+    return () => window.removeEventListener("hashchange", openFromHash);
+  }, []);
+
   return (
     <div
       dir="rtl"
@@ -42,7 +62,7 @@ export function PlatformLanding({ landing }: { siteName?: string; landing: Landi
       style={LANDING_PALETTE}
       data-testid="platform-landing"
     >
-      <LandingHeader onLogin={() => start(null)} />
+      <LandingHeader onLogin={() => start("login")} onSignup={() => start("signup")} />
 
       <main id="main-content" className="flex-1">
         <HeroSection

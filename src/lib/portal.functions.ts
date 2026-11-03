@@ -499,6 +499,23 @@ export const createPortalStore = createServerFn({ method: "POST" })
       ownerUserId: createdUserId,
       actor: null,
     });
+    // דף הנחיתה: מייל "החנות נפתחה" עם כפתור הכניסה לניהול — אם הדף נסגר, חוזרים משם
+    const [{ welcomeStoreOwner }, { TRIAL_DAYS }] = await Promise.all([
+      import("@/lib/portal-notify.server"),
+      import("@/lib/subscription"),
+    ]);
+    const portalOrigin = originForTenant({
+      slug: PORTAL_STORE_SLUG,
+      domain: null,
+      is_default: false,
+    }).replace(/\/+$/, "");
+    await welcomeStoreOwner({
+      email,
+      store_name: tenant.name,
+      store_url: store.url,
+      login_url: `${portalOrigin}/#login`,
+      trial_days: TRIAL_DAYS,
+    });
     return { store };
   });
 

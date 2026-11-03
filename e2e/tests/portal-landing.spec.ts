@@ -196,7 +196,42 @@ test.describe("landing page — in the browser", () => {
       "#top",
     );
     await page.getByRole("button", { name: "כניסה", exact: true }).click();
-    await expect(dialog.getByRole("heading", { name: "כניסה או פתיחת חנות" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "כניסה לניהול" })).toBeVisible();
+  });
+
+  test("the prominent signup button, the login link, and the link from the email (#login)", async ({
+    page,
+  }) => {
+    test.skip(test.info().project.name === "mobile", "desktop flow");
+    await page.goto(PORTAL);
+    const dialog = page.getByRole("dialog");
+    // the header and the hero: "הרשמה קלה — תוך 2 דקות"
+    for (const id of ["header-signup", "hero-signup"]) {
+      await expect(page.getByTestId(id)).toContainText("הרשמה");
+      await page.getByTestId(id).click();
+      await expect(
+        dialog.getByRole("heading", { name: "הרשמה קלה — תוך 2 דקות" }),
+        id,
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+    }
+    // the visible label on a computer (the phone shows the short "הרשמה")
+    await expect(page.getByTestId("header-signup")).toHaveText("הרשמה קלה — תוך 2 דקות", {
+      useInnerText: true,
+    });
+    // "כבר נרשמתם? כניסה לניהול"
+    await page.getByTestId("hero-login").click();
+    await expect(dialog.getByRole("heading", { name: "כניסה לניהול" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+
+    // the button in the "store opened" email: /#login opens the login window at once (a fresh page)
+    await page.goto("about:blank");
+    await page.goto(`${PORTAL}#login`);
+    await expect(dialog.getByRole("heading", { name: "כניסה לניהול" })).toBeVisible();
+    await expect(page.locator("#portal-email")).toBeVisible();
+    expect(await page.evaluate(() => window.location.hash)).toBe("");
   });
 
   test("the footer pages answer: terms, privacy, accessibility", async ({ request }) => {

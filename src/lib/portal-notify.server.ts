@@ -1,6 +1,8 @@
 // שלב E2: בקשה לאתר צימר מהשער → מייל למנהלי הפלטפורמה (שרת בלבד).
 // מיגרציה 40: גם עסק שבעליו פתחו מהשער (ניסיון) — אותו מייל, "נפתח לניסיון — חזרו אליו", ומייל
 // "העסק נפתח" לבעל העסק עם הקישור לאזור הניהול.
+// דף הנחיתה: גם חנות אונליין שנפתחה מהשער — מייל "החנות נפתחה" עם כפתור "כניסה לניהול החנות"
+// (אם הדף נסגר באמצע — נכנסים משם).
 // כשל במייל לא מפיל את הבקשה / הפתיחה — הן כבר שמורות במסד ומופיעות בפאנל.
 import { emailActionButton, escapeHtml, isValidEmail, sendEmail } from "@/lib/email.server";
 
@@ -179,5 +181,53 @@ export async function welcomeZimmerOwner(owner: {
     if (!result.sent) console.error("[portal] zimmer welcome failed", result.reason);
   } catch (error) {
     console.error("[portal] zimmer welcome crashed", error);
+  }
+}
+
+/**
+ * דף הנחיתה: "החנות נפתחה" לבעל החנות (באימייל המאומת בשער) — כפתור "כניסה לניהול החנות", כדי
+ * שאם הדף נסגר באמצע (למשל בזמן שמכינים את הכתובת) אפשר לחזור לניהול מהמייל.
+ * הקישור — לכניסה בשער (`/#login`): קוד חד-פעמי למייל ← החנויות שלכם ← ישר לניהול. בלי טוקן
+ * כניסה במייל (קישור שפותח חשבון בלי קוד — לא שולחים).
+ */
+export function storeWelcomeEmail(owner: {
+  email: string;
+  store_name: string;
+  store_url: string;
+  login_url: string;
+  trial_days: number;
+}): { subject: string; html: string } {
+  const name = escapeHtml(owner.store_name);
+  const html = `<!doctype html>
+<html lang="he" dir="rtl">
+  <body style="margin:0;padding:24px;background:#f3f7fe;font-family:Heebo,Arial,sans-serif;color:#021352;">
+    <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;padding:28px;border:1px solid #d6e1f5;">
+      <h1 style="font-size:20px;margin:0 0 12px;">החנות "${name}" נפתחה!</h1>
+      <p style="margin:0 0 12px;line-height:1.7;">${owner.trial_days} ימי הניסיון התחילו — כל הכלים של חבילת הפרימיום פתוחים. בניהול החנות מוסיפים מוצרים, מעצבים ומתחילים למכור.</p>
+      ${emailActionButton("כניסה לניהול החנות", owner.login_url)}
+      <p style="margin:16px 0 0;line-height:1.7;">שמרו את המייל הזה: בכל פעם נכנסים מהכפתור (או מ-<span dir="ltr">${escapeHtml(hostOf(owner.login_url))}</span> ← "כניסה"), מקבלים קוד חד-פעמי ל-<span dir="ltr">${escapeHtml(owner.email)}</span>, ובוחרים את החנות.</p>
+      <p style="margin:12px 0 0;color:#3c4a6e;font-size:13px;line-height:1.6;">כתובת החנות: <a href="${escapeHtml(owner.store_url)}" style="color:#0057e6;"><span dir="ltr">${escapeHtml(hostOf(owner.store_url))}</span></a> — אם היא עוד לא נפתחת, חכו דקה-שתיים: מכינים לה תעודת אבטחה.</p>
+    </div>
+  </body>
+</html>`;
+  return { subject: `החנות "${owner.store_name}" נפתחה — הקישור לכניסה לניהול`, html };
+}
+
+/** שליחת "החנות נפתחה" — כשל לא מבטל את הפתיחה (החנות כבר קיימת, ובעליה בדרך לניהול) */
+export async function welcomeStoreOwner(
+  owner: Parameters<typeof storeWelcomeEmail>[0],
+): Promise<void> {
+  try {
+    if (!isValidEmail(owner.email)) return;
+    const { subject, html } = storeWelcomeEmail(owner);
+    const result = await sendEmail({
+      to: [owner.email],
+      subject,
+      html,
+      platformSender: { name: "נוריאל — חנויות אונליין" },
+    });
+    if (!result.sent) console.error("[portal] store welcome failed", result.reason);
+  } catch (error) {
+    console.error("[portal] store welcome crashed", error);
   }
 }

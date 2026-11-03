@@ -325,10 +325,23 @@ export function PortalOnboarding({
               description:
                 "מתחילים בכניסה: עם חשבון Google, או עם קוד חד-פעמי למייל. בלי סיסמאות ובלי תשלום עכשיו.",
             }
-          : {
-              title: "כניסה או פתיחת חנות",
-              description: "הכי מהיר — עם חשבון Google. אפשר גם עם קוד חד-פעמי למייל. בלי סיסמאות.",
-            },
+          : intent === "signup"
+            ? {
+                title: "הרשמה קלה — תוך 2 דקות",
+                description:
+                  "מזינים אימייל ומקבלים קוד (או נכנסים עם Google), ואז בוחרים: חנות אינטרנטית או אתר לצימר. בלי סיסמאות ובלי כרטיס אשראי.",
+              }
+            : intent === "login"
+              ? {
+                  title: "כניסה לניהול",
+                  description:
+                    "הזינו את האימייל שאיתו נרשמתם — נשלח קוד חד-פעמי, ותיכנסו לחנות או לאתר שלכם. בלי סיסמאות.",
+                }
+              : {
+                  title: "כניסה או פתיחת חנות",
+                  description:
+                    "הכי מהיר — עם חשבון Google. אפשר גם עם קוד חד-פעמי למייל. בלי סיסמאות.",
+                },
     code: { title: "בדקו את המייל", description: "הזינו את הקוד בן 6 הספרות ששלחנו אליכם." },
     loading: { title: "רק רגע…", description: "טוענים את החנויות שלכם." },
     stores: {
@@ -2169,6 +2182,11 @@ function PreparingStep({
           החלון פתוח, נעביר אתכם לבד.
         </p>
       )}
+
+      {/* דף הנחיתה: אם החלון נסגר — המייל עם כפתור הכניסה לניהול כבר בדרך */}
+      <p className="text-xs leading-5 text-muted-foreground" data-testid="preparing-email-note">
+        שלחנו ל-<bdi>{session.email}</bdi> מייל עם קישור לכניסה לניהול — אם החלון ייסגר, נכנסים משם.
+      </p>
 
       {(slow || ssl === "error") && !entering && (
         <div className="space-y-3 rounded-xl border border-accent/40 bg-accent/10 p-4 text-sm">

@@ -24,6 +24,7 @@ import {
   type LandingData,
 } from "@/lib/portal-landing";
 import { stepAfterLogin } from "@/lib/portal";
+import { storeWelcomeEmail } from "@/lib/portal-notify.server";
 import { PLAN_FEATURES, TRIAL_DAYS } from "@/lib/subscription";
 
 /** נתונים כמו שהמסד מחזיר היום (המחירים — מכאן בלבד, כדי לבדוק שהדף לא ממציא מספרים) */
@@ -243,10 +244,39 @@ describe("stepAfterLogin — the trial buttons open their own path", () => {
     expect(stepAfterLogin(fresh, "zimmer", 0)).toBe("product");
   });
 
+  it("the signup button and the login link → the usual choice after the code", () => {
+    expect(stepAfterLogin(fresh, "signup", 2)).toBe("product");
+    expect(stepAfterLogin(fresh, "login", 2)).toBe("product");
+    expect(stepAfterLogin({ stores: [{} as never], canCreate: true }, "login", 2)).toBe("stores");
+  });
+
   it("plain login → the usual choice; existing owners → their stores", () => {
     expect(stepAfterLogin(fresh, null, 2)).toBe("product");
     const owner = { stores: [{} as never], canCreate: true };
     expect(stepAfterLogin(owner, "zimmer", 2)).toBe("stores");
     expect(stepAfterLogin({ stores: [], canCreate: false }, "store", 2)).toBe("stores");
+  });
+});
+
+describe("the store welcome email — a way back to management if the page closes", () => {
+  const mail = storeWelcomeEmail({
+    email: "owner@example.com",
+    store_name: "מחשבי <דנה>",
+    store_url: "https://dana-shop.nuri1.fit",
+    login_url: "https://nuriel-app2.nuri1.fit/#login",
+    trial_days: 14,
+  });
+
+  it("has the login button to the portal and the store address", () => {
+    expect(mail.subject).toBe('החנות "מחשבי <דנה>" נפתחה — הקישור לכניסה לניהול');
+    expect(mail.html).toContain('href="https://nuriel-app2.nuri1.fit/#login"');
+    expect(mail.html).toContain("כניסה לניהול החנות");
+    expect(mail.html).toContain("dana-shop.nuri1.fit");
+    expect(mail.html).toContain("14 ימי הניסיון התחילו");
+  });
+
+  it("escapes the store name and carries no login token", () => {
+    expect(mail.html).toContain('החנות "מחשבי &lt;דנה&gt;" נפתחה!');
+    expect(mail.html).not.toMatch(/code=|token=|#code/);
   });
 });

@@ -10,9 +10,9 @@ import {
   Shot,
   WhatsAppIcon,
 } from "./parts";
-import { EXTERNAL, ctaGold } from "./styles";
+import { EXTERNAL, ctaGold, ctaOutline } from "./styles";
 
-export type StartIntent = "store" | "zimmer" | null;
+export type StartIntent = "store" | "zimmer" | "signup" | "login" | null;
 
 const NAV = [
   { href: "#online-store", label: "חנות אינטרנטית" },
@@ -24,7 +24,13 @@ const NAV = [
 ] as const;
 
 /** הכותרת העליונה — קבועה בראש הדף; בטלפון התפריט נפתח בכפתור */
-export function LandingHeader({ onLogin }: { onLogin: () => void }) {
+export function LandingHeader({
+  onLogin,
+  onSignup,
+}: {
+  onLogin: () => void;
+  onSignup: () => void;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <header className="sticky top-0 z-40 border-b border-(--l-line) bg-white/95 supports-[backdrop-filter]:bg-white/90">
@@ -63,10 +69,19 @@ export function LandingHeader({ onLogin }: { onLogin: () => void }) {
           </a>
           <button
             type="button"
-            onClick={onLogin}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-(--l-line) px-4 text-[0.95rem] font-semibold text-(--l-ink) transition-colors hover:border-(--l-blue)/40 hover:text-(--l-blue) focus-visible:outline-2 focus-visible:outline-(--l-blue)"
+            onClick={onSignup}
+            className="inline-flex min-h-11 items-center rounded-xl bg-(--l-gold) px-3 text-[0.95rem] font-bold text-(--l-ink) shadow-[0_6px_14px_-8px_rgba(118,86,12,0.75)] transition-colors hover:bg-(--l-gold-hover) focus-visible:outline-2 focus-visible:outline-(--l-blue) sm:px-4"
+            data-testid="header-signup"
           >
-            <LockKeyhole className="size-4" aria-hidden="true" />
+            <span className="sm:hidden">הרשמה</span>
+            <span className="hidden sm:inline">הרשמה קלה — תוך 2 דקות</span>
+          </button>
+          <button
+            type="button"
+            onClick={onLogin}
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-(--l-line) px-3 text-[0.95rem] font-semibold text-(--l-ink) transition-colors hover:border-(--l-blue)/40 hover:text-(--l-blue) focus-visible:outline-2 focus-visible:outline-(--l-blue) sm:px-4"
+          >
+            <LockKeyhole className="hidden size-4 sm:block" aria-hidden="true" />
             כניסה
           </button>
           <button
@@ -143,6 +158,28 @@ export function HeroSection({
             זמינות ויומן תפוסה — בעברית, מהמחשב ומהטלפון, בלי ידע טכני.
           </p>
 
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
+            <button
+              type="button"
+              onClick={() => onStart("signup")}
+              className={`${ctaGold} min-h-14 px-8 text-lg`}
+              data-testid="hero-signup"
+            >
+              הרשמה קלה — תוך 2 דקות
+            </button>
+            <p className="text-[0.95rem] text-(--l-muted)">
+              כבר נרשמתם?{" "}
+              <button
+                type="button"
+                onClick={() => onStart("login")}
+                className="font-semibold text-(--l-blue) underline underline-offset-4 hover:text-(--l-ink)"
+                data-testid="hero-login"
+              >
+                כניסה לניהול
+              </button>
+            </p>
+          </div>
+
           <ul className="mt-8 divide-y divide-(--l-line) overflow-hidden rounded-2xl border border-(--l-line) bg-white">
             <li className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
@@ -159,7 +196,7 @@ export function HeroSection({
               <button
                 type="button"
                 onClick={() => onStart("store")}
-                className={`${ctaGold} shrink-0`}
+                className={`${ctaOutline} shrink-0`}
                 data-testid="hero-store-trial"
               >
                 {trialCta(storeTrialDays)}
@@ -181,7 +218,7 @@ export function HeroSection({
               <button
                 type="button"
                 onClick={() => onStart("zimmer")}
-                className={`${ctaGold} shrink-0`}
+                className={`${ctaOutline} shrink-0`}
                 data-testid="hero-zimmer-trial"
               >
                 {trialCta(zimmerTrialDays)}
