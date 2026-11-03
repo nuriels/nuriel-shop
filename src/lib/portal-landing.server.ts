@@ -12,6 +12,7 @@
 import { catalogFromRows, PAID_PLANS } from "@/lib/plan-catalog";
 import { PORTAL_STORE_SLUG } from "@/lib/portal";
 import {
+  hideChannelSync,
   storePlanFit,
   zimmerPlanFit,
   type LandingData,
@@ -63,7 +64,8 @@ async function loadZimmerOffer(): Promise<{
   const plans = (Array.isArray(plansRaw) ? plansRaw : []).map((value): LandingZimmerPlan => {
     const p = obj(value);
     const maxUnits = num(p["max_units"]);
-    return {
+    // הסנכרון עם Airbnb / Booking.com מוסתר כרגע בשער (SHOW_CHANNEL_SYNC)
+    return hideChannelSync({
       code: str(p["code"]),
       name: str(p["name"]),
       tagline: str(p["tagline"]),
@@ -74,7 +76,7 @@ async function loadZimmerOffer(): Promise<{
         ? (p["highlights"] as unknown[]).filter((h): h is string => typeof h === "string")
         : [],
       fit: zimmerPlanFit(maxUnits),
-    };
+    });
   });
   const days = num(daysRaw);
   return { plans, trialDays: days !== null && days > 0 ? days : null };

@@ -35,6 +35,34 @@ export const NURIEL_BUSINESS = {
 
 export const HOSPITALITY_PRODUCT = "Nuriel Hospitality";
 
+/**
+ * סנכרון יומנים עם Airbnb / Booking.com — **מוסתר כרגע בשער** (דף הנחיתה, JSON-LD, llms.txt וחלון
+ * ההרשמה), לבקשת בעל העסק (3.11.2026): עד שייבדק בחבילת הפרימיום ובהגדרות. להחזרה — true.
+ * היכולת עצמה (ניהול ← "ערוצי הזמנה") וטקסטי החבילות במסד — בלי שינוי.
+ */
+export const SHOW_CHANNEL_SYNC = false;
+
+/** טקסט שמזכיר את הסנכרון עם Airbnb / Booking.com */
+export function mentionsChannelSync(text: string): boolean {
+  return /airbnb|booking/i.test(text);
+}
+
+/**
+ * חבילת Hospitality כפי שהשער מציג אותה: כשהסנכרון מוסתר — בלי תיאור קצר ובלי שורות שמזכירים
+ * אותו (שאר השורות כמו במסד). show — לבדיקות; ברירת המחדל — SHOW_CHANNEL_SYNC.
+ */
+export function hideChannelSync<T extends { tagline: string; highlights: string[] }>(
+  plan: T,
+  show: boolean = SHOW_CHANNEL_SYNC,
+): T {
+  if (show) return plan;
+  return {
+    ...plan,
+    tagline: mentionsChannelSync(plan.tagline) ? "" : plan.tagline,
+    highlights: plan.highlights.filter((h) => !mentionsChannelSync(h)),
+  };
+}
+
 /** הלוגו לסורקים (JSON-LD) — 512px, מוקטן פרופורציונלית מהקובץ המקורי (public/brand) */
 export const BRAND_LOGO_PATH = "/brand/nuriel-computers-logo-512.jpg";
 
@@ -222,7 +250,7 @@ export function commonSetupFee(plans: LandingZimmerPlan[]): number | null {
 
 export type FaqItem = { q: string; a: string };
 
-export function landingFaq(data: LandingData): FaqItem[] {
+export function landingFaq(data: LandingData, showSync: boolean = SHOW_CHANNEL_SYNC): FaqItem[] {
   const storeDays = data.store.trialDays;
   const hospDays = data.hospitality.trialDays;
   const fee = commonSetupFee(data.hospitality.plans);
@@ -253,10 +281,15 @@ export function landingFaq(data: LandingData): FaqItem[] {
       q: "אפשר לחבר דומיין משלי?",
       a: `כן. בחנות אינטרנטית — בחבילת הפרימיום (או כתוסף). ב-${HOSPITALITY_PRODUCT} — חיבור הדומיין הוא חלק מההקמה. עד אז האתר עובד בכתובת מאובטחת על nuri1.fit.`,
     },
-    {
-      q: "יש סנכרון עם Airbnb ו-Booking.com?",
-      a: `כן, בחבילת הפרימיום של ${HOSPITALITY_PRODUCT}: יומני Airbnb ו-Booking.com מסתנכרנים עם יומן התפוסה, כדי למנוע הזמנות כפולות.`,
-    },
+    // מוסתר כרגע (SHOW_CHANNEL_SYNC)
+    ...(showSync
+      ? [
+          {
+            q: "יש סנכרון עם Airbnb ו-Booking.com?",
+            a: `כן, בחבילת הפרימיום של ${HOSPITALITY_PRODUCT}: יומני Airbnb ו-Booking.com מסתנכרנים עם יומן התפוסה, כדי למנוע הזמנות כפולות.`,
+          },
+        ]
+      : []),
     {
       q: "אפשר לנהל הכול מהטלפון?",
       a: "כן. החנויות, אתרי הצימרים ואזורי הניהול מותאמים לטלפון — מוסיפים מוצר, מאשרים הזמנה או פותחים תאריכים מכל מקום.",

@@ -1,5 +1,11 @@
 import { Check, ExternalLink } from "lucide-react";
-import { HOSPITALITY_PRODUCT, ZIMMER_DEMO_URL, trialCta, trialLabel } from "@/lib/portal-landing";
+import {
+  HOSPITALITY_PRODUCT,
+  SHOW_CHANNEL_SYNC,
+  ZIMMER_DEMO_URL,
+  trialCta,
+  trialLabel,
+} from "@/lib/portal-landing";
 import { BrowserFrame, NewTabNote, PhoneFrame, SectionHeading, Shot } from "./parts";
 import { EXTERNAL, ctaGold, ctaOutlineDark } from "./styles";
 
@@ -12,7 +18,7 @@ const SITE_FEATURES = [
   "מיילים אוטומטיים לאורחים ולעסק",
 ] as const;
 
-const MANAGE_FEATURES = [
+const MANAGE_FEATURES: readonly string[] = [
   "יחידות, חדרים וסוגי חדרים (סוגי חדרים — פרימיום)",
   "פתיחת תאריכים לכל יחידה, ותזכורת כשצריך לפתוח עוד",
   "יומן תפוסה אחד: הזמנה של חדר חוסמת השכרה של כל המתחם באותם תאריכים, ולהפך",
@@ -20,8 +26,9 @@ const MANAGE_FEATURES = [
   "פרטי אורחים לפי הרשאות הצוות",
   "מעקב תשלומים — תשלום טלפוני ויומן תשלומים",
   "דוחות וייצוא",
-  "סנכרון יומנים עם Airbnb ו-Booking.com (פרימיום)",
-] as const;
+  // מוסתר כרגע (SHOW_CHANNEL_SYNC ב-portal-landing.ts)
+  ...(SHOW_CHANNEL_SYNC ? ["סנכרון יומנים עם Airbnb ו-Booking.com (פרימיום)"] : []),
+];
 
 function FeatureList({ title, items }: { title: string; items: readonly string[] }) {
   return (

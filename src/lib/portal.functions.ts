@@ -20,6 +20,7 @@ import {
   type StoreReadiness,
   zimmerRequestProblems,
 } from "@/lib/portal";
+import { hideChannelSync } from "@/lib/portal-landing";
 
 /**
  * שער הפלטפורמה (חלק 12) — פונקציות השרת. פועלות רק באתר של החנות
@@ -654,7 +655,8 @@ async function loadZimmerPlans(): Promise<PortalZimmerPlan[]> {
     return raw.map((value) => {
       const p = obj(value);
       const num = (v: unknown) => (typeof v === "number" ? v : null);
-      return {
+      // הסנכרון עם Airbnb / Booking.com מוסתר כרגע בשער (SHOW_CHANNEL_SYNC)
+      return hideChannelSync({
         code: str(p["code"]),
         name: str(p["name"]),
         tagline: str(p["tagline"]),
@@ -664,7 +666,7 @@ async function loadZimmerPlans(): Promise<PortalZimmerPlan[]> {
         highlights: Array.isArray(p["highlights"])
           ? (p["highlights"] as unknown[]).filter((h): h is string => typeof h === "string")
           : [],
-      };
+      });
     });
   } catch (error) {
     logPortal("warn", "zimmer plans unavailable", { message: String(error) });

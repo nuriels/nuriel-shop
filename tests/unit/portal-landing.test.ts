@@ -7,14 +7,17 @@ import {
   HOSPITALITY_PRODUCT,
   LANDING_TITLE,
   NURIEL_BUSINESS,
+  SHOW_CHANNEL_SYNC,
   STORE_DEMO_URL,
   ZIMMER_DEMO_URL,
   commonSetupFee,
   contactMessage,
+  hideChannelSync,
   landingDescription,
   landingFaq,
   landingJsonLd,
   landingLlmsTxt,
+  mentionsChannelSync,
   shekels,
   storeCategoryUrl,
   storePlanFit,
@@ -278,5 +281,46 @@ describe("the store welcome email — a way back to management if the page close
   it("escapes the store name and carries no login token", () => {
     expect(mail.html).toContain('החנות "מחשבי &lt;דנה&gt;" נפתחה!');
     expect(mail.html).not.toMatch(/code=|token=|#code/);
+  });
+});
+
+describe("Airbnb / Booking.com sync — hidden on the portal for now (one switch)", () => {
+  // the premium package as the database has it today
+  const premium = {
+    tagline: "בלי הגבלות — עם סנכרון Airbnb / Booking.com ותמיכה מועדפת",
+    highlights: [
+      "יחידות ומתחמים ללא הגבלה",
+      "סנכרון Airbnb / Booking.com — בלי הזמנות כפולות",
+      "תמיכה מועדפת — מענה באותו יום + WhatsApp",
+    ],
+  };
+
+  it("is hidden now (SHOW_CHANNEL_SYNC = false)", () => {
+    expect(SHOW_CHANNEL_SYNC).toBe(false);
+  });
+
+  it("a package loses only what mentions the sync; the basic package is untouched", () => {
+    expect(hideChannelSync(premium)).toEqual({
+      tagline: "",
+      highlights: ["יחידות ומתחמים ללא הגבלה", "תמיכה מועדפת — מענה באותו יום + WhatsApp"],
+    });
+    const basic = {
+      tagline: "אתר הזמנות מלא לצימר — עם תמיכה",
+      highlights: ["עד 3 יחידות (חדרים / בקתות)", "תמיכה — מענה תוך יום עסקים"],
+    };
+    expect(hideChannelSync(basic)).toEqual(basic);
+    // shown again — exactly as in the database
+    expect(hideChannelSync(premium, true)).toEqual(premium);
+  });
+
+  it("the FAQ, JSON-LD and llms.txt say nothing about it; the switch brings the question back", () => {
+    const d = data();
+    const faq = landingFaq(d);
+    expect(faq.some((f) => mentionsChannelSync(`${f.q} ${f.a}`))).toBe(false);
+    expect(JSON.stringify(landingJsonLd(d))).not.toMatch(/airbnb|booking/i);
+    expect(landingLlmsTxt(d)).not.toMatch(/airbnb|booking/i);
+    const shown = landingFaq(d, true);
+    expect(shown.map((f) => f.q)).toContain("יש סנכרון עם Airbnb ו-Booking.com?");
+    expect(shown).toHaveLength(faq.length + 1);
   });
 });
