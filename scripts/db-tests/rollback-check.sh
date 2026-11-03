@@ -93,6 +93,15 @@ M41=20261105180000_hosp_unit_size
 M42=20261105190000_hosp_logo_brand
 M43=20261105200000_hosp_open_dates
 M44=20261105210000_hosp_booking_groups
+M45=20261106120000_hosp_sec_c1_guest_claim
+M46=20261106130000_sec_h1_trusted_account
+M47=20261106140000_sec_h4_bucket_mime
+M48=20261106150000_sec_h5_double_opt_in
+M49=20261106160000_sec_m3_online_hold_guard
+M50=20261106170000_sec_m5_keep_platform_records
+M51=20261106180000_sec_p3_low_findings
+M52=20261106190000_sec_p3_helpers_quote_email
+M53=20261106200000_sec_prv_guest_privacy
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -113,6 +122,276 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- SEC-PRV: guest privacy — outbox links, anonymization, export (migration 53) ----------
+expect "before the rollback: links stripped per room after sending, notes cleared on anonymization, the export includes history and payments" \
+  "SELECT (SELECT prosrc LIKE '%PRV-17%' AND prosrc LIKE '%WITH ORDINALITY%' FROM pg_proc WHERE oid = 'hospitality.mark_notification(uuid,boolean,text,text)'::regprocedure)
+      AND (SELECT prosrc LIKE '%cancellation_reason = NULL%' FROM pg_proc WHERE oid = 'hospitality._anonymize_guest(uuid,uuid)'::regprocedure)
+      AND (SELECT prosrc LIKE '%''payments''%' FROM pg_proc WHERE oid = 'hospitality.export_guest(uuid)'::regprocedure)"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M53" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M53"
+down "$M53"
+expect "the three functions are the originals (top-level link only, notes kept, the shorter export)" \
+  "SELECT (SELECT prosrc NOT LIKE '%PRV-17%' FROM pg_proc WHERE oid = 'hospitality.mark_notification(uuid,boolean,text,text)'::regprocedure)
+      AND (SELECT prosrc NOT LIKE '%cancellation_reason = NULL%' FROM pg_proc WHERE oid = 'hospitality._anonymize_guest(uuid,uuid)'::regprocedure)
+      AND (SELECT prosrc NOT LIKE '%''payments''%' FROM pg_proc WHERE oid = 'hospitality.export_guest(uuid)'::regprocedure)"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m52.sql"
+schema_dump "$SCHEMA_DIR/after-m53-down.sql"
+if diff -q "$SCHEMA_DIR/m52.sql" "$SCHEMA_DIR/after-m53-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 52, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 52:"; diff "$SCHEMA_DIR/m52.sql" "$SCHEMA_DIR/after-m53-down.sql" | head -20; exit 1
+fi
+
+# ---------- SEC P3 (b): helpers, coupon quotes, own email on self-registration (migration 52) ----------
+expect "before the rollback: helper grants narrowed, the coupon guard in both quote functions, the email trigger exists" \
+  "SELECT NOT has_function_privilege('authenticated', 'public.product_serial_gap(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.staff_display_name(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.can_pick(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.is_warehouse(uuid)', 'EXECUTE')
+      AND (SELECT count(*) FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace
+            AND proname IN ('quote', 'quote_type') AND prosrc LIKE '%SEC-L4%') = 2
+      AND (SELECT prosrc LIKE '%SEC-L3%' FROM pg_proc WHERE oid = 'public.order_coupon_verify(uuid)'::regprocedure)
+      AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'user_roles_auth_email')"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M52" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M52"
+down "$M52"
+expect "the grants, the quote functions and order_coupon_verify are the originals; no email trigger" \
+  "SELECT has_function_privilege('authenticated', 'public.product_serial_gap(uuid)', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'public.staff_display_name(uuid)', 'EXECUTE')
+      AND has_function_privilege('anon', 'public.can_pick(uuid)', 'EXECUTE')
+      AND has_function_privilege('anon', 'public.is_warehouse(uuid)', 'EXECUTE')
+      AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace
+                       AND proname IN ('quote', 'quote_type') AND prosrc LIKE '%SEC-L4%')
+      AND (SELECT prosrc NOT LIKE '%SEC-L3%' FROM pg_proc WHERE oid = 'public.order_coupon_verify(uuid)'::regprocedure)
+      AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'user_roles_auth_email')
+      AND to_regprocedure('public.user_roles_auth_email()') IS NULL"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m51.sql"
+schema_dump "$SCHEMA_DIR/after-m52-down.sql"
+if diff -q "$SCHEMA_DIR/m51.sql" "$SCHEMA_DIR/after-m52-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 51, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 51:"; diff "$SCHEMA_DIR/m51.sql" "$SCHEMA_DIR/after-m52-down.sql" | head -20; exit 1
+fi
+
+# ---------- SEC P3: low findings (migration 51) ----------
+expect "before the rollback: login-email map is server-only, no anon reset requests, site requests keep guest cards" \
+  "SELECT NOT has_function_privilege('authenticated', 'public.resolve_login_email(text)', 'EXECUTE')
+      AND NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'password_reset_requests' AND policyname = 'anyone can request reset')
+      AND (SELECT bool_and(prosrc NOT LIKE '%SET marketing_consent = true%') FROM pg_proc
+            WHERE pronamespace = 'hospitality'::regnamespace AND proname IN ('request_booking', 'request_booking_group'))"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M51" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M51"
+down "$M51"
+expect "the grant, the reset policy and the earlier request functions are back" \
+  "SELECT has_function_privilege('authenticated', 'public.resolve_login_email(text)', 'EXECUTE')
+      AND EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'password_reset_requests' AND policyname = 'anyone can request reset')
+      AND (SELECT bool_and(prosrc LIKE '%SET marketing_consent = true%') FROM pg_proc
+            WHERE pronamespace = 'hospitality'::regnamespace AND proname IN ('request_booking', 'request_booking_group'))"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m50.sql"
+schema_dump "$SCHEMA_DIR/after-m51-down.sql"
+if diff -q "$SCHEMA_DIR/m50.sql" "$SCHEMA_DIR/after-m51-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 50, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 50:"; diff "$SCHEMA_DIR/m50.sql" "$SCHEMA_DIR/after-m51-down.sql" | head -20; exit 1
+fi
+
+# ---------- SEC-M5: store deletion keeps Nuriel's own records (migration 50) ----------
+expect "before the rollback: billing / audit rows are not cascaded or purged; billing keeps a store label" \
+  "SELECT NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname IN ('billing_history_tenant_id_fkey', 'platform_audit_log_tenant_id_fkey'))
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'billing_history' AND column_name = 'store_label')
+      AND (SELECT prosrc LIKE '%tenant_deleted%' FROM pg_proc WHERE oid = 'public.platform_delete_tenant(uuid,text)'::regprocedure)"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M50" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M50"
+down "$M50"
+expect "the cascading foreign keys are back, the label column is gone, the delete function is the original" \
+  "SELECT (SELECT count(*) FROM pg_constraint WHERE conname IN ('billing_history_tenant_id_fkey', 'platform_audit_log_tenant_id_fkey')
+            AND pg_get_constraintdef(oid) LIKE '%ON DELETE CASCADE%') = 2
+      AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'billing_history' AND column_name = 'store_label')
+      AND (SELECT prosrc NOT LIKE '%tenant_deleted%' FROM pg_proc WHERE oid = 'public.platform_delete_tenant(uuid,text)'::regprocedure)"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m49.sql"
+schema_dump "$SCHEMA_DIR/after-m50-down.sql"
+if diff -q "$SCHEMA_DIR/m49.sql" "$SCHEMA_DIR/after-m50-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 49, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 49:"; diff "$SCHEMA_DIR/m49.sql" "$SCHEMA_DIR/after-m50-down.sql" | head -20; exit 1
+fi
+
+# ---------- SEC-M3: hold guard on site requests (migration 49) ----------
+expect "before the rollback: the hold guard exists and both site request functions call it" \
+  "SELECT to_regprocedure('hospitality._online_hold_guard(uuid,uuid[],date,date)') IS NOT NULL
+      AND (SELECT count(*) FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace
+            AND proname IN ('request_booking', 'request_booking_group') AND prosrc LIKE '%_online_hold_guard%') = 2"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M49" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M49"
+down "$M49"
+expect "the guard is gone and the site request functions no longer call it" \
+  "SELECT to_regprocedure('hospitality._online_hold_guard(uuid,uuid[],date,date)') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace
+                       AND proname IN ('request_booking', 'request_booking_group') AND prosrc LIKE '%_online_hold_guard%')"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m48.sql"
+schema_dump "$SCHEMA_DIR/after-m49-down.sql"
+if diff -q "$SCHEMA_DIR/m48.sql" "$SCHEMA_DIR/after-m49-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 48, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 48:"; diff "$SCHEMA_DIR/m48.sql" "$SCHEMA_DIR/after-m49-down.sql" | head -20; exit 1
+fi
+
+# ---------- SEC-H5: marketing double opt-in (migration 48) ----------
+expect "before the rollback: consent is double opt-in (confirm function, token + evidence columns)" \
+  "SELECT to_regprocedure('public.marketing_confirm(text,text,text)') IS NOT NULL
+      AND to_regprocedure('public.marketing_set_consent(text,boolean,text,text,uuid,text,text,text,text,jsonb)') IS NOT NULL
+      AND to_regprocedure('public.marketing_set_consent(text,boolean,text,text,uuid)') IS NULL
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+                   AND table_name = 'marketing_consents' AND column_name = 'confirm_token_hash')"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M48" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M48"
+down "$M48"
+expect "single opt-in is back: the part-40 consent function, no confirm function, no new columns" \
+  "SELECT to_regprocedure('public.marketing_confirm(text,text,text)') IS NULL
+      AND to_regprocedure('public.marketing_release_confirm(text,text)') IS NULL
+      AND to_regprocedure('public.marketing_set_consent(text,boolean,text,text,uuid)') IS NOT NULL
+      AND to_regprocedure('public.marketing_set_consent(text,boolean,text,text,uuid,text,text,text,text,jsonb)') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+                       AND table_name IN ('marketing_consents', 'marketing_consent_events')
+                       AND column_name IN ('confirm_token_hash', 'confirm_sent_at', 'confirm_context', 'confirmed_at',
+                                           'consent_ip_hash', 'consent_user_agent', 'consent_method',
+                                           'kind', 'ip_hash', 'user_agent', 'method'))"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m47.sql"
+schema_dump "$SCHEMA_DIR/after-m48-down.sql"
+if diff -q "$SCHEMA_DIR/m47.sql" "$SCHEMA_DIR/after-m48-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 47, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 47:"; diff "$SCHEMA_DIR/m47.sql" "$SCHEMA_DIR/after-m48-down.sql" | head -20; exit 1
+fi
+
+# ---------- SEC-H4: MIME allowlist on the public Ecommerce buckets (migration 47, data only) ----------
+expect "before the rollback: product-images and branding accept raster (+ banner video) only — no SVG" \
+  "SELECT count(*) = 2 AND bool_and(allowed_mime_types IS NOT NULL AND file_size_limit IS NOT NULL
+                                  AND NOT ('image/svg+xml' = ANY (allowed_mime_types)))
+     FROM storage.buckets WHERE id IN ('product-images', 'branding')"
+echo "rollback: $M47"
+down "$M47"
+expect "the buckets are kept (they hold every product image and logo) with no type or size limit again" \
+  "SELECT count(*) = 2 AND bool_and(allowed_mime_types IS NULL AND file_size_limit IS NULL AND public)
+     FROM storage.buckets WHERE id IN ('product-images', 'branding')"
+schema_dump "$SCHEMA_DIR/after-m47-down.sql"
+# (the schema just before this rollback is the one after the migration-48 rollback above)
+if diff -q "$SCHEMA_DIR/after-m48-down.sql" "$SCHEMA_DIR/after-m47-down.sql" >/dev/null; then
+  echo "  ok   data-only migration: the schema is unchanged by the rollback"
+else
+  echo "  FAIL migration 47 changed the schema:"; diff "$SCHEMA_DIR/after-m48-down.sql" "$SCHEMA_DIR/after-m47-down.sql" | head -20; exit 1
+fi
+
+# ---------- SEC-H1: trusted-account binding (migration 46) ----------
+expect "before the rollback: the trusted-account helper exists and the six binding functions use it" \
+  "SELECT to_regprocedure('public._platform_account_id(text)') IS NOT NULL
+      AND (SELECT bool_and(prosrc LIKE '%_platform_account_id%') FROM pg_proc
+            WHERE oid IN ('hospitality.admin_set_owner(uuid,text,text)'::regprocedure,
+                          'hospitality.team_add_manager(text,text)'::regprocedure,
+                          'hospitality.portal_open_site(text,text,jsonb)'::regprocedure,
+                          'public.platform_link_store_admin(uuid,text)'::regprocedure,
+                          'public.portal_create_store(text,text,text)'::regprocedure,
+                          'public.store_link_existing_account(text,text,text)'::regprocedure))"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M46" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M46"
+down "$M46"
+expect "the helper is gone and the six binding functions resolve the account by email again" \
+  "SELECT to_regprocedure('public._platform_account_id(text)') IS NULL
+      AND (SELECT bool_and(prosrc NOT LIKE '%_platform_account_id%' AND prosrc LIKE '%auth.users%') FROM pg_proc
+            WHERE oid IN ('hospitality.admin_set_owner(uuid,text,text)'::regprocedure,
+                          'hospitality.team_add_manager(text,text)'::regprocedure,
+                          'hospitality.portal_open_site(text,text,jsonb)'::regprocedure,
+                          'public.platform_link_store_admin(uuid,text)'::regprocedure,
+                          'public.portal_create_store(text,text,text)'::regprocedure,
+                          'public.store_link_existing_account(text,text,text)'::regprocedure))"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m45.sql"
+schema_dump "$SCHEMA_DIR/after-m46-down.sql"
+if diff -q "$SCHEMA_DIR/m45.sql" "$SCHEMA_DIR/after-m46-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 45, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 45:"; diff "$SCHEMA_DIR/m45.sql" "$SCHEMA_DIR/after-m46-down.sql" | head -20; exit 1
+fi
+
+# ---------- SEC-C1: token-gated guest claim (migration 45) ----------
+expect "before the rollback: claim is token-gated; the booking functions carry no email auto-link" \
+  "SELECT to_regprocedure('hospitality.claim_guest_bookings(text)') IS NOT NULL
+      AND to_regprocedure('hospitality.claim_guest_bookings()') IS NULL
+      AND (SELECT bool_and(prosrc NOT LIKE '%email_confirmed_at IS NOT NULL%') FROM pg_proc
+            WHERE oid IN ('hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)'::regprocedure,
+                          'hospitality.request_booking_group(jsonb,date,date,text,text,text,text,boolean,text,boolean,text)'::regprocedure))"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M45" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M45"
+down "$M45"
+expect "the no-arg claim is restored; the booking functions carry the email auto-link again" \
+  "SELECT to_regprocedure('hospitality.claim_guest_bookings()') IS NOT NULL
+      AND to_regprocedure('hospitality.claim_guest_bookings(text)') IS NULL
+      AND (SELECT bool_and(prosrc LIKE '%email_confirmed_at IS NOT NULL%') FROM pg_proc
+            WHERE oid IN ('hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)'::regprocedure,
+                          'hospitality.request_booking_group(jsonb,date,date,text,text,text,text,boolean,text,boolean,text)'::regprocedure))"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m44.sql"
+schema_dump "$SCHEMA_DIR/after-m45-down.sql"
+if diff -q "$SCHEMA_DIR/m44.sql" "$SCHEMA_DIR/after-m45-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 44, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 44:"; diff "$SCHEMA_DIR/m44.sql" "$SCHEMA_DIR/after-m45-down.sql" | head -20; exit 1
+fi
 
 # ---------- several rooms in one request (migration 44) ----------
 expect "before the rollback: bookings have a group; the group functions exist" \
@@ -1204,6 +1483,15 @@ up "$M41"
 up "$M42"
 up "$M43"
 up "$M44"
+up "$M45"
+up "$M46"
+up "$M47"
+up "$M48"
+up "$M49"
+up "$M50"
+up "$M51"
+up "$M52"
+up "$M53"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \

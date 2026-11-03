@@ -120,6 +120,18 @@ write_app_env() {
     hosp_secret=$(openssl rand -hex 32)
     HOSP_SECRET_CREATED=1
   fi
+  # SEC-L13: סוד ה-HMAC של קודי הכניסה במייל, קודי/טוקני הפורטל וה-CAPTCHA. בלעדיו האפליקציה
+  # משתמשת במפתח השירות עצמו (SUPABASE_SERVICE_ROLE_KEY) כמפתח HMAC. נוצר פעם אחת ונשמר בין
+  # הרצות (קודם — שורה שנוספה ידנית נמחקה בכל הרצה). ביצירה הראשונה בלבד: קודים וטוקנים שכבר
+  # נשלחו (עד שעה) מפסיקים לעבוד, ומבקשים חדשים.
+  local login_secret="${LOGIN_CODE_SECRET:-}"
+  if [[ -z "$login_secret" && -f "$APP_DIR/.env" ]]; then
+    login_secret=$(grep '^LOGIN_CODE_SECRET=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/^"//; s/"$//' || true)
+  fi
+  if [[ -z "$login_secret" ]]; then
+    login_secret=$(openssl rand -hex 32)
+    LOGIN_SECRET_CREATED=1
+  fi
   log "כותב את קבצי הסביבה של האפליקציה"
   umask 077
   # docker compose קורא את הקובץ הזה אוטומטית (משתני ${...} ב-docker-compose.yml)
@@ -147,6 +159,8 @@ PLATFORM_ADMIN_HOST=${PLATFORM_ADMIN_HOST}
 HOSPITALITY_ENGINE=${hosp_engine}
 HOSPITALITY_SECRET=${hosp_secret}
 HOSPITALITY_POW_MAX=${hosp_pow}
+# סוד ה-HMAC של קודי הכניסה במייל / הפורטל / CAPTCHA (סוד — לגבות; זהה בכל השרתים)
+LOGIN_CODE_SECRET=${login_secret}
 EOF
   umask 022
   # פורט מקומי בלבד — הגישה מבחוץ רק דרך Nginx (כמו שאר האפליקציות בשרת)
@@ -160,6 +174,9 @@ services:
 EOF
   if [[ "${HOSP_SECRET_CREATED:-}" == 1 ]]; then
     echo "  ✓ נוצר HOSPITALITY_SECRET ב-$APP_DIR/.env — לשמור עותק בגיבוי הסודות"
+  fi
+  if [[ "${LOGIN_SECRET_CREATED:-}" == 1 ]]; then
+    echo "  ✓ נוצר LOGIN_CODE_SECRET ב-$APP_DIR/.env — קודי כניסה שכבר נשלחו (עד שעה) יפוגו פעם אחת"
   fi
   if [[ "${GROW_KEY_CREATED:-}" == 1 ]]; then
     echo "  ✓ נוצר מפתח הצפנה לסליקה (GROW_SECRETS_KEY) ב-$APP_DIR/.env — לשמור עותק גיבוי נפרד"
@@ -247,6 +264,10 @@ if [[ ! -f .env ]]; then
   set_env .env DASHBOARD_PASSWORD "$DASHBOARD_PASSWORD"
   set_env .env SECRET_KEY_BASE "$SECRET_KEY_BASE"
   set_env .env VAULT_ENC_KEY "$VAULT_ENC_KEY"
+  # SEC-M4: שאר הסודות (בהתקנה חדשה בלבד; .env קיים לא נדרס) — אחרת נשארים בערך הציבורי
+  set_env .env PG_META_CRYPTO_KEY "$PG_META_CRYPTO_KEY"
+  set_env .env LOGFLARE_PUBLIC_ACCESS_TOKEN "$LOGFLARE_PUBLIC_ACCESS_TOKEN"
+  set_env .env LOGFLARE_PRIVATE_ACCESS_TOKEN "$LOGFLARE_PRIVATE_ACCESS_TOKEN"
   set_env .env POOLER_TENANT_ID "$PROJECT"
   # פורטים — מקומיים בלבד, לא מתנגשים בסטאקים הקיימים
   set_env .env KONG_HTTP_PORT "127.0.0.1:${KONG_HTTP_PORT}"
@@ -397,12 +418,17 @@ else
   fi
   [[ ${#ADMIN_PASSWORD} -ge 8 ]] || fail "הסיסמה קצרה מ-8 תווים"
   log "יוצר משתמש אדמין ($ADMIN_EMAIL)"
+  # SEC-H1: app_metadata.platform — חשבון שהמערכת יצרה (אפשר לקשר אליו תפקיד לפי אימייל)
   payload=$(ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASSWORD="$ADMIN_PASSWORD" node -e \
-    'process.stdout.write(JSON.stringify({email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD, email_confirm: true}))')
-  CREATE_RESP=$(curl -s -X POST "http://127.0.0.1:${KONG_HTTP_PORT}/auth/v1/admin/users" \
-    -H "apikey: $SERVICE" -H "Authorization: Bearer $SERVICE" \
-    -H "Content-Type: application/json" -d "$payload")
-  unset payload ADMIN_PASSWORD
+    'process.stdout.write(JSON.stringify({email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD, email_confirm: true, app_metadata: {platform: true}}))')
+  # INF-12: מפתח השירות והסיסמה לא בשורת הפקודה (/proc/*/cmdline) — הכותרות מקובץ פרטי (0600),
+  # הגוף מ-stdin
+  hdr=$(umask 077; mktemp)
+  printf 'apikey: %s\nAuthorization: Bearer %s\n' "$SERVICE" "$SERVICE" > "$hdr"
+  CREATE_RESP=$(printf '%s' "$payload" | curl -s -X POST "http://127.0.0.1:${KONG_HTTP_PORT}/auth/v1/admin/users" \
+    -H @"$hdr" -H "Content-Type: application/json" --data-binary @-)
+  rm -f "$hdr"
+  unset payload ADMIN_PASSWORD hdr
   echo "$CREATE_RESP" | grep -q '"id"' || fail "יצירת האדמין נכשלה: $CREATE_RESP"
 fi
 # תמיד מוודא שהתפקיד admin/מאושר/לא-חסום, בחנות ברירת המחדל

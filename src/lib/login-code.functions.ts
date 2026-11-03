@@ -188,6 +188,7 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
         email: data.email,
         email_confirm: true,
         user_metadata: { signup_method: "email_code" },
+        app_metadata: { platform: true }, // SEC-H1: סימון חסין-זיוף שהמערכת יצרה את החשבון
       });
       // מרוץ (שתי לשוניות) — החשבון כבר נוצר; ממשיכים להתחבר אליו
       if (createError && !/already|exists|registered/i.test(createError.message)) {

@@ -487,6 +487,18 @@ SELECT tests.server('minimum: guest order of ₪200 → blocked too',
   $$SELECT * FROM public.place_guest_order('order', tests.s35_items(2), tests.s35_details())$$, 'המינימלי');
 SELECT tests.run('minimum: ₪500 exactly → accepted',
   $$SELECT * FROM public.place_order('order', tests.s35_items(5), 18, true, tests.s35_details())$$, :SU, NULL, 1);
+-- SEC-L3: order_coupon_verify — משתמש מחובר בודק רק הזמנה שלו (לא חושף סכום / קוד קופון של הזמנה אחרת)
+SELECT id AS s35_order FROM public.orders
+ WHERE tenant_id = '70000000-0000-0000-0000-00000000000b' AND customer_id = :SU AND kind = 'order'
+ ORDER BY created_at DESC LIMIT 1 \gset
+UPDATE public.site_settings SET minimum_order_amount = 1000 WHERE tenant_id = '70000000-0000-0000-0000-00000000000b';
+SELECT tests.run('SEC-L3: the customer re-checking their own order still gets the minimum check',
+  format($$SELECT public.order_coupon_verify(%L)$$, :'s35_order'), :SU, 'המינימלי');
+SELECT tests.run('SEC-L3: another signed-in user learns nothing about the order (silent, no amount)',
+  format($$SELECT public.order_coupon_verify(%L)$$, :'s35_order'), :SC, NULL, 1);
+SELECT tests.server('SEC-L3: the server (guest checkout) still checks any order',
+  format($$SELECT public.order_coupon_verify(%L)$$, :'s35_order'), 'המינימלי');
+UPDATE public.site_settings SET minimum_order_amount = 500 WHERE tenant_id = '70000000-0000-0000-0000-00000000000b';
 SELECT tests.run('minimum: a quote request below the minimum → accepted',
   $$SELECT * FROM public.place_order('quote', tests.s35_items(1), 18, true, tests.s35_details())$$, :SU, NULL, 1);
 SELECT tests.run('minimum: POS below the minimum → accepted (store staff)',

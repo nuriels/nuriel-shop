@@ -3190,8 +3190,21 @@ export type Database = {
           _source: string;
           _consent_text?: string;
           _user_id?: string;
+          _confirm_token_hash?: string;
+          _ip_hash?: string;
+          _user_agent?: string;
+          _method?: string;
+          _context?: Json;
         };
         Returns: Json;
+      };
+      marketing_confirm: {
+        Args: { _token: string; _ip_hash?: string; _user_agent?: string };
+        Returns: Json;
+      };
+      marketing_release_confirm: {
+        Args: { _email: string; _confirm_token_hash: string };
+        Returns: undefined;
       };
       marketing_unsubscribe: { Args: { _token: string }; Returns: string };
       grow_mark_paid: {

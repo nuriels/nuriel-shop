@@ -180,21 +180,19 @@ export const saveAbandonedCart = createServerFn({ method: "POST" })
     const { marketingSendToken, recordMarketingConsent } =
       await import("@/lib/marketing-consent.server");
 
-    // חלק 40 (חוק הספאם): העגלה נשמרת לתזכורת רק למי שאישר דיוור — עכשיו
-    // בתיבה בקופה, או קודם (הרשמה / "החשבון שלי") ולא הסיר את עצמו.
+    // חלק 40 (חוק הספאם): העגלה נשמרת לתזכורת רק למי שכבר אישר דיוור (ולא הסיר את עצמו).
+    // SEC-H5: הסכמה חדשה לא נרשמת כאן — זו שמירה תוך כדי הקלדה (כתובת חלקית / של מישהו
+    // אחר). היא נרשמת רק אחרי שליחת ההזמנה (requestCheckoutMarketingConsent), באישור כפול.
+    // הסרה — תמיד מיד.
     if (data.withdrawConsent) {
-      await recordMarketingConsent({ email: data.email, subscribed: false, source: "checkout" });
-    }
-    let allowed = !data.withdrawConsent && (await marketingSendToken(data.email)) !== null;
-    if (!allowed && data.marketingConsent) {
-      const consent = await recordMarketingConsent({
+      await recordMarketingConsent({
         email: data.email,
-        subscribed: true,
+        subscribed: false,
         source: "checkout",
-        name: data.name || null,
+        method: "checkout",
       });
-      allowed = consent?.subscribed === true;
     }
+    const allowed = !data.withdrawConsent && (await marketingSendToken(data.email)) !== null;
     // בלי הסכמה: לא שומרים (ועגלה שנשמרה קודם באותה קופה — נמחקת)
     const { data: id, error } = await supabaseAdmin.rpc("save_abandoned_cart", {
       _session: data.session,

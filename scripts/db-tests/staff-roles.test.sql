@@ -182,6 +182,33 @@ SELECT tests.run('link: cashier cannot link accounts',
   $$SELECT public.store_link_existing_account('new2@test.local', 'cashier', 'x')$$, :CA, 'רק מנהל החנות');
 DELETE FROM public.user_roles WHERE tenant_id = '70000000-0000-0000-0000-00000000000b' AND user_id = 'a0000000-0000-0000-0000-0000000000c1';
 
+-- ---------- SEC-H1: קישור לפי אימייל רק לחשבון שהמערכת יצרה/אימתה ----------
+-- חשבון שנרשם עצמאית (POST /auth/v1/signup) — raw_app_meta_data לא-ריק בלי platform, עם סיסמה
+INSERT INTO auth.users (id, email, email_confirmed_at, encrypted_password, raw_app_meta_data)
+VALUES ('a0000000-0000-0000-0000-0000000000f9', 'squatter@test.local', now(), 'x',
+        '{"provider":"email","providers":["email"]}'::jsonb);
+SELECT tests.check('SEC-H1: a self-signed-up account is not a platform account (helper → NULL)',
+  $$SELECT public._platform_account_id('squatter@test.local') IS NULL$$);
+SELECT tests.check('SEC-H1: a platform-created account is resolved by the helper',
+  $$SELECT public._platform_account_id('new1@test.local') = 'a0000000-0000-0000-0000-0000000000c1'$$);
+SELECT tests.run('SEC-H1: a self-signed-up account cannot be linked as staff (fail-closed, returns NULL)',
+  $$SELECT public.store_link_existing_account('squatter@test.local', 'cashier', 'x')$$, :B2, NULL, 1);
+SELECT tests.check('SEC-H1: … and no role row was created for the squatter',
+  $$SELECT NOT EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = 'a0000000-0000-0000-0000-0000000000f9')$$);
+-- כניסה בקוד שנשלח למייל = הוכחת בעלות על התיבה → החשבון מאומת (כמו חשבון שנפתח בטופס ההרשמה)
+SELECT set_config('request.headers', json_build_object('x-tenant-id', '70000000-0000-0000-0000-00000000000b')::text, false);
+SELECT public.issue_login_code('squatter@test.local', repeat('d', 64)) IS NOT NULL AS ok \gset
+SELECT tests.check('SEC-H1: a wrong email code does not verify the account',
+  $$SELECT public.consume_login_code('squatter@test.local', repeat('e', 64)) ->> 'result' = 'invalid'$$);
+SELECT tests.check('SEC-H1: … it is still not linkable',
+  $$SELECT public._platform_account_id('squatter@test.local') IS NULL$$);
+SELECT tests.check('SEC-H1: the right email code (the person owns the mailbox) signs in',
+  $$SELECT public.consume_login_code('squatter@test.local', repeat('d', 64)) ->> 'result' = 'ok'$$);
+SELECT tests.check('SEC-H1: … and verifies the account — now it can be linked by email',
+  $$SELECT public._platform_account_id('squatter@test.local') = 'a0000000-0000-0000-0000-0000000000f9'$$);
+DELETE FROM public.login_codes WHERE email = 'squatter@test.local';
+DELETE FROM auth.users WHERE id = 'a0000000-0000-0000-0000-0000000000f9';
+
 -- ---------- חבילה ותשלום — הבעלים בלבד ----------
 SELECT tests.run('billing: manager cannot request an extra admin seat',
   $$SELECT public.request_extra_admin()$$, :B2, 'רק בעל החנות');

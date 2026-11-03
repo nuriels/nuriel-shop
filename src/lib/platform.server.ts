@@ -20,7 +20,11 @@ export type StoreAdminCredentials = {
   existingAccount: boolean;
 };
 
-const ALREADY_REGISTERED = "כתובת האימייל הזו כבר רשומה במערכת (בחנות זו או בחנות אחרת)";
+// SEC-H1: כשהקישור לחשבון קיים לא הצליח — החשבון נפתח בלי אימות מייל (טופס ההרשמה). כניסה אחת
+// בקוד שנשלח למייל מאמתת אותו, ואז אפשר לקשר.
+const ALREADY_REGISTERED =
+  "כתובת האימייל הזו כבר רשומה במערכת (בחנות זו או בחנות אחרת). אם החשבון עדיין לא אומת — " +
+  "בעל הכתובת צריך להתחבר פעם אחת עם קוד שנשלח למייל, ואז לנסות שוב.";
 const CUSTOMER_ELSEWHERE =
   "כתובת האימייל הזו רשומה כלקוח בחנות במערכת — חשבון לקוח שייך לחנות אחת. למנהל החנות צריך כתובת אחרת.";
 
@@ -68,6 +72,7 @@ export async function provisionStoreAdmin(
     email,
     password,
     email_confirm: true,
+    app_metadata: { platform: true }, // SEC-H1: סימון חסין-זיוף שהמערכת יצרה את החשבון
   });
   if (createError || !created.user) {
     const message = createError?.message ?? "";

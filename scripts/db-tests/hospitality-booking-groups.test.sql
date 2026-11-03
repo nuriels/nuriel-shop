@@ -215,6 +215,18 @@ SELECT tests.check('the new personal link from the approval email opens that roo
   format($$SELECT (pg_temp.call(%1$L, NULL, format('SELECT hospitality.get_booking_by_token(%%L)', %2$L)) ->> 'status') = 'confirmed'
              AND pg_temp.err_of(%1$L, %3$L, format('SELECT hospitality.booking_group_decide(%%L, true)', %4$L)) LIKE '%%אין בקבוצה%%'$$,
          :'st', :'t2new', :OWNER44, :'b2'));
+-- PRV-17: אחרי שליחת המייל הקבוצתי — אין בתור המיילים קישורי ניהול (גם לא של כל חדר)
+SELECT n.id AS gmail FROM hospitality.notifications n WHERE n.tenant_id = :'st' AND n.event = 'group_booking_confirmed' LIMIT 1 \gset
+UPDATE hospitality.notifications SET status = 'sending', attempts = 1, locked_until = now() + interval '5 minutes' WHERE id = :'gmail';
+SELECT hospitality.mark_notification(:'gmail', true) AS gsent \gset
+SELECT tests.check('PRV-17: once the group email is sent, no booking-management link is left in the queue (none per room); the rooms list stays',
+  format($$SELECT %1$L = 'sent' AND n.payload::text !~ '[0-9a-f]{64}' AND jsonb_array_length(n.payload -> 'rooms') = 2
+             AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(n.payload -> 'rooms') r WHERE r ? 'manage_token')
+             AND n.payload -> 'rooms' -> 0 ? 'unit_name'
+            FROM hospitality.notifications n WHERE n.id = %2$L$$, :'gsent', :'gmail'));
+SELECT tests.check('PRV-17: … the guest''s link itself still works (only the copy in the queue is gone)',
+  format($$SELECT (pg_temp.call(%1$L, NULL, format('SELECT hospitality.get_booking_by_token(%%L)', %2$L)) ->> 'status') = 'confirmed'$$,
+         :'st', :'t2new'));
 SELECT (SELECT id FROM hospitality.bookings WHERE group_id = :'gid2' ORDER BY number LIMIT 1) AS g2b \gset
 SELECT pg_temp.call(:'st', :OWNER44, format($q$SELECT hospitality.booking_group_decide(%L, false, 'אין מקום בתאריכים האלה')$q$, :'g2b')) IS NOT NULL AS ok \gset
 SELECT tests.check('decline all: both rooms declined — one email to the guest with the reason; a visitor cannot decide',

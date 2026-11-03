@@ -39,6 +39,8 @@ export type MyStore = {
   status: string;
   /** הכתובת של החנות (דומיין פרטי פעיל, או <slug>.<base>) */
   url: string;
+  /** SEC-H2: מארח קוד ה-handoff — תמיד תת-הדומיין של הפלטפורמה, לעולם לא דומיין מותאם */
+  handoffOrigin: string;
   /** החנות של האתר הנוכחי */
   isCurrent: boolean;
 };
@@ -60,7 +62,9 @@ type MyStoreRow = {
 const ROLES: readonly StoreRole[] = ["admin", "agent", "warehouse", "cashier"];
 
 async function loadMyStores(supabase: SupabaseClient<Database>): Promise<MyStore[]> {
-  const { originForTenant } = await import("@/integrations/supabase/tenant.server");
+  const { originForTenant, slugOriginForTenant } = await import(
+    "@/integrations/supabase/tenant.server"
+  );
   const { data, error } = await supabase.rpc("my_stores");
   if (error) {
     console.error("[store-switcher] my_stores failed", error.message);
@@ -82,6 +86,13 @@ async function loadMyStores(supabase: SupabaseClient<Database>): Promise<MyStore
       } catch {
         url = "";
       }
+      // SEC-H2: קוד ה-handoff תמיד על תת-הדומיין של הפלטפורמה, לעולם לא על דומיין מותאם
+      let handoffOrigin = "";
+      try {
+        handoffOrigin = slugOriginForTenant({ slug: row.slug, is_default: row.is_default });
+      } catch {
+        handoffOrigin = "";
+      }
       return {
         id: row.tenant_id,
         slug: row.slug,
@@ -90,6 +101,7 @@ async function loadMyStores(supabase: SupabaseClient<Database>): Promise<MyStore
         isOwner: row.is_owner === true,
         status: row.status,
         url,
+        handoffOrigin,
         isCurrent: row.is_current === true,
       };
     });
@@ -123,7 +135,7 @@ export const switchStore = createServerFn({ method: "POST" })
     const target = stores.find((store) => store.id === data.tenantId);
     if (!target) throw new Error("אין לכם הרשאה לנהל את החנות הזו");
     if (target.isCurrent) throw new Error("אתם כבר בחנות הזו");
-    if (!target.url) throw new Error("לחנות הזו עוד אין כתובת פעילה");
+    if (!target.handoffOrigin) throw new Error("לחנות הזו עוד אין כתובת פעילה");
 
     const { randomBytes, createHash } = await import("node:crypto");
     const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
@@ -150,5 +162,9 @@ export const switchStore = createServerFn({ method: "POST" })
       "[store-switcher]",
       JSON.stringify({ user: context.userId, to: target.slug, role: target.role }),
     );
-    return { url: `${target.url}/admin-handoff#code=${code}&from=switch`, name: target.name };
+    // SEC-H2: קוד הכניסה החד-פעמי תמיד על תת-הדומיין של הפלטפורמה (לא על דומיין מותאם)
+    return {
+      url: `${target.handoffOrigin}/admin-handoff#code=${code}&from=switch`,
+      name: target.name,
+    };
   });

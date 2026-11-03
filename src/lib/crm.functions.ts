@@ -201,6 +201,23 @@ export const sendManualMessage = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data, context }) => {
+    // הגבלת קצב: הודעה ידנית יוצאת מדומיין המערכת עם טקסט וקישור חופשיים — בלי הגבלה, מנהל
+    // חנות (גם חנות שנפתחה לבד בפורטל) יכול להשתמש בה כממסר דואר. לשולח: 30 בשעה (לכתובת
+    // חופשית — 10 בשעה); לחנות: 300 ביום. שימוש רגיל לא מושפע.
+    const [{ allowAction }, { maybeCurrentTenant }] = await Promise.all([
+      import("@/lib/rate-limit.server"),
+      import("@/integrations/supabase/tenant.server"),
+    ]);
+    const store = maybeCurrentTenant()?.id ?? "none";
+    if (
+      !allowAction(`manual-mail:${context.userId}`, 30, 60 * 60 * 1000) ||
+      (data.userId === "" &&
+        !allowAction(`manual-mail-free:${context.userId}`, 10, 60 * 60 * 1000)) ||
+      !allowAction(`manual-mail-store:${store}`, 300, 24 * 60 * 60 * 1000)
+    ) {
+      throw new Error("נשלחו הרבה הודעות ידניות בזמן קצר. נסו שוב מאוחר יותר.");
+    }
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { sendEmail, renderEmailHtml, textToEmailHtml, emailActionButton } =
       await import("@/lib/email.server");
@@ -237,5 +254,13 @@ export const sendManualMessage = createServerFn({ method: "POST" })
         : {}),
     });
     if (!result.sent) throw new Error(result.reason ?? "שליחת ההודעה נכשלה");
+    // כתובת חופשית אין לה יומן לקוח — לפחות תיעוד בשרת: מי שלח ולאיזה דומיין (בלי הכתובת המלאה)
+    if (data.userId === "") {
+      console.info("[crm] manual message to a free address", {
+        by: context.userId,
+        store,
+        domain: recipient.split("@")[1] ?? "",
+      });
+    }
     return { sentTo: recipient };
   });

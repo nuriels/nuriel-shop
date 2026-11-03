@@ -42,6 +42,20 @@ CREATE TABLE IF NOT EXISTS auth.identities (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- SEC-H1: מדמה את GoTrue — חשבון שהמערכת יצרה (admin.createUser עם app_metadata) נושא
+-- platform=true. פיקסצ'רים (raw_app_meta_data ברירת-מחדל ריק) מסומנים אוטומטית כחשבון-מערכת;
+-- בדיקה שרוצה "הרשמה עצמאית" (לא-מהימן) מזינה raw_app_meta_data לא-ריק בלי platform.
+CREATE OR REPLACE FUNCTION auth._stub_mark_platform() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.raw_app_meta_data IS NULL OR NEW.raw_app_meta_data = '{}'::jsonb THEN
+    NEW.raw_app_meta_data := '{"provider":"email","providers":["email"],"platform":true}'::jsonb;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS stub_mark_platform ON auth.users;
+CREATE TRIGGER stub_mark_platform BEFORE INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION auth._stub_mark_platform();
+
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS UUID LANGUAGE sql STABLE AS $$
   SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid
 $$;

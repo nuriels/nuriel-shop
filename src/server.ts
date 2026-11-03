@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { withSecurityHeaders } from "./lib/security-headers";
 import {
   EXPIRED_PAGE,
   FORBIDDEN_PAGE,
@@ -123,65 +124,70 @@ async function handle(request: Request, env: unknown, ctx: unknown): Promise<Res
 }
 
 export default {
+  // SEC-M1: כותרות אבטחה לכל תגובה — רק כותרת שחסרה (עמודי Hospitality שומרים את שלהם)
   async fetch(request: Request, env: unknown, ctx: unknown) {
-    try {
-      const host = requestHost(request);
-      const pathname = new URL(request.url).pathname;
-      // חלק 38: פיד ה-XML לזאפ הוסר — הסורקים עוברים לעמודי ה-HTML (/zap)
-      if (pathname === "/zap.xml") {
-        return new Response("Gone — the Zap index moved to /zap\n", {
-          status: 410,
-          headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
-        });
-      }
-      if (
-        STATIC_PATH.test(pathname) &&
-        !FEED_PATHS.has(pathname) &&
-        !GOOGLE_VERIFY_PATH.test(pathname) &&
-        !STORE_ASSET_PATH.test(pathname)
-      ) {
-        return await runWithTenant(host, null, () => handle(request, env, ctx));
-      }
-      const tenant = await resolveTenant(host);
-      if (!tenant || isUnknownStoreHost(host, tenant)) {
-        return new Response(STORE_NOT_FOUND_HTML, {
-          status: 404,
-          headers: { "content-type": "text/html; charset=utf-8" },
-        });
-      }
-      // אתר של מנוע אחר (Hospitality) — המנוע מחליט; אתר Ecommerce ממשיך כמו היום
-      const { gateSiteRequest } = await import("./app/engines");
-      const engineResponse = await runWithTenant(host, tenant, () =>
-        gateSiteRequest(tenant, request),
-      );
-      if (engineResponse) return engineResponse;
-      if (FEED_PATHS.has(pathname)) {
-        const { renderFeed } = await import("./lib/feeds.server");
-        return await runWithTenant(host, tenant, () => renderFeed(pathname, request));
-      }
-      if (GOOGLE_VERIFY_PATH.test(pathname)) {
-        const { renderGoogleVerification } = await import("./lib/feeds.server");
-        const verification = await runWithTenant(host, tenant, () =>
-          renderGoogleVerification(pathname),
-        );
-        if (verification) return verification;
-      }
-      // חלק 38: עמודי האינדקס לסורקים של זאפ — HTML נקי, בלי ה-Layout של החנות
-      if (isZapPage(pathname)) {
-        const { renderZapPage } = await import("./lib/zap-pages.server");
-        return await runWithTenant(host, tenant, () => renderZapPage(pathname, request));
-      }
-      return await runWithTenant(
-        host,
-        tenant,
-        () => storeGate(pathname) ?? handle(request, env, ctx),
-      );
-    } catch (error) {
-      console.error(error);
-      return new Response(renderErrorPage(), {
-        status: 500,
+    return withSecurityHeaders(await route(request, env, ctx));
+  },
+};
+
+async function route(request: Request, env: unknown, ctx: unknown): Promise<Response> {
+  try {
+    const host = requestHost(request);
+    const pathname = new URL(request.url).pathname;
+    // חלק 38: פיד ה-XML לזאפ הוסר — הסורקים עוברים לעמודי ה-HTML (/zap)
+    if (pathname === "/zap.xml") {
+      return new Response("Gone — the Zap index moved to /zap\n", {
+        status: 410,
+        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+    if (
+      STATIC_PATH.test(pathname) &&
+      !FEED_PATHS.has(pathname) &&
+      !GOOGLE_VERIFY_PATH.test(pathname) &&
+      !STORE_ASSET_PATH.test(pathname)
+    ) {
+      return await runWithTenant(host, null, () => handle(request, env, ctx));
+    }
+    const tenant = await resolveTenant(host);
+    if (!tenant || isUnknownStoreHost(host, tenant)) {
+      return new Response(STORE_NOT_FOUND_HTML, {
+        status: 404,
         headers: { "content-type": "text/html; charset=utf-8" },
       });
     }
-  },
-};
+    // אתר של מנוע אחר (Hospitality) — המנוע מחליט; אתר Ecommerce ממשיך כמו היום
+    const { gateSiteRequest } = await import("./app/engines");
+    const engineResponse = await runWithTenant(host, tenant, () =>
+      gateSiteRequest(tenant, request),
+    );
+    if (engineResponse) return engineResponse;
+    if (FEED_PATHS.has(pathname)) {
+      const { renderFeed } = await import("./lib/feeds.server");
+      return await runWithTenant(host, tenant, () => renderFeed(pathname, request));
+    }
+    if (GOOGLE_VERIFY_PATH.test(pathname)) {
+      const { renderGoogleVerification } = await import("./lib/feeds.server");
+      const verification = await runWithTenant(host, tenant, () =>
+        renderGoogleVerification(pathname),
+      );
+      if (verification) return verification;
+    }
+    // חלק 38: עמודי האינדקס לסורקים של זאפ — HTML נקי, בלי ה-Layout של החנות
+    if (isZapPage(pathname)) {
+      const { renderZapPage } = await import("./lib/zap-pages.server");
+      return await runWithTenant(host, tenant, () => renderZapPage(pathname, request));
+    }
+    return await runWithTenant(
+      host,
+      tenant,
+      () => storeGate(pathname) ?? handle(request, env, ctx),
+    );
+  } catch (error) {
+    console.error(error);
+    return new Response(renderErrorPage(), {
+      status: 500,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  }
+}

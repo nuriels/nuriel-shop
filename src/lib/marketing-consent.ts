@@ -36,3 +36,17 @@ export function unsubscribePath(token: string): string {
 }
 
 export const UUID_FORMAT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * SEC-H5 — אישור כפול (double opt-in): הצטרפות לדיוור נכנסת לתוקף רק אחרי לחיצה על קישור
+ * חד-פעמי שנשלח לכתובת עצמה. הקישור מוביל לעמוד האישור; במסד נשמר רק hash של האסימון.
+ */
+export function confirmPath(token: string): string {
+  return `/marketing/confirm/${token}`;
+}
+
+/** אסימון האישור: 32 בתים אקראיים בקידוד hex */
+export const CONFIRM_TOKEN_FORMAT = /^[0-9a-f]{64}$/;
+
+/** איך הגיעה בקשת ההצטרפות (נשמר כראיה; תואם ל-CHECK במסד) */
+export type ConsentMethod = "popup" | "checkout" | "register" | "account";

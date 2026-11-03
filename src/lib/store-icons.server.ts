@@ -27,11 +27,25 @@ async function tenantLogo(tenantId: string): Promise<{ key: string; bytes: Buffe
       .maybeSingle();
     const path = data?.logo_path?.trim() ?? "";
     if (/^https?:\/\//i.test(path)) {
-      const res = await fetch(path);
-      if (res.ok) found = { key: path, bytes: Buffer.from(await res.arrayBuffer()) };
+      // SEC-H3: logo_path נשלט ע"י בעל-החנות. קישור חיצוני עובר דרך fetchRemoteImage — חוסם
+      // SSRF (loopback / רשת פנימית / cloud-metadata), דוחה SVG/HTML, ומגביל גודל וזמן —
+      // במקום fetch() גולמי שעקב redirects ללא מגבלה.
+      const { fetchRemoteImage } = await import("@/server/services/image-fetch");
+      const { bytes } = await fetchRemoteImage(path);
+      found = { key: path, bytes };
     } else if (path) {
       const { data: blob } = await supabaseAdmin.storage.from("branding").download(path);
       if (blob) found = { key: path, bytes: Buffer.from(await blob.arrayBuffer()) };
+    }
+    // SEC-H3: רק תמונת raster מגיעה ל-sharp (librsvg לא מופעל → CVE ב-sharp<0.35.5 לא ניתן-להפעלה)
+    if (found) {
+      const { sniffImageType } = await import("@/server/services/image-fetch");
+      const kind = sniffImageType(found.bytes);
+      const RASTER = new Set(["jpeg", "png", "gif", "webp", "avif", "heif", "tiff"]);
+      if (!kind || !RASTER.has(kind)) {
+        console.warn("[store-icons] the store logo is not a supported raster image — ignoring");
+        found = null;
+      }
     }
   } catch (error) {
     console.error("[store-icons] loading the store logo failed", error);

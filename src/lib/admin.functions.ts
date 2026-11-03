@@ -169,11 +169,16 @@ export const createStaffUser = createServerFn({ method: "POST" })
       email: data.email,
       password: tempPassword,
       email_confirm: true,
+      app_metadata: { platform: true }, // SEC-H1: סימון חסין-זיוף שהמערכת יצרה את החשבון
     });
     if (createError || !created.user) {
       const message = createError?.message ?? "";
       if (/already|exists|registered|duplicate/i.test(message)) {
-        throw new Error("כתובת האימייל הזו כבר רשומה במערכת");
+        // SEC-H1: הקישור לחשבון הקיים לא הצליח — חשבון שעדיין לא אומת (נפתח בטופס ההרשמה)
+        throw new Error(
+          "כתובת האימייל הזו כבר רשומה במערכת. אם החשבון עדיין לא אומת — בעל הכתובת צריך " +
+            "להתחבר פעם אחת עם קוד שנשלח למייל, ואז לנסות שוב.",
+        );
       }
       throw new Error(message || "יצירת המשתמש נכשלה");
     }
@@ -611,6 +616,11 @@ export const registerCustomer = createServerFn({ method: "POST" })
       email: data.email,
       password: data.password,
       email_confirm: true,
+      // SEC-H1: הטופס פתוח לכל אחד ולא מאמת שהכתובת שייכת לנרשם — לכן החשבון לא מסומן
+      // "מאומת" (app_metadata.platform), ואי אפשר לקשר אליו תפקיד/בעלות לפי אימייל עד כניסה
+      // אחת בקוד שנשלח למייל (consume_login_code מסמן). הזמנה שנשלחה לכתובת הזו — הקישור
+      // הגיע לתיבה והצוות ערב לכתובת, ולכן מסומן כמו קודם.
+      ...(invite?.email ? { app_metadata: { platform: true } } : {}),
     });
     if (createError || !created.user) {
       await releaseInvite();
@@ -657,8 +667,9 @@ export const registerCustomer = createServerFn({ method: "POST" })
     }
     if (invite) await invites.markInviteUser(invite.id, created.user.id);
 
-    // חלק 40: אישור דיוור — נרשם עם הנוסח שהוצג, ואם החנות הגדירה קופון
-    // "ברוכים הבאים" — הוא נשלח במייל (כשל לא מבטל את ההרשמה)
+    // חלק 40: אישור דיוור — נרשם עם הנוסח שהוצג. SEC-H5: בהרשמה עם סיסמה הכתובת לא אומתה,
+    // ולכן אישור כפול: מייל אישור אחד; "ברוכים הבאים" (אם הוגדר) — רק אחרי הלחיצה.
+    // כשל לא מבטל את ההרשמה.
     if (data.marketingOptIn) {
       const { recordMarketingConsent } = await import("@/lib/marketing-consent.server");
       await recordMarketingConsent({
@@ -667,6 +678,7 @@ export const registerCustomer = createServerFn({ method: "POST" })
         source: "register",
         userId: created.user.id,
         name: data.contactName,
+        method: "register",
       }).catch((error: unknown) => console.error("[register] marketing consent failed", error));
     }
 

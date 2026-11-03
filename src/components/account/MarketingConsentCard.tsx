@@ -11,12 +11,14 @@ import { myMarketingConsent, setMyMarketingConsent } from "@/lib/marketing-conse
 /**
  * חלק 40: "דיוור" ב"החשבון שלי" — הלקוח רואה אם הוא מנוי, ומצטרף / מסיר את
  * עצמו בלחיצה. הצטרפות נרשמת עם הנוסח שמוצג כאן (הוכחה להסכמה).
+ * SEC-H5: הצטרפות נכנסת לתוקף רק אחרי לחיצה על הקישור במייל האישור; הסרה — מיד.
  */
 export function MarketingConsentCard() {
   const { settings } = useSiteSettings();
   const load = useServerFn(myMarketingConsent);
   const save = useServerFn(setMyMarketingConsent);
   const [subscribed, setSubscribed] = useState<boolean | null>(null);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const storeName = settings?.business_name?.trim() || settings?.site_title?.trim() || "";
 
@@ -31,7 +33,16 @@ export function MarketingConsentCard() {
     try {
       const result = await save({ data: { subscribed: next } });
       setSubscribed(result.subscribed);
-      toast.success(result.subscribed ? "נרשמת לדיוור" : "הוסרת מרשימת הדיוור");
+      if (result.subscribed) {
+        setPendingEmail(null);
+        toast.success("את/ה ברשימת הדיוור");
+      } else if (next && result.pending) {
+        setPendingEmail(result.email);
+        toast.success("שלחנו לך מייל לאישור ההצטרפות");
+      } else {
+        setPendingEmail(null);
+        toast.success("הוסרת מרשימת הדיוור");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "השמירה נכשלה");
     } finally {
@@ -50,6 +61,12 @@ export function MarketingConsentCard() {
           <p id="account-marketing-text" className="text-sm text-muted-foreground">
             {marketingConsentText(storeName, "account")}
           </p>
+          {pendingEmail ? (
+            <p role="status" className="text-sm font-medium" data-testid="account-marketing-pending">
+              כמעט סיימנו — שלחנו מייל אישור אל <bdi dir="ltr">{pendingEmail}</bdi>. ההצטרפות
+              תיכנס לתוקף אחרי הלחיצה על הקישור שבמייל.
+            </p>
+          ) : null}
         </div>
         <Switch
           aria-label="קבלת דיוור והטבות במייל"

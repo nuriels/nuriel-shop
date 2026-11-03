@@ -9,17 +9,59 @@
  * רק בתוך בקשה של חנות (supabaseAdmin מוגבל לחנות של הבקשה).
  */
 
+import { createHash, randomBytes } from "node:crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { tenantSiteOrigin } from "@/integrations/supabase/tenant.server";
+import { maybeCurrentTenant, tenantSiteOrigin } from "@/integrations/supabase/tenant.server";
 import { couponLabel, type CouponType } from "@/lib/coupons";
 import {
   adSubject,
+  CONFIRM_TOKEN_FORMAT,
+  confirmPath,
   marketingConsentText,
   unsubscribePath,
+  type ConsentMethod,
   type ConsentSource,
 } from "@/lib/marketing-consent";
 
-type ConsentResult = { subscribed: boolean; token: string | null; welcome_due: boolean };
+/** תוצאת רישום הסכמה (SEC-H5 — אישור כפול) */
+export type ConsentResult = {
+  /** מנוי פעיל (אישר דיוור) */
+  subscribed: boolean;
+  /** ממתין לאישור במייל */
+  pending: boolean;
+  /** כבר נשלח מייל אישור ב-24 השעות האחרונות — לא נשלח שוב */
+  throttled: boolean;
+  /** מייל אישור נשלח עכשיו */
+  confirmSent: boolean;
+};
+
+type SetConsentRow = {
+  subscribed?: boolean;
+  pending?: boolean;
+  confirm_issued?: boolean;
+  throttled?: boolean;
+};
+
+const sha256Hex = (value: string): string => createHash("sha256").update(value).digest("hex");
+
+/**
+ * ראיית ההסכמה (SEC-H5): hash של ה-IP עם מלח החנות (לא שומרים IP גלוי) והדפדפן.
+ * מחוץ לבקשת HTTP (למשל בדיקות) — ריק.
+ */
+async function consentEvidence(): Promise<{ ipHash: string | null; userAgent: string | null }> {
+  try {
+    const [{ requestIp }, { getRequest }] = await Promise.all([
+      import("@/lib/rate-limit.server"),
+      import("@tanstack/react-start/server"),
+    ]);
+    const ip = await requestIp();
+    const tenantId = maybeCurrentTenant()?.id ?? "";
+    const agent = getRequest()?.headers.get("user-agent")?.trim().slice(0, 300) || null;
+    return { ipHash: ip ? sha256Hex(`${tenantId}:${ip}`) : null, userAgent: agent };
+  } catch {
+    return { ipHash: null, userAgent: null };
+  }
+}
 
 export async function marketingSendToken(email: string): Promise<string | null> {
   const { data, error } = await supabaseAdmin.rpc("marketing_send_token", { _email: email });
@@ -80,8 +122,10 @@ export async function marketingFooterHtml(token: string): Promise<string> {
 }
 
 /**
- * רישום ההסכמה (או הסירוב) עם הנוסח שהוצג ללקוח. אם זו הצטרפות ראשונה
- * בהרשמה / ב"החשבון שלי" והחנות הגדירה קופון ברוכים הבאים — המייל נשלח.
+ * רישום ההסכמה (או הסירוב) עם הנוסח שהוצג ללקוח.
+ * SEC-H5 — אישור כפול: הסרה נכנסת לתוקף מיד; הצטרפות (חדשה, או חזרה אחרי הסרה) נשמרת
+ * כ"ממתינה" ונשלח מייל אישור אחד עם קישור חד-פעמי — שום דיוור (גם לא "ברוכים הבאים")
+ * לא נשלח לפני הלחיצה (confirmMarketingConsent). מי שכבר מנוי — נשאר מנוי, בלי מייל נוסף.
  * כשל בשליחה לא מפיל את הפעולה שקראה לנו (הרשמה, קופה).
  */
 export async function recordMarketingConsent(input: {
@@ -90,26 +134,133 @@ export async function recordMarketingConsent(input: {
   source: ConsentSource;
   userId?: string | null;
   name?: string | null;
+  method?: ConsentMethod;
+  /** חלון הקופון: הקופון שיישלח אחרי האישור */
+  context?: { coupon: string } | null;
 }): Promise<ConsentResult | null> {
   const contact = await storeContact();
+  const evidence = await consentEvidence();
+  const rawToken = input.subscribed ? randomBytes(32).toString("hex") : null;
+  const tokenHash = rawToken ? sha256Hex(rawToken) : null;
   const { data, error } = await supabaseAdmin.rpc("marketing_set_consent", {
     _email: input.email,
     _subscribed: input.subscribed,
     _source: input.source,
     _consent_text: input.subscribed ? marketingConsentText(contact.name, input.source) : "",
     ...(input.userId ? { _user_id: input.userId } : {}),
+    ...(tokenHash ? { _confirm_token_hash: tokenHash } : {}),
+    ...(evidence.ipHash ? { _ip_hash: evidence.ipHash } : {}),
+    ...(evidence.userAgent ? { _user_agent: evidence.userAgent } : {}),
+    ...(input.method ? { _method: input.method } : {}),
+    ...(input.context ? { _context: input.context } : {}),
   });
   if (error) {
     console.error("[marketing] consent save failed", error.message);
     return null;
   }
-  const result = data as unknown as ConsentResult;
-  if (result?.welcome_due) {
-    await sendWelcomeCouponEmail(input.email, input.name ?? null).catch((sendError: unknown) =>
+  const row = (data ?? {}) as SetConsentRow;
+  let confirmSent = false;
+  if (row.confirm_issued === true && rawToken && tokenHash) {
+    confirmSent = await sendMarketingConfirmEmail(
+      input.email,
+      rawToken,
+      input.context?.coupon ?? null,
+    ).catch((sendError: unknown) => {
+      console.error("[marketing] confirmation email failed", sendError);
+      return false;
+    });
+    // השליחה נכשלה — משחררים את הבקשה, כדי שאפשר יהיה לנסות שוב מיד (ולא אחרי 24 שעות)
+    if (!confirmSent) {
+      await supabaseAdmin.rpc("marketing_release_confirm", {
+        _email: input.email,
+        _confirm_token_hash: tokenHash,
+      });
+    }
+  }
+  return {
+    subscribed: row.subscribed === true,
+    pending: row.pending === true && (row.confirm_issued !== true || confirmSent),
+    throttled: row.throttled === true,
+    confirmSent,
+  };
+}
+
+/**
+ * מייל האישור (SEC-H5): מייל אחד, לא פרסומת — רק בקשה לאשר. בלי אישור לא נשלח כלום.
+ * הקישור חד-פעמי ובתוקף 7 ימים.
+ */
+export async function sendMarketingConfirmEmail(
+  email: string,
+  rawToken: string,
+  couponCode: string | null,
+): Promise<boolean> {
+  const { escapeHtml, emailActionButton, renderEmailHtml, sendEmail } =
+    await import("@/lib/email.server");
+  const contact = await storeContact();
+  const storeName = contact.name || "החנות";
+  const details = [contact.name, contact.address, contact.phone, contact.email]
+    .filter((part) => part !== "")
+    .map((part) => escapeHtml(part))
+    .join(" · ");
+  const body = `
+      <p>שלום,</p>
+      <p>קיבלנו בקשה לצרף את הכתובת <strong dir="ltr">${escapeHtml(email)}</strong> לרשימת הדיוור של ${escapeHtml(storeName)} (עדכונים, הטבות וקופונים במייל).</p>
+      <p>כדי לאשר את ההצטרפות — לחצו על הכפתור:</p>
+      ${emailActionButton("אני מאשר/ת את ההצטרפות לדיוור", `${tenantSiteOrigin()}${confirmPath(rawToken)}`)}
+      ${couponCode ? "<p>אחרי האישור נשלח אליכם את הקופון שביקשתם.</p>" : ""}
+      <p style="font-size:13px;color:#6b7280;">לא ביקשתם? פשוט התעלמו מהמייל — בלי אישור לא נשלח אליכם שום דיוור. הקישור בתוקף 7 ימים.</p>
+      ${details ? `<p style="font-size:12px;color:#6b7280;">השולח: ${details}.</p>` : ""}
+    `;
+  const result = await sendEmail({
+    to: [email],
+    subject: `אישור הצטרפות לדיוור של ${storeName}`,
+    html: await renderEmailHtml(`אישור הצטרפות לדיוור`, body),
+  });
+  return result.sent;
+}
+
+export type ConfirmOutcome = {
+  confirmed: boolean;
+  /** חלון הקופון: האם הקופון נשלח אחרי האישור */
+  coupon: "sent" | "already_sent" | "unavailable" | "failed" | null;
+};
+
+/**
+ * הלחיצה על הקישור במייל האישור (SEC-H5): ההצטרפות נכנסת לתוקף, ואז — רק עכשיו — נשלחים
+ * "ברוכים הבאים" (אם החנות הגדירה) והקופון שביקשו בחלון הקופץ.
+ */
+export async function confirmMarketingConsent(rawToken: string): Promise<ConfirmOutcome> {
+  const token = rawToken.trim().toLowerCase();
+  if (!CONFIRM_TOKEN_FORMAT.test(token)) return { confirmed: false, coupon: null };
+  const evidence = await consentEvidence();
+  const { data, error } = await supabaseAdmin.rpc("marketing_confirm", {
+    _token: token,
+    ...(evidence.ipHash ? { _ip_hash: evidence.ipHash } : {}),
+    ...(evidence.userAgent ? { _user_agent: evidence.userAgent } : {}),
+  });
+  if (error) {
+    console.error("[marketing] confirm failed", error.message);
+    return { confirmed: false, coupon: null };
+  }
+  const row = (data ?? null) as {
+    email?: string;
+    token?: string;
+    welcome_due?: boolean;
+    context?: { coupon?: string } | null;
+  } | null;
+  if (!row?.email || !row.token) return { confirmed: false, coupon: null };
+
+  if (row.welcome_due) {
+    await sendWelcomeCouponEmail(row.email, null).catch((sendError: unknown) =>
       console.error("[marketing] welcome email failed", sendError),
     );
   }
-  return result;
+  let coupon: ConfirmOutcome["coupon"] = null;
+  if (typeof row.context?.coupon === "string") {
+    const { deliverShowcaseCoupon } = await import("@/lib/coupon-showcase.server");
+    coupon = await deliverShowcaseCoupon(row.email, row.context.coupon, row.token);
+  }
+  return { confirmed: true, coupon };
 }
 
 /**

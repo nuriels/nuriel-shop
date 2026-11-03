@@ -176,16 +176,21 @@ export function trackingHeadScripts(
     });
   }
   if (pixel) {
+    // disablePushState: ה-Pixel לא סופר לבד מעברים בתוך האתר (גם לא לאזורי החשבון/הניהול) —
+    // MarketingLayer שולח PageView רק בעמודים המותרים (בלי ספירה כפולה). PRV.
     scripts.push({
-      children: `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixel}');fbq('track','PageView');`,
+      children: `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq.disablePushState=true;fbq('init','${pixel}');fbq('track','PageView');`,
     });
   }
   return scripts;
 }
 
-/** עמודים שבהם לא טוענים מעקב ולא פופ-אפ: אזורי הצוות, החשבון והקופה הפנימית */
+/**
+ * עמודים שבהם לא טוענים מעקב ולא פופ-אפ: אזורי הצוות, החשבון והקופה הפנימית, וקישורים עם
+ * אסימון בכתובת (marketing/confirm). מעבר לעמוד כזה כשהמעקב כבר נטען — טעינה מלאה (TrackingConsent).
+ */
 export const NO_MARKETING_PATHS =
-  /^\/(admin|admin-handoff|agent|warehouse|courier|platform|login|register|reset-password|locked|forbidden|account|orders|agreement|owner-agreement|unsubscribe)(\/|$)/;
+  /^\/(admin|admin-handoff|agent|warehouse|courier|platform|login|register|reset-password|locked|forbidden|account|orders|agreement|owner-agreement|unsubscribe|marketing)(\/|$)/;
 
 type TrackWindow = Window & {
   fbq?: (...args: unknown[]) => void;

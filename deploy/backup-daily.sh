@@ -1,15 +1,24 @@
 #!/usr/bin/env bash
 # ============================================================
-# גיבוי יומי — קובי (kobi-*) בלבד
+# גיבוי יומי — לכל סטאק בשרת (BACKUP_PROJECT: kobi כברירת מחדל, nuriel-shop, …)
 # ============================================================
 # מה נשמר בכל גיבוי (תיקייה אחת לכל יום):
 #   db.dump        — כל מסד הנתונים (pg_dump -Fc), כולל משתמשים, הזמנות ומוצרים
+#                    (מוצפן: db.dump.age — כש-BACKUP_AGE_RECIPIENT מוגדר; SEC-H6)
 #   db.toc         — תוכן הקובץ לפי pg_restore --list (הוכחה שהקובץ תקין וניתן לשחזור)
 #   counts.txt     — כמה מוצרים / הזמנות / לקוחות / משתמשים היו ברגע הגיבוי
 #   storage/       — קבצי ה-Storage (תמונות מוצרים, לוגו, באנרים). עותק "חכם":
 #                    קובץ שלא השתנה מאתמול לא תופס מקום נוסף (hard link דרך rsync)
 #   secrets/       — קובץ הסודות של Supabase (בלעדיו אין שחזור!), env של האפליקציה, הגדרות Nginx
+#                    (מוצפן: secrets.tar.age — כש-BACKUP_AGE_RECIPIENT מוגדר; אחרת מסומן UNENCRYPTED)
+#   storage-private.tar.age — כשההצפנה מוגדרת: הקבצים של ה-buckets הפרטיים (קבלות תשלום, מסמכים,
+#                    קבצים מצורפים) — מוצפנים, ולא בתוך storage/ הגלוי
 #   SHA256SUMS     — טביעת אצבע לכל קובץ
+#
+# שחזור מגיבוי מוצפן (במחשב שמחזיק את המפתח הפרטי — לא בשרת):
+#   age -d -i key.txt -o db.dump db.dump.age && age -d -i key.txt secrets.tar.age | tar -x
+#   age -d -i key.txt storage-private.tar.age | tar -x -C <תיקיית ה-Storage המשוחזרת>
+# מפתח: age-keygen -o key.txt (במחשב אישי) — המפתח הציבורי (age1…) מועבר ל-backup-install.sh.
 #
 # שמירה: 14 גיבויים יומיים אחרונים + הגיבוי הראשון של כל חודש ל-12 חודשים.
 # הסקריפט רק קורא: pg_dump והעתקת קבצים. לא עוצר, לא מפעיל מחדש ולא משנה שום
@@ -22,18 +31,33 @@
 set -Eeuo pipefail
 umask 077
 
-BACKUP_ROOT="${BACKUP_ROOT:-/root/backups/kobi}"
+# SEC-H6: אותו סקריפט לכל סטאק בשרת — BACKUP_PROJECT קובע את כל ברירות המחדל (קונטיינרים
+# ${PROJECT}-db / ${PROJECT}-storage, /root/${PROJECT}-supabase). ברירת המחדל kobi — בדיוק כמו קודם.
+BACKUP_PROJECT="${BACKUP_PROJECT:-kobi}"
+BACKUP_ROOT="${BACKUP_ROOT:-/root/backups/$BACKUP_PROJECT}"
 KEEP_DAILY="${KEEP_DAILY:-14}"
 KEEP_MONTHLY="${KEEP_MONTHLY:-12}"
 MIN_FREE_MB="${MIN_FREE_MB:-1024}"
-DB_CONTAINER="${DB_CONTAINER:-kobi-db}"
+DB_CONTAINER="${DB_CONTAINER:-$BACKUP_PROJECT-db}"
 DB_NAME="${DB_NAME:-postgres}"
-STORAGE_CONTAINER="${STORAGE_CONTAINER:-kobi-storage}"
-STORAGE_FALLBACK="${STORAGE_FALLBACK:-/root/kobi-supabase/docker/volumes/storage}"
-SUPABASE_ENV="${SUPABASE_ENV:-/root/kobi-supabase/docker/.env}"
-APP_DIR="${APP_DIR:-/root/kobi-git}"
+STORAGE_CONTAINER="${STORAGE_CONTAINER:-$BACKUP_PROJECT-storage}"
+STORAGE_FALLBACK="${STORAGE_FALLBACK:-/root/$BACKUP_PROJECT-supabase/docker/volumes/storage}"
+SUPABASE_ENV="${SUPABASE_ENV:-/root/$BACKUP_PROJECT-supabase/docker/.env}"
+if [[ "$BACKUP_PROJECT" == kobi ]]; then
+  APP_DIR="${APP_DIR:-/root/kobi-git}"
+else
+  # הסקריפט רץ מתוך ה-clone של הפרויקט (deploy/) — האפליקציה היא התיקייה שמעליו
+  APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+fi
+LOG_FILE="${LOG_FILE:-/var/log/$BACKUP_PROJECT-backup.log}"
 # אופציונלי — העתקה מחוץ לשרת. קובץ עם: RCLONE_REMOTE="שם-remote:תיקייה"
-OFFSITE_CONF="${OFFSITE_CONF:-/root/.kobi-backup-offsite}"
+OFFSITE_CONF="${OFFSITE_CONF:-/root/.$BACKUP_PROJECT-backup-offsite}"
+# SEC-H6: הצפנה — מפתח age ציבורי (age1…) או קובץ recipients. המפתח הפרטי נשמר מחוץ לשרת.
+# ברירת מחדל: /root/.<project>-backup-recipients אם קיים (backup-install.sh כותב אותו), כך שה-cron
+# לא צריך משתנים נוספים. בלי מפתח: הגיבוי עובד כמו קודם, אבל מסומן UNENCRYPTED ומוצגת אזהרה.
+AGE_RECIPIENTS_FILE="${AGE_RECIPIENTS_FILE:-/root/.$BACKUP_PROJECT-backup-recipients}"
+BACKUP_AGE_RECIPIENT="${BACKUP_AGE_RECIPIENT:-}"
+if [[ -z "$BACKUP_AGE_RECIPIENT" && -s "$AGE_RECIPIENTS_FILE" ]]; then BACKUP_AGE_RECIPIENT="$AGE_RECIPIENTS_FILE"; fi
 
 log() { echo "[$(date '+%F %T')] $*"; }
 sql_quote() { printf "'%s'" "${1//\'/\'\'}"; }
@@ -48,7 +72,9 @@ if [[ "${1:-}" == "--status" ]]; then
        " · חודשיים: $(find "$BACKUP_ROOT/monthly" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
   if [[ -d "$BACKUP_ROOT/latest" ]]; then
     echo "האחרון: $(readlink -f "$BACKUP_ROOT/latest")"
-    echo "  מסד: $(du -h "$BACKUP_ROOT/latest/db.dump" | cut -f1) · קבצים: $(du -sh "$BACKUP_ROOT/latest/storage" | cut -f1)"
+    dump="$BACKUP_ROOT/latest/db.dump"; [[ -f "$dump.age" ]] && dump="$dump.age"
+    echo "  מסד: $(du -h "$dump" | cut -f1) · קבצים: $(du -sh "$BACKUP_ROOT/latest/storage" | cut -f1)"
+    if [[ -f "$BACKUP_ROOT/latest/UNENCRYPTED" ]]; then echo "  ⚠ לא מוצפן — הגדירו BACKUP_AGE_RECIPIENT"; else echo "  ✓ המסד והסודות מוצפנים"; fi
     sed 's/^/  /' "$BACKUP_ROOT/latest/counts.txt"
   fi
   echo "סה\"כ בדיסק (בלי כפילויות): $(du -sh "$BACKUP_ROOT" 2>/dev/null | cut -f1) · פנוי: $(df -Ph "$BACKUP_ROOT" | awk 'NR==2{print $4}')"
@@ -79,7 +105,7 @@ on_error() {
   { date '+%F %T'; echo "$STEP"; } > "$BACKUP_ROOT/LAST_FAILED" 2>/dev/null || true
   rm -rf "$WORK" 2>/dev/null || true
   notify_admins "הגיבוי היומי נכשל" \
-    "שלב: $STEP · $(date '+%d.%m %H:%M') · פרטים בשרת: /var/log/kobi-backup.log"
+    "שלב: $STEP · $(date '+%d.%m %H:%M') · פרטים בשרת: $LOG_FILE"
   exit "$code"
 }
 trap 'on_error $LINENO' ERR
@@ -112,6 +138,10 @@ docker exec -i "$DB_CONTAINER" pg_restore --list < "$WORK/db.dump" > "$WORK/db.t
 grep -q "TABLE DATA public global_products" "$WORK/db.toc"
 grep -q "TABLE DATA public orders" "$WORK/db.toc"
 grep -q "TABLE DATA auth users" "$WORK/db.toc"
+# PRIV-09: כשיש במסד את סכמת Hospitality — גם ההזמנות שלה חייבות להיות בקובץ
+has_hosp="$(docker exec "$DB_CONTAINER" psql -U postgres -d "$DB_NAME" -v ON_ERROR_STOP=1 -qAt \
+  -c "select to_regclass('hospitality.bookings') is not null")"
+if [[ "$has_hosp" == t ]]; then grep -q "TABLE DATA hospitality bookings" "$WORK/db.toc"; fi
 
 STEP="ספירת נתונים לתיעוד"
 docker exec "$DB_CONTAINER" psql -U postgres -d "$DB_NAME" -v ON_ERROR_STOP=1 -qAt -F ': ' -c "
@@ -131,20 +161,57 @@ if [[ -z "$storage_src" || ! -d "$storage_src" ]]; then
   false
 fi
 
+# SEC-H6: כשההצפנה מוגדרת, הקבצים של ה-buckets הפרטיים (קבלות תשלום, מסמכים, קבצים מצורפים)
+# לא נכנסים ל-storage/ הגלוי — הם נאספים בנפרד ומוצפנים בשלב 3b (storage-private.tar.age).
+# הרשימה נלקחת מהמסד (storage.buckets.public = false), כך ש-bucket פרטי חדש נכלל אוטומטית.
+private_dirs=()
+rsync_excludes=()
+if [[ -n "$BACKUP_AGE_RECIPIENT" ]]; then
+  STEP="איתור ה-buckets הפרטיים"
+  private_list="$(docker exec "$DB_CONTAINER" psql -U postgres -d "$DB_NAME" -v ON_ERROR_STOP=1 -qAt \
+    -c "select id from storage.buckets where not public order by id")"
+  while IFS= read -r bucket; do
+    [[ -n "$bucket" ]] || continue
+    # במבנה של Storage בשרת: <storage>/<tenant>/<global bucket>/<bucket id>/… (עומק 3)
+    while IFS= read -r -d '' dir; do
+      rel="${dir#"$storage_src"/}"
+      private_dirs+=("$rel")
+      rsync_excludes+=(--exclude "/$rel/")
+    done < <(find "$storage_src" -mindepth 1 -maxdepth 3 -type d -name "$bucket" -print0)
+  done <<< "$private_list"
+fi
+
 STEP="העתקת קבצי Storage"
 prev_storage="$(find "$BACKUP_ROOT/daily" -mindepth 2 -maxdepth 2 -type d -name storage \
   ! -path '*.partial/*' 2>/dev/null | sort | tail -1 || true)"
 if command -v rsync >/dev/null 2>&1; then
   rsync_rc=0
-  rsync -a --delete ${prev_storage:+--link-dest="$prev_storage"} "$storage_src/" "$WORK/storage/" || rsync_rc=$?
+  rsync -a --delete ${prev_storage:+--link-dest="$prev_storage"} ${rsync_excludes[@]+"${rsync_excludes[@]}"} \
+    "$storage_src/" "$WORK/storage/" || rsync_rc=$?
   # 24 = קובץ נמחק בזמן ההעתקה (העלאה/מחיקה באמצע) — תקין
   if (( rsync_rc != 0 && rsync_rc != 24 )); then false; fi
 else
   mkdir -p "$WORK/storage"
   cp -a "$storage_src/." "$WORK/storage/"
+  for rel in ${private_dirs[@]+"${private_dirs[@]}"}; do rm -rf "${WORK:?}/storage/$rel"; done
 fi
 files_count="$(find "$WORK/storage" -type f | wc -l)"
 log "  ✓ קבצים: $files_count ($(du -sh "$WORK/storage" | cut -f1))"
+
+if (( ${#private_dirs[@]} > 0 )); then
+  STEP="העתקת הקבצים של ה-buckets הפרטיים (להצפנה)"
+  for rel in "${private_dirs[@]}"; do
+    mkdir -p "$WORK/.private/$rel"
+    if command -v rsync >/dev/null 2>&1; then
+      rsync_rc=0
+      rsync -a "$storage_src/$rel/" "$WORK/.private/$rel/" || rsync_rc=$?
+      if (( rsync_rc != 0 && rsync_rc != 24 )); then false; fi
+    else
+      cp -a "$storage_src/$rel/." "$WORK/.private/$rel/"
+    fi
+  done
+  log "  ✓ buckets פרטיים (יוצפנו): $(find "$WORK/.private" -type f | wc -l) קבצים"
+fi
 
 # ---------- 3. סודות והגדרות ----------
 STEP="גיבוי קובץ הסודות של Supabase"
@@ -153,10 +220,34 @@ cp -p "$SUPABASE_ENV" "$WORK/secrets/supabase-docker.env"
 for name in .env .env.production; do
   if [[ -f "$APP_DIR/$name" ]]; then cp -p "$APP_DIR/$name" "$WORK/secrets/app${name}"; fi
 done
-for conf in /etc/nginx/sites-available/*kobi*; do
+for conf in /etc/nginx/sites-available/*"$BACKUP_PROJECT"*; do
   if [[ -f "$conf" ]]; then cp -p "$conf" "$WORK/secrets/"; fi
 done
 git -C "$APP_DIR" log --oneline -1 > "$WORK/app-commit.txt" 2>/dev/null || echo "לא ידוע" > "$WORK/app-commit.txt"
+
+# ---------- 3b. הצפנה (SEC-H6) ----------
+# המסד והסודות (JWT_SECRET, SERVICE_ROLE_KEY, סיסמת Postgres, GROW_SECRETS_KEY…) מוצפנים ב-age
+# למפתח ציבורי; המפתח הפרטי לא נמצא בשרת. הוכחת התקינות (db.toc) נוצרה כבר מהעותק הגלוי.
+if [[ -n "$BACKUP_AGE_RECIPIENT" ]]; then
+  STEP="הצפנת המסד והסודות (age)"
+  command -v age >/dev/null 2>&1
+  if [[ -f "$BACKUP_AGE_RECIPIENT" ]]; then age_to=(-R "$BACKUP_AGE_RECIPIENT"); else age_to=(-r "$BACKUP_AGE_RECIPIENT"); fi
+  tar -C "$WORK" -cf - secrets | age "${age_to[@]}" -o "$WORK/secrets.tar.age"
+  [[ -s "$WORK/secrets.tar.age" ]]
+  rm -rf "$WORK/secrets"
+  age "${age_to[@]}" -o "$WORK/db.dump.age" "$WORK/db.dump"
+  [[ -s "$WORK/db.dump.age" ]]
+  rm -f "$WORK/db.dump"
+  if [[ -d "$WORK/.private" ]]; then
+    tar -C "$WORK/.private" -cf - . | age "${age_to[@]}" -o "$WORK/storage-private.tar.age"
+    [[ -s "$WORK/storage-private.tar.age" ]]
+    rm -rf "$WORK/.private"
+  fi
+  log "  ✓ המסד, הסודות והקבצים הפרטיים מוצפנים (age) — לשחזור: age -d -i <מפתח פרטי>"
+else
+  echo "הגיבוי לא מוצפן — הגדירו BACKUP_AGE_RECIPIENT (מפתח age ציבורי)" > "$WORK/UNENCRYPTED"
+  log "  ⚠ הגיבוי לא מוצפן (המסד והסודות בטקסט גלוי) — הגדירו BACKUP_AGE_RECIPIENT"
+fi
 
 STEP="טביעת אצבע לקבצים (SHA256SUMS)"
 ( cd "$WORK" && find . -type f ! -path './storage/*' ! -name SHA256SUMS -print0 | sort -z \
@@ -189,7 +280,8 @@ if [[ -f "$OFFSITE_CONF" ]]; then
     STEP="העתקה מחוץ לשרת (rclone → $RCLONE_REMOTE)"
     command -v rclone >/dev/null 2>&1
     rclone copy "$DAY_DIR" "$RCLONE_REMOTE/daily/$STAMP" --exclude "storage/**"
-    rclone sync "$DAY_DIR/storage" "$RCLONE_REMOTE/storage"
+    # SEC-H6: קובץ שנמחק / הוחלף בשרת לא נעלם גם מהעותק החיצוני — נשמר בתיקייה לפי תאריך
+    rclone sync "$DAY_DIR/storage" "$RCLONE_REMOTE/storage" --backup-dir "$RCLONE_REMOTE/storage-deleted/$STAMP"
     rclone delete "$RCLONE_REMOTE/daily" --min-age "${OFFSITE_KEEP_DAYS:-30}d" || true
     rclone rmdirs "$RCLONE_REMOTE/daily" --leave-root || true
     log "  ✓ הועתק מחוץ לשרת: $RCLONE_REMOTE"

@@ -261,6 +261,22 @@ SELECT tests.check('room type: room 1 blocked on a night → that night is not f
              AND (SELECT (q ->> 'available')::boolean AND q ->> 'unit_id' = %3$L
                     FROM pg_temp.call(%1$L, NULL, format('SELECT hospitality.quote_type(%%L, %%L, %%L)', %2$L, pg_temp.d(7), pg_temp.d(8))) q)$$,
          :'st', :'cat', :'r1'));
+-- SEC-L4: קוד קופון בהצעת מחיר לסוג — רק דרך שרת האתר
+CREATE OR REPLACE FUNCTION pg_temp.call_err(_site text, _uid uuid, _sql text) RETURNS text LANGUAGE plpgsql AS $f$
+BEGIN
+  PERFORM pg_temp.call(_site, _uid, _sql);
+  RETURN NULL;
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.headers', '', true);
+  RETURN SQLERRM;
+END $f$;
+SELECT tests.check('SEC-L4: a visitor calling the API directly cannot try a coupon code on a room-type quote',
+  format($$SELECT pg_temp.call_err(%1$L, NULL, format('SELECT hospitality.quote_type(%%L, %%L, %%L, 2, 0, %%L)', %2$L, pg_temp.d(7), pg_temp.d(8), 'GUESS1'))
+                  LIKE '%%קוד קופון נבדק רק דרך%%'$$, :'st', :'cat'));
+SELECT tests.check('SEC-L4: … the site server can (a wrong code gets the usual answer)',
+  format($$SELECT pg_temp.srv_err(%1$L, format('SELECT hospitality.quote_type(%%L, %%L, %%L, 2, 0, %%L)', %2$L, pg_temp.d(7), pg_temp.d(8), 'GUESS1'))
+                  LIKE '%%קוד הקופון לא תקף%%'$$, :'st', :'cat'));
 
 -- ============================================================
 -- 6. The dashboard task and the reminder email

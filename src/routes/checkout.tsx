@@ -98,6 +98,7 @@ import {
 } from "@/lib/bit-payments";
 import { sendOrderEmails } from "@/lib/email.functions";
 import { checkCoupon, restoreAbandonedCart, saveAbandonedCart } from "@/lib/marketing.functions";
+import { requestCheckoutMarketingConsent } from "@/lib/marketing-consent.functions";
 import {
   couponDiscount,
   couponEligibleSubtotal,
@@ -213,6 +214,7 @@ function CheckoutPage() {
   const sendEmails = useServerFn(sendOrderEmails);
   const checkCouponFn = useServerFn(checkCoupon);
   const saveCartFn = useServerFn(saveAbandonedCart);
+  const requestConsentFn = useServerFn(requestCheckoutMarketingConsent);
   const restoreCartFn = useServerFn(restoreAbandonedCart);
   const getBitPaymentFn = useServerFn(getBitPayment);
   const search = Route.useSearch();
@@ -826,6 +828,11 @@ function CheckoutPage() {
         search: { start: 1 },
       });
     };
+    // SEC-H5: אישור דיוור נרשם רק אחרי שההזמנה נשלחה (לא בהקלדה), באישור כפול — מייל אישור
+    // אחד לכתובת של ההזמנה; עד הלחיצה עליו לא נשלח דיוור (גם לא תזכורת עגלה).
+    const requestMarketingConsentFor = (orderId: string) => {
+      if (marketingOptIn) void requestConsentFn({ data: { orderId } }).catch(() => undefined);
+    };
     try {
       let result: PlacedOrder;
       if (isCustomer && role) {
@@ -839,6 +846,7 @@ function CheckoutPage() {
         });
         const order = data?.[0];
         if (error || !order) throw new Error(error?.message ?? "שליחת ההזמנה נכשלה");
+        requestMarketingConsentFor(order.id);
 
         if ((payByBit || payByGrow) && order.kind === "order") {
           if (saveToProfile) {
@@ -899,6 +907,7 @@ function CheckoutPage() {
       } else {
         // אורח: בלי חשבון — ההזמנה נוצרת בשרת (הגבלת קצב + בדיקות במסד)
         const order = await placeGuest({ data: { kind, items: lines, details } });
+        requestMarketingConsentFor(order.orderId);
         if (order.grow) {
           await goToGrow(order.orderId);
           return;
@@ -920,22 +929,6 @@ function CheckoutPage() {
       }
       // Pixel / GA: רכישה (רק הזמנה עם מחירים)
       if (!result.isQuote) trackPurchase(result.orderNumber, grandTotal);
-      // חלק 40: אישור הדיוור נרשם גם אם ההזמנה נשלחה לפני שהעגלה נשמרה
-      // (השרת לא שומר עגלה נטושה אחרי הזמנה — רק את ההסכמה)
-      const optInEmail = (details.customer_email || form.customerEmail || session?.user.email || "")
-        .trim()
-        .toLowerCase();
-      if (marketingOptIn && EMAIL_FORMAT.test(optInEmail)) {
-        void saveCartFn({
-          data: {
-            session: randomUuid(),
-            email: optInEmail,
-            name: form.customerName.trim(),
-            items: [],
-            marketingConsent: true,
-          },
-        }).catch(() => undefined);
-      }
       // עגלה חדשה מעכשיו — ההזמנה סגרה את העגלה הנטושה (במסד, לפי האימייל)
       const fresh = randomUuid();
       cartSession.current = fresh;

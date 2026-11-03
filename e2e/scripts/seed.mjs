@@ -22,6 +22,9 @@ for (const user of Object.values(USERS)) {
       email: user.email,
       password: user.password,
       email_confirm: true,
+      // SEC-H1: חשבון שהמערכת יצרה (כמו כל admin.createUser באפליקציה) — מסומן; אחרת לא
+      // ניתן לקשר אליו תפקיד/בעלות לפי אימייל
+      app_metadata: { platform: true },
     }),
   });
   if (!res.ok && res.status !== 422)

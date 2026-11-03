@@ -169,7 +169,18 @@ SELECT tests.check('confirm link: once the email is sent the token is removed fr
 -- ============================================================
 SELECT pg_temp.call(:'sc', :OWNER_C, format($$SELECT to_jsonb(hospitality.cancel_booking(%L, 'בדיקה'))$$, :'b1')) IS NOT NULL AS ok \gset
 SELECT b.guest_id AS g1 FROM hospitality.bookings b WHERE b.id = :'b1' \gset
+-- PRV-6: הערות הצוות בהזמנה — חלק מהמידע על האורח (בייצוא) ונמחקות עם פרטיו
+UPDATE hospitality.bookings SET notes = 'הערת צוות: רגישות למזון' WHERE id = :'b1';
+SELECT tests.check('PRV-6: the guest''s data export includes the booking notes, the cancellation reason, the history and the payments',
+  format($$SELECT b ->> 'notes' = 'הערת צוות: רגישות למזון' AND b ? 'cancellation_reason'
+             AND jsonb_typeof(b -> 'events') = 'array' AND jsonb_array_length(b -> 'events') > 0
+             AND jsonb_typeof(b -> 'payments') = 'array'
+            FROM jsonb_array_elements(pg_temp.call(%1$L, %2$L, format('SELECT hospitality.export_guest_logged(%%L)', %3$L)) -> 'bookings') b
+           WHERE b ->> 'number' = (SELECT number::text FROM hospitality.bookings WHERE id = %4$L)$$,
+         :'sc', :OWNER_C, :'g1', :'b1'));
 SELECT pg_temp.call(:'sc', :OWNER_C, format('SELECT to_jsonb(hospitality.anonymize_guest(%L))', :'g1')) AS anon \gset
+SELECT tests.check('PRV-6: erasing the guest''s details also clears the staff notes and the cancellation reason on the bookings',
+  format($$SELECT b.notes IS NULL AND b.cancellation_reason IS NULL FROM hospitality.bookings b WHERE b.id = %L$$, :'b1'));
 SELECT tests.check('confirm link: erasing the guest''s details clears both tokens — neither link opens anything',
   format($$SELECT b.manage_token_hash IS NULL AND b.manage_token2_hash IS NULL AND b.manage_token_expires_at IS NULL
              AND pg_temp.page(%2$L, %3$L) LIKE 'error: %%' AND pg_temp.page(%2$L, %4$L) LIKE 'error: %%'

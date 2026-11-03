@@ -215,6 +215,15 @@ export function parseGuestBookingRef(input: Raw) {
   return { token: null, bookingId: uuid(bookingId, "ההזמנה") };
 }
 
+/** אסימון ניהול ההזמנה (מהמייל) — ההוכחה לשיוך הזמנה לחשבון מחובר (SEC-C1) */
+export function parseClaimToken(input: Raw): { token: string } {
+  const t = String(field(input, "token") ?? "")
+    .trim()
+    .toLowerCase();
+  if (!MANAGE_TOKEN.test(t)) throw new InputError("ההזמנה לא נמצאה");
+  return { token: t };
+}
+
 export function parseRequestCancellation(input: Raw) {
   return {
     ...parseGuestBookingRef(input),

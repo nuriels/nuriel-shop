@@ -78,9 +78,11 @@ DEFAULT_HOST="${DEFAULT_HOST%%:*}"
 DEFAULT_HOST="${DEFAULT_HOST,,}"
 
 rpc() {
-  curl -fsS --max-time 30 -X POST \
-    -H "apikey: $SERVICE_KEY" -H "Authorization: Bearer $SERVICE_KEY" \
-    -H "Content-Type: application/json" "$@"
+  # INF-12: מפתח השירות לא בשורת הפקודה (גלוי ב-/proc/*/cmdline בכל הרצה, כל דקה) — הכותרות
+  # עוברות ל-curl כקובץ הגדרות ב-stdin (-K -). הגוף (-d) נשאר בארגומנטים — אין בו סוד.
+  printf 'header = "apikey: %s"\nheader = "Authorization: Bearer %s"\n' "$SERVICE_KEY" "$SERVICE_KEY" |
+    curl -fsS --max-time 30 -X POST -K - \
+      -H "Content-Type: application/json" "$@"
 }
 
 # ------------------------------------------------------------

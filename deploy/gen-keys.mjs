@@ -25,6 +25,10 @@ const values = {
   DASHBOARD_PASSWORD: crypto.randomBytes(12).toString("hex"),
   SECRET_KEY_BASE: crypto.randomBytes(48).toString("hex"),
   VAULT_ENC_KEY: crypto.randomBytes(16).toString("hex"), // בדיוק 32 תווים
+  // SEC-M4: גם שאר הסודות של הסטאק — אחרת נשארים בערך הציבורי של .env.example
+  PG_META_CRYPTO_KEY: crypto.randomBytes(32).toString("hex"),
+  LOGFLARE_PUBLIC_ACCESS_TOKEN: crypto.randomBytes(32).toString("hex"),
+  LOGFLARE_PRIVATE_ACCESS_TOKEN: crypto.randomBytes(32).toString("hex"),
 };
 
 for (const [key, value] of Object.entries(values)) {

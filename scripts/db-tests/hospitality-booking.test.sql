@@ -55,8 +55,12 @@ CREATE OR REPLACE FUNCTION pg_temp.req(_site text, _uid uuid, _unit uuid, _in da
                                        _code text DEFAULT NULL) RETURNS jsonb LANGUAGE plpgsql AS $f$
 DECLARE q jsonb;
 BEGIN
-  q := pg_temp.call(_site, _uid, format('SELECT hospitality.quote(%L, %L, %L, %s, %s, %L)',
-                                        _unit, _in, _out, _adults, _children, _code));
+  -- SEC-L4: הצעת מחיר עם קוד קופון — רק דרך שרת האתר (כמו האתר עצמו)
+  q := CASE WHEN _code IS NULL
+            THEN pg_temp.call(_site, _uid, format('SELECT hospitality.quote(%L, %L, %L, %s, %s, %L)',
+                                                  _unit, _in, _out, _adults, _children, _code))
+            ELSE pg_temp.srv(_site, format('SELECT hospitality.quote(%L, %L, %L, %s, %s, %L)',
+                                           _unit, _in, _out, _adults, _children, _code)) END;
   RETURN pg_temp.srv(_site, format(
     'SELECT hospitality.request_booking(_unit_id => %L, _check_in => %L, _check_out => %L, _full_name => %L,
        _email => %L, _phone => %L, _idempotency_key => %L, _policy_accepted => true, _policy_hash => %L,
@@ -280,10 +284,26 @@ SELECT tests.check('quote: an automatic promotion is applied',
           FROM pg_temp.call(%L, NULL, format('SELECT hospitality.quote(%%L, %%L, %%L)', %L::uuid, pg_temp.d(30), pg_temp.d(32))) q$$, :'sx', :U6));
 SELECT tests.check('quote: a coupon code is applied (case-insensitive)',
   format($$SELECT (q ->> 'discount')::numeric = 100 AND q ->> 'promotion_id' = '71d60000-0000-0000-0000-000000000002'
-          FROM pg_temp.call(%L, NULL, format('SELECT hospitality.quote(%%L, %%L, %%L, 2, 0, %%L)', %L::uuid, pg_temp.d(30), pg_temp.d(32), 'welcome')) q$$, :'sx', :U5));
+          FROM pg_temp.srv(%L, format('SELECT hospitality.quote(%%L, %%L, %%L, 2, 0, %%L)', %L::uuid, pg_temp.d(30), pg_temp.d(32), 'welcome')) q$$, :'sx', :U5));
 SELECT pg_temp.expect_error('quote: an unknown coupon is refused',
-  format($$SELECT pg_temp.call(%L, NULL, format('SELECT hospitality.quote(%%L, %%L, %%L, 2, 0, %%L)', %L::uuid, pg_temp.d(30), pg_temp.d(32), 'NOPE'))$$, :'sx', :U5),
+  format($$SELECT pg_temp.srv(%L, format('SELECT hospitality.quote(%%L, %%L, %%L, 2, 0, %%L)', %L::uuid, pg_temp.d(30), pg_temp.d(32), 'NOPE'))$$, :'sx', :U5),
   'קוד הקופון לא תקף');
+-- SEC-L4: קוד קופון נבדק רק דרך שרת האתר (אחרי הגבלת הקצב) — קריאה ישירה ל-API לא מנחשת קודים
+SELECT pg_temp.expect_error('SEC-L4: a visitor calling the API directly cannot try a coupon code',
+  format($$SELECT pg_temp.call(%L, NULL, format('SELECT hospitality.quote(%%L, %%L, %%L, 2, 0, %%L)', %L::uuid, pg_temp.d(30), pg_temp.d(32), 'NOPE'))$$, :'sx', :U5),
+  'קוד קופון נבדק רק דרך');
+SELECT pg_temp.expect_error('SEC-L4: … not even a valid one (no oracle: the same answer for every code)',
+  format($$SELECT pg_temp.call(%L, NULL, format('SELECT hospitality.quote(%%L, %%L, %%L, 2, 0, %%L)', %L::uuid, pg_temp.d(30), pg_temp.d(32), 'welcome'))$$, :'sx', :U5),
+  'קוד קופון נבדק רק דרך');
+SELECT pg_temp.expect_error('SEC-L4: … nor a signed-in guest',
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.quote(%%L, %%L, %%L, 2, 0, %%L)', %L::uuid, pg_temp.d(30), pg_temp.d(32), 'welcome'))$$, :'sx', :GUEST_V, :U5),
+  'קוד קופון נבדק רק דרך');
+SELECT tests.check('SEC-L4: a blank code is no code — the public quote works as before',
+  format($$SELECT (q ->> 'discount')::numeric = round((q ->> 'subtotal')::numeric * 0.1, 2) AND q ->> 'promotion_id' IS DISTINCT FROM '71d60000-0000-0000-0000-000000000002'
+          FROM pg_temp.call(%L, NULL, format('SELECT hospitality.quote(%%L, %%L, %%L, 2, 0, %%L)', %L::uuid, pg_temp.d(30), pg_temp.d(32), '  ')) q$$, :'sx', :U6));
+SELECT tests.check('SEC-L4: the business staff can still quote with a code (management)',
+  format($$SELECT q ->> 'promotion_id' = '71d60000-0000-0000-0000-000000000002'
+          FROM pg_temp.call(%L, %L, format('SELECT hospitality.quote(%%L, %%L, %%L, 2, 0, %%L)', %L::uuid, pg_temp.d(30), pg_temp.d(32), 'welcome')) q$$, :'sx', :OWNER_X, :U5));
 
 -- policies: default (flexible), a strict policy for a unit, a holiday rule policy
 INSERT INTO hospitality.policies (id, tenant_id, name, deposit_kind, deposit_value, free_cancel_days, fee_tiers, no_show_fee) VALUES
@@ -386,28 +406,36 @@ SELECT tests.check('cap: the cap is per business (the same contact can request o
          :'sy', :UY));
 
 -- an Ecommerce store owner (member of another tenant) books as a guest
+SELECT pg_temp.req(:'sx', :ECOM_OWNER, :U2, pg_temp.d(70), pg_temp.d(71), 'owner.a@test.local', '0547777777', 'key-ecom-0001') AS re \gset
+SELECT (:'re'::jsonb) ->> 'manage_token' AS te \gset
 SELECT tests.check('request: an Ecommerce store owner can book as a guest (request_tenant, not membership)',
-  format($$SELECT (pg_temp.req(%L, %L, %L, pg_temp.d(70), pg_temp.d(71), 'owner.a@test.local', '0547777777', 'key-ecom-0001') ->> 'status') = 'pending_approval'$$,
-         :'sx', :ECOM_OWNER, :U2));
+  format($$SELECT (%L::jsonb ->> 'status') = 'pending_approval'$$, :'re'));
 SELECT tests.check('request: … without gaining any staff access to site X',
   format($$SELECT pg_temp.call(%L, %L, 'SELECT to_jsonb(count(*)) FROM hospitality.bookings')::integer = 0$$, :'sx', :ECOM_OWNER));
 
 -- logged-in guests: the request itself is anonymous (sent by the app server only — migration 25, D1);
 -- an account is linked by claiming, and only with a verified account email
-SELECT pg_temp.req(:'sx', :GUEST_V, :U2, pg_temp.d(80), pg_temp.d(81), 'verified.guest@test.local', '0531111111', 'key-ver-0001') ->> 'booking_id' AS bv \gset
+SELECT pg_temp.req(:'sx', :GUEST_V, :U2, pg_temp.d(80), pg_temp.d(81), 'verified.guest@test.local', '0531111111', 'key-ver-0001') AS rv \gset
+SELECT (:'rv'::jsonb) ->> 'booking_id' AS bv, (:'rv'::jsonb) ->> 'manage_token' AS tv \gset
 SELECT pg_temp.req(:'sx', :GUEST_U, :U2, pg_temp.d(82), pg_temp.d(83), 'unverified.guest@test.local', '0532222222', 'key-unv-0001') AS ru \gset
 SELECT (:'ru'::jsonb) ->> 'booking_id' AS bu, (:'ru'::jsonb) ->> 'manage_token' AS tu \gset
 SELECT tests.check('identity: a request links no account by itself (server-only requests, D1)',
   format($$SELECT g.user_id IS NULL FROM hospitality.guests g JOIN hospitality.bookings b ON b.guest_id = g.id WHERE b.id = %L$$, :'bv'));
 SELECT pg_temp.req(:'sx', :GUEST_V, :U2, pg_temp.d(84), pg_temp.d(85), 'someone.else@test.local', '0533333333', 'key-ver-0002') ->> 'booking_id' AS bo \gset
-SELECT pg_temp.after('identity: a logged-in guest with a verified matching email claims and is linked',
-  format($$SELECT pg_temp.call(%L, %L, 'SELECT to_jsonb(hospitality.claim_guest_bookings())')$$, :'sx', :GUEST_V),
+-- SEC-C1: linking an account to a guest needs proof of ownership — the manage-token emailed to
+-- the guest — not a matching (auto-confirmed, meaningless) account email.
+SELECT pg_temp.after('identity: a logged-in guest who holds the booking''s manage-token claims and is linked',
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT to_jsonb(hospitality.claim_guest_bookings(%%L))', %L))$$, :'sx', :GUEST_V, :'tv'),
   format($$SELECT $1::integer = 1
              AND (SELECT g.user_id = %L FROM hospitality.guests g JOIN hospitality.bookings b ON b.guest_id = g.id WHERE b.id = %L)$$,
          :GUEST_V, :'bv'));
-SELECT tests.check('identity: an unverified account is not linked',
-  format($$SELECT g.user_id IS NULL FROM hospitality.guests g JOIN hospitality.bookings b ON b.guest_id = g.id WHERE b.id = %L$$, :'bu'));
-SELECT tests.check('identity: a typed email of someone else does not link the logged-in account',
+SELECT pg_temp.expect_error('identity: a wrong manage-token links nothing',
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.claim_guest_bookings(%%L)', repeat('f', 64)))$$, :'sx', :GUEST_U),
+  'ההזמנה לא נמצאה');
+SELECT pg_temp.expect_error('identity: a typed email of someone else does not link the logged-in account (token required)',
+  format($$SELECT pg_temp.call(%L, %L, 'SELECT hospitality.claim_guest_bookings(NULL)')$$, :'sx', :GUEST_V),
+  'ההזמנה לא נמצאה');
+SELECT tests.check('identity: claiming one booking links only that guest, not another unrelated booking',
   format($$SELECT g.user_id IS NULL FROM hospitality.guests g JOIN hospitality.bookings b ON b.guest_id = g.id WHERE b.id = %L$$, :'bo'));
 SELECT pg_temp.expect_error('identity: anon cannot send a booking request through the API (app server only, D1)',
   format($$SELECT pg_temp.call(%L, NULL, format('SELECT hospitality.request_booking(_unit_id => %%L, _check_in => %%L, _check_out => %%L,
@@ -959,6 +987,10 @@ UPDATE hospitality.bookings SET manage_token_expires_at = now() - interval '1 se
 SELECT pg_temp.expect_error('token: an expired link (30 days after check-out) is not found',
   format($$SELECT pg_temp.call(%L, NULL, format('SELECT hospitality.get_booking_by_token(%%L)', %L))$$, :'sx', :'tu'),
   'ההזמנה לא נמצאה');
+-- SEC-C1: an expired manage-token cannot link an account either
+SELECT pg_temp.expect_error('claim: an expired manage-token links nothing',
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality.claim_guest_bookings(%%L)', %L))$$, :'sx', :GUEST_U, :'tu'),
+  'ההזמנה לא נמצאה');
 SELECT tests.check('token: valid until 30 days after check-out (end of day, business time zone)',
   format($$SELECT manage_token_expires_at = ((check_out + 31)::timestamp AT TIME ZONE 'Asia/Jerusalem') FROM hospitality.bookings WHERE id = %L$$, :'b1'));
 SELECT tests.check('my bookings: a linked verified guest sees exactly their own bookings on this site',
@@ -984,24 +1016,23 @@ SELECT tests.run('tables: anon has no table access', 'SELECT * FROM hospitality.
 SELECT tests.run('tables: a guest cannot write bookings', 'UPDATE hospitality.bookings SET total = 0', :GUEST_V, 'permission denied');
 SELECT tests.run('tables: even the owner cannot write bookings directly', 'UPDATE hospitality.bookings SET total = 0', :OWNER_X, 'permission denied');
 
--- claiming past bookings: verified email only, this site only
-UPDATE auth.users SET email_confirmed_at = now() WHERE id = :GUEST_U;
-SELECT pg_temp.after('claim: after verifying the account email, the guest links their earlier booking on this site',
-  format($$SELECT pg_temp.call(%L, %L, 'SELECT to_jsonb(hospitality.claim_guest_bookings())')$$, :'sx', :GUEST_U),
+-- claiming past bookings: holding the booking's manage-token, this site only (SEC-C1)
+-- (restore the token the expiry test above invalidated, so the guest can still claim)
+UPDATE hospitality.bookings SET manage_token_expires_at = ((check_out + 31)::timestamp AT TIME ZONE 'Asia/Jerusalem')
+  WHERE id = :'bu';
+SELECT pg_temp.after('claim: the guest links their earlier booking on this site with its manage-token',
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT to_jsonb(hospitality.claim_guest_bookings(%%L))', %L))$$, :'sx', :GUEST_U, :'tu'),
   format($$SELECT $1::integer = 1
              AND (SELECT g.user_id = %L FROM hospitality.guests g JOIN hospitality.bookings b ON b.guest_id = g.id WHERE b.id = %L)$$,
          :GUEST_U, :'bu'));
-UPDATE auth.users SET email_confirmed_at = NULL WHERE id = :GUEST_U;
-SELECT pg_temp.expect_error('claim: an unverified account cannot link anything',
-  format($$SELECT pg_temp.call(%L, %L, 'SELECT to_jsonb(hospitality.claim_guest_bookings())')$$, :'sx', :GUEST_U),
-  'אימייל מאומת');
+SELECT pg_temp.expect_error('claim: a missing manage-token links nothing',
+  format($$SELECT pg_temp.call(%L, %L, 'SELECT to_jsonb(hospitality.claim_guest_bookings(NULL))')$$, :'sx', :GUEST_U),
+  'ההזמנה לא נמצאה');
 SELECT pg_temp.expect_error('claim: not available to anon',
-  format($$SELECT pg_temp.call(%L, NULL, 'SELECT to_jsonb(hospitality.claim_guest_bookings())')$$, :'sx'), 'permission denied');
-UPDATE auth.users SET email_confirmed_at = now() WHERE id = :ECOM_OWNER;
-SELECT pg_temp.after('claim: a verified Ecommerce store owner claims only the booking made with their own email',
-  format($$SELECT pg_temp.call(%L, %L, 'SELECT to_jsonb(hospitality.claim_guest_bookings())')$$, :'sx', :ECOM_OWNER),
+  format($$SELECT pg_temp.call(%L, NULL, 'SELECT to_jsonb(hospitality.claim_guest_bookings(NULL))')$$, :'sx'), 'permission denied');
+SELECT pg_temp.after('claim: a visitor claims only the booking whose manage-token they hold',
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT to_jsonb(hospitality.claim_guest_bookings(%%L))', %L))$$, :'sx', :ECOM_OWNER, :'te'),
   format($$SELECT $1::integer = 1 AND jsonb_array_length(pg_temp.call(%L, %L, 'SELECT hospitality.my_bookings()')) = 1$$, :'sx', :ECOM_OWNER));
-UPDATE auth.users SET email_confirmed_at = NULL WHERE id = :ECOM_OWNER;
 
 -- staff of one site cannot reach another site's bookings
 SELECT tests.check('staff isolation: owner Y on the site X host reads no bookings',

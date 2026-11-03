@@ -96,6 +96,7 @@ import { Route as ManageGuestsGuestIdRouteImport } from './routes/manage.guests_
 import { Route as ManagePropertiesPropertyIdRouteImport } from './routes/manage.properties.$propertyId'
 import { Route as ManageSupportTicketIdRouteImport } from './routes/manage.support_.$ticketId'
 import { Route as ManageUnitsUnitIdRouteImport } from './routes/manage.units_.$unitId'
+import { Route as MarketingConfirmTokenRouteImport } from './routes/marketing.confirm.$token'
 import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
 import { Route as StayRoomsTypeSlugRouteImport } from './routes/stay.rooms.$typeSlug'
 import { Route as StayUnitsUnitSlugRouteImport } from './routes/stay.units.$unitSlug'
@@ -538,6 +539,11 @@ const ManageUnitsUnitIdRoute = ManageUnitsUnitIdRouteImport.update({
   path: '/units/$unitId',
   getParentRoute: () => ManageRoute,
 } as any)
+const MarketingConfirmTokenRoute = MarketingConfirmTokenRouteImport.update({
+  id: '/marketing/confirm/$token',
+  path: '/marketing/confirm/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlatformCustomersTenantIdRoute =
   PlatformCustomersTenantIdRouteImport.update({
     id: '/platform_/customers/$tenantId',
@@ -643,6 +649,7 @@ export interface FileRoutesByFullPath {
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/support/$ticketId': typeof ManageSupportTicketIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
+  '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
@@ -733,6 +740,7 @@ export interface FileRoutesByTo {
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/support/$ticketId': typeof ManageSupportTicketIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
+  '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
@@ -826,6 +834,7 @@ export interface FileRoutesById {
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/support_/$ticketId': typeof ManageSupportTicketIdRoute
   '/manage/units_/$unitId': typeof ManageUnitsUnitIdRoute
+  '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
@@ -920,6 +929,7 @@ export interface FileRouteTypes {
     | '/manage/properties/$propertyId'
     | '/manage/support/$ticketId'
     | '/manage/units/$unitId'
+    | '/marketing/confirm/$token'
     | '/platform/customers/$tenantId'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
@@ -1010,6 +1020,7 @@ export interface FileRouteTypes {
     | '/manage/properties/$propertyId'
     | '/manage/support/$ticketId'
     | '/manage/units/$unitId'
+    | '/marketing/confirm/$token'
     | '/platform/customers/$tenantId'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
@@ -1102,6 +1113,7 @@ export interface FileRouteTypes {
     | '/manage/properties/$propertyId'
     | '/manage/support_/$ticketId'
     | '/manage/units_/$unitId'
+    | '/marketing/confirm/$token'
     | '/platform_/customers/$tenantId'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
@@ -1166,6 +1178,7 @@ export interface RootRouteChildren {
   ApiWebhooksGrowRoute: typeof ApiWebhooksGrowRoute
   CheckoutBitOrderIdRoute: typeof CheckoutBitOrderIdRoute
   CheckoutGrowOrderIdRoute: typeof CheckoutGrowOrderIdRoute
+  MarketingConfirmTokenRoute: typeof MarketingConfirmTokenRoute
   PlatformCustomersTenantIdRoute: typeof PlatformCustomersTenantIdRoute
 }
 
@@ -1780,6 +1793,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageUnitsUnitIdRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/marketing/confirm/$token': {
+      id: '/marketing/confirm/$token'
+      path: '/marketing/confirm/$token'
+      fullPath: '/marketing/confirm/$token'
+      preLoaderRoute: typeof MarketingConfirmTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/platform_/customers/$tenantId': {
       id: '/platform_/customers/$tenantId'
       path: '/platform/customers/$tenantId'
@@ -1942,6 +1962,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWebhooksGrowRoute: ApiWebhooksGrowRoute,
   CheckoutBitOrderIdRoute: CheckoutBitOrderIdRoute,
   CheckoutGrowOrderIdRoute: CheckoutGrowOrderIdRoute,
+  MarketingConfirmTokenRoute: MarketingConfirmTokenRoute,
   PlatformCustomersTenantIdRoute: PlatformCustomersTenantIdRoute,
 }
 export const routeTree = rootRouteImport

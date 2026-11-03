@@ -26,6 +26,15 @@ type CompressOptions = {
   preserveTransparency?: boolean;
 };
 
+/** פורמטי raster שהדליים הציבוריים מקבלים (SEC-H4 — allowed_mime_types במסד) */
+const WEB_SAFE_TYPES: ReadonlySet<string> = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/gif",
+]);
+
 const PRODUCT_OPTIONS: CompressOptions = { maxDimension: 1000, quality: 0.82 };
 const LOGO_OPTIONS: CompressOptions = {
   maxDimension: 600,
@@ -77,11 +86,17 @@ function targetSize(
 async function compress(file: File, options: CompressOptions): Promise<CompressResult> {
   if (!file.type.startsWith("image/")) throw new Error("יש לבחור קובץ תמונה");
 
-  // GIF מונפש ו-SVG לא עוברים דחיסה — המרה תשבור אותם
-  if (file.type === "image/gif" || file.type === "image/svg+xml") {
+  // SEC-H4: SVG יכול להכיל סקריפט, והדליים הציבוריים מגישים אותו inline — לא נתמך (גם השרת
+  // חוסם אותו: allowed_mime_types). כמו בתמונות של Hospitality.
+  if (file.type === "image/svg+xml" || /\.svg$/i.test(file.name)) {
+    throw new Error("קובצי SVG לא נתמכים — השתמשו ב-PNG / JPG / WEBP");
+  }
+
+  // GIF מונפש לא עובר דחיסה — המרה תשבור את האנימציה
+  if (file.type === "image/gif") {
     return {
       file,
-      extension: file.type === "image/gif" ? "gif" : "svg",
+      extension: "gif",
       originalBytes: file.size,
       compressedBytes: file.size,
     };
@@ -121,8 +136,11 @@ async function compress(file: File, options: CompressOptions): Promise<CompressR
 
   const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
 
-  // אם הדחיסה לא שיפרה כלום (למשל תמונה שכבר קטנה ומאופטמת) — משתמשים במקור
+  // אם הדחיסה לא שיפרה כלום (למשל תמונה שכבר קטנה ומאופטמת) — משתמשים במקור, אבל רק אם
+  // הוא כבר בפורמט רשת שהאחסון מקבל (SEC-H4: allowed_mime_types). HEIC / BMP / TIFF עוברים
+  // המרה גם אם היא גדולה יותר — אחרת האחסון ידחה אותם (וגם רוב הדפדפנים לא מציגים אותם).
   if (
+    WEB_SAFE_TYPES.has(file.type) &&
     blob.size >= file.size &&
     sourceWidth <= options.maxDimension &&
     sourceHeight <= options.maxDimension

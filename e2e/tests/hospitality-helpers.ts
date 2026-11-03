@@ -21,14 +21,22 @@ export const asPlatform = (query: string) =>
 
 export type Account = { email: string; password: string };
 
-/** חשבון עם סיסמה (GoTrue admin API של Supabase המקומי) */
+/**
+ * חשבון עם סיסמה (GoTrue admin API של Supabase המקומי) — כמו כל חשבון שהמערכת יוצרת, מסומן
+ * app_metadata.platform (SEC-H1: רק לחשבון כזה אפשר לקשר תפקיד/בעלות לפי אימייל)
+ */
 export async function ensureUser(request: APIRequestContext, user: Account): Promise<string> {
   const existing = sql(`SELECT id FROM auth.users WHERE email = '${user.email}'`);
   if (existing) return existing;
   const key = process.env["SUPABASE_SERVICE_ROLE_KEY"]!;
   const res = await request.post(`${supabaseEnv().url}/auth/v1/admin/users`, {
     headers: { apikey: key, authorization: `Bearer ${key}` },
-    data: { email: user.email, password: user.password, email_confirm: true },
+    data: {
+      email: user.email,
+      password: user.password,
+      email_confirm: true,
+      app_metadata: { platform: true },
+    },
   });
   expect(res.ok(), await res.text()).toBe(true);
   return ((await res.json()) as { id: string }).id;

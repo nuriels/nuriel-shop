@@ -428,3 +428,54 @@ SELECT tests.check('exposure: the guest''s own booking (secret link) has no staf
 SELECT tests.check('exposure: the export feed has dates only (no guest name / email / phone)',
   format($$SELECT NOT (f::text ~* '(אורחת|d1\.guest|0521119999|@)')
           FROM pg_temp.srv(NULL, format('SELECT hospitality.channel_feed(%%L, %%L)', %L, %L)) f$$, :'sb', :'feedb'));
+
+-- ============================================================
+-- 6. SEC-M3: requests from the site cannot flood the availability calendar
+--    (business A: one active unit → at most 42 unit-nights held by requests not yet approved;
+--     the fixture request ba already holds 2)
+-- ============================================================
+SELECT pg_temp.expect_error('hold guard: a site request longer than 14 nights is refused',
+  format($$SELECT pg_temp.req(%L, %L, pg_temp.d(100), pg_temp.d(115), 'm3.long@example.com', '0527000001', 'm3-key-long-0001')$$, :'sa', :UA),
+  'עד 14 לילות');
+SELECT tests.check('hold guard: 14 nights is still allowed (pending approval) — held 16',
+  format($$SELECT (pg_temp.req(%L, %L, pg_temp.d(100), pg_temp.d(114), 'm3.a@example.com', '0527000002', 'm3-key-a-0001') ->> 'status') = 'pending_approval'$$, :'sa', :UA));
+SELECT tests.check('hold guard: more requests from other people are accepted — held 30',
+  format($$SELECT (pg_temp.req(%L, %L, pg_temp.d(120), pg_temp.d(134), 'm3.b@example.com', '0527000003', 'm3-key-b-0001') ->> 'status') = 'pending_approval'$$, :'sa', :UA));
+SELECT tests.check('hold guard: … up to the cap exactly — held 42',
+  format($$SELECT (pg_temp.req(%L, %L, pg_temp.d(140), pg_temp.d(152), 'm3.c@example.com', '0527000004', 'm3-key-c-0001') ->> 'status') = 'pending_approval'$$, :'sa', :UA));
+SELECT pg_temp.expect_error('hold guard: one more night held by an unapproved request is over the business cap',
+  format($$SELECT pg_temp.req(%L, %L, pg_temp.d(160), pg_temp.d(161), 'm3.d@example.com', '0527000005', 'm3-key-d-0001')$$, :'sa', :UA),
+  'בקשות רבות');
+SELECT tests.check('hold guard: the refused request left nothing behind',
+  $$SELECT NOT EXISTS (SELECT 1 FROM hospitality.bookings WHERE idempotency_key = 'm3-key-d-0001')$$);
+-- the owner approves one → its nights no longer count as an unapproved hold
+SELECT pg_temp.call(:'sa', :OWNER_A, format('SELECT to_jsonb(hospitality.approve_booking(%L))',
+       (SELECT id FROM hospitality.bookings WHERE idempotency_key = 'm3-key-b-0001'))) IS NOT NULL AS ok \gset
+SELECT tests.check('hold guard: once the owner approves a request, new requests go through again',
+  format($$SELECT (pg_temp.req(%L, %L, pg_temp.d(160), pg_temp.d(161), 'm3.e@example.com', '0527000006', 'm3-key-e-0001') ->> 'status') = 'pending_approval'$$, :'sa', :UA));
+SELECT tests.check('hold guard: business B is not affected by A''s pending requests',
+  format($$SELECT (pg_temp.req(%L, %L, pg_temp.d(100), pg_temp.d(114), 'm3.f@example.com', '0527000007', 'm3-key-f-0001') ->> 'status') = 'pending_approval'$$, :'sb', :UB));
+SELECT tests.check('hold guard: both site request functions call it; the owner''s manual booking does not',
+  $$SELECT (SELECT count(*) FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace
+              AND proname IN ('request_booking', 'request_booking_group') AND prosrc LIKE '%_online_hold_guard%') = 2
+       AND (SELECT bool_and(position('_online_hold_guard' IN prosrc) = 0) FROM pg_proc
+             WHERE pronamespace = 'hospitality'::regnamespace AND proname = 'create_manual_booking')$$);
+SELECT pg_temp.denied('hold guard: not callable from the API',
+  format($$SELECT pg_temp.call(%L, %L, format('SELECT hospitality._online_hold_guard(%%L, ARRAY[%%L]::uuid[], current_date, current_date + 1)', %L, %L))$$,
+         :'sa', :OWNER_A, :'sa', :UA));
+
+-- ============================================================
+-- 7. SEC-L9: a site request does not change an existing guest card
+--    (ga = the guest of the fixture request ba, marketing consent off)
+-- ============================================================
+SELECT pg_temp.call(:'sa', NULL, format('SELECT hospitality.quote(%L, %L, %L, 2, 0)', :UA, pg_temp.d(170), pg_temp.d(171))) ->> 'policy_hash' AS l9hash \gset
+SELECT pg_temp.srv(:'sa', format($$SELECT hospitality.request_booking(_unit_id => %L, _check_in => %L, _check_out => %L,
+   _full_name => 'מישהו אחר', _email => 'd1.guest.a@example.com', _phone => '0527000099', _idempotency_key => 'l9-key-0001',
+   _policy_accepted => true, _policy_hash => %L, _marketing_consent => true)$$, :UA, pg_temp.d(170), pg_temp.d(171), :'l9hash')) ->> 'booking_id' AS l9b \gset
+SELECT tests.check('SEC-L9: a site request typed with someone else''s email does not turn on their marketing consent',
+  format($$SELECT NOT marketing_consent FROM hospitality.guests WHERE id = %L$$, :'ga'));
+SELECT tests.check('SEC-L9: … the request is still accepted, and its opt-in is kept in the booking''s own evidence',
+  format($$SELECT status = 'pending_approval' AND guest_id = %L AND (policy_acceptance ->> 'marketing_consent')::boolean
+      FROM hospitality.bookings WHERE id = %L$$, :'ga', :'l9b'));
+SELECT tests.check('SEC-L9: a request without an opt-in records false in its evidence',
+  format($$SELECT (policy_acceptance ->> 'marketing_consent') = 'false' FROM hospitality.bookings WHERE id = %L$$, :'ba'));

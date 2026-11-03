@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import { Cookie } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -97,6 +97,29 @@ export function TrackingConsent({ tracking }: { tracking: StoreTracking | null }
       injectTracking(tracking);
     }
   }, [choice, tracking, hasTracking, path]);
+
+  // PRV: קוד שנטען נשאר בעמוד עד טעינה מחדש, ו-GA4 מדווח לבד על מעברים בתוך האתר. לכן מעבר
+  // מהחנות לאזור החשבון / הניהול (קישור, ניווט) — טעינה מלאה של העמוד, בלי המעקב.
+  const router = useRouter();
+  useEffect(() => {
+    if (choice !== "granted" || !hasTracking) return;
+    return router.history.block({
+      enableBeforeUnload: false,
+      blockerFn: ({ nextLocation, action }) => {
+        if (!(window as TrackingWindow).__trackingInjected) return false;
+        if (action !== "PUSH" && action !== "REPLACE") return false;
+        if (!NO_MARKETING_PATHS.test(nextLocation.pathname)) return false;
+        window.location.assign(nextLocation.href);
+        return true;
+      },
+    });
+  }, [choice, hasTracking, router]);
+  // … וחזרה (Back / Forward) לאזור כזה — טעינה מחדש בלי הקוד
+  useEffect(() => {
+    if ((window as TrackingWindow).__trackingInjected && NO_MARKETING_PATHS.test(path)) {
+      window.location.reload();
+    }
+  }, [path]);
 
   if (!hasTracking || choice === undefined) return null;
   const visible = reopened || (choice === null && !NO_MARKETING_PATHS.test(path));

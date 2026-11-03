@@ -36,15 +36,19 @@ export function allowAction(key: string, limit: number, windowMs: number): boole
   return true;
 }
 
-/** כתובת ה-IP של הפונה, לפי הכותרת ש-Nginx מוסיף */
+/**
+ * כתובת ה-IP של הפונה — רק ממקור שהשרת שלנו קובע (SEC-M2): X-Real-IP (ה-Nginx דורס אותו בכל
+ * בקשה), אחרת ההופ האחרון ב-X-Forwarded-For. לא ההופ הראשון — אותו שולח הדפדפן, וזיופו עוקף
+ * כל הגבלה לפי IP (ניחוש סיסמה, קוד כניסה, הרשמה, צור-קשר…). אותם כללים כמו ב-Hospitality.
+ */
 export async function requestIp(): Promise<string> {
   try {
-    const { getRequest } = await import("@tanstack/react-start/server");
+    const [{ getRequest }, { clientIp }] = await Promise.all([
+      import("@tanstack/react-start/server"),
+      import("@/platform/security/client-ip"),
+    ]);
     const request = getRequest();
-    const forwarded = request?.headers.get("x-forwarded-for");
-    const ip = forwarded?.split(",")[0]?.trim();
-    if (ip) return ip;
-    return request?.headers.get("x-real-ip")?.trim() || "unknown";
+    return request ? clientIp(request.headers) : "unknown";
   } catch {
     return "unknown";
   }

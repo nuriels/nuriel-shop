@@ -42,7 +42,8 @@ CREATE OR REPLACE FUNCTION pg_temp.req(_site text, _unit uuid, _in date, _out da
                                        _code text DEFAULT NULL) RETURNS jsonb LANGUAGE plpgsql AS $f$
 DECLARE q jsonb;
 BEGIN
-  q := pg_temp.call(_site, NULL, format('SELECT hospitality.quote(%L, %L, %L, 2, 0, %L)', _unit, _in, _out, _code));
+  -- SEC-L4: קוד קופון — רק דרך שרת האתר; הצעת המחיר של האורח (כמו האתר)
+  q := pg_temp.srv(_site, format('SELECT hospitality.quote(%L, %L, %L, 2, 0, %L)', _unit, _in, _out, _code));
   RETURN pg_temp.srv(_site, format(
     'SELECT hospitality.request_booking(_unit_id => %L, _check_in => %L, _check_out => %L, _full_name => %L,
        _email => %L, _phone => %L, _idempotency_key => %L, _policy_accepted => true, _policy_hash => %L, _promo_code => %L)',

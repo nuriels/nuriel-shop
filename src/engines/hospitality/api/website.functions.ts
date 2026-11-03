@@ -41,12 +41,12 @@ import {
 } from "../validation/input";
 
 /** הגבלת קצב משותפת (מונה במסד) לפעולה של גולש — לפי כתובת / רשת / העסק */
-async function throttle(action: LimitAction): Promise<void> {
+async function throttle(action: LimitAction): Promise<{ ip: string; userAgent: string }> {
   const [{ guardPublic }, { hospitalitySiteId }] = await Promise.all([
     import("../security/guard.server"),
     import("../server/rpc.server"),
   ]);
-  await guardPublic(action, await hospitalitySiteId());
+  return guardPublic(action, await hospitalitySiteId());
 }
 
 /** האימות נגד בוטים של בקשת הזמנה: הפתרון של האתגר ושדה המלכודת */
@@ -103,16 +103,21 @@ export const hospitalityPublicAvailability = createServerFn({ method: "POST" })
 export const hospitalitySiteQuote = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseQuote(input))
   .handler(async ({ data }): Promise<Quote> => {
-    await throttle("quote");
-    const { callRpc } = await import("../server/rpc.server");
-    return callRpc<Quote>("quote", {
-      _unit_id: data.unitId,
-      _check_in: data.checkIn,
-      _check_out: data.checkOut,
-      _adults: data.adults,
-      _children: data.children,
-      _promo_code: data.promoCode,
-    });
+    const client = await throttle("quote");
+    // SEC-L4: דרך השרת (מפתח השירות) — המסד מקבל קוד קופון רק מכאן, אחרי הגבלת הקצב
+    const { callServerRpc } = await import("../server/rpc.server");
+    return callServerRpc<Quote>(
+      "quote",
+      {
+        _unit_id: data.unitId,
+        _check_in: data.checkIn,
+        _check_out: data.checkOut,
+        _adults: data.adults,
+        _children: data.children,
+        _promo_code: data.promoCode,
+      },
+      client,
+    );
   });
 
 /**
@@ -340,17 +345,22 @@ export const hospitalitySiteQuoteType = createServerFn({ method: "POST" })
     return { ...parseQuote({ ...input, unitId: c.categoryId }), ...c };
   })
   .handler(async ({ data }): Promise<Quote & { category_id: string }> => {
-    await throttle("quote");
-    const { callRpc } = await import("../server/rpc.server");
-    return callRpc<Quote & { category_id: string }>("quote_type", {
-      _category_id: data.categoryId,
-      _check_in: data.checkIn,
-      _check_out: data.checkOut,
-      _adults: data.adults,
-      _children: data.children,
-      _promo_code: data.promoCode,
-      _preferred_unit: data.preferredUnit,
-    });
+    const client = await throttle("quote");
+    // SEC-L4: דרך השרת (מפתח השירות) — המסד מקבל קוד קופון רק מכאן, אחרי הגבלת הקצב
+    const { callServerRpc } = await import("../server/rpc.server");
+    return callServerRpc<Quote & { category_id: string }>(
+      "quote_type",
+      {
+        _category_id: data.categoryId,
+        _check_in: data.checkIn,
+        _check_out: data.checkOut,
+        _adults: data.adults,
+        _children: data.children,
+        _promo_code: data.promoCode,
+        _preferred_unit: data.preferredUnit,
+      },
+      client,
+    );
   });
 
 /** בקשת הזמנה לסוג: המסד בוחר חדר פנוי מהסוג באותה טרנזקציה (בלי מרוץ בין אורחים) */

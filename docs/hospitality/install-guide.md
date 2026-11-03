@@ -148,16 +148,48 @@ fi
 
 השחזור של כל חלק — ב-§12.
 
-**הגיבוי היומי** (`deploy/backup-daily.sh`):
-- ברירות המחדל שלו הן של `kobi`. לסטאק הזה מעבירים משתנים:
+**הגיבוי היומי** (`deploy/backup-daily.sh` + `deploy/backup-install.sh`, SEC-H6):
+- `BACKUP_PROJECT=nuriel-shop` קובע את כל ברירות המחדל:
+  - קונטיינרים `nuriel-shop-db` / `nuriel-shop-storage`, `/root/nuriel-shop-supabase/docker/.env`;
+  - תיקיית האפליקציה = התיקייה שמעל `deploy/`;
+  - `/root/backups/nuriel-shop`, לוג `/var/log/nuriel-shop-backup.log`, הגדרות Nginx `*nuriel-shop*`.
+  - בלי המשתנה — `kobi`, בדיוק כמו קודם.
+- **מפתח הצפנה** (age) — במחשב אישי, **לא בשרת**: `age-keygen -o nuriel-shop-backup-key.txt`.
+  - הקובץ הוא המפתח הפרטי: שומרים אותו במנהל סיסמאות / כספת, בנפרד מהגיבויים. בלעדיו אין שחזור.
+  - המפתח הציבורי (`age1…`) מודפס בשורה `Public key:` — רק הוא עובר לשרת.
+- **התקנה** (פעם אחת; בטוח להרצה חוזרת):
   ```bash
-  BACKUP_ROOT=/root/backups/nuriel-shop DB_CONTAINER=nuriel-shop-db \
-    STORAGE_CONTAINER=nuriel-shop-storage SUPABASE_ENV=/root/nuriel-shop-supabase/docker/.env \
-    APP_DIR=/root/nuriel-shop-git bash /root/nuriel-shop-git/deploy/backup-daily.sh
+  BACKUP_PROJECT=nuriel-shop BACKUP_AGE_RECIPIENT=age1… bash /root/nuriel-shop-git/deploy/backup-install.sh
   ```
-- הוא מעתיק הגדרות Nginx רק לשמות `*kobi*`. Nginx של הסטאק הזה — ב-1.2.
-- לפני שנכנס מידע אמיתי של אורחים: לוודא שהגיבוי היומי רץ, ושהעותק מחוץ לשרת **מוצפן**
-  (ממצא PRIV-08).
+  - cron כל לילה ב-00:50 (של kobi ב-00:30 — לא שני `pg_dump` במקביל).
+  - נשמרים **מוצפנים בלבד**: המסד (`db.dump.age`), הסודות (`secrets.tar.age`), והקבצים של ה-buckets
+    הפרטיים — קבלות תשלום, מסמכים, צרופות (`storage-private.tar.age`). הרשימה נלקחת מהמסד
+    (`storage.buckets.public = false`), כך ש-bucket פרטי חדש נכלל אוטומטית.
+  - גלויים: תמונות ציבוריות (`storage/`), `db.toc` (רשימת תוכן בלבד) ו-`counts.txt` (ספירות).
+  - אם `age` לא עובד — הגיבוי **נכשל** ומתקבלת התראה (לא נשמר גיבוי גלוי בשקט).
+- **בדיקה:** `BACKUP_PROJECT=nuriel-shop bash /root/nuriel-shop-git/deploy/backup-daily.sh --status`
+  → "✓ המסד והסודות מוצפנים".
+- **גיבויים מלפני ההצפנה** נשארים גלויים עד שהסבב מוחק אותם (14 יום; עותקים חודשיים — 12 חודשים),
+  וכך גם `storage-deleted/` בעותק החיצוני. מחיקה מוקדמת — החלטה, לא אוטומטי.
+- **תרגיל שחזור** (PRIV-09 / OPS-06) — מהמחשב שמחזיק את המפתח; ה-dump המפוענח עובר ב-SSH ישר
+  למסד **נפרד** (`restore_check`, כמו ב-§12) ולא נשמר גלוי בשרת. **לעולם לא** מעל המסד החי:
+  ```bash
+  mkdir -p bk && scp root@SERVER:/root/backups/nuriel-shop/latest/{db.dump.age,secrets.tar.age,storage-private.tar.age,counts.txt,SHA256SUMS} bk/
+  (cd bk && sha256sum -c --ignore-missing SHA256SUMS)
+  ssh root@SERVER 'docker exec nuriel-shop-db psql -U postgres -qc "CREATE DATABASE restore_check"'
+  age -d -i nuriel-shop-backup-key.txt bk/db.dump.age | ssh root@SERVER \
+    'docker exec -i nuriel-shop-db pg_restore -U postgres -d restore_check --no-owner --no-privileges'
+  # שגיאות על אובייקטים פנימיים של Supabase צפויות. משווים לספירות של אותו לילה:
+  cat bk/counts.txt
+  ssh root@SERVER "docker exec nuriel-shop-db psql -U postgres -d restore_check -tAc \
+    'select count(*) from public.orders; select count(*) from auth.users; select count(*) from hospitality.bookings'"
+  age -d -i nuriel-shop-backup-key.txt bk/secrets.tar.age | tar -t      # רשימת קובצי הסודות
+  age -d -i nuriel-shop-backup-key.txt bk/storage-private.tar.age | tar -t | head
+  ssh root@SERVER 'docker exec nuriel-shop-db psql -U postgres -qc "DROP DATABASE restore_check"'
+  rm -rf bk
+  ```
+- העתקה מחוץ לשרת (לא חובה): קובץ `/root/.nuriel-shop-backup-offsite` עם `RCLONE_REMOTE="remote:path"`.
+  הקבצים המוצפנים עוברים כמו שהם; קובץ שנמחק מ-Storage נשמר ב-`storage-deleted/<תאריך>`.
 
 ## 2. הקוד
 
@@ -320,7 +352,7 @@ unset ANON SERVICE
 | `HOSPITALITY_ENGINE` | **ריק** עד §9; אז `on` | **המתג הכללי.** רק `on` מפעיל. ריק או כל ערך אחר — כבוי: אין עמוד, פונקציה או תהליך רקע של Hospitality |
 | `HOSPITALITY_SECRET` | `openssl rand -hex 32` (64 תווים) | **חדש (D1).** HMAC למפתחות של הגבלת הקצב ולחתימת אתגרי ה-CAPTCHA. פרטים מתחת לטבלה |
 | `HOSPITALITY_POW_MAX` | לא חובה (ברירת מחדל 50000) | הקושי של אתגר ה-CAPTCHA. ערך מחוץ ל-1000–2000000 — ברירת המחדל |
-| `LOGIN_CODE_SECRET` | קיים / מומלץ | סוד לקודי הכניסה במייל, נפרד ממפתח השירות (AUTH-09). גם הוא נמחק בהרצה של `setup-selfhost.sh` (פרטים מתחת לטבלה) |
+| `LOGIN_CODE_SECRET` | נוצר אוטומטית (SEC-L13) | סוד ה-HMAC של קודי הכניסה במייל, קודי/טוקני הפורטל וה-CAPTCHA — נפרד ממפתח השירות (AUTH-09). `setup-selfhost.sh` שומר ערך קיים, ויוצר אחד אם חסר (פרטים מתחת לטבלה) |
 | `RESEND_API_KEY`, `EMAIL_FROM_ADDRESS` | קיימים | המיילים של העסקים יוצאים דרכם |
 | `TENANT_BASE_DOMAIN` | קיים | כתובות העסקים: `<slug>.<domain>` |
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | קיימים | |
@@ -335,8 +367,9 @@ unset ANON SERVICE
 
 **הרצה חוזרת של `setup-selfhost.sh`:** הסקריפט כותב את `.env` מחדש (גם עם `--env-only`).
 - **`HOSPITALITY_*`:** נשמרים, ו-`HOSPITALITY_SECRET` נוצר פעם אחת אם חסר.
-- **משתנים שהסקריפט לא כותב:** נמחקים — למשל `LOGIN_CODE_SECRET` ו-`SERVER_PUBLIC_IPS`.
-  אחרי הרצה מוסיפים אותם שוב.
+- **`LOGIN_CODE_SECRET` (SEC-L13):** נשמר, ונוצר פעם אחת אם חסר. ביצירה הראשונה בלבד: קודי כניסה,
+  קודי פורטל ואתגרי CAPTCHA שכבר נשלחו (עד שעה) מפסיקים לעבוד — מבקשים חדשים.
+- **משתנים שהסקריפט לא כותב:** נמחקים — למשל `SERVER_PUBLIC_IPS`. אחרי הרצה מוסיפים אותם שוב.
 
 **כבר עכשיו** (המנוע עדיין כבוי, אז זה לא משנה כלום):
 

@@ -256,6 +256,22 @@ export function originForTenant(
 }
 
 /**
+ * SEC-H2: כתובת הבסיס של חנות על תת-הדומיין של הפלטפורמה בלבד (<slug>.<base>, או כתובת
+ * האתר הראשית לחנות ברירת המחדל) — לעולם לא דומיין מותאם. לשימוש בקוד ה-handoff החד-פעמי
+ * (admin-handoff#code=): קוד כניסה חייב לנחות על מארח שהפלטפורמה שולטת בו, לא על דומיין
+ * שבעל-חנות מכוון את ה-DNS שלו (אחרת סקריפט על הדומיין שלו גונב את הקוד ואת הסשן).
+ */
+export function slugOriginForTenant(
+  tenant: (Pick<Tenant, "slug" | "is_default">) | null,
+): string {
+  const { siteUrl, baseDomain } = platformEnv();
+  if (tenant?.is_default && siteUrl) return siteUrl;
+  if (tenant && baseDomain) return `https://${tenant.slug}.${baseDomain}`;
+  if (siteUrl && !tenant) return siteUrl;
+  throw new Error("לא הוגדרה כתובת בסיס לפלטפורמה (TENANT_BASE_DOMAIN / PUBLIC_SITE_URL)");
+}
+
+/**
  * כתובת הבסיס של החנות הנוכחית, לקישורים במיילים (איפוס סיסמה, הזמנות, הסכמים).
  * נבנית מרשומת החנות במסד — לא מכותרות הבקשה, שנשלטות ע"י הפונה.
  */

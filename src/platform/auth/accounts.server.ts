@@ -11,6 +11,9 @@ export async function ensureAccount(
     email,
     email_confirm: true,
     user_metadata: meta,
+    // SEC-H1: סימון חסין-זיוף (app_metadata — המשתמש אינו יכול לשנותו ב-updateUser) שהחשבון
+    // נוצר בידי המערכת. שיוך תפקיד/בעלות לפי אימייל מקשר רק לחשבון מסומן כזה.
+    app_metadata: { platform: true },
   });
   // נוצר בינתיים (בקשה מקבילה) — החשבון קיים, וזה מה שצריך
   if (error && !/already|exists|registered/i.test(error.message)) {

@@ -1,5 +1,5 @@
 // פונקציות שרת לאורחים (בלי חשבון) — האתר לפי x-tenant-id (request_tenant במסד).
-// אורח מחובר נשלח עם הטוקן שלו; שיוך הזמנה לחשבון — claim_guest_bookings (אימייל מאומת).
+// אורח מחובר נשלח עם הטוקן שלו; שיוך הזמנה לחשבון — claim_guest_bookings עם אסימון הניהול (SEC-C1).
 // בלי ממשק (ה-API של Stage 1; האתר משתמש ב-api/website.functions.ts) — אבל נגישות בכתובת שלהן,
 // ולכן עם אותן הגנות (D1): הגבלת קצב משותפת, ובקשת הזמנה רק עם אתגר CAPTCHA ודרך השרת.
 import { createServerFn } from "@tanstack/react-start";
@@ -35,9 +35,14 @@ async function optionalToken(): Promise<string | null> {
 export const hospitalityQuote = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseQuote(input))
   .handler(async ({ data }) => {
-    await throttle("quote");
-    const { callRpc } = await import("./rpc.server");
-    return callRpc<Quote>(
+    const [{ guardPublic }, { callServerRpc, hospitalitySiteId }] = await Promise.all([
+      import("../security/guard.server"),
+      import("./rpc.server"),
+    ]);
+    const client = await guardPublic("quote", await hospitalitySiteId());
+    // SEC-L4: דרך השרת (מפתח השירות) — המסד מקבל קוד קופון רק מכאן, אחרי הגבלת הקצב.
+    // הצעת המחיר של האורח (כמו באתר); הצוות מתמחר מתוך הניהול.
+    return callServerRpc<Quote>(
       "quote",
       {
         _unit_id: data.unitId,
@@ -47,7 +52,7 @@ export const hospitalityQuote = createServerFn({ method: "POST" })
         _children: data.children,
         _promo_code: data.promoCode,
       },
-      { accessToken: await optionalToken() },
+      client,
     );
   });
 

@@ -449,6 +449,7 @@ export const createPortalStore = createServerFn({ method: "POST" })
           email,
           email_confirm: true,
           user_metadata: { signup_method: "platform_portal" },
+          app_metadata: { platform: true }, // SEC-H1: סימון חסין-זיוף שהמערכת יצרה את החשבון
         });
       // מרוץ (שתי לשוניות) — החשבון כבר נוצר; ממשיכים איתו
       if (createError && !/already|exists|registered/i.test(createError.message)) {
@@ -789,6 +790,7 @@ export const openPortalZimmer = createServerFn({ method: "POST" })
           email,
           email_confirm: true,
           user_metadata: { signup_method: "hospitality_portal" },
+          app_metadata: { platform: true }, // SEC-H1: סימון חסין-זיוף שהמערכת יצרה את החשבון
         });
       // מרוץ (שתי לשוניות) — החשבון כבר נוצר; ממשיכים איתו
       if (createError && !/already|exists|registered/i.test(createError.message)) {
@@ -877,7 +879,9 @@ export const openPortalZimmer = createServerFn({ method: "POST" })
 
 async function loadStoreState(email: string, tenantId: string) {
   const { supabaseAdminUnscoped } = await import("@/integrations/supabase/client.server");
-  const { originForTenant } = await import("@/integrations/supabase/tenant.server");
+  const { originForTenant, slugOriginForTenant } = await import(
+    "@/integrations/supabase/tenant.server"
+  );
   const { data, error } = await supabaseAdminUnscoped.rpc("portal_store_state", {
     _email: email,
     _tenant: tenantId,
@@ -911,6 +915,8 @@ async function loadStoreState(email: string, tenantId: string) {
     userId: str(row["user_id"]),
     isBlocked: row["is_blocked"] === true,
     origin: originForTenant(target),
+    // SEC-H2: קוד ה-handoff תמיד על תת-הדומיין של הפלטפורמה, לעולם לא על דומיין מותאם
+    handoffOrigin: slugOriginForTenant({ slug: target.slug, is_default: target.is_default }),
     readiness,
     sslError: strOrNull(row["ssl_error"]),
   };
@@ -972,5 +978,6 @@ export const enterPortalStore = createServerFn({ method: "POST" })
       throw new Error("הכניסה לחנות נכשלה. נסו שוב.");
     }
     logPortal("info", "enter store", { email: maskEmail(email), slug: state.slug });
-    return { url: `${state.origin}/admin-handoff#code=${code}&from=portal`, name: state.name };
+    // SEC-H2: הכניסה עם הקוד תמיד על תת-הדומיין של הפלטפורמה (לא על דומיין מותאם)
+    return { url: `${state.handoffOrigin}/admin-handoff#code=${code}&from=portal`, name: state.name };
   });
