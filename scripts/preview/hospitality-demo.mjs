@@ -81,20 +81,29 @@ function rpc(fn, args, { token, schema = "hospitality", site } = {}) {
   });
 }
 
-/** חשבון עם סיסמת ההדגמה (נוצר, או שהסיסמה שלו מתאפסת) */
+/**
+ * חשבון עם סיסמת ההדגמה (נוצר, או שהסיסמה שלו מתאפסת). SEC-H1: חשבון שהמערכת יוצרת מסומן
+ * app_metadata.platform — כמו בייצור (ensureAccount) — אחרת אי אפשר לקשר אליו תפקיד לפי אימייל
+ * (team_add_manager / admin_set_owner).
+ */
 async function ensureUser(email) {
   const headers = { apikey: SERVICE, authorization: `Bearer ${SERVICE}` };
   const existing = sql(`SELECT id FROM auth.users WHERE lower(email) = ${q(email)}`);
   if (existing) {
     await http("PUT", `/auth/v1/admin/users/${existing}`, {
       headers,
-      body: { password: DEMO_PASSWORD, email_confirm: true },
+      body: { password: DEMO_PASSWORD, email_confirm: true, app_metadata: { platform: true } },
     });
     return existing;
   }
   const user = await http("POST", "/auth/v1/admin/users", {
     headers,
-    body: { email, password: DEMO_PASSWORD, email_confirm: true },
+    body: {
+      email,
+      password: DEMO_PASSWORD,
+      email_confirm: true,
+      app_metadata: { platform: true },
+    },
   });
   return user.id;
 }
