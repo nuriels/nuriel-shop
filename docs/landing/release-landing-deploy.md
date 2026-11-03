@@ -9,22 +9,23 @@
 
 ## למה אחרי J + K
 
-הענף אחד: `be62922` יושב מעל `c13cd00` (J + K). פריסה של דף הנחיתה לפני J + K הייתה מעלה את קוד
+הענף אחד: `fab4a94` יושב מעל `c13cd00` (J + K). פריסה של דף הנחיתה לפני J + K הייתה מעלה את קוד
 J + K בלי המיגרציות 42–44 — לכן הסדר קבוע: J + K (נעוץ ב-`c13cd00`, בלי שורה אחת של דף הנחיתה) ← ורק
-אחר כך דף הנחיתה (נעוץ ב-`be62922`). LU3 בודקת שאין מיגרציות ממתינות — אם J + K עוד לא נפרס, היא
+אחר כך דף הנחיתה (נעוץ ב-`fab4a94`). LU3 בודקת שאין מיגרציות ממתינות — אם J + K עוד לא נפרס, היא
 תראה 3 ועוצרים.
 
-## מה נכנס — נעוץ ב-`be62922`
+## מה נכנס — נעוץ ב-`fab4a94`
 
-| commit    | מה                                                                                                                            |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `61ab354` | מסמך הפריסה של J + K (תיעוד בלבד)                                                                                             |
-| `ad3a2fe` | דף הנחיתה: SSR לשער בלבד, המחירים וימי הניסיון מהמסד, שני מסלולי ניסיון (14 / 30), צור קשר, WhatsApp, SEO, llms.txt לשער בלבד |
-| `9433ef2` | בדיקת SQL (פתיחת תאריכים) — התאריך המקומי של העסק; קובץ בדיקה בלבד, לא רץ בשרת                                                |
-| `1ebba27` | הלוגו המקורי (`public/brand`) והפלטה מתוך הלוגו; הלוגו ב-JSON-LD                                                              |
-| `be62922` | הלוגו בלבד במקום שם העסק בטקסט (כותרת ופוטר); WhatsApp 050-5492178 בכל הכפתורים — נבדק; כל כפתורי הניסיון נבדקו               |
+| commit    | מה                                                                                                                                   |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `61ab354` | מסמך הפריסה של J + K (תיעוד בלבד)                                                                                                    |
+| `ad3a2fe` | דף הנחיתה: SSR לשער בלבד, המחירים וימי הניסיון מהמסד, שני מסלולי ניסיון (14 / 30), צור קשר, WhatsApp, SEO, llms.txt לשער בלבד        |
+| `9433ef2` | בדיקת SQL (פתיחת תאריכים) — התאריך המקומי של העסק; קובץ בדיקה בלבד, לא רץ בשרת                                                       |
+| `1ebba27` | הלוגו המקורי (`public/brand`) והפלטה מתוך הלוגו; הלוגו ב-JSON-LD                                                                     |
+| `be62922` | הלוגו בלבד במקום שם העסק בטקסט (כותרת ופוטר); WhatsApp 050-5492178 בכל הכפתורים — נבדק; כל כפתורי הניסיון נבדקו                      |
+| `fab4a94` | הכותרת: "חנות אינטרנטית לעסק / ואתר הזמנות לצימר" (בלי "נוריאל מחשבים: מחשבים"); כותרות ב-Heebo; שני המוצרים קודם, "מי אנחנו" אחר כך |
 
-- **בלי מיגרציות:** `git diff --name-only c13cd00 be62922 -- supabase` — ריק (נבדק שוב ב-LU3).
+- **בלי מיגרציות:** `git diff --name-only c13cd00 fab4a94 -- supabase` — ריק (נבדק שוב ב-LU3).
 - **בלי שינוי במנועים:** אפס קבצים תחת `src/engines` ו-`src/platform/engines`.
 - **מה משתנה בשרת:** עמוד הבית של nuriel-app2 בלבד (ו-`/llms.txt` שלו). בכל חנות אחרת עמוד הבית נשאר
   כמו היום (`data-only`) — נבדק.
@@ -64,20 +65,20 @@ mkdir -p /root/backups/nuriel-shop/before-landing && chmod 700 /root/backups/nur
 **מצופה:** מספר טבלאות בגיבוי (בסביבות 147); `c13cd00 …`; התגים כולל `before-landing` (ו-`before-jk`).
 (דף הנחיתה לא נוגע במסד — הגיבוי ליתר ביטחון בלבד.)
 
-### LU2 — הקוד (נעוץ ב-`be62922`)
+### LU2 — הקוד (נעוץ ב-`fab4a94`)
 
 ```bash
-cd /root/nuriel-shop-git && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge --ff-only be62922 && git log --oneline -1
+cd /root/nuriel-shop-git && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge --ff-only fab4a94 && git log --oneline -1
 ```
 
-**מצופה:** `Updating c13cd00..be62922`, `Fast-forward`; השורה האחרונה —
-`be62922 Landing page (nuriel-app2): the original logo instead of the business name in text; every button and number checked`.
-(בשורת ה-fetch יכול להופיע commit מאוחר יותר — תיעוד; ה-merge נעוץ ב-`be62922`.)
+**מצופה:** `Updating c13cd00..fab4a94`, `Fast-forward`; השורה האחרונה —
+`fab4a94 Landing page (nuriel-app2): a heading about the two products, without "נוריאל מחשבים: מחשבים"`.
+(בשורת ה-fetch יכול להופיע commit מאוחר יותר — תיעוד; ה-merge נעוץ ב-`fab4a94`.)
 
 ### LU3 — בדיקה יבשה (קריאה בלבד): אין מיגרציות
 
 ```bash
-cd /root/nuriel-shop-git && git diff --name-only c13cd00 be62922 -- supabase | wc -l && ls supabase/migrations/*.sql | xargs -n1 basename | LC_ALL=C sort > /root/backups/nuriel-shop/before-landing/files.txt && docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT filename FROM public._migrations_applied" | LC_ALL=C sort > /root/backups/nuriel-shop/before-landing/applied.txt && LC_ALL=C comm -23 /root/backups/nuriel-shop/before-landing/files.txt /root/backups/nuriel-shop/before-landing/applied.txt | wc -l && wc -l < /root/backups/nuriel-shop/before-landing/applied.txt
+cd /root/nuriel-shop-git && git diff --name-only c13cd00 fab4a94 -- supabase | wc -l && ls supabase/migrations/*.sql | xargs -n1 basename | LC_ALL=C sort > /root/backups/nuriel-shop/before-landing/files.txt && docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT filename FROM public._migrations_applied" | LC_ALL=C sort > /root/backups/nuriel-shop/before-landing/applied.txt && LC_ALL=C comm -23 /root/backups/nuriel-shop/before-landing/files.txt /root/backups/nuriel-shop/before-landing/applied.txt | wc -l && wc -l < /root/backups/nuriel-shop/before-landing/applied.txt
 ```
 
 **מצופה:** `0` (אין קובץ מסד שהשתנה), `0` (אין מיגרציה ממתינה), `160`. **אחרת — עוצרים.**
@@ -99,12 +100,12 @@ cd /root/nuriel-shop-git && docker compose up -d && docker compose ps
 ### LU6 — בדיקות אחרי העלאה (הפקודה מחכה דקה — זה לא תקוע)
 
 ```bash
-sleep 60 && curl -s https://nuriel-app2.nuri1.fit/ -o /root/backups/nuriel-shop/before-landing/home.html && grep -ao '<h1[^>]*>[^<]*</h1>' /root/backups/nuriel-shop/before-landing/home.html && grep -ao 'התחילו [0-9]* ימי ניסיון בחינם' /root/backups/nuriel-shop/before-landing/home.html | sort | uniq -c && grep -ao 'wa\.me/[0-9]*' /root/backups/nuriel-shop/before-landing/home.html | sort | uniq -c && curl -s -o /dev/null -w 'llms: %{http_code}\n' https://nuriel-app2.nuri1.fit/llms.txt && curl -s -o /dev/null -w 'logo: %{http_code} %{content_type}\n' https://nuriel-app2.nuri1.fit/brand/nuriel-computers-logo-192.webp && curl -s https://nuriel-shop.nuri1.fit/ | grep -ao 'data-testid="platform-landing"' | wc -l
+sleep 60 && curl -s https://nuriel-app2.nuri1.fit/ -o /root/backups/nuriel-shop/before-landing/home.html && grep -aoE '<h1 id="hero-title"[^>]*><span[^>]*>[^<]*</span> <span[^>]*>[^<]*</span></h1>' /root/backups/nuriel-shop/before-landing/home.html | sed 's/<[^>]*>//g' && grep -ao 'התחילו [0-9]* ימי ניסיון בחינם' /root/backups/nuriel-shop/before-landing/home.html | sort | uniq -c && grep -ao 'wa\.me/[0-9]*' /root/backups/nuriel-shop/before-landing/home.html | sort | uniq -c && curl -s -o /dev/null -w 'llms: %{http_code}\n' https://nuriel-app2.nuri1.fit/llms.txt && curl -s -o /dev/null -w 'logo: %{http_code} %{content_type}\n' https://nuriel-app2.nuri1.fit/brand/nuriel-computers-logo-192.webp && curl -s https://nuriel-shop.nuri1.fit/ | grep -ao 'data-testid="platform-landing"' | wc -l
 ```
 
 **מצופה:**
 
-- `<h1 …>נוריאל מחשבים: מחשבים, חנויות אונליין ומערכת לניהול צימרים</h1>` — הדף מרונדר בשרת;
+- `חנות אינטרנטית לעסק ואתר הזמנות לצימר` — הכותרת (H1) מרונדרת בשרת;
 - `4 התחילו 14 ימי ניסיון בחינם` ו-`4 התחילו 30 ימי ניסיון בחינם` (פתיחה, החלק, שתי החבילות);
 - `4 wa.me/972505492178`;
 - `llms: 200`; `logo: 200 image/webp`;
@@ -127,9 +128,9 @@ sleep 60 && curl -s https://nuriel-app2.nuri1.fit/ -o /root/backups/nuriel-shop/
 docker tag nuriel-shop-app-app:before-landing nuriel-shop-app-app:latest && cd /root/nuriel-shop-git && docker compose up -d && docker compose ps
 ```
 
-ה-image של J + K עולה מיד, בלי בנייה ובלי שינוי במסד (אין מה להחזיר). **התיקייה נשארת על `be62922`**;
+ה-image של J + K עולה מיד, בלי בנייה ובלי שינוי במסד (אין מה להחזיר). **התיקייה נשארת על `fab4a94`**;
 לבנייה הבאה של הגרסה הקודמת — `git -C /root/nuriel-shop-git checkout c13cd00` (רק אם צריך).
 
 ## סטטוס CI
 
-- `be62922` — ריצה 114 (ובריצה שאחריה — המסמך הזה, אותו קוד). התוצאה — בהודעה שמצרפת את התוכנית.
+- הריצה על המסמך הזה (`fab4a94` + תיעוד בלבד) — התוצאה בהודעה שמצרפת את התוכנית. ריצה 115 על `be62922` + תיעוד — ירוקה בכל ארבע העבודות.
