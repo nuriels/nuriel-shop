@@ -22,17 +22,12 @@ export function LandingFooter() {
         <div>
           <BrandMark tone="light" />
           <p className="mt-4 max-w-xs text-[0.95rem] leading-7 text-(--l-on-navy)">
-            מחשבים ושירות, חנויות אונליין ומערכת לניהול צימרים — מבית שמש.
+            חנויות אינטרנטיות לעסקים ואתרי הזמנות לצימרים — מבית נוריאל מחשבים, בית שמש.
           </p>
         </div>
         <nav aria-label="באתר">
           <p className="text-base font-bold">באתר</p>
           <ul className="mt-3 space-y-1 text-[0.95rem]">
-            <li>
-              <a href="#computers" className={linkClass}>
-                מחשבים ושירות
-              </a>
-            </li>
             <li>
               <a href="#online-store" className={linkClass}>
                 הקמת חנות אינטרנטית
@@ -46,6 +41,11 @@ export function LandingFooter() {
             <li>
               <a href="#pricing" className={linkClass}>
                 חבילות ומחירים
+              </a>
+            </li>
+            <li>
+              <a href="#computers" className={linkClass}>
+                מי אנחנו
               </a>
             </li>
             <li>

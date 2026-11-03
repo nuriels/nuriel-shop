@@ -18,7 +18,7 @@ import { StoreSection } from "./landing/StoreSection";
  * דף הנחיתה של נוריאל מחשבים — עמוד הבית של nuriel-app2 (שער הפלטפורמה), במקום הקטלוג.
  * מרונדר בשרת (SSR) — כל התוכן כבר ב-HTML הראשוני (גוגל, Bing, כלי AI, בלי JavaScript).
  *
- * שלושה תחומים: נוריאל מחשבים (חנות ושירות), חנות אינטרנטית לעסק (14 ימי ניסיון) ו-Nuriel
+ * הדף מיועד לשני המוצרים: חנות אינטרנטית לעסק (14 ימי ניסיון) ואתר הזמנות לצימר — Nuriel
  * Hospitality לצימרים (30 ימי ניסיון) — כל כפתור ניסיון פותח את חלון הכניסה במסלול שלו.
  * המחירים וימי הניסיון — מהמסד בזמן הטעינה (landing); null — המסד לא החזיר: הדף בלי מספרים.
  */
@@ -50,7 +50,6 @@ export function PlatformLanding({ landing }: { siteName?: string; landing: Landi
           zimmerTrialDays={landing?.hospitality.trialDays ?? null}
           onStart={start}
         />
-        <ComputersSection />
         <StoreSection trialDays={landing?.store.trialDays ?? null} onStart={() => start("store")} />
         <HospitalitySection
           trialDays={landing?.hospitality.trialDays ?? null}
@@ -58,6 +57,8 @@ export function PlatformLanding({ landing }: { siteName?: string; landing: Landi
         />
         {landing && <PricingSection data={landing} onStart={start} />}
         <WhySection />
+        {/* מי אנחנו — נוריאל מחשבים (החנות והשירות): אחרי שני המוצרים, שהם עיקר הדף */}
+        <ComputersSection />
         {faq.length > 0 && <FaqSection items={faq} />}
         <ContactSection />
       </main>

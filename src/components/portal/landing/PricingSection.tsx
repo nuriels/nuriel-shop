@@ -56,7 +56,7 @@ function PlanCard({
       </div>
       {plan.price !== null && (
         <p className="mt-4 flex items-baseline gap-2 text-(--l-ink)">
-          <span className="font-display text-[2.6rem] font-black leading-none tabular-nums">
+          <span className="text-[2.6rem] font-extrabold leading-none tracking-[-0.01em] tabular-nums">
             {shekels(plan.price)}
           </span>
           <span className="text-base text-(--l-muted)">לחודש</span>

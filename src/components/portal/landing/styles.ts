@@ -23,6 +23,9 @@ export const LANDING_PALETTE = {
   "--l-line": "#d6e1f5",
   "--l-muted": "#3c4a6e",
   "--l-on-navy": "#c8d3ee",
+  // כותרות בדף הנחיתה — Heebo כבד (כמו האותיות בלוגו) במקום הסריף הכללי של האתר (h1/h2 ב-styles.css).
+  // רק בתוך העטיפה של הדף; שאר האתרים והחנויות לא מושפעים.
+  "--font-display": '"Heebo", ui-sans-serif, system-ui, sans-serif',
 } as CSSProperties;
 
 const focusRing =

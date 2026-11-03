@@ -61,7 +61,12 @@ test.describe("landing page — server-rendered content", () => {
     const html = await res.text();
 
     expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
-    expect(html).toContain("נוריאל מחשבים: מחשבים, חנויות אונליין ומערכת לניהול צימרים");
+    // the heading is about the two products — two lines, a space between them for crawlers
+    expect(html).toMatch(
+      /<h1 id="hero-title"[^>]*><span[^>]*>חנות אינטרנטית לעסק<\/span> <span[^>]*>ואתר הזמנות לצימר<\/span><\/h1>/,
+    );
+    // no repeated "מחשבים" in the heading (the old "נוריאל מחשבים: מחשבים, …")
+    expect(/<h1[^>]*>.*?<\/h1>/s.exec(html)?.[0]).not.toContain("מחשבים");
     for (const id of ["computers", "online-store", "hospitality", "pricing", "faq", "contact"]) {
       expect(html).toContain(`id="${id}"`);
     }
@@ -71,7 +76,7 @@ test.describe("landing page — server-rendered content", () => {
     // the store prices are the ones in the database (platform_plans)
     for (const price of plans()) expect(html).toContain(`${price.toLocaleString("he-IL")} ₪`);
     // head: title, description, canonical and structured data
-    expect(html).toMatch(/<title>נוריאל מחשבים — /);
+    expect(html).toContain("<title>חנות אינטרנטית לעסק ואתר הזמנות לצימר | נוריאל מחשבים</title>");
     expect(html).toMatch(/<link rel="canonical" href="[^"]+\/"/);
     const ld = /<script type="application\/ld\+json">(.+?)<\/script>/s.exec(html);
     expect(ld).not.toBeNull();

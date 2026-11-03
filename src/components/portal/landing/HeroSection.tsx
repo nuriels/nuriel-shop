@@ -10,15 +10,15 @@ import {
   Shot,
   WhatsAppIcon,
 } from "./parts";
-import { EXTERNAL, ctaGold, ctaNavy } from "./styles";
+import { EXTERNAL, ctaGold } from "./styles";
 
 export type StartIntent = "store" | "zimmer" | null;
 
 const NAV = [
-  { href: "#computers", label: "מחשבים ושירות" },
   { href: "#online-store", label: "חנות אינטרנטית" },
   { href: "#hospitality", label: HOSPITALITY_PRODUCT },
   { href: "#pricing", label: "מחירים" },
+  { href: "#computers", label: "מי אנחנו" },
   { href: "#faq", label: "שאלות נפוצות" },
   { href: "#contact", label: "צור קשר" },
 ] as const;
@@ -130,36 +130,20 @@ export function HeroSection({
     >
       <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-16 pt-10 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:gap-14 lg:pb-24 lg:pt-16">
         <div>
+          {/* שתי שורות בשני הצבעים של הלוגו — כחול-לילה ("מחשבים") וכחול רויאל ("נוריאל") */}
           <h1
             id="hero-title"
-            className="font-display text-[clamp(2.1rem,1.25rem+3.3vw,3.6rem)] font-black leading-[1.1] text-balance text-(--l-ink)"
+            className="text-[clamp(2.3rem,1.45rem+2.9vw,3.3rem)] font-extrabold leading-[1.1] tracking-[-0.01em] text-balance"
           >
-            נוריאל מחשבים: מחשבים, חנויות אונליין ומערכת לניהול צימרים
+            <span className="block text-(--l-ink)">חנות אינטרנטית לעסק</span>{" "}
+            <span className="block text-(--l-blue)">ואתר הזמנות לצימר</span>
           </h1>
           <p className="mt-5 max-w-xl text-[1.0625rem] leading-[1.75] text-pretty text-(--l-muted) sm:text-lg">
-            חנות מחשבים ושירות בבית שמש — ופלטפורמה בעברית שבה עסקים מקימים חנות אינטרנטית, ובעלי
-            צימרים מנהלים אתר, הזמנות ויומן תפוסה. בלי ידע טכני.
+            מבית נוריאל מחשבים: מקימים חנות אונליין ומתחילים למכור, או מקבלים אתר לצימר עם הזמנות,
+            זמינות ויומן תפוסה — בעברית, מהמחשב ומהטלפון, בלי ידע טכני.
           </p>
 
           <ul className="mt-8 divide-y divide-(--l-line) overflow-hidden rounded-2xl border border-(--l-line) bg-white">
-            <li className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <a
-                  href="#computers"
-                  className="text-lg font-bold text-(--l-ink) underline-offset-4 hover:text-(--l-blue) hover:underline"
-                >
-                  מחשבים, חלקים ושירות
-                </a>
-                <p className="mt-1 text-[0.95rem] leading-6 text-(--l-muted)">
-                  ניידים ונייחים, מחודשים, ציוד היקפי ומדפסות — ותיקונים ושדרוגים.
-                </p>
-              </div>
-              <a href={STORE_DEMO_URL} {...EXTERNAL} className={`${ctaNavy} shrink-0`}>
-                לחנות של נוריאל מחשבים
-                <ExternalLink className="size-4" aria-hidden="true" />
-                <NewTabNote />
-              </a>
-            </li>
             <li className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <a
@@ -187,10 +171,11 @@ export function HeroSection({
                   href="#hospitality"
                   className="text-lg font-bold text-(--l-ink) underline-offset-4 hover:text-(--l-blue) hover:underline"
                 >
-                  <bdi dir="ltr">{HOSPITALITY_PRODUCT}</bdi> — לצימרים
+                  אתר הזמנות לצימר
                 </a>
                 <p className="mt-1 text-[0.95rem] leading-6 text-(--l-muted)">
-                  אתר, בקשות הזמנה, זמינות ויומן תפוסה — במקום אחד.
+                  <bdi dir="ltr">{HOSPITALITY_PRODUCT}</bdi>: אתר מעוצב, בקשות הזמנה, זמינות ויומן
+                  תפוסה — במקום אחד.
                 </p>
               </div>
               <button
@@ -203,6 +188,18 @@ export function HeroSection({
               </button>
             </li>
           </ul>
+          <p className="mt-5 text-[0.95rem] leading-7 text-(--l-muted)">
+            מחפשים מחשב, תיקון או שדרוג?{" "}
+            <a
+              href={STORE_DEMO_URL}
+              {...EXTERNAL}
+              className="inline-flex items-center gap-1 font-semibold text-(--l-blue) underline underline-offset-4"
+            >
+              לחנות של נוריאל מחשבים
+              <ExternalLink className="size-3.5" aria-hidden="true" />
+              <NewTabNote />
+            </a>
+          </p>
         </div>
 
         <figure className="mx-auto w-full max-w-xl lg:max-w-none">

@@ -272,14 +272,14 @@ export function landingFaq(data: LandingData): FaqItem[] {
 // SEO — כותרת, תיאור, JSON-LD (רק נתונים אמיתיים)
 // ------------------------------------------------------------
 
-export const LANDING_TITLE = "נוריאל מחשבים — מחשבים, הקמת חנות אינטרנטית ומערכת לניהול צימרים";
+export const LANDING_TITLE = "חנות אינטרנטית לעסק ואתר הזמנות לצימר | נוריאל מחשבים";
 
 export function landingDescription(data: LandingData): string {
   const storeDays = data.store.trialDays;
   const hospDays = data.hospitality.trialDays;
   return (
-    `נוריאל מחשבים, בית שמש: מחשבים, ציוד ושירות, הקמת חנות אינטרנטית לעסק בלי ידע טכני (${storeDays} ימי ניסיון) ` +
-    `ומערכת לניהול צימרים — אתר, הזמנות ויומן תפוסה${hospDays ? ` (${hospDays} ימי ניסיון)` : ""}.`
+    `חנות אינטרנטית לעסק בלי ידע טכני (${storeDays} ימי ניסיון) ואתר לצימר עם הזמנות, זמינות ויומן ` +
+    `תפוסה${hospDays ? ` (${hospDays} ימי ניסיון)` : ""} — בעברית, מבית נוריאל מחשבים, בית שמש.`
   );
 }
 

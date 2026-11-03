@@ -199,7 +199,7 @@ export function SectionHeading({
       <h2
         id={id}
         className={cn(
-          "font-display text-[clamp(1.85rem,1.2rem+2.2vw,2.75rem)] font-black leading-[1.15] text-balance",
+          "text-[clamp(1.85rem,1.2rem+2.2vw,2.75rem)] font-extrabold leading-[1.15] tracking-[-0.01em] text-balance",
           tone === "dark" ? "text-(--l-ink)" : "text-white",
         )}
       >
