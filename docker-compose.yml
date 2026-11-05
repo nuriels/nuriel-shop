@@ -42,6 +42,10 @@ services:
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-}
       # סוד לחתימת קודי הכניסה למייל (HMAC). ריק = נגזר ממפתח ה-service role
       LOGIN_CODE_SECRET: ${LOGIN_CODE_SECRET:-}
+      # שליחת רישיונות דיגיטליים: מפתח הצפנת מפתחות הרישיון במסד (AES-256-GCM, נגזר ב-HKDF).
+      # סוד! נוצר פעם אחת ע"י setup-selfhost.sh. אם יאבד — אי אפשר לפענח מפתחות שכבר נשמרו.
+      # ריק = המודול לא שומר ולא שולח רישיונות.
+      LICENSE_KEYS_SECRET: ${LICENSE_KEYS_SECRET:-}
       # סליקה דרך Grow (חלק 43): מפתח הצפנת פרטי המסוף של החנויות (AES-256-GCM).
       # סוד! נוצר פעם אחת ע"י setup-selfhost.sh. אם יאבד — צריך להזין מחדש את פרטי המסופים.
       GROW_SECRETS_KEY: ${GROW_SECRETS_KEY:-}

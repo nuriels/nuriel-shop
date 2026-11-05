@@ -132,6 +132,16 @@ write_app_env() {
     login_secret=$(openssl rand -hex 32)
     LOGIN_SECRET_CREATED=1
   fi
+  # שליחת רישיונות דיגיטליים: מפתח הצפנת מפתחות הרישיון במסד. נוצר פעם אחת ונשמר בין הרצות —
+  # אסור להחליף אותו: מפתחות שכבר נשמרו מוצפנים בו (בלעדיו אי אפשר להציג / לשלוח אותם שוב)
+  local license_secret="${LICENSE_KEYS_SECRET:-}"
+  if [[ -z "$license_secret" && -f "$APP_DIR/.env" ]]; then
+    license_secret=$(grep '^LICENSE_KEYS_SECRET=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/^"//; s/"$//' || true)
+  fi
+  if [[ -z "$license_secret" ]]; then
+    license_secret=$(openssl rand -hex 32)
+    LICENSE_SECRET_CREATED=1
+  fi
   log "כותב את קבצי הסביבה של האפליקציה"
   umask 077
   # docker compose קורא את הקובץ הזה אוטומטית (משתני ${...} ב-docker-compose.yml)
@@ -161,6 +171,8 @@ HOSPITALITY_SECRET=${hosp_secret}
 HOSPITALITY_POW_MAX=${hosp_pow}
 # סוד ה-HMAC של קודי הכניסה במייל / הפורטל / CAPTCHA (סוד — לגבות; זהה בכל השרתים)
 LOGIN_CODE_SECRET=${login_secret}
+# שליחת רישיונות דיגיטליים: מפתח הצפנת מפתחות הרישיון (סוד — לגבות! אם יאבד, מפתחות שנשמרו לא יפוענחו)
+LICENSE_KEYS_SECRET=${license_secret}
 EOF
   umask 022
   # פורט מקומי בלבד — הגישה מבחוץ רק דרך Nginx (כמו שאר האפליקציות בשרת)
@@ -177,6 +189,9 @@ EOF
   fi
   if [[ "${LOGIN_SECRET_CREATED:-}" == 1 ]]; then
     echo "  ✓ נוצר LOGIN_CODE_SECRET ב-$APP_DIR/.env — קודי כניסה שכבר נשלחו (עד שעה) יפוגו פעם אחת"
+  fi
+  if [[ "${LICENSE_SECRET_CREATED:-}" == 1 ]]; then
+    echo "  ✓ נוצר LICENSE_KEYS_SECRET ב-$APP_DIR/.env — לשמור עותק בגיבוי הסודות (בלעדיו מפתחות רישיון שנשמרו לא יפוענחו)"
   fi
   if [[ "${GROW_KEY_CREATED:-}" == 1 ]]; then
     echo "  ✓ נוצר מפתח הצפנה לסליקה (GROW_SECRETS_KEY) ב-$APP_DIR/.env — לשמור עותק גיבוי נפרד"

@@ -22,6 +22,7 @@ import { Route as CancellationsRouteImport } from './routes/cancellations'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ForbiddenRouteImport } from './routes/forbidden'
+import { Route as LicenseDownloadRouteImport } from './routes/license-download'
 import { Route as LockedRouteImport } from './routes/locked'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ManageRouteImport } from './routes/manage'
@@ -86,6 +87,8 @@ import { Route as AdminSettingsDomainRouteImport } from './routes/admin_.setting
 import { Route as AdminSettingsStaffRouteImport } from './routes/admin_.settings_.staff'
 import { Route as ApiAdminAnalyticsRouteImport } from './routes/api.admin.analytics'
 import { Route as ApiAdminTriggerAbandonedCartsRouteImport } from './routes/api.admin.trigger-abandoned-carts'
+import { Route as ApiLicenseDownloadCheckRouteImport } from './routes/api.license-download.check'
+import { Route as ApiLicenseDownloadFileRouteImport } from './routes/api.license-download.file'
 import { Route as ApiUnsubscribeTokenRouteImport } from './routes/api.unsubscribe.$token'
 import { Route as ApiWebhooksGrowRouteImport } from './routes/api.webhooks.grow'
 import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$orderId'
@@ -164,6 +167,11 @@ const ContactRoute = ContactRouteImport.update({
 const ForbiddenRoute = ForbiddenRouteImport.update({
   id: '/forbidden',
   path: '/forbidden',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LicenseDownloadRoute = LicenseDownloadRouteImport.update({
+  id: '/license-download',
+  path: '/license-download',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LockedRoute = LockedRouteImport.update({
@@ -488,6 +496,16 @@ const ApiAdminTriggerAbandonedCartsRoute =
     path: '/api/admin/trigger-abandoned-carts',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiLicenseDownloadCheckRoute = ApiLicenseDownloadCheckRouteImport.update({
+  id: '/api/license-download/check',
+  path: '/api/license-download/check',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiLicenseDownloadFileRoute = ApiLicenseDownloadFileRouteImport.update({
+  id: '/api/license-download/file',
+  path: '/api/license-download/file',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiUnsubscribeTokenRoute = ApiUnsubscribeTokenRouteImport.update({
   id: '/api/unsubscribe/$token',
   path: '/api/unsubscribe/$token',
@@ -575,6 +593,7 @@ export interface FileRoutesByFullPath {
   '/checkout': typeof CheckoutRoute
   '/contact': typeof ContactRoute
   '/forbidden': typeof ForbiddenRoute
+  '/license-download': typeof LicenseDownloadRoute
   '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
   '/manage': typeof ManageRouteWithChildren
@@ -639,6 +658,8 @@ export interface FileRoutesByFullPath {
   '/admin/settings/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
+  '/api/license-download/check': typeof ApiLicenseDownloadCheckRoute
+  '/api/license-download/file': typeof ApiLicenseDownloadFileRoute
   '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
@@ -668,6 +689,7 @@ export interface FileRoutesByTo {
   '/checkout': typeof CheckoutRoute
   '/contact': typeof ContactRoute
   '/forbidden': typeof ForbiddenRoute
+  '/license-download': typeof LicenseDownloadRoute
   '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
@@ -730,6 +752,8 @@ export interface FileRoutesByTo {
   '/admin/settings/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
+  '/api/license-download/check': typeof ApiLicenseDownloadCheckRoute
+  '/api/license-download/file': typeof ApiLicenseDownloadFileRoute
   '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
@@ -760,6 +784,7 @@ export interface FileRoutesById {
   '/checkout': typeof CheckoutRoute
   '/contact': typeof ContactRoute
   '/forbidden': typeof ForbiddenRoute
+  '/license-download': typeof LicenseDownloadRoute
   '/locked': typeof LockedRoute
   '/login': typeof LoginRoute
   '/manage': typeof ManageRouteWithChildren
@@ -824,6 +849,8 @@ export interface FileRoutesById {
   '/admin_/settings_/staff': typeof AdminSettingsStaffRoute
   '/api/admin/analytics': typeof ApiAdminAnalyticsRoute
   '/api/admin/trigger-abandoned-carts': typeof ApiAdminTriggerAbandonedCartsRoute
+  '/api/license-download/check': typeof ApiLicenseDownloadCheckRoute
+  '/api/license-download/file': typeof ApiLicenseDownloadFileRoute
   '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout_/bit/$orderId': typeof CheckoutBitOrderIdRoute
@@ -855,6 +882,7 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/contact'
     | '/forbidden'
+    | '/license-download'
     | '/locked'
     | '/login'
     | '/manage'
@@ -919,6 +947,8 @@ export interface FileRouteTypes {
     | '/admin/settings/staff'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
+    | '/api/license-download/check'
+    | '/api/license-download/file'
     | '/api/unsubscribe/$token'
     | '/api/webhooks/grow'
     | '/checkout/bit/$orderId'
@@ -948,6 +978,7 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/contact'
     | '/forbidden'
+    | '/license-download'
     | '/locked'
     | '/login'
     | '/orders'
@@ -1010,6 +1041,8 @@ export interface FileRouteTypes {
     | '/admin/settings/staff'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
+    | '/api/license-download/check'
+    | '/api/license-download/file'
     | '/api/unsubscribe/$token'
     | '/api/webhooks/grow'
     | '/checkout/bit/$orderId'
@@ -1039,6 +1072,7 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/contact'
     | '/forbidden'
+    | '/license-download'
     | '/locked'
     | '/login'
     | '/manage'
@@ -1103,6 +1137,8 @@ export interface FileRouteTypes {
     | '/admin_/settings_/staff'
     | '/api/admin/analytics'
     | '/api/admin/trigger-abandoned-carts'
+    | '/api/license-download/check'
+    | '/api/license-download/file'
     | '/api/unsubscribe/$token'
     | '/api/webhooks/grow'
     | '/checkout_/bit/$orderId'
@@ -1133,6 +1169,7 @@ export interface RootRouteChildren {
   CheckoutRoute: typeof CheckoutRoute
   ContactRoute: typeof ContactRoute
   ForbiddenRoute: typeof ForbiddenRoute
+  LicenseDownloadRoute: typeof LicenseDownloadRoute
   LockedRoute: typeof LockedRoute
   LoginRoute: typeof LoginRoute
   ManageRoute: typeof ManageRouteWithChildren
@@ -1174,6 +1211,8 @@ export interface RootRouteChildren {
   AdminSettingsStaffRoute: typeof AdminSettingsStaffRoute
   ApiAdminAnalyticsRoute: typeof ApiAdminAnalyticsRoute
   ApiAdminTriggerAbandonedCartsRoute: typeof ApiAdminTriggerAbandonedCartsRoute
+  ApiLicenseDownloadCheckRoute: typeof ApiLicenseDownloadCheckRoute
+  ApiLicenseDownloadFileRoute: typeof ApiLicenseDownloadFileRoute
   ApiUnsubscribeTokenRoute: typeof ApiUnsubscribeTokenRoute
   ApiWebhooksGrowRoute: typeof ApiWebhooksGrowRoute
   CheckoutBitOrderIdRoute: typeof CheckoutBitOrderIdRoute
@@ -1273,6 +1312,13 @@ declare module '@tanstack/react-router' {
       path: '/forbidden'
       fullPath: '/forbidden'
       preLoaderRoute: typeof ForbiddenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/license-download': {
+      id: '/license-download'
+      path: '/license-download'
+      fullPath: '/license-download'
+      preLoaderRoute: typeof LicenseDownloadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/locked': {
@@ -1723,6 +1769,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminTriggerAbandonedCartsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/license-download/check': {
+      id: '/api/license-download/check'
+      path: '/api/license-download/check'
+      fullPath: '/api/license-download/check'
+      preLoaderRoute: typeof ApiLicenseDownloadCheckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/license-download/file': {
+      id: '/api/license-download/file'
+      path: '/api/license-download/file'
+      fullPath: '/api/license-download/file'
+      preLoaderRoute: typeof ApiLicenseDownloadFileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/unsubscribe/$token': {
       id: '/api/unsubscribe/$token'
       path: '/api/unsubscribe/$token'
@@ -1917,6 +1977,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutRoute: CheckoutRoute,
   ContactRoute: ContactRoute,
   ForbiddenRoute: ForbiddenRoute,
+  LicenseDownloadRoute: LicenseDownloadRoute,
   LockedRoute: LockedRoute,
   LoginRoute: LoginRoute,
   ManageRoute: ManageRouteWithChildren,
@@ -1958,6 +2019,8 @@ const rootRouteChildren: RootRouteChildren = {
   AdminSettingsStaffRoute: AdminSettingsStaffRoute,
   ApiAdminAnalyticsRoute: ApiAdminAnalyticsRoute,
   ApiAdminTriggerAbandonedCartsRoute: ApiAdminTriggerAbandonedCartsRoute,
+  ApiLicenseDownloadCheckRoute: ApiLicenseDownloadCheckRoute,
+  ApiLicenseDownloadFileRoute: ApiLicenseDownloadFileRoute,
   ApiUnsubscribeTokenRoute: ApiUnsubscribeTokenRoute,
   ApiWebhooksGrowRoute: ApiWebhooksGrowRoute,
   CheckoutBitOrderIdRoute: CheckoutBitOrderIdRoute,

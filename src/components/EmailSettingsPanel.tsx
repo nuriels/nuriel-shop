@@ -20,6 +20,7 @@ import { SendMessagePanel } from "@/components/SendMessagePanel";
 import { EmailTestCard } from "@/components/EmailTestCard";
 import { StoreResendCard } from "@/components/StoreResendCard";
 import { NotificationLogCard } from "@/components/NotificationLogCard";
+import { DigitalLicensesPanel } from "@/components/licenses/DigitalLicensesPanel";
 
 type AdminOption = { user_id: string; email: string };
 type Diagnostics = Awaited<ReturnType<typeof getEmailDiagnostics>>;
@@ -79,9 +80,27 @@ export function EmailSettingsPanel() {
 
   // הפאנל לשליחת הודעה אינו תלוי בהגדרות המייל — מוצג גם בזמן טעינה או
   // אם טעינת ההגדרות נכשלה, כדי שהאפשרות תמיד תהיה גלויה
+  const header = (
+    <div className="flex items-center gap-3">
+      <div className="flex size-11 items-center justify-center rounded-xl gradient-brand text-primary-foreground">
+        <Mail className="size-5" />
+      </div>
+      <div>
+        <h2 className="text-xl font-bold text-foreground">התראות מייל</h2>
+        <p className="text-sm text-muted-foreground">
+          אישורי הזמנה ללקוחות, כתובת השולח, יומן התראות ובדיקת שליחה
+        </p>
+      </div>
+    </div>
+  );
+
   if (!settings) {
     return (
       <section className="space-y-5">
+        {header}
+        {/* שליחת רישיון דיגיטלי (פיילוט) — מוצג רק בחנות שהפיילוט פעיל בה ולמנהלים; באותו מקום
+            בשני המצבים כדי שלא ייטען מחדש כשההגדרות מגיעות */}
+        <DigitalLicensesPanel />
         <SendMessagePanel />
         <p className="text-sm text-muted-foreground">טוען הגדרות מייל...</p>
       </section>
@@ -132,17 +151,9 @@ export function EmailSettingsPanel() {
 
   return (
     <section className="space-y-5">
-      <div className="flex items-center gap-3">
-        <div className="flex size-11 items-center justify-center rounded-xl gradient-brand text-primary-foreground">
-          <Mail className="size-5" />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-foreground">התראות מייל</h2>
-          <p className="text-sm text-muted-foreground">
-            אישורי הזמנה ללקוחות, כתובת השולח, יומן התראות ובדיקת שליחה
-          </p>
-        </div>
-      </div>
+      {header}
+
+      <DigitalLicensesPanel />
 
       <StoreResendCard state={provider} onChange={setProvider} />
 

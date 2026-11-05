@@ -108,6 +108,8 @@ export const TENANT_BUCKETS = [
   "branding",
   "contact-attachments",
   "payment-receipts",
+  // מודול הרישיונות הדיגיטליים: תוכנות התקנה, מדריכים וקבלות (פרטי)
+  "license-files",
 ] as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

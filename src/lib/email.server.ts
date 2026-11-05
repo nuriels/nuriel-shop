@@ -76,6 +76,12 @@ export type SendResult = {
   id?: string | null;
   /** לא היה ניסיון שליחה בכלל (אין מפתח / אין נמען תקין) */
   skipped?: boolean;
+  /**
+   * מה בדיוק קרה מול הספק: accepted — Resend קיבל לשליחה (עדיין לא "נמסר");
+   * rejected — Resend דחה (שגיאת HTTP); transport_error — תקלת רשת, לא ידוע אם התקבל;
+   * skipped — לא היה ניסיון.
+   */
+  outcome?: "accepted" | "rejected" | "transport_error" | "skipped";
 };
 
 const EMAIL_FORMAT = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
@@ -253,11 +259,14 @@ async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
     return {
       sent: false,
       skipped: true,
+      outcome: "skipped",
       reason: "מפתח Resend (RESEND_API_KEY) לא הוגדר בשרת",
     };
   }
   const to = input.to.map((address) => address.trim()).filter(isValidEmail);
-  if (to.length === 0) return { sent: false, skipped: true, reason: "אין נמענים תקינים" };
+  if (to.length === 0) {
+    return { sent: false, skipped: true, outcome: "skipped", reason: "אין נמענים תקינים" };
+  }
 
   const sender = input.platformSender
     ? platformSenderFor(input.platformSender.name, input.platformSender.replyTo ?? null)
@@ -295,13 +304,25 @@ async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
       console.error("[email] Resend error", response.status, body);
       // מחזירים את גוף השגיאה של Resend: בדרך כלל "domain is not verified"
       // או "API key is invalid", וזו בדיוק המידע שהמנהל צריך.
-      return { sent: false, reason: `שגיאת שליחה (${response.status}): ${body.slice(0, 300)}` };
+      return {
+        sent: false,
+        outcome: "rejected",
+        reason: `שגיאת שליחה (${response.status}): ${body.slice(0, 300)}`,
+      };
     }
     const payload = (await response.json().catch(() => null)) as { id?: unknown } | null;
-    return { sent: true, id: typeof payload?.id === "string" ? payload.id.slice(0, 200) : null };
+    return {
+      sent: true,
+      outcome: "accepted",
+      id: typeof payload?.id === "string" ? payload.id.slice(0, 200) : null,
+    };
   } catch (error) {
     console.error("[email] send failed", error);
-    return { sent: false, reason: error instanceof Error ? error.message : "שגיאה לא ידועה" };
+    return {
+      sent: false,
+      outcome: "transport_error",
+      reason: error instanceof Error ? error.message : "שגיאה לא ידועה",
+    };
   }
 }
 
@@ -348,7 +369,7 @@ export function emailActionButton(label: string, url: string): string {
 }
 
 /** כתובת ציבורית של לוגו האתר מתוך ה-Storage (נטענת ישירות בתוכנת המייל) */
-function publicLogoUrl(logoPath: string | null): string | null {
+export function publicLogoUrl(logoPath: string | null): string | null {
   if (!logoPath) return null;
   if (/^https?:\/\//i.test(logoPath)) return logoPath;
   const base = process.env["SUPABASE_URL"]?.replace(/\/$/, "");

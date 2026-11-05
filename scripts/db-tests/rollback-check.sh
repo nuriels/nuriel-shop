@@ -102,6 +102,7 @@ M50=20261106170000_sec_m5_keep_platform_records
 M51=20261106180000_sec_p3_low_findings
 M52=20261106190000_sec_p3_helpers_quote_email
 M53=20261106200000_sec_prv_guest_privacy
+M54=20261107100000_lic_digital_licenses
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -122,6 +123,41 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- LIC: digital licenses — tables, private bucket, pilot flag (migration 54) ----------
+expect "before the rollback: 4 license tables (server only), atomic consume, the pilot flag on no store" \
+  "SELECT to_regclass('public.license_files') IS NOT NULL
+      AND to_regclass('public.license_deliveries') IS NOT NULL
+      AND to_regclass('public.license_download_links') IS NOT NULL
+      AND to_regclass('public.license_audit') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'public.license_deliveries', 'SELECT')
+      AND NOT has_function_privilege('anon', 'public.license_consume_download(text)', 'EXECUTE')
+      AND has_function_privilege('service_role', 'public.license_consume_download(text)', 'EXECUTE')
+      AND EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key = 'digital_licenses')
+      AND NOT EXISTS (SELECT 1 FROM public.tenant_feature_flags WHERE key = 'digital_licenses')"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M54" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M54"
+down "$M54"
+expect "the module is gone: tables, functions and the flag" \
+  "SELECT to_regclass('public.license_files') IS NULL
+      AND to_regclass('public.license_audit') IS NULL
+      AND to_regprocedure('public.license_link_peek(text)') IS NULL
+      AND to_regprocedure('public.license_check_refs()') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key = 'digital_licenses')"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m53.sql"
+schema_dump "$SCHEMA_DIR/after-m54-down.sql"
+if diff -q "$SCHEMA_DIR/m53.sql" "$SCHEMA_DIR/after-m54-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 53, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 53:"; diff "$SCHEMA_DIR/m53.sql" "$SCHEMA_DIR/after-m54-down.sql" | head -20; exit 1
+fi
 
 # ---------- SEC-PRV: guest privacy — outbox links, anonymization, export (migration 53) ----------
 expect "before the rollback: links stripped per room after sending, notes cleared on anonymization, the export includes history and payments" \
@@ -1492,6 +1528,12 @@ up "$M50"
 up "$M51"
 up "$M52"
 up "$M53"
+up "$M54"
+expect "the license module is back: tables, atomic consume, the pilot flag (on no store)" \
+  "SELECT to_regclass('public.license_download_links') IS NOT NULL
+      AND to_regprocedure('public.license_consume_download(text)') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key = 'digital_licenses')
+      AND NOT EXISTS (SELECT 1 FROM public.tenant_feature_flags WHERE key = 'digital_licenses')"
 expect "site_type back, every store ecommerce" \
   "SELECT bool_and(site_type = 'ecommerce') FROM public.tenants"
 expect "seed trigger has the WHEN condition again" \
