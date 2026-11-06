@@ -164,7 +164,7 @@ docker exec nuriel-shop-db psql -U postgres -q -c "DROP DATABASE IF EXISTS resto
 ### S1 — הקוד (✏️ קבצים ב-`/root/nuriel-shop-git` בלבד; האתר ממשיך לרוץ על הגרסה הקודמת)
 
 ```bash
-cd /root/nuriel-shop-git && git merge --ff-only 7ec7a26 && git log --oneline -1 && mkdir -p /root/backups/nuriel-shop/before-sec-lic/rollbacks && cp supabase/rollbacks/20261106*.down.sql supabase/rollbacks/20261107100000_lic_digital_licenses.down.sql /root/backups/nuriel-shop/before-sec-lic/rollbacks/ && ls /root/backups/nuriel-shop/before-sec-lic/rollbacks | wc -l
+cd /root/nuriel-shop-git && git merge -q --ff-only 7ec7a26 && git log --oneline -1 && mkdir -p /root/backups/nuriel-shop/before-sec-lic/rollbacks && cp supabase/rollbacks/20261106*.down.sql supabase/rollbacks/20261107100000_lic_digital_licenses.down.sql /root/backups/nuriel-shop/before-sec-lic/rollbacks/ && ls /root/backups/nuriel-shop/before-sec-lic/rollbacks | wc -l
 ```
 
 **תקין:** `Updating f2e8bf7..7ec7a26`, `Fast-forward`, רשימת קבצים (128 קבצים); `7ec7a26 Digital license sending
