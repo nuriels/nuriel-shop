@@ -21,3 +21,24 @@ export async function ensureAccount(
   }
   return { created: !error };
 }
+
+/**
+ * שלב א' 3: סיסמה חדשה לחשבון של החיבור — רק אחרי שמי שקורא אימת את המשתמש (קוד חד-פעמי למייל) ובדק
+ * הרשאה. הטוקן נבדק מול שרת ההתחברות (GoTrue); הסיסמה עצמה לא נרשמת בשום מקום מלבדו.
+ */
+export async function setPasswordForSession(accessToken: string, password: string): Promise<void> {
+  const { data, error } = await supabaseAdminUnscoped.auth.getUser(accessToken);
+  if (error || !data.user) throw new Error("החיבור לא אומת. נסו שוב.");
+  const { error: updateError } = await supabaseAdminUnscoped.auth.admin.updateUserById(
+    data.user.id,
+    { password },
+  );
+  if (updateError) {
+    // GoTrue מחזיר הודעה באנגלית (למשל סיסמה חלשה מדי) — בלי פרטים נוספים
+    throw new Error(
+      /weak|short|least/i.test(updateError.message)
+        ? "הסיסמה חלשה מדי — בחרו סיסמה ארוכה יותר"
+        : "שמירת הסיסמה נכשלה. נסו שוב.",
+    );
+  }
+}

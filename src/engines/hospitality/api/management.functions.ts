@@ -3,6 +3,7 @@
 // דגלי המסד והניהול); כאן רק: אזור הניהול פעיל לאתר, זהות המשתמש, ותרגום התשובה.
 import { createServerFn } from "@tanstack/react-start";
 import type { ManagementAccess, ManagementContext } from "../types/management";
+import { parseManagerPasswordReset } from "../validation/manage-login";
 
 export const hospitalityManagementContext = createServerFn({ method: "GET" }).handler(
   async (): Promise<ManagementAccess> => {
@@ -44,3 +45,50 @@ export const hospitalityManagementContext = createServerFn({ method: "GET" }).ha
     }
   },
 );
+
+/**
+ * שלב א' 3: הכניסה עם Google — דרך השער של Nuriel בלבד (חזרת ה-OAuth לכתובת של Nuriel, לא של האתר;
+ * docs/security/oauth-pkce-analysis.md). מהשער חוזרים לאזור הניהול בקוד חד-פעמי (/admin-handoff).
+ */
+export const hospitalityCentralLogin = createServerFn({ method: "GET" }).handler(
+  async (): Promise<{ url: string | null }> => {
+    const { portalLoginUrl } = await import("@/platform/tenancy/portal.server");
+    return { url: portalLoginUrl() };
+  },
+);
+
+/**
+ * שלב א' 3: איפוס סיסמה בקוד חד-פעמי למייל — בבקשה אחת: הקוד נבדק (אותה פונקציה של הכניסה בקוד),
+ * ההרשאה לניהול באתר הזה נבדקת במסד, ורק אז נשמרת הסיסמה החדשה. מחזיר את החיבור (נכנסים מיד).
+ * כך כל דרכי הכניסה (קוד, סיסמה, Google דרך השער) מגיעות לאותו חשבון — בלי חשבון כפול.
+ */
+export const hospitalityResetPassword = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseManagerPasswordReset(input))
+  .handler(async ({ data }): Promise<{ accessToken: string; refreshToken: string }> => {
+    const [
+      { verifyLoginCode, loginWithIdentifier },
+      { callRpc, HospitalityError },
+      { setPasswordForSession },
+    ] = await Promise.all([
+      import("@/platform/auth/login"),
+      import("../server/rpc.server"),
+      import("@/platform/auth/accounts.server"),
+    ]);
+    const tokens = await verifyLoginCode({ data: { email: data.email, code: data.code } });
+    try {
+      await callRpc<ManagementContext>(
+        "management_context",
+        {},
+        { accessToken: tokens.accessToken },
+      );
+    } catch (error) {
+      if (error instanceof HospitalityError && error.code === "42501")
+        throw new HospitalityError("לחשבון הזה אין הרשאת ניהול באתר הזה", "42501");
+      throw error;
+    }
+    await setPasswordForSession(tokens.accessToken, data.password);
+    console.info("[hospitality/manage] password reset by email code");
+    // שינוי סיסמה מנתק את החיבורים של החשבון (גם את זה שנפתח בקוד) — חיבור חדש עם הסיסמה החדשה,
+    // שגם מוכיח שהיא עובדת
+    return loginWithIdentifier({ data: { identifier: data.email, password: data.password } });
+  });

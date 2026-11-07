@@ -88,6 +88,11 @@ const PLATFORM_ADAPTERS: [adapter: string, wraps: (target: string) => boolean][]
   ["src/platform/auth/accounts.server.ts", (t) => t === "src/integrations/supabase/client.server"],
   ["src/platform/security/rate-limit.server.ts", (t) => t === "src/lib/rate-limit.server"],
   ["src/platform/media/pwa-icons.server.ts", (t) => t === "src/lib/pwa-icon-render.server"],
+  // שלב א' 3: כתובת השער (הכניסה המרכזית עם Google) — הקבוע של השער והכתובות של האתרים
+  [
+    "src/platform/tenancy/portal.server.ts",
+    (t) => t === "src/lib/portal" || t === "src/integrations/supabase/tenant.server",
+  ],
   ["src/platform/media/remote-image.server.ts", (t) => t === "src/server/services/image-fetch"],
   ["src/platform/email/send.server.ts", (t) => t === "src/lib/email.server"],
   [

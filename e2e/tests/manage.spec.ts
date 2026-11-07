@@ -11,7 +11,7 @@ const DASHBOARD_GREETING = /^(בוקר טוב|צהריים טובים|ערב ט�
 
 // Hospitality Stage 2a — אזור הניהול של בעל העסק (/manage) על השרת הבנוי:
 //   • נפתח רק באתר אירוח עם הדגלים (מסד + ניהול), בלי לפתוח את האתר הציבורי;
-//   • כניסה: ה-handoff הקיים מהשער, סיסמה, קוד במייל — בלי Google;
+//   • כניסה: ה-handoff הקיים מהשער, סיסמה, קוד במייל; Google — רק דרך השער (שלב א' 3);
 //   • בעלים / מנהל / חשבון בלי הרשאה — הרשאה בשרת ובמסד, לא רק בממשק;
 //   • עברית RTL, מותאם לטלפון, בדיקות נגישות (axe);
 //   • החנויות (Ecommerce) לא השתנו: /admin, דף הבית, ו-/manage אינו קיים בחנות.
@@ -196,7 +196,9 @@ test("server: the context answers by account — owner, manager, other store, an
   expect((await callContext(request, hostOf(STORE_A.slug))).status()).toBe(404);
 });
 
-test("login page: Hebrew RTL, email code and password, no Google, accessible", async ({ page }) => {
+test("login page: Hebrew RTL, email code and password; Google only through Nuriel's central login (no OAuth here), accessible", async ({
+  page,
+}) => {
   await page.goto(HURL("/manage"));
   await expect(page).toHaveURL(/\/manage\/login$/);
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
@@ -204,10 +206,15 @@ test("login page: Hebrew RTL, email code and password, no Google, accessible", a
   await expect(page.getByRole("heading", { name: "כניסה לניהול העסק" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "קוד למייל" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "סיסמה" })).toBeVisible();
-  // אין כניסה עם Google (הגופנים של Google Fonts אינם כניסה)
+  // שלב א' 3: Google — קישור לכניסה המרכזית (השער של Nuriel), לא כניסה באתר הזה: חזרת ה-OAuth רק
+  // לכתובת של Nuriel (docs/security/oauth-pkce-analysis.md); מהשער — קוד חד-פעמי חזרה לניהול
+  const google = page.getByRole("link", { name: "כניסה עם Google" });
+  // הכתובת של השער כמו בקישורים במיילים (originForTenant — בייצור https://nuriel-app2.<הדומיין>)
+  await expect(google).toHaveAttribute(
+    "href",
+    /^https?:\/\/nuriel-app2\.shop\.localhost(:\d+)?\/#login$/,
+  );
   await expect(page.getByRole("button", { name: /google/i })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: /google/i })).toHaveCount(0);
-  await expect(page.getByText(/google/i)).toHaveCount(0);
   expect(await page.content()).not.toMatch(/provider=google|signInWithOAuth|accounts\.google/i);
   await expectAccessible(page, "login");
 });
