@@ -26,6 +26,36 @@ export interface PaymentSettingsView extends PaymentSettingsValues {
   editable: boolean;
 }
 
+/** שלב א' 5: אמצעי התשלום שהאורח בחר (bookings.payment_method) */
+export const GUEST_PAYMENT_METHODS = ["bank", "bit", "phone", "other"] as const;
+export type GuestPaymentMethod = (typeof GUEST_PAYMENT_METHODS)[number];
+
+export type ProofStatus = "submitted" | "approved" | "rejected";
+
+/** אישור העברה שהאורח העלה (בלי נתיב הקובץ) */
+export interface PaymentProofView {
+  id: string;
+  status: ProofStatus;
+  file_name: string;
+  mime: string;
+  size: number;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+}
+
+/** שלב א' 5: העברה בנקאית בהזמנה של האורח — הכול מהשרת (רענון / חזרה מאוחרת לא מאבדים כלום) */
+export interface GuestTransferState {
+  /** העסק מקבל העברות וההגעה לפחות min_days ימים אחרי מועד ההזמנה */
+  allowed: boolean;
+  min_days: number;
+  /** האורח בחר בהעברה בנקאית */
+  chosen: boolean;
+  proofs: PaymentProofView[];
+  waiting_review: boolean;
+  can_upload: boolean;
+}
+
 /** לאורח, להזמנה שלו בלבד */
 export interface GuestPaymentInfo {
   available: boolean;
@@ -39,4 +69,23 @@ export interface GuestPaymentInfo {
   bit?: { phone: string } | null;
   phone?: { number: string | null } | null;
   note?: string | null;
+  /** שלב א' 5 (מיגרציה 55) */
+  transfer?: GuestTransferState;
+  payment_method?: GuestPaymentMethod | null;
+}
+
+/** שלב א' 5: האישורים של הזמנה — לצוות */
+export interface StaffBookingProofs {
+  payment_method: GuestPaymentMethod | null;
+  bank_allowed: boolean;
+  amount_due: number;
+  currency: string;
+  proofs: PaymentProofView[];
+}
+
+/** שלב א' 5: אישורים שממתינים לבדיקה (לוח הבקרה) — הוותיק שבהם לקישור ישיר */
+export interface ProofsWaiting {
+  count: number;
+  booking_id: string | null;
+  booking_number: number | null;
 }

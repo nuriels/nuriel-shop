@@ -9,6 +9,7 @@ export const bookingsKey = (tab: BookingTab, q: string) =>
 export const bookingKey = (id: string) => [...manageKeys.all, "booking", id] as const;
 /** יומן התשלומים של הזמנה (יתרה / החזר) — מתעדכן גם אחרי אישור, ביטול או שינוי של ההזמנה */
 export const paymentsKey = (id: string) => [...manageKeys.all, "payments", id] as const;
+export const proofsKey = (id: string) => [...manageKeys.all, "proofs", id] as const;
 
 export const TABS: { key: Exclude<BookingTab, "all">; label: string; empty: string }[] = [
   { key: "pending", label: "ממתינות לטיפול", empty: "אין בקשות שממתינות לאישור." },
@@ -142,6 +143,10 @@ export function eventText(e: { kind: string; from: string | null; to: string | n
   if (e.kind === "payment_recorded") return "נרשם תשלום";
   if (e.kind === "refund_recorded") return "נרשם החזר";
   if (e.kind === "payment_voided") return "רישום תשלום בוטל";
+  // שלב א' 5: העברה בנקאית
+  if (e.kind === "payment_method_chosen") return "האורח בחר אמצעי תשלום";
+  if (e.kind === "payment_proof_submitted") return "האורח העלה אישור העברה";
+  if (e.kind === "payment_proof_rejected") return "אישור ההעברה נדחה";
   if (e.to && e.to !== e.from) return EVENT_STATUS_TEXT[e.to] ?? `${e.from ?? ""} ← ${e.to}`;
   return e.kind.replace(/_/g, " ");
 }

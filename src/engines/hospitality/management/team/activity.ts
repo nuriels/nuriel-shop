@@ -153,6 +153,11 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} רשם/ה החזר כספי ב${target}`;
     case "payments.voided":
       return `${actor} ביטל/ה רישום תשלום ב${target}`;
+    // שלב א' 5: אישורי העברה שהאורח העלה
+    case "payments.proof_approved":
+      return `${actor} אישר/ה העברה בנקאית ב${target}`;
+    case "payments.proof_rejected":
+      return `${actor} דחה/תה אישור העברה ב${target}`;
     case "payments.instructions_updated":
       return `${actor} עדכן/ה את פרטי התשלום לאורחים`;
     case "room_types.created":

@@ -197,9 +197,13 @@ SELECT tests.check('guest: a cancelled booking — no details ("closed")',
 -- ============================================================
 -- 4. The public site and emails: which methods only
 -- ============================================================
+-- migration 55: bank transfer is offered only for an arrival at least 7 days away (the site sends the arrival date)
 SELECT tests.check('site: guests see which methods the business takes — no details; another business keeps its own',
-  format($$SELECT pg_temp.call(%1$L, NULL, 'SELECT hospitality.public_payment_methods()') = '{"methods": ["bank", "bit", "phone", "note"]}'::jsonb
-             AND pg_temp.call(%2$L, NULL, 'SELECT hospitality.public_payment_methods()') = '{"methods": ["phone"]}'::jsonb$$,
+  format($$SELECT pg_temp.call(%1$L, NULL, format('SELECT hospitality.public_payment_methods(%%L)', pg_temp.d(30))) -> 'methods'
+                = '["bank", "bit", "phone", "note"]'::jsonb
+             AND pg_temp.call(%1$L, NULL, format('SELECT hospitality.public_payment_methods(%%L)', pg_temp.d(30)))::text NOT LIKE '%%123456%%'
+             AND pg_temp.call(%2$L, NULL, format('SELECT hospitality.public_payment_methods(%%L)', pg_temp.d(30))) -> 'methods'
+                = '["phone"]'::jsonb$$,
          :'sp', :'sx'));
 SELECT tests.check('emails: the server learns which methods to mention (no details)',
   format($$SELECT hospitality.email_payment_methods(%L) = ARRAY['bank', 'bit', 'phone', 'note']$$, :'sp'));

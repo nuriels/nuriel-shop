@@ -210,7 +210,7 @@ export function collectedShare(n: DashboardNumbers): number | null {
 
 export type TaskLink =
   | { to: "/manage/bookings/$bookingId"; params: { bookingId: string }; hash?: string }
-  | { to: "/manage/bookings"; search: { tab: "pending" } }
+  | { to: "/manage/bookings"; search: { tab: "pending" | "upcoming" } }
   | { to: "/manage/channels" }
   | { to: "/manage/emails"; search: { filter: "failed" } }
   | { to: "/manage/pricing" }
@@ -327,6 +327,22 @@ export function taskView(task: DashboardTask, now: number = Date.now()): TaskVie
         cta: "לפרסום",
         link: { to: "/manage/website" },
         tone: "info",
+      };
+    case "proofs":
+      return {
+        title: plural(task.count, "אישור העברה לבדיקה", "אישורי העברה לבדיקה"),
+        detail: task.booking_number
+          ? `הזמנה #${task.booking_number}${task.count > 1 ? " ועוד" : ""} · בדקו שההעברה נכנסה`
+          : "בדקו שההעברה נכנסה לחשבון",
+        cta: "לבדיקה",
+        link: task.booking_id
+          ? {
+              to: "/manage/bookings/$bookingId",
+              params: { bookingId: task.booking_id },
+              hash: "transfer-proofs",
+            }
+          : { to: "/manage/bookings", search: { tab: "upcoming" } },
+        tone: "warning",
       };
     case "open_dates":
       return {

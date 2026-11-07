@@ -31,6 +31,8 @@ import { dateTimeText, money, scheduleLines, stayText, telHref, whatsappHref } f
 import { hasInstructions, methodsText } from "../lib/payment";
 import { useSite } from "../lib/site-context";
 import { paymentState } from "../../payments/phone";
+import { transferPaymentLabel } from "../lib/transfer";
+import { TransferCard } from "./TransferProof";
 
 /** מצבים שבהם מוצג מצב התשלום (בקשה פעילה / הזמנה) */
 const PAYABLE = new Set([
@@ -335,11 +337,13 @@ export function MyBookingPage() {
               <Row
                 label={t.my.payment}
                 value={
-                  instructions && paymentState(Number(b.total), Number(b.amount_paid)) === "unpaid"
+                  // שלב א' 5: העברה בנקאית — "ממתין לאישור העברה" / "האישור התקבל"
+                  transferPaymentLabel(payment, t) ??
+                  (instructions && paymentState(Number(b.total), Number(b.amount_paid)) === "unpaid"
                     ? payment?.available
                       ? t.my.unpaidInstructions
                       : t.my.unpaidLater
-                    : t.my.paymentStates[paymentState(Number(b.total), Number(b.amount_paid))]
+                    : t.my.paymentStates[paymentState(Number(b.total), Number(b.amount_paid))])
                 }
               />
             )}
@@ -365,6 +369,15 @@ export function MyBookingPage() {
         </section>
 
         {payment && <PaymentCard payment={payment} />}
+
+        {payment && (
+          <TransferCard
+            payment={payment}
+            guestRef={{ token }}
+            queryKey={bookingKey(token)}
+            timeZone={tz}
+          />
+        )}
 
         {LIVE.includes(b.status) && <ArrivalCard arrival={arrival} timeZone={tz} />}
 

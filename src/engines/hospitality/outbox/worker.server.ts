@@ -176,6 +176,22 @@ async function siteContext(tenantId: string): Promise<SiteContext> {
   };
 }
 
+/**
+ * שלב א' 5 (מיגרציה 55): העברה בנקאית רק כשההגעה לפחות 7 ימים אחרי מועד ההזמנה — המייל לאורח מזכיר
+ * רק את מה שזמין בהזמנה שלו (כמו עמוד ההזמנה). בשגיאה — בלי העברה (לא מציעים מה שאולי לא זמין).
+ */
+async function bookingPaymentMethods(bookingId: string, all: string[]): Promise<string[]> {
+  try {
+    const m = await rpc<string[] | null>("email_booking_payment_methods", {
+      _booking_id: bookingId,
+    });
+    if (Array.isArray(m)) return m;
+  } catch {
+    // ממשיכים בלי העברה בנקאית
+  }
+  return all.filter((x) => x !== "bank");
+}
+
 async function sendDue(): Promise<void> {
   const sites = new Map<string, Promise<SiteContext>>();
   for (let round = 0; round < 10; round++) {
@@ -188,8 +204,20 @@ async function sendDue(): Promise<void> {
       try {
         if (!sites.has(n.tenant_id)) sites.set(n.tenant_id, siteContext(n.tenant_id));
         const ctx = await sites.get(n.tenant_id)!;
+        const business =
+          n.recipient_kind === "guest" &&
+          n.booking_id &&
+          ctx.business.paymentMethods?.includes("bank")
+            ? {
+                ...ctx.business,
+                paymentMethods: await bookingPaymentMethods(
+                  n.booking_id,
+                  ctx.business.paymentMethods,
+                ),
+              }
+            : ctx.business;
         const email = renderBookingEmail(n.event, n.recipient_kind, n.payload, {
-          business: ctx.business,
+          business,
           // לעסק: ההזמנה; התנגשות ביומן חיצוני (D3) — מסך הערוצים; תזכורת לפתיחת תאריכים (43) —
           // היומן; תשובה מהתמיכה (E4) — הפנייה
           bookingUrl: !ctx.origin

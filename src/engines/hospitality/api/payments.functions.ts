@@ -1,9 +1,11 @@
 // תשלומים להזמנה (תשתית Stage 8) — לצוות עם הרשאת bookings: יומן התשלומים, רישום תשלום / החזר
 // ידני (מזומן, העברה, Bit, כרטיס, צ'ק), וביטול רישום (עם סיבה). בלי ספק סליקה עדיין.
 import { createServerFn } from "@tanstack/react-start";
+import type { ProofsWaiting, StaffBookingProofs } from "../types/payment-instructions";
 import type { BookingPayments, PaymentKind, PaymentMethod } from "../types/payments";
 import { InputError, isoDate, optionalText, uuid } from "../validation/input";
 import { CARD_IN_PAYMENT_NOTE, looksLikeCardNumber } from "../payments/phone";
+import { parseBookingProofs, parseProofId, parseProofReview } from "../validation/proofs";
 
 const KINDS: PaymentKind[] = ["deposit", "balance", "full", "refund", "other"];
 const METHODS: PaymentMethod[] = ["cash", "transfer", "bit", "card", "check", "other"];
@@ -66,3 +68,54 @@ export const hospitalityPaymentVoid = createServerFn({ method: "POST" })
       _reason: data.reason,
     });
   });
+
+// ---------- שלב א' 5: אישורי העברה שהאורח העלה ----------
+// ההרשאה (bookings), השייכות לעסק והמעברים (נבדק פעם אחת) — במסד (מיגרציה 55). אישור = תשלום ביומן.
+
+export const hospitalityBookingProofs = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseBookingProofs(input))
+  .handler(async ({ data }): Promise<StaffBookingProofs> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<StaffBookingProofs>("booking_payment_proofs", { _booking_id: data.bookingId });
+  });
+
+/** קישור צפייה חתום (2 דקות) — רק אחרי שהמסד אישר שהאישור שייך לעסק והמשתמש רשאי */
+export const hospitalityProofUrl = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseProofId(input))
+  .handler(async ({ data }): Promise<{ url: string }> => {
+    const [{ manageRpc }, { signedProofUrl }] = await Promise.all([
+      import("../server/manage.server"),
+      import("../server/proofs.server"),
+    ]);
+    const file = await manageRpc<{ path: string; name: string; mime: string }>(
+      "payment_proof_file",
+      { _proof_id: data.proofId },
+    );
+    return { url: await signedProofUrl(file) };
+  });
+
+export const hospitalityReviewProof = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => {
+    const parsed = parseProofReview(input);
+    // D4: בלי מספרי כרטיס במערכת
+    if (looksLikeCardNumber(parsed.note)) throw new InputError(CARD_IN_PAYMENT_NOTE);
+    return parsed;
+  })
+  .handler(async ({ data }): Promise<StaffBookingProofs> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<StaffBookingProofs>("payment_proof_review", {
+      _proof_id: data.proofId,
+      _decision: data.decision,
+      _amount: data.amount,
+      _note: data.note,
+    });
+  });
+
+/** כמה אישורי העברה ממתינים לבדיקה, והוותיק שבהם — ל"דורש טיפול" בלוח הבקרה */
+export const hospitalityProofsWaiting = createServerFn({ method: "GET" }).handler(
+  async (): Promise<ProofsWaiting> => {
+    const { manageRpc } = await import("../server/manage.server");
+    const r = await manageRpc<ProofsWaiting | null>("payment_proofs_waiting", {});
+    return r ?? { count: 0, booking_id: null, booking_number: null };
+  },
+);

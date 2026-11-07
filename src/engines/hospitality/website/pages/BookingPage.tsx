@@ -48,18 +48,23 @@ import { unitCover } from "../lib/media";
 import { hasInstructions, methodsText } from "../lib/payment";
 import { useSite } from "../lib/site-context";
 
+/** שלב א' 5: האמצעים לפי תאריך ההגעה — העברה בנקאית רק כשההגעה לפחות 7 ימים מהיום (השרת מחליט) */
+function usePaymentMethods(checkIn?: string) {
+  return useQuery({
+    queryKey: ["hosp-site", "payment-methods", checkIn ?? null],
+    queryFn: () => hospitalitySitePaymentMethods({ data: { checkIn } }),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
 /**
  * שורת התשלום בטופס: בלי הוראות תשלום — הנוסח של D4 (נציג העסק יתקשר); עם הוראות (העברה בנקאית /
  * Bit / הוראות של העסק — מיגרציה 37) — "פרטי התשלום יופיעו בעמוד ההזמנה אחרי האישור".
  */
-function usePayLine(): string {
+function usePayLine(checkIn?: string): string {
   const t = useCopy();
-  const methods = useQuery({
-    queryKey: ["hosp-site", "payment-methods"],
-    queryFn: () => hospitalitySitePaymentMethods(),
-    staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
-  });
+  const methods = usePaymentMethods(checkIn);
   return hasInstructions(methods.data)
     ? t.book.payByInstructions(methodsText(methods.data, t.my.methodNames))
     : t.book.payByPhone;
@@ -758,7 +763,7 @@ function QuoteDetails({
   rules: string[];
 }) {
   const t = useCopy();
-  const payLine = usePayLine();
+  const payLine = usePayLine(q.check_in);
   const { site } = useSite();
   const nights = useMemo(() => {
     // לילות באותו מחיר — שורה אחת ("2 לילות × ₪750")
@@ -862,7 +867,14 @@ function GuestForm({
   onTermsChanged: () => void;
 }) {
   const t = useCopy();
-  const payLine = usePayLine();
+  const payLine = usePayLine(quote.check_in);
+  // שלב א' 5: איך האורח רוצה לשלם — רק מהאמצעים שהעסק מקבל לתאריכים האלה
+  const payOptions = (usePaymentMethods(quote.check_in).data ?? []).filter(
+    (m): m is "bank" | "bit" | "phone" => m === "bank" || m === "bit" || m === "phone",
+  );
+  const [payMethod, setPayMethod] = useState<"bank" | "bit" | "phone" | null>(null);
+  // אמצעי יחיד — נבחר לבד (למשל העברה בנקאית בלבד → "ממתין לאישור העברה")
+  const chosenMethod = payOptions.length === 1 ? payOptions[0]! : payMethod;
   const { site } = useSite();
   const navigate = useNavigate();
   const [fullName, setFullName] = useState("");
@@ -897,6 +909,8 @@ function GuestForm({
         language: t.locale,
         captcha,
         [TRAP_FIELD]: trap,
+        // שלב א' 5: רק אם עדיין זמין לתאריכים (השרת בודק שוב)
+        paymentMethod: chosenMethod && payOptions.includes(chosenMethod) ? chosenMethod : null,
       };
       // מיגרציה 44: כמה חדרים — בקשה אחת (כל החדרים יחד או אף אחד)
       if (extras.length > 0)
@@ -1097,6 +1111,31 @@ function GuestForm({
           />
         </label>
       </div>
+      {/* שלב א' 5: בחירת אמצעי התשלום — כשיש יותר מאחד */}
+      {payOptions.length > 1 && (
+        <fieldset className="space-y-2 rounded-[var(--radius)] border border-border bg-card p-4">
+          <legend className="px-1 text-sm font-medium">{t.book.payHow}</legend>
+          <p className="text-xs text-muted-foreground">{t.book.payHowHint}</p>
+          {payOptions.map((m) => (
+            <label key={m} className="flex min-h-11 items-center gap-3">
+              <input
+                type="radio"
+                name="pay-method"
+                value={m}
+                checked={payMethod === m}
+                onChange={() => setPayMethod(m)}
+                className="size-5 accent-[var(--primary)]"
+              />
+              <span className="text-sm">{t.my.methodNames[m]}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {chosenMethod === "bank" && (
+        <p className="text-sm text-muted-foreground" data-testid="pay-bank-hint">
+          {t.book.payBankHint}
+        </p>
+      )}
       {/* D4: לפני השליחה — שוב, שהתשלום לא כאן */}
       <p className="flex items-start gap-2 text-sm text-muted-foreground">
         <Phone className="mt-0.5 size-4 shrink-0" aria-hidden="true" />

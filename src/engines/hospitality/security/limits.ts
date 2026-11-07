@@ -49,6 +49,14 @@ export const LIMITS = {
   cancelQuote: [{ per: "ip", limit: 30, window: 10 * MIN }],
   /** בקשת ביטול */
   cancel: [{ per: "ip", limit: 6, window: HOUR }],
+  /**
+   * שלב א' 5: העלאת אישור העברה (עד 5MB לקובץ) — מעל המגבלות של המסד (עד 3 העלאות שלא הושלמו בשעה
+   * להזמנה, ו-5 אישורים להזמנה)
+   */
+  proofUpload: [
+    { per: "ip", limit: 10, window: 10 * MIN },
+    { per: "tenant", limit: 300, window: DAY },
+  ],
   /** יומן הייצוא (iCal) — Airbnb / Booking.com מושכים כל כמה דקות עד שעה */
   ical: [{ per: "token", limit: 120, window: HOUR }],
 

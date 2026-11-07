@@ -2,6 +2,9 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_bank_transfer (55): הגנה (נעצר כשיש אישורי העברה / קבצים בדלי), rollback → הטבלה, הדלי
+#     הפרטי, העמודה payment_method ופונקציות ההעברה נעלמו; guest_payment_info ו-public_payment_methods()
+#     בגרסה של 37 מילה במילה; הסכמה זהה בדיוק ל-54
 #   • hosp_unit_size (41): rollback → העמודה size_sqm נמחקה, _unit_json / _unit_apply / unit_create /
 #     unit_update בגרסה של 11 ו-_site_payload בגרסה של 21 מילה במילה; הסכמה זהה בדיוק ל-40
 #   • hosp_portal_open (40): rollback → portal_open_site, portal_trial_days, טריגר "האתר נפתח בפרסום"
@@ -103,6 +106,7 @@ M51=20261106180000_sec_p3_low_findings
 M52=20261106190000_sec_p3_helpers_quote_email
 M53=20261106200000_sec_prv_guest_privacy
 M54=20261107100000_lic_digital_licenses
+M55=20261108100000_hosp_bank_transfer
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -123,6 +127,56 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- A5: bank-transfer policy and transfer proofs (migration 55) ----------
+expect "before the rollback: proofs table (functions only), private bucket, the 7-day rule, dated payment methods, server-only 'ready'" \
+  "SELECT to_regclass('hospitality.payment_proofs') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'hospitality.payment_proofs', 'SELECT')
+      AND NOT has_table_privilege('anon', 'hospitality.payment_proofs', 'SELECT')
+      AND EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-payment-proofs' AND NOT public)
+      AND hospitality._bank_transfer_min_days() = 7
+      AND to_regprocedure('hospitality.public_payment_methods(date)') IS NOT NULL
+      AND to_regprocedure('hospitality.public_payment_methods()') IS NULL
+      AND NOT has_function_privilege('anon', 'hospitality.guest_proof_ready(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality.guest_proof_ready(uuid)', 'EXECUTE')
+      AND has_function_privilege('service_role', 'hospitality.guest_proof_ready(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'hospitality.payment_proof_review(uuid,text,numeric,text)', 'EXECUTE')"
+echo "rollback guard: $M55 refuses while a transfer-proof file is stored"
+q "INSERT INTO storage.objects (bucket_id, name) VALUES ('hosp-payment-proofs', 'rb/a/b')" >/dev/null
+if down "$M55" 2>/dev/null; then
+  echo "  FAIL rollback ran although a transfer-proof file exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT to_regclass('hospitality.payment_proofs') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-payment-proofs')"
+q "DELETE FROM storage.objects WHERE bucket_id = 'hosp-payment-proofs'" >/dev/null
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M55" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M55"
+down "$M55"
+expect "the transfer module is gone: table, column, functions, bucket; the payment-instruction functions are the migration-37 versions" \
+  "SELECT to_regclass('hospitality.payment_proofs') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = 'hospitality' AND table_name = 'bookings' AND column_name = 'payment_method')
+      AND to_regprocedure('hospitality.guest_proof_slot(text,uuid,text,text,integer)') IS NULL
+      AND to_regprocedure('hospitality._bank_for_booking(hospitality.bookings)') IS NULL
+      AND to_regprocedure('hospitality.public_payment_methods()') IS NOT NULL
+      AND to_regprocedure('hospitality.public_payment_methods(date)') IS NULL
+      AND (SELECT prosrc NOT LIKE '%_transfer_state%' FROM pg_proc WHERE oid = 'hospitality.guest_payment_info(text,uuid)'::regprocedure)
+      AND NOT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-payment-proofs')"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m54.sql"
+schema_dump "$SCHEMA_DIR/after-m55-down.sql"
+if diff -q "$SCHEMA_DIR/m54.sql" "$SCHEMA_DIR/after-m55-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 54, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 54:"; diff "$SCHEMA_DIR/m54.sql" "$SCHEMA_DIR/after-m55-down.sql" | head -20; exit 1
+fi
 
 # ---------- LIC: digital licenses — tables, private bucket, pilot flag (migration 54) ----------
 expect "before the rollback: 4 license tables (server only), atomic consume, the pilot flag on no store" \
@@ -1529,6 +1583,11 @@ up "$M51"
 up "$M52"
 up "$M53"
 up "$M54"
+up "$M55"
+expect "the transfer proofs are back: table, private bucket, dated payment methods" \
+  "SELECT to_regclass('hospitality.payment_proofs') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-payment-proofs' AND NOT public)
+      AND to_regprocedure('hospitality.public_payment_methods(date)') IS NOT NULL"
 expect "the license module is back: tables, atomic consume, the pilot flag (on no store)" \
   "SELECT to_regclass('public.license_download_links') IS NOT NULL
       AND to_regprocedure('public.license_consume_download(text)') IS NOT NULL
@@ -1542,8 +1601,8 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 37 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state and the payment instructions), RLS on all, role admin, 6 flags off (incl. management)" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 37
+expect "Hospitality schema back: 38 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions and the transfer proofs), RLS on all, role admin, 6 flags off (incl. management)" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 38
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
       AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 6"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"

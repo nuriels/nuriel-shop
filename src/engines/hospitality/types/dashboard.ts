@@ -96,7 +96,9 @@ export type DashboardTaskKind =
   | "prices"
   | "site"
   | "plan"
-  | "open_dates";
+  | "open_dates"
+  /** שלב א' 5: אישורי העברה שהאורחים העלו וממתינים לבדיקה (נוסף בממשק, מ-payment_proofs_waiting) */
+  | "proofs";
 
 export interface DashboardTask {
   kind: DashboardTaskKind;

@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from "@/pl
 import { GroupCard } from "./GroupCard";
 import { PaymentsCard } from "./PaymentsCard";
 import { PhonePaymentCard } from "./PhonePaymentCard";
+import { ProofsCard } from "./ProofsCard";
 import {
   hospitalityApproveBooking,
   hospitalityBookingDetail,
@@ -357,6 +358,8 @@ function Booking({ b }: { b: BookingDetail }) {
       </Section>
 
       <PaymentsCard bookingId={b.id} today={b.today} timezone={ctx.business.timezone} />
+
+      <ProofsCard bookingId={b.id} timezone={ctx.business.timezone} />
 
       <Section title={`מדיניות ביטול${b.policy.name ? ` — ${b.policy.name}` : ""}`}>
         <p className="text-sm">

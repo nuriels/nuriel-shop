@@ -10,6 +10,7 @@ import {
   CircleCheckBig,
   Clock,
   CreditCard,
+  FileCheck,
   Globe,
   MailWarning,
   Receipt,
@@ -22,7 +23,8 @@ import {
 import { cn } from "@/platform/ui";
 import { hospitalityChannels } from "../../api/channels.functions";
 import { hospitalityDashboardTasks } from "../../api/dashboard.functions";
-import type { DashboardTaskKind } from "../../types/dashboard";
+import { hospitalityProofsWaiting } from "../../api/payments.functions";
+import type { DashboardTask, DashboardTaskKind } from "../../types/dashboard";
 import { CHANNEL_LABELS } from "../calendar/model";
 import { manageKeys } from "../lib/query-keys";
 import { ErrorState, IconTile, SectionCard, SkeletonBlock } from "../ui/kit";
@@ -40,6 +42,7 @@ const ICONS: Record<DashboardTaskKind, LucideIcon> = {
   site: Globe,
   plan: Receipt,
   open_dates: CalendarCheck,
+  proofs: FileCheck,
 };
 
 export function TasksCard({ canBookings }: { canBookings: boolean }) {
@@ -48,7 +51,27 @@ export function TasksCard({ canBookings }: { canBookings: boolean }) {
     queryFn: () => hospitalityDashboardTasks(),
     refetchInterval: 60_000,
   });
-  const items = query.data ? sortTasks(query.data.items) : [];
+  // שלב א' 5: אישורי העברה שממתינים לבדיקה — שאילתה נפרדת (הרשאת bookings), נכנסת לאותה רשימה
+  const proofs = useQuery({
+    queryKey: [...manageKeys.all, "dashboard", "proofs"],
+    queryFn: () => hospitalityProofsWaiting(),
+    enabled: canBookings,
+    refetchInterval: 60_000,
+  });
+  const proofTask: DashboardTask | null =
+    proofs.data && proofs.data.count > 0
+      ? {
+          kind: "proofs",
+          severity: "high",
+          count: proofs.data.count,
+          booking_id: proofs.data.booking_id,
+          booking_number: proofs.data.booking_number,
+        }
+      : null;
+  const items = query.data
+    ? sortTasks(proofTask ? [proofTask, ...query.data.items] : query.data.items)
+    : [];
+  const taskCount = (query.data?.count ?? 0) + (proofTask ? 1 : 0);
   const hasConflicts = items.some((t) => t.kind === "channels" && (t.conflicts ?? 0) > 0);
   // פירוט ההתנגשות הראשונה (יחידה · ערוץ · תאריכים) — רק כשיש כזו
   const channels = useQuery({
@@ -65,9 +88,9 @@ export function TasksCard({ canBookings }: { canBookings: boolean }) {
       title={
         <span className="flex items-center gap-2">
           דורש טיפול
-          {query.data && query.data.count > 0 && (
+          {query.data && taskCount > 0 && (
             <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-[var(--hm-warning-bg)] px-1.5 text-xs font-bold text-[var(--hm-warning)]">
-              {query.data.count}
+              {taskCount}
             </span>
           )}
         </span>
