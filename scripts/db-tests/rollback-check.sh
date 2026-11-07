@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_shabbat (57): rollback → העמודה shabbat_observant והמתג נעלמו; _settings_values בגרסה של 8 ו-_site_payload
+#     בגרסה של 42 מילה במילה; הסכמה זהה בדיוק ל-56
 #   • hosp_guest_area (56): rollback → קודי הכניסה, החיבורים ופונקציות "ההזמנות שלי" נעלמו;
 #     guest_payment_info / guest_set_payment_method / guest_proof_slot בגרסה של 55 מילה במילה; הסכמה זהה בדיוק ל-55
 #   • hosp_bank_transfer (55): הגנה (נעצר כשיש אישורי העברה / קבצים בדלי), rollback → הטבלה, הדלי
@@ -110,6 +112,7 @@ M53=20261106200000_sec_prv_guest_privacy
 M54=20261107100000_lic_digital_licenses
 M55=20261108100000_hosp_bank_transfer
 M56=20261108110000_hosp_guest_area
+M57=20261108120000_hosp_shabbat
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -130,6 +133,37 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- A6: "מתחם שומר שבת" (migration 57) ----------
+expect "before the rollback: the column (off everywhere), the switch for staff, the value on the site" \
+  "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'settings'
+                   AND column_name = 'shabbat_observant')
+      AND NOT EXISTS (SELECT 1 FROM hospitality.settings WHERE shabbat_observant)
+      AND has_function_privilege('authenticated', 'hospitality.settings_set_shabbat(boolean)', 'EXECUTE')
+      AND (SELECT prosrc LIKE '%shabbat_observant%' FROM pg_proc WHERE oid = 'hospitality._site_payload(uuid)'::regprocedure)"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M57" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M57"
+down "$M57"
+expect "the column and the switch are gone; the site payload and the settings values are the originals" \
+  "SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'settings'
+                       AND column_name = 'shabbat_observant')
+      AND to_regprocedure('hospitality.settings_set_shabbat(boolean)') IS NULL
+      AND (SELECT prosrc NOT LIKE '%shabbat%' FROM pg_proc WHERE oid = 'hospitality._site_payload(uuid)'::regprocedure)
+      AND (SELECT prosrc NOT LIKE '%shabbat%' FROM pg_proc WHERE oid = 'hospitality._settings_values(hospitality.settings)'::regprocedure)"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m56.sql"
+schema_dump "$SCHEMA_DIR/after-m57-down.sql"
+if diff -q "$SCHEMA_DIR/m56.sql" "$SCHEMA_DIR/after-m57-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 56, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 56:"; diff "$SCHEMA_DIR/m56.sql" "$SCHEMA_DIR/after-m57-down.sql" | head -20; exit 1
+fi
 
 # ---------- A2: the guest area "ההזמנות שלי" (migration 56) ----------
 expect "before the rollback: codes and sessions (functions only), every area function server-only, the 55 functions call the shared helpers" \
@@ -1622,6 +1656,10 @@ up "$M53"
 up "$M54"
 up "$M55"
 up "$M56"
+up "$M57"
+expect "the shabbat switch is back (off everywhere)" \
+  "SELECT to_regprocedure('hospitality.settings_set_shabbat(boolean)') IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM hospitality.settings WHERE shabbat_observant)"
 expect "the guest area is back: codes, sessions, the list for the server only" \
   "SELECT to_regclass('hospitality.guest_sessions') IS NOT NULL
       AND has_function_privilege('service_role', 'hospitality.guest_area_bookings(text)', 'EXECUTE')

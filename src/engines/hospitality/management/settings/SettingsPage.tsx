@@ -45,6 +45,7 @@ import {
 } from "./model";
 import { DaysField, EmailListField, SelectField, TextField } from "../lib/fields";
 import { PaymentInstructionsCard } from "./PaymentInstructionsCard";
+import { ShabbatCard } from "./ShabbatCard";
 
 interface Notice {
   remoteChanged: SettingsKey[];
@@ -83,6 +84,10 @@ export function SettingsPage() {
   return (
     <>
       <SettingsForm initial={settings.data} />
+      {/* שלב א' 6: "מתחם שומר שבת" — מתג שנשמר מיד */}
+      <div className="mx-auto mt-6 w-full max-w-3xl">
+        <ShabbatCard view={settings.data} />
+      </div>
       {/* מיגרציה 37: תשלום מאורחים — טופס נפרד (שמירה משלו, בעלי העסק בלבד) */}
       <div className="mx-auto mt-6 w-full max-w-3xl">
         <PaymentInstructionsCard />

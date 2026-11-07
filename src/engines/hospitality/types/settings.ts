@@ -45,6 +45,8 @@ export interface SettingsValues {
   currency: string;
   timezone: string;
   payment_hold_minutes: number;
+  /** שלב א' 6 (מיגרציה 57): המתחם שומר שבת — נשמר בנפרד (settings_set_shabbat) */
+  shabbat_observant?: boolean;
 }
 
 export interface SettingsView {

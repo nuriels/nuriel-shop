@@ -125,6 +125,8 @@ export interface PublicBusiness {
   timezone: string;
   booking_mode: "request" | "instant" | string;
   approval_hours: number;
+  /** שלב א' 6 (מיגרציה 57): תג "המתחם שומר שבת" בכותרת ובתחתית, והודעה בהזמנה */
+  shabbat_observant?: boolean;
 }
 
 export interface PublicSite {

@@ -2,6 +2,7 @@
 // קרדיט נוריאל (D6 / F1 — מחוץ לתוכן, לא ניתן להסרה) ושורת פעולות קבועה בנייד.
 import { Link, Outlet, useLoaderData, useLocation } from "@tanstack/react-router";
 import { Mail, Menu, MessageCircle, Phone, UserRound } from "lucide-react";
+import { ShabbatBadge } from "./components/ShabbatBadge";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { NurielCredit } from "@/platform/branding/NurielCredit";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger, cn } from "@/platform/ui";
@@ -182,6 +183,13 @@ function SiteHeader() {
           ))}
         </nav>
         <div className="flex items-center gap-2">
+          {/* שלב א' 6: "המתחם שומר שבת" — רק כשבעל העסק סימן */}
+          {site.business.shabbat_observant && (
+            <ShabbatBadge
+              testId="shabbat-badge-header"
+              className={cn("hidden px-2 xl:inline-flex", overlay ? "opacity-95" : "opacity-85")}
+            />
+          )}
           {/* שלב א' 2: "ההזמנות שלי" — כניסת אורחים בקוד למייל */}
           <Link
             to="/stay/account"
@@ -238,6 +246,9 @@ function SiteHeader() {
             >
               <SheetTitle className="font-display border-b border-border px-6 py-5 text-xl font-medium">
                 {site.business.name}
+                {site.business.shabbat_observant && (
+                  <ShabbatBadge className="mt-1 flex font-sans text-sm font-normal opacity-80" />
+                )}
               </SheetTitle>
               <nav aria-label={t.nav.menu} className="flex flex-col px-3 py-4">
                 {site.booking_open && (
@@ -338,6 +349,12 @@ function SiteFooter() {
         <div>
           <p className="font-display text-2xl font-medium">{b.name}</p>
           {b.address && <p className="mt-3 text-sm opacity-75">{b.address}</p>}
+          {b.shabbat_observant && (
+            <ShabbatBadge
+              testId="shabbat-badge-footer"
+              className="mt-4 rounded-full border border-white/25 px-3 py-1 opacity-90"
+            />
+          )}
         </div>
         <nav aria-label={t.nav.menu} className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
           {navItems(t).map((i) => (

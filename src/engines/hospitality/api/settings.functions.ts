@@ -33,3 +33,14 @@ export const hospitalityUpdateSettings = createServerFn({ method: "POST" })
       throw error;
     }
   });
+
+/** שלב א' 6: "מתחם שומר שבת" — שמירה מיידית (הרשאת settings במסד, נרשם ביומן) */
+export const hospitalitySetShabbat = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => {
+    if (typeof input?.["on"] !== "boolean") throw new Error("ערך לא תקין");
+    return { on: input["on"] as boolean };
+  })
+  .handler(async ({ data }): Promise<SettingsView> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<SettingsView>("settings_set_shabbat", { _on: data.on });
+  });

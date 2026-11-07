@@ -42,6 +42,11 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} הוסיף/ה את ${target} לצוות הניהול`;
     case "team.manager_removed":
       return `${actor} הסיר/ה את ${target} מצוות הניהול`;
+    // שלב א' 6
+    case "settings.shabbat_on":
+      return `${actor} סימן/ה שהמתחם שומר שבת`;
+    case "settings.shabbat_off":
+      return `${actor} ביטל/ה את הסימון "המתחם שומר שבת"`;
     case "settings.updated": {
       const fields = Object.keys(entry.changes)
         .filter((k): k is SettingsKey => (SETTINGS_KEYS as readonly string[]).includes(k))

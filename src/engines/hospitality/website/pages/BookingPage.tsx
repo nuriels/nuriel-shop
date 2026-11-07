@@ -25,6 +25,7 @@ import type { PublicUnit } from "../../types/website";
 import { AvailabilityCalendar, type DateRange } from "../components/AvailabilityCalendar";
 import { Photo } from "../components/Photo";
 import { useCopy } from "../copy";
+import { CandlesIcon } from "../components/ShabbatBadge";
 import { nightsBetween } from "../lib/dates";
 import {
   findUnit,
@@ -811,6 +812,16 @@ function QuoteDetails({
           </p>
         )}
       </dl>
+      {/* שלב א' 6: המתחם שומר שבת — לפני השליחה */}
+      {site.business.shabbat_observant && (
+        <p
+          className="flex items-start gap-2 rounded-sm border border-border px-3 py-2 text-xs leading-relaxed"
+          data-testid="shabbat-notice"
+        >
+          <CandlesIcon className="mt-0.5" />
+          {t.shabbat.notice}
+        </p>
+      )}
       <p className="rounded-sm bg-[var(--site-sand)] px-3 py-2 text-xs leading-relaxed">
         {site.business.booking_mode === "instant"
           ? t.book.instantNote
