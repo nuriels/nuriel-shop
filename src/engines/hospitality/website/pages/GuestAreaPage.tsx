@@ -44,9 +44,11 @@ export function GuestAreaPage() {
     retry: false,
     staleTime: 30_000,
   });
+  // נגישות (IS 5568 2.4.10): גם בזמן הטעינה — ובשרת, שמגיש את מצב הטעינה — העמוד נפתח בכותרת שלו
   if (list.isPending)
     return (
       <Frame>
+        <h1 className="font-display mb-6 text-3xl font-medium">{t.account.title}</h1>
         <Notice>{t.account.loading}</Notice>
       </Frame>
     );
@@ -318,6 +320,7 @@ function AreaBooking({ id }: { id: string }) {
     return (
       <Frame>
         {back}
+        <h1 className="font-display mb-6 text-3xl font-medium">{t.account.title}</h1>
         <Notice>{t.my.loading}</Notice>
       </Frame>
     );
@@ -325,6 +328,7 @@ function AreaBooking({ id }: { id: string }) {
     return (
       <Frame>
         {back}
+        <h1 className="font-display mb-6 text-3xl font-medium">{t.account.title}</h1>
         <Notice>{errText(detail.error, t.my.notFound)}</Notice>
       </Frame>
     );
