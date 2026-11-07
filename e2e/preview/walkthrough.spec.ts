@@ -125,7 +125,7 @@ test.beforeAll(async () => {
   await new Promise((resolve) => setTimeout(resolve, 16_000));
 });
 
-test("01 platform admin: the stores list, then into a Hospitality site's management", async ({
+test("01 platform admin: the stores list, the hospitality sites, then into a site's management", async ({
   page,
   context,
 }, info) => {
@@ -136,11 +136,19 @@ test("01 platform admin: the stores list, then into a Hospitality site's managem
   await page.locator("#password").fill(DEMO_PASSWORD);
   await page.getByRole("button", { name: "התחבר", exact: true }).click();
   await expect(page).not.toHaveURL(/\/login/, { timeout: 20_000 });
+  // שלב א' 4: רשימת החנויות — חנויות אונליין בלבד; אתרי האירוח במסך משלהם
   await page.goto(`${PLATFORM}/platform`);
-  const row = page.getByRole("row", { name: /צימרי הגליל/ });
-  await expect(row).toBeVisible();
+  const elsewhere = page.getByTestId("hospitality-elsewhere");
+  await expect(elsewhere).toBeVisible();
+  await expect(page.getByRole("row", { name: /צימרי הגליל/ })).toHaveCount(0);
   await pause(page, 900);
   await shot(page, p, "01-platform-stores");
+  await elsewhere.getByRole("link", { name: "לאתרי האירוח" }).click();
+  await expect(page).toHaveURL(/\/platform\/hospitality/);
+  const row = page.locator('[data-site="demo-zimmer"]');
+  await expect(row).toContainText("צימרי הגליל");
+  await pause(page, 900);
+  await shot(page, p, "01b-platform-hospitality-sites");
   // הכפתור פותח את כתובת האתר כמו בשרת אמיתי (https://<site>.shop.localhost, בלי פורט);
   // מקומית האפליקציה על http ופורט 3100 — ההקלטה מפנה לשם (האפליקציה עצמה לא משתנה)
   await context.route(/^https:\/\/[a-z0-9-]+\.shop\.localhost\//, (route) => {

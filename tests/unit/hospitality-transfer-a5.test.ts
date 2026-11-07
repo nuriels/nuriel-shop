@@ -19,8 +19,11 @@ const ID = "0f0e0d0c-0b0a-4908-8706-050403020100";
 const TOKEN = "a".repeat(64);
 const ascii = (s: string) => new TextEncoder().encode(s);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
-const file = (data: Uint8Array | string, name: string, type = "application/octet-stream") =>
-  new File([typeof data === "string" ? ascii(data) : data], name, { type });
+const file = (
+  data: Uint8Array<ArrayBuffer> | string,
+  name: string,
+  type = "application/octet-stream",
+) => new File([typeof data === "string" ? ascii(data) : data], name, { type });
 
 describe("the guest's payment method", () => {
   it("bank / bit / phone / other; empty is 'not chosen'; anything else is refused", () => {

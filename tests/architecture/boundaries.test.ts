@@ -94,6 +94,8 @@ const PLATFORM_ADAPTERS: [adapter: string, wraps: (target: string) => boolean][]
     (t) => t === "src/lib/portal" || t === "src/integrations/supabase/tenant.server",
   ],
   ["src/platform/media/remote-image.server.ts", (t) => t === "src/server/services/image-fetch"],
+  // שלב א' 4: "היכנס לניהול" מכרטיס אתר אירוח בפאנל — אותו קוד כניסה חד-פעמי של רשימת החנויות
+  ["src/platform/auth/admin-handoff.ts", (t) => t === "src/lib/handoff.functions"],
   ["src/platform/email/send.server.ts", (t) => t === "src/lib/email.server"],
   [
     "src/platform/auth/login.ts",

@@ -6,7 +6,18 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { BedDouble, Copy, ExternalLink, Gem, LifeBuoy, Plus, Store, UserPlus } from "lucide-react";
+import {
+  BedDouble,
+  Copy,
+  ExternalLink,
+  Gem,
+  LifeBuoy,
+  LogIn,
+  Plus,
+  Store,
+  UserPlus,
+} from "lucide-react";
+import { createAdminHandoff } from "@/platform/auth/admin-handoff";
 import { toast } from "sonner";
 import {
   Badge,
@@ -612,6 +623,30 @@ function SiteCard(props: { site: HospitalitySiteRow; onOwner: () => void; onPlan
   const s = props.site;
   const refresh = useRefresh();
   const [busy, setBusy] = useState(false);
+  const [entering, setEntering] = useState(false);
+  /**
+   * "היכנס לניהול" (כמו ברשימת החנויות): קוד כניסה חד-פעמי לאתר, ופתיחת אזור הניהול שלו בלשונית
+   * חדשה — כמנהל הפלטפורמה, בלי להירשם בצוות של העסק. הכניסה נרשמת בתיק הלקוח.
+   */
+  const enter = async () => {
+    // הלשונית נפתחת מיד, בתוך הלחיצה — אחרת חוסם החלונות הקופצים עוצר אותה
+    const tab = window.open("about:blank", "_blank");
+    setEntering(true);
+    try {
+      const { url } = await createAdminHandoff({ data: { tenantId: s.id } });
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = url;
+      } else {
+        window.location.assign(url);
+      }
+    } catch (error) {
+      tab?.close();
+      toast.error(errorText(error));
+    } finally {
+      setEntering(false);
+    }
+  };
   const setSite = async (key: "frontend" | "booking", enabled: boolean) => {
     setBusy(true);
     try {
@@ -740,6 +775,18 @@ function SiteCard(props: { site: HospitalitySiteRow; onOwner: () => void; onPlan
             <Button type="button" variant="outline" className="min-h-11" onClick={props.onPlan}>
               שינוי חבילה
             </Button>
+            {s.site_flags.backend && s.site_flags.management && (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 gap-1.5"
+                onClick={() => void enter()}
+                disabled={entering}
+              >
+                <LogIn className="size-4" aria-hidden="true" />
+                היכנס לניהול
+              </Button>
+            )}
             {s.site_url && s.frontend_enabled && (
               <a
                 href={s.site_url}

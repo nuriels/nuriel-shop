@@ -58,6 +58,7 @@ const PLATFORM_AUTH_ADAPTERS = [
   "src/platform/media/pwa-icons.server.ts",
   "src/platform/email/send.server.ts",
   "src/platform/tenancy/portal.server.ts",
+  "src/platform/auth/admin-handoff.ts",
 ];
 // מתאמי הנתיבים של Hospitality: קבצי src/routes שהמסגרת דורשת, ונחשבים קוד של המנוע
 const HOSPITALITY_ROUTES = [
@@ -125,7 +126,7 @@ export default tseslint.config(
     [],
     {
       regex:
-        "^@/(?!lib/auth\\.functions$|lib/login-code\\.functions$|lib/rate-limit\\.server$|lib/email\\.server$|lib/pwa-icon-render\\.server$|lib/portal$|server/services/image-fetch$)(engines|app|routes|components|hooks|lib|server)(/|$)|^\\.\\./\\.\\./",
+        "^@/(?!lib/auth\\.functions$|lib/login-code\\.functions$|lib/rate-limit\\.server$|lib/email\\.server$|lib/pwa-icon-render\\.server$|lib/portal$|lib/handoff\\.functions$|server/services/image-fetch$)(engines|app|routes|components|hooks|lib|server)(/|$)|^\\.\\./\\.\\./",
     },
     PLATFORM_MESSAGE,
     "/^@\\/(engines|app|routes|components|hooks|lib|server)(\\/|$)|^\\.\\.\\/\\.\\.\\//",
