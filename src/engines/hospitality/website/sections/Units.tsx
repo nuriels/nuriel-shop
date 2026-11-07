@@ -53,7 +53,8 @@ export function Units({
         ) : (
           <ul
             className={cn(
-              "mt-14 grid gap-8",
+              // grid-cols-1 (minmax(0,1fr)): כרטיס לא מרחיב את הרשת מעבר לרוחב המסך גם בטקסט מוגדל
+              "mt-14 grid grid-cols-1 gap-8",
               variant === "landscape"
                 ? "lg:grid-cols-2"
                 : units.length === 1
@@ -159,7 +160,7 @@ function UnitCard({ unit, roomType }: { unit: PublicUnit; roomType?: TypeListing
         )}
         <div
           className={cn(
-            "mt-2 flex items-end justify-between gap-4 border-t border-border pt-4",
+            "mt-2 flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-t border-border pt-4",
             soft && "flex-col items-center",
           )}
         >

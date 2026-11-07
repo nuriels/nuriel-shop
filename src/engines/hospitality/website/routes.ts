@@ -22,6 +22,7 @@ import { findPackage, packageImages, packageUnit } from "./lib/packages";
 import { findUnit } from "./lib/format";
 import { findType } from "./lib/listing";
 import { SiteLayout } from "./SiteLayout";
+import { A11Y_BOOTSTRAP } from "./a11y/prefs";
 
 type ParentMatch = Promise<{ loaderData?: unknown }>;
 
@@ -29,6 +30,8 @@ export const siteLayoutRoute = {
   beforeLoad: hospitalitySiteOnly,
   // כותרות אבטחה לכל עמודי האתר (security/headers.ts)
   headers: () => SITE_SECURITY_HEADERS,
+  // כפתור הנגישות: ההעדפות השמורות מוחלות ב-<head>, לפני הציור הראשון (בלי הבהוב של העיצוב הרגיל)
+  head: () => ({ scripts: [{ children: A11Y_BOOTSTRAP }] }),
   // אתר שנסגר (הדגל כבוי, או עוד לא פתוח) → 404 "האתר עדיין לא פתוח", לא שגיאת שרת
   loader: async (): Promise<PublicSite> => {
     try {

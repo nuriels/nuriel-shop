@@ -34,15 +34,19 @@ export function CandlesIcon({ className }: { className?: string }) {
 export function ShabbatBadge({
   className,
   testId = "shabbat-badge",
+  wideOnly = false,
 }: {
   className?: string;
   testId?: string;
+  /** בכותרת: מוסתר בטקסט מוגדל (כפתור הנגישות), כשהכותרת עוברת לתפריט המקוצר */
+  wideOnly?: boolean;
 }) {
   const t = useCopy();
   return (
     <span
       className={cn("inline-flex items-center gap-1.5 text-sm", className)}
       data-testid={testId}
+      {...(wideOnly ? { "data-wide-nav": "" } : {})}
     >
       <CandlesIcon />
       {t.shabbat.badge}

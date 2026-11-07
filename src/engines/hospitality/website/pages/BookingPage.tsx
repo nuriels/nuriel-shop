@@ -30,6 +30,7 @@ import { Photo } from "../components/Photo";
 import { useCopy } from "../copy";
 import { CandlesIcon } from "../components/ShabbatBadge";
 import { addDays, nightsBetween } from "../lib/dates";
+import { prefersReducedMotion } from "../a11y/prefs";
 import {
   findUnit,
   money,
@@ -346,8 +347,7 @@ function UnitBooking() {
                 disabled={!canContinue}
                 onClick={() => {
                   setStep("details");
-                  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-                  window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+                  window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
                 }}
                 className="inline-flex h-12 w-full items-center justify-center rounded-sm bg-primary px-8 text-base font-medium text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
               >
@@ -1392,8 +1392,7 @@ function PackageBooking({ pkg }: { pkg: PublicPackage }) {
                 disabled={!canContinue}
                 onClick={() => {
                   setStep("details");
-                  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-                  window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+                  window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
                 }}
                 className="inline-flex h-12 w-full items-center justify-center rounded-sm bg-primary px-8 text-base font-medium text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
               >

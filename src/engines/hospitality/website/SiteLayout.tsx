@@ -5,8 +5,17 @@ import { Mail, Menu, MessageCircle, Phone, UserRound } from "lucide-react";
 import { ShabbatBadge } from "./components/ShabbatBadge";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { NurielCredit } from "@/platform/branding/NurielCredit";
-import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger, cn } from "@/platform/ui";
+import { cn } from "@/platform/ui";
 import type { PublicSite } from "../types/website";
+import { A11Y_CSS } from "./a11y/prefs";
+import { AccessibilityWidget } from "./components/AccessibilityWidget";
+import {
+  SidePanel,
+  SidePanelClose,
+  SidePanelContent,
+  SidePanelTitle,
+  SidePanelTrigger,
+} from "./components/SidePanel";
 import { CopyContext, siteCopy, useCopy } from "./copy";
 import { findUnit, telHref, whatsappHref } from "./lib/format";
 import { FOOTER_BAR_SPACE, hasActionBar } from "./lib/action-bar";
@@ -31,7 +40,10 @@ function pageOf(pathname: string, site: PublicSite): SitePage {
 
 /** משקל ומרווח של גופן התצוגה לפי הערכה (מעל ברירת המחדל של .font-display) — קבוע, בלי קלט */
 const DISPLAY_CSS =
-  "[data-site-theme] .font-display{font-family:var(--site-display-font);font-weight:var(--site-display-weight);letter-spacing:var(--site-display-tracking)}";
+  "[data-site-theme] .font-display{font-family:var(--site-display-font);font-weight:var(--site-display-weight);letter-spacing:var(--site-display-tracking)}" +
+  // מילה ארוכה (שם עסק בכותרת גדולה, אימייל, כתובת אתר) נשברת בטלפון ובטקסט מוגדל — במקום להרחיב
+  // את העמוד ולגרום לגלילה לצדדים (נמצא בבדיקת הנגישות: אימייל ארוך + טקסט 150%)
+  "[data-site-theme] :is(h1,h2,a[href^='mailto:'],[dir='ltr']){overflow-wrap:anywhere}";
 
 export function SiteLayout(): ReactNode {
   const site = useLoaderData({ strict: false }) as PublicSite;
@@ -86,7 +98,8 @@ export function SiteShell({
           className="min-h-screen bg-background font-sans text-foreground antialiased"
           data-site-theme={theme.id}
         >
-          <style>{DISPLAY_CSS + SIGNATURE_CSS}</style>
+          {/* העדפות כפתור הנגישות (מחלקות hosp-a11y-* על <html>) — כאן, ולא ב-styles.css של החנויות */}
+          <style>{DISPLAY_CSS + SIGNATURE_CSS + A11Y_CSS}</style>
           {/* React מעביר את הגיליון ל-<head> (גם ב-SSR) ולא טוען אותו פעמיים */}
           {fontSheet && <link rel="stylesheet" href={fontSheet} precedence="default" />}
           {/* נגישות: הקישור הראשון בעמוד — מדלג על התפריט ישר לתוכן (מוצג רק בפוקוס מהמקלדת) */}
@@ -102,6 +115,7 @@ export function SiteShell({
           </main>
           <SiteFooter />
           <MobileActionBar />
+          <AccessibilityWidget />
         </div>
       </SiteContext.Provider>
     </CopyContext.Provider>
@@ -166,14 +180,18 @@ function SiteHeader() {
             </span>
           )}
         </Link>
-        <nav aria-label={t.nav.menu} className="hidden items-center gap-7 text-sm lg:flex">
+        <nav
+          aria-label={t.nav.menu}
+          className="hidden items-center gap-7 text-sm lg:flex"
+          data-wide-nav=""
+        >
           {items.map((i) => (
             <Link
               key={i.hash}
               to="/stay"
               hash={i.hash}
               className={cn(
-                "relative py-1 transition-opacity hover:opacity-100",
+                "relative py-1 whitespace-nowrap transition-opacity hover:opacity-100",
                 overlay ? "opacity-90" : "opacity-80",
                 "after:absolute after:inset-x-0 after:-bottom-0.5 after:h-px after:origin-center after:scale-x-0 after:bg-current after:transition-transform hover:after:scale-x-100",
               )}
@@ -188,15 +206,17 @@ function SiteHeader() {
             <ShabbatBadge
               testId="shabbat-badge-header"
               className={cn("hidden px-2 xl:inline-flex", overlay ? "opacity-95" : "opacity-85")}
+              wideOnly
             />
           )}
           {/* שלב א' 2: "ההזמנות שלי" — כניסת אורחים בקוד למייל */}
           <Link
             to="/stay/account"
             className={cn(
-              "hidden min-h-10 items-center gap-2 rounded-sm px-3 text-sm transition-opacity hover:opacity-100 md:inline-flex",
+              "hidden min-h-10 items-center gap-2 rounded-sm px-3 text-sm whitespace-nowrap transition-opacity hover:opacity-100 md:inline-flex",
               overlay ? "opacity-90" : "opacity-80",
             )}
+            data-wide-nav=""
           >
             <UserRound className="size-4" aria-hidden="true" />
             {t.account.link}
@@ -204,8 +224,9 @@ function SiteHeader() {
           {site.business.phone && (
             <a
               href={telHref(site.business.phone)}
+              data-wide-nav=""
               className={cn(
-                "hidden items-center gap-2 rounded-sm border px-4 py-2 text-sm transition-colors md:inline-flex",
+                "hidden items-center gap-2 rounded-sm border px-4 py-2 text-sm whitespace-nowrap transition-colors md:inline-flex",
                 overlay
                   ? "border-white/50 hover:bg-white/10"
                   : "border-foreground/20 hover:bg-foreground/5",
@@ -219,7 +240,7 @@ function SiteHeader() {
             <Link
               to="/stay/book"
               className={cn(
-                "hidden h-10 items-center rounded-sm px-5 text-sm font-medium transition-colors sm:inline-flex",
+                "hidden h-10 items-center rounded-sm px-5 text-sm font-medium whitespace-nowrap transition-colors sm:inline-flex",
                 overlay
                   ? "bg-white text-[var(--site-deep)] hover:bg-white/90"
                   : "bg-primary text-primary-foreground hover:opacity-90",
@@ -228,46 +249,48 @@ function SiteHeader() {
               {t.nav.book}
             </Link>
           )}
-          <Sheet>
-            <SheetTrigger
+          <SidePanel>
+            <SidePanelTrigger
               className={cn(
                 "inline-flex size-11 items-center justify-center rounded-sm lg:hidden",
                 overlay ? "hover:bg-white/10" : "hover:bg-foreground/5",
               )}
               aria-label={t.nav.menu}
+              data-compact-nav=""
             >
               <Menu className="size-6" aria-hidden="true" />
-            </SheetTrigger>
-            <SheetContent
-              side="right"
-              className="w-[85vw] max-w-sm border-s-0 bg-background p-0"
+            </SidePanelTrigger>
+            <SidePanelContent
+              closeLabel={t.nav.closeMenu}
+              className="w-[85vw]"
               style={themeStyle(theme, design.colors[theme.id], design.fonts?.[theme.id])}
               dir={t.dir}
+              aria-describedby={undefined}
             >
-              <SheetTitle className="font-display border-b border-border px-6 py-5 text-xl font-medium">
+              <SidePanelTitle className="font-display border-b border-border px-6 py-5 pe-16 text-xl font-medium">
                 {site.business.name}
                 {site.business.shabbat_observant && (
                   <ShabbatBadge className="mt-1 flex font-sans text-sm font-normal opacity-80" />
                 )}
-              </SheetTitle>
+              </SidePanelTitle>
               <nav aria-label={t.nav.menu} className="flex flex-col px-3 py-4">
                 {site.booking_open && (
-                  <SheetClose asChild>
+                  <SidePanelClose asChild>
                     <Link
                       to="/stay/book"
                       className="mb-2 rounded-sm bg-primary px-3 py-3 text-center text-lg font-medium text-primary-foreground"
                     >
                       {t.nav.book}
                     </Link>
-                  </SheetClose>
+                  </SidePanelClose>
                 )}
-                <SheetClose asChild>
+                <SidePanelClose asChild>
                   <Link to="/stay" className="rounded-sm px-3 py-3 text-lg hover:bg-muted">
                     {t.nav.home}
                   </Link>
-                </SheetClose>
+                </SidePanelClose>
                 {items.map((i) => (
-                  <SheetClose asChild key={i.hash}>
+                  <SidePanelClose asChild key={i.hash}>
                     <Link
                       to="/stay"
                       hash={i.hash}
@@ -275,9 +298,9 @@ function SiteHeader() {
                     >
                       {i.label}
                     </Link>
-                  </SheetClose>
+                  </SidePanelClose>
                 ))}
-                <SheetClose asChild>
+                <SidePanelClose asChild>
                   <Link
                     to="/stay/account"
                     className="mt-2 inline-flex items-center gap-2 rounded-sm border-t border-border px-3 pt-4 pb-3 text-lg hover:bg-muted"
@@ -285,11 +308,11 @@ function SiteHeader() {
                     <UserRound className="size-5" aria-hidden="true" />
                     {t.account.link}
                   </Link>
-                </SheetClose>
+                </SidePanelClose>
               </nav>
               <ContactButtons className="border-t border-border px-6 py-5" />
-            </SheetContent>
-          </Sheet>
+            </SidePanelContent>
+          </SidePanel>
         </div>
       </div>
     </header>
