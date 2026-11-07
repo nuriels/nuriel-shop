@@ -156,16 +156,23 @@ export const hospitalityPlatformSetPlan = createServerFn({ method: "POST" })
     const { platformRpc } = await import("../server/platform-admin.server");
     // בתוקף עד סוף היום שנבחר (כולל)
     const end = data.until ? `${data.until}T23:59:59Z` : null;
+    // שלב א' 4: המסך מציג את התאריך הנוכחי — מה שנשלח הוא מה שנבחר (גם ריק = בלי תאריך סיום)
     await platformRpc("admin_set_subscription", {
       _tenant_id: data.siteId,
       _plan: data.plan,
-      _status: data.plan === "trial" ? "trialing" : "active",
+      _status: data.status,
       _trial_ends_at: data.plan === "trial" ? end : null,
       _current_period_end: data.plan === "trial" ? null : end,
-      // יחידות נוספות שכבר נקנו — נשארות
       _extra_units: data.extraUnits,
-      _note: "עודכן מ'ניהול Hospitality'",
+      _note: "עודכן מ'אתרי אירוח' בפאנל הפלטפורמה",
     });
+    // מקומות מנהלים נוספים — פונקציה נפרדת (מיגרציה 7), רק כשנשלח מספר
+    if (data.extraManagers !== null) {
+      await platformRpc("admin_set_extra_managers", {
+        _tenant_id: data.siteId,
+        _extra: data.extraManagers,
+      });
+    }
     return { saved: true };
   });
 

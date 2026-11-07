@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_platform_separation (58): rollback → platform_list_tenants (כל האתרים) ו-admin_sites בגרסאות הקודמות מילה
+#     במילה; הסכמה זהה בדיוק ל-57
 #   • hosp_shabbat (57): rollback → העמודה shabbat_observant והמתג נעלמו; _settings_values בגרסה של 8 ו-_site_payload
 #     בגרסה של 42 מילה במילה; הסכמה זהה בדיוק ל-56
 #   • hosp_guest_area (56): rollback → קודי הכניסה, החיבורים ופונקציות "ההזמנות שלי" נעלמו;
@@ -113,6 +115,7 @@ M54=20261107100000_lic_digital_licenses
 M55=20261108100000_hosp_bank_transfer
 M56=20261108110000_hosp_guest_area
 M57=20261108120000_hosp_shabbat
+M58=20261108130000_hosp_platform_separation
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -133,6 +136,31 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- A4: the platform panel keeps stores and hospitality sites apart (migration 58) ----------
+expect "before the rollback: the stores list is online stores only; the site list has the plan screen's fields" \
+  "SELECT (SELECT prosrc LIKE '%site_type = ''ecommerce''%' FROM pg_proc WHERE oid = 'public.platform_list_tenants()'::regprocedure)
+      AND (SELECT prosrc LIKE '%current_period_end%' FROM pg_proc WHERE oid = 'hospitality.admin_sites()'::regprocedure)"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M58" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M58"
+down "$M58"
+expect "both functions are the originals" \
+  "SELECT (SELECT prosrc NOT LIKE '%site_type%' FROM pg_proc WHERE oid = 'public.platform_list_tenants()'::regprocedure)
+      AND (SELECT prosrc NOT LIKE '%current_period_end%' FROM pg_proc WHERE oid = 'hospitality.admin_sites()'::regprocedure)"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m57.sql"
+schema_dump "$SCHEMA_DIR/after-m58-down.sql"
+if diff -q "$SCHEMA_DIR/m57.sql" "$SCHEMA_DIR/after-m58-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 57, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 57:"; diff "$SCHEMA_DIR/m57.sql" "$SCHEMA_DIR/after-m58-down.sql" | head -20; exit 1
+fi
 
 # ---------- A6: "מתחם שומר שבת" (migration 57) ----------
 expect "before the rollback: the column (off everywhere), the switch for staff, the value on the site" \
@@ -1657,6 +1685,9 @@ up "$M54"
 up "$M55"
 up "$M56"
 up "$M57"
+up "$M58"
+expect "the stores list is online stores only again" \
+  "SELECT prosrc LIKE '%site_type = ''ecommerce''%' FROM pg_proc WHERE oid = 'public.platform_list_tenants()'::regprocedure"
 expect "the shabbat switch is back (off everywhere)" \
   "SELECT to_regprocedure('hospitality.settings_set_shabbat(boolean)') IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM hospitality.settings WHERE shabbat_observant)"

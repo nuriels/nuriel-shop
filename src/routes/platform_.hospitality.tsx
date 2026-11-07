@@ -4,6 +4,8 @@ import { PlatformHospitalityPage } from "@/engines/hospitality/platform-admin/Pl
 
 export const Route = createFileRoute("/platform_/hospitality")({
   ssr: false,
-  head: () => ({ meta: [{ title: "ניהול Hospitality" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({
+    meta: [{ title: "אתרי אירוח (Hospitality)" }, { name: "robots", content: "noindex" }],
+  }),
   component: PlatformHospitalityPage,
 });

@@ -8,7 +8,13 @@ test.describe("platform (super admin) dashboard", () => {
     await expect(page.getByText("ניהול הפלטפורמה").first()).toBeVisible();
     await expect(page.getByText("הקמת חנות חדשה")).toBeVisible();
     await expect(page.getByText(`${STORE_B.slug}.shop.localhost`).first()).toBeVisible();
-    for (const item of ["חנויות", "תמיכה", "חבילות ומחירים", "בקשות שדרוג ותוספים"]) {
+    for (const item of [
+      "חנויות אונליין",
+      "תמיכה",
+      "חבילות לחנויות",
+      "בקשות שדרוג ותוספים",
+      "אתרי אירוח (Hospitality)",
+    ]) {
       await expect(page.getByText(item, { exact: true }).first()).toBeVisible();
     }
   });

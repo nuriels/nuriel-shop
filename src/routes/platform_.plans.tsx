@@ -144,10 +144,11 @@ function PlansEditor() {
         <div>
           <h2 className="flex items-center gap-2 text-2xl font-bold">
             <Gem className="size-6 text-primary" aria-hidden="true" />
-            חבילות ומחירים
+            חבילות ומחירים לחנויות אונליין
           </h2>
           <p className="text-sm text-muted-foreground">
-            מה שבעלי החנויות רואים ב"המנוי שלי": שמות, מחירים ופיצ'רים.
+            מה שבעלי החנויות רואים ב"המנוי שלי": שמות, מחירים ופיצ'רים. החבילות של אתרי האירוח —
+            במסך "אתרי אירוח (Hospitality)".
           </p>
         </div>
         <div className="flex items-center gap-2">

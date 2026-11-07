@@ -67,6 +67,10 @@ export interface HospitalitySiteRow {
   subscription_status: string;
   subscription_active: boolean;
   trial_ends_at: string | null;
+  /** שלב א' 4 (מיגרציה 58): סיום מנוי בתשלום; מקומות מנהלים נוספים ומגבלה */
+  current_period_end?: string | null;
+  extra_managers?: number;
+  managers_limit?: number | null;
   units_active: number;
   units_limit: number | null;
   extra_units: number;

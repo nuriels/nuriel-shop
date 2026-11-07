@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -152,10 +152,22 @@ function PlatformConsole({
         </Card>
       )}
 
+      {/* שלב א' 4: אתרי האירוח לא ברשימה הזו — יש להם מסך, חבילות ומחירים משלהם */}
+      <Card className="border-dashed" data-testid="hospitality-elsewhere">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4 text-sm">
+          <span>
+            אתרי האירוח (צימרים) לא מופיעים כאן — הם מנוהלים בנפרד, כולל החבילות והמחירים שלהם.
+          </span>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/platform/hospitality">לאתרי האירוח</Link>
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div className="space-y-1.5">
-            <CardTitle>חנויות ({stores.length})</CardTitle>
+            <CardTitle>חנויות אונליין ({stores.length})</CardTitle>
             <CardDescription>
               {active} פעילות · {suspended} מוקפאות · {trials} בניסיון · {paying} משלמות
               {expired > 0 && (

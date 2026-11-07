@@ -75,11 +75,17 @@ export function parseSetOwner(input: Raw): { siteId: string; email: string; name
   return { siteId: uuid(i["siteId"], "האתר"), email, name };
 }
 
+/** שלב א' 4: מצב מנוי בתשלום שמנהל הפלטפורמה בוחר (ניסיון — לפי החבילה) */
+export const PAID_STATUSES = ["active", "past_due", "canceled"] as const;
+export type PaidStatus = (typeof PAID_STATUSES)[number];
+
 export function parseSetPlan(input: Raw): {
   siteId: string;
   plan: string;
   until: string | null;
   extraUnits: number;
+  status: PaidStatus | "trialing";
+  extraManagers: number | null;
 } {
   const i = input ?? {};
   const plan = text(i["plan"]);
@@ -90,7 +96,25 @@ export function parseSetPlan(input: Raw): {
   const extra = i["extraUnits"] ?? 0;
   if (typeof extra !== "number" || !Number.isInteger(extra) || extra < 0 || extra > 1000)
     throw new InputError("מספר היחידות הנוספות לא תקין");
-  return { siteId: uuid(i["siteId"], "האתר"), plan, until, extraUnits: extra };
+  // בלי מצב — פעיל (כמו קודם); ניסיון — תמיד "בניסיון"
+  const rawStatus = text(i["status"]) || "active";
+  if (plan !== "trial" && !(PAID_STATUSES as readonly string[]).includes(rawStatus))
+    throw new InputError("מצב המנוי לא תקין");
+  const managers = i["extraManagers"];
+  if (
+    managers !== undefined &&
+    managers !== null &&
+    (typeof managers !== "number" || !Number.isInteger(managers) || managers < 0 || managers > 100)
+  )
+    throw new InputError("מספר המנהלים הנוספים חייב להיות בין 0 ל-100");
+  return {
+    siteId: uuid(i["siteId"], "האתר"),
+    plan,
+    until,
+    extraUnits: extra,
+    status: plan === "trial" ? "trialing" : (rawStatus as PaidStatus),
+    extraManagers: typeof managers === "number" ? managers : null,
+  };
 }
 
 export function parseSetFlag(input: Raw): {

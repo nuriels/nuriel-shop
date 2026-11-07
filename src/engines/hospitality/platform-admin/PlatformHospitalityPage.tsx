@@ -61,10 +61,10 @@ export function PlatformHospitalityPage() {
       <PanelHeader />
       <main className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold">ניהול Hospitality</h1>
+          <h1 className="text-2xl font-semibold">אתרי אירוח (Hospitality)</h1>
           <p className="text-muted-foreground">
-            פתיחת עסקי אירוח (צימרים, וילות, מלונות) ומעקב אחריהם. בעל העסק מקים את הכול בעצמו באזור
-            הניהול של האתר שלו.
+            פתיחת עסקי אירוח (צימרים, וילות, מלונות) ומעקב אחריהם — עם החבילות והמחירים שלהם, בנפרד
+            מהחנויות האונליין. בעל העסק מקים את הכול בעצמו באזור הניהול של האתר שלו.
           </p>
         </header>
         {query.isPending ? (
@@ -82,9 +82,9 @@ export function PlatformHospitalityPage() {
 /** הכותרת של הפאנל — אותם קישורים כמו בשאר הלשוניות (בלי לייבא את קוד הפאנל) */
 function PanelHeader() {
   const links = [
-    { to: "/platform", label: "חנויות", icon: Store },
+    { to: "/platform", label: "חנויות אונליין", icon: Store },
     { to: "/platform/support", label: "תמיכה", icon: LifeBuoy },
-    { to: "/platform/plans", label: "חבילות ומחירים", icon: Gem },
+    { to: "/platform/plans", label: "חבילות לחנויות", icon: Gem },
     { to: "/platform/upgrades", label: "בקשות שדרוג ותוספים", icon: UserPlus },
   ] as const;
   return (
@@ -110,7 +110,7 @@ function PanelHeader() {
             className="flex min-h-9 items-center gap-1.5 rounded-md bg-background px-3 text-sm font-medium shadow-sm"
           >
             <BedDouble className="size-4" aria-hidden="true" />
-            ניהול Hospitality
+            אתרי אירוח (Hospitality)
           </span>
         </nav>
       </div>
@@ -828,22 +828,64 @@ function OwnerSheet({ site, onClose }: { site: HospitalitySiteRow; onClose: () =
   );
 }
 
+/** שלב א' 4: מצבי מנוי בתשלום שאפשר לבחור (ניסיון — לפי החבילה) */
+const PAID_STATUS_LABELS: [string, string][] = [
+  ["active", "פעיל"],
+  ["past_due", "באיחור בתשלום (האתר פעיל עוד 7 ימים מתאריך הסיום)"],
+  ["canceled", "בוטל (האתר לא מקבל הזמנות)"],
+];
+const dayOf = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : "");
+
+/**
+ * החבילה של אתר אירוח (שלב א' 4): התאריך הנוכחי מוצג ונשמר כמו שהוא (לא נמחק בטעות), מצב המנוי,
+ * יחידות ומקומות מנהלים נוספים, והשימוש הנוכחי. ההגבלות נאכפות במסד — מה שכבר קיים נשאר.
+ */
 function PlanSheet(props: { site: HospitalitySiteRow; plans: PlanOption[]; onClose: () => void }) {
   const refresh = useRefresh();
   const { site } = props;
-  const [plan, setPlan] = useState(site.plan);
-  const [until, setUntil] = useState("");
+  const initial = {
+    plan: site.plan,
+    until: site.plan === "trial" ? dayOf(site.trial_ends_at) : dayOf(site.current_period_end),
+    status: PAID_STATUS_LABELS.some(([k]) => k === site.subscription_status)
+      ? site.subscription_status
+      : "active",
+    extraUnits: String(site.extra_units ?? 0),
+    extraManagers: String(site.extra_managers ?? 0),
+  };
+  const [plan, setPlan] = useState(initial.plan);
+  const [until, setUntil] = useState(initial.until);
+  const [status, setStatus] = useState(initial.status);
+  const [extraUnits, setExtraUnits] = useState(initial.extraUnits);
+  const [extraManagers, setExtraManagers] = useState(initial.extraManagers);
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  const error = plan === "trial" && !until ? "לניסיון צריך תאריך סיום" : null;
+  const isTrial = plan === "trial";
+  const units = Number(extraUnits);
+  const managers = Number(extraManagers);
+  const error =
+    isTrial && !until
+      ? "לניסיון צריך תאריך סיום"
+      : !Number.isInteger(units) || units < 0 || units > 1000
+        ? "יחידות נוספות — מספר שלם בין 0 ל-1000"
+        : !Number.isInteger(managers) || managers < 0 || managers > 100
+          ? "מנהלים נוספים — מספר שלם בין 0 ל-100"
+          : null;
+  // החבילות המפורסמות, והחבילה הנוכחית של האתר גם אם הוסרה מהפרסום
+  const options = props.plans.filter((p) => p.is_published || p.code === site.plan);
   const chosen = props.plans.find((p) => p.code === plan);
+  const dirty =
+    plan !== initial.plan ||
+    until !== initial.until ||
+    (!isTrial && status !== initial.status) ||
+    extraUnits !== initial.extraUnits ||
+    extraManagers !== initial.extraManagers;
   return (
     <FormSheet
       open
       title={`חבילה — ${site.name}`}
-      description="הורדה לחבילה קטנה מהשימוש הנוכחי מותרת: היחידות הקיימות נשארות, אבל אי אפשר להוסיף עד שמתפנה מקום."
-      dirty={plan !== site.plan || until !== ""}
+      description="הורדה לחבילה קטנה מהשימוש הנוכחי מותרת: מה שכבר קיים נשאר, אבל אי אפשר להוסיף עד שמתפנה מקום."
+      dirty={dirty}
       busy={busy}
       submitLabel="שמירה"
       serverError={serverError}
@@ -857,7 +899,14 @@ function PlanSheet(props: { site: HospitalitySiteRow; plans: PlanOption[]; onClo
         setBusy(true);
         setServerError(null);
         void hospitalityPlatformSetPlan({
-          data: { siteId: site.id, plan, until, extraUnits: site.extra_units },
+          data: {
+            siteId: site.id,
+            plan,
+            until,
+            status: isTrial ? "trialing" : status,
+            extraUnits: units,
+            extraManagers: extraManagers !== initial.extraManagers ? managers : null,
+          },
         })
           .then(() => {
             toast.success("החבילה עודכנה");
@@ -868,24 +917,55 @@ function PlanSheet(props: { site: HospitalitySiteRow; plans: PlanOption[]; onClo
           .finally(() => setBusy(false));
       }}
     >
+      <p className="text-sm text-muted-foreground" data-testid="plan-usage">
+        עכשיו: {site.units_active} יחידות פעילות
+        {site.units_limit !== null ? ` מתוך ${site.units_limit}` : ""} · {site.managers + 1} מנהלים
+        (כולל הבעלים)
+        {site.managers_limit !== null && site.managers_limit !== undefined
+          ? ` מתוך ${site.managers_limit}`
+          : ""}
+      </p>
       <Field id="pl-plan" label="חבילה" hint={planHint(chosen)}>
         <select
           id="pl-plan"
           className="min-h-11 rounded-md border border-input bg-background px-3"
           value={plan}
-          onChange={(e) => setPlan(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            // מעבר בין ניסיון לחבילה בתשלום — התאריך שייך לסוג אחר
+            if ((next === "trial") !== (plan === "trial"))
+              setUntil(next === site.plan ? initial.until : "");
+            setPlan(next);
+          }}
         >
-          {props.plans.map((p) => (
+          {options.map((p) => (
             <option key={p.code} value={p.code}>
               {planLabel(p)}
+              {p.is_published ? "" : " (לא מפורסמת)"}
             </option>
           ))}
         </select>
       </Field>
+      {!isTrial && (
+        <Field id="pl-status" label="מצב המנוי">
+          <select
+            id="pl-status"
+            className="min-h-11 rounded-md border border-input bg-background px-3"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            {PAID_STATUS_LABELS.map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       <Field
         id="pl-until"
-        label={plan === "trial" ? "הניסיון עד" : "המנוי בתוקף עד (לא חובה)"}
-        error={submitted ? error : null}
+        label={isTrial ? "הניסיון עד" : "המנוי בתוקף עד (ריק — בלי תאריך סיום)"}
+        error={submitted && isTrial && !until ? "לניסיון צריך תאריך סיום" : null}
       >
         <Input
           id="pl-until"
@@ -896,6 +976,33 @@ function PlanSheet(props: { site: HospitalitySiteRow; plans: PlanOption[]; onClo
           className="min-h-11"
         />
       </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field id="pl-extra-units" label="יחידות נוספות (מעבר לחבילה)">
+          <Input
+            id="pl-extra-units"
+            inputMode="numeric"
+            dir="ltr"
+            value={extraUnits}
+            onChange={(e) => setExtraUnits(e.target.value.replace(/\D/g, ""))}
+            className="min-h-11"
+          />
+        </Field>
+        <Field id="pl-extra-managers" label="מנהלים נוספים (מעבר לחבילה)">
+          <Input
+            id="pl-extra-managers"
+            inputMode="numeric"
+            dir="ltr"
+            value={extraManagers}
+            onChange={(e) => setExtraManagers(e.target.value.replace(/\D/g, ""))}
+            className="min-h-11"
+          />
+        </Field>
+      </div>
+      {submitted && error && !(isTrial && !until) && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
     </FormSheet>
   );
 }

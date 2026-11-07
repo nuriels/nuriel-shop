@@ -48,7 +48,7 @@ export function PlatformShell({
                   active={active === "stores"}
                   icon={<Store className="size-4" />}
                 >
-                  חנויות
+                  חנויות אונליין
                 </NavLink>
                 <NavLink
                   to="/platform/support"
@@ -63,7 +63,7 @@ export function PlatformShell({
                   active={active === "plans"}
                   icon={<Gem className="size-4" />}
                 >
-                  חבילות ומחירים
+                  חבילות לחנויות
                 </NavLink>
                 <NavLink
                   to="/platform/upgrades"
@@ -72,13 +72,14 @@ export function PlatformShell({
                 >
                   בקשות שדרוג ותוספים
                 </NavLink>
-                {/* מסך של מנוע האירוח — רק קישור (הקוד שלו לא מיובא לכאן) */}
+                {/* מסך של מנוע האירוח — רק קישור (הקוד שלו לא מיובא לכאן). שלב א' 4: אתרי האירוח והחבילות
+                    שלהם — רק שם (לא ברשימת החנויות ולא בחבילות של החנויות) */}
                 <NavLink
                   to="/platform/hospitality"
                   active={false}
                   icon={<BedDouble className="size-4" />}
                 >
-                  ניהול Hospitality
+                  אתרי אירוח (Hospitality)
                 </NavLink>
               </nav>
             )}

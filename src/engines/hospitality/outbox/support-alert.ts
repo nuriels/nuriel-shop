@@ -51,7 +51,7 @@ export function supportAlertEmail(
 <table role="presentation" style="border-collapse:collapse;font-size:15px">${rows}</table>
 <div style="margin-top:14px;background:#f7f8f7;border-right:4px solid #b08a3e;border-radius:8px;padding:12px 14px;line-height:1.7;white-space:pre-wrap">${e(preview)}</div>
 ${button}
-<p style="margin:18px 0 0;color:#9ca3af;font-size:12px">התראה אוטומטית. המענה — בפאנל, ב"ניהול Hospitality" ← תמיכה.</p>
+<p style="margin:18px 0 0;color:#9ca3af;font-size:12px">התראה אוטומטית. המענה — בפאנל, ב"אתרי אירוח (Hospitality)" ← תמיכה.</p>
 </div></body></html>`;
   return { subject, html };
 }
