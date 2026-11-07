@@ -28,6 +28,8 @@ export function ManageLayout() {
     queryFn: () => hospitalityManagementContext(),
     staleTime: 30_000,
     refetchOnWindowFocus: true,
+    // A3: בכל כניסה לאזור בודקים מחדש — תשובה ישנה מהמטמון לא מחליטה לבד
+    refetchOnMount: "always",
     retry: false,
   });
 
@@ -40,7 +42,10 @@ export function ManageLayout() {
     [queryClient],
   );
 
-  const signedOut = access.data?.state === "signed_out";
+  // A3: למסך הכניסה רק לפי תשובה טרייה מהשרת (אחרי הבדיקה של הכניסה הזו), לא לפי "לא מחובר" שנשאר
+  // במטמון מלפני שהמשתמש נכנס — זה מה שהחזיר מנהלים שנכנסו בהצלחה למסך הכניסה
+  const signedOut =
+    access.data?.state === "signed_out" && access.isFetchedAfterMount && !access.isFetching;
   useEffect(() => {
     if (signedOut) void navigate({ to: "/manage/login", replace: true });
   }, [signedOut, navigate]);

@@ -248,7 +248,10 @@ test("owner: password login → dashboard with the checklist, plan, team; access
 });
 
 test("manager: email-code login → no team, no plan details", async ({ page, request }) => {
-  await page.goto(HURL("/manage/login"));
+  // A3: כמו מנהל אמיתי — נכנסים קודם ל-/manage (קישור מהמייל / מהפלטפורמה), מועברים למסך הכניסה,
+  // ו"לא מחובר" נשמר במטמון. אחרי הקוד — נכנסים לניהול ונשארים שם (לא חוזרים למסך הכניסה)
+  await page.goto(HURL("/manage"));
+  await expect(page).toHaveURL(/\/manage\/login$/);
   await page.getByLabel("אימייל").fill(MANAGER.email);
   const since = Date.now();
   await page.getByRole("button", { name: "שליחת קוד" }).click();
@@ -277,6 +280,10 @@ test("manager: email-code login → no team, no plan details", async ({ page, re
   await page.getByRole("button", { name: "כניסה" }).click();
   await expect(page).toHaveURL(/\/manage$/);
   await expect(page.getByText("מנהל/ת")).toBeVisible();
+  // A3: נשארים בניהול — גם אחרי רגע (הבאג: הופנו בחזרה למסך הכניסה אחרי "נכנסתם")
+  await page.waitForTimeout(1500);
+  await expect(page).toHaveURL(/\/manage$/);
+  await expect(page.getByLabel("הקוד מהמייל")).toHaveCount(0);
   await expect(page.getByText("צוות ניהול")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "החבילה שלי" })).toHaveCount(0);
   await expectAccessible(page, "dashboard (manager)");

@@ -23,6 +23,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/platform/ui";
+import { hospitalityManagementContext } from "../../api/management.functions";
 import { manageKeys } from "../lib/query-keys";
 
 const errorText = (error: unknown) =>
@@ -34,7 +35,21 @@ export function ManageLogin() {
 
   const enter = async (tokens: { accessToken: string; refreshToken: string }) => {
     await applyServerSession(tokens.accessToken, tokens.refreshToken);
-    await queryClient.invalidateQueries({ queryKey: manageKeys.all });
+    // A3: התשובה "לא מחובר" מהביקור הקודם ב-/manage נשארת במטמון (invalidate לא מוחק אותה), והמעטפת
+    // הציגה אותה מיד והחזירה לכאן — "נכנסתם" ונשארים במסך הכניסה. לכן: מוחקים את המטמון של אזור
+    // הניהול, בודקים בשרת עם החיבור החדש, ורק אז עוברים.
+    queryClient.removeQueries({ queryKey: manageKeys.all });
+    const access = await queryClient.fetchQuery({
+      queryKey: manageKeys.context,
+      queryFn: () => hospitalityManagementContext(),
+      staleTime: 0,
+    });
+    if (access.state === "signed_out") {
+      // הקוד / הסיסמה אומתו, אבל השרת לא מזהה את החיבור — לא עוברים (אחרת לולאה) ומסבירים
+      throw new Error(
+        "הפרטים אומתו, אבל החיבור לא נשמר בדפדפן. רעננו את הדף ונסו שוב. אם זה חוזר — נסו דפדפן אחר או אפשרו שמירת נתוני אתרים.",
+      );
+    }
     toast.success("נכנסתם לניהול העסק");
     await navigate({ to: "/manage", replace: true });
   };

@@ -19,7 +19,12 @@ export const hospitalityManagementContext = createServerFn({ method: "GET" }).ha
     let session;
     try {
       session = await sessionFromRequest();
-    } catch {
+    } catch (error) {
+      // A3: לא בולעים בשקט — חיבור שלא נקרא הוא הסיבה לכניסה ש"מצליחה" וחוזרת למסך הכניסה
+      console.warn(
+        "[hospitality/manage] the session could not be read:",
+        error instanceof Error ? error.message : "unknown error",
+      );
       return { state: "signed_out" };
     }
     if (!session) return { state: "signed_out" };
