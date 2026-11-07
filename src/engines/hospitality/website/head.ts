@@ -5,6 +5,7 @@
 import { SITE_PATH } from "../config";
 import type { PublicSite, PublicUnit } from "../types/website";
 import { siteCopy } from "./copy";
+import { brandAssetUrl, SHARE_IMAGE } from "./lib/brand";
 import { normalizeDesign } from "./design/schema";
 import { firstSentence } from "./lib/format";
 import { heroImage, mediaById, unitCover } from "./lib/media";
@@ -17,10 +18,16 @@ export interface PageHead {
   links: Link[];
 }
 
+/** תמונת שיתוף; size — כשידוע (תמונת הלוגו שנוצרת אצלנו), עוזר לסורקים להציג בלי הורדה מקדימה */
+type ShareImage = {
+  url: string;
+  size: { width: number; height: number; type: string } | null;
+};
+
 function base(o: {
   title: string;
   description: string;
-  image: string | null;
+  image: ShareImage | null;
   url: string | null;
   siteName: string;
 }): Meta[] {
@@ -39,12 +46,34 @@ function base(o: {
     { name: "twitter:description", content: o.description },
     ...(o.image
       ? [
-          { property: "og:image", content: o.image },
-          { name: "twitter:image", content: o.image },
+          { property: "og:image", content: o.image.url },
+          ...(o.image.size
+            ? [
+                { property: "og:image:width", content: String(o.image.size.width) },
+                { property: "og:image:height", content: String(o.image.size.height) },
+                { property: "og:image:type", content: o.image.size.type },
+              ]
+            : []),
+          { property: "og:image:alt", content: o.siteName },
+          { name: "twitter:image", content: o.image.url },
         ]
       : []),
   ];
 }
+
+/**
+ * A1: תמונת השיתוף של העסק (ווטסאפ, פייסבוק ושאר הרשתות) — הלוגו שהעסק העלה, כ-PNG קטן מהדומיין של
+ * האתר (/stay/brand/og-image); null — אין לוגו או שהכתובת הקנונית של האתר לא ידועה (סורקים צריכים כתובת
+ * מלאה). אף פעם לא הלוגו של נוריאל.
+ */
+export function logoShareImage(site: PublicSite, logoId: string | undefined): ShareImage | null {
+  const logo = logoId ? mediaById(site, logoId) : null;
+  if (!logo || logo.kind !== "image" || !site.origin) return null;
+  return { url: brandAssetUrl("og-image", logo.id, site.origin), size: SHARE_IMAGE };
+}
+
+const photo = (url: string | null | undefined): ShareImage | null =>
+  url ? { url, size: null } : null;
 
 const canonical = (url: string | null): Link[] => (url ? [{ rel: "canonical", href: url }] : []);
 const absolute = (site: PublicSite, path: string) => (site.origin ? `${site.origin}${path}` : null);
@@ -63,10 +92,13 @@ export function siteHomeHead(site: PublicSite | undefined): PageHead {
   const defaults = seoDefaults(site, kind);
   const title = seo.title || defaults.title;
   const description = seo.description || defaults.description;
-  // הלוגו (D2) לא משמש כתמונת שיתוף; הוא נכנס לנתונים המובנים כ-logo. תמונת שיתוף שנבחרה (E5) —
-  // קודמת לתמונת הפתיח
+  // A1: תמונת השיתוף — תמונה שנבחרה בהגדרות "גוגל ושיתוף" (E5) → הלוגו של העסק (PNG קטן מהדומיין
+  // של האתר) → תמונת הפתיח. בנתונים המובנים: image — תמונה של המקום, logo — הלוגו.
   const logoId = normalizeDesign(site.design?.document ?? null, site.design?.theme).logo;
-  const image = mediaById(site, seo.image)?.url ?? heroImage(site, logoId)?.url ?? null;
+  const hero = heroImage(site, logoId)?.url ?? null;
+  const share =
+    photo(mediaById(site, seo.image)?.url) ?? logoShareImage(site, logoId) ?? photo(hero);
+  const image = mediaById(site, seo.image)?.url ?? hero;
   const logo = mediaById(site, logoId)?.url ?? null;
   const url = absolute(site, SITE_PATH);
   const prices = site.units.map((u) => u.base_price);
@@ -92,7 +124,7 @@ export function siteHomeHead(site: PublicSite | undefined): PageHead {
   };
   return {
     meta: [
-      ...base({ title, description, image, url, siteName: site.business.name }),
+      ...base({ title, description, image: share, url, siteName: site.business.name }),
       // אימות Search Console: רק קוד תקין (נבדק ב-normalizeDesign), כ-content של תגית שנבנית כאן
       ...(seo.google ? [{ name: "google-site-verification", content: seo.google }] : []),
       { "script:ld+json": ld } as unknown as Meta,
@@ -112,11 +144,13 @@ export function siteUnitHead(site: PublicSite, unit: PublicUnit, path: string): 
     unit.seo_description?.trim() ||
     (unit.description ? firstSentence(unit.description) : describe(site));
   const url = absolute(site, path);
+  // A1: תמונת היחידה; יחידה בלי תמונה — הלוגו של העסק (לא תמונה ריקה ולא האייקון הכללי)
+  const logoId = normalizeDesign(site.design?.document ?? null, site.design?.theme).logo;
   return {
     meta: base({
       title,
       description,
-      image: unitCover(unit, site)?.url ?? null,
+      image: photo(unitCover(unit, site)?.url) ?? logoShareImage(site, logoId),
       url,
       siteName: site.business.name,
     }),

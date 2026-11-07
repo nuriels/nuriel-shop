@@ -28,7 +28,8 @@ function anonHeaders(): Record<string, string> {
   return headers;
 }
 
-async function rpc<T>(siteId: string, fn: string): Promise<T> {
+/** קריאה ציבורית (anon) לפונקציית מסד של האתר — גם לאייקונים מהלוגו (brand.server.ts, A1) */
+export async function rpc<T>(siteId: string, fn: string): Promise<T> {
   const res = await fetch(`${supabaseUrl()}/rest/v1/rpc/${fn}`, {
     method: "POST",
     headers: {

@@ -6,6 +6,13 @@ import { MANAGE_PATH, SITE_PATH } from "../config";
 const MANAGE_AREA = new RegExp(`^${MANAGE_PATH}(/|$)`);
 const SITE_AREA = new RegExp(`^${SITE_PATH}(/|$)`);
 const HANDOFF_PATH = "/admin-handoff";
+// A1: האייקונים, תמונת השיתוף והמניפסט מהלוגו — בלי סיומת קובץ (נתיב עם סיומת נחשב בשרת לקובץ סטטי)
+const BRAND_AREA = new RegExp(`^${SITE_PATH}/brand/[a-z0-9-]+$`);
+
+/** A1: /stay/brand/<asset> — מוגש גם כשרק אזור הניהול פתוח (האייקון של מסך הבית בניהול) */
+export function isBrandAssetPath(pathname: string): boolean {
+  return BRAND_AREA.test(pathname);
+}
 /** כתובת הנחיתה של ה-handoff הקיים (/admin) — באתר אירוח מופנית ל-/manage */
 export const ADMIN_LANDING = /^\/admin\/?$/;
 

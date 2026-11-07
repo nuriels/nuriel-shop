@@ -16,7 +16,7 @@ import { nurielCreditHtml } from "@/platform/branding/credit";
 import type { EdgeRequest, SiteRef } from "@/platform/engines/contract";
 import { MANAGE_PATH, SITE_PATH } from "../config";
 import { robotsTxt } from "../website/seo";
-import { ADMIN_LANDING, isManagementPath, isSitePath } from "./paths";
+import { ADMIN_LANDING, isBrandAssetPath, isManagementPath, isSitePath } from "./paths";
 
 // עמוד סטטי (בלי React ובלי נתוני העסק): צבעי ערכת "יוקרה", גופני מערכת, ניגודיות AA
 const page = (title: string, text: string, homeLink = false) => `<!doctype html>
@@ -101,6 +101,19 @@ export async function hospitalityGate(
     const map = open && request.method === "GET" && opts.sitemap ? await opts.sitemap() : null;
     if (map) return map;
     return html(open ? NOT_FOUND_HTML : NOT_OPEN_HTML, 404);
+  }
+  // A1: האייקונים, תמונת השיתוף והמניפסט מהלוגו (/stay/brand/…) — באתר פעיל שהאתר הציבורי או אזור
+  // הניהול שלו פתוחים (גם מסך הבית של הניהול). אחרת — 404 כמו כל קובץ, בלי לחשוף כלום.
+  if (isBrandAssetPath(request.pathname)) {
+    const allowed =
+      request.method === "GET" &&
+      site.status === "active" &&
+      ((await siteOpen()) || (await opts.managementOpen()));
+    if (allowed) return null;
+    return new Response("Not found\n", {
+      status: 404,
+      headers: { "content-type": "text/plain; charset=utf-8", "x-robots-tag": "noindex" },
+    });
   }
   // האתר הציבורי: הבית ("/" → /stay), עמודי היחידות, ההזמנה וניהול ההזמנה של האורח
   if ((request.pathname === "/" || isSitePath(request.pathname)) && (await siteOpen())) {

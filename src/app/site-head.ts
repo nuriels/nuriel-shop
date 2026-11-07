@@ -3,7 +3,7 @@
 // אף שדה של החנות (מנוי, SEO, מעקב, שבת, מבצעים, לוגו). רק בחירה וחיבור.
 import type { SiteType } from "@/platform/engines/contract";
 import { hospitalitySiteHead } from "@/engines/hospitality/api/site.functions";
-import { hospitalityHeadMeta } from "@/engines/hospitality/management/head";
+import { hospitalityHeadLinks, hospitalityHeadMeta } from "@/engines/hospitality/management/head";
 import type { SiteHead } from "@/engines/hospitality/types/site";
 
 export type EngineSite = { siteType: SiteType } & SiteHead;
@@ -21,12 +21,19 @@ export async function engineSiteData<StoreData>(
   siteType: SiteType,
 ): Promise<EngineSiteData<StoreData>> {
   if (siteType === "hospitality") {
-    const head = await hospitalitySiteHead().catch(() => ({ name: null }));
-    return { engineSite: { siteType, name: head.name } } as EngineSiteData<StoreData>;
+    const head = await hospitalitySiteHead().catch(() => ({ name: null, logoId: null }));
+    return {
+      engineSite: { siteType, name: head.name, logoId: head.logoId ?? null },
+    } as EngineSiteData<StoreData>;
   }
   return { engineSite: { siteType, name: null } } as EngineSiteData<StoreData>;
 }
 
 export function engineSiteMeta(site: EngineSite) {
   return hospitalityHeadMeta({ name: site.name });
+}
+
+/** A1: האייקונים של אתר המנוע (לשונית, מסך הבית, מניפסט) — מהלוגו של העסק; בלי לוגו — האייקון הכללי */
+export function engineSiteLinks(site: EngineSite) {
+  return hospitalityHeadLinks({ name: site.name, logoId: site.logoId ?? null });
 }

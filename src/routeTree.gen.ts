@@ -101,6 +101,7 @@ import { Route as ManageSupportTicketIdRouteImport } from './routes/manage.suppo
 import { Route as ManageUnitsUnitIdRouteImport } from './routes/manage.units_.$unitId'
 import { Route as MarketingConfirmTokenRouteImport } from './routes/marketing.confirm.$token'
 import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
+import { Route as StayBrandAssetRouteImport } from './routes/stay.brand.$asset'
 import { Route as StayRoomsTypeSlugRouteImport } from './routes/stay.rooms.$typeSlug'
 import { Route as StayUnitsUnitSlugRouteImport } from './routes/stay.units.$unitSlug'
 
@@ -568,6 +569,11 @@ const PlatformCustomersTenantIdRoute =
     path: '/platform/customers/$tenantId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const StayBrandAssetRoute = StayBrandAssetRouteImport.update({
+  id: '/brand/$asset',
+  path: '/brand/$asset',
+  getParentRoute: () => StayRoute,
+} as any)
 const StayRoomsTypeSlugRoute = StayRoomsTypeSlugRouteImport.update({
   id: '/rooms/$typeSlug',
   path: '/rooms/$typeSlug',
@@ -672,6 +678,7 @@ export interface FileRoutesByFullPath {
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/stay/brand/$asset': typeof StayBrandAssetRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
 }
@@ -766,6 +773,7 @@ export interface FileRoutesByTo {
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/stay/brand/$asset': typeof StayBrandAssetRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
 }
@@ -863,6 +871,7 @@ export interface FileRoutesById {
   '/manage/units_/$unitId': typeof ManageUnitsUnitIdRoute
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/stay/brand/$asset': typeof StayBrandAssetRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
 }
@@ -961,6 +970,7 @@ export interface FileRouteTypes {
     | '/manage/units/$unitId'
     | '/marketing/confirm/$token'
     | '/platform/customers/$tenantId'
+    | '/stay/brand/$asset'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
   fileRoutesByTo: FileRoutesByTo
@@ -1055,6 +1065,7 @@ export interface FileRouteTypes {
     | '/manage/units/$unitId'
     | '/marketing/confirm/$token'
     | '/platform/customers/$tenantId'
+    | '/stay/brand/$asset'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
   id:
@@ -1151,6 +1162,7 @@ export interface FileRouteTypes {
     | '/manage/units_/$unitId'
     | '/marketing/confirm/$token'
     | '/platform_/customers/$tenantId'
+    | '/stay/brand/$asset'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
   fileRoutesById: FileRoutesById
@@ -1867,6 +1879,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformCustomersTenantIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stay/brand/$asset': {
+      id: '/stay/brand/$asset'
+      path: '/brand/$asset'
+      fullPath: '/stay/brand/$asset'
+      preLoaderRoute: typeof StayBrandAssetRouteImport
+      parentRoute: typeof StayRoute
+    }
     '/stay/rooms/$typeSlug': {
       id: '/stay/rooms/$typeSlug'
       path: '/rooms/$typeSlug'
@@ -1946,6 +1965,7 @@ interface StayRouteChildren {
   StayMyBookingRoute: typeof StayMyBookingRoute
   StayPrivacyRoute: typeof StayPrivacyRoute
   StayIndexRoute: typeof StayIndexRoute
+  StayBrandAssetRoute: typeof StayBrandAssetRoute
   StayRoomsTypeSlugRoute: typeof StayRoomsTypeSlugRoute
   StayUnitsUnitSlugRoute: typeof StayUnitsUnitSlugRoute
 }
@@ -1957,6 +1977,7 @@ const StayRouteChildren: StayRouteChildren = {
   StayMyBookingRoute: StayMyBookingRoute,
   StayPrivacyRoute: StayPrivacyRoute,
   StayIndexRoute: StayIndexRoute,
+  StayBrandAssetRoute: StayBrandAssetRoute,
   StayRoomsTypeSlugRoute: StayRoomsTypeSlugRoute,
   StayUnitsUnitSlugRoute: StayUnitsUnitSlugRoute,
 }

@@ -27,7 +27,7 @@ import { TrackingConsent } from "@/components/marketing/TrackingConsent";
 import { canonicalUrl } from "@/lib/seo-urls";
 import { EngineSiteShell } from "@/app/site-shell";
 import { engineRouteRedirect } from "@/app/site-routes";
-import { engineSiteData, engineSiteMeta } from "@/app/site-head";
+import { engineSiteData, engineSiteLinks, engineSiteMeta } from "@/app/site-head";
 
 // גופני אתרי המנוע (Hospitality): Heebo + Frank Ruhl Libre, משתנים, עברית ולטינית — public/fonts/hosp
 const ENGINE_FONT_LINKS = [
@@ -136,7 +136,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         meta: engineSiteMeta(loaderData.engineSite),
         links: [
           { rel: "stylesheet", href: appCss },
-          { rel: "icon", type: "image/png", href: "/favicon.png" },
+          // A1: האייקון, אייקון מסך הבית והמניפסט — מהלוגו של העסק (בלי לוגו — האייקון הכללי)
+          ...engineSiteLinks(loaderData.engineSite),
           // אתרי מנוע (Hospitality, שלב F2): הגופנים מאוחסנים בשרת שלנו — בלי Google Fonts
           ...ENGINE_FONT_LINKS,
         ],

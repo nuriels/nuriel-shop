@@ -87,6 +87,7 @@ const PLATFORM_ADAPTERS: [adapter: string, wraps: (target: string) => boolean][]
   ["src/platform/auth/browser-session.ts", (t) => t === "src/integrations/supabase/client"],
   ["src/platform/auth/accounts.server.ts", (t) => t === "src/integrations/supabase/client.server"],
   ["src/platform/security/rate-limit.server.ts", (t) => t === "src/lib/rate-limit.server"],
+  ["src/platform/media/pwa-icons.server.ts", (t) => t === "src/lib/pwa-icon-render.server"],
   ["src/platform/media/remote-image.server.ts", (t) => t === "src/server/services/image-fetch"],
   ["src/platform/email/send.server.ts", (t) => t === "src/lib/email.server"],
   [
@@ -222,6 +223,7 @@ describe("architecture: dependency boundaries", () => {
       "src/routes/stay.accessibility.tsx",
       "src/routes/stay.book.tsx",
       "src/routes/stay.booking-received.tsx",
+      "src/routes/stay.brand.$asset.tsx",
       "src/routes/stay.index.tsx",
       "src/routes/stay.my-booking.tsx",
       "src/routes/stay.privacy.tsx",

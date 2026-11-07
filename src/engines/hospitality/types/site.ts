@@ -2,4 +2,6 @@
 export interface SiteHead {
   /** שם העסק (או שם האתר); null = לא זמין */
   name: string | null;
+  /** A1: מזהה הלוגו שהעסק העלה — לאייקונים ולמניפסט; null / חסר = אין לוגו (האייקון הכללי) */
+  logoId?: string | null;
 }
