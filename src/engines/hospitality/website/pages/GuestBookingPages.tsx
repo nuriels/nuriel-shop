@@ -21,6 +21,7 @@ import {
   hospitalitySiteBooking,
   hospitalitySiteCancellationQuote,
   hospitalitySiteRequestCancellation,
+  hospitalitySiteUploadProof,
 } from "../../api/website.functions";
 import type { ArrivalValues } from "../../types/catalog";
 import type { GuestBookingView } from "../../types/domain";
@@ -30,8 +31,7 @@ import { useCopy } from "../copy";
 import { dateTimeText, money, scheduleLines, stayText, telHref, whatsappHref } from "../lib/format";
 import { hasInstructions, methodsText } from "../lib/payment";
 import { useSite } from "../lib/site-context";
-import { paymentState } from "../../payments/phone";
-import { transferPaymentLabel } from "../lib/transfer";
+import { paymentRowText } from "../lib/transfer";
 import { TransferCard } from "./TransferProof";
 
 /** מצבים שבהם מוצג מצב התשלום (בקשה פעילה / הזמנה) */
@@ -99,7 +99,7 @@ function useGuestBooking(token: string | null) {
   });
 }
 
-function Frame({ children, narrow = false }: { children: ReactNode; narrow?: boolean }) {
+export function Frame({ children, narrow = false }: { children: ReactNode; narrow?: boolean }) {
   return (
     <div className="bg-background pt-24 sm:pt-28">
       <div className={cn("mx-auto px-4 pb-20 sm:px-8", narrow ? "max-w-2xl" : "max-w-4xl")}>
@@ -109,7 +109,7 @@ function Frame({ children, narrow = false }: { children: ReactNode; narrow?: boo
   );
 }
 
-function Notice({ children }: { children: ReactNode }) {
+export function Notice({ children }: { children: ReactNode }) {
   return (
     <p className="rounded-[var(--radius)] border border-border bg-card p-6 text-muted-foreground">
       {children}
@@ -252,7 +252,7 @@ export function BookingReceivedPage() {
   );
 }
 
-function Row({ label, value }: { label: string; value: ReactNode }) {
+export function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex justify-between gap-4">
       <dt className="text-muted-foreground">{label}</dt>
@@ -281,9 +281,26 @@ const STATUS_TONE: Record<string, string> = {
   checked_out: "bg-muted text-foreground",
 };
 
+/** מצב ההזמנה (תג צבעוני) — "ההזמנה שלי" ו"ההזמנות שלי" */
+export function StatusChip({ status, className }: { status: string; className?: string }) {
+  const t = useCopy();
+  return (
+    <span
+      className={cn(
+        "rounded-full px-4 py-1.5 text-sm font-medium",
+        STATUS_TONE[status] ?? "bg-muted text-muted-foreground",
+        className,
+      )}
+    >
+      {t.statuses[status] ?? status}
+    </span>
+  );
+}
+
 export function MyBookingPage() {
   const t = useCopy();
   const { site } = useSite();
+  const queryClient = useQueryClient();
   const { token, ready } = useHashParams();
   const query = useGuestBooking(token);
   if (!ready || (token && query.isPending))
@@ -300,7 +317,6 @@ export function MyBookingPage() {
       </Frame>
     );
   const { booking: b, arrival, payment } = query.data;
-  const instructions = hasInstructions(payment?.methods);
   const tz = b.policy?.timezone || site.business.timezone;
   const pending = b.status === "pending_approval" || b.status === "pending_payment";
   return (
@@ -312,14 +328,7 @@ export function MyBookingPage() {
             {t.my.number(b.number)}
           </h1>
         </div>
-        <span
-          className={cn(
-            "rounded-full px-4 py-1.5 text-sm font-medium",
-            STATUS_TONE[b.status] ?? "bg-muted text-muted-foreground",
-          )}
-        >
-          {t.statuses[b.status] ?? b.status}
-        </span>
+        <StatusChip status={b.status} />
       </header>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -334,18 +343,7 @@ export function MyBookingPage() {
             )}
             {/* D4: מצב התשלום — רק לפי מה שהעסק רשם (תשלום טלפוני) */}
             {PAYABLE.has(b.status) && (
-              <Row
-                label={t.my.payment}
-                value={
-                  // שלב א' 5: העברה בנקאית — "ממתין לאישור העברה" / "האישור התקבל"
-                  transferPaymentLabel(payment, t) ??
-                  (instructions && paymentState(Number(b.total), Number(b.amount_paid)) === "unpaid"
-                    ? payment?.available
-                      ? t.my.unpaidInstructions
-                      : t.my.unpaidLater
-                    : t.my.paymentStates[paymentState(Number(b.total), Number(b.amount_paid))])
-                }
-              />
+              <Row label={t.my.payment} value={paymentRowText(b, payment, t)} />
             )}
           </dl>
           {pending && b.hold_expires_at && (
@@ -373,9 +371,18 @@ export function MyBookingPage() {
         {payment && (
           <TransferCard
             payment={payment}
-            guestRef={{ token }}
-            queryKey={bookingKey(token)}
             timeZone={tz}
+            send={(file) => {
+              const form = new FormData();
+              form.set("token", token);
+              form.set("file", file);
+              return hospitalitySiteUploadProof({ data: form });
+            }}
+            onSent={(info) =>
+              queryClient.setQueryData(bookingKey(token), (old: unknown) =>
+                old && typeof old === "object" ? { ...(old as object), payment: info } : old,
+              )
+            }
           />
         )}
 
@@ -395,7 +402,7 @@ export function MyBookingPage() {
  * "איך משלמים" (מיגרציה 37): רק אחרי שההזמנה אושרה ונשאר סכום לתשלום (המסד מחליט). לפני האישור —
  * הודעה שהפרטים יופיעו כאן. ההוראות אינן אישור תשלום: "שולם" רק לפי מה שהעסק רשם.
  */
-function PaymentCard({ payment }: { payment: GuestPaymentInfo }) {
+export function PaymentCard({ payment }: { payment: GuestPaymentInfo }) {
   const t = useCopy();
   if (!payment.available) {
     if (payment.reason !== "not_confirmed" || !hasInstructions(payment.methods)) return null;
@@ -578,7 +585,7 @@ function ArrivalCard({ arrival, timeZone }: { arrival: GuestArrival | null; time
   );
 }
 
-function ContactLinks() {
+export function ContactLinks() {
   const t = useCopy();
   const { site } = useSite();
   const b = site.business;

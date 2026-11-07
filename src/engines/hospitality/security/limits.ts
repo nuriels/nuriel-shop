@@ -50,6 +50,16 @@ export const LIMITS = {
   /** בקשת ביטול */
   cancel: [{ per: "ip", limit: 6, window: HOUR }],
   /**
+   * שלב א' 2: "ההזמנות שלי" — בקשת קוד כניסה למייל (מעל המגבלות של המסד: קוד ל-30 שניות ו-5 בשעה
+   * לכתובת) ובדיקת הקוד (מעל 5 הניסיונות לקוד)
+   */
+  guestCode: [
+    { per: "ip", limit: 5, window: 10 * MIN },
+    { per: "ip", limit: 20, window: DAY },
+    { per: "tenant", limit: 500, window: DAY },
+  ],
+  guestVerify: [{ per: "ip", limit: 30, window: 10 * MIN }],
+  /**
    * שלב א' 5: העלאת אישור העברה (עד 5MB לקובץ) — מעל המגבלות של המסד (עד 3 העלאות שלא הושלמו בשעה
    * להזמנה, ו-5 אישורים להזמנה)
    */

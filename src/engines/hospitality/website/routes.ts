@@ -10,6 +10,7 @@ import { SITE_PATH } from "../config";
 import { privatePageMeta, siteHomeHead, siteUnitHead, type PageHead } from "./head";
 import { validateBookSearch } from "./lib/booking";
 import { BookingPage } from "./pages/BookingPage";
+import { GuestAreaPage } from "./pages/GuestAreaPage";
 import { BookingReceivedPage, MyBookingPage } from "./pages/GuestBookingPages";
 import { HomePage } from "./pages/HomePage";
 import { PreviewPage } from "./pages/PreviewPage";
@@ -93,6 +94,14 @@ export const siteBookRoute = {
 };
 export const siteReceivedRoute = privateRoute("הבקשה התקבלה", BookingReceivedPage);
 export const siteMyBookingRoute = privateRoute("ההזמנה שלי", MyBookingPage);
+/** שלב א' 2: "ההזמנות שלי" — כניסה בקוד למייל; ?booking=<id> — הזמנה אחת */
+export const siteAccountRoute = {
+  ...privateRoute("ההזמנות שלי", GuestAreaPage),
+  validateSearch: (raw: Record<string, unknown>): { booking?: string } =>
+    typeof raw["booking"] === "string" && /^[0-9a-f-]{36}$/i.test(raw["booking"])
+      ? { booking: raw["booking"].toLowerCase() }
+      : {},
+};
 export const sitePrivacyRoute = privateRoute("מדיניות פרטיות", PrivacyPage);
 export const siteAccessibilityRoute = privateRoute("הצהרת נגישות", AccessibilityPage);
 

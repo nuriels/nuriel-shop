@@ -72,6 +72,7 @@ import { Route as ProductProductIdRouteImport } from './routes/product.$productI
 import { Route as PwaIconRouteImport } from './routes/pwa.$icon'
 import { Route as StayIndexRouteImport } from './routes/stay.index'
 import { Route as StayAccessibilityRouteImport } from './routes/stay.accessibility'
+import { Route as StayAccountRouteImport } from './routes/stay.account'
 import { Route as StayBookRouteImport } from './routes/stay.book'
 import { Route as StayBookingReceivedRouteImport } from './routes/stay.booking-received'
 import { Route as StayMyBookingRouteImport } from './routes/stay.my-booking'
@@ -420,6 +421,11 @@ const StayAccessibilityRoute = StayAccessibilityRouteImport.update({
   path: '/accessibility',
   getParentRoute: () => StayRoute,
 } as any)
+const StayAccountRoute = StayAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => StayRoute,
+} as any)
 const StayBookRoute = StayBookRouteImport.update({
   id: '/book',
   path: '/book',
@@ -647,6 +653,7 @@ export interface FileRoutesByFullPath {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/stay/accessibility': typeof StayAccessibilityRoute
+  '/stay/account': typeof StayAccountRoute
   '/stay/book': typeof StayBookRoute
   '/stay/booking-received': typeof StayBookingReceivedRoute
   '/stay/my-booking': typeof StayMyBookingRoute
@@ -742,6 +749,7 @@ export interface FileRoutesByTo {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/stay/accessibility': typeof StayAccessibilityRoute
+  '/stay/account': typeof StayAccountRoute
   '/stay/book': typeof StayBookRoute
   '/stay/booking-received': typeof StayBookingReceivedRoute
   '/stay/my-booking': typeof StayMyBookingRoute
@@ -840,6 +848,7 @@ export interface FileRoutesById {
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/stay/accessibility': typeof StayAccessibilityRoute
+  '/stay/account': typeof StayAccountRoute
   '/stay/book': typeof StayBookRoute
   '/stay/booking-received': typeof StayBookingReceivedRoute
   '/stay/my-booking': typeof StayMyBookingRoute
@@ -939,6 +948,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/stay/accessibility'
+    | '/stay/account'
     | '/stay/book'
     | '/stay/booking-received'
     | '/stay/my-booking'
@@ -1034,6 +1044,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/stay/accessibility'
+    | '/stay/account'
     | '/stay/book'
     | '/stay/booking-received'
     | '/stay/my-booking'
@@ -1131,6 +1142,7 @@ export interface FileRouteTypes {
     | '/product/$productId'
     | '/pwa/$icon'
     | '/stay/accessibility'
+    | '/stay/account'
     | '/stay/book'
     | '/stay/booking-received'
     | '/stay/my-booking'
@@ -1676,6 +1688,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StayAccessibilityRouteImport
       parentRoute: typeof StayRoute
     }
+    '/stay/account': {
+      id: '/stay/account'
+      path: '/account'
+      fullPath: '/stay/account'
+      preLoaderRoute: typeof StayAccountRouteImport
+      parentRoute: typeof StayRoute
+    }
     '/stay/book': {
       id: '/stay/book'
       path: '/book'
@@ -1960,6 +1979,7 @@ const ManageRouteWithChildren =
 
 interface StayRouteChildren {
   StayAccessibilityRoute: typeof StayAccessibilityRoute
+  StayAccountRoute: typeof StayAccountRoute
   StayBookRoute: typeof StayBookRoute
   StayBookingReceivedRoute: typeof StayBookingReceivedRoute
   StayMyBookingRoute: typeof StayMyBookingRoute
@@ -1972,6 +1992,7 @@ interface StayRouteChildren {
 
 const StayRouteChildren: StayRouteChildren = {
   StayAccessibilityRoute: StayAccessibilityRoute,
+  StayAccountRoute: StayAccountRoute,
   StayBookRoute: StayBookRoute,
   StayBookingReceivedRoute: StayBookingReceivedRoute,
   StayMyBookingRoute: StayMyBookingRoute,

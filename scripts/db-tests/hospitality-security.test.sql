@@ -294,7 +294,9 @@ BEGIN
                       'channel_sync_service', 'channel_calendars_due', 'payment_provider_record', 'claim_notifications',
                       'mark_notification', 'expire_holds', 'apply_retention', 'export_guest', 'confirm_payment',
                       'email_payment_methods', 'support_platform_recipients', 'site_request_submit',
-                      'portal_open_site', 'portal_trial_days', 'guest_proof_ready', 'email_booking_payment_methods']) f
+                      'portal_open_site', 'portal_trial_days', 'guest_proof_ready', 'email_booking_payment_methods',
+                      'guest_code_issue', 'guest_code_consume', 'guest_area_sign_out', 'guest_area_bookings',
+                      'guest_area_booking', 'guest_area_set_payment_method', 'guest_area_proof_slot']) f
    WHERE EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace AND p.proname = f
                     AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE')))
       OR NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace AND p.proname = f

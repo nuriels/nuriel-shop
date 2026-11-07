@@ -1,7 +1,7 @@
 // המעטפת של האתר הציבורי (/stay): הערכה (משתני CSS), הטקסטים לפי שפה, הכותרת, הפוטר עם
 // קרדיט נוריאל (D6 / F1 — מחוץ לתוכן, לא ניתן להסרה) ושורת פעולות קבועה בנייד.
 import { Link, Outlet, useLoaderData, useLocation } from "@tanstack/react-router";
-import { Mail, Menu, MessageCircle, Phone } from "lucide-react";
+import { Mail, Menu, MessageCircle, Phone, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { NurielCredit } from "@/platform/branding/NurielCredit";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger, cn } from "@/platform/ui";
@@ -182,6 +182,17 @@ function SiteHeader() {
           ))}
         </nav>
         <div className="flex items-center gap-2">
+          {/* שלב א' 2: "ההזמנות שלי" — כניסת אורחים בקוד למייל */}
+          <Link
+            to="/stay/account"
+            className={cn(
+              "hidden min-h-10 items-center gap-2 rounded-sm px-3 text-sm transition-opacity hover:opacity-100 md:inline-flex",
+              overlay ? "opacity-90" : "opacity-80",
+            )}
+          >
+            <UserRound className="size-4" aria-hidden="true" />
+            {t.account.link}
+          </Link>
           {site.business.phone && (
             <a
               href={telHref(site.business.phone)}
@@ -255,6 +266,15 @@ function SiteHeader() {
                     </Link>
                   </SheetClose>
                 ))}
+                <SheetClose asChild>
+                  <Link
+                    to="/stay/account"
+                    className="mt-2 inline-flex items-center gap-2 rounded-sm border-t border-border px-3 pt-4 pb-3 text-lg hover:bg-muted"
+                  >
+                    <UserRound className="size-5" aria-hidden="true" />
+                    {t.account.link}
+                  </Link>
+                </SheetClose>
               </nav>
               <ContactButtons className="border-t border-border px-6 py-5" />
             </SheetContent>
@@ -325,6 +345,9 @@ function SiteFooter() {
               {i.label}
             </Link>
           ))}
+          <Link to="/stay/account" className="opacity-75 hover:opacity-100">
+            {t.account.link}
+          </Link>
         </nav>
         <ContactButtons className="[&_svg]:text-[var(--site-gold)]" />
       </div>

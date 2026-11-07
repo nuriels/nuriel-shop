@@ -1,15 +1,13 @@
 // שלב א' 5: העברה בנקאית בעמוד ההזמנה של האורח — מצב ההעברה, העלאת אישור (צילום מסך / PDF) והאישורים
 // שנשלחו. הכול מהשרת (guest_payment_info): רענון, סגירת הדפדפן או חזרה מאוחרת מציגים בדיוק את אותו מצב
 // ואת אותה אפשרות להעלות. הקובץ נבדק בשרת לפי התוכן ונשמר באחסון פרטי.
-import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, Clock, FileText, Upload, XCircle } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { cn } from "@/platform/ui";
-import { hospitalitySiteUploadProof } from "../../api/website.functions";
 import type { GuestPaymentInfo, PaymentProofView } from "../../types/payment-instructions";
 import { useCopy } from "../copy";
 import { dateTimeText } from "../lib/format";
-import type { GuestRef } from "../lib/transfer";
 
 const ACCEPT = ".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf";
 const MAX_PROOFS = 5;
@@ -32,19 +30,19 @@ function StatusIcon({ status }: { status: PaymentProofView["status"] }) {
 
 export function TransferCard({
   payment,
-  guestRef,
-  queryKey,
+  send,
+  onSent,
   timeZone,
 }: {
   payment: GuestPaymentInfo;
-  guestRef: GuestRef;
-  /** מפתח השאילתה של העמוד — מתעדכן מהתשובה של השרת אחרי ההעלאה */
-  queryKey: QueryKey;
+  /** שולח את הקובץ לשרת (בקישור האישי או מהאזור האישי) — מחזיר את מצב התשלום המעודכן */
+  send: (file: File) => Promise<GuestPaymentInfo>;
+  /** המצב המעודכן מהשרת אחרי ההעלאה — העמוד מעדכן את הנתונים שלו */
+  onSent: (info: GuestPaymentInfo) => void;
   timeZone: string;
 }) {
   const t = useCopy();
   const tr = payment.transfer;
-  const queryClient = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
   const hintId = useId();
   const [file, setFile] = useState<File | null>(null);
@@ -52,16 +50,10 @@ export function TransferCard({
   const upload = useMutation({
     mutationFn: async () => {
       if (!file) throw new Error(t.my.transfer.fileHint);
-      const form = new FormData();
-      if ("token" in guestRef) form.set("token", guestRef.token);
-      else form.set("bookingId", guestRef.bookingId);
-      form.set("file", file);
-      return hospitalitySiteUploadProof({ data: form });
+      return send(file);
     },
     onSuccess: (info) => {
-      queryClient.setQueryData(queryKey, (old: unknown) =>
-        old && typeof old === "object" ? { ...(old as object), payment: info } : old,
-      );
+      onSent(info);
       setFile(null);
       setDone(true);
       if (input.current) input.current.value = "";

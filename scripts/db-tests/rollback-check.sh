@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_guest_area (56): rollback → קודי הכניסה, החיבורים ופונקציות "ההזמנות שלי" נעלמו;
+#     guest_payment_info / guest_set_payment_method / guest_proof_slot בגרסה של 55 מילה במילה; הסכמה זהה בדיוק ל-55
 #   • hosp_bank_transfer (55): הגנה (נעצר כשיש אישורי העברה / קבצים בדלי), rollback → הטבלה, הדלי
 #     הפרטי, העמודה payment_method ופונקציות ההעברה נעלמו; guest_payment_info ו-public_payment_methods()
 #     בגרסה של 37 מילה במילה; הסכמה זהה בדיוק ל-54
@@ -107,6 +109,7 @@ M52=20261106190000_sec_p3_helpers_quote_email
 M53=20261106200000_sec_prv_guest_privacy
 M54=20261107100000_lic_digital_licenses
 M55=20261108100000_hosp_bank_transfer
+M56=20261108110000_hosp_guest_area
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -127,6 +130,40 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- A2: the guest area "ההזמנות שלי" (migration 56) ----------
+expect "before the rollback: codes and sessions (functions only), every area function server-only, the 55 functions call the shared helpers" \
+  "SELECT to_regclass('hospitality.guest_codes') IS NOT NULL
+      AND to_regclass('hospitality.guest_sessions') IS NOT NULL
+      AND NOT has_table_privilege('service_role', 'hospitality.guest_sessions', 'SELECT')
+      AND NOT has_function_privilege('anon', 'hospitality.guest_area_bookings(text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality.guest_code_consume(text,text,text)', 'EXECUTE')
+      AND has_function_privilege('service_role', 'hospitality.guest_area_proof_slot(text,uuid,text,text,integer)', 'EXECUTE')
+      AND (SELECT prosrc LIKE '%_guest_payment_json%' FROM pg_proc WHERE oid = 'hospitality.guest_payment_info(text,uuid)'::regprocedure)"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M56" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M56"
+down "$M56"
+expect "the guest area is gone; the three 55 functions are the originals" \
+  "SELECT to_regclass('hospitality.guest_codes') IS NULL
+      AND to_regclass('hospitality.guest_sessions') IS NULL
+      AND to_regprocedure('hospitality.guest_area_bookings(text)') IS NULL
+      AND to_regprocedure('hospitality._guest_payment_json(uuid,hospitality.bookings)') IS NULL
+      AND (SELECT prosrc NOT LIKE '%_guest_payment_json%' FROM pg_proc WHERE oid = 'hospitality.guest_payment_info(text,uuid)'::regprocedure)
+      AND (SELECT prosrc LIKE '%_transfer_state%' FROM pg_proc WHERE oid = 'hospitality.guest_proof_slot(text,uuid,text,text,integer)'::regprocedure)"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m55.sql"
+schema_dump "$SCHEMA_DIR/after-m56-down.sql"
+if diff -q "$SCHEMA_DIR/m55.sql" "$SCHEMA_DIR/after-m56-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 55, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 55:"; diff "$SCHEMA_DIR/m55.sql" "$SCHEMA_DIR/after-m56-down.sql" | head -20; exit 1
+fi
 
 # ---------- A5: bank-transfer policy and transfer proofs (migration 55) ----------
 expect "before the rollback: proofs table (functions only), private bucket, the 7-day rule, dated payment methods, server-only 'ready'" \
@@ -1584,6 +1621,11 @@ up "$M52"
 up "$M53"
 up "$M54"
 up "$M55"
+up "$M56"
+expect "the guest area is back: codes, sessions, the list for the server only" \
+  "SELECT to_regclass('hospitality.guest_sessions') IS NOT NULL
+      AND has_function_privilege('service_role', 'hospitality.guest_area_bookings(text)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'hospitality.guest_area_bookings(text)', 'EXECUTE')"
 expect "the transfer proofs are back: table, private bucket, dated payment methods" \
   "SELECT to_regclass('hospitality.payment_proofs') IS NOT NULL
       AND EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-payment-proofs' AND NOT public)
@@ -1601,8 +1643,8 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 38 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions and the transfer proofs), RLS on all, role admin, 6 flags off (incl. management)" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 38
+expect "Hospitality schema back: 40 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions, the transfer proofs and the guest-area codes and sessions), RLS on all, role admin, 6 flags off (incl. management)" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 40
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
       AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 6"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
