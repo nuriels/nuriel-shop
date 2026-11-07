@@ -268,6 +268,7 @@ function BookingList({ title, items }: { title: string; items: GuestAreaBooking[
               <StatusChip status={b.status} className="px-3 py-1 text-xs" />
             </div>
             <dl className="space-y-2 text-sm">
+              {b.package_name && <Row label={t.packages.row} value={b.package_name} />}
               <Row label={t.my.unit} value={b.unit_name} />
               <Row
                 label={t.my.dates}
@@ -359,6 +360,7 @@ function AreaBooking({ id }: { id: string }) {
       <div className="grid gap-6 md:grid-cols-2">
         <section className="rounded-[var(--radius)] border border-border bg-card p-6">
           <dl className="space-y-3 text-sm">
+            {b.package_name && <Row label={t.packages.row} value={b.package_name} />}
             <Row label={t.my.unit} value={b.unit_name} />
             <Row label={t.my.dates} value={stayText(b.check_in, b.check_out, t.locale)} />
             <Row label={t.my.guests} value={t.my.guestsText(b.adults, b.children)} />

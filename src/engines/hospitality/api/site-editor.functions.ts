@@ -2,6 +2,7 @@
 // טעינת הטיוטה והגרסאות, שמירה אוטומטית (revision), פרסום, שחזור, ותצוגה מקדימה (נתוני האתר
 // + הטיוטה, גם כשהאתר סגור לגולשים). המסמך עובר normalizeDesign בשרת לפני השמירה — וגם בהצגה.
 import { createServerFn } from "@tanstack/react-start";
+import type { PublicPackage } from "../types/packages";
 import type { PublicRoomType, PublicSite, RawPublicSite } from "../types/website";
 import { InputError } from "../validation/input";
 import { normalizeDesign } from "../website/design/schema";
@@ -114,11 +115,15 @@ export const hospitalitySitePreview = createServerFn({ method: "GET" }).handler(
       import("../server/manage.server"),
       import("../server/media.server"),
     ]);
-    const [raw, types] = await Promise.all([
+    const [raw, types, packages] = await Promise.all([
       manageRpc<RawPublicSite>("site_preview", {}),
       // סוגי חדרים — לתצוגה (מי שאין לו הרשאת קטלוג רואה את היחידות בלי קיבוץ)
       manageRpc<PublicRoomType[]>("room_types_view", {}).catch(() => [] as PublicRoomType[]),
+      // שלב א' 7: החבילות שמוצגות באתר (מי שאין לו הרשאת קטלוג — בלי)
+      manageRpc<{ packages: (PublicPackage & { is_active: boolean })[] }>("packages_view", {})
+        .then((v) => v.packages.filter((p) => p.is_active))
+        .catch(() => [] as PublicPackage[]),
     ]);
-    return toPublicSite(raw, publicUrl, types);
+    return toPublicSite(raw, publicUrl, types, packages);
   },
 );

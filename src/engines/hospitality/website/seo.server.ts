@@ -2,6 +2,7 @@
 // הנתונים: אותם נתונים ציבוריים שהאתר מציג (public_site, public_room_types), לפי האתר של הבקשה;
 // במטמון קצר לכל אתר (ברירת מחדל 5 דקות, SITEMAP_TTL_MS — כמו מפות האתר של החנויות), כך שבקשות
 // חוזרות לא מעמיסות על המסד. בלי קוד מתיקיות server/ (השער נטען גם בבאנדל של הדפדפן).
+import type { PublicPackage } from "../types/packages";
 import { currentSiteAddresses } from "@/platform/tenancy/current-site.server";
 import { publishableKey, supabaseUrl } from "@/platform/supabase/env.server";
 import { HOSPITALITY_SCHEMA } from "../config";
@@ -48,11 +49,12 @@ export async function rpc<T>(siteId: string, fn: string): Promise<T> {
 async function publicSite(siteId: string): Promise<PublicSite> {
   const hit = cache.get(siteId);
   if (hit && TTL_MS > 0 && Date.now() - hit.at < TTL_MS) return hit.site;
-  const [raw, types] = await Promise.all([
+  const [raw, types, packages] = await Promise.all([
     rpc<RawPublicSite>(siteId, "public_site"),
     rpc<PublicRoomType[]>(siteId, "public_room_types"),
+    rpc<PublicPackage[]>(siteId, "public_packages").catch(() => [] as PublicPackage[]),
   ]);
-  const site = toPublicSite(raw, () => null, types);
+  const site = toPublicSite(raw, () => null, types, packages);
   if (cache.size > 500) cache.clear();
   cache.set(siteId, { at: Date.now(), site });
   return site;

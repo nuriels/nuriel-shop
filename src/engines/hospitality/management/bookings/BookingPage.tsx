@@ -307,6 +307,29 @@ function Booking({ b }: { b: BookingDetail }) {
         )}
       </Section>
 
+      {b.package && (
+        <Section title={`חבילה — ${b.package.name}`}>
+          <div className="space-y-2 text-sm" data-testid="booking-package">
+            <p>
+              {b.package.kind === "special" ? "חבילה מיוחדת" : "חבילת אירוח"} ·{" "}
+              {b.package.nights === 1 ? "לילה אחד" : `${b.package.nights} לילות`} · עד{" "}
+              {b.package.max_guests} אורחים · {money(Number(b.package.price), b.currency)} לכל
+              החבילה
+            </p>
+            {b.package.terms && (
+              <p className="whitespace-pre-line text-muted-foreground">
+                <span className="font-medium text-foreground">תנאי החבילה: </span>
+                {b.package.terms}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              כך האורח הזמין ואישר. שינוי תאריכים מחשב מחיר לפי התעריפים — אפשר לקבוע את מחיר החבילה
+              ידנית בשינוי.
+            </p>
+          </div>
+        </Section>
+      )}
+
       <Section title="מחיר">
         <table className="w-full text-sm">
           <caption className="sr-only">מחיר לכל לילה</caption>
@@ -354,7 +377,11 @@ function Booking({ b }: { b: BookingDetail }) {
             ],
           ]}
         />
-        {b.price_manual && <p className="mt-2 text-sm text-muted-foreground">המחיר נקבע ידנית.</p>}
+        {b.package ? (
+          <p className="mt-2 text-sm text-muted-foreground">מחיר החבילה (מתחלק בין הלילות).</p>
+        ) : (
+          b.price_manual && <p className="mt-2 text-sm text-muted-foreground">המחיר נקבע ידנית.</p>
+        )}
       </Section>
 
       <PaymentsCard bookingId={b.id} today={b.today} timezone={ctx.business.timezone} />

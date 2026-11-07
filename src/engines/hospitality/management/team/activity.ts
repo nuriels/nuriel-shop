@@ -175,6 +175,17 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} שייך/ה את ${target} לסוג חדר`;
     case "room_types.applied":
       return `${actor} החיל/ה את פרטי סוג החדר ${target} על החדרים שלו`;
+    // שלב א' 7: חבילות
+    case "packages.created":
+      return `${actor} הוסיף/ה את החבילה ${target}`;
+    case "packages.updated":
+      return `${actor} עדכן/ה את החבילה ${target}`;
+    case "packages.deleted":
+      return `${actor} מחק/ה את החבילה ${target}`;
+    case "packages.shown":
+      return `${actor} הציג/ה באתר את החבילה ${target}`;
+    case "packages.hidden":
+      return `${actor} הסתיר/ה מהאתר את החבילה ${target}`;
     case "channels.calendar_added":
       return `${actor} חיבר/ה יומן חיצוני ל${target}`;
     case "channels.calendar_removed":

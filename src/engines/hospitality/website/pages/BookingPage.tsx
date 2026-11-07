@@ -12,21 +12,24 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { cn } from "@/platform/ui";
 import {
   hospitalitySiteFreeUnits,
+  hospitalitySitePackageQuote,
   hospitalitySiteQuote,
   hospitalitySiteQuoteType,
   hospitalitySiteRequestBooking,
   hospitalitySiteRequestBookingType,
   hospitalitySiteRequestGroup,
+  hospitalitySiteRequestPackage,
   hospitalitySitePaymentMethods,
 } from "../../api/website.functions";
-import type { GroupRequestResult } from "../../types/domain";
+import type { GroupRequestResult, Quote } from "../../types/domain";
+import type { PackageQuote, PublicPackage } from "../../types/packages";
 import { CAPTCHA_RETRY, TRAP_FIELD } from "../../security/messages";
 import type { PublicUnit } from "../../types/website";
 import { AvailabilityCalendar, type DateRange } from "../components/AvailabilityCalendar";
 import { Photo } from "../components/Photo";
 import { useCopy } from "../copy";
 import { CandlesIcon } from "../components/ShabbatBadge";
-import { nightsBetween } from "../lib/dates";
+import { addDays, nightsBetween } from "../lib/dates";
 import {
   findUnit,
   money,
@@ -46,6 +49,13 @@ import {
   type TypeListing,
 } from "../lib/listing";
 import { unitCover } from "../lib/media";
+import {
+  findPackage,
+  firstArrival,
+  packageImages,
+  packagePeriod,
+  packageUnit,
+} from "../lib/packages";
 import { hasInstructions, methodsText } from "../lib/payment";
 import { useSite } from "../lib/site-context";
 
@@ -82,7 +92,15 @@ function newKey(): string {
 const errText = (e: unknown, fallback: string) =>
   e instanceof Error && /[֐-׿]/.test(e.message) ? e.message : fallback;
 
+/** שלב א' 7: ?package=<slug> — הזמנת חבילה; אחרת — יחידה / סוג חדר / כמה חדרים (כמו קודם) */
 export function BookingPage() {
+  const { site } = useSite();
+  const search = useSearch({ strict: false }) as BookSearch;
+  const pkg = findPackage(site, search.package);
+  return pkg ? <PackageBooking pkg={pkg} /> : <UnitBooking />;
+}
+
+function UnitBooking() {
   const t = useCopy();
   const { site, design } = useSite();
   const navigate = useNavigate();
@@ -760,22 +778,25 @@ function QuoteDetails({
   quote: q,
   rules,
 }: {
-  quote: Awaited<ReturnType<typeof hospitalitySiteQuote>>;
+  /** שלב א' 7: גם הצעה לחבילה — מחיר החבילה בשורה אחת, ותנאי החבילה */
+  quote: Quote | PackageQuote;
   rules: string[];
 }) {
   const t = useCopy();
   const payLine = usePayLine(q.check_in);
   const { site } = useSite();
+  const pkg = "package" in q ? q.package : null;
+  const quoteNights = "nights" in q ? q.nights : null;
   const nights = useMemo(() => {
     // לילות באותו מחיר — שורה אחת ("2 לילות × ₪750")
     const groups: { price: number; count: number }[] = [];
-    for (const n of q.nights) {
+    for (const n of quoteNights ?? []) {
       const last = groups[groups.length - 1];
       if (last && last.price === Number(n.price)) last.count += 1;
       else groups.push({ price: Number(n.price), count: 1 });
     }
     return groups;
-  }, [q.nights]);
+  }, [quoteNights]);
   const lines = scheduleLines(q.policy, t);
   const guestText =
     typeof q.policy.rules["guest_text"] === "string" ? q.policy.rules["guest_text"] : null;
@@ -785,6 +806,14 @@ function QuoteDetails({
         {stayText(q.check_in, q.check_out, t.locale)} · {t.book.nights(q.nights_count)}
       </p>
       <dl className="space-y-2">
+        {pkg && (
+          <div className="flex justify-between gap-4 text-muted-foreground">
+            <dt>
+              {pkg.name} · {t.book.nights(q.nights_count)}
+            </dt>
+            <dd className="tabular-nums">{money(Number(q.total), q.currency)}</dd>
+          </div>
+        )}
         {nights.map((g, i) => (
           <div key={i} className="flex justify-between gap-4 text-muted-foreground">
             <dt>
@@ -801,7 +830,7 @@ function QuoteDetails({
           </div>
         )}
         <div className="flex items-baseline justify-between gap-4 border-t border-border pt-3 text-base">
-          <dt className="font-medium">{t.book.total}</dt>
+          <dt className="font-medium">{pkg ? t.packages.total : t.book.total}</dt>
           <dd className="font-display text-2xl tabular-nums">
             {money(Number(q.total), q.currency)}
           </dd>
@@ -845,6 +874,12 @@ function QuoteDetails({
         </ul>
         {guestText && <p className="mt-2 text-muted-foreground">{guestText}</p>}
       </div>
+      {pkg?.terms && (
+        <div data-testid="package-terms-summary">
+          <h3 className="mb-2 font-medium">{t.packages.terms}</h3>
+          <p className="whitespace-pre-line text-muted-foreground">{pkg.terms}</p>
+        </div>
+      )}
       {rules.length > 0 && (
         <div>
           <h3 className="mb-2 font-medium">{t.book.houseRules}</h3>
@@ -859,9 +894,22 @@ function QuoteDetails({
   );
 }
 
+type GuestQuote = Pick<
+  Quote,
+  | "check_in"
+  | "check_out"
+  | "adults"
+  | "children"
+  | "policy_hash"
+  | "total"
+  | "currency"
+  | "unit_id"
+>;
+
 function GuestForm({
   unit,
   roomType,
+  pkg,
   quote,
   extras,
   idempotencyKey,
@@ -870,7 +918,9 @@ function GuestForm({
 }: {
   unit: PublicUnit;
   roomType: TypeListing | undefined;
-  quote: Awaited<ReturnType<typeof hospitalitySiteQuote>>;
+  /** שלב א' 7: הזמנת חבילה (על היחידה של החבילה) */
+  pkg?: PublicPackage | undefined;
+  quote: GuestQuote;
   /** מיגרציה 44: חדרים נוספים (עם הצעת המחיר שלהם) — בקשה אחת לכל החדרים */
   extras: (ExtraRoom & { unit: PublicUnit; quote: SiteQuote })[];
   idempotencyKey: string;
@@ -923,6 +973,8 @@ function GuestForm({
         // שלב א' 5: רק אם עדיין זמין לתאריכים (השרת בודק שוב)
         paymentMethod: chosenMethod && payOptions.includes(chosenMethod) ? chosenMethod : null,
       };
+      // שלב א' 7: חבילה — המסד מחשב את העזיבה, המחיר והתנאים לפי החבילה
+      if (pkg) return hospitalitySiteRequestPackage({ data: { packageId: pkg.id, ...guest } });
       // מיגרציה 44: כמה חדרים — בקשה אחת (כל החדרים יחד או אף אחד)
       if (extras.length > 0)
         return hospitalitySiteRequestGroup({
@@ -1004,9 +1056,11 @@ function GuestForm({
     <form onSubmit={submit} noValidate className="max-w-xl space-y-6">
       <div className="lg:hidden">
         <p className="text-sm text-muted-foreground">
-          {extras.length > 0
-            ? t.book.groupLine(extras.length + 1)
-            : (roomType?.type.name ?? unit.name)}{" "}
+          {pkg
+            ? pkg.name
+            : extras.length > 0
+              ? t.book.groupLine(extras.length + 1)
+              : (roomType?.type.name ?? unit.name)}{" "}
           · {stayText(quote.check_in, quote.check_out, t.locale)} ·{" "}
           {money(
             Number(quote.total) + extras.reduce((s, x) => s + Number(x.quote.total), 0),
@@ -1084,7 +1138,7 @@ function GuestForm({
             className="mt-1 size-5 accent-[var(--primary)]"
             aria-invalid={touched && !accept}
           />
-          <span className="text-sm">{t.book.acceptTerms}</span>
+          <span className="text-sm">{pkg ? t.packages.acceptTerms : t.book.acceptTerms}</span>
         </label>
         {touched && !accept && (
           <p role="alert" className="text-xs text-destructive">
@@ -1183,6 +1237,235 @@ function GuestForm({
         </button>
       </div>
     </form>
+  );
+}
+
+// ---------- שלב א' 7: הזמנת חבילה ----------
+
+function PackageBooking({ pkg }: { pkg: PublicPackage }) {
+  const t = useCopy();
+  const { site, design } = useSite();
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as BookSearch;
+  // findPackage מחזיר רק חבילה שהיחידה שלה באתר
+  const unit = packageUnit(pkg, site)!;
+  const capacity = Math.min(pkg.max_guests, unit.capacity);
+  const earliest = firstArrival(pkg, site.today);
+  const [range, setRange] = useState<DateRange>(() => {
+    const from = search.from && search.from >= earliest ? search.from : null;
+    return { from, to: from ? addDays(from, pkg.nights) : null };
+  });
+  const [adults, setAdults] = useState(Math.max(1, Math.min(search.adults ?? 2, capacity)));
+  const [children, setChildren] = useState(search.children ?? 0);
+  const [step, setStep] = useState<"choose" | "details">("choose");
+  const keyRef = useRef(newKey());
+  const period = packagePeriod(pkg, t.locale);
+
+  useEffect(() => {
+    void navigate({
+      to: "/stay/book",
+      search: { package: pkg.slug, ...(range.from ? { from: range.from } : {}), adults, children },
+      replace: true,
+      resetScroll: false,
+    });
+  }, [pkg.slug, range.from, adults, children, navigate]);
+  // שינוי בבחירה = ניסיון חדש (מזהה בקשה חדש)
+  useEffect(() => {
+    keyRef.current = newKey();
+  }, [pkg.id, range.from, adults, children]);
+
+  const maxAdults = Math.min(unit.max_adults ?? capacity, capacity);
+  const maxChildren = Math.min(
+    unit.max_children ?? Math.max(0, capacity - 1),
+    Math.max(0, capacity - adults),
+  );
+  useEffect(() => {
+    if (adults > maxAdults) setAdults(Math.max(1, maxAdults));
+    if (children > maxChildren) setChildren(Math.max(0, maxChildren));
+  }, [adults, children, maxAdults, maxChildren]);
+
+  const quote = useQuery({
+    queryKey: ["hospitality", "site", "package-quote", pkg.id, range.from, adults, children],
+    queryFn: () =>
+      hospitalitySitePackageQuote({
+        data: { packageId: pkg.id, checkIn: range.from!, adults, children },
+      }),
+    enabled: !!range.from && site.booking_open,
+    retry: false,
+    staleTime: 30_000,
+  });
+
+  if (!site.booking_open) return <BookingClosed />;
+  const q = quote.data;
+  const canContinue = !!range.from && !!q?.available;
+  const summary = (
+    <PackageSummary pkg={pkg} unit={unit} quote={quote} adults={adults} children={children} />
+  );
+
+  return (
+    <PageFrame>
+      <div className="grid gap-10 lg:grid-cols-[1fr_24rem] lg:gap-14" data-testid="package-booking">
+        <div className="min-w-0">
+          {step === "choose" ? (
+            <div className="space-y-12">
+              <Field title={t.packages.kind[pkg.kind]} index={1}>
+                <div className="flex items-center gap-4 rounded-[var(--radius)] border border-primary bg-card p-3 ring-1 ring-primary">
+                  <Photo
+                    media={packageImages(pkg, site)[0] ?? null}
+                    alt={pkg.name}
+                    sizes="96px"
+                    className="size-20 shrink-0 rounded-sm"
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-medium">{pkg.name}</span>
+                    <span className="block text-sm text-muted-foreground">
+                      {[
+                        t.packages.nights(pkg.nights),
+                        t.packages.guests(pkg.max_guests),
+                        t.packages.in(unit.name),
+                      ].join(" · ")}
+                    </span>
+                    <span className="block text-sm tabular-nums">
+                      {money(pkg.price, site.business.currency)} {t.packages.pricePer(pkg.nights)}
+                    </span>
+                  </span>
+                </div>
+              </Field>
+              <Field title={t.packages.arrival} index={2}>
+                <p className="mb-4 text-sm text-muted-foreground" aria-live="polite">
+                  {range.from && range.to
+                    ? `${stayText(range.from, range.to, t.locale)} · ${t.book.nights(pkg.nights)}`
+                    : t.packages.pickArrival(pkg.nights)}
+                  {range.from && (
+                    <button
+                      type="button"
+                      onClick={() => setRange({ from: null, to: null })}
+                      className="ms-3 underline underline-offset-4 hover:text-foreground"
+                    >
+                      {t.book.clearDates}
+                    </button>
+                  )}
+                </p>
+                {period && (
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    {t.packages.period(period.from, period.to)}
+                  </p>
+                )}
+                <AvailabilityCalendar
+                  unitId={unit.id}
+                  today={site.today}
+                  calendarStyle={design.calendar}
+                  range={range}
+                  onSelect={setRange}
+                  fixedNights={pkg.nights}
+                />
+              </Field>
+              <Field title={t.book.guests} index={3}>
+                <div className="grid max-w-md gap-4">
+                  <Stepper
+                    label={t.book.adults}
+                    value={adults}
+                    min={1}
+                    max={Math.max(1, maxAdults)}
+                    onChange={setAdults}
+                  />
+                  {(unit.max_children ?? 1) > 0 && capacity > 1 && (
+                    <Stepper
+                      label={t.book.children}
+                      hint={
+                        unit.child_age_limit != null
+                          ? t.book.childrenHint(unit.child_age_limit)
+                          : undefined
+                      }
+                      value={children}
+                      min={0}
+                      max={Math.max(0, maxChildren)}
+                      onChange={setChildren}
+                    />
+                  )}
+                  <p className="text-sm text-muted-foreground">{t.packages.upTo(capacity)}</p>
+                </div>
+              </Field>
+              <div className="lg:hidden">{summary}</div>
+              <button
+                type="button"
+                disabled={!canContinue}
+                onClick={() => {
+                  setStep("details");
+                  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+                  window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+                }}
+                className="inline-flex h-12 w-full items-center justify-center rounded-sm bg-primary px-8 text-base font-medium text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+              >
+                {t.book.continue}
+              </button>
+            </div>
+          ) : (
+            <GuestForm
+              unit={unit}
+              roomType={undefined}
+              pkg={pkg}
+              quote={q!}
+              extras={[]}
+              idempotencyKey={keyRef.current}
+              onBack={() => setStep("choose")}
+              onTermsChanged={() => {
+                setStep("choose");
+                void quote.refetch();
+              }}
+            />
+          )}
+        </div>
+        <aside className="hidden lg:sticky lg:top-28 lg:block lg:self-start">{summary}</aside>
+      </div>
+    </PageFrame>
+  );
+}
+
+function PackageSummary({
+  pkg,
+  unit,
+  quote,
+  adults,
+  children,
+}: {
+  pkg: PublicPackage;
+  unit: PublicUnit;
+  quote: ReturnType<typeof useQuery<PackageQuote>>;
+  adults: number;
+  children: number;
+}) {
+  const t = useCopy();
+  const { site } = useSite();
+  const q = quote.data;
+  const property = site.properties.find((p) => p.id === unit.property_id);
+  const rules = property ? rulesLines(property, t) : [];
+  return (
+    <div className="rounded-[var(--radius)] border border-border bg-card p-6 shadow-[var(--site-shadow)]">
+      <h2 className="font-display text-2xl">{t.book.summary}</h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        {pkg.name} · {t.my.guestsText(adults, children)}
+      </p>
+      <div className="mt-5 border-t border-border pt-5" aria-live="polite">
+        {!q ? (
+          quote.isFetching ? (
+            <p className="text-sm text-muted-foreground">{t.book.calculating}</p>
+          ) : quote.isError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {errText(quote.error, t.book.error)}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t.book.pickToPrice}</p>
+          )
+        ) : !q.available ? (
+          <p role="alert" className="text-sm text-destructive">
+            {q.open === false ? t.book.notOpen : t.book.unavailable}
+          </p>
+        ) : (
+          <QuoteDetails quote={q} rules={rules} />
+        )}
+      </div>
+    </div>
   );
 }
 

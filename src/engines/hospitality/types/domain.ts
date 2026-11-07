@@ -113,6 +113,8 @@ export interface GuestBookingView {
   policy: PolicySnapshot;
   cancellation_outcome: JsonObject | null;
   can_request_cancellation: boolean;
+  /** שלב א' 7 (מיגרציה 59): הזמנת חבילה — שם החבילה; null / חסר — הזמנה רגילה */
+  package_name?: string | null;
 }
 
 export interface CancellationQuote {

@@ -4,6 +4,8 @@ export interface BookSearch {
   unit?: string;
   /** סוג חדר (מלון) — slug */
   type?: string;
+  /** שלב א' 7: חבילה — slug (העזיבה לפי מספר הלילות של החבילה) */
+  package?: string;
   from?: string;
   to?: string;
   adults?: number;
@@ -17,6 +19,8 @@ export function validateBookSearch(raw: Record<string, unknown>): BookSearch {
   const out: BookSearch = {};
   if (typeof raw["unit"] === "string" && raw["unit"].length <= 200) out.unit = raw["unit"];
   if (typeof raw["type"] === "string" && raw["type"].length <= 200) out.type = raw["type"];
+  if (typeof raw["package"] === "string" && raw["package"].length <= 200)
+    out.package = raw["package"];
   if (typeof raw["from"] === "string" && ISO.test(raw["from"])) out.from = raw["from"];
   if (typeof raw["to"] === "string" && ISO.test(raw["to"])) out.to = raw["to"];
   const n = (v: unknown, min: number) => {

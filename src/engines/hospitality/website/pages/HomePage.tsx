@@ -1,6 +1,6 @@
 // עמוד הבית של האתר הציבורי — לפי מסמך העיצוב: המקטעים בסדר שהעסק קבע, בלי המוסתרים.
 // בלי מסמך (עוד לא עוצב) — הסדר הרגיל: פתיח, על המקום, יחידות, גלריה, מתקנים, תנאים, מיקום וקשר.
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { Section, SectionType } from "../design/schema";
 import { useSite } from "../lib/site-context";
 import { Amenities } from "../sections/Amenities";
@@ -8,6 +8,7 @@ import { CtaBanner, Faq, Highlights, TextSection } from "../sections/Custom";
 import { Gallery } from "../sections/Gallery";
 import { Hero } from "../sections/Hero";
 import { Intro } from "../sections/Intro";
+import { Packages } from "../sections/Packages";
 import { LocationContact } from "../sections/Location";
 import { Terms } from "../sections/Terms";
 import { Units } from "../sections/Units";
@@ -28,15 +29,21 @@ const RENDER: Record<SectionType, (s: Section) => ReactNode> = {
 
 export function HomePage() {
   const { design } = useSite();
+  const shown = design.sections.filter((s) => !s.hidden);
+  // שלב א' 7: החבילות — מיד אחרי היחידות (בלי מקטע יחידות — אחרי הפתיח); בלי חבילות — כלום
+  const at = Math.max(
+    shown.findIndex((s) => s.type === "units"),
+    0,
+  );
   return (
     <>
-      {design.sections
-        .filter((s) => !s.hidden)
-        .map((s) => (
-          <div key={s.id} data-section-id={s.id}>
-            {RENDER[s.type](s)}
-          </div>
-        ))}
+      {shown.map((s, i) => (
+        <Fragment key={s.id}>
+          <div data-section-id={s.id}>{RENDER[s.type](s)}</div>
+          {i === at && <Packages />}
+        </Fragment>
+      ))}
+      {shown.length === 0 && <Packages />}
     </>
   );
 }

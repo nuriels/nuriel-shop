@@ -1,5 +1,6 @@
 // האתר הציבורי של העסק (Stage 4) — מה שהאתר מקבל מהשרת (public_site, מיגרציה 19).
 // רק מידע ציבורי: בלי פרטי אורחים, קודי כניסה, הערות פנימיות או כללי מחיר.
+import type { PublicPackage } from "./packages";
 import type { ArrivalValues } from "./catalog";
 import type { GuestBookingView } from "./domain";
 import type { GuestPaymentInfo } from "./payment-instructions";
@@ -145,6 +146,8 @@ export interface PublicSite {
   design: SiteDesignRecord | null;
   /** סוגי חדרים (מלונות): הסוג נמכר במקום כל חדר; ההזמנה — לחדר פנוי מהסוג */
   room_types: PublicRoomType[];
+  /** שלב א' 7: חבילות אירוח / חבילות מיוחדות שמוצגות באתר (ריק — אין) */
+  packages?: PublicPackage[];
   /** E5: הכתובת הקנונית של האתר (https://…, בלי / בסוף) — לכתובות הקנוניות ולשיתוף; null — לא ידוע */
   origin?: string | null;
 }
@@ -200,7 +203,7 @@ export type RawPublicMedia = Omit<PublicMedia, "url" | "srcset" | "thumb_url"> &
 
 export type RawPublicSite = Omit<
   PublicSite,
-  "gallery" | "brand" | "properties" | "units" | "design" | "room_types"
+  "gallery" | "brand" | "properties" | "units" | "design" | "room_types" | "packages"
 > & {
   design: (Omit<SiteDesignRecord, "document"> & { document: unknown }) | null;
   gallery: RawPublicMedia[];

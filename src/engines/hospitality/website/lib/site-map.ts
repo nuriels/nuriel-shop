@@ -8,6 +8,7 @@ import type {
   RawPublicMedia,
   RawPublicSite,
 } from "../../types/website";
+import type { PublicPackage } from "../../types/packages";
 
 type PublicUrl = (p: string | null | undefined) => string | null;
 
@@ -30,11 +31,13 @@ export function toPublicSite(
   raw: RawPublicSite,
   publicUrl: PublicUrl,
   roomTypes: PublicRoomType[] = [],
+  packages: PublicPackage[] = [],
 ): PublicSite {
   const urls = mediaUrls(publicUrl);
   return {
     ...raw,
     room_types: roomTypes,
+    packages: packages.map((p) => ({ ...p, price: Number(p.price) })),
     design: raw.design
       ? { ...raw.design, document: JSON.stringify(raw.design.document ?? {}) }
       : null,

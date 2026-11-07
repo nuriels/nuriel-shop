@@ -1,4 +1,5 @@
 // הזמנות לצוות (Stage 2h) — מה ש-staff_bookings / staff_booking_detail מחזירות (מיגרציה 16)
+import type { PackageSnapshot } from "./packages";
 /** ערך JSON (מה שהמסד מחזיר בשדות גמישים) */
 export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
@@ -111,6 +112,8 @@ export interface BookingDetail {
   amount_paid: number;
   payment_status: "unpaid" | "deposit_paid" | "paid";
   price_manual: boolean;
+  /** שלב א' 7 (מיגרציה 59): הזמנת חבילה — החבילה כפי שהאורח הזמין; null — הזמנה רגילה */
+  package?: PackageSnapshot | null;
   source: BookingRow["source"];
   channel: string | null;
   created_at: string;

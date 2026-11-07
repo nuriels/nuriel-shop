@@ -23,6 +23,8 @@ import type {
   RawPublicSite,
   SiteGuestBooking,
 } from "../types/website";
+import type { PackageQuote, PublicPackage } from "../types/packages";
+import { parsePackageQuote, parseRequestPackage } from "../validation/packages";
 import type {
   GuestPaymentInfo,
   GuestPaymentMethod,
@@ -76,13 +78,16 @@ export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
       import("../server/rpc.server"),
       import("../server/media.server"),
     ]);
-    const [raw, types, { currentSiteAddresses }, { canonicalOrigin, siteSeo }] = await Promise.all([
-      callRpc<RawPublicSite>("public_site", {}),
-      callRpc<PublicRoomType[]>("public_room_types", {}),
-      import("@/platform/tenancy/current-site.server"),
-      import("../website/seo"),
-    ]);
-    const site = toPublicSite(raw, publicUrl, types);
+    const [raw, types, packages, { currentSiteAddresses }, { canonicalOrigin, siteSeo }] =
+      await Promise.all([
+        callRpc<RawPublicSite>("public_site", {}),
+        callRpc<PublicRoomType[]>("public_room_types", {}),
+        // שלב א' 7 — בלי מיגרציה 59 (או כשהמסד לא ענה) האתר עובד כרגיל, בלי חבילות
+        callRpc<PublicPackage[]>("public_packages", {}).catch(() => [] as PublicPackage[]),
+        import("@/platform/tenancy/current-site.server"),
+        import("../website/seo"),
+      ]);
+    const site = toPublicSite(raw, publicUrl, types, packages);
     // E5: הכתובת הקנונית — מרשומת האתר + הבחירה בגרסה המפורסמת
     return { ...site, origin: canonicalOrigin(await currentSiteAddresses(), siteSeo(site)) };
   },
@@ -280,6 +285,66 @@ export const hospitalitySiteRequestGroup = createServerFn({ method: "POST" })
       (result.bookings ?? []).map((b) => b.manage_token),
       data.paymentMethod,
     );
+    kickOutbox();
+    return result;
+  });
+
+// ---------- שלב א' 7: חבילות (מיגרציה 59) ----------
+
+/** הצעת מחיר לחבילה: מחיר החבילה ומספר הלילות שלה, התפוסה והתנאים של היחידה — רק מהמסד */
+export const hospitalitySitePackageQuote = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parsePackageQuote(input))
+  .handler(async ({ data }): Promise<PackageQuote> => {
+    const client = await throttle("quote");
+    const { callServerRpc } = await import("../server/rpc.server");
+    return callServerRpc<PackageQuote>(
+      "package_quote",
+      {
+        _package_id: data.packageId,
+        _check_in: data.checkIn,
+        _adults: data.adults,
+        _children: data.children,
+      },
+      client,
+    );
+  });
+
+/**
+ * בקשת הזמנה לחבילה — אותן בדיקות כמו לחדר אחד (מלכודת, CAPTCHA, הגבלת קצב), ואז המסד: הזמנה על
+ * היחידה של החבילה (אותה תפוסה — בלי הזמנה כפולה), במחיר החבילה ובתנאים שהאורח אישר
+ */
+export const hospitalitySiteRequestPackage = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => ({
+    ...parseRequestPackage(input),
+    ...botCheckInput(input),
+    paymentMethod: optionalPaymentMethod(input?.["paymentMethod"]),
+  }))
+  .handler(async ({ data }): Promise<BookingRequestResult> => {
+    const client = await guardRequest(data);
+    const [{ callServerRpc }, { kickOutbox }] = await Promise.all([
+      import("../server/rpc.server"),
+      import("../outbox/worker.server"),
+    ]);
+    const result = await callServerRpc<BookingRequestResult>(
+      "request_booking_package",
+      {
+        _package_id: data.packageId,
+        _check_in: data.checkIn,
+        _full_name: data.fullName,
+        _email: data.email,
+        _phone: data.phone,
+        _idempotency_key: data.idempotencyKey,
+        _policy_accepted: true,
+        _policy_hash: data.policyHash,
+        _adults: data.adults,
+        _children: data.children,
+        _special_requests: data.specialRequests,
+        _marketing_consent: data.marketingConsent,
+        _language: data.language,
+      },
+      client,
+    );
+    await applyPaymentChoice([result.manage_token], data.paymentMethod);
     kickOutbox();
     return result;
   });

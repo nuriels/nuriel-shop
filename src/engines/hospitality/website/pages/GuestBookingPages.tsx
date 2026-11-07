@@ -217,6 +217,7 @@ export function BookingReceivedPage() {
             )}
             {b && !(rooms && groupRooms.length > 0) && (
               <dl className="mx-auto mt-8 grid max-w-md gap-3 rounded-sm bg-[var(--site-sand)] p-5 text-start text-sm">
+                {b.package_name && <Row label={t.packages.row} value={b.package_name} />}
                 <Row label={t.my.unit} value={b.unit_name} />
                 <Row label={t.my.dates} value={stayText(b.check_in, b.check_out, t.locale)} />
                 <Row label={t.my.guests} value={t.my.guestsText(b.adults, b.children)} />
@@ -334,6 +335,7 @@ export function MyBookingPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <section className="rounded-[var(--radius)] border border-border bg-card p-6">
           <dl className="space-y-3 text-sm">
+            {b.package_name && <Row label={t.packages.row} value={b.package_name} />}
             <Row label={t.my.unit} value={b.unit_name} />
             <Row label={t.my.dates} value={stayText(b.check_in, b.check_out, t.locale)} />
             <Row label={t.my.guests} value={t.my.guestsText(b.adults, b.children)} />

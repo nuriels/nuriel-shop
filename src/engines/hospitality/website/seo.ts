@@ -68,6 +68,8 @@ export function sitemapEntries(site: PublicSite): SitemapEntry[] {
           : `${SITE_PATH}/rooms/${seg(item.type.type.slug)}`,
     });
   }
+  // שלב א' 7: עמודי החבילות שמוצגות באתר
+  for (const p of site.packages ?? []) out.push({ path: `${SITE_PATH}/packages/${seg(p.slug)}` });
   const seen = new Set<string>();
   return out.filter((e) => !seen.has(e.path) && seen.add(e.path) && e.path.startsWith(SITE_PATH));
 }

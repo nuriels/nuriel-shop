@@ -53,6 +53,7 @@ export function AvailabilityCalendar({
   range,
   onSelect,
   minNights = 1,
+  fixedNights,
   months: count = 2,
   calendarStyle = "classic",
   className,
@@ -64,6 +65,8 @@ export function AvailabilityCalendar({
   range?: DateRange;
   onSelect?: (r: DateRange) => void;
   minNights?: number;
+  /** שלב א' 7: חבילה — בוחרים רק תאריך הגעה, והעזיבה אחרי מספר הלילות של החבילה */
+  fixedNights?: number | undefined;
   /** חודש אחד (צד העמוד) או שניים (בנייד תמיד אחד) */
   months?: 1 | 2;
   /** K3: הסגנון שבעל העסק בחר בעורך */
@@ -105,6 +108,13 @@ export function AvailabilityCalendar({
 
   const pick = (day: string) => {
     if (!onSelect) return;
+    if (fixedNights) {
+      // חבילה: כל הלילות שלה צריכים להיות פתוחים ופנויים (השרת בודק שוב בהצעת המחיר)
+      const end = addDays(day, fixedNights);
+      if (rangeHasBusy(day, end, blocked)) return;
+      onSelect({ from: day, to: end });
+      return;
+    }
     const start = range?.from;
     if (!start || range?.to || day <= start) {
       if (blocked.has(day)) return;
@@ -258,6 +268,8 @@ export function AvailabilityCalendar({
                 "relative inline-flex size-6 items-center justify-center rounded-full text-[11px]",
                 CELL[look][k],
                 look === "classic" && k === "free" && "ring-1 ring-foreground/30",
+                // במקרא — ניגודיות מלאה (בלוח עצמו לילה תפוס הוא כפתור לא פעיל, ושם הצבע החלש מותר)
+                look === "classic" && k === "busy" && "text-muted-foreground",
               )}
               aria-hidden="true"
             >

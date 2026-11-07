@@ -7,6 +7,7 @@ export type NavKey =
   | "calendar"
   | "bookings"
   | "units"
+  | "packages"
   | "photos"
   | "pricing"
   | "policies"
@@ -43,6 +44,7 @@ export type NavPath =
   | "/manage/channels"
   | "/manage/team"
   | "/manage/units"
+  | "/manage/packages"
   | "/manage/photos"
   | "/manage/pricing"
   | "/manage/policies"
@@ -101,6 +103,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: "catalog",
     also: ["/manage/units/", "/manage/properties/", "/manage/room-types"],
     keywords: "חדרים צימרים מתחם סוויטה",
+  },
+  {
+    key: "packages",
+    label: "חבילות",
+    to: "/manage/packages",
+    group: "place",
+    permission: "catalog",
+    keywords: "חבילת כלה חבילה מיוחדת חבילת אירוח VIP",
   },
   {
     key: "photos",

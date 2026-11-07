@@ -17,6 +17,8 @@ import { PreviewPage } from "./pages/PreviewPage";
 import { AccessibilityPage, PrivacyPage } from "./pages/LegalPages";
 import { SiteError, SiteNotFound } from "./pages/SiteMessage";
 import { UnitPage } from "./pages/UnitPage";
+import { PackagePage } from "./pages/PackagePage";
+import { findPackage, packageImages, packageUnit } from "./lib/packages";
 import { findUnit } from "./lib/format";
 import { findType } from "./lib/listing";
 import { SiteLayout } from "./SiteLayout";
@@ -148,5 +150,39 @@ export const siteRoomTypeRoute = {
   head: ({ loaderData }: { loaderData?: { head: PageHead } }) =>
     loaderData?.head ?? { meta: [], links: [] },
   component: UnitPage,
+  notFoundComponent: SiteNotFound,
+};
+
+/** שלב א' 7: עמוד חבילה: /stay/packages/<slug> — חבילה שמוצגת באתר; אחרת 404 */
+export const sitePackageRoute = {
+  loader: async ({
+    params,
+    parentMatchPromise,
+  }: {
+    params: { packageSlug: string };
+    parentMatchPromise: ParentMatch;
+  }) => {
+    const site = (await parentMatchPromise).loaderData as PublicSite | undefined;
+    const pkg = site ? findPackage(site, params.packageSlug) : undefined;
+    const unit = site && pkg ? packageUnit(pkg, site) : undefined;
+    if (!site || !pkg || !unit) throw notFound();
+    // הכותרות לשיתוף: שם החבילה, התיאור והתמונה הראשונה שלה (או של היחידה)
+    const head = siteUnitHead(
+      site,
+      {
+        ...unit,
+        name: pkg.name,
+        description: pkg.description ?? unit.description,
+        seo_title: null,
+        seo_description: null,
+        media: packageImages(pkg, site),
+      },
+      `${SITE_PATH}/packages/${seg(pkg.slug)}`,
+    );
+    return { head };
+  },
+  head: ({ loaderData }: { loaderData?: { head: PageHead } }) =>
+    loaderData?.head ?? { meta: [], links: [] },
+  component: PackagePage,
   notFoundComponent: SiteNotFound,
 };
