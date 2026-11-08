@@ -5,13 +5,15 @@
 >
 > 🔍 = קריאה בלבד · ✏️ = משנה משהו בשרת (כתוב בדיוק מה) · ⛔ = נקודת אישור שלך.
 >
-> **הקוד לפריסה:** `0df6fe0` (ענף `hospitality/stage-2`).
+> **הקוד לפריסה:** `6dd034b` (ענף `hospitality/stage-2`).
 > **מצב השרת לפני:** אחרי פריסת הנגישות והמסמכים — הקוד על `919ae23`, 176 מיגרציות, תג חזרה `before-a11y-docs`.
-> **אחרי:** הקוד על `0df6fe0`, 177 מיגרציות, תג חזרה חדש `before-nuriel-ai`.
+> **אחרי:** הקוד על `6dd034b`, 177 מיגרציות, תג חזרה חדש `before-nuriel-ai`.
 >
-> **נבדק מראש (בלי השרת):** מיגרציה 61 על מסד נקי (פעמיים) ועל מסד עם נתונים — 2756/2756 בדיקות מסד, מתוכן 101
-> של העוזר; Rollback ← הסכמה זהה בדיוק למיגרציה 60, ושוב קדימה; 930 בדיקות יחידה ואבטחה (157 של העוזר); בנייה;
-> סקירת אבטחה עצמאית — 11 ממצאים, כולם תוקנו ונבדקו; E2E ב-CI מול "דגם" מדומה (בלי מפתח אמיתי ובלי חיוב).
+> **נבדק מראש (בלי השרת):** מיגרציה 61 על מסד נקי ועל מסד עם נתונים, וגם פעמיים ברצף (הריצה השנייה לא משנה דבר)
+> — 2769/2769 בדיקות מסד ב-3 סבבים; Rollback ← הסכמה זהה בדיוק למיגרציה 60, ושוב קדימה; מקביליות אמיתית (24 בדיקות:
+> מכסות, התראות, "חידוש" ו"הפעלה" שנלחצו 8 פעמים במקביל); 936 בדיקות יחידה ואבטחה; בנייה; E2E מלא — 234 עברו, 0
+> נכשלו — מול "דגם" מדומה (בלי מפתח אמיתי ובלי חיוב), כולל בידוד בין עסקים בכל סוגי הכתובות; בדיקה חינמית מול
+> Anthropic האמיתי (21/21, בלי קריאה בתשלום). שתי סקירות עצמאיות — כל הממצאים תוקנו ונבדקו.
 
 ## מה נכנס
 
@@ -23,20 +25,33 @@
 - **חלון העוזר אצל מנהל העסק** (פאנל החנות `/admin`, ניהול המתחם `/manage`) — רק לעסק שיש / הייתה לו חבילה.
 - **התראות חידוש במייל** (30 / 14 / 7 / 1 ימים לפני הסיום וביום הסיום) — בדיקה כל שעה בתוך השרת, פעם אחת לכל
   התראה (שליחה שנכשלה — עוד ניסיון אחרי שעה, עד 3, באותו מפתח כפילות), בלי חיוב אוטומטי.
+- **עלויות:** כל המכסות שקובעות עלות — **במסד**, משותפות לכל תהליכי השרת ולא מתאפסות בהפעלה מחדש: למשתמש בדקה,
+  לעסק בשעה, אותה שאלה, כלל המערכת בשעה, ו**תקרת תקציב חודשית** (ברירת מחדל 25$; מעליה — תשובות מהמדריכים בלבד,
+  בלי קריאה לדגם). בדיקת המכסה נכשלה — אין קריאה לדגם.
+- **אישור תשלום — חובה:** בכל הפעלה ובכל חידוש מנהל העל מסמן "התשלום התקבל". בלי זה המסך, השרת **והמסד** מסרבים;
+  האישור נשמר בהיסטוריה.
 
-**מיגרציה אחת** — `20261110100000_ai_assistant.sql`, עטופה ב-`BEGIN` / `COMMIT`. **לא משנה נתונים קיימים ולא משנה
-פונקציה קיימת:** שמונה טבלאות חדשות (סגורות לדפדפן לגמרי, כולל סיכום עלויות יומי שלא נמחק עם עסק), 22 פונקציות
-חדשות (לשרת בלבד), ושתי שורות קטלוג (שתי
-החבילות, 150 ₪). ההגדרות מתחילות **כבוי, בלי מפתח, בלי חבילות** — אחרי הפריסה שום עסק לא רואה שינוי.
+**מיגרציה אחת** — `20261110100000_ai_assistant.sql`, עטופה ב-`BEGIN` / `COMMIT` (הכול או כלום; גם הרצה שנייה לא
+משנה דבר). **לא משנה נתונים קיימים ולא משנה פונקציה קיימת:** תשע טבלאות חדשות (סגורות לדפדפן לגמרי, כולל סיכום
+עלויות יומי שלא נמחק עם עסק ומוני המכסות), 24 פונקציות חדשות (לשרת בלבד), ושתי שורות קטלוג (שתי החבילות, 150 ₪).
+`btree_gist` כבר קיים בייצור (מיגרציית ההזמנות). ההגדרות מתחילות **כבוי, בלי מפתח, בלי חבילות** — אחרי הפריסה שום
+עסק לא רואה שינוי. שם הקובץ (10.11.2026) הוא מספור עוקב כמו 60 שלפניה — לא תאריך הרצה; ממוין אחריה.
 
 - **בלי משתני סביבה חדשים** ובלי שינוי ב-`docker-compose.yml` / Nginx. מפתח ההצפנה של מפתח ה-API נגזר
-  מ-`SUPABASE_SERVICE_ROLE_KEY` שכבר קיים בשרת (אם יוחלף אי-פעם — מדביקים את מפתח ה-API מחדש במסך).
+  מ-`SUPABASE_SERVICE_ROLE_KEY` שכבר קיים בשרת (אם יוחלף אי-פעם — מדביקים את מפתח ה-API מחדש במסך; עד אז העוזר
+  עונה מהמדריכים בלבד). **אפשרות (החלטה שלך):** `AI_ASSISTANT_SECRET` ייעודי — אם רוצים, מגדירים **לפני** שמירת
+  המפתח הראשונה (שינוי ב-`.env` — באישור נפרד, לא חלק מהפקודות כאן).
 - **תלות חדשה בבנייה:** `@anthropic-ai/sdk` בגרסה נעולה `1.3.0` (ב-`bun.lock`, מ-registry.npmjs.org).
 - **יציאה לרשת:** רק כשהעוזר פעיל — בקשות HTTPS ל-`api.anthropic.com` מתוך קונטיינר האפליקציה. P3 בודק שהכתובת
   נגישה (בלי מפתח, בלי עלות).
 - **שינוי אחד שנוגע בכל האתרים** (`src/server.ts`, מהסקירה העצמאית): בקשה לפונקציית שרת (`/_serverFn/…`) תמיד
-  מקבלת את העסק של הכתובת — גם כשהנתיב נגמר כמו שם קובץ (`…/x.js`), שעד עכשיו רץ "בלי עסק". בקשות רגילות לא
-  משתנות; ה-E2E המלא (כל האתרים, החנויות והפאנלים) עובר עם השינוי.
+  מקבלת את העסק של הכתובת — גם כשהנתיב נגמר כמו שם קובץ (`…/x.js`). **זה סוגר פער שקיים היום בייצור** (נבדק על
+  הבנייה של `919ae23`: נתיב כזה הריץ פונקציה של Ecommerce באתר של מתחם ובכתובת שאין בה חנות — "בלי עסק"). בקשות
+  רגילות לא משתנות; E2E חדש בודק חנות, מתחם, פאנל, דומיין ראשי, דומיין מותאם של חנות ושל מתחם, כותרות מזויפות,
+  `tenantId` בקלט ופונקציות של המנוע השני.
+- **הבדיקה השעתית של ההתראות** עולה עם הבקשה הראשונה לשרת אחרי ההפעלה (כך Nitro טוען את האפליקציה; כך גם תהליכי
+  הרקע הקיימים) — בייצור זה ה-healthcheck של Docker (כל 30 שניות), כלומר תוך כחצי דקה, **בלי שום משתמש**. V1 בודק את
+  השורה בלוג.
 - **הסדר:** הקוד והבנייה קודם (האתר ממשיך לרוץ), אחר כך מיגרציה 61, ומיד ההפעלה. הגרסה הקודמת עובדת גם מול 61
   (רק מוסיפה), כך שחזרה של האפליקציה בלבד (R1) אפשרית בלי לגעת במסד.
 
@@ -53,6 +68,16 @@
 - הצפנה: רק תג אימות מלא; `AI_ASSISTANT_SECRET` קצר — שגיאה ברורה (לא נפילה שקטה לסוד אחר).
 - התראות: בלי שירות מיילים — לא תופסים כלום; שליחה שנכשלה — עוד ניסיון. סיכום העלויות נשמר גם אחרי מחיקת עסק.
 
+### מה השתנה בבדיקת PRE-DEPLOY FINAL
+
+- המכסות שקובעות עלות עברו מהזיכרון של כל תהליך — למסד (משותף, לא מתאפס), ונוספה תקרת תקציב חודשית.
+- אישור "התשלום התקבל" — חובה בהפעלה ובחידוש (מסך + שרת + מסד), נשמר בהיסטוריה.
+- בלי מפתח — אין בקשה ל-Anthropic בכלל. סקריפט בדיקה מבוקר מול Anthropic (`bun run ai:staging-check`; קריאה בתשלום
+  רק עם `--paid` ומפתח Staging).
+- מסנני הסיסמאות והאותיות הדומות לא נכנסים יותר לקוד של הדפדפן. קובצי השרת שבקוד הדפדפן — אותם 10 בדיוק כמו בייצור
+  היום (אותו גודל), בלי סודות ובלי source maps.
+- בדיקות חדשות: בידוד בין עסקים בכל סוגי הכתובות; "חידוש" / "הפעלה" שנלחצו 8 פעמים במקביל → תקופה / חבילה אחת.
+
 ---
 
 ## שלב 1 — בדיקות מקדימות (🔍)
@@ -60,16 +85,16 @@
 ### P1 — הענף והקומיט
 
 ```bash
-cd /root/nuriel-shop-git && git branch --show-current && git log --oneline -1 && git status --short --untracked-files=no | wc -l && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge-base --is-ancestor HEAD 0df6fe0 && echo "fast-forward possible" && git merge-base --is-ancestor 0df6fe0 origin/hospitality/stage-2 && echo "0df6fe0 is on origin" && git log --oneline -1 0df6fe0
+cd /root/nuriel-shop-git && git branch --show-current && git log --oneline -1 && git status --short --untracked-files=no | wc -l && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge-base --is-ancestor HEAD 6dd034b && echo "fast-forward possible" && git merge-base --is-ancestor 6dd034b origin/hospitality/stage-2 && echo "6dd034b is on origin" && git log --oneline -1 6dd034b
 ```
 
 **תקין:** `hospitality/stage-2`; `919ae23 Hospitality sites: upload the main image…`; `0`; `fast-forward possible`;
-`0df6fe0 is on origin`; השורה של הקומיט. אחרת — עוצרים.
+`6dd034b is on origin`; השורה של הקומיט. אחרת — עוצרים.
 
 ### P2 — Docker, המיגרציות, הדיסק
 
 ```bash
-cd /root/nuriel-shop-git && docker ps --format '{{.Names}}\t{{.Status}}' | grep '^nuriel-shop-' && docker images nuriel-shop-app-app --format '{{.Tag}}\t{{.CreatedSince}}' && docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied" && LC_ALL=C comm -23 <(git ls-tree --name-only 0df6fe0 supabase/migrations/ | xargs -n1 basename | LC_ALL=C sort) <(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT filename FROM public._migrations_applied" | LC_ALL=C sort) && df -h /var/lib/docker /root/backups/nuriel-shop | tail -n +2
+cd /root/nuriel-shop-git && docker ps --format '{{.Names}}\t{{.Status}}' | grep '^nuriel-shop-' && docker images nuriel-shop-app-app --format '{{.Tag}}\t{{.CreatedSince}}' && docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied" && LC_ALL=C comm -23 <(git ls-tree --name-only 6dd034b supabase/migrations/ | xargs -n1 basename | LC_ALL=C sort) <(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT filename FROM public._migrations_applied" | LC_ALL=C sort) && df -h /var/lib/docker /root/backups/nuriel-shop | tail -n +2
 ```
 
 **תקין:** הקונטיינרים ב-`Up` (ליד האפליקציה `(healthy)`); התגים כוללים `before-a11y-docs`; `176`; **שורה אחת**
@@ -84,7 +109,16 @@ docker exec nuriel-shop-app node -e "fetch('https://api.anthropic.com/v1/models'
 **תקין:** `anthropic reachable, status 401` (401 = "אין מפתח" — צפוי). `NOT reachable` — עוצרים: צריך לפתוח יציאה
 ל-`api.anthropic.com:443` בחומת האש לפני שמפעילים את העוזר (הפריסה עצמה לא תלויה בזה).
 
-**⛔ אישור 1 — רק אם P1–P3 תקינים.** מכאן הפקודות כותבות בשרת.
+### P4 — Nginx דורס את `X-Forwarded-Host` בכל בלוק של האפליקציה
+
+```bash
+nginx -T 2>/dev/null | awk '/^[[:space:]]*location /{inb=1; blk=""} inb{blk=blk $0 "\n"} inb && /^[[:space:]]*}/{inb=0; if (blk ~ /proxy_pass http:\/\/127\.0\.0\.1:3700/) {p++; if (blk !~ /proxy_set_header X-Forwarded-Host \$host;/) m++}} END{print p+0 " app blocks, " m+0 " without X-Forwarded-Host $host"}'
+```
+
+**תקין:** `N app blocks, 0 without X-Forwarded-Host $host` (N — 2 ומעלה). הזיהוי של העסק נשען על הכותרת הזו, ו-Nginx
+צריך לדרוס כל ערך שהגיע מהדפדפן. מספר אחר מ-0 — עוצרים ושולחים לי (זה לא תלוי בפריסה הזו, אבל חשוב לבדוק לפניה).
+
+**⛔ אישור 1 — רק אם P1–P4 תקינים.** מכאן הפקודות כותבות בשרת.
 
 ---
 
@@ -114,7 +148,7 @@ docker exec nuriel-shop-db psql -U postgres -q -c "DROP DATABASE IF EXISTS resto
 ### S1 — הקוד (✏️ קבצים + עותק של קובץ ה-Rollback ליד הגיבוי)
 
 ```bash
-cd /root/nuriel-shop-git && git merge -q --ff-only 0df6fe0 && git log --oneline -1 && mkdir -p /root/backups/nuriel-shop/before-nuriel-ai/rollbacks && cp supabase/rollbacks/20261110100000_ai_assistant.down.sql /root/backups/nuriel-shop/before-nuriel-ai/rollbacks/ && ls /root/backups/nuriel-shop/before-nuriel-ai/rollbacks
+cd /root/nuriel-shop-git && git merge -q --ff-only 6dd034b && git log --oneline -1 && mkdir -p /root/backups/nuriel-shop/before-nuriel-ai/rollbacks && cp supabase/rollbacks/20261110100000_ai_assistant.down.sql /root/backups/nuriel-shop/before-nuriel-ai/rollbacks/ && ls /root/backups/nuriel-shop/before-nuriel-ai/rollbacks
 ```
 
 **תקין:** שורת הקומיט; `20261110100000_ai_assistant.down.sql`.
@@ -136,10 +170,10 @@ cd /root/nuriel-shop-git && docker compose build && docker run --rm --entrypoint
 ### M1
 
 ```bash
-cd /root/nuriel-shop-git && f=20261110100000_ai_assistant && docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < supabase/migrations/$f.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "INSERT INTO public._migrations_applied (filename) VALUES ('$f.sql')" && echo "$f ok" && row=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public._migrations_applied WHERE filename LIKE '20261110%'), (SELECT count(*) FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' AND relname IN ('ai_packages','ai_subscriptions','ai_subscription_periods','ai_subscription_events','ai_settings','ai_usage_log','ai_usage_daily','ai_notifications') AND relrowsecurity), (SELECT count(*) FROM public.ai_packages WHERE price_agorot = 15000), (SELECT mode FROM public.ai_settings), has_table_privilege('authenticated', 'public.ai_settings', 'SELECT'), has_function_privilege('authenticated', 'public.ai_entitlement(uuid)', 'EXECUTE'), (SELECT count(*) FROM public._migrations_applied)") && echo "$row" && [ "$row" = "1|8|2|off|f|f|177" ] && echo "61 checks ok" && docker exec nuriel-shop-db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema'" && docker compose up -d
+cd /root/nuriel-shop-git && f=20261110100000_ai_assistant && docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < supabase/migrations/$f.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "INSERT INTO public._migrations_applied (filename) VALUES ('$f.sql')" && echo "$f ok" && row=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public._migrations_applied WHERE filename LIKE '20261110%'), (SELECT count(*) FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' AND relname IN ('ai_packages','ai_subscriptions','ai_subscription_periods','ai_subscription_events','ai_settings','ai_usage_log','ai_usage_daily','ai_rate_buckets','ai_notifications') AND relrowsecurity), (SELECT count(*) FROM public.ai_packages WHERE price_agorot = 15000), (SELECT mode FROM public.ai_settings), has_table_privilege('authenticated', 'public.ai_settings', 'SELECT'), has_function_privilege('authenticated', 'public.ai_entitlement(uuid)', 'EXECUTE'), (SELECT count(*) FROM public._migrations_applied)") && echo "$row" && [ "$row" = "1|9|2|off|f|f|177" ] && echo "61 checks ok" && docker exec nuriel-shop-db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema'" && docker compose up -d
 ```
 
-**תקין:** `… ok`; `1|8|2|off|f|f|177` — לפי הסדר: רשומה אחת; שמונה הטבלאות עם RLS; שתי החבילות ב-150 ₪; העוזר
+**תקין:** `… ok`; `1|9|2|off|f|f|177` — לפי הסדר: רשומה אחת; תשע הטבלאות עם RLS; שתי החבילות ב-150 ₪; העוזר
 **כבוי**; הדפדפן **לא** קורא את ההגדרות; הדפדפן **לא** מפעיל את בדיקת הזכאות (רק השרת); 177 מיגרציות. ואז
 `61 checks ok`, `NOTIFY`, שורות ה-compose.
 
@@ -155,9 +189,10 @@ cd /root/nuriel-shop-git && f=20261110100000_ai_assistant && docker exec -i nuri
 cd /root/nuriel-shop-git && sleep 60 && docker compose ps app && ph=$(docker exec nuriel-shop-app sh -c 'printf %s "$PLATFORM_ADMIN_HOST"') && echo "platform host: ${ph:-NOT SET}" && for u in https://nuriel-shop.nuri1.fit/ https://nofi-dorit.nuri1.fit/stay https://nofi-dorit.nuri1.fit/manage/login "https://$ph/platform/ai"; do curl -s -o /dev/null -w "$u: %{http_code}\n" "$u"; done && docker logs --since 3m nuriel-shop-app 2>&1 | grep -iE "error|fatal|nuriel-ai" | tail -20
 ```
 
-**תקין:** `Up … (healthy)`; `platform host:` עם הדומיין של פאנל הפלטפורמה; ארבע שורות `200`; לוג ריק (שורות
-`aborted` — לא בעיה; בלי `[nuriel-ai] renewal notices failed`). בדיקת ההתראות הראשונה רצה דקה אחרי העלייה — בלי
-חבילות היא לא שולחת כלום ולא כותבת ללוג.
+**תקין:** `Up … (healthy)`; `platform host:` עם הדומיין של פאנל הפלטפורמה; ארבע שורות `200`; בלוג **שורה אחת**
+`[nuriel-ai] renewal notices: hourly check started (first run in 1 minute)` — הבדיקה השעתית עלתה בלי שום משתמש (עם
+ה-healthcheck); בלי `[nuriel-ai] renewal notices failed` ובלי `error` / `fatal` (שורות `aborted` — לא בעיה). בלי
+חבילות הבדיקה לא שולחת כלום ולא כותבת עוד ללוג.
 
 ### V2 — המסד אחרי (🔍)
 
@@ -165,18 +200,19 @@ cd /root/nuriel-shop-git && sleep 60 && docker compose ps app && ph=$(docker exe
 docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public.ai_subscriptions), (SELECT count(*) FROM public.ai_usage_log), (SELECT count(*) FROM public.ai_notifications), (SELECT mode || '|' || (api_key_encrypted IS NULL) FROM public.ai_settings), (SELECT count(*) FROM public.platform_audit_log WHERE action LIKE 'ai\_%')"
 ```
 
-**תקין:** `0|0|0|off|t|0` — אין חבילות, אין שימוש, אין התראות, העוזר כבוי ובלי מפתח.
+**תקין:** `0|0|0|off|true|0` — אין חבילות, אין שימוש, אין התראות, העוזר כבוי ובלי מפתח.
 
 ### V3 — בדפדפן (אתה, בסדר הזה)
 
 1. **מנהל העל** → "ניהול הפלטפורמה" → **"ניהול תוסף AI"**: רשימת כל החנויות והמתחמים, כולם "ללא חבילה".
 2. בחנות כלשהי ובנופי דורית — **אין** כפתור NURIEL AI (אין חבילות). שום שינוי אצל הלקוחות.
 3. **מפתח:** במסך בלבד (לא בצ'אט, לא בטרמינל) — מדביקים מפתח API רגיל מ-console.anthropic.com → "שמירת מפתח" →
-   מופיע `sk-ant-…XXXX`. מומלץ להגדיר בקונסולה של Anthropic תקרת הוצאה חודשית.
+   מופיע `sk-ant-…XXXX`. **תקציב חודשי ($)** במסך — ברירת המחדל 25$; מעליו העוזר עונה מהמדריכים בלבד. מומלץ להגדיר
+   גם בקונסולה של Anthropic תקרת הוצאה חודשית.
 4. **מצב בדיקה** → "בדיקת חיבור" (קריאה אחת, בערך חצי סנט) → "החיבור תקין … הסיווג נכון".
 5. במצב בדיקה, נכנסים לניהול של חנות / של נופי דורית ("היכנס לניהול") ושואלים שאלה — רק מנהל העל רואה את העוזר.
 6. כשהכול תקין: **"פעיל"**, ומפעילים חבילה לעסק **רק אחרי אישור ותשלום** (150 ₪ לשנה) — "הפעלה", תאריך התחלה,
-   והסיום נקבע לבד.
+   מסמנים **"התשלום התקבל"** (בלי הסימון הכפתור נעול, והשרת והמסד מסרבים), והסיום נקבע לבד.
 
 ---
 
@@ -206,19 +242,20 @@ docker exec nuriel-shop-db pg_dump -U postgres -d postgres -Fc > /root/backups/n
 
 ## כל הפקודות לפי הסדר
 
-| #     | סוג            | מה                                 | תקין                        |
-| ----- | -------------- | ---------------------------------- | --------------------------- |
-| P1    | 🔍             | הענף והקומיט                       | `919ae23`, `fast-forward …` |
-| P2    | 🔍             | Docker, מיגרציות, דיסק             | `176`, ממתינה אחת           |
-| P3    | 🔍             | יציאה ל-Anthropic (בלי מפתח)       | `status 401`                |
-| ⛔ 1  |                |                                    |                             |
-| B1    | ✏️ גיבוי       | מסד, תג `before-nuriel-ai`         | `dump read to the end: ok`  |
-| B2    | ✏️ מסד נפרד    | בדיקת שחזור                        | שתי שורות זהות              |
-| S1    | ✏️ קבצים       | הקוד ← `0df6fe0`                   | קובץ ה-Rollback             |
-| S2    | ✏️ image       | בנייה + הקוד החדש בתוך ה-image     | `Built`, מספר > 0           |
-| ⛔ 2  |                |                                    |                             |
-| M1    | ✏️ מסד + הפעלה | מיגרציה 61 + בדיקה + הפעלה         | `61 checks ok`, `Started`   |
-| V1    | 🔍             | האתרים ו-`/platform/ai`            | ארבע `200`                  |
-| V2    | 🔍             | המסד אחרי                          | `0\|0\|0\|off\|t\|0`        |
-| V3    | דפדפן          | המסך, מפתח, מצב בדיקה, בדיקת חיבור | —                           |
-| R1/R2 | ✏️             | רק בתקלה                           | —                           |
+| #     | סוג            | מה                                    | תקין                               |
+| ----- | -------------- | ------------------------------------- | ---------------------------------- |
+| P1    | 🔍             | הענף והקומיט                          | `919ae23`, `fast-forward …`        |
+| P2    | 🔍             | Docker, מיגרציות, דיסק                | `176`, ממתינה אחת                  |
+| P3    | 🔍             | יציאה ל-Anthropic (בלי מפתח)          | `status 401`                       |
+| P4    | 🔍             | Nginx דורס `X-Forwarded-Host`         | `0 without …`                      |
+| ⛔ 1  |                |                                       |                                    |
+| B1    | ✏️ גיבוי       | מסד, תג `before-nuriel-ai`            | `dump read to the end: ok`         |
+| B2    | ✏️ מסד נפרד    | בדיקת שחזור                           | שתי שורות זהות                     |
+| S1    | ✏️ קבצים       | הקוד ← `6dd034b`                      | קובץ ה-Rollback                    |
+| S2    | ✏️ image       | בנייה + הקוד החדש בתוך ה-image        | `Built`, מספר > 0                  |
+| ⛔ 2  |                |                                       |                                    |
+| M1    | ✏️ מסד + הפעלה | מיגרציה 61 + בדיקה + הפעלה            | `61 checks ok`, `Started`          |
+| V1    | 🔍             | האתרים, `/platform/ai`, הבדיקה השעתית | ארבע `200`, `hourly check started` |
+| V2    | 🔍             | המסד אחרי                             | `0\|0\|0\|off\|true\|0`            |
+| V3    | דפדפן          | המסך, מפתח, מצב בדיקה, בדיקת חיבור    | —                                  |
+| R1/R2 | ✏️             | רק בתקלה                              | —                                  |
