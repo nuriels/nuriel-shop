@@ -17,6 +17,7 @@ import {
   LogOut,
   RefreshCw,
   Search,
+  SlidersHorizontal,
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -197,6 +198,8 @@ export function CalendarPage() {
   });
   const [cancelled, setCancelled] = useState(false);
   const [q, setQ] = useState("");
+  // בטלפון הסינון והחיפוש מקופלים מאחורי כפתור (במחשב — תמיד גלויים)
+  const [showFilters, setShowFilters] = useState(false);
   const [booking, setBooking] = useState<CalendarBooking | null>(null);
   const [block, setBlock] = useState<CalendarBlock | null>(null);
   const [blockForm, setBlockForm] = useState<{ unitId: string; from: string; to: string } | null>(
@@ -291,6 +294,11 @@ export function CalendarPage() {
   const unitTypes = [
     ...new Set(data.units.filter((u) => u.kind !== "whole_property").map((u) => u.unit_type)),
   ];
+  // כמה מסננים פעילים — מוצג על כפתור "סינון וחיפוש" בטלפון, כדי שלא יוסתרו בלי לדעת
+  const activeFilters =
+    [filters.propertyId, filters.unitId, filters.unitType, filters.tone].filter(Boolean).length +
+    (cancelled ? 1 : 0) +
+    (q.trim() ? 1 : 0);
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-4">
@@ -431,7 +439,28 @@ export function CalendarPage() {
         </span>
       </div>
 
-      <div className="flex flex-wrap items-end gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-11 gap-2 self-start sm:hidden"
+        aria-expanded={showFilters}
+        aria-controls="cal-filters"
+        onClick={() => setShowFilters((v) => !v)}
+        data-testid="calendar-filters-toggle"
+      >
+        <SlidersHorizontal className="size-4" aria-hidden="true" />
+        סינון וחיפוש
+        {activeFilters > 0 && (
+          <span className="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">
+            {activeFilters}
+            <span className="sr-only"> פעילים</span>
+          </span>
+        )}
+      </Button>
+      <div
+        id="cal-filters"
+        className={cn("flex flex-wrap items-end gap-2", !showFilters && "max-sm:hidden")}
+      >
         <div className="flex flex-col gap-1">
           <Label htmlFor="cal-property" className="text-xs">
             מתחם

@@ -228,7 +228,8 @@ function TeamContent({ team, siteUrl }: { team: TeamView; siteUrl: string }) {
                 className="flex flex-wrap items-center gap-3 py-3"
                 data-member={m.email}
               >
-                <div className="min-w-0 flex-1">
+                {/* בסיס 14rem: בטלפון הגישה לנתונים הכספיים וההסרה יורדות לשורה משלהן */}
+                <div className="min-w-0 flex-[1_1_14rem]">
                   <p className="flex flex-wrap items-center gap-2 font-medium">
                     <span className="truncate">{m.display_name || m.email}</span>
                     {m.role === "owner" ? (

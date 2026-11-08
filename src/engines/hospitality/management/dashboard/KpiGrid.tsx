@@ -163,7 +163,8 @@ function KpiCard({ k }: { k: Kpi }) {
     <>
       <div className="flex items-center gap-2.5">
         <IconTile icon={k.icon} tone={k.tone} size="sm" />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--hm-ink-2)]">
+        {/* שתי שורות לכל היותר — בטלפון הכותרת לא נקטעת ב"…" */}
+        <span className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-tight font-semibold text-[var(--hm-ink-2)]">
           {k.label}
         </span>
         {k.finance && (

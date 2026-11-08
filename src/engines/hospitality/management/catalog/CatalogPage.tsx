@@ -273,39 +273,43 @@ function PropertyCard(props: {
   const inactiveId = useId();
   return (
     <Card data-property={p.name}>
+      {/* השם והפרטים בשורה משלהם (בסיס 16rem): כשאין מקום — הכפתורים יורדים לשורה הבאה, והשם
+          לא נדחק לעמודה צרה (בטלפון: אות או מילה בשורה) */}
       <CardHeader className="flex flex-row flex-wrap items-start gap-3 space-y-0">
-        <span
-          className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
-          aria-hidden="true"
-        >
-          <Icon className="size-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <CardTitle className="text-lg">
-            <h2 className="break-words">
-              <Link
-                to="/manage/properties/$propertyId"
-                params={{ propertyId: p.id }}
-                className="hover:underline"
-              >
-                {p.name}
-              </Link>
-            </h2>
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {PROPERTY_TYPE_LABELS[p.property_type]} · {count(units.length, "יחידה אחת", "יחידות")}
-          </p>
-          {p.address && (
-            <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
-              <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
-              <span className="break-words">{p.address}</span>
+        <div className="flex min-w-0 flex-[1_1_16rem] items-start gap-3">
+          <span
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+            aria-hidden="true"
+          >
+            <Icon className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <CardTitle className="text-lg">
+              <h2 className="break-words">
+                <Link
+                  to="/manage/properties/$propertyId"
+                  params={{ propertyId: p.id }}
+                  className="hover:underline"
+                >
+                  {p.name}
+                </Link>
+              </h2>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {PROPERTY_TYPE_LABELS[p.property_type]} · {count(units.length, "יחידה אחת", "יחידות")}
             </p>
-          )}
-          {p.status === "draft" && (
-            <span className="mt-1.5 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-900">
-              טיוטה — לא יוצג לאורחים
-            </span>
-          )}
+            {p.address && (
+              <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
+                <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+                <span className="break-words">{p.address}</span>
+              </p>
+            )}
+            {p.status === "draft" && (
+              <span className="mt-1.5 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-900">
+                טיוטה — לא יוצג לאורחים
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
