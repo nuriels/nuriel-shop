@@ -36,6 +36,8 @@ BEGIN
   END IF;
 END $$;
 
+DROP FUNCTION IF EXISTS public.ai_rate_buckets_prune();
+DROP FUNCTION IF EXISTS public.ai_quota_take(uuid, uuid, text, boolean);
 DROP FUNCTION IF EXISTS public.ai_notifications_mark_stale();
 DROP FUNCTION IF EXISTS public.ai_notification_finish(bigint, text, text);
 DROP FUNCTION IF EXISTS public.ai_notification_claim(uuid, date, text, text);
@@ -45,7 +47,9 @@ DROP FUNCTION IF EXISTS public.ai_admin_usage(uuid);
 DROP FUNCTION IF EXISTS public.ai_admin_save_settings(uuid, jsonb);
 DROP FUNCTION IF EXISTS public.ai_admin_history(uuid, uuid);
 DROP FUNCTION IF EXISTS public.ai_admin_set_suspended(uuid, uuid, boolean, text);
+DROP FUNCTION IF EXISTS public.ai_admin_renew(uuid, uuid, date, text, boolean);
 DROP FUNCTION IF EXISTS public.ai_admin_renew(uuid, uuid, date, text);
+DROP FUNCTION IF EXISTS public.ai_admin_activate(uuid, uuid, text, date, text, boolean);
 DROP FUNCTION IF EXISTS public.ai_admin_activate(uuid, uuid, text, date, text);
 DROP FUNCTION IF EXISTS public.ai_admin_list(uuid, text, text);
 DROP FUNCTION IF EXISTS public.ai_audit(uuid, text, uuid, text, jsonb);
@@ -57,6 +61,7 @@ DROP FUNCTION IF EXISTS public.ai_chain_end(uuid, date);
 DROP TABLE IF EXISTS public.ai_notifications;
 DROP TABLE IF EXISTS public.ai_usage_log;
 DROP TABLE IF EXISTS public.ai_usage_daily;
+DROP TABLE IF EXISTS public.ai_rate_buckets;
 DROP TABLE IF EXISTS public.ai_settings;
 DROP TABLE IF EXISTS public.ai_subscription_events;
 DROP TABLE IF EXISTS public.ai_subscription_periods;

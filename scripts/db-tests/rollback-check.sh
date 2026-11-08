@@ -148,17 +148,20 @@ schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --sch
 schema_dump "$SCHEMA_DIR/before.sql"
 
 # ---------- NURIEL AI ASSISTANT (migration 61) ----------
-expect "before the rollback: the 7 AI tables closed to the browser (server: read only), the functions for the server only" \
-  "SELECT to_regclass('public.ai_subscriptions') IS NOT NULL
-      AND to_regclass('public.ai_subscription_periods') IS NOT NULL
-      AND to_regclass('public.ai_settings') IS NOT NULL
+expect "before the rollback: the 9 AI tables (RLS) closed to the browser (server: read only), the functions for the server only" \
+  "SELECT (SELECT count(*) FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
+                                           AND c.relname LIKE 'ai\\_%' AND c.relrowsecurity) = 9
+      AND NOT EXISTS (SELECT 1 FROM pg_class c, unnest(ARRAY['anon', 'authenticated']) r(role),
+                                    unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) p(priv)
+                       WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r' AND c.relname LIKE 'ai\\_%'
+                         AND has_table_privilege(r.role, c.oid, p.priv))
       AND NOT has_table_privilege('authenticated', 'public.ai_settings', 'SELECT')
       AND NOT has_table_privilege('anon', 'public.ai_subscriptions', 'SELECT')
       AND has_table_privilege('service_role', 'public.ai_subscriptions', 'SELECT')
       AND NOT has_table_privilege('service_role', 'public.ai_subscription_periods', 'INSERT')
       AND has_function_privilege('service_role', 'public.ai_entitlement(uuid)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'public.ai_entitlement(uuid)', 'EXECUTE')
-      AND NOT has_function_privilege('authenticated', 'public.ai_admin_activate(uuid,uuid,text,date,text)', 'EXECUTE')"
+      AND NOT has_function_privilege('authenticated', 'public.ai_admin_activate(uuid,uuid,text,date,text,boolean)', 'EXECUTE')"
 echo "rollback guard: $M61 refuses while a package exists, and while the assistant is configured"
 q "SET session_replication_role = replica;
    INSERT INTO public.ai_subscriptions (tenant_id, package_code, product)
@@ -185,7 +188,7 @@ for f in $(ls "$MIGRATIONS"/*.sql | sort); do
 done
 echo "rollback: $M61"
 down "$M61"
-expect "the AI add-on is gone: the 8 tables and every ai_ function; the platform log keeps its rows" \
+expect "the AI add-on is gone: the 9 tables and every ai_ function; the platform log keeps its rows" \
   "SELECT to_regclass('public.ai_packages') IS NULL
       AND to_regclass('public.ai_subscriptions') IS NULL
       AND to_regclass('public.ai_subscription_periods') IS NULL
@@ -193,6 +196,7 @@ expect "the AI add-on is gone: the 8 tables and every ai_ function; the platform
       AND to_regclass('public.ai_settings') IS NULL
       AND to_regclass('public.ai_usage_log') IS NULL
       AND to_regclass('public.ai_usage_daily') IS NULL
+      AND to_regclass('public.ai_rate_buckets') IS NULL
       AND to_regclass('public.ai_notifications') IS NULL
       AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'ai\_%')
       AND EXISTS (SELECT 1 FROM public.platform_audit_log WHERE action = 'ai_settings_changed')"
@@ -1856,9 +1860,10 @@ up "$M58"
 up "$M59"
 up "$M60"
 up "$M61"
-expect "the AI add-on is back: 8 tables closed to the browser, 2 packages at 150 ILS, the assistant off, functions for the server only" \
+expect "the AI add-on is back: 9 tables closed to the browser, 2 packages at 150 ILS, the assistant off, functions for the server only" \
   "SELECT to_regclass('public.ai_subscriptions') IS NOT NULL
       AND to_regclass('public.ai_usage_daily') IS NOT NULL
+      AND to_regclass('public.ai_rate_buckets') IS NOT NULL
       AND NOT has_table_privilege('authenticated', 'public.ai_settings', 'SELECT')
       AND NOT has_table_privilege('authenticated', 'public.ai_usage_daily', 'SELECT')
       AND (SELECT count(*) FROM public.ai_packages WHERE price_agorot = 15000) = 2

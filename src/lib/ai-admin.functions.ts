@@ -19,9 +19,17 @@ type ActivateInput = {
   product: "ecommerce" | "hospitality";
   startsOn: string;
   note?: string;
+  /** מנהל העל אישר שהתשלום התקבל — בלי זה אין הפעלה (נבדק בשרת ובמסד) */
+  paymentConfirmed?: boolean;
 };
 /** expectedLastEnd — סוף התקופה האחרונה כפי שהמסך הציג (last_ends_on); השתנה בינתיים → החידוש נעצר */
-type RenewInput = { tenantId: string; expectedLastEnd: string; note?: string };
+type RenewInput = {
+  tenantId: string;
+  expectedLastEnd: string;
+  note?: string;
+  /** מנהל העל אישר שהתשלום התקבל — בלי זה אין חידוש (נבדק בשרת ובמסד) */
+  paymentConfirmed?: boolean;
+};
 type SuspendInput = { tenantId: string; suspended: boolean; reason?: string };
 type SaveInput = {
   apiKey?: string;

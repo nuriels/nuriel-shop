@@ -56,6 +56,10 @@ export async function requirePlatformAdmin(): Promise<{ userId: string }> {
 }
 
 /** הודעות המסד (באנגלית, קבועות) → הודעה בעברית למנהל העל. כל השאר → הודעה כללית */
+/** בלי חיוב אוטומטי: כל הפעלה וכל חידוש — רק אחרי שמנהל העל אישר במפורש שהתשלום התקבל (גם במסד) */
+export const PAYMENT_NOT_CONFIRMED =
+  "יש לאשר שהתשלום התקבל — בלי האישור אין הפעלה ואין חידוש (אין חיוב אוטומטי)";
+
 const DB_MESSAGES: readonly [RegExp, string][] = [
   [/platform admin only/, FORBIDDEN_MESSAGE],
   [/business not found/, "העסק לא נמצא"],
@@ -77,6 +81,7 @@ const DB_MESSAGES: readonly [RegExp, string][] = [
     "החבילה השתנתה בינתיים (ייתכן שכבר חודשה) — רעננו את הרשימה ובדקו לפני חידוש נוסף",
   ],
   [/no package for this business/, "לעסק אין חבילה"],
+  [/payment was received/, PAYMENT_NOT_CONFIRMED],
 ];
 
 function adminError(error: unknown, fallback: string): SafeError {
@@ -167,6 +172,7 @@ export async function handleActivate(input: unknown): Promise<JsonObject> {
   if (!isAiProduct(product)) throw new SafeError("נא לבחור את סוג העוזר");
   const startsOn = String(data["startsOn"] ?? "").trim();
   if (!DATE.test(startsOn)) throw new SafeError("נא לבחור תאריך התחלה");
+  if (data["paymentConfirmed"] !== true) throw new SafeError(PAYMENT_NOT_CONFIRMED);
   try {
     return obj(
       await store.rpc("ai_admin_activate", {
@@ -175,6 +181,7 @@ export async function handleActivate(input: unknown): Promise<JsonObject> {
         _product: product,
         _starts_on: startsOn,
         _note: noteOf(data["note"]),
+        _payment_confirmed: true,
       }),
     );
   } catch (error) {
@@ -191,6 +198,7 @@ export async function handleRenew(input: unknown): Promise<JsonObject> {
   // מנהל אחר, רשימה ישנה) — המסד עוצר, ולא נרשמת שנה נוספת בטעות
   const expectedLastEnd = String(data["expectedLastEnd"] ?? "").trim();
   if (!DATE.test(expectedLastEnd)) throw new SafeError("רעננו את הרשימה ונסו שוב");
+  if (data["paymentConfirmed"] !== true) throw new SafeError(PAYMENT_NOT_CONFIRMED);
   try {
     return obj(
       await store.rpc("ai_admin_renew", {
@@ -198,6 +206,7 @@ export async function handleRenew(input: unknown): Promise<JsonObject> {
         _tenant: tenantId,
         _expected_last_end: expectedLastEnd,
         _note: noteOf(data["note"]),
+        _payment_confirmed: true,
       }),
     );
   } catch (error) {
@@ -262,11 +271,12 @@ export function detectAnomalies(usage: JsonObject | null, budgetUsd: number): Ai
   }
   const totals = obj(usage["totals"]);
   const cost = Number(totals["cost_usd"] ?? 0);
-  if (budgetUsd > 0 && cost > budgetUsd) {
+  // התקציב הוא תקרה (במסד, ai_quota_take): בהגעה אליו העוזר עונה מהמדריכים בלבד, בלי קריאות לדגם
+  if (cost >= budgetUsd) {
     out.push({
       kind: "budget",
       tenant: null,
-      message: `העלות המשוערת החודש ($${cost.toFixed(2)}) עברה את התקציב ($${budgetUsd.toFixed(2)})`,
+      message: `התקציב החודשי נוצל ($${cost.toFixed(2)} מתוך $${budgetUsd.toFixed(2)}) — העוזר עונה מהמדריכים בלבד, בלי קריאות לדגם, עד תחילת החודש הבא או עד הגדלת התקציב`,
     });
   }
   return out;

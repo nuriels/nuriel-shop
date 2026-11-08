@@ -158,6 +158,8 @@ async function tick(): Promise<void> {
   if (running) return;
   running = true;
   try {
+    // מוני המכסות שהחלון שלהם נגמר — נמחקים (לא קריטי)
+    await store.pruneQuota();
     const run = await runRenewalNotices();
     if (run.emailNotConfigured) {
       console.error(
@@ -187,4 +189,6 @@ export function startAiRenewalJob(): void {
   first.unref?.();
   timer = setInterval(() => void tick(), 60 * 60 * 1000);
   timer.unref?.();
+  // שורה אחת בעליית השרת — כך אפשר לוודא (docker logs) שהבדיקה השעתית רצה בלי שום בקשה מבחוץ
+  console.log("[nuriel-ai] renewal notices: hourly check started (first run in 1 minute)");
 }

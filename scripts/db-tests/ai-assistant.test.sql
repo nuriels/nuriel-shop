@@ -64,19 +64,20 @@ SELECT tests.check('AI: the browser roles have no privilege on any AI table',
   $$SELECT bool_and(NOT has_table_privilege(r, 'public.' || t, p))
       FROM unnest(ARRAY['anon', 'authenticated']) r,
            unnest(ARRAY['ai_packages', 'ai_subscriptions', 'ai_subscription_periods', 'ai_subscription_events',
-                        'ai_settings', 'ai_usage_log', 'ai_usage_daily', 'ai_notifications']) t,
+                        'ai_settings', 'ai_usage_log', 'ai_usage_daily', 'ai_rate_buckets', 'ai_notifications']) t,
            unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) p$$);
 SELECT tests.check('AI: RLS is on for every AI table',
   $$SELECT bool_and(c.relrowsecurity) FROM pg_class c
      WHERE c.oid IN ('public.ai_packages'::regclass, 'public.ai_subscriptions'::regclass,
                      'public.ai_subscription_periods'::regclass, 'public.ai_subscription_events'::regclass,
                      'public.ai_settings'::regclass, 'public.ai_usage_log'::regclass, 'public.ai_usage_daily'::regclass,
+                     'public.ai_rate_buckets'::regclass,
                      'public.ai_notifications'::regclass)$$);
 SELECT tests.check('AI: the app server reads, but cannot write packages, periods, history or notifications directly',
   $$SELECT bool_and(has_table_privilege('service_role', 'public.' || t, 'SELECT'))
        AND NOT bool_or(has_table_privilege('service_role', 'public.' || t, p))
       FROM unnest(ARRAY['ai_packages', 'ai_subscriptions', 'ai_subscription_periods', 'ai_subscription_events',
-                        'ai_notifications', 'ai_usage_daily']) t,
+                        'ai_notifications', 'ai_usage_daily', 'ai_rate_buckets']) t,
            unnest(ARRAY['INSERT', 'UPDATE', 'DELETE']) p$$);
 SELECT tests.check('AI: the app server writes the usage log (insert only) and only the last error of the settings',
   $$SELECT has_table_privilege('service_role', 'public.ai_usage_log', 'INSERT')
@@ -90,12 +91,13 @@ SELECT tests.check('AI: every function the server uses is for the server only; t
                     AND NOT has_function_privilege('anon', f, 'EXECUTE')
                     AND NOT has_function_privilege('authenticated', f, 'EXECUTE'))
       FROM unnest(ARRAY['public.ai_today()', 'public.ai_period_end(date)', 'public.ai_entitlement(uuid)',
-                        'public.ai_admin_list(uuid,text,text)', 'public.ai_admin_activate(uuid,uuid,text,date,text)',
-                        'public.ai_admin_renew(uuid,uuid,date,text)', 'public.ai_admin_set_suspended(uuid,uuid,boolean,text)',
+                        'public.ai_admin_list(uuid,text,text)', 'public.ai_admin_activate(uuid,uuid,text,date,text,boolean)',
+                        'public.ai_admin_renew(uuid,uuid,date,text,boolean)', 'public.ai_admin_set_suspended(uuid,uuid,boolean,text)',
                         'public.ai_admin_history(uuid,uuid)', 'public.ai_admin_save_settings(uuid,jsonb)',
                         'public.ai_admin_usage(uuid)',
                         'public.ai_due_notifications()', 'public.ai_notification_claim(uuid,date,text,text)',
-                        'public.ai_notification_finish(bigint,text,text)', 'public.ai_notifications_mark_stale()']) f$$);
+                        'public.ai_notification_finish(bigint,text,text)', 'public.ai_notifications_mark_stale()',
+                        'public.ai_quota_take(uuid,uuid,text,boolean)', 'public.ai_rate_buckets_prune()']) f$$);
 SELECT tests.check('AI: the internal functions (state on a date, chain, audit, guards) are callable by no role',
   $$SELECT NOT bool_or(has_function_privilege(r, f, 'EXECUTE'))
       FROM unnest(ARRAY['anon', 'authenticated', 'service_role']) r,
@@ -114,7 +116,7 @@ SELECT tests.run('AI: a store manager (browser) cannot change the price',
 SELECT tests.run('AI: a store manager (browser) cannot read its own entitlement function directly',
   format('SELECT public.ai_entitlement(%L)', :STORE_A), :OWNER_A, 'permission denied');
 SELECT tests.run('AI: a store manager (browser) cannot activate a package for itself',
-  format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', CURRENT_DATE)', :OWNER_A, :STORE_A), :OWNER_A,
+  format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', CURRENT_DATE, _payment_confirmed => true)', :OWNER_A, :STORE_A), :OWNER_A,
   'permission denied');
 SELECT tests.run('AI: the platform admin in the browser cannot call the admin functions either (server only)',
   format('SELECT public.ai_admin_list(%L)', :PA), :PA, 'permission denied');
@@ -153,23 +155,34 @@ SELECT tests.check('AI: just before / after midnight UTC on 31.12 the Israeli da
 -- ---------- הפעלה: רק מנהל העל, רק לפי סוג העסק ----------
 SELECT tests.check('AI: a store manager id cannot activate (the function checks the actor is a platform admin)',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%platform admin only%%'$$,
-         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today())', :OWNER_A, :STORE_A)));
+         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today(), _payment_confirmed => true)', :OWNER_A, :STORE_A)));
 SELECT tests.check('AI: an online store cannot get the Hospitality assistant',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%must match the business type%%'$$,
-         format('SELECT public.ai_admin_activate(%L, %L, ''hospitality'', public.ai_today())', :PA, :STORE_A)));
+         format('SELECT public.ai_admin_activate(%L, %L, ''hospitality'', public.ai_today(), _payment_confirmed => true)', :PA, :STORE_A)));
 SELECT tests.check('AI: a zimmer cannot get the Ecommerce assistant',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%must match the business type%%'$$,
-         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today())', :PA, :ZIMMER)));
+         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today(), _payment_confirmed => true)', :PA, :ZIMMER)));
 SELECT tests.check('AI: an unknown product is refused',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%unknown product%%'$$,
-         format('SELECT public.ai_admin_activate(%L, %L, ''crm'', public.ai_today())', :PA, :STORE_A)));
+         format('SELECT public.ai_admin_activate(%L, %L, ''crm'', public.ai_today(), _payment_confirmed => true)', :PA, :STORE_A)));
 SELECT tests.check('AI: a start date more than 60 days back, or more than a year ahead, is refused',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%start date out of range%%'
               AND tests.ai_srv(%L) ->> 'error' LIKE '%%start date out of range%%'$$,
-         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today() - 61)', :PA, :STORE_A),
-         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today() + 366)', :PA, :STORE_A)));
+         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today() - 61, _payment_confirmed => true)', :PA, :STORE_A),
+         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today() + 366, _payment_confirmed => true)', :PA, :STORE_A)));
 SELECT tests.check('AI: nothing was created by the refused attempts',
   $$SELECT NOT EXISTS (SELECT 1 FROM public.ai_subscriptions)$$);
+
+-- ---------- בלי אישור מפורש שהתשלום התקבל — אין הפעלה (אין חיוב אוטומטי) ----------
+SELECT tests.check('AI: without "the payment was received" even the platform admin cannot activate (missing / false / NULL)',
+  format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%confirm that the payment was received%%'
+              AND tests.ai_srv(%L) ->> 'error' LIKE '%%confirm that the payment was received%%'
+              AND tests.ai_srv(%L) ->> 'error' LIKE '%%confirm that the payment was received%%'
+              AND NOT EXISTS (SELECT 1 FROM public.ai_subscriptions)
+              AND NOT EXISTS (SELECT 1 FROM public.ai_subscription_periods)$$,
+         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today())', :PA, :STORE_A),
+         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today(), NULL, false)', :PA, :STORE_A),
+         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today(), NULL, NULL)', :PA, :STORE_A)));
 
 SELECT tests.check('AI: the platform admin activates the Ecommerce assistant for an online store — active, 12 months',
   format($$SELECT r ->> 'status' = 'active' AND (r ->> 'entitled')::boolean
@@ -177,7 +190,7 @@ SELECT tests.check('AI: the platform admin activates the Ecommerce assistant for
               AND (r ->> 'days_left')::int = public.ai_period_end(public.ai_today()) - public.ai_today()
               AND (r ->> 'price_agorot')::int = 15000
              FROM tests.ai_srv(%L) r$$,
-         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today(), ''שולם בהעברה'')',
+         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today(), ''שולם בהעברה'', _payment_confirmed => true)',
                 :PA, :STORE_A)));
 SELECT tests.check('AI: the period stores the price at activation, who activated it and when',
   format($$SELECT p.kind = 'activation' AND p.price_agorot = 15000 AND p.created_by = %L AND p.note = 'שולם בהעברה'
@@ -191,14 +204,23 @@ SELECT tests.check('AI: the history has the activation with the actor email, dat
                            WHERE l.tenant_id = %L AND l.action = 'ai_subscription_activated'
                              AND l.details ->> 'product' = 'ecommerce' AND (l.details ->> 'price_agorot')::int = 15000)$$,
          :STORE_A, :STORE_A));
+SELECT tests.check('AI: the history records that the payment was confirmed; an activation / renewal event without it cannot exist',
+  format($$SELECT (SELECT bool_and(e.payment_confirmed) FROM public.ai_subscription_events e
+                    WHERE e.tenant_id = %L AND e.kind = 'activated')
+              AND (tests.ai_srv(%L) -> 'events' -> 0 ->> 'payment_confirmed')::boolean
+              AND NOT tests.try(%L)$$,
+         :STORE_A,
+         format('SELECT public.ai_admin_history(%L, %L)', :PA, :STORE_A),
+         format('INSERT INTO public.ai_subscription_events (subscription_id, tenant_id, kind, payment_confirmed)
+                   SELECT id, tenant_id, ''renewed'', false FROM public.ai_subscriptions WHERE tenant_id = %L', :STORE_A)));
 SELECT tests.check('AI: activating again while active is refused — renew instead',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%renew it instead%%'$$,
-         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today())', :PA, :STORE_A)));
+         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today(), _payment_confirmed => true)', :PA, :STORE_A)));
 SELECT tests.check('AI: the Hospitality assistant for a zimmer, starting in 10 days — scheduled, not yet entitled',
   format($$SELECT r ->> 'status' = 'scheduled' AND NOT (r ->> 'entitled')::boolean AND r ->> 'product' = 'hospitality'
               AND (r ->> 'starts_on')::date = public.ai_today() + 10
              FROM tests.ai_srv(%L) r$$,
-         format('SELECT public.ai_admin_activate(%L, %L, ''hospitality'', public.ai_today() + 10)', :PA, :ZIMMER)));
+         format('SELECT public.ai_admin_activate(%L, %L, ''hospitality'', public.ai_today() + 10, _payment_confirmed => true)', :PA, :ZIMMER)));
 SELECT tests.check('AI: the entitlement the server reads on every request is the state of today',
   format($$SELECT (tests.ai_srv(%L) ->> 'entitled')::boolean
               AND NOT (tests.ai_srv(%L) ->> 'entitled')::boolean
@@ -227,18 +249,25 @@ SELECT tests.check('AI: the status through the period: the day before (scheduled
 -- ---------- חידוש: מהיום שאחרי הסוף, בלי ימים אבודים; תקופה עתידית אחת לכל היותר; רק מול מה שהמסך הציג ----------
 SELECT tests.check('AI: a store manager id cannot renew',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%platform admin only%%'$$,
-         format('SELECT public.ai_admin_renew(%L, %L, NULL)', :OWNER_A, :STORE_A)));
+         format('SELECT public.ai_admin_renew(%L, %L, NULL, _payment_confirmed => true)', :OWNER_A, :STORE_A)));
 CREATE TEMP TABLE ai_before AS SELECT ends_on AS old_end FROM public.ai_subscription_periods WHERE tenant_id = :STORE_A;
 SELECT tests.check('AI: the state gives the screen the latest end of all periods (what the renew dialog sends back)',
   format($$SELECT (tests.ai_srv(%L) ->> 'last_ends_on')::date = b.old_end FROM ai_before b$$,
          format('SELECT public.ai_entitlement(%L)', :STORE_A)));
 SELECT tests.check('AI: renewing against an end date the package does not have (a stale screen) is refused',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%changed meanwhile%%'$$,
-         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :STORE_A, (SELECT old_end - 1 FROM ai_before))));
+         format('SELECT public.ai_admin_renew(%L, %L, %L, _payment_confirmed => true)', :PA, :STORE_A, (SELECT old_end - 1 FROM ai_before))));
+SELECT tests.check('AI: renewing without "the payment was received" is refused — nothing added',
+  format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%confirm that the payment was received%%'
+              AND tests.ai_srv(%L) ->> 'error' LIKE '%%confirm that the payment was received%%'
+              AND (SELECT count(*) FROM public.ai_subscription_periods WHERE tenant_id = %L) = 1$$,
+         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :STORE_A, (SELECT old_end FROM ai_before)),
+         format('SELECT public.ai_admin_renew(%L, %L, %L, NULL, false)', :PA, :STORE_A, (SELECT old_end FROM ai_before)),
+         :STORE_A));
 SELECT tests.check('AI: renewing without saying which end date the screen showed is refused',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%changed meanwhile%%'$$,
-         format('SELECT public.ai_admin_renew(%L, %L, NULL)', :PA, :STORE_A)));
-SELECT tests.ai_keep('renew-a', format('SELECT public.ai_admin_renew(%L, %L, %L, ''חידוש מראש'')', :PA, :STORE_A,
+         format('SELECT public.ai_admin_renew(%L, %L, NULL, _payment_confirmed => true)', :PA, :STORE_A)));
+SELECT tests.ai_keep('renew-a', format('SELECT public.ai_admin_renew(%L, %L, %L, ''חידוש מראש'', _payment_confirmed => true)', :PA, :STORE_A,
                                        (SELECT old_end FROM ai_before)));
 SELECT tests.check('AI: renewing while active starts the day after the end; the end moves 12 months; price stored again',
   format($$SELECT o.j ->> 'status' = 'active'
@@ -257,18 +286,18 @@ SELECT tests.check('AI: after the renewal the old end is no longer "ending soon"
 SELECT tests.check('AI: a double click / a retry after a lost response (the same end date again) is refused',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%changed meanwhile%%'
               AND (SELECT count(*) FROM public.ai_subscription_periods WHERE tenant_id = %L) = 2$$,
-         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :STORE_A, (SELECT old_end FROM ai_before)), :STORE_A));
+         format('SELECT public.ai_admin_renew(%L, %L, %L, _payment_confirmed => true)', :PA, :STORE_A, (SELECT old_end FROM ai_before)), :STORE_A));
 SELECT tests.check('AI: a second renewal ahead, even against the new end date, is refused — one future period at most',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%already scheduled%%'$$,
-         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :STORE_A,
+         format('SELECT public.ai_admin_renew(%L, %L, %L, _payment_confirmed => true)', :PA, :STORE_A,
                 (SELECT max(ends_on) FROM public.ai_subscription_periods WHERE tenant_id = :STORE_A))));
 SELECT tests.check('AI: a package that has not started yet cannot be renewed ahead as well (one future period at most)',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%already scheduled%%'$$,
-         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :ZIMMER,
+         format('SELECT public.ai_admin_renew(%L, %L, %L, _payment_confirmed => true)', :PA, :ZIMMER,
                 (SELECT max(ends_on) FROM public.ai_subscription_periods WHERE tenant_id = :ZIMMER))));
 SELECT tests.check('AI: renewing a package that does not exist is refused',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%activate first%%'$$,
-         format('SELECT public.ai_admin_renew(%L, %L, NULL)', :PA, :STORE_B)));
+         format('SELECT public.ai_admin_renew(%L, %L, NULL, _payment_confirmed => true)', :PA, :STORE_B)));
 
 -- ---------- השבתה ידנית ----------
 SELECT tests.check('AI: suspending stops the assistant at once (in the middle of a period), with the reason',
@@ -307,9 +336,9 @@ SELECT tests.check('AI: a period that ended 20 days ago — expired, not entitle
              FROM tests.ai_srv(%L) r$$, format('SELECT public.ai_entitlement(%L)', :STORE_B)));
 SELECT tests.check('AI: activating an expired business again chooses a new start date (no overlap with the old period)',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%overlaps an earlier period%%'$$,
-         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today() - 30)', :PA, :STORE_B)));
+         format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today() - 30, _payment_confirmed => true)', :PA, :STORE_B)));
 CREATE TEMP TABLE ai_before_b AS SELECT max(ends_on) AS old_end FROM public.ai_subscription_periods WHERE tenant_id = :STORE_B;
-SELECT tests.ai_keep('renew-b', format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :STORE_B,
+SELECT tests.ai_keep('renew-b', format('SELECT public.ai_admin_renew(%L, %L, %L, _payment_confirmed => true)', :PA, :STORE_B,
                                        (SELECT old_end FROM ai_before_b)));
 SELECT tests.check('AI: renewing after expiry starts today (not back-dated); the old period keeps its old price',
   format($$SELECT o.j ->> 'status' = 'active' AND (o.j ->> 'starts_on')::date = public.ai_today()
@@ -319,7 +348,7 @@ SELECT tests.check('AI: renewing after expiry starts today (not back-dated); the
 SELECT tests.check('AI: after expiry, the same renewal again (a retry against the old end date) books no second year',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%changed meanwhile%%'
               AND (SELECT count(*) FROM public.ai_subscription_periods WHERE tenant_id = %L) = 2$$,
-         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :STORE_B, (SELECT old_end FROM ai_before_b)), :STORE_B));
+         format('SELECT public.ai_admin_renew(%L, %L, %L, _payment_confirmed => true)', :PA, :STORE_B, (SELECT old_end FROM ai_before_b)), :STORE_B));
 
 -- ---------- כתיבה ישירה למסד: גם מנהל המסד לא יוצר תקופה שאינה 12 חודשים / חופפת / מסוג אחר ----------
 SELECT tests.check('AI: a period that is not exactly 12 months is rejected by the database',
@@ -420,7 +449,7 @@ SELECT tests.check('AI: a suspended package gets no notices',
          :DOOMED));
 SELECT tests.check('AI: (resume)', format($$SELECT tests.ai_srv(%L) ->> 'status' = 'ending_soon'$$,
   format('SELECT public.ai_admin_set_suspended(%L, %L, false)', :PA, :DOOMED)));
-SELECT tests.ai_keep('renew-d', format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :DOOMED,
+SELECT tests.ai_keep('renew-d', format('SELECT public.ai_admin_renew(%L, %L, %L, _payment_confirmed => true)', :PA, :DOOMED,
                                        (SELECT max(ends_on) FROM public.ai_subscription_periods WHERE tenant_id = :DOOMED)));
 SELECT tests.check('AI: after a renewal, no notice about the old end date (on the old 7-day / last day there is nothing due)',
   format($$SELECT (SELECT j ->> 'status' FROM tests.ai_out WHERE label = 'renew-d') = 'active'
@@ -499,7 +528,7 @@ UPDATE public.ai_notifications SET status = 'skipped', attempts = 1 WHERE tenant
 SELECT tests.check('AI: a skipped notice (no valid address) is final — not tried again',
   format($$SELECT NOT EXISTS (SELECT 1 FROM public.ai_due_notifications_on(public.ai_today()) d WHERE d.tenant_id = %L)$$,
          :LASTDAY));
-SELECT tests.ai_keep('renew-last-1', format('SELECT public.ai_admin_renew(%L, %L, public.ai_today())', :PA, :LASTDAY));
+SELECT tests.ai_keep('renew-last-1', format('SELECT public.ai_admin_renew(%L, %L, public.ai_today(), _payment_confirmed => true)', :PA, :LASTDAY));
 SELECT tests.check('AI: on the last day a renewal starts tomorrow (no lost day) — and the end-day notice is no longer due',
   format($$SELECT (SELECT NOT (j ? 'error') AND (j ->> 'renewal_starts_on')::date = public.ai_today() + 1
                           AND j ->> 'status' = 'active'
@@ -510,7 +539,7 @@ SELECT tests.check('AI: on the last day a renewal starts tomorrow (no lost day) 
 SELECT tests.check('AI: on the last day a second renewal is refused (one future period at most)',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%already scheduled%%'
               AND (SELECT count(*) FROM public.ai_subscription_periods WHERE tenant_id = %L) = 2$$,
-         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :LASTDAY,
+         format('SELECT public.ai_admin_renew(%L, %L, %L, _payment_confirmed => true)', :PA, :LASTDAY,
                 (SELECT max(ends_on) FROM public.ai_subscription_periods WHERE tenant_id = :LASTDAY)), :LASTDAY));
 
 -- ---------- הגדרות כלליות ----------
@@ -594,6 +623,81 @@ SELECT tests.check('AI: invalid usage rows are rejected (mode, outcome, 4 guides
        AND NOT tests.try('INSERT INTO public.ai_usage_log (mode, outcome, guides) VALUES (''ai'', ''guides'', ARRAY[''a'',''b'',''c'',''d''])')
        AND NOT tests.try('INSERT INTO public.ai_usage_log (mode, outcome, question) VALUES (''search'', ''unknown'', repeat(''א'', 501))')$$);
 
+-- ---------- מכסות השאלות במסד: משותפות לכל שרתי האפליקציה, שורדות הפעלה מחדש ----------
+\set U1 '\'a1000000-0000-4000-8000-0000000000c1\''
+\set U2 '\'a1000000-0000-4000-8000-0000000000c2\''
+\set U3 '\'a1000000-0000-4000-8000-0000000000c3\''
+UPDATE public.ai_settings SET user_minute_limit = 2, tenant_hourly_limit = 3, monthly_budget_usd = 1000;
+DELETE FROM public.ai_rate_buckets;
+-- עזר: הפקודה שלוקחת מכסה (רצה כשרת האפליקציה דרך ai_keep — כל קריאה בפקודה נפרדת)
+CREATE OR REPLACE FUNCTION tests.ai_quota_sql(_tenant uuid, _user uuid, _q text, _model boolean) RETURNS text
+LANGUAGE sql AS $$
+  SELECT format('SELECT public.ai_quota_take(%L, %L, %L, %L)', _tenant, _user, _q, _model);
+$$;
+SELECT tests.ai_keep('quota-1', tests.ai_quota_sql(:STORE_A, :U1, 'שאלה ראשונה', true));
+SELECT tests.ai_keep('quota-2', tests.ai_quota_sql(:STORE_A, :U1, 'שאלה שנייה', true));
+SELECT tests.ai_keep('quota-3', tests.ai_quota_sql(:STORE_A, :U1, 'שאלה שלישית', true));
+SELECT tests.check('AI quota: the user limit comes from the settings (2 a minute) — the third is refused, with when to retry',
+  $$SELECT (SELECT j ->> 'result' FROM tests.ai_out WHERE label = 'quota-1') = 'ok'
+       AND (SELECT j ->> 'result' FROM tests.ai_out WHERE label = 'quota-2') = 'ok'
+       AND (SELECT j ->> 'result' = 'user' AND (j ->> 'retry_after')::int BETWEEN 1 AND 60
+              FROM tests.ai_out WHERE label = 'quota-3')$$);
+SELECT tests.check('AI quota: a refused attempt is counted nowhere (the business and the system counters stay at 2)',
+  format($$SELECT (SELECT hits FROM public.ai_rate_buckets WHERE key = 'u:' || %L) = 2
+              AND (SELECT hits FROM public.ai_rate_buckets WHERE key = 't:' || %L) = 2
+              AND (SELECT hits FROM public.ai_rate_buckets WHERE key = 'g') = 2$$, :U1, :STORE_A));
+SELECT tests.ai_keep('quota-4', tests.ai_quota_sql(:STORE_A, :U2, 'שאלה של משתמש אחר', true));
+SELECT tests.ai_keep('quota-5', tests.ai_quota_sql(:STORE_A, :U2, 'עוד שאלה של משתמש אחר', true));
+SELECT tests.check('AI quota: more users of the same business do not multiply it — the business limit (3 an hour) holds',
+  $$SELECT (SELECT j ->> 'result' FROM tests.ai_out WHERE label = 'quota-4') = 'ok'
+       AND (SELECT j ->> 'result' FROM tests.ai_out WHERE label = 'quota-5') = 'tenant'$$);
+UPDATE public.ai_settings SET user_minute_limit = 20, tenant_hourly_limit = 50;
+SELECT tests.ai_keep('rep-1', tests.ai_quota_sql(:STORE_B, :U3, 'איך מוסיפים מוצר', false));
+SELECT tests.ai_keep('rep-2', tests.ai_quota_sql(:STORE_B, :U3, 'איך מוסיפים מוצר', false));
+SELECT tests.ai_keep('rep-3', tests.ai_quota_sql(:STORE_B, :U3, 'איך מוסיפים מוצר', false));
+SELECT tests.ai_keep('rep-4', tests.ai_quota_sql(:STORE_B, :U3, 'איך מוסיפים מוצר', false));
+SELECT tests.ai_keep('rep-5', tests.ai_quota_sql(:STORE_A, :U3, 'איך מוסיפים מוצר', false));
+SELECT tests.check('AI quota: the same question 3 times in 10 minutes, the 4th is refused — per business; not sent to the model → no system count',
+  $$SELECT (SELECT array_agg(j ->> 'result' ORDER BY label) FROM tests.ai_out WHERE label LIKE 'rep-%')
+             = ARRAY['ok', 'ok', 'ok', 'repeated', 'ok']
+       AND (SELECT hits FROM public.ai_rate_buckets WHERE key = 'g') = 3$$);
+UPDATE public.ai_rate_buckets SET hits = 1500 WHERE key = 'g';
+SELECT tests.ai_keep('glob-1', tests.ai_quota_sql(:STORE_B, :U3, 'שאלה שתישלח לדגם', true));
+SELECT tests.ai_keep('glob-2', tests.ai_quota_sql(:STORE_B, :U3, 'בקשה שנעצרת לפני הדגם', false));
+SELECT tests.check('AI quota: the system limit (1500 an hour) stops calls to the model only — a question that is not sent still passes',
+  $$SELECT (SELECT j ->> 'result' FROM tests.ai_out WHERE label = 'glob-1') = 'global'
+       AND (SELECT j ->> 'result' FROM tests.ai_out WHERE label = 'glob-2') = 'ok'$$);
+DELETE FROM public.ai_rate_buckets WHERE key = 'g';
+UPDATE public.ai_settings SET monthly_budget_usd = 0.5;
+INSERT INTO public.ai_usage_log (tenant_id, product, mode, outcome, model, input_tokens, output_tokens, cost_usd)
+VALUES (:STORE_B, 'ecommerce', 'ai', 'guides', 'claude-haiku-5-5', 1000, 10, 0.6);
+SELECT tests.ai_keep('bud-1', tests.ai_quota_sql(:STORE_B, :U3, 'שאלה אחרי שהתקציב נוצל', true));
+SELECT tests.ai_keep('bud-2', tests.ai_quota_sql(:STORE_B, :U3, 'בקשה שנעצרת לפני הדגם אחרי התקציב', false));
+SELECT tests.check('AI quota: the monthly budget is a cap — above it "budget" (guides only, no model call), the system counter untouched',
+  $$SELECT (SELECT j ->> 'result' FROM tests.ai_out WHERE label = 'bud-1') = 'budget'
+       AND (SELECT j ->> 'result' FROM tests.ai_out WHERE label = 'bud-2') = 'ok'
+       AND NOT EXISTS (SELECT 1 FROM public.ai_rate_buckets WHERE key = 'g')$$);
+UPDATE public.ai_settings SET monthly_budget_usd = 0;
+SELECT tests.ai_keep('bud-3', tests.ai_quota_sql(:STORE_B, :U3, 'שאלה כשהתקציב אפס', true));
+UPDATE public.ai_settings SET monthly_budget_usd = 1000;
+SELECT tests.ai_keep('bud-4', tests.ai_quota_sql(:STORE_B, :U3, 'שאלה אחרי הגדלת התקציב', true));
+SELECT tests.check('AI quota: a budget of 0 = no model calls at all; raising the budget brings the model back at once',
+  $$SELECT (SELECT j ->> 'result' FROM tests.ai_out WHERE label = 'bud-3') = 'budget'
+       AND (SELECT j ->> 'result' FROM tests.ai_out WHERE label = 'bud-4') = 'ok'$$);
+SELECT tests.check('AI quota: a call without a business / user / kind is refused',
+  format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%needs a business%%'$$,
+         format('SELECT public.ai_quota_take(NULL, %L, ''x'', true)', :U3)));
+INSERT INTO public.ai_rate_buckets (key, hits, window_ends) VALUES ('u:old', 5, now() - interval '2 hours');
+SELECT tests.ai_keep('prune', 'SELECT to_jsonb(public.ai_rate_buckets_prune())');
+SELECT tests.check('AI quota: counters whose window ended over an hour ago are pruned; live ones stay',
+  $$SELECT (SELECT (j #>> '{}')::int >= 1 FROM tests.ai_out WHERE label = 'prune')
+       AND NOT EXISTS (SELECT 1 FROM public.ai_rate_buckets WHERE key = 'u:old')
+       AND EXISTS (SELECT 1 FROM public.ai_rate_buckets WHERE key LIKE 'q:%')$$);
+SELECT tests.check('AI quota: the counters are closed to the browser and not writable by the app server directly',
+  $$SELECT NOT has_table_privilege('authenticated', 'public.ai_rate_buckets', 'SELECT')
+       AND NOT has_table_privilege('service_role', 'public.ai_rate_buckets', 'INSERT')
+       AND NOT has_table_privilege('service_role', 'public.ai_rate_buckets', 'UPDATE')$$);
+
 -- ---------- מחיקת עסק: נתוני התוסף נמחקים איתו, יומן הפלטפורמה והסיכום היומי נשמרים ----------
 INSERT INTO public.ai_usage_log (tenant_id, product, mode, outcome, model, input_tokens, output_tokens, cost_usd)
 VALUES (:DOOMED, 'ecommerce', 'ai', 'guides', 'claude-haiku-5-5', 5000, 50, 0.5);
@@ -625,9 +729,12 @@ DELETE FROM public.ai_subscription_periods WHERE tenant_id IN (:STORE_A, :STORE_
 DELETE FROM public.ai_subscriptions WHERE tenant_id IN (:STORE_A, :STORE_B, :ZIMMER, :LASTDAY);
 DELETE FROM public.ai_usage_log;
 DELETE FROM public.ai_usage_daily;
+DELETE FROM public.ai_rate_buckets;
+DROP FUNCTION IF EXISTS tests.ai_quota_sql(uuid, uuid, text, boolean);
 DROP FUNCTION IF EXISTS tests.ai_claim_d0_sql(uuid);
 UPDATE public.ai_settings SET mode = 'off', model = 'claude-haiku-5-5', api_key_encrypted = NULL, api_key_last4 = NULL,
        api_key_updated_at = NULL, api_key_updated_by = NULL, last_error = NULL, last_error_at = NULL,
-       updated_by = NULL, max_question_chars = 400, tenant_hourly_limit = 60, user_minute_limit = 6;
+       updated_by = NULL, max_question_chars = 400, tenant_hourly_limit = 60, user_minute_limit = 6,
+       monthly_budget_usd = 25;
 DELETE FROM public.platform_audit_log WHERE action LIKE 'ai\_%';
 DELETE FROM public.tenants WHERE id IN (:ZIMMER, :LASTDAY);

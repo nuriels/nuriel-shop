@@ -174,6 +174,40 @@ export function loadPackages(): Promise<PackageRow[]> {
 // ------------------------------------------------------------------ זכאות (בכל בקשה)
 
 /** מצב החבילה של העסק היום (שעון ישראל) — מחושב במסד בלבד */
+/**
+ * מכסות השאלות — במסד, משותפות לכל שרתי האפליקציה ושורדות הפעלה מחדש: משתמש בדקה, עסק בשעה, אותה שאלה
+ * ב-10 דקות, כלל המערכת בשעה (רק כשהשאלה תישלח לדגם) ותקרת התקציב החודשי.
+ */
+export type QuotaResult = "ok" | "budget" | "user" | "tenant" | "repeated" | "global";
+
+export async function takeQuota(input: {
+  tenantId: string;
+  userId: string;
+  fingerprint: string;
+  modelCall: boolean;
+}): Promise<QuotaResult> {
+  const out = await rpc<{ result?: unknown } | null>("ai_quota_take", {
+    _tenant: input.tenantId,
+    _user: input.userId,
+    _fingerprint: input.fingerprint.slice(0, 400),
+    _model_call: input.modelCall,
+  });
+  const result = out?.result;
+  const known: readonly QuotaResult[] = ["ok", "budget", "user", "tenant", "repeated", "global"];
+  if (typeof result === "string" && (known as readonly string[]).includes(result))
+    return result as QuotaResult;
+  throw new AiDbError("unexpected quota answer", 500, null);
+}
+
+/** מונים ישנים — נמחקים פעם בשעה (מהבדיקה השעתית) */
+export async function pruneQuota(): Promise<void> {
+  try {
+    await rpc("ai_rate_buckets_prune", {});
+  } catch {
+    // לא קריטי
+  }
+}
+
 export function entitlement(tenantId: string): Promise<unknown> {
   return rpc<unknown>("ai_entitlement", { _tenant: tenantId });
 }

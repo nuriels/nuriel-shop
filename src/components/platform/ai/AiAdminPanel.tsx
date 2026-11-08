@@ -42,6 +42,7 @@ import {
 import type { AdminBusiness, AiAdminOverview, Json, JsonObject } from "@/platform/ai/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -151,6 +152,8 @@ function ActionDialog({
   const business = action.business;
   const [startsOn, setStartsOn] = useState(israelTodayForDisplay());
   const [note, setNote] = useState("");
+  // הפעלה / חידוש — רק אחרי אישור מפורש שהתשלום התקבל (גם השרת והמסד דורשים אותו)
+  const [paid, setPaid] = useState(false);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<JsonObject | null>(null);
   const state = business.state;
@@ -169,13 +172,24 @@ function ActionDialog({
     try {
       if (action.kind === "activate") {
         await activate({
-          data: { tenantId: business.tenantId, product: business.siteType, startsOn, note },
+          data: {
+            tenantId: business.tenantId,
+            product: business.siteType,
+            startsOn,
+            note,
+            paymentConfirmed: paid,
+          },
         });
         toast.success("החבילה הופעלה");
       } else if (action.kind === "renew") {
         // סוף התקופה האחרונה כפי שמוצג כאן — אם השתנה בינתיים (לחיצה כפולה, מנהל אחר), השרת עוצר
         await renew({
-          data: { tenantId: business.tenantId, expectedLastEnd: lastEnd ?? "", note },
+          data: {
+            tenantId: business.tenantId,
+            expectedLastEnd: lastEnd ?? "",
+            note,
+            paymentConfirmed: paid,
+          },
         });
         toast.success("החבילה חודשה לשנה נוספת");
       } else if (action.kind === "suspend") {
@@ -308,6 +322,23 @@ function ActionDialog({
                 onChange={(e) => setNote(e.target.value)}
               />
             </div>
+            {action.kind !== "suspend" && (
+              <div className="flex items-start gap-2 rounded-lg border px-3 py-2.5">
+                <Checkbox
+                  id="ai-paid"
+                  checked={paid}
+                  onCheckedChange={(value) => setPaid(value === true)}
+                  data-testid="ai-paid"
+                  className="mt-0.5"
+                />
+                <Label htmlFor="ai-paid" className="text-sm leading-snug">
+                  אני מאשר/ת שהתשלום ({formatShekels(price)} לשנה) התקבל
+                  <span className="block text-xs font-normal text-foreground/80">
+                    בלי האישור אין הפעלה ואין חידוש — גם בשרת. האישור נשמר בהיסטוריה.
+                  </span>
+                </Label>
+              </div>
+            )}
             {action.kind === "suspend" && action.suspended && (
               <p className="text-sm text-muted-foreground">
                 העוזר נעצר מיד אצל העסק. התקופה ממשיכה לרוץ, וההגדרות וההיסטוריה נשמרות.
@@ -319,7 +350,11 @@ function ActionDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={busy || (action.kind === "renew" && futureAlready)}
+                disabled={
+                  busy ||
+                  (action.kind === "renew" && futureAlready) ||
+                  (action.kind !== "suspend" && !paid)
+                }
                 data-testid="ai-confirm"
               >
                 {busy && <Loader2 className="size-4 animate-spin" />}
@@ -392,6 +427,7 @@ function HistoryView({ history }: { history: JsonObject | null }) {
                 </>
               )}
               {num(e["price_agorot"]) !== null && <> · {formatShekels(num(e["price_agorot"]))}</>}
+              {e["payment_confirmed"] === true && <> · התשלום אושר</>}
               {str(e["note"]) && <div className="text-muted-foreground">{str(e["note"])}</div>}
             </li>
           ))}
@@ -830,7 +866,7 @@ function SettingsCard({ overview, reload }: { overview: AiAdminOverview; reload:
               ["maxQuestionChars", "אורך שאלה מרבי (תווים)"],
               ["tenantHourlyLimit", "שאלות לעסק בשעה"],
               ["userMinuteLimit", "שאלות למשתמש בדקה"],
-              ["monthlyBudgetUsd", "תקציב חודשי ($) — להתראה"],
+              ["monthlyBudgetUsd", "תקציב חודשי ($) — תקרה: מעליו עונים מהמדריכים בלבד"],
             ] as const
           ).map(([key, label]) => (
             <div key={key} className="space-y-1.5">

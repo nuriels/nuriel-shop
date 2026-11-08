@@ -417,17 +417,24 @@ export function questionFingerprint(question: string): string {
 
 // ------------------------------------------------------------------ סינון מידע רגיש
 
-/** מילה שאחריה בא סוד: סיסמה / קוד כניסה / אימות / סודי / גישה / password / pin */
-const SECRET_WORD = String.raw`(?:ה)?סיסמת\s+[א-ת]+|(?:ה)?סיסמ(?:ה|א)(?:\s+(?:שלו|שלה|שלי|שלנו|שלהם|החדשה|הזמנית|הישנה))?|\b(?:password|passcode|passwd|pwd|pin(?:\s+code)?)\b|(?:ה)?קוד\s+(?:ה)?(?:כניסה|אימות|סודי|גישה)`;
-const SECRET_SAID = new RegExp(
-  String.raw`(${SECRET_WORD})(\s*(?:[:=]|\bis\b|\bwas\b|היא|הוא|זה|זו)\s*)\S+`,
-  "gi",
-);
-const SECRET_NEXT = new RegExp(
-  // ספרות או סימנים של סיסמה (בלי ? ו-! — הם בדרך כלל סוף המשפט)
-  String.raw`(${SECRET_WORD})(\s+)(?=\S*[\d@#$%^&*~+=_])\S+`,
-  "gi",
-);
+type SecretPatterns = { said: RegExp; next: RegExp };
+let secretPatternsCache: SecretPatterns | null = null;
+
+/**
+ * "סיסמה: …" / "my password is …" / "הסיסמה שלי 1234". נבנים בשימוש הראשון ולא בטעינת הקובץ: הקובץ
+ * נטען גם בדפדפן (בשביל התוויות והתאריכים), וכך המסננים לא נכנסים לקוד של הדפדפן.
+ */
+function secretPatterns(): SecretPatterns {
+  if (secretPatternsCache) return secretPatternsCache;
+  // מילה שאחריה בא סוד: סיסמה / קוד כניסה / אימות / סודי / גישה / password / pin
+  const word = String.raw`(?:ה)?סיסמת\s+[א-ת]+|(?:ה)?סיסמ(?:ה|א)(?:\s+(?:שלו|שלה|שלי|שלנו|שלהם|החדשה|הזמנית|הישנה))?|\b(?:password|passcode|passwd|pwd|pin(?:\s+code)?)\b|(?:ה)?קוד\s+(?:ה)?(?:כניסה|אימות|סודי|גישה)`;
+  secretPatternsCache = {
+    said: new RegExp(String.raw`(${word})(\s*(?:[:=]|\bis\b|\bwas\b|היא|הוא|זה|זו)\s*)\S+`, "gi"),
+    // ספרות או סימנים של סיסמה (בלי ? ו-! — הם בדרך כלל סוף המשפט)
+    next: new RegExp(String.raw`(${word})(\s+)(?=\S*[\d@#$%^&*~+=_])\S+`, "gi"),
+  };
+  return secretPatternsCache;
+}
 const SECRET_LATIN_AFTER_HEBREW =
   /((?:ה)?סיסמת\s+[א-ת]+|(?:ה)?סיסמ(?:ה|א)(?:\s+(?:שלו|שלה|שלי|שלנו|שלהם|החדשה|הזמנית|הישנה))?)(\s+)[A-Za-z][\w.-]{3,}/g;
 
@@ -446,9 +453,9 @@ export function redactSensitive(text: string): string {
       .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[אימייל]")
       .replace(/(?:https?:\/\/|www\.)\S+/gi, "[קישור]")
       // "סיסמה: x", "password = x", "my password is x", "הסיסמה שלי היא x"
-      .replace(SECRET_SAID, "$1$2[הוסתר]")
+      .replace(secretPatterns().said, "$1$2[הוסתר]")
       // "הסיסמה שלי 1234", "pin 4821" — המילה שאחרי נראית כמו סוד (ספרות / סימנים)
-      .replace(SECRET_NEXT, "$1$2[הוסתר]")
+      .replace(secretPatterns().next, "$1$2[הוסתר]")
       // "הסיסמה שלי qwerty" — מילה באנגלית אחרי "סיסמה" בעברית
       .replace(SECRET_LATIN_AFTER_HEBREW, "$1$2[הוסתר]")
       .replace(/[\w-]{24,}/g, "[מחרוזת]")
@@ -489,53 +496,54 @@ const BLOCKED_PATTERNS: readonly RegExp[] = [
  * אותיות קיריליות / יווניות שנראות כמו לטיניות ("sуstem" עם у קירילית) → הלטינית, לבדיקה בלבד (הטקסט
  * עצמו לא משתנה). בקודים — שום אות כזו לא מופיעה בקוד עצמו.
  */
-const LOOKALIKES = new Map<string, string>(
-  (
-    [
-      [0x0430, "a"],
-      [0x0432, "b"],
-      [0x0435, "e"],
-      [0x0451, "e"],
-      [0x043a, "k"],
-      [0x043c, "m"],
-      [0x043d, "h"],
-      [0x043e, "o"],
-      [0x0440, "p"],
-      [0x0441, "c"],
-      [0x0442, "t"],
-      [0x0443, "y"],
-      [0x0445, "x"],
-      [0x0456, "i"],
-      [0x0457, "i"],
-      [0x0458, "j"],
-      [0x0455, "s"],
-      [0x0501, "d"],
-      [0x051b, "q"],
-      [0x051d, "w"],
-      [0x04bb, "h"],
-      [0x04cf, "l"],
-      [0x04af, "y"],
-      [0x0261, "g"],
-      [0x03b1, "a"],
-      [0x03b2, "b"],
-      [0x03b5, "e"],
-      [0x03b9, "i"],
-      [0x03ba, "k"],
-      [0x03bd, "v"],
-      [0x03bf, "o"],
-      [0x03c1, "p"],
-      [0x03c4, "t"],
-      [0x03c5, "u"],
-      [0x03c7, "x"],
-      [0x03b3, "y"],
-      [0x03c9, "w"],
-    ] as const
-  ).map(([code, latin]) => [String.fromCodePoint(code), latin]),
-);
+const LOOKALIKE_CODES = [
+  [0x0430, "a"],
+  [0x0432, "b"],
+  [0x0435, "e"],
+  [0x0451, "e"],
+  [0x043a, "k"],
+  [0x043c, "m"],
+  [0x043d, "h"],
+  [0x043e, "o"],
+  [0x0440, "p"],
+  [0x0441, "c"],
+  [0x0442, "t"],
+  [0x0443, "y"],
+  [0x0445, "x"],
+  [0x0456, "i"],
+  [0x0457, "i"],
+  [0x0458, "j"],
+  [0x0455, "s"],
+  [0x0501, "d"],
+  [0x051b, "q"],
+  [0x051d, "w"],
+  [0x04bb, "h"],
+  [0x04cf, "l"],
+  [0x04af, "y"],
+  [0x0261, "g"],
+  [0x03b1, "a"],
+  [0x03b2, "b"],
+  [0x03b5, "e"],
+  [0x03b9, "i"],
+  [0x03ba, "k"],
+  [0x03bd, "v"],
+  [0x03bf, "o"],
+  [0x03c1, "p"],
+  [0x03c4, "t"],
+  [0x03c5, "u"],
+  [0x03c7, "x"],
+  [0x03b3, "y"],
+  [0x03c9, "w"],
+] as const;
+let lookalikes: Map<string, string> | null = null;
 
 function latinSkeleton(text: string): string {
+  // נבנית בשימוש הראשון (לא בטעינת הקובץ — כך היא לא נכנסת לקוד של הדפדפן)
+  lookalikes ??= new Map(
+    LOOKALIKE_CODES.map(([code, latin]) => [String.fromCodePoint(code), latin] as const),
+  );
   let out = "";
-  for (const ch of text) out += LOOKALIKES.get(ch) ?? ch;
+  for (const ch of text) out += lookalikes.get(ch) ?? ch;
   return out;
 }
 
@@ -697,6 +705,9 @@ export function scrubKeys(text: string): string {
  * הודעה בעברית על שגיאה מ-Anthropic — מה קרה ומה עושים. מוצגת רק למנהל העל במסך הניהול. לפי קוד
  * הסטטוס והטקסט של השגיאה, כך שאפשר לבדוק אותה גם בלי הספרייה.
  */
+/** השגיאה של createAnthropicRouterClient כשאין מפתח — לפני כל בקשה לרשת */
+export const NO_API_KEY_ERROR = "no API key configured";
+
 export function describeAiError(error: unknown): string {
   return scrubKeys(describeError(error)).slice(0, 300);
 }
@@ -709,6 +720,7 @@ function describeError(error: unknown): string {
       ? (error as { status: number }).status
       : null;
   const message = error instanceof Error ? error.message : String(error ?? "");
+  if (message === NO_API_KEY_ERROR) return "לא הוגדר מפתח API — הדביקו מפתח ושמרו";
   if (/credit balance/i.test(message)) return "אין יתרת קרדיט בחשבון Anthropic — יש לטעון קרדיט";
   if (/usage limits|spend limit|enforced_spend_limit_reached/i.test(message)) {
     return "הגעתם לתקרת ההוצאה ב-Anthropic — היא מתאפסת בתחילת החודש, או שאפשר להעלות אותה בקונסולה";

@@ -54,12 +54,11 @@ import { SafeError } from "./safe-error";
 import * as store from "./store.server";
 
 const MINUTE = 60 * 1000;
-const HOUR = 60 * MINUTE;
 /**
- * תקרה לכל המערכת (כל העסקים יחד) — נגד לולאה / הצפה, לא תקציב. נספרות רק שאלות של עסקים זכאים שבאמת
- * נשלחות לדגם; המגבלה לעסק (עד 300 בשעה, במסד) נמוכה ממנה בהרבה, כך שעסק אחד לא מנצל אותה לבד.
+ * המכסות שמגבילות עלויות (משתמש בדקה, עסק בשעה, אותה שאלה, כלל המערכת בשעה — 1500, ותקרת התקציב
+ * החודשי) — במסד (ai_quota_take): משותפות לכל שרתי האפליקציה ושורדות הפעלה מחדש. כאן בזיכרון נשארו רק
+ * שני שערים שמגינים על השרת ועל המסד מלולאה מהירה (לפני השאילתות במסד), לא על העלויות.
  */
-export const GLOBAL_HOURLY_LIMIT = 1500;
 /** כל שאלה (גם של מי שאינו מנהל / עסק בלי חבילה) — למשתמש בדקה, לפני השאילתות במסד */
 export const ASK_GATE_PER_MINUTE = 30;
 /**
@@ -67,8 +66,10 @@ export const ASK_GATE_PER_MINUTE = 30;
  * מהירה; שימוש רגיל (גם מעבר מהיר בין עמודים) רחוק מזה
  */
 export const STATUS_PER_MINUTE = 60;
-/** אותה שאלה בדיוק, באותו עסק — עד 3 פעמים ב-10 דקות */
-export const SAME_QUESTION_LIMIT = { count: 3, windowMs: 10 * MINUTE } as const;
+/** נרשם ביומן ובשגיאה האחרונה כשהתקציב החודשי נוצל (מנהל העל רואה למה העוזר עונה מהמדריכים בלבד) */
+export const BUDGET_REACHED = "monthly budget reached — answering from the guides only";
+/** המכסה לא נבדקה (תקלה במסד) — אין קריאה לדגם */
+export const QUOTA_UNCHECKED = "quota check failed — answering from the guides only";
 
 // ------------------------------------------------------------------ מי הפונה
 
@@ -322,16 +323,6 @@ export function usageColumns(answered: Pick<Answered, "calledAi" | "usage" | "co
   };
 }
 
-/** המגבלות של המשתמש ושל העסק — רק אחרי שנמצא שהעסק זכאי */
-function withinCallerLimits(caller: AiCaller, settings: store.SettingsRow | null): boolean {
-  const perMinute = settings?.user_minute_limit ?? 6;
-  const perHour = settings?.tenant_hourly_limit ?? 60;
-  return (
-    allowAction(`ai:user-minute:${caller.userId}`, perMinute, MINUTE) &&
-    allowAction(`ai:tenant-hour:${caller.tenantId}`, perHour, HOUR)
-  );
-}
-
 /**
  * שאלה בחלון העוזר — מנהלי העסק בלבד, וכל התנאים נבדקים מחדש בכל שאלה. עוזר לא זמין → רק ההודעה והקוד
  * (subscription_expired וכו'), בלי חיפוש, בלי דגם ובלי יומן. כך גם קריאה ישירה ל-API לא עוקפת דבר.
@@ -352,7 +343,6 @@ export async function handleAsk(
   // אין חבילה / פג תוקף / כבוי: רק ההודעה — בלי לצרוך מכסה של העסק או של כלל המערכת
   if (ev.denial !== null || !ev.key)
     return unavailableResult(ev.denial ?? "assistant_off", ev.state);
-  if (!withinCallerLimits(caller, ev.settings)) return limitedResult();
 
   const raw = (typeof input === "object" && input !== null ? input : {}) as {
     question?: unknown;
@@ -363,33 +353,37 @@ export async function handleAsk(
   const question = sanitizeQuestion(raw.question, max);
   if (!question) throw new SafeError("נא לכתוב שאלה");
 
-  // אותה שאלה שוב ושוב (סקריפט / לחיצות חוזרות) — לא נשלחת שוב לדגם
-  const fingerprint = questionFingerprint(question).slice(0, 200);
-  if (
-    !allowAction(
-      `ai:same:${caller.tenantId}:${fingerprint}`,
-      SAME_QUESTION_LIMIT.count,
-      SAME_QUESTION_LIMIT.windowMs,
-    )
-  ) {
-    return limitedResult(REPEATED_MESSAGE);
-  }
-
   const previous = sanitizePrevious(raw.previous);
-  // התקרה של כל המערכת — רק לשאלה שבאמת תישלח לדגם (בקשה אסורה נעצרת לפניו ולא נספרת)
-  if (
-    !isBlockedConversation(question, previous) &&
-    !allowAction("ai:all-hour", GLOBAL_HOURLY_LIMIT, HOUR)
-  ) {
-    return limitedResult();
+  // המכסות — במסד, בקריאה אחת: משתמש בדקה, עסק בשעה, אותה שאלה ב-10 דקות; ורק לשאלה שבאמת תישלח
+  // לדגם (בקשה אסורה נעצרת לפניו) — כלל המערכת בשעה ותקרת התקציב החודשי
+  const modelCall = !isBlockedConversation(question, previous);
+  let quota: store.QuotaResult | "unchecked";
+  try {
+    quota = await store.takeQuota({
+      tenantId: caller.tenantId,
+      userId: caller.userId,
+      fingerprint: questionFingerprint(question),
+      modelCall,
+    });
+  } catch {
+    // בלי בדיקת מכסה אין קריאה לדגם (נכשל לכיוון הבטוח מבחינת עלויות) — עונים מהמדריכים בלבד
+    quota = "unchecked";
   }
+  if (quota === "repeated") return limitedResult(REPEATED_MESSAGE);
+  if (quota === "user" || quota === "tenant" || quota === "global") return limitedResult();
+  const modelAllowed = quota === "ok";
 
   const key = ev.key;
   const createClient = deps.createClient ?? createAnthropicRouterClient;
-  const answered = await answerQuestion(catalog, question, previous, async () => ({
-    client: await createClient(key),
-    model: ev.model,
-  }));
+  const answered = await answerQuestion(catalog, question, previous, async () =>
+    modelAllowed ? { client: await createClient(key), model: ev.model } : null,
+  );
+  // התקציב נוצל / המכסה לא נבדקה — נרשם, כדי שמנהל העל יראה למה העוזר עונה מהמדריכים בלבד
+  if (!modelAllowed && modelCall) {
+    answered.error = quota === "budget" ? BUDGET_REACHED : QUOTA_UNCHECKED;
+    if (quota === "budget" && ev.settings?.last_error !== BUDGET_REACHED)
+      await store.recordLastError(BUDGET_REACHED);
+  }
 
   if (answered.mode === "ai" && ev.settings?.last_error) await store.recordLastError(null);
   if (answered.mode === "ai_error") await store.recordLastError(answered.error);

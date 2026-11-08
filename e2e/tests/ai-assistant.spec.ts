@@ -96,6 +96,9 @@ async function activateFrom(page: Page, filter: "Ecommerce" | "Hospitality", nam
   await expect(dialog.getByTestId("ai-end-preview")).toContainText("12 חודשים");
   await expect(dialog).toContainText("150 ₪ לשנה");
   await dialog.getByLabel("הערה — למשל אסמכתת תשלום (לא חובה)").fill("E2E — שולם בהעברה");
+  // בלי אישור שהתשלום התקבל — אין הפעלה
+  await expect(dialog.getByTestId("ai-confirm")).toBeDisabled();
+  await dialog.getByTestId("ai-paid").click();
   await dialog.getByTestId("ai-confirm").click();
   // הוכחת ההפעלה היא הסטטוס בשורה; ההודעה — first(): הודעה מהפעלה קודמת יכולה עוד להיות על המסך
   await expect(page.getByText("החבילה הופעלה").first()).toBeVisible({ timeout: 15_000 });
@@ -292,7 +295,10 @@ test("expiry: the assistant stops, a direct API call gets subscription_expired, 
     .first();
   await expect(row.locator("[data-status]")).toHaveAttribute("data-status", "expired");
   await row.getByTestId("ai-renew").click();
-  await admin.getByRole("dialog").getByTestId("ai-confirm").click();
+  const renewDialog = admin.getByRole("dialog");
+  await expect(renewDialog.getByTestId("ai-confirm")).toBeDisabled();
+  await renewDialog.getByTestId("ai-paid").click();
+  await renewDialog.getByTestId("ai-confirm").click();
   await expect(admin.getByText("החבילה חודשה לשנה נוספת")).toBeVisible({ timeout: 15_000 });
   await expect(row.locator("[data-status]")).toHaveAttribute("data-status", "active");
 
@@ -367,6 +373,23 @@ test("a store owner cannot reach the platform admin functions (neither on the st
   }
   // והמפתח לא יוצא משום תשובה של מנהל העל
   const platformToken = await accessToken(request, USERS.platform);
+  // גם מנהל העל, בקריאה ישירה בלי "התשלום התקבל" — אין הפעלה ואין חידוש
+  for (const [name, data] of [
+    ["aiAdminActivate", { tenantId: STORE_A.id, product: "ecommerce", startsOn: "2026-11-08" }],
+    [
+      "aiAdminRenew",
+      { tenantId: STORE_A.id, expectedLastEnd: "2027-11-07", paymentConfirmed: "yes" },
+    ],
+  ] as const) {
+    const res = await callServerFn(request, {
+      host: "platform.shop.localhost",
+      file: "src/lib/ai-admin.functions.ts",
+      name,
+      data,
+      token: platformToken,
+    });
+    expect(await res.text()).toContain("יש לאשר שהתשלום התקבל");
+  }
   const overview = await callServerFn(request, {
     host: "platform.shop.localhost",
     file: "src/lib/ai-admin.functions.ts",

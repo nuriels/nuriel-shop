@@ -9,7 +9,7 @@
  */
 import type Anthropic from "@anthropic-ai/sdk";
 import type { GuideCatalog } from "./guides/types";
-import { sanitizeRouterOutput, type AiModelId, type RouterResult } from "./logic";
+import { NO_API_KEY_ERROR, sanitizeRouterOutput, type AiModelId, type RouterResult } from "./logic";
 
 /** הכתובת הרשמית של Anthropic — המפתח נשלח רק לשם */
 export const ANTHROPIC_API_URL = "https://api.anthropic.com";
@@ -183,8 +183,24 @@ export function routerClientFromSdk(client: { messages: MessagesApi }): RouterCl
   };
 }
 
-/** לקוח אמיתי מול Anthropic (הספרייה נטענת רק כשצריך, בצד השרת) */
-export async function createAnthropicRouterClient(apiKey: string): Promise<RouterClient> {
+/** זמן ההמתנה המרבי לתשובה (בקשה אחת, בלי ניסיון חוזר) */
+export const ROUTER_TIMEOUT_MS = 20_000;
+
+/**
+ * לקוח אמיתי מול Anthropic (הספרייה נטענת רק כשצריך, בצד השרת).
+ * timeoutMs — לבדיקת ה-Staging בלבד (scripts/ai-staging-check.ts): בדיקת timeout אמיתית מול Anthropic.
+ * מוגבל ל-1–20000; האפליקציה עצמה לא מעבירה אותו (תמיד 20 שניות).
+ */
+export async function createAnthropicRouterClient(
+  apiKey: string,
+  options: { timeoutMs?: number } = {},
+): Promise<RouterClient> {
+  // בלי מפתח — אין בקשה בכלל (גם לא אחת שתיענה 401). האפליקציה לא מגיעה לכאן בלי מפתח; זו הגנה נוספת
+  if (apiKey.trim() === "") throw new Error(NO_API_KEY_ERROR);
+  const timeout = Math.min(
+    ROUTER_TIMEOUT_MS,
+    Math.max(1, Math.floor(options.timeoutMs ?? ROUTER_TIMEOUT_MS)),
+  );
   const { default: AnthropicClient } = await import("@anthropic-ai/sdk");
   const client = new AnthropicClient({
     apiKey,
@@ -196,7 +212,7 @@ export async function createAnthropicRouterClient(apiKey: string): Promise<Route
     // בלי ניסיונות חוזרים אוטומטיים: כל קריאה היא קריאה אחת בדיוק (עלות צפויה). בתקלה המנהל מקבל
     // הודעה כללית, ופרטי השגיאה נרשמים למנהל העל בלבד
     maxRetries: 0,
-    timeout: 20_000,
+    timeout,
   });
   return routerClientFromSdk(client);
 }

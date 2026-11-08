@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["tests/**/*.ts", "e2e/**/*.ts", "vitest.config.ts"],
+  "include": ["tests/**/*.ts", "e2e/**/*.ts", "vitest.config.ts", "scripts/ai-staging-check.ts"],
   "exclude": ["e2e/.supabase"],
   "compilerOptions": {
     "types": ["node", "vite/client"],

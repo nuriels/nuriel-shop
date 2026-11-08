@@ -26,7 +26,8 @@
 --
 -- חידוש: תקופה חדשה של 12 חודשים. כשהחבילה עוד בתוקף — מתחילה ביום שאחרי הסוף (בלי ימים אבודים);
 --   כשפגה — מהיום. ההגדרות, היסטוריית השימוש וההתראות לא נמחקים כשהחבילה פגה, וחידוש ממשיך מאותו מקום.
---   אין חיוב אוטומטי: מנהל העל מפעיל / מחדש רק אחרי אישור ותשלום (מחוץ למערכת).
+--   אין חיוב אוטומטי: מנהל העל מפעיל / מחדש רק אחרי אישור ותשלום (מחוץ למערכת) — ובכל הפעלה ובכל חידוש
+--   הוא מאשר במפורש שהתשלום התקבל (_payment_confirmed). בלי האישור — המסד לא רושם תקופה; האישור נשמר בהיסטוריה.
 --
 -- הרשאות: כל הטבלאות סגורות לדפדפן (anon / authenticated) — גם למנהל עסק וגם למנהל העל. כל פעולה של
 --   מנהל העל עוברת דרך פונקציה שמקבלת את מזהה המבצע מהשרת ובודקת בעצמה שהוא מנהל פלטפורמה
@@ -174,6 +175,9 @@ CREATE TABLE IF NOT EXISTS public.ai_subscription_events (
   actor_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   actor_email TEXT CHECK (actor_email IS NULL OR char_length(actor_email) <= 320),
   note TEXT CHECK (note IS NULL OR char_length(note) <= 300),
+  -- מנהל העל אישר שהתשלום התקבל. חובה בכל הפעלה ובכל חידוש (אין חיוב אוטומטי, ואין תקופה בלי אישור)
+  payment_confirmed BOOLEAN NOT NULL DEFAULT false,
+  CHECK ((kind IN ('activated', 'renewed')) = payment_confirmed),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ai_subscription_events_sub_idx
@@ -271,6 +275,104 @@ CREATE TRIGGER ai_usage_daily_add AFTER INSERT ON public.ai_usage_log
   FOR EACH ROW EXECUTE FUNCTION public.ai_usage_daily_add();
 
 -- ------------------------------------------------------------
+-- 7ב. מכסות השאלות — משותפות לכל שרתי האפליקציה ושורדות הפעלה מחדש (באותו מבנה כמו
+--     hospitality.rate_check, מיגרציה 36): משתמש בדקה, עסק בשעה, אותה שאלה ב-10 דקות, כלל המערכת בשעה
+--     (רק לשאלה שנשלחת לדגם) — ותקרת התקציב החודשי. נבדק הכול; נספר רק ניסיון שעבר את כל הכללים.
+--     מונים חולפים (לא מידע מסחרי); שורות ישנות נמחקות כל שעה (ai_rate_buckets_prune)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.ai_rate_buckets (
+  key TEXT PRIMARY KEY CHECK (char_length(key) BETWEEN 1 AND 120),
+  hits INTEGER NOT NULL CHECK (hits >= 0),
+  window_ends TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ai_rate_buckets_ends_idx ON public.ai_rate_buckets (window_ends);
+
+-- _model_call: השאלה תישלח לדגם (בקשה אסורה נעצרת לפניו — לא נספרת בכלל המערכת ולא בתקציב).
+-- מחזיר {"result": "ok" | "budget" | "user" | "tenant" | "repeated" | "global", "retry_after": שניות}.
+-- "budget" — התקציב החודשי נוצל: השאלה נענית מהמדריכים בלבד, בלי קריאה לדגם (נספרת במכסות המשתמש והעסק)
+CREATE OR REPLACE FUNCTION public.ai_quota_take(_tenant uuid, _user uuid, _fingerprint text, _model_call boolean)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  s public.ai_settings;
+  _month_cost numeric := 0;
+  _budget_hit boolean := false;
+  _rules jsonb;
+  _rule jsonb;
+  _key text;
+  _limit integer;
+  _window integer;
+  _hits integer;
+  _ends timestamptz;
+  _failed text;
+  _retry integer := 0;
+BEGIN
+  IF _tenant IS NULL OR _user IS NULL OR _model_call IS NULL THEN
+    RAISE EXCEPTION 'ai: a quota needs a business, a user and the kind of call' USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  SELECT * INTO s FROM public.ai_settings WHERE id;
+  IF _model_call THEN
+    SELECT COALESCE(sum(d.cost_usd), 0) INTO _month_cost FROM public.ai_usage_daily d
+     WHERE d.day >= date_trunc('month', public.ai_today()::timestamp)::date;
+    -- 0 = בלי קריאות לדגם בכלל
+    _budget_hit := _month_cost >= COALESCE(s.monthly_budget_usd, 0);
+  END IF;
+
+  -- הכללים לפי סדר העדיפות (הראשון שנחסם — התשובה)
+  _rules := jsonb_build_array(
+    jsonb_build_object('code', 'user', 'key', 'u:' || _user, 'limit', COALESCE(s.user_minute_limit, 6), 'window', 60),
+    jsonb_build_object('code', 'tenant', 'key', 't:' || _tenant, 'limit', COALESCE(s.tenant_hourly_limit, 60),
+                       'window', 3600),
+    jsonb_build_object('code', 'repeated', 'key', 'q:' || _tenant || ':' || md5(left(COALESCE(_fingerprint, ''), 400)),
+                       'limit', 3, 'window', 600));
+  IF _model_call AND NOT _budget_hit THEN
+    _rules := _rules || jsonb_build_array(jsonb_build_object('code', 'global', 'key', 'g', 'limit', 1500, 'window', 3600));
+  END IF;
+
+  -- 1. נעילת המונים לפי סדר המפתחות (בלי deadlock בין קריאות מקבילות); הנעילה עד סוף הטרנזקציה
+  FOR _key IN SELECT DISTINCT x.r ->> 'key' FROM jsonb_array_elements(_rules) AS x(r) ORDER BY 1 LOOP
+    PERFORM pg_advisory_xact_lock(hashtextextended('ai-rate:' || _key, 0));
+  END LOOP;
+
+  -- 2. בדיקה בלי ספירה
+  FOR _rule IN SELECT x.r FROM jsonb_array_elements(_rules) WITH ORDINALITY AS x(r, ord) ORDER BY x.ord LOOP
+    _key := _rule ->> 'key';
+    _limit := (_rule ->> 'limit')::integer;
+    _window := (_rule ->> 'window')::integer;
+    SELECT b.hits, b.window_ends INTO _hits, _ends FROM public.ai_rate_buckets b WHERE b.key = _key;
+    IF NOT FOUND OR _ends <= now() THEN
+      _hits := 0;
+      _ends := now() + make_interval(secs => _window);
+    END IF;
+    IF _hits + 1 > _limit THEN
+      _failed := COALESCE(_failed, _rule ->> 'code');
+      _retry := GREATEST(_retry, CEIL(EXTRACT(EPOCH FROM _ends - now()))::integer, 1);
+    END IF;
+  END LOOP;
+  IF _failed IS NOT NULL THEN
+    RETURN jsonb_build_object('result', _failed, 'retry_after', _retry);
+  END IF;
+
+  -- 3. עבר את כולם → נספר בכל הכללים
+  FOR _rule IN SELECT x.r FROM jsonb_array_elements(_rules) AS x(r) LOOP
+    _key := _rule ->> 'key';
+    _window := (_rule ->> 'window')::integer;
+    INSERT INTO public.ai_rate_buckets AS b (key, hits, window_ends)
+    VALUES (_key, 1, now() + make_interval(secs => _window))
+    ON CONFLICT (key) DO UPDATE
+      SET hits = CASE WHEN b.window_ends <= now() THEN 1 ELSE LEAST(b.hits + 1, 2000000000) END,
+          window_ends = CASE WHEN b.window_ends <= now() THEN EXCLUDED.window_ends ELSE b.window_ends END;
+  END LOOP;
+  RETURN jsonb_build_object('result', CASE WHEN _budget_hit THEN 'budget' ELSE 'ok' END, 'retry_after', 0);
+END $$;
+
+-- מונים שהחלון שלהם נגמר לפני יותר משעה — נמחקים (מהבדיקה השעתית בשרת)
+CREATE OR REPLACE FUNCTION public.ai_rate_buckets_prune()
+RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
+  WITH d AS (DELETE FROM public.ai_rate_buckets WHERE window_ends < now() - interval '1 hour' RETURNING 1)
+  SELECT count(*)::integer FROM d;
+$$;
+
+-- ------------------------------------------------------------
 -- 8. התראות החידוש — אותה התראה לאותה תקופה נשלחת פעם אחת בלבד (UNIQUE)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.ai_notifications (
@@ -305,7 +407,7 @@ DECLARE
   _t text;
 BEGIN
   FOREACH _t IN ARRAY ARRAY['ai_packages', 'ai_subscriptions', 'ai_subscription_periods', 'ai_subscription_events',
-                            'ai_settings', 'ai_usage_log', 'ai_usage_daily', 'ai_notifications'] LOOP
+                            'ai_settings', 'ai_usage_log', 'ai_usage_daily', 'ai_rate_buckets', 'ai_notifications'] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', _t);
     EXECUTE format('REVOKE ALL ON public.%I FROM PUBLIC, anon, authenticated, service_role', _t);
     EXECUTE format('GRANT SELECT ON public.%I TO service_role', _t);
@@ -479,8 +581,10 @@ BEGIN
 END $$;
 
 -- הפעלה: בחירת סוג העוזר (חייב להתאים לסוג העסק) ותאריך התחלה; הסיום — 12 חודשים, אוטומטית
+-- הגרסה הקודמת של הטיוטה (בלי אישור התשלום) — רק בסביבות בדיקה שבהן היא הורצה; בייצור לא קיימת
+DROP FUNCTION IF EXISTS public.ai_admin_activate(uuid, uuid, text, date, text);
 CREATE OR REPLACE FUNCTION public.ai_admin_activate(_actor uuid, _tenant uuid, _product text, _starts_on date,
-                                                    _note text DEFAULT NULL)
+                                                    _note text DEFAULT NULL, _payment_confirmed boolean DEFAULT false)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   _email text := public.ai_require_platform_admin(_actor);
@@ -493,6 +597,10 @@ DECLARE
   _kind text := 'activation';
   _clean_note text := NULLIF(left(btrim(COALESCE(_note, '')), 300), '');
 BEGIN
+  -- בלי חיוב אוטומטי: מנהל העל מאשר במפורש שהתשלום התקבל. בלי האישור — אין הפעלה
+  IF _payment_confirmed IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'ai: confirm that the payment was received' USING ERRCODE = 'check_violation';
+  END IF;
   SELECT * INTO t FROM public.tenants WHERE id = _tenant FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'ai: business not found' USING ERRCODE = 'no_data_found';
@@ -530,9 +638,9 @@ BEGIN
   VALUES (s.id, _tenant, _kind, _starts_on, public.ai_period_end(_starts_on), pk.price_agorot, _clean_note, _actor)
   RETURNING id INTO _period;
   INSERT INTO public.ai_subscription_events (subscription_id, tenant_id, kind, period_id, starts_on, ends_on,
-                                             price_agorot, actor_id, actor_email, note)
+                                             price_agorot, actor_id, actor_email, note, payment_confirmed)
   VALUES (s.id, _tenant, CASE WHEN _kind = 'activation' THEN 'activated' ELSE 'renewed' END, _period, _starts_on,
-          public.ai_period_end(_starts_on), pk.price_agorot, _actor, _email, _clean_note);
+          public.ai_period_end(_starts_on), pk.price_agorot, _actor, _email, _clean_note, true);
   PERFORM public.ai_audit(_actor, _email, _tenant,
     CASE WHEN _kind = 'activation' THEN 'ai_subscription_activated' ELSE 'ai_subscription_renewed' END,
     jsonb_build_object('product', _product, 'starts_on', _starts_on, 'ends_on', public.ai_period_end(_starts_on),
@@ -543,8 +651,9 @@ END $$;
 -- חידוש לשנה נוספת: בתוקף / טרם התחילה → מהיום שאחרי הסוף; פגה → מהיום. חידוש אחד מראש לכל היותר
 -- _expected_last_end: סוף התקופה האחרונה כפי שהמסך הציג (last_ends_on). השתנה בינתיים (לחיצה כפולה, ניסיון
 -- חוזר אחרי שהתשובה אבדה, שני מנהלים, רשימה ישנה) → נעצר, ולא נרשמת שנה נוספת בטעות
+DROP FUNCTION IF EXISTS public.ai_admin_renew(uuid, uuid, date, text);
 CREATE OR REPLACE FUNCTION public.ai_admin_renew(_actor uuid, _tenant uuid, _expected_last_end date,
-                                                 _note text DEFAULT NULL)
+                                                 _note text DEFAULT NULL, _payment_confirmed boolean DEFAULT false)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   _email text := public.ai_require_platform_admin(_actor);
@@ -556,6 +665,10 @@ DECLARE
   _period uuid;
   _clean_note text := NULLIF(left(btrim(COALESCE(_note, '')), 300), '');
 BEGIN
+  -- חידוש — רק אחרי אישור מפורש שהתשלום התקבל (אין חיוב אוטומטי)
+  IF _payment_confirmed IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'ai: confirm that the payment was received' USING ERRCODE = 'check_violation';
+  END IF;
   SELECT * INTO s FROM public.ai_subscriptions WHERE tenant_id = _tenant FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'ai: no package to renew — activate first' USING ERRCODE = 'no_data_found';
@@ -580,9 +693,9 @@ BEGIN
   VALUES (s.id, _tenant, 'renewal', _start, public.ai_period_end(_start), pk.price_agorot, _clean_note, _actor)
   RETURNING id INTO _period;
   INSERT INTO public.ai_subscription_events (subscription_id, tenant_id, kind, period_id, starts_on, ends_on,
-                                             price_agorot, actor_id, actor_email, note)
+                                             price_agorot, actor_id, actor_email, note, payment_confirmed)
   VALUES (s.id, _tenant, 'renewed', _period, _start, public.ai_period_end(_start), pk.price_agorot, _actor, _email,
-          _clean_note);
+          _clean_note, true);
   PERFORM public.ai_audit(_actor, _email, _tenant, 'ai_subscription_renewed',
     jsonb_build_object('product', s.product, 'starts_on', _start, 'ends_on', public.ai_period_end(_start),
                        'price_agorot', pk.price_agorot));
@@ -640,7 +753,8 @@ BEGIN
       FROM public.ai_subscription_periods p WHERE p.subscription_id = s.id), '[]'::jsonb),
     'events', COALESCE((SELECT jsonb_agg(jsonb_build_object(
         'kind', e.kind, 'starts_on', e.starts_on, 'ends_on', e.ends_on, 'price_agorot', e.price_agorot,
-        'actor_email', e.actor_email, 'note', e.note, 'created_at', e.created_at) ORDER BY e.created_at DESC, e.id DESC)
+        'actor_email', e.actor_email, 'note', e.note, 'payment_confirmed', e.payment_confirmed,
+        'created_at', e.created_at) ORDER BY e.created_at DESC, e.id DESC)
       FROM public.ai_subscription_events e WHERE e.subscription_id = s.id), '[]'::jsonb),
     'notifications', COALESCE((SELECT jsonb_agg(jsonb_build_object(
         'kind', n.kind, 'period_ends_on', n.period_ends_on, 'status', n.status,
@@ -896,8 +1010,8 @@ REVOKE ALL ON FUNCTION public.ai_today() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_period_end(date) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_entitlement(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_admin_list(uuid, text, text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.ai_admin_activate(uuid, uuid, text, date, text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.ai_admin_renew(uuid, uuid, date, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.ai_admin_activate(uuid, uuid, text, date, text, boolean) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.ai_admin_renew(uuid, uuid, date, text, boolean) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_admin_set_suspended(uuid, uuid, boolean, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_admin_history(uuid, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_admin_save_settings(uuid, jsonb) FROM PUBLIC, anon, authenticated;
@@ -906,13 +1020,16 @@ REVOKE ALL ON FUNCTION public.ai_due_notifications() FROM PUBLIC, anon, authenti
 REVOKE ALL ON FUNCTION public.ai_notification_claim(uuid, date, text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_notification_finish(bigint, text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_notifications_mark_stale() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.ai_quota_take(uuid, uuid, text, boolean) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.ai_rate_buckets_prune() FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.ai_today(), public.ai_period_end(date), public.ai_entitlement(uuid),
-  public.ai_admin_list(uuid, text, text), public.ai_admin_activate(uuid, uuid, text, date, text),
-  public.ai_admin_renew(uuid, uuid, date, text), public.ai_admin_set_suspended(uuid, uuid, boolean, text),
+  public.ai_admin_list(uuid, text, text), public.ai_admin_activate(uuid, uuid, text, date, text, boolean),
+  public.ai_admin_renew(uuid, uuid, date, text, boolean), public.ai_admin_set_suspended(uuid, uuid, boolean, text),
   public.ai_admin_history(uuid, uuid), public.ai_admin_save_settings(uuid, jsonb), public.ai_admin_usage(uuid),
   public.ai_due_notifications(), public.ai_notification_claim(uuid, date, text, text),
-  public.ai_notification_finish(bigint, text, text), public.ai_notifications_mark_stale()
+  public.ai_notification_finish(bigint, text, text), public.ai_notifications_mark_stale(),
+  public.ai_quota_take(uuid, uuid, text, boolean), public.ai_rate_buckets_prune()
   TO service_role;
 
 COMMIT;
