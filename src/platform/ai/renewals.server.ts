@@ -7,11 +7,13 @@
  *  • חבילה שחודשה — תאריך הסיום זז קדימה, ואין התראה על הסיום הישן; חבילה מושבתת — אין התראות;
  *  • "תפיסה" לפני השליחה (ai_notification_claim, UNIQUE במסד) — אותה התראה לאותה תקופה לא נשלחת
  *    פעמיים, גם כשרצים כמה שרתים במקביל, וגם בניסיון חוזר (Idempotency-Key אצל ספק המיילים);
- *  • נרשם: נשלחה / נכשלה (עם הסיבה) / דולגה (אין כתובת מייל תקינה). מה שנכשל לא נשלח שוב אוטומטית.
+ *  • נרשם: נשלחה / נכשלה (עם הסיבה) / דולגה (אין כתובת מייל תקינה). מה שנכשל — ניסיון נוסף אחרי שעה,
+ *    עד 3 ניסיונות, באותו Idempotency-Key (כך שמייל שכבר יצא לא יוצא שוב);
+ *  • שירות המיילים לא מוגדר (אין RESEND_API_KEY) — לא תופסים כלום, וההתראות לא "נשרפות".
  * בלי חיוב אוטומטי: החידוש נעשה בידי מנהל העל, רק אחרי אישור ותשלום.
  * ההתראה בפאנל הניהול של הלקוח מחושבת בכל טעינה מהמצב במסד (endingSoonMessage) — לא נשלחת.
  */
-import { escapeHtml, sendBusinessEmail } from "../email/send.server";
+import { emailConfigured, escapeHtml, sendBusinessEmail } from "../email/send.server";
 import { formatIsraeliDate, formatShekels } from "./logic";
 import * as store from "./store.server";
 import type { RenewalRun } from "./types";
@@ -82,7 +84,14 @@ function replyToAddress(): string | null {
 
 /** ריצה אחת: מה שצריך לצאת היום → תפיסה → שליחה → רישום התוצאה */
 export async function runRenewalNotices(): Promise<RenewalRun> {
-  const run: RenewalRun = { due: 0, sent: 0, failed: 0, skipped: 0, claimedElsewhere: 0 };
+  const run: RenewalRun = {
+    due: 0,
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+    claimedElsewhere: 0,
+    emailNotConfigured: false,
+  };
   try {
     await store.rpc("ai_notifications_mark_stale", {});
   } catch {
@@ -90,6 +99,11 @@ export async function runRenewalNotices(): Promise<RenewalRun> {
   }
   const due = (await store.rpc<DueNotice[]>("ai_due_notifications", {})) ?? [];
   run.due = due.length;
+  // בלי שירות מיילים לא תופסים אף התראה — אחרת כולן היו נרשמות כ"דולגה" ולא יוצאות לעולם
+  if (due.length > 0 && !emailConfigured()) {
+    run.emailNotConfigured = true;
+    return run;
+  }
   for (const notice of due) {
     const email = validEmail(notice.owner_email);
     const id = await store.rpc<number | null>("ai_notification_claim", {
@@ -145,7 +159,11 @@ async function tick(): Promise<void> {
   running = true;
   try {
     const run = await runRenewalNotices();
-    if (run.sent + run.failed + run.skipped > 0) {
+    if (run.emailNotConfigured) {
+      console.error(
+        `[nuriel-ai] renewal notices: email is not configured (RESEND_API_KEY) — ${run.due} due, nothing sent`,
+      );
+    } else if (run.sent + run.failed + run.skipped > 0) {
       console.log(
         `[nuriel-ai] renewal notices: ${run.sent} sent, ${run.failed} failed, ${run.skipped} skipped`,
       );

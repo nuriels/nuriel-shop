@@ -20,7 +20,8 @@ type ActivateInput = {
   startsOn: string;
   note?: string;
 };
-type RenewInput = { tenantId: string; note?: string };
+/** expectedLastEnd — סוף התקופה האחרונה כפי שהמסך הציג (last_ends_on); השתנה בינתיים → החידוש נעצר */
+type RenewInput = { tenantId: string; expectedLastEnd: string; note?: string };
 type SuspendInput = { tenantId: string; suspended: boolean; reason?: string };
 type SaveInput = {
   apiKey?: string;

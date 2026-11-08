@@ -15,13 +15,17 @@ import { sanitizeRouterOutput, type AiModelId, type RouterResult } from "./logic
 export const ANTHROPIC_API_URL = "https://api.anthropic.com";
 
 /**
- * בבדיקות (E2E) בלבד: שירות מדומה על המחשב המקומי. כתובת שאינה http://127.0.0.1 / localhost — לא
- * נלקחת בחשבון, כך שהגדרה שגויה לא יכולה לשלוח את המפתח לשרת אחר.
+ * בבדיקות (E2E) בלבד: שירות מדומה על המחשב המקומי. נלקח בחשבון רק כששני התנאים מתקיימים: גם פאנל
+ * הפלטפורמה עצמו מוגדר על דומיין מקומי (localhost / *.localhost — שאי אפשר להגיש מהאינטרנט, כך שבשרת
+ * אמיתי זה לא קורה), וכתובת השירות היא http://127.0.0.1 / localhost. אחרת — רק Anthropic.
  */
 export function anthropicBaseUrl(env: Record<string, string | undefined> = process.env): string {
   const override = env["AI_ASSISTANT_TEST_API_URL"]?.trim();
+  const platformHost = env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase() ?? "";
+  const localPlatform = platformHost === "localhost" || platformHost.endsWith(".localhost");
   if (
     override &&
+    localPlatform &&
     /^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d{2,5})?(?:\/[\w/-]*)?$/.test(override)
   ) {
     return override.replace(/\/$/, "");
@@ -95,10 +99,25 @@ export function buildUserMessage(question: string, previous: readonly string[]):
 export type RouterParams = Anthropic.MessageCreateParamsNonStreaming;
 
 /**
+ * בלי "חשיבה" (thinking) איפה שאפשר: ב-Haiku 5.5 — disabled; ב-Sonnet 5.5 — between_tools (הערך הנמוך
+ * ביותר שם — disabled נדחה; בלי כלים אין חשיבה בכלל). ב-Opus 5.5 אי אפשר לכבות: effort נמוך שולט בה,
+ * והיא נספרת ב-max_tokens — לכן שם התקרה גבוהה יותר.
+ */
+export function thinkingFor(model: AiModelId): RouterParams["thinking"] {
+  if (model === "claude-haiku-5-5") return { type: "disabled" };
+  if (model === "claude-sonnet-5-5") return { type: "between_tools" };
+  return undefined;
+}
+
+/** התשובה היא JSON של כמה עשרות טוקנים; ב-Opus 5.5 גם החשיבה (שאי אפשר לכבות) נכנסת לתקרה */
+export function maxTokensFor(model: AiModelId): number {
+  return model === "claude-opus-5-5" ? 4096 : 1024;
+}
+
+/**
  * הבקשה המלאה שנשלחת ל-Anthropic — נבנית במקום אחד, כדי שהבדיקות יוודאו בדיוק מה יוצא מהשרת.
  *  - בלי tools / tool_choice / mcp / container: לדגם אין שום יכולת פעולה.
- *  - thinking לא נשלח: בשלושת הדגמים ברירת המחדל היא "adaptive" (ב-Opus 5.5 אי אפשר לכבות), ו-effort
- *    נמוך שומר על מהירות ועלות. 1024 טוקנים מספיקים לחשיבה קצרה + JSON זעיר.
+ *  - thinking: כבוי ב-Haiku / Sonnet (thinkingFor), ו-effort נמוך — מהירות ועלות.
  *  - בלי temperature (בדגמים האלה ערך שאינו ברירת מחדל נדחה).
  *  - בלי streaming: התשובה היא JSON של כמה עשרות טוקנים שלא מוצג למשתמש.
  *  - ההוראות ורשימת המדריכים קבועות בין שאלות → נשמרות ב-prompt cache (קריאה חוזרת עולה עשירית).
@@ -109,9 +128,11 @@ export function buildRouterParams(
   question: string,
   previous: readonly string[],
 ): RouterParams {
+  const thinking = thinkingFor(model);
   return {
     model,
-    max_tokens: 1024,
+    max_tokens: maxTokensFor(model),
+    ...(thinking ? { thinking } : {}),
     system: [
       { type: "text", text: buildRouterPrompt(catalog), cache_control: { type: "ephemeral" } },
     ],

@@ -173,7 +173,10 @@ function ActionDialog({
         });
         toast.success("החבילה הופעלה");
       } else if (action.kind === "renew") {
-        await renew({ data: { tenantId: business.tenantId, note } });
+        // סוף התקופה האחרונה כפי שמוצג כאן — אם השתנה בינתיים (לחיצה כפולה, מנהל אחר), השרת עוצר
+        await renew({
+          data: { tenantId: business.tenantId, expectedLastEnd: lastEnd ?? "", note },
+        });
         toast.success("החבילה חודשה לשנה נוספת");
       } else if (action.kind === "suspend") {
         await setSuspended({
@@ -191,10 +194,14 @@ function ActionDialog({
   };
 
   const currentEnd = str(state["ends_on"]);
+  // סוף התקופה האחרונה (של כל התקופות) — מה שהחידוש נשען עליו
+  const lastEnd = str(state["last_ends_on"]) ?? currentEnd;
+  // כבר יש תקופה עתידית (חידוש מראש / הפעלה שעוד לא התחילה) — לכל היותר אחת
+  const futureAlready = Boolean(str(state["renewal_starts_on"])) || status === "scheduled";
   const renewStart = (() => {
     const today = israelTodayForDisplay();
-    if (!currentEnd || currentEnd < today) return today;
-    const next = new Date(`${currentEnd}T00:00:00Z`);
+    if (!lastEnd || lastEnd < today) return today;
+    const next = new Date(`${lastEnd}T00:00:00Z`);
     next.setUTCDate(next.getUTCDate() + 1);
     return next.toISOString().slice(0, 10);
   })();
@@ -265,15 +272,24 @@ function ActionDialog({
                 </div>
               </>
             )}
-            {action.kind === "renew" && (
-              <p className="rounded-lg bg-secondary px-3 py-2 text-sm">
-                תקופה חדשה: {formatIsraeliDate(renewStart)} –{" "}
-                {formatIsraeliDate(periodEndPreview(renewStart))}
-                {currentEnd && renewStart !== israelTodayForDisplay()
-                  ? " (מיד אחרי הסיום הנוכחי — בלי ימים אבודים)"
-                  : ""}
-              </p>
-            )}
+            {action.kind === "renew" &&
+              (futureAlready ? (
+                <p
+                  className="rounded-lg bg-secondary px-3 py-2 text-sm"
+                  data-testid="ai-renew-blocked"
+                >
+                  כבר נקבעה תקופה עתידית (חידוש מראש, או הפעלה שעוד לא התחילה) — אפשר לחדש שוב רק
+                  כשהיא תתחיל.
+                </p>
+              ) : (
+                <p className="rounded-lg bg-secondary px-3 py-2 text-sm">
+                  תקופה חדשה: {formatIsraeliDate(renewStart)} –{" "}
+                  {formatIsraeliDate(periodEndPreview(renewStart))}
+                  {lastEnd && renewStart !== israelTodayForDisplay()
+                    ? " (מיד אחרי הסיום הנוכחי — בלי ימים אבודים)"
+                    : ""}
+                </p>
+              ))}
             {action.kind !== "suspend" && (
               <p className="text-sm font-semibold">
                 מחיר: {formatShekels(price)} לשנה · ללא חיוב אוטומטי
@@ -301,7 +317,11 @@ function ActionDialog({
               <Button type="button" variant="outline" onClick={onClose}>
                 ביטול
               </Button>
-              <Button type="submit" disabled={busy} data-testid="ai-confirm">
+              <Button
+                type="submit"
+                disabled={busy || (action.kind === "renew" && futureAlready)}
+                data-testid="ai-confirm"
+              >
                 {busy && <Loader2 className="size-4 animate-spin" />}
                 {action.kind === "activate"
                   ? "הפעלה"
@@ -400,6 +420,7 @@ function HistoryView({ history }: { history: JsonObject | null }) {
               {NOTICE_STATUS[str(n["status"]) ?? ""] ?? str(n["status"])} ·{" "}
               <span dir="ltr">{str(n["recipient_masked"]) ?? "—"}</span> ·{" "}
               {dateTime(n["created_at"])}
+              {(num(n["attempts"]) ?? 1) > 1 && <> · {num(n["attempts"])} ניסיונות</>}
               {str(n["error"]) && <span className="text-destructive"> · {str(n["error"])}</span>}
             </li>
           ))}
@@ -932,7 +953,7 @@ function RenewalsCard() {
     <Section
       icon={<BellRing className="size-5 text-primary" />}
       title="התראות חידוש"
-      description="30 / 14 / 7 / 1 ימים לפני הסיום וביום הסיום · נבדק אוטומטית כל שעה · כל התראה נשלחת פעם אחת, ולא אחרי חידוש"
+      description="30 / 14 / 7 / 1 ימים לפני הסיום וביום הסיום · נבדק אוטומטית כל שעה · כל התראה נשלחת פעם אחת (שליחה שנכשלה — עוד ניסיון אחרי שעה, עד 3), ולא אחרי חידוש"
     >
       <div className="flex flex-wrap items-center gap-3">
         <Button
@@ -943,7 +964,9 @@ function RenewalsCard() {
             try {
               const r = await runRenewals();
               setResult(
-                `נבדקו ${r.due} · נשלחו ${r.sent} · נכשלו ${r.failed} · דולגו ${r.skipped}`,
+                r.emailNotConfigured
+                  ? `יש ${r.due} התראות לשליחה, אבל שירות המיילים לא מוגדר בשרת (RESEND_API_KEY) — לא נשלח ולא נרשם דבר`
+                  : `נבדקו ${r.due} · נשלחו ${r.sent} · נכשלו ${r.failed} · דולגו ${r.skipped}`,
               );
             } catch (error) {
               setResult(errorText(error));

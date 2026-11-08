@@ -6,11 +6,13 @@
  * בכל קריאה, בסדר הזה, ובשרת בלבד:
  *  1. מי הפונה — מהטוקן שאומת (לא ממה שהדפדפן שולח), ובאיזה עסק — לפי הכתובת (Host), לא לפי tenant_id
  *     מהדפדפן. סוג העסק במסד חייב להיות המוצר של הקטלוג.
- *  2. ההרשאה: מנהל העסק (owner / manager לפי המנגנון הקיים) — אחרת "אין הרשאה".
- *  3. הגבלות קצב (משתמש / עסק / כלל המערכת).
+ *  2. הגבלת קצב למשתמש — עוד לפני שאילתות התפקיד במסד (גם מי שאינו מנהל לא מעמיס על המסד).
+ *  3. ההרשאה: מנהל העסק (owner / manager לפי המנגנון הקיים) — אחרת "אין הרשאה".
  *  4. הזכאות במסד, לפי היום בישראל: חבילה פעילה, תאריך ההתחלה הגיע, תאריך הסיום לא עבר, לא הושבתה,
  *     סוג החבילה וקטלוג המדריכים תואמים. אין "בדיקה בטעינה" — כל שאלה נבדקת מחדש.
- *  5. השאלה: ניקוי, חסימת בקשות אסורות לפני הדגם, סינון מידע רגיש, סיווג בלבד, יומן.
+ *  5. רק לעסק זכאי: המגבלות של המשתמש ושל העסק (עסק בלי חבילה לא צורך שום מכסה של אחרים).
+ *  6. השאלה: ניקוי, חסימת בקשות אסורות לפני הדגם, אותה שאלה שוב ושוב, ורק לשאלה שבאמת נשלחת לדגם —
+ *     התקרה של כל המערכת. סינון מידע רגיש, סיווג בלבד, יומן.
  */
 import { sessionFromRequest } from "../auth/session.server";
 import { allowAction } from "../security/rate-limit.server";
@@ -27,6 +29,8 @@ import {
   estimateCostUsd,
   failedAnswer,
   FORBIDDEN_MESSAGE,
+  isBlockedConversation,
+  LIMITED_MESSAGE,
   limitedResult,
   NO_TOKENS,
   parseSubscriptionState,
@@ -51,8 +55,18 @@ import * as store from "./store.server";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
-/** תקרה לכל המערכת (כל העסקים יחד) — נגד לולאה / הצפה, לא תקציב */
+/**
+ * תקרה לכל המערכת (כל העסקים יחד) — נגד לולאה / הצפה, לא תקציב. נספרות רק שאלות של עסקים זכאים שבאמת
+ * נשלחות לדגם; המגבלה לעסק (עד 300 בשעה, במסד) נמוכה ממנה בהרבה, כך שעסק אחד לא מנצל אותה לבד.
+ */
 export const GLOBAL_HOURLY_LIMIT = 1500;
+/** כל שאלה (גם של מי שאינו מנהל / עסק בלי חבילה) — למשתמש בדקה, לפני השאילתות במסד */
+export const ASK_GATE_PER_MINUTE = 30;
+/**
+ * בדיקות מצב בחלון (בכל טעינת עמוד ניהול, בחזרה ללשונית, כל 5 דקות, בכפתור) — למשתמש בדקה. נגד לולאה
+ * מהירה; שימוש רגיל (גם מעבר מהיר בין עמודים) רחוק מזה
+ */
+export const STATUS_PER_MINUTE = 60;
 /** אותה שאלה בדיוק, באותו עסק — עד 3 פעמים ב-10 דקות */
 export const SAME_QUESTION_LIMIT = { count: 3, windowMs: 10 * MINUTE } as const;
 
@@ -65,11 +79,18 @@ export type AiCaller = {
   platformAdmin: boolean;
 };
 
+/** הגבלת קצב למשתמש שנבדקת מיד אחרי אימות הטוקן — לפני כל שאילתה במסד */
+export type CallerGate = { bucket: string; perMinute: number };
+
 /**
  * הפונה, רק אם הוא מנהל של העסק שבכתובת, והעסק מהמוצר של הקטלוג. אחרת null — בלי לגלות למה.
+ * "limited" — המשתמש (גם אם אינו מנהל) עבר את מגבלת הקצב שלפני השאילתות במסד.
  * (מנהל הפלטפורמה הוא owner בכל עסק, כמו בכל המערכת.)
  */
-export async function resolveCaller(product: GuideCatalog["product"]): Promise<AiCaller | null> {
+export async function resolveCaller(
+  product: GuideCatalog["product"],
+  gate?: CallerGate,
+): Promise<AiCaller | "limited" | null> {
   let session: { userId: string } | null = null;
   try {
     session = await sessionFromRequest();
@@ -77,6 +98,8 @@ export async function resolveCaller(product: GuideCatalog["product"]): Promise<A
     session = null;
   }
   if (!session) return null;
+  if (gate && !allowAction(`${gate.bucket}:${session.userId}`, gate.perMinute, MINUTE))
+    return "limited";
   const site = await currentSite();
   if (!site || site.siteType !== product) return null;
   const [role, platformAdmin] = await Promise.all([
@@ -140,7 +163,11 @@ export async function evaluateAccess(caller: AiCaller, catalog: GuideCatalog): P
  * חבילה לא רואה את העוזר (חוץ ממנהל העל במצב בדיקה). בלי מפתח, דגם, צריכה או עלויות.
  */
 export async function handleStatus(catalog: GuideCatalog): Promise<AssistantStatusView> {
-  const caller = await resolveCaller(catalog.product);
+  const caller = await resolveCaller(catalog.product, {
+    bucket: "ai:status-minute",
+    perMinute: STATUS_PER_MINUTE,
+  });
+  if (caller === "limited") throw new SafeError(LIMITED_MESSAGE);
   if (!caller) return { visible: false };
   const ev = await evaluateAccess(caller, catalog);
   if (ev.state.status === "none" && !ev.testMode) return { visible: false };
@@ -199,7 +226,7 @@ export async function answerQuestion(
 ): Promise<Answered> {
   const keywordIds = searchGuides(question, catalog.guides).map((hit) => hit.guide.id);
   const base = { model: null, calledAi: false, usage: NO_TOKENS, costUsd: 0, error: null };
-  if (detectBlockedRequest(question)) {
+  if (isBlockedConversation(question, previousQuestions)) {
     return {
       ...base,
       answer: composeAnswer({ blocked: true, routed: null, keywordIds, siteVocabulary: false }),
@@ -295,13 +322,13 @@ export function usageColumns(answered: Pick<Answered, "calledAi" | "usage" | "co
   };
 }
 
-function withinLimits(caller: AiCaller, settings: store.SettingsRow | null): boolean {
+/** המגבלות של המשתמש ושל העסק — רק אחרי שנמצא שהעסק זכאי */
+function withinCallerLimits(caller: AiCaller, settings: store.SettingsRow | null): boolean {
   const perMinute = settings?.user_minute_limit ?? 6;
   const perHour = settings?.tenant_hourly_limit ?? 60;
   return (
     allowAction(`ai:user-minute:${caller.userId}`, perMinute, MINUTE) &&
-    allowAction(`ai:tenant-hour:${caller.tenantId}`, perHour, HOUR) &&
-    allowAction("ai:all-hour", GLOBAL_HOURLY_LIMIT, HOUR)
+    allowAction(`ai:tenant-hour:${caller.tenantId}`, perHour, HOUR)
   );
 }
 
@@ -314,13 +341,18 @@ export async function handleAsk(
   input: unknown,
   deps: { createClient?: (apiKey: string) => Promise<RouterClient> } = {},
 ): Promise<AskResult> {
-  const caller = await resolveCaller(catalog.product);
+  const caller = await resolveCaller(catalog.product, {
+    bucket: "ai:ask-gate",
+    perMinute: ASK_GATE_PER_MINUTE,
+  });
+  if (caller === "limited") return limitedResult();
   if (!caller) throw new SafeError(FORBIDDEN_MESSAGE);
 
   const ev = await evaluateAccess(caller, catalog);
-  if (!withinLimits(caller, ev.settings)) return limitedResult();
+  // אין חבילה / פג תוקף / כבוי: רק ההודעה — בלי לצרוך מכסה של העסק או של כלל המערכת
   if (ev.denial !== null || !ev.key)
     return unavailableResult(ev.denial ?? "assistant_off", ev.state);
+  if (!withinCallerLimits(caller, ev.settings)) return limitedResult();
 
   const raw = (typeof input === "object" && input !== null ? input : {}) as {
     question?: unknown;
@@ -343,17 +375,21 @@ export async function handleAsk(
     return limitedResult(REPEATED_MESSAGE);
   }
 
+  const previous = sanitizePrevious(raw.previous);
+  // התקרה של כל המערכת — רק לשאלה שבאמת תישלח לדגם (בקשה אסורה נעצרת לפניו ולא נספרת)
+  if (
+    !isBlockedConversation(question, previous) &&
+    !allowAction("ai:all-hour", GLOBAL_HOURLY_LIMIT, HOUR)
+  ) {
+    return limitedResult();
+  }
+
   const key = ev.key;
   const createClient = deps.createClient ?? createAnthropicRouterClient;
-  const answered = await answerQuestion(
-    catalog,
-    question,
-    sanitizePrevious(raw.previous),
-    async () => ({
-      client: await createClient(key),
-      model: ev.model,
-    }),
-  );
+  const answered = await answerQuestion(catalog, question, previous, async () => ({
+    client: await createClient(key),
+    model: ev.model,
+  }));
 
   if (answered.mode === "ai" && ev.settings?.last_error) await store.recordLastError(null);
   if (answered.mode === "ai_error") await store.recordLastError(answered.error);

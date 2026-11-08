@@ -185,13 +185,14 @@ for f in $(ls "$MIGRATIONS"/*.sql | sort); do
 done
 echo "rollback: $M61"
 down "$M61"
-expect "the AI add-on is gone: the 7 tables and every ai_ function; the platform log keeps its rows" \
+expect "the AI add-on is gone: the 8 tables and every ai_ function; the platform log keeps its rows" \
   "SELECT to_regclass('public.ai_packages') IS NULL
       AND to_regclass('public.ai_subscriptions') IS NULL
       AND to_regclass('public.ai_subscription_periods') IS NULL
       AND to_regclass('public.ai_subscription_events') IS NULL
       AND to_regclass('public.ai_settings') IS NULL
       AND to_regclass('public.ai_usage_log') IS NULL
+      AND to_regclass('public.ai_usage_daily') IS NULL
       AND to_regclass('public.ai_notifications') IS NULL
       AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'ai\_%')
       AND EXISTS (SELECT 1 FROM public.platform_audit_log WHERE action = 'ai_settings_changed')"
@@ -1855,9 +1856,11 @@ up "$M58"
 up "$M59"
 up "$M60"
 up "$M61"
-expect "the AI add-on is back: 7 tables closed to the browser, 2 packages at 150 ILS, the assistant off, functions for the server only" \
+expect "the AI add-on is back: 8 tables closed to the browser, 2 packages at 150 ILS, the assistant off, functions for the server only" \
   "SELECT to_regclass('public.ai_subscriptions') IS NOT NULL
+      AND to_regclass('public.ai_usage_daily') IS NOT NULL
       AND NOT has_table_privilege('authenticated', 'public.ai_settings', 'SELECT')
+      AND NOT has_table_privilege('authenticated', 'public.ai_usage_daily', 'SELECT')
       AND (SELECT count(*) FROM public.ai_packages WHERE price_agorot = 15000) = 2
       AND (SELECT mode FROM public.ai_settings) = 'off'
       AND has_function_privilege('service_role', 'public.ai_entitlement(uuid)', 'EXECUTE')

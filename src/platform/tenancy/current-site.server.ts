@@ -12,6 +12,15 @@ export async function currentSite(): Promise<SiteRef | null> {
   return { id: tenant.id, siteType: await siteTypeOf(tenant.id), status: tenant.status };
 }
 
+/**
+ * הבקשה הגיעה לכתובת פאנל הפלטפורמה (PLATFORM_ADMIN_HOST) — לפי הכתובת עצמה. "אין אתר" (currentSite
+ * מחזיר null) אינו אותו דבר: גם בקשה בלי אתר מזוהה בכתובת של עסק מחזירה null.
+ */
+export async function isPlatformHost(): Promise<boolean> {
+  const { isPlatformRequest } = await import("@/integrations/supabase/tenant.server");
+  return isPlatformRequest();
+}
+
 /** הכתובת הציבורית של אתר (דומיין משלו, או <slug>.<הדומיין של הפלטפורמה>); null — לא הוגדר */
 export async function siteOrigin(site: {
   slug: string;

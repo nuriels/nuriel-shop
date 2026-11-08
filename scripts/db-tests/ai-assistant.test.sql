@@ -10,6 +10,7 @@
 \set STORE_B '\'70000000-0000-0000-0000-00000000000b\''
 \set ZIMMER '\'7a1a0000-0000-4000-8000-0000000000e1\''
 \set DOOMED '\'7a1a0000-0000-4000-8000-0000000000e2\''
+\set LASTDAY '\'7a1a0000-0000-4000-8000-0000000000e3\''
 
 -- עזר: מריץ כשרת האפליקציה (service_role) ומחזיר את התוצאה או {"error": ...}
 CREATE OR REPLACE FUNCTION tests.ai_srv(_sql text) RETURNS jsonb LANGUAGE plpgsql AS $$
@@ -54,7 +55,8 @@ $$;
 
 INSERT INTO public.tenants (id, slug, name, site_type, owner_email) VALUES
   (:ZIMMER, 'ai-zimmer', 'צימר הבדיקה', 'hospitality', 'zimmer.owner@test.local'),
-  (:DOOMED, 'ai-doomed', 'חנות שתימחק', 'ecommerce', 'doomed@test.local')
+  (:DOOMED, 'ai-doomed', 'חנות שתימחק', 'ecommerce', 'doomed@test.local'),
+  (:LASTDAY, 'ai-lastday', 'מתחם ביום האחרון', 'hospitality', 'lastday@test.local')
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------- גישה: סגור לדפדפן; השרת קורא, וכותב רק ליומן השימוש ולשגיאה האחרונה ----------
@@ -62,18 +64,19 @@ SELECT tests.check('AI: the browser roles have no privilege on any AI table',
   $$SELECT bool_and(NOT has_table_privilege(r, 'public.' || t, p))
       FROM unnest(ARRAY['anon', 'authenticated']) r,
            unnest(ARRAY['ai_packages', 'ai_subscriptions', 'ai_subscription_periods', 'ai_subscription_events',
-                        'ai_settings', 'ai_usage_log', 'ai_notifications']) t,
+                        'ai_settings', 'ai_usage_log', 'ai_usage_daily', 'ai_notifications']) t,
            unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) p$$);
 SELECT tests.check('AI: RLS is on for every AI table',
   $$SELECT bool_and(c.relrowsecurity) FROM pg_class c
      WHERE c.oid IN ('public.ai_packages'::regclass, 'public.ai_subscriptions'::regclass,
                      'public.ai_subscription_periods'::regclass, 'public.ai_subscription_events'::regclass,
-                     'public.ai_settings'::regclass, 'public.ai_usage_log'::regclass, 'public.ai_notifications'::regclass)$$);
+                     'public.ai_settings'::regclass, 'public.ai_usage_log'::regclass, 'public.ai_usage_daily'::regclass,
+                     'public.ai_notifications'::regclass)$$);
 SELECT tests.check('AI: the app server reads, but cannot write packages, periods, history or notifications directly',
   $$SELECT bool_and(has_table_privilege('service_role', 'public.' || t, 'SELECT'))
        AND NOT bool_or(has_table_privilege('service_role', 'public.' || t, p))
       FROM unnest(ARRAY['ai_packages', 'ai_subscriptions', 'ai_subscription_periods', 'ai_subscription_events',
-                        'ai_notifications']) t,
+                        'ai_notifications', 'ai_usage_daily']) t,
            unnest(ARRAY['INSERT', 'UPDATE', 'DELETE']) p$$);
 SELECT tests.check('AI: the app server writes the usage log (insert only) and only the last error of the settings',
   $$SELECT has_table_privilege('service_role', 'public.ai_usage_log', 'INSERT')
@@ -88,7 +91,7 @@ SELECT tests.check('AI: every function the server uses is for the server only; t
                     AND NOT has_function_privilege('authenticated', f, 'EXECUTE'))
       FROM unnest(ARRAY['public.ai_today()', 'public.ai_period_end(date)', 'public.ai_entitlement(uuid)',
                         'public.ai_admin_list(uuid,text,text)', 'public.ai_admin_activate(uuid,uuid,text,date,text)',
-                        'public.ai_admin_renew(uuid,uuid,text)', 'public.ai_admin_set_suspended(uuid,uuid,boolean,text)',
+                        'public.ai_admin_renew(uuid,uuid,date,text)', 'public.ai_admin_set_suspended(uuid,uuid,boolean,text)',
                         'public.ai_admin_history(uuid,uuid)', 'public.ai_admin_save_settings(uuid,jsonb)',
                         'public.ai_admin_usage(uuid)',
                         'public.ai_due_notifications()', 'public.ai_notification_claim(uuid,date,text,text)',
@@ -99,7 +102,7 @@ SELECT tests.check('AI: the internal functions (state on a date, chain, audit, g
            unnest(ARRAY['public.ai_state_on(uuid,date)', 'public.ai_chain_end(uuid,date)',
                         'public.ai_require_platform_admin(uuid)', 'public.ai_audit(uuid,text,uuid,text,jsonb)',
                         'public.ai_due_notifications_on(date)', 'public.ai_subscriptions_guard()',
-                        'public.ai_periods_guard()']) f$$);
+                        'public.ai_periods_guard()', 'public.ai_usage_daily_add()']) f$$);
 SELECT tests.run('AI: a store manager (browser) cannot read the AI settings', $$SELECT * FROM public.ai_settings$$,
   :OWNER_A, 'permission denied');
 SELECT tests.run('AI: a store manager (browser) cannot read even the last 4 characters of the key',
@@ -221,12 +224,22 @@ SELECT tests.check('AI: the status through the period: the day before (scheduled
       FROM p$$, :STORE_A, :STORE_A, :STORE_A, :STORE_A, :STORE_A, :STORE_A, :STORE_A, :STORE_A, :STORE_A, :STORE_A,
      :STORE_A, :STORE_A));
 
--- ---------- חידוש: מהיום שאחרי הסוף, בלי ימים אבודים; פעם אחת מראש לכל היותר ----------
+-- ---------- חידוש: מהיום שאחרי הסוף, בלי ימים אבודים; תקופה עתידית אחת לכל היותר; רק מול מה שהמסך הציג ----------
 SELECT tests.check('AI: a store manager id cannot renew',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%platform admin only%%'$$,
-         format('SELECT public.ai_admin_renew(%L, %L)', :OWNER_A, :STORE_A)));
+         format('SELECT public.ai_admin_renew(%L, %L, NULL)', :OWNER_A, :STORE_A)));
 CREATE TEMP TABLE ai_before AS SELECT ends_on AS old_end FROM public.ai_subscription_periods WHERE tenant_id = :STORE_A;
-SELECT tests.ai_keep('renew-a', format('SELECT public.ai_admin_renew(%L, %L, ''חידוש מראש'')', :PA, :STORE_A));
+SELECT tests.check('AI: the state gives the screen the latest end of all periods (what the renew dialog sends back)',
+  format($$SELECT (tests.ai_srv(%L) ->> 'last_ends_on')::date = b.old_end FROM ai_before b$$,
+         format('SELECT public.ai_entitlement(%L)', :STORE_A)));
+SELECT tests.check('AI: renewing against an end date the package does not have (a stale screen) is refused',
+  format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%changed meanwhile%%'$$,
+         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :STORE_A, (SELECT old_end - 1 FROM ai_before))));
+SELECT tests.check('AI: renewing without saying which end date the screen showed is refused',
+  format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%changed meanwhile%%'$$,
+         format('SELECT public.ai_admin_renew(%L, %L, NULL)', :PA, :STORE_A)));
+SELECT tests.ai_keep('renew-a', format('SELECT public.ai_admin_renew(%L, %L, %L, ''חידוש מראש'')', :PA, :STORE_A,
+                                       (SELECT old_end FROM ai_before)));
 SELECT tests.check('AI: renewing while active starts the day after the end; the end moves 12 months; price stored again',
   format($$SELECT o.j ->> 'status' = 'active'
        AND (o.j ->> 'ends_on')::date = public.ai_period_end(b.old_end + 1)
@@ -241,12 +254,21 @@ SELECT tests.check('AI: after the renewal the old end is no longer "ending soon"
                   ->> 'status' = 'active'
               AND public.ai_state_on(%L, (SELECT min(ends_on) FROM public.ai_subscription_periods WHERE tenant_id = %L) + 1)
                   ->> 'status' = 'active'$$, :STORE_A, :STORE_A, :STORE_A, :STORE_A));
-SELECT tests.check('AI: a second renewal ahead (double click) is refused',
+SELECT tests.check('AI: a double click / a retry after a lost response (the same end date again) is refused',
+  format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%changed meanwhile%%'
+              AND (SELECT count(*) FROM public.ai_subscription_periods WHERE tenant_id = %L) = 2$$,
+         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :STORE_A, (SELECT old_end FROM ai_before)), :STORE_A));
+SELECT tests.check('AI: a second renewal ahead, even against the new end date, is refused — one future period at most',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%already scheduled%%'$$,
-         format('SELECT public.ai_admin_renew(%L, %L)', :PA, :STORE_A)));
+         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :STORE_A,
+                (SELECT max(ends_on) FROM public.ai_subscription_periods WHERE tenant_id = :STORE_A))));
+SELECT tests.check('AI: a package that has not started yet cannot be renewed ahead as well (one future period at most)',
+  format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%already scheduled%%'$$,
+         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :ZIMMER,
+                (SELECT max(ends_on) FROM public.ai_subscription_periods WHERE tenant_id = :ZIMMER))));
 SELECT tests.check('AI: renewing a package that does not exist is refused',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%activate first%%'$$,
-         format('SELECT public.ai_admin_renew(%L, %L)', :PA, :STORE_B)));
+         format('SELECT public.ai_admin_renew(%L, %L, NULL)', :PA, :STORE_B)));
 
 -- ---------- השבתה ידנית ----------
 SELECT tests.check('AI: suspending stops the assistant at once (in the middle of a period), with the reason',
@@ -286,12 +308,18 @@ SELECT tests.check('AI: a period that ended 20 days ago — expired, not entitle
 SELECT tests.check('AI: activating an expired business again chooses a new start date (no overlap with the old period)',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%overlaps an earlier period%%'$$,
          format('SELECT public.ai_admin_activate(%L, %L, ''ecommerce'', public.ai_today() - 30)', :PA, :STORE_B)));
-SELECT tests.ai_keep('renew-b', format('SELECT public.ai_admin_renew(%L, %L)', :PA, :STORE_B));
+CREATE TEMP TABLE ai_before_b AS SELECT max(ends_on) AS old_end FROM public.ai_subscription_periods WHERE tenant_id = :STORE_B;
+SELECT tests.ai_keep('renew-b', format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :STORE_B,
+                                       (SELECT old_end FROM ai_before_b)));
 SELECT tests.check('AI: renewing after expiry starts today (not back-dated); the old period keeps its old price',
   format($$SELECT o.j ->> 'status' = 'active' AND (o.j ->> 'starts_on')::date = public.ai_today()
               AND (SELECT array_agg(price_agorot ORDER BY starts_on) FROM public.ai_subscription_periods
                     WHERE tenant_id = %L) = ARRAY[12000, 15000]
              FROM tests.ai_out o WHERE o.label = 'renew-b'$$, :STORE_B));
+SELECT tests.check('AI: after expiry, the same renewal again (a retry against the old end date) books no second year',
+  format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%changed meanwhile%%'
+              AND (SELECT count(*) FROM public.ai_subscription_periods WHERE tenant_id = %L) = 2$$,
+         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :STORE_B, (SELECT old_end FROM ai_before_b)), :STORE_B));
 
 -- ---------- כתיבה ישירה למסד: גם מנהל המסד לא יוצר תקופה שאינה 12 חודשים / חופפת / מסוג אחר ----------
 SELECT tests.check('AI: a period that is not exactly 12 months is rejected by the database',
@@ -392,7 +420,8 @@ SELECT tests.check('AI: a suspended package gets no notices',
          :DOOMED));
 SELECT tests.check('AI: (resume)', format($$SELECT tests.ai_srv(%L) ->> 'status' = 'ending_soon'$$,
   format('SELECT public.ai_admin_set_suspended(%L, %L, false)', :PA, :DOOMED)));
-SELECT tests.ai_keep('renew-d', format('SELECT public.ai_admin_renew(%L, %L)', :PA, :DOOMED));
+SELECT tests.ai_keep('renew-d', format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :DOOMED,
+                                       (SELECT max(ends_on) FROM public.ai_subscription_periods WHERE tenant_id = :DOOMED)));
 SELECT tests.check('AI: after a renewal, no notice about the old end date (on the old 7-day / last day there is nothing due)',
   format($$SELECT (SELECT j ->> 'status' FROM tests.ai_out WHERE label = 'renew-d') = 'active'
               AND NOT EXISTS (SELECT 1 FROM public.ai_due_notifications_on(public.ai_today() + 23) d WHERE d.tenant_id = %L)
@@ -402,10 +431,11 @@ SELECT tests.check('AI: and 30 days before the new end, the notices start again 
   format($$SELECT d.kind = 'd30' AND d.period_ends_on = public.ai_period_end(public.ai_today() + 31)
              FROM public.ai_due_notifications_on(public.ai_period_end(public.ai_today() + 31) - 30) d
             WHERE d.tenant_id = %L$$, :DOOMED));
-SELECT tests.check('AI: a pending notice left by a crash is marked failed after an hour (never re-sent)',
+SELECT tests.check('AI: a pending notice left by a crash is marked failed after an hour (a next attempt keeps the same idempotency key)',
   format($$WITH ins AS (
-      INSERT INTO public.ai_notifications (subscription_id, tenant_id, period_ends_on, kind, created_at)
-      SELECT id, tenant_id, DATE '2031-01-01', 'd0', now() - interval '2 hours' FROM public.ai_subscriptions WHERE tenant_id = %L
+      INSERT INTO public.ai_notifications (subscription_id, tenant_id, period_ends_on, kind, created_at, claimed_at)
+      SELECT id, tenant_id, DATE '2031-01-01', 'd0', now() - interval '2 hours', now() - interval '2 hours'
+        FROM public.ai_subscriptions WHERE tenant_id = %L
       RETURNING id)
     SELECT count(*) = 1 FROM ins$$, :DOOMED));
 SELECT tests.ai_keep('stale', 'SELECT to_jsonb(public.ai_notifications_mark_stale())');
@@ -416,6 +446,72 @@ SELECT tests.check('AI: (mark stale)',
 SELECT tests.check('AI: the same notice twice for the same end date is impossible (unique)',
   format($$SELECT NOT tests.try(%L)$$,
      format('INSERT INTO public.ai_notifications (subscription_id, tenant_id, period_ends_on, kind) SELECT id, tenant_id, DATE ''2031-01-01'', ''d0'' FROM public.ai_subscriptions WHERE tenant_id = %L', :DOOMED)));
+
+-- ---------- שליחה שנכשלה: ניסיון נוסף אחרי שעה, עד 3 ניסיונות; היום האחרון וחידוש בו ----------
+-- מתחם ביום האחרון של התקופה (נכתב ישירות): התראת d0 של היום
+INSERT INTO public.ai_subscriptions (tenant_id, package_code, product)
+VALUES (:LASTDAY, 'nuriel_ai_hospitality', 'hospitality') ON CONFLICT (tenant_id) DO NOTHING;
+INSERT INTO public.ai_subscription_periods (subscription_id, tenant_id, kind, starts_on, ends_on, price_agorot)
+SELECT s.id, s.tenant_id, 'activation', d.start, public.ai_period_end(d.start), 15000
+  FROM public.ai_subscriptions s, (SELECT ((public.ai_today() + 1) - interval '12 months')::date AS start) d
+ WHERE s.tenant_id = :LASTDAY;
+SELECT tests.check('AI: (setup) the period ends today — ending soon, 0 days left, still entitled; the end-day notice is due',
+  format($$SELECT r ->> 'status' = 'ending_soon' AND (r ->> 'days_left')::int = 0 AND (r ->> 'entitled')::boolean
+              AND EXISTS (SELECT 1 FROM public.ai_due_notifications_on(public.ai_today()) d
+                           WHERE d.tenant_id = %L AND d.kind = 'd0')
+             FROM tests.ai_srv(%L) r$$, :LASTDAY, format('SELECT public.ai_entitlement(%L)', :LASTDAY)));
+-- עזר: הפקודה שתופסת את התראת d0 של היום (רצה כשרת האפליקציה דרך ai_srv / ai_keep)
+CREATE OR REPLACE FUNCTION tests.ai_claim_d0_sql(_tenant uuid) RETURNS text LANGUAGE sql AS $$
+  SELECT format('SELECT jsonb_build_object(''id'', public.ai_notification_claim(s.id, public.ai_today(), ''d0'', ''l***@test.local'')) FROM public.ai_subscriptions s WHERE s.tenant_id = %L', _tenant);
+$$;
+SELECT tests.ai_keep('retry-claim-1', tests.ai_claim_d0_sql(:LASTDAY));
+SELECT tests.ai_keep('retry-fail-1', format('SELECT jsonb_build_object(''ok'', public.ai_notification_finish(n.id, ''failed'', ''provider down'')) FROM public.ai_notifications n WHERE n.tenant_id = %L', :LASTDAY));
+SELECT tests.check('AI: a failed send is not due again at once (an hour between attempts)',
+  format($$SELECT (SELECT (j ->> 'id') IS NOT NULL FROM tests.ai_out WHERE label = 'retry-claim-1')
+              AND (SELECT status = 'failed' AND attempts = 1 FROM public.ai_notifications WHERE tenant_id = %L)
+              AND NOT EXISTS (SELECT 1 FROM public.ai_due_notifications_on(public.ai_today()) d WHERE d.tenant_id = %L)$$,
+         :LASTDAY, :LASTDAY));
+UPDATE public.ai_notifications SET finished_at = now() - interval '2 hours' WHERE tenant_id = :LASTDAY;
+SELECT tests.check('AI: an hour later the failed send is due again (the same end date and kind)',
+  format($$SELECT EXISTS (SELECT 1 FROM public.ai_due_notifications_on(public.ai_today()) d
+                           WHERE d.tenant_id = %L AND d.kind = 'd0')$$, :LASTDAY));
+SELECT tests.ai_keep('retry-claim-2', tests.ai_claim_d0_sql(:LASTDAY));
+SELECT tests.ai_keep('retry-claim-2b', tests.ai_claim_d0_sql(:LASTDAY));
+SELECT tests.check('AI: the retry takes the same row (the same idempotency key), counts the attempt, and only one server gets it',
+  format($$SELECT (SELECT j ->> 'id' FROM tests.ai_out WHERE label = 'retry-claim-2')
+                  = (SELECT j ->> 'id' FROM tests.ai_out WHERE label = 'retry-claim-1')
+              AND (SELECT (j ->> 'id') IS NULL FROM tests.ai_out WHERE label = 'retry-claim-2b')
+              AND (SELECT status = 'pending' AND attempts = 2 AND error IS NULL AND finished_at IS NULL
+                          AND claimed_at > now() - interval '1 minute'
+                     FROM public.ai_notifications WHERE tenant_id = %L)
+              AND (SELECT count(*) FROM public.ai_notifications WHERE tenant_id = %L) = 1$$, :LASTDAY, :LASTDAY));
+SELECT tests.ai_keep('retry-fail-2', format('SELECT jsonb_build_object(''ok'', public.ai_notification_finish(n.id, ''failed'', ''provider down'')) FROM public.ai_notifications n WHERE n.tenant_id = %L', :LASTDAY));
+UPDATE public.ai_notifications SET finished_at = now() - interval '2 hours' WHERE tenant_id = :LASTDAY;
+SELECT tests.ai_keep('retry-claim-3', tests.ai_claim_d0_sql(:LASTDAY));
+SELECT tests.ai_keep('retry-fail-3', format('SELECT jsonb_build_object(''ok'', public.ai_notification_finish(n.id, ''failed'', ''provider down'')) FROM public.ai_notifications n WHERE n.tenant_id = %L', :LASTDAY));
+UPDATE public.ai_notifications SET finished_at = now() - interval '2 hours' WHERE tenant_id = :LASTDAY;
+SELECT tests.check('AI: after 3 failed attempts the notice is not tried again',
+  format($$SELECT (SELECT (j ->> 'id') IS NOT NULL FROM tests.ai_out WHERE label = 'retry-claim-3')
+              AND (SELECT status = 'failed' AND attempts = 3 FROM public.ai_notifications WHERE tenant_id = %L)
+              AND NOT EXISTS (SELECT 1 FROM public.ai_due_notifications_on(public.ai_today()) d WHERE d.tenant_id = %L)
+              AND (tests.ai_srv(tests.ai_claim_d0_sql(%L)) ->> 'id') IS NULL$$, :LASTDAY, :LASTDAY, :LASTDAY));
+UPDATE public.ai_notifications SET status = 'skipped', attempts = 1 WHERE tenant_id = :LASTDAY;
+SELECT tests.check('AI: a skipped notice (no valid address) is final — not tried again',
+  format($$SELECT NOT EXISTS (SELECT 1 FROM public.ai_due_notifications_on(public.ai_today()) d WHERE d.tenant_id = %L)$$,
+         :LASTDAY));
+SELECT tests.ai_keep('renew-last-1', format('SELECT public.ai_admin_renew(%L, %L, public.ai_today())', :PA, :LASTDAY));
+SELECT tests.check('AI: on the last day a renewal starts tomorrow (no lost day) — and the end-day notice is no longer due',
+  format($$SELECT (SELECT NOT (j ? 'error') AND (j ->> 'renewal_starts_on')::date = public.ai_today() + 1
+                          AND j ->> 'status' = 'active'
+                     FROM tests.ai_out WHERE label = 'renew-last-1')
+              AND (SELECT count(*) FROM public.ai_subscription_periods WHERE tenant_id = %L) = 2
+              AND NOT EXISTS (SELECT 1 FROM public.ai_due_notifications_on(public.ai_today()) d WHERE d.tenant_id = %L)$$,
+         :LASTDAY, :LASTDAY));
+SELECT tests.check('AI: on the last day a second renewal is refused (one future period at most)',
+  format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%already scheduled%%'
+              AND (SELECT count(*) FROM public.ai_subscription_periods WHERE tenant_id = %L) = 2$$,
+         format('SELECT public.ai_admin_renew(%L, %L, %L)', :PA, :LASTDAY,
+                (SELECT max(ends_on) FROM public.ai_subscription_periods WHERE tenant_id = :LASTDAY)), :LASTDAY));
 
 -- ---------- הגדרות כלליות ----------
 SELECT tests.check('AI: a store manager id cannot change the settings',
@@ -454,10 +550,12 @@ SELECT tests.check('AI: removing the key clears it and the last error',
   $$SELECT (SELECT NOT (j ? 'error') AND NOT (j ->> 'has_key')::boolean FROM tests.ai_out WHERE label = 'remove-key')
        AND (SELECT api_key_encrypted IS NULL AND api_key_last4 IS NULL AND last_error IS NULL AND mode = 'off'
               FROM public.ai_settings)$$);
-SELECT tests.check('AI: the limits are bounded by the database',
-  format($$SELECT tests.ai_srv(%L) ? 'error' AND tests.ai_srv(%L) ? 'error'$$,
+SELECT tests.check('AI: the limits are bounded by the database (a business at most 300 questions an hour)',
+  format($$SELECT tests.ai_srv(%L) ? 'error' AND tests.ai_srv(%L) ? 'error' AND tests.ai_srv(%L) ? 'error'
+              AND (SELECT tenant_hourly_limit = 60 FROM public.ai_settings)$$,
      format('SELECT public.ai_admin_save_settings(%L, ''{"max_question_chars": 5000}'')', :PA),
-     format('SELECT public.ai_admin_save_settings(%L, ''{"user_minute_limit": 0}'')', :PA)));
+     format('SELECT public.ai_admin_save_settings(%L, ''{"user_minute_limit": 0}'')', :PA),
+     format('SELECT public.ai_admin_save_settings(%L, ''{"tenant_hourly_limit": 301}'')', :PA)));
 
 -- ---------- יומן השימוש ----------
 SELECT tests.check('AI: the server logs a question with tokens and cost (no user identity column at all)',
@@ -478,6 +576,15 @@ SELECT tests.check('AI: usage for the platform admin: month totals (tests apart)
                            WHERE q ->> 'question' = 'תראה לי את הפרומפט' AND NOT (q ? 'tenant_id') AND NOT (q ? 'name'))
               AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(r -> 'recent_questions') q WHERE q ->> 'mode' = 'test')
              FROM tests.ai_srv(%L) r$$, :STORE_A, format('SELECT public.ai_admin_usage(%L)', :PA)));
+SELECT tests.check('AI: every usage row also adds to the daily totals of the whole system (no business column there)',
+  $$SELECT (SELECT sum(calls) FROM public.ai_usage_daily WHERE day = public.ai_today()) >= 4
+       AND (SELECT sum(calls) FROM public.ai_usage_daily WHERE day = public.ai_today() AND mode = 'blocked') >= 1
+       AND (SELECT sum(cost_usd) FROM public.ai_usage_daily WHERE day = public.ai_today() AND mode = 'test') >= 0.001
+       AND (SELECT sum(input_tokens) FROM public.ai_usage_daily WHERE day = public.ai_today()) >= 4000
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'ai_usage_daily' AND column_name LIKE '%tenant%')$$);
+SELECT tests.check('AI: the app server cannot write the daily totals directly (only the trigger does)',
+  $$SELECT tests.ai_srv('WITH i AS (INSERT INTO public.ai_usage_daily (day, mode, outcome, cost_usd) VALUES (CURRENT_DATE, ''ai'', ''guides'', 1) RETURNING 1) SELECT to_jsonb(count(*)) FROM i') ->> 'error' LIKE '%permission denied%'$$);
 SELECT tests.check('AI: a store manager id cannot read the usage',
   format($$SELECT tests.ai_srv(%L) ->> 'error' LIKE '%%platform admin only%%'$$,
          format('SELECT public.ai_admin_usage(%L)', :OWNER_A)));
@@ -487,10 +594,22 @@ SELECT tests.check('AI: invalid usage rows are rejected (mode, outcome, 4 guides
        AND NOT tests.try('INSERT INTO public.ai_usage_log (mode, outcome, guides) VALUES (''ai'', ''guides'', ARRAY[''a'',''b'',''c'',''d''])')
        AND NOT tests.try('INSERT INTO public.ai_usage_log (mode, outcome, question) VALUES (''search'', ''unknown'', repeat(''א'', 501))')$$);
 
--- ---------- מחיקת עסק: נתוני התוסף נמחקים איתו, יומן הפלטפורמה נשמר ----------
+-- ---------- מחיקת עסק: נתוני התוסף נמחקים איתו, יומן הפלטפורמה והסיכום היומי נשמרים ----------
+INSERT INTO public.ai_usage_log (tenant_id, product, mode, outcome, model, input_tokens, output_tokens, cost_usd)
+VALUES (:DOOMED, 'ecommerce', 'ai', 'guides', 'claude-haiku-5-5', 5000, 50, 0.5);
+SELECT tests.ai_keep('usage-before-delete', format('SELECT public.ai_admin_usage(%L)', :PA));
 SELECT set_config('request.jwt.claim.sub', :PA, false);
 SELECT public.platform_delete_tenant(:DOOMED, 'ai-doomed');
 SELECT set_config('request.jwt.claim.sub', '', false);
+SELECT tests.ai_keep('usage-after-delete', format('SELECT public.ai_admin_usage(%L)', :PA));
+SELECT tests.check('AI: deleting a business keeps the month totals and cost (what was paid to Anthropic) — its log rows go',
+  format($$SELECT (a.j -> 'totals' ->> 'cost_usd')::numeric = (b.j -> 'totals' ->> 'cost_usd')::numeric
+              AND (a.j -> 'totals' ->> 'questions')::int = (b.j -> 'totals' ->> 'questions')::int
+              AND (b.j -> 'totals' ->> 'cost_usd')::numeric >= 0.5
+              AND NOT EXISTS (SELECT 1 FROM public.ai_usage_log WHERE tenant_id = %L)
+              AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(a.j -> 'tenants') x WHERE x ->> 'tenant_id' = %L)
+             FROM tests.ai_out a, tests.ai_out b WHERE a.label = 'usage-after-delete' AND b.label = 'usage-before-delete'$$,
+     :DOOMED, :DOOMED));
 SELECT tests.check('AI: deleting a business removes its AI rows (package, periods, history, notices) — the platform log stays',
   format($$SELECT NOT EXISTS (SELECT 1 FROM public.ai_subscriptions WHERE tenant_id = %L)
               AND NOT EXISTS (SELECT 1 FROM public.ai_subscription_periods WHERE tenant_id = %L)
@@ -500,13 +619,15 @@ SELECT tests.check('AI: deleting a business removes its AI rows (package, period
      :DOOMED, :DOOMED, :DOOMED, :DOOMED, :DOOMED));
 
 -- ---------- ניקוי: מחזירים את המצב (חבילות של חנויות הבדיקה, הצימר, ההגדרות, היומן) ----------
-DELETE FROM public.ai_notifications WHERE tenant_id IN (:STORE_A, :STORE_B, :ZIMMER);
-DELETE FROM public.ai_subscription_events WHERE tenant_id IN (:STORE_A, :STORE_B, :ZIMMER);
-DELETE FROM public.ai_subscription_periods WHERE tenant_id IN (:STORE_A, :STORE_B, :ZIMMER);
-DELETE FROM public.ai_subscriptions WHERE tenant_id IN (:STORE_A, :STORE_B, :ZIMMER);
+DELETE FROM public.ai_notifications WHERE tenant_id IN (:STORE_A, :STORE_B, :ZIMMER, :LASTDAY);
+DELETE FROM public.ai_subscription_events WHERE tenant_id IN (:STORE_A, :STORE_B, :ZIMMER, :LASTDAY);
+DELETE FROM public.ai_subscription_periods WHERE tenant_id IN (:STORE_A, :STORE_B, :ZIMMER, :LASTDAY);
+DELETE FROM public.ai_subscriptions WHERE tenant_id IN (:STORE_A, :STORE_B, :ZIMMER, :LASTDAY);
 DELETE FROM public.ai_usage_log;
+DELETE FROM public.ai_usage_daily;
+DROP FUNCTION IF EXISTS tests.ai_claim_d0_sql(uuid);
 UPDATE public.ai_settings SET mode = 'off', model = 'claude-haiku-5-5', api_key_encrypted = NULL, api_key_last4 = NULL,
        api_key_updated_at = NULL, api_key_updated_by = NULL, last_error = NULL, last_error_at = NULL,
        updated_by = NULL, max_question_chars = 400, tenant_hourly_limit = 60, user_minute_limit = 6;
 DELETE FROM public.platform_audit_log WHERE action LIKE 'ai\_%';
-DELETE FROM public.tenants WHERE id = :ZIMMER;
+DELETE FROM public.tenants WHERE id IN (:ZIMMER, :LASTDAY);

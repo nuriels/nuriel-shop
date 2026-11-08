@@ -145,6 +145,9 @@ async function route(request: Request, env: unknown, ctx: unknown): Promise<Resp
     }
     if (
       STATIC_PATH.test(pathname) &&
+      // פונקציות שרת תמיד מקבלות את העסק של הכתובת — גם כשהנתיב נגמר כמו קובץ (/_serverFn/<id>/x.js),
+      // אחרת הן היו רצות "בלי עסק" בכתובת של עסק
+      !pathname.startsWith("/_serverFn") &&
       !FEED_PATHS.has(pathname) &&
       !GOOGLE_VERIFY_PATH.test(pathname) &&
       !STORE_ASSET_PATH.test(pathname)

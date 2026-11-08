@@ -1,7 +1,7 @@
 // מתאם (adapter) לשירות המיילים הקיים של נוריאל (src/lib/email.server — Resend): שליחה בשם
 // עסק (שם השולח = שם העסק, מענה = המייל של העסק, הכתובת עצמה על דומיין המערכת), עם
 // Idempotency-Key — כך שניסיון חוזר לא שולח פעמיים. בלי שינוי בשירות עצמו.
-import { escapeHtml as escape, sendEmail } from "@/lib/email.server";
+import { escapeHtml as escape, resendApiKey, sendEmail } from "@/lib/email.server";
 
 export interface BusinessEmail {
   to: string;
@@ -33,3 +33,8 @@ export async function sendBusinessEmail(input: BusinessEmail): Promise<BusinessE
 }
 
 export const escapeHtml = escape;
+
+/** שירות המיילים מוגדר בשרת (יש מפתח Resend) — בלעדיו שום מייל לא יוצא */
+export function emailConfigured(): boolean {
+  return resendApiKey() !== null;
+}

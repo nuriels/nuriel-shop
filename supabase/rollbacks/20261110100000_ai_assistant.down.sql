@@ -1,8 +1,9 @@
 -- ============================================================
 -- Rollback של 20261110100000_ai_assistant.sql (מיגרציה 61 — NURIEL AI ASSISTANT)
 -- מסרב כשיש נתונים: חבילות שהופעלו לעסקים (תקופות, מחירים ששולמו, היסטוריה), התראות שנשלחו, יומן
--- שימוש, או מפתח API שמור — כל אלה מידע מסחרי, ומחיקה שלהם היא החלטה, לא תופעת לוואי. קודם מייצאים
--- (pg_dump של הטבלאות) ומחליטים. הרשומות ביומן הפלטפורמה (platform_audit_log) לא נמחקות.
+-- שימוש וסיכום העלויות היומי, או מפתח API שמור — כל אלה מידע מסחרי, ומחיקה שלהם היא החלטה, לא
+-- תופעת לוואי. קודם מייצאים (pg_dump של הטבלאות) ומחליטים. הרשומות ביומן הפלטפורמה
+-- (platform_audit_log) לא נמחקות.
 -- בלי פונקציה קיימת שהשתנתה — הכול חדש. לפני ה-rollback: האפליקציה חוזרת לגרסה בלי NURIEL AI.
 -- ============================================================
 
@@ -20,7 +21,8 @@ BEGIN
       ('ai_subscription_periods', 'תקופות של חבילות NURIEL AI'),
       ('ai_subscription_events', 'היסטוריית הפעלות וחידושים'),
       ('ai_notifications', 'התראות חידוש שנשלחו'),
-      ('ai_usage_log', 'יומן השימוש בעוזר') LOOP
+      ('ai_usage_log', 'יומן השימוש בעוזר'),
+      ('ai_usage_daily', 'סיכום השימוש והעלויות היומי') LOOP
     IF to_regclass('public.' || _tbl) IS NOT NULL THEN
       EXECUTE format('SELECT count(*) FROM public.%I', _tbl) INTO _n;
       IF _n > 0 THEN
@@ -43,7 +45,7 @@ DROP FUNCTION IF EXISTS public.ai_admin_usage(uuid);
 DROP FUNCTION IF EXISTS public.ai_admin_save_settings(uuid, jsonb);
 DROP FUNCTION IF EXISTS public.ai_admin_history(uuid, uuid);
 DROP FUNCTION IF EXISTS public.ai_admin_set_suspended(uuid, uuid, boolean, text);
-DROP FUNCTION IF EXISTS public.ai_admin_renew(uuid, uuid, text);
+DROP FUNCTION IF EXISTS public.ai_admin_renew(uuid, uuid, date, text);
 DROP FUNCTION IF EXISTS public.ai_admin_activate(uuid, uuid, text, date, text);
 DROP FUNCTION IF EXISTS public.ai_admin_list(uuid, text, text);
 DROP FUNCTION IF EXISTS public.ai_audit(uuid, text, uuid, text, jsonb);
@@ -54,12 +56,14 @@ DROP FUNCTION IF EXISTS public.ai_chain_end(uuid, date);
 
 DROP TABLE IF EXISTS public.ai_notifications;
 DROP TABLE IF EXISTS public.ai_usage_log;
+DROP TABLE IF EXISTS public.ai_usage_daily;
 DROP TABLE IF EXISTS public.ai_settings;
 DROP TABLE IF EXISTS public.ai_subscription_events;
 DROP TABLE IF EXISTS public.ai_subscription_periods;
 DROP TABLE IF EXISTS public.ai_subscriptions;
 DROP TABLE IF EXISTS public.ai_packages;
 
+DROP FUNCTION IF EXISTS public.ai_usage_daily_add();
 DROP FUNCTION IF EXISTS public.ai_periods_guard();
 DROP FUNCTION IF EXISTS public.ai_subscriptions_guard();
 DROP FUNCTION IF EXISTS public.ai_period_end(date);

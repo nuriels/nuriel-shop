@@ -8,7 +8,7 @@
  */
 import { sessionFromRequest } from "../auth/session.server";
 import { allowAction } from "../security/rate-limit.server";
-import { currentSite } from "../tenancy/current-site.server";
+import { isPlatformHost } from "../tenancy/current-site.server";
 import type { GuideCatalog } from "./guides/types";
 import { isAiProduct } from "./guides/types";
 import {
@@ -26,7 +26,7 @@ import {
 } from "./logic";
 import { createAnthropicRouterClient, routeQuestion, type RouterClient } from "./router.server";
 import { SafeError } from "./safe-error";
-import { encryptApiKey } from "./secrets.server";
+import { AiSecretConfigError, encryptApiKey } from "./secrets.server";
 import * as store from "./store.server";
 import type {
   AdminBusiness,
@@ -38,9 +38,12 @@ import type {
 
 const HOUR = 60 * 60 * 1000;
 
-/** ההרשאה, ראשונה בכל פעולה: כתובת הפאנל, משתמש מחובר, מנהל פלטפורמה. הודעה זהה בכל סירוב */
+/**
+ * ההרשאה, ראשונה בכל פעולה: כתובת הפאנל (הכתובת עצמה — לא "אין אתר", שקורה גם בכתובת של עסק), משתמש
+ * מחובר, מנהל פלטפורמה. הודעה זהה בכל סירוב
+ */
 export async function requirePlatformAdmin(): Promise<{ userId: string }> {
-  if ((await currentSite()) !== null) throw new SafeError(FORBIDDEN_MESSAGE);
+  if (!(await isPlatformHost())) throw new SafeError(FORBIDDEN_MESSAGE);
   let session: { userId: string } | null = null;
   try {
     session = await sessionFromRequest();
@@ -65,7 +68,14 @@ const DB_MESSAGES: readonly [RegExp, string][] = [
   [/renew it instead/, 'לעסק כבר יש חבילה בתוקף או שנקבעה מראש — השתמשו ב"חידוש לשנה נוספת"'],
   [/overlaps an earlier period/, "תאריך ההתחלה חופף לתקופה קודמת — בחרו תאריך אחרי סיומה"],
   [/activate first/, "לעסק אין חבילה — הפעילו קודם"],
-  [/already scheduled/, "כבר נקבע חידוש מראש לשנה הבאה — אי אפשר לחדש שוב עכשיו"],
+  [
+    /already scheduled/,
+    "כבר נקבעה תקופה עתידית (חידוש מראש, או הפעלה שעוד לא התחילה) — אפשר לחדש שוב רק כשהיא תתחיל",
+  ],
+  [
+    /changed meanwhile/,
+    "החבילה השתנתה בינתיים (ייתכן שכבר חודשה) — רעננו את הרשימה ובדקו לפני חידוש נוסף",
+  ],
   [/no package for this business/, "לעסק אין חבילה"],
 ];
 
@@ -177,11 +187,16 @@ export async function handleRenew(input: unknown): Promise<JsonObject> {
   limit(userId, "write", 120);
   const data = obj(input);
   const tenantId = tenantIdOf(data);
+  // סוף התקופה האחרונה כפי שהמסך הציג: אם השתנה בינתיים (לחיצה כפולה, ניסיון חוזר אחרי שהתשובה אבדה,
+  // מנהל אחר, רשימה ישנה) — המסד עוצר, ולא נרשמת שנה נוספת בטעות
+  const expectedLastEnd = String(data["expectedLastEnd"] ?? "").trim();
+  if (!DATE.test(expectedLastEnd)) throw new SafeError("רעננו את הרשימה ונסו שוב");
   try {
     return obj(
       await store.rpc("ai_admin_renew", {
         _actor: userId,
         _tenant: tenantId,
+        _expected_last_end: expectedLastEnd,
         _note: noteOf(data["note"]),
       }),
     );
@@ -322,8 +337,12 @@ export async function handleSaveSettings(input: unknown): Promise<{ ok: true }> 
     if (!check.ok) throw new SafeError(check.error);
     try {
       patch["api_key_encrypted"] = encryptApiKey(check.key);
-    } catch {
-      throw new SafeError("לא ניתן להצפין את המפתח בשרת — פנו לתמיכה הטכנית");
+    } catch (error) {
+      throw new SafeError(
+        error instanceof AiSecretConfigError && /shorter than 32/.test(error.message)
+          ? "הגדרת ההצפנה בשרת שגויה: AI_ASSISTANT_SECRET קצר מ-32 תווים — מאריכים אותו או מסירים אותו"
+          : "לא ניתן להצפין את המפתח בשרת — פנו לתמיכה הטכנית",
+      );
     }
     patch["api_key_last4"] = keyLast4(check.key);
   }

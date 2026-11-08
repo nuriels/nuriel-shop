@@ -86,7 +86,8 @@ export function isAiMode(value: unknown): value is AiMode {
 
 export const LIMIT_BOUNDS = {
   maxQuestionChars: { min: 50, max: 1000 },
-  tenantHourlyLimit: { min: 1, max: 2000 },
+  // הרבה מתחת לתקרה של כל המערכת (1500 בשעה) — עסק אחד לא יכול לנצל אותה לבד
+  tenantHourlyLimit: { min: 1, max: 300 },
   userMinuteLimit: { min: 1, max: 60 },
   monthlyBudgetUsd: { min: 0, max: 100000 },
 } as const;
@@ -329,38 +330,43 @@ export const DEFAULT_MAX_QUESTION_LENGTH = 400;
 export const MAX_PREVIOUS_QUESTIONS = 3;
 const MAX_PREVIOUS_LENGTH = 200;
 
-/** טווחי קודים של תווים נסתרים — מספרים, לא תווים בקוד */
-const HIDDEN_RANGES: readonly (readonly [number, number])[] = [
-  [0x00, 0x1f], // תווי בקרה
-  [0x7f, 0x9f], // DEL ותווי בקרה C1
-  [0xad, 0xad], // מקף רך
-  [0x061c, 0x061c], // סימן כיווניות ערבי
-  [0x180e, 0x180e],
-  [0x200b, 0x200f], // רווחים ברוחב אפס, LRM / RLM
-  [0x2028, 0x202e], // מפרידי שורה / פסקה, embedding / override
-  [0x2060, 0x206f], // word joiner, isolates
-  [0xfeff, 0xfeff], // BOM
-  [0xfff9, 0xfffb],
-];
+/**
+ * תווים בלתי נראים — נמחקים, לא הופכים לרווח ("sys<רוחב אפס>tem" → "system", כדי שהבדיקה תתפוס את
+ * המילה): תווי עיצוב (Cf — רוחב אפס, כיווניות, BOM, תווי Tag U+E0000–E007F), שימוש פרטי (Co), קודים
+ * שלא הוקצו (Cn), חצאי זוג (Cs), וכל תו "שמתעלמים ממנו" לפי Unicode (Default_Ignorable — בוררי וריאציה,
+ * מילויי האנגול שנראים כמו רווח ועוד). בקודים בלבד — אף תו נסתר לא מופיע בקוד עצמו.
+ */
+const INVISIBLE = /[\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Default_Ignorable_Code_Point}]/gu;
+/** תווי בקרה (גם שורה חדשה), מפרידי שורה / פסקה, ו-< > — כדי שהטקסט לא "יסגור" את התגיות שבהן הוא נשלח לדגם */
+const CONTROL_OR_MARKUP = /[\p{Cc}\u{2028}\u{2029}<>]/gu;
+/** לבדיקה שסורקת את קבצי העוזר (בלי הדגל g): כל תו בלתי נראה, ותווי בקרה C1 */
+export const HIDDEN_CHARACTER =
+  /[\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Default_Ignorable_Code_Point}\u{7F}-\u{9F}\u{2028}\u{2029}]/u;
+/** ניקוד וטעמים עבריים (U+0591–U+05C7) */
+const HEBREW_MARKS = /[\u{0591}-\u{05C7}]/gu;
 
-function rangeClass(ranges: readonly (readonly [number, number])[], extra = ""): string {
-  const hex = (code: number) => `\\u${code.toString(16).padStart(4, "0")}`;
-  return `[${ranges.map(([from, to]) => (from === to ? hex(from) : `${hex(from)}-${hex(to)}`)).join("")}${extra}]`;
+/**
+ * הצורה האחידה של טקסט מהדפדפן: NFKC (רוחב מלא וצורות תאימות → הצורה הרגילה, כך ש-＜ הופך ל-<),
+ * מחיקת התווים הבלתי נראים, בקרה ו-< > לרווח, ורווחים מכווצים.
+ */
+export function normalizeText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(INVISIBLE, "")
+    .replace(CONTROL_OR_MARKUP, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-/** תווים נסתרים / בקרה / כיווניות, ו-< > — כדי שהטקסט לא יוכל "לסגור" את התגיות שבהן הוא נשלח לדגם */
-const HIDDEN_OR_MARKUP = new RegExp(rangeClass(HIDDEN_RANGES, "<>"), "g");
-/** אותו דבר, לבדיקה בלבד (בלי הדגל g) — משמש גם את הבדיקה שסורקת את קבצי העוזר */
-export const HIDDEN_CHARACTER = new RegExp(rangeClass(HIDDEN_RANGES.slice(2)));
-/** ניקוד וטעמים עבריים (U+0591–U+05C7) */
-const HEBREW_MARKS = new RegExp(rangeClass([[0x0591, 0x05c7]]), "g");
+/** קיצור בלי לחתוך תו באמצע (זוג surrogates) */
+function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+}
 
 function cleanText(value: unknown, max: number): string {
-  return String(value ?? "")
-    .replace(HIDDEN_OR_MARKUP, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, max);
+  return clip(normalizeText(String(value ?? "")), max);
 }
 
 /** השאלה לאחר ניקוי: בלי תווים נסתרים, רווחים מכווצים, אורך מוגבל. null = ריקה / קצרה מדי */
@@ -411,10 +417,25 @@ export function questionFingerprint(question: string): string {
 
 // ------------------------------------------------------------------ סינון מידע רגיש
 
+/** מילה שאחריה בא סוד: סיסמה / קוד כניסה / אימות / סודי / גישה / password / pin */
+const SECRET_WORD = String.raw`(?:ה)?סיסמת\s+[א-ת]+|(?:ה)?סיסמ(?:ה|א)(?:\s+(?:שלו|שלה|שלי|שלנו|שלהם|החדשה|הזמנית|הישנה))?|\b(?:password|passcode|passwd|pwd|pin(?:\s+code)?)\b|(?:ה)?קוד\s+(?:ה)?(?:כניסה|אימות|סודי|גישה)`;
+const SECRET_SAID = new RegExp(
+  String.raw`(${SECRET_WORD})(\s*(?:[:=]|\bis\b|\bwas\b|היא|הוא|זה|זו)\s*)\S+`,
+  "gi",
+);
+const SECRET_NEXT = new RegExp(
+  // ספרות או סימנים של סיסמה (בלי ? ו-! — הם בדרך כלל סוף המשפט)
+  String.raw`(${SECRET_WORD})(\s+)(?=\S*[\d@#$%^&*~+=_])\S+`,
+  "gi",
+);
+const SECRET_LATIN_AFTER_HEBREW =
+  /((?:ה)?סיסמת\s+[א-ת]+|(?:ה)?סיסמ(?:ה|א)(?:\s+(?:שלו|שלה|שלי|שלנו|שלהם|החדשה|הזמנית|הישנה))?)(\s+)[A-Za-z][\w.-]{3,}/g;
+
 /**
  * מסיר מהטקסט מידע רגיש לפני שהוא נשלח לדגם ולפני שהוא נשמר ביומן: מפתחות וטוקנים, כתובות מייל,
  * קישורים, מספרים ארוכים (טלפון, ת.ז, ח.פ, כרטיס אשראי, חשבון בנק, מספר הזמנה), מחרוזות שנראות כמו
- * סיסמה, וסיסמה שנכתבה במפורש ("סיסמה: ..."). שמות אנשים אי אפשר לזהות בוודאות — לכן גם התזכורת
+ * סיסמה, סיסמה / קוד שנכתבו במפורש ("סיסמה: ...", "my password is ...", "הסיסמה שלי 1234"), וכל
+ * רצף של 4 ספרות ומעלה. שמות אנשים אי אפשר לזהות בוודאות — לכן גם התזכורת
  * בחלון.
  */
 export function redactSensitive(text: string): string {
@@ -424,16 +445,19 @@ export function redactSensitive(text: string): string {
       .replace(/\bre_[A-Za-z0-9_]{8,}/g, "[מפתח]")
       .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[אימייל]")
       .replace(/(?:https?:\/\/|www\.)\S+/gi, "[קישור]")
-      .replace(
-        /(סיסמ[הא](?:\s+(?:שלו|שלה|שלי|שלהם|החדשה|הזמנית|הישנה))?|password|passcode|pin|קוד(?:\s+(?:כניסה|אימות))?)(\s*(?:[:=]|היא|הוא|זה|זו)\s*)\S+/gi,
-        "$1$2[הוסתר]",
-      )
+      // "סיסמה: x", "password = x", "my password is x", "הסיסמה שלי היא x"
+      .replace(SECRET_SAID, "$1$2[הוסתר]")
+      // "הסיסמה שלי 1234", "pin 4821" — המילה שאחרי נראית כמו סוד (ספרות / סימנים)
+      .replace(SECRET_NEXT, "$1$2[הוסתר]")
+      // "הסיסמה שלי qwerty" — מילה באנגלית אחרי "סיסמה" בעברית
+      .replace(SECRET_LATIN_AFTER_HEBREW, "$1$2[הוסתר]")
       .replace(/[\w-]{24,}/g, "[מחרוזת]")
       // אותיות וספרות יחד (סיסמה, קוד, מספר רישוי) — מחרוזת אנגלית קצרה בלי ספרות ("pdf") נשארת
       .replace(/[A-Za-z0-9!@#$%^&*._+=-]{6,}/g, (token) =>
         /[A-Za-z]/.test(token) && /\d/.test(token) ? "[מחרוזת]" : token,
       )
-      .replace(/\d(?:[\s.-]?\d){4,}/g, "[מספר]")
+      // 4 ספרות ומעלה (קוד אימות, קוד כניסה, טלפון, ת.ז, כרטיס, חשבון, הזמנה) — לסיווג אין בהן צורך
+      .replace(/\d(?:[\s.-]?\d){3,}/g, "[מספר]")
   );
 }
 
@@ -461,9 +485,76 @@ const BLOCKED_PATTERNS: readonly RegExp[] = [
   /(?:שיחות|היסטורי[יה]ת?|שאלות|הודעות)\s+(?:ה?שיחה\s+)?(?:של\s+)?(?:ה)?(?:משתמש|מנהל|לקוח)(?:ים)?\s+(?:ה)?אחר|מה\s+(?:שאל|כתב)(?:ו)?\s+(?:ה)?(?:מנהל|משתמש)(?:ים)?\s+(?:ה)?אחר|other\s+(?:users|admins|stores|businesses|tenants)|another\s+(?:user|admin|store|tenant|business|zimmer|hotel)|(?:נתונים|מידע|פרטים|הזמנות|לקוחות|אורחים|מחירים|דוחות)\s+(?:של|מ)\s*(?:ה)?(?:חנות|אתר|עסק|צימר|מתחם|מלון)\s+(?:ה)?(?:אחר|שכ[נן]|מתחר)|(?:חנות|עסק|צימר|מתחם|מלון)\s+(?:ה)?(?:אחר|אחרת|מתחר)|(?:פרטי|הטלפון\s+של|המייל\s+של|האימייל\s+של|הכתובת\s+של)\s+(?:ה)?מנהל(?:ים)?\s+(?:ה)?(?:אחר|ראשי)|הטלפון\s+(?:ה)?פרטי/i,
 ];
 
+/**
+ * אותיות קיריליות / יווניות שנראות כמו לטיניות ("sуstem" עם у קירילית) → הלטינית, לבדיקה בלבד (הטקסט
+ * עצמו לא משתנה). בקודים — שום אות כזו לא מופיעה בקוד עצמו.
+ */
+const LOOKALIKES = new Map<string, string>(
+  (
+    [
+      [0x0430, "a"],
+      [0x0432, "b"],
+      [0x0435, "e"],
+      [0x0451, "e"],
+      [0x043a, "k"],
+      [0x043c, "m"],
+      [0x043d, "h"],
+      [0x043e, "o"],
+      [0x0440, "p"],
+      [0x0441, "c"],
+      [0x0442, "t"],
+      [0x0443, "y"],
+      [0x0445, "x"],
+      [0x0456, "i"],
+      [0x0457, "i"],
+      [0x0458, "j"],
+      [0x0455, "s"],
+      [0x0501, "d"],
+      [0x051b, "q"],
+      [0x051d, "w"],
+      [0x04bb, "h"],
+      [0x04cf, "l"],
+      [0x04af, "y"],
+      [0x0261, "g"],
+      [0x03b1, "a"],
+      [0x03b2, "b"],
+      [0x03b5, "e"],
+      [0x03b9, "i"],
+      [0x03ba, "k"],
+      [0x03bd, "v"],
+      [0x03bf, "o"],
+      [0x03c1, "p"],
+      [0x03c4, "t"],
+      [0x03c5, "u"],
+      [0x03c7, "x"],
+      [0x03b3, "y"],
+      [0x03c9, "w"],
+    ] as const
+  ).map(([code, latin]) => [String.fromCodePoint(code), latin]),
+);
+
+function latinSkeleton(text: string): string {
+  let out = "";
+  for (const ch of text) out += LOOKALIKES.get(ch) ?? ch;
+  return out;
+}
+
 export function detectBlockedRequest(text: string): boolean {
-  const normalized = text.normalize("NFKC").replace(HEBREW_MARKS, "").replace(/\s+/g, " ");
-  return BLOCKED_PATTERNS.some((pattern) => pattern.test(normalized));
+  const normalized = normalizeText(text).replace(HEBREW_MARKS, "");
+  if (BLOCKED_PATTERNS.some((pattern) => pattern.test(normalized))) return true;
+  const lower = normalized.toLowerCase();
+  const skeleton = latinSkeleton(lower);
+  return skeleton !== lower && BLOCKED_PATTERNS.some((pattern) => pattern.test(skeleton));
+}
+
+/**
+ * בקשה אסורה בשאלה עצמה — או מפוצלת בין השאלות הקודמות (שלא נחסמו) לשאלה ("system" ואז "prompt").
+ * שאלה קודמת שנחסמה לבדה לא נשלחת לדגם בכלל, ולא חוסמת את השאלות שאחריה.
+ */
+export function isBlockedConversation(question: string, previous: readonly string[]): boolean {
+  if (detectBlockedRequest(question)) return true;
+  const allowed = previous.filter((item) => !detectBlockedRequest(item));
+  return allowed.length > 0 && detectBlockedRequest([...allowed, question].join(" "));
 }
 
 // ------------------------------------------------------------------ ההחלטה מה מוצג

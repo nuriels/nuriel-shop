@@ -47,7 +47,7 @@ const TABLES = {
   "platform-admin": `platform_addons platform_admin_handoffs platform_admins platform_agreement_acceptances
     platform_agreement_versions platform_audit_log platform_documents platform_email_log platform_plans
     platform_pricing_settings
-    ai_packages ai_subscriptions ai_subscription_periods ai_subscription_events ai_settings ai_usage_log
+    ai_packages ai_subscriptions ai_subscription_periods ai_subscription_events ai_settings ai_usage_log ai_usage_daily
     ai_notifications`,
 };
 

@@ -59,4 +59,6 @@ export type RenewalRun = {
   failed: number;
   skipped: number;
   claimedElsewhere: number;
+  /** שירות המיילים לא מוגדר בשרת — לא נתפסה ולא נרשמה אף התראה (יישלחו כשיוגדר, באותו חלון) */
+  emailNotConfigured: boolean;
 };

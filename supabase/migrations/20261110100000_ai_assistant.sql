@@ -193,9 +193,10 @@ CREATE TABLE IF NOT EXISTS public.ai_settings (
   api_key_last4 TEXT CHECK (api_key_last4 IS NULL OR api_key_last4 ~ '^[A-Za-z0-9_-]{4}$'),
   api_key_updated_at TIMESTAMPTZ,
   api_key_updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  -- מגבלות: אורך שאלה, שאלות לעסק בשעה, שאלות למשתמש בדקה
+  -- מגבלות: אורך שאלה, שאלות לעסק בשעה (הרבה מתחת לתקרה של כל המערכת — 1500 בשעה, באפליקציה — כך
+  -- שעסק אחד לא יכול לנצל אותה לבד), שאלות למשתמש בדקה
   max_question_chars INTEGER NOT NULL DEFAULT 400 CHECK (max_question_chars BETWEEN 50 AND 1000),
-  tenant_hourly_limit INTEGER NOT NULL DEFAULT 60 CHECK (tenant_hourly_limit BETWEEN 1 AND 2000),
+  tenant_hourly_limit INTEGER NOT NULL DEFAULT 60 CHECK (tenant_hourly_limit BETWEEN 1 AND 300),
   user_minute_limit INTEGER NOT NULL DEFAULT 6 CHECK (user_minute_limit BETWEEN 1 AND 60),
   -- תקציב חודשי משוער (בדולרים) — חריגה מסומנת למנהל העל כחריגה (לא עוצרת)
   monthly_budget_usd NUMERIC(10, 2) NOT NULL DEFAULT 25 CHECK (monthly_budget_usd BETWEEN 0 AND 100000),
@@ -231,6 +232,44 @@ CREATE TABLE IF NOT EXISTS public.ai_usage_log (
 CREATE INDEX IF NOT EXISTS ai_usage_log_created_idx ON public.ai_usage_log (created_at DESC);
 CREATE INDEX IF NOT EXISTS ai_usage_log_tenant_idx ON public.ai_usage_log (tenant_id, created_at DESC);
 
+-- סיכום יומי של כל המערכת (בלי עמודת עסק): כל שורה ביומן מתווספת לסיכום של היום שלה (שעון ישראל).
+-- הסיכומים והתקציב החודשי נקראים מכאן — כך שמחיקת עסק (שמוחקת את השורות שלו ביומן) לא מקטינה את
+-- מה שכבר שולם ל-Anthropic. טריגר בלבד כותב לכאן; לשרת — קריאה בלבד
+CREATE TABLE IF NOT EXISTS public.ai_usage_daily (
+  day DATE NOT NULL,
+  product TEXT NOT NULL DEFAULT '' CHECK (product IN ('', 'ecommerce', 'hospitality')),
+  mode TEXT NOT NULL CHECK (mode IN ('ai', 'search', 'ai_error', 'blocked', 'test')),
+  outcome TEXT NOT NULL CHECK (outcome IN ('guides', 'off_topic', 'unknown', 'failed')),
+  calls INTEGER NOT NULL DEFAULT 0 CHECK (calls >= 0),
+  input_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
+  output_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
+  cache_write_tokens BIGINT NOT NULL DEFAULT 0 CHECK (cache_write_tokens >= 0),
+  cache_read_tokens BIGINT NOT NULL DEFAULT 0 CHECK (cache_read_tokens >= 0),
+  cost_usd NUMERIC(14, 6) NOT NULL DEFAULT 0 CHECK (cost_usd >= 0),
+  PRIMARY KEY (day, product, mode, outcome)
+);
+
+CREATE OR REPLACE FUNCTION public.ai_usage_daily_add()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  INSERT INTO public.ai_usage_daily AS d (day, product, mode, outcome, calls, input_tokens, output_tokens,
+                                          cache_write_tokens, cache_read_tokens, cost_usd)
+  VALUES ((NEW.created_at AT TIME ZONE 'Asia/Jerusalem')::date, COALESCE(NEW.product, ''), NEW.mode, NEW.outcome, 1,
+          COALESCE(NEW.input_tokens, 0), COALESCE(NEW.output_tokens, 0), COALESCE(NEW.cache_write_tokens, 0),
+          COALESCE(NEW.cache_read_tokens, 0), COALESCE(NEW.cost_usd, 0))
+  ON CONFLICT (day, product, mode, outcome) DO UPDATE
+     SET calls = d.calls + 1,
+         input_tokens = d.input_tokens + EXCLUDED.input_tokens,
+         output_tokens = d.output_tokens + EXCLUDED.output_tokens,
+         cache_write_tokens = d.cache_write_tokens + EXCLUDED.cache_write_tokens,
+         cache_read_tokens = d.cache_read_tokens + EXCLUDED.cache_read_tokens,
+         cost_usd = d.cost_usd + EXCLUDED.cost_usd;
+  RETURN NULL;
+END $$;
+DROP TRIGGER IF EXISTS ai_usage_daily_add ON public.ai_usage_log;
+CREATE TRIGGER ai_usage_daily_add AFTER INSERT ON public.ai_usage_log
+  FOR EACH ROW EXECUTE FUNCTION public.ai_usage_daily_add();
+
 -- ------------------------------------------------------------
 -- 8. התראות החידוש — אותה התראה לאותה תקופה נשלחת פעם אחת בלבד (UNIQUE)
 -- ------------------------------------------------------------
@@ -242,12 +281,16 @@ CREATE TABLE IF NOT EXISTS public.ai_notifications (
   period_ends_on DATE NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('d30', 'd14', 'd7', 'd1', 'd0')),
   channel TEXT NOT NULL DEFAULT 'email' CHECK (channel = 'email'),
-  -- pending = נתפסה לשליחה · sent · failed (נרשמה השגיאה; לא נשלחת שוב) · skipped (אין כתובת תקינה)
+  -- pending = נתפסה לשליחה · sent · failed (נרשמה השגיאה; עוד ניסיון אחרי שעה, עד 3 ניסיונות) ·
+  -- skipped (אין כתובת תקינה — סופי)
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed', 'skipped')),
+  attempts SMALLINT NOT NULL DEFAULT 1 CHECK (attempts BETWEEN 1 AND 3),
   -- הכתובת במיסוך (n***@example.com) — לא הכתובת המלאה
   recipient_masked TEXT CHECK (recipient_masked IS NULL OR char_length(recipient_masked) <= 120),
   error TEXT CHECK (error IS NULL OR char_length(error) <= 300),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- מתי נתפס הניסיון הנוכחי (התפיסה שנתקעה נמדדת ממנו)
+  claimed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   finished_at TIMESTAMPTZ,
   CONSTRAINT ai_notifications_once UNIQUE (subscription_id, period_ends_on, kind, channel)
 );
@@ -262,7 +305,7 @@ DECLARE
   _t text;
 BEGIN
   FOREACH _t IN ARRAY ARRAY['ai_packages', 'ai_subscriptions', 'ai_subscription_periods', 'ai_subscription_events',
-                            'ai_settings', 'ai_usage_log', 'ai_notifications'] LOOP
+                            'ai_settings', 'ai_usage_log', 'ai_usage_daily', 'ai_notifications'] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', _t);
     EXECUTE format('REVOKE ALL ON public.%I FROM PUBLIC, anon, authenticated, service_role', _t);
     EXECUTE format('GRANT SELECT ON public.%I TO service_role', _t);
@@ -376,6 +419,8 @@ BEGIN
     -- תקופה פעילה + חידוש שכבר נקבע מראש: מתי מתחיל החידוש
     'renewal_starts_on', CASE WHEN cur.id IS NOT NULL AND _chain_end > cur.ends_on THEN cur.ends_on + 1 END,
     'current_period_ends_on', cur.ends_on,
+    -- סוף התקופה האחרונה (של כל התקופות) — מסך החידוש שולח אותו חזרה, והחידוש נעצר אם הוא השתנה בינתיים
+    'last_ends_on', _last.ends_on,
     'suspended', s.suspended,
     'suspended_at', s.suspended_at,
     'suspend_reason', s.suspend_reason);
@@ -496,7 +541,10 @@ BEGIN
 END $$;
 
 -- חידוש לשנה נוספת: בתוקף / טרם התחילה → מהיום שאחרי הסוף; פגה → מהיום. חידוש אחד מראש לכל היותר
-CREATE OR REPLACE FUNCTION public.ai_admin_renew(_actor uuid, _tenant uuid, _note text DEFAULT NULL)
+-- _expected_last_end: סוף התקופה האחרונה כפי שהמסך הציג (last_ends_on). השתנה בינתיים (לחיצה כפולה, ניסיון
+-- חוזר אחרי שהתשובה אבדה, שני מנהלים, רשימה ישנה) → נעצר, ולא נרשמת שנה נוספת בטעות
+CREATE OR REPLACE FUNCTION public.ai_admin_renew(_actor uuid, _tenant uuid, _expected_last_end date,
+                                                 _note text DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   _email text := public.ai_require_platform_admin(_actor);
@@ -517,11 +565,15 @@ BEGIN
   END IF;
   SELECT * INTO pk FROM public.ai_packages WHERE code = s.package_code;
   SELECT max(p.ends_on) INTO _last_end FROM public.ai_subscription_periods p WHERE p.subscription_id = s.id;
-  _start := GREATEST(COALESCE(_last_end + 1, _today), _today);
-  -- הגנה מלחיצה כפולה: אפשר לחדש מראש פעם אחת (עד שנתיים קדימה), לא יותר
-  IF public.ai_period_end(_start) > (_today + interval '24 months')::date THEN
+  IF _expected_last_end IS DISTINCT FROM _last_end THEN
+    RAISE EXCEPTION 'ai: the package changed meanwhile — reload before renewing' USING ERRCODE = 'check_violation';
+  END IF;
+  -- לכל היותר תקופה עתידית אחת: חידוש מראש (או הפעלה שעוד לא התחילה) כבר קיים → אי אפשר לחדש שוב עד שהיא
+  -- תתחיל. כך גם ביום האחרון של תקופה אפשר לחדש פעם אחת בלבד
+  IF EXISTS (SELECT 1 FROM public.ai_subscription_periods p WHERE p.subscription_id = s.id AND p.starts_on > _today) THEN
     RAISE EXCEPTION 'ai: a renewal is already scheduled' USING ERRCODE = 'check_violation';
   END IF;
+  _start := GREATEST(COALESCE(_last_end + 1, _today), _today);
 
   INSERT INTO public.ai_subscription_periods (subscription_id, tenant_id, kind, starts_on, ends_on, price_agorot,
                                               note, created_by)
@@ -592,7 +644,8 @@ BEGIN
       FROM public.ai_subscription_events e WHERE e.subscription_id = s.id), '[]'::jsonb),
     'notifications', COALESCE((SELECT jsonb_agg(jsonb_build_object(
         'kind', n.kind, 'period_ends_on', n.period_ends_on, 'status', n.status,
-        'recipient_masked', n.recipient_masked, 'error', n.error, 'created_at', n.created_at) ORDER BY n.created_at DESC)
+        'recipient_masked', n.recipient_masked, 'error', n.error, 'attempts', n.attempts,
+        'created_at', n.created_at) ORDER BY n.created_at DESC)
       FROM (SELECT * FROM public.ai_notifications x WHERE x.subscription_id = s.id
              ORDER BY x.created_at DESC LIMIT 50) n), '[]'::jsonb));
 END $$;
@@ -661,29 +714,32 @@ END $$;
 CREATE OR REPLACE FUNCTION public.ai_admin_usage(_actor uuid)
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
-  _month_start timestamptz := date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC';
+  -- החודש לפי שעון ישראל (כמו כל התאריכים בתוסף)
+  _month_first date := date_trunc('month', public.ai_today()::timestamp)::date;
+  _month_start timestamptz := _month_first::timestamp AT TIME ZONE 'Asia/Jerusalem';
   _since timestamptz;
 BEGIN
   PERFORM public.ai_require_platform_admin(_actor);
   _since := LEAST(_month_start, now() - interval '15 days');
   RETURN jsonb_build_object(
     'month_start', _month_start,
+    -- הסיכומים והתקציב — מהסיכום היומי, שלא נמחק עם עסק
     'totals', (SELECT jsonb_build_object(
-        'questions', count(*) FILTER (WHERE l.mode <> 'test'),
-        'ai', count(*) FILTER (WHERE l.mode = 'ai'),
-        'search', count(*) FILTER (WHERE l.mode = 'search'),
-        'blocked', count(*) FILTER (WHERE l.mode = 'blocked'),
-        'failed', count(*) FILTER (WHERE l.outcome = 'failed' AND l.mode <> 'test'),
-        'off_topic', count(*) FILTER (WHERE l.outcome = 'off_topic' AND l.mode <> 'test'),
-        'unknown', count(*) FILTER (WHERE l.outcome = 'unknown' AND l.mode <> 'test'),
-        'tests', count(*) FILTER (WHERE l.mode = 'test'),
-        'input_tokens', COALESCE(sum(l.input_tokens), 0),
-        'output_tokens', COALESCE(sum(l.output_tokens), 0),
-        'cache_write_tokens', COALESCE(sum(l.cache_write_tokens), 0),
-        'cache_read_tokens', COALESCE(sum(l.cache_read_tokens), 0),
-        'cost_usd', COALESCE(sum(l.cost_usd), 0),
-        'test_cost_usd', COALESCE(sum(l.cost_usd) FILTER (WHERE l.mode = 'test'), 0))
-      FROM public.ai_usage_log l WHERE l.created_at >= _month_start),
+        'questions', COALESCE(sum(d.calls) FILTER (WHERE d.mode <> 'test'), 0),
+        'ai', COALESCE(sum(d.calls) FILTER (WHERE d.mode = 'ai'), 0),
+        'search', COALESCE(sum(d.calls) FILTER (WHERE d.mode = 'search'), 0),
+        'blocked', COALESCE(sum(d.calls) FILTER (WHERE d.mode = 'blocked'), 0),
+        'failed', COALESCE(sum(d.calls) FILTER (WHERE d.outcome = 'failed' AND d.mode <> 'test'), 0),
+        'off_topic', COALESCE(sum(d.calls) FILTER (WHERE d.outcome = 'off_topic' AND d.mode <> 'test'), 0),
+        'unknown', COALESCE(sum(d.calls) FILTER (WHERE d.outcome = 'unknown' AND d.mode <> 'test'), 0),
+        'tests', COALESCE(sum(d.calls) FILTER (WHERE d.mode = 'test'), 0),
+        'input_tokens', COALESCE(sum(d.input_tokens), 0),
+        'output_tokens', COALESCE(sum(d.output_tokens), 0),
+        'cache_write_tokens', COALESCE(sum(d.cache_write_tokens), 0),
+        'cache_read_tokens', COALESCE(sum(d.cache_read_tokens), 0),
+        'cost_usd', COALESCE(sum(d.cost_usd), 0),
+        'test_cost_usd', COALESCE(sum(d.cost_usd) FILTER (WHERE d.mode = 'test'), 0))
+      FROM public.ai_usage_daily d WHERE d.day >= _month_first),
     'tenants', COALESCE((SELECT jsonb_agg(x.j ORDER BY x.cost DESC, x.calls DESC) FROM (
         SELECT jsonb_build_object(
                  'tenant_id', l.tenant_id, 'name', t.name, 'slug', t.slug, 'product', max(l.product),
@@ -701,10 +757,9 @@ BEGIN
           LEFT JOIN public.tenants t ON t.id = l.tenant_id
          WHERE l.created_at >= _since AND l.tenant_id IS NOT NULL
          GROUP BY l.tenant_id, t.name, t.slug) x), '[]'::jsonb),
-    'days', COALESCE((SELECT jsonb_agg(jsonb_build_object('day', d.day, 'questions', d.n, 'cost_usd', d.c) ORDER BY d.day)
-      FROM (SELECT (l.created_at AT TIME ZONE 'Asia/Jerusalem')::date AS day,
-                   count(*) FILTER (WHERE l.mode <> 'test') AS n, COALESCE(sum(l.cost_usd), 0) AS c
-              FROM public.ai_usage_log l WHERE l.created_at >= now() - interval '14 days' GROUP BY 1) d), '[]'::jsonb),
+    'days', COALESCE((SELECT jsonb_agg(jsonb_build_object('day', x.day, 'questions', x.n, 'cost_usd', x.c) ORDER BY x.day)
+      FROM (SELECT d.day, COALESCE(sum(d.calls) FILTER (WHERE d.mode <> 'test'), 0) AS n, COALESCE(sum(d.cost_usd), 0) AS c
+              FROM public.ai_usage_daily d WHERE d.day >= public.ai_today() - 13 GROUP BY d.day) x), '[]'::jsonb),
     'recent_questions', COALESCE((SELECT jsonb_agg(jsonb_build_object(
         'question', u.question, 'product', u.product, 'outcome', u.outcome, 'mode', u.mode, 'at', u.created_at)
         ORDER BY u.created_at DESC)
@@ -752,7 +807,10 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
    WHERE d.kind IS NOT NULL
      AND NOT EXISTS (SELECT 1 FROM public.ai_notifications n
                       WHERE n.subscription_id = d.subscription_id AND n.period_ends_on = d.chain_end
-                        AND n.kind = d.kind AND n.channel = 'email')
+                        AND n.kind = d.kind AND n.channel = 'email'
+                        -- שליחה שנכשלה: ניסיון נוסף שעה אחרי הקודם, עד 3 ניסיונות. נשלחה / דולגה / בטיפול — לא
+                        AND NOT (n.status = 'failed' AND n.attempts < 3
+                                 AND n.finished_at < now() - interval '1 hour'))
    ORDER BY d.days_left, d.name
 $$;
 
@@ -781,10 +839,20 @@ BEGIN
   VALUES (_subscription, _tenant, _period_ends_on, _kind, left(_recipient_masked, 120))
   ON CONFLICT ON CONSTRAINT ai_notifications_once DO NOTHING
   RETURNING id INTO _id;
+  IF _id IS NULL THEN
+    -- ניסיון נוסף לשליחה שנכשלה (אותה שורה — ואותו Idempotency-Key אצל ספק המיילים)
+    UPDATE public.ai_notifications n
+       SET status = 'pending', attempts = n.attempts + 1, error = NULL, finished_at = NULL, claimed_at = now(),
+           recipient_masked = left(_recipient_masked, 120)
+     WHERE n.subscription_id = _subscription AND n.period_ends_on = _period_ends_on AND n.kind = _kind
+       AND n.channel = 'email' AND n.status = 'failed' AND n.attempts < 3
+       AND n.finished_at < now() - interval '1 hour'
+    RETURNING n.id INTO _id;
+  END IF;
   RETURN _id;
 END $$;
 
--- סיום: נשלחה / נכשלה (השגיאה נרשמת; לא נשלחת שוב) / דולגה (אין כתובת תקינה). רק מ-pending
+-- סיום: נשלחה / נכשלה (השגיאה נרשמת; ניסיון נוסף אחרי שעה, עד 3) / דולגה (אין כתובת תקינה). רק מ-pending
 CREATE OR REPLACE FUNCTION public.ai_notification_finish(_id bigint, _status text, _error text DEFAULT NULL)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
@@ -797,7 +865,8 @@ BEGIN
   RETURN FOUND;
 END $$;
 
--- תפיסה שנתקעה (השרת נפל בין התפיסה לשליחה): אחרי שעה — נכשלה. לא נשלחת שוב (אולי כבר יצאה)
+-- תפיסה שנתקעה (השרת נפל בין התפיסה לשליחה): אחרי שעה — נכשלה. הניסיון הבא (אם נשארו) יוצא עם אותו
+-- Idempotency-Key, כך שאם המייל כבר יצא — ספק המיילים לא שולח אותו שוב
 CREATE OR REPLACE FUNCTION public.ai_notifications_mark_stale()
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -805,7 +874,7 @@ DECLARE
 BEGIN
   UPDATE public.ai_notifications
      SET status = 'failed', error = 'interrupted before the result was recorded', finished_at = now()
-   WHERE status = 'pending' AND created_at < now() - interval '1 hour';
+   WHERE status = 'pending' AND claimed_at < now() - interval '1 hour';
   GET DIAGNOSTICS _n = ROW_COUNT;
   RETURN _n;
 END $$;
@@ -816,6 +885,7 @@ END $$;
 -- ------------------------------------------------------------
 REVOKE ALL ON FUNCTION public.ai_subscriptions_guard() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.ai_periods_guard() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.ai_usage_daily_add() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.ai_chain_end(uuid, date) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.ai_state_on(uuid, date) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.ai_require_platform_admin(uuid) FROM PUBLIC, anon, authenticated, service_role;
@@ -827,7 +897,7 @@ REVOKE ALL ON FUNCTION public.ai_period_end(date) FROM PUBLIC, anon, authenticat
 REVOKE ALL ON FUNCTION public.ai_entitlement(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_admin_list(uuid, text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_admin_activate(uuid, uuid, text, date, text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.ai_admin_renew(uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.ai_admin_renew(uuid, uuid, date, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_admin_set_suspended(uuid, uuid, boolean, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_admin_history(uuid, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ai_admin_save_settings(uuid, jsonb) FROM PUBLIC, anon, authenticated;
@@ -839,7 +909,7 @@ REVOKE ALL ON FUNCTION public.ai_notifications_mark_stale() FROM PUBLIC, anon, a
 
 GRANT EXECUTE ON FUNCTION public.ai_today(), public.ai_period_end(date), public.ai_entitlement(uuid),
   public.ai_admin_list(uuid, text, text), public.ai_admin_activate(uuid, uuid, text, date, text),
-  public.ai_admin_renew(uuid, uuid, text), public.ai_admin_set_suspended(uuid, uuid, boolean, text),
+  public.ai_admin_renew(uuid, uuid, date, text), public.ai_admin_set_suspended(uuid, uuid, boolean, text),
   public.ai_admin_history(uuid, uuid), public.ai_admin_save_settings(uuid, jsonb), public.ai_admin_usage(uuid),
   public.ai_due_notifications(), public.ai_notification_claim(uuid, date, text, text),
   public.ai_notification_finish(bigint, text, text), public.ai_notifications_mark_stale()
