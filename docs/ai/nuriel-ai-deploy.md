@@ -1,6 +1,13 @@
 # פריסה לייצור: NURIEL AI ASSISTANT (מיגרציה 61) — nuriel-shop
 
-> **אף פקודה כאן לא הורצה בשרת.** שולחים לי פקודה אחת, מריצים, ומחזירים את הפלט — ורק אז הפקודה הבאה.
+> **✅ נפרס לייצור ב-08.11.2026** (פקודה אחת בכל פעם, הפלט של כל אחת נבדק):
+> P1–P4 תקינים (Nginx: 2 בלוקים של האפליקציה, 6 שרתים דרך ה-snippet, כולם דורסים `X-Forwarded-Host`) · B1 גיבוי
+> 3.1M נקרא עד הסוף · B2 שחזור למסד נפרד — `6|7|1|1|176` זהה · S1 `6dd034b` · S2 נבנה (הקוד החדש בתוך ה-image) ·
+> M1 `1|9|2|off|f|f|177` · V1 ארבע `200`, `hourly check started`, בלי שגיאות. אחר כך, במסך: מפתח נשמר, מצב **פעיל**,
+> בדיקת חיבור עברה (Haiku, $0.000834), וחבילות ל-נופי דורית (Hospitality) ול-Nuriel Shop (Ecommerce) —
+> 08.11.2026–07.11.2027, 150 ₪, "התשלום התקבל" סומן. תג חזרה: `before-nuriel-ai`.
+>
+> שולחים לי פקודה אחת, מריצים, ומחזירים את הפלט — ורק אז הפקודה הבאה.
 > שום פקודה לא מדפיסה סוד, ו**מפתח ה-API של Anthropic לא נכנס בשום פקודה** — רק במסך "ניהול תוסף AI".
 >
 > 🔍 = קריאה בלבד · ✏️ = משנה משהו בשרת (כתוב בדיוק מה) · ⛔ = נקודת אישור שלך.
@@ -118,6 +125,14 @@ nginx -T 2>/dev/null | awk '/^[[:space:]]*location /{inb=1; blk=""} inb{blk=blk 
 **תקין:** `N app blocks, 0 without X-Forwarded-Host $host` (N — 2 ומעלה). הזיהוי של העסק נשען על הכותרת הזו, ו-Nginx
 צריך לדרוס כל ערך שהגיע מהדפדפן. מספר אחר מ-0 — עוצרים ושולחים לי (זה לא תלוי בפריסה הזו, אבל חשוב לבדוק לפניה).
 
+**P4b (אם N = 2):** האם אין בלוק שמפנה לאפליקציה בצורה אחרת, וכמה שרתים משתמשים ב-snippet:
+
+```bash
+nginx -T 2>/dev/null | grep -oE "proxy_pass[[:space:]]+[^;]+" | sort | uniq -c; echo "snippet includes: $(nginx -T 2>/dev/null | grep -cE 'include[[:space:]]+[^;]*nuriel-app-proxy\.conf')"; echo "3700 in any form: $(nginx -T 2>/dev/null | grep -E 'proxy_pass' | grep -c ':3700')"
+```
+
+**תקין:** `2 proxy_pass http://127.0.0.1:3700`; `3700 in any form: 2`; `snippet includes:` 1 ומעלה.
+
 **⛔ אישור 1 — רק אם P1–P4 תקינים.** מכאן הפקודות כותבות בשרת.
 
 ---
@@ -156,10 +171,12 @@ cd /root/nuriel-shop-git && git merge -q --ff-only 6dd034b && git log --oneline 
 ### S2 — בנייה ובדיקה שהקוד החדש בתוך ה-image (✏️ image חדש; האתר ממשיך לרוץ על הישן)
 
 ```bash
-cd /root/nuriel-shop-git && docker compose build && docker run --rm --entrypoint sh nuriel-shop-app-app:latest -c "grep -rl 'ai_entitlement' /app/.output/server | wc -l; ls /app/node_modules/@anthropic-ai/sdk/package.json"
+cd /root/nuriel-shop-git && docker compose build && docker run --rm --entrypoint sh nuriel-shop-app-app:latest -c "grep -rl 'ai_entitlement' /app/.output/server | wc -l; ls /app/.output/server/_libs/@anthropic-ai; grep -rl 'ai_quota_take' /app/.output/server | wc -l; grep -rl '_payment_confirmed' /app/.output/server | wc -l"
 ```
 
-**תקין:** `Built`, בלי שגיאה; מספר גדול מ-0; הנתיב של `package.json` של הספרייה. שגיאה — עוצרים (האתר לא נפגע).
+**תקין:** `Built`, בלי שגיאה; ואז `2`, `sdk+[...].mjs` (הספרייה ארוזה בתוך `.output` — ב-image אין `node_modules`),
+`2` (המכסות המשותפות), `1` (אישור התשלום). שגיאה — עוצרים (האתר לא נפגע). נעצר ב-`bun install` עם
+`canvas … pixman-1 … not found` — תקלה זמנית בהורדה מ-GitHub (חבילה של בדיקות בלבד): מריצים שוב את S2.
 
 **⛔ אישור 2 — מכאן משנים את המסד ומפעילים את הגרסה החדשה.** בשעה שקטה.
 
@@ -186,10 +203,11 @@ cd /root/nuriel-shop-git && f=20261110100000_ai_assistant && docker exec -i nuri
 ### V1 — האתרים והמסך החדש (🔍; מחכה דקה)
 
 ```bash
-cd /root/nuriel-shop-git && sleep 60 && docker compose ps app && ph=$(docker exec nuriel-shop-app sh -c 'printf %s "$PLATFORM_ADMIN_HOST"') && echo "platform host: ${ph:-NOT SET}" && for u in https://nuriel-shop.nuri1.fit/ https://nofi-dorit.nuri1.fit/stay https://nofi-dorit.nuri1.fit/manage/login "https://$ph/platform/ai"; do curl -s -o /dev/null -w "$u: %{http_code}\n" "$u"; done && docker logs --since 3m nuriel-shop-app 2>&1 | grep -iE "error|fatal|nuriel-ai" | tail -20
+cd /root/nuriel-shop-git && sleep 120 && docker compose ps app && echo "new code in the running app: $(docker exec nuriel-shop-app sh -c "grep -rl 'ai_quota_take' /app/.output/server | wc -l")" && ph=$(docker exec nuriel-shop-app sh -c 'printf %s "$PLATFORM_ADMIN_HOST"') && echo "platform host: ${ph:-NOT SET}" && for u in https://nuriel-shop.nuri1.fit/ https://nofi-dorit.nuri1.fit/stay https://nofi-dorit.nuri1.fit/manage/login "https://$ph/platform/ai"; do curl -s -o /dev/null -w "$u: %{http_code}\n" "$u"; done && docker logs --since 15m nuriel-shop-app 2>&1 | grep -iE "error|fatal|nuriel-ai" | tail -20
 ```
 
-**תקין:** `Up … (healthy)`; `platform host:` עם הדומיין של פאנל הפלטפורמה; ארבע שורות `200`; בלוג **שורה אחת**
+**תקין:** `Up … (healthy)`; `new code in the running app: 2`; `platform host:` עם הדומיין של פאנל הפלטפורמה; ארבע
+שורות `200`; בלוג **שורה אחת**
 `[nuriel-ai] renewal notices: hourly check started (first run in 1 minute)` — הבדיקה השעתית עלתה בלי שום משתמש (עם
 ה-healthcheck); בלי `[nuriel-ai] renewal notices failed` ובלי `error` / `fatal` (שורות `aborted` — לא בעיה). בלי
 חבילות הבדיקה לא שולחת כלום ולא כותבת עוד ללוג.
@@ -197,10 +215,12 @@ cd /root/nuriel-shop-git && sleep 60 && docker compose ps app && ph=$(docker exe
 ### V2 — המסד אחרי (🔍)
 
 ```bash
-docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public.ai_subscriptions), (SELECT count(*) FROM public.ai_usage_log), (SELECT count(*) FROM public.ai_notifications), (SELECT mode || '|' || (api_key_encrypted IS NULL) FROM public.ai_settings), (SELECT count(*) FROM public.platform_audit_log WHERE action LIKE 'ai\_%')"
+docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public.ai_subscriptions), (SELECT count(*) FROM public.ai_usage_log), (SELECT count(*) FROM public.ai_notifications), (SELECT mode || '|' || (api_key_encrypted IS NULL) FROM public.ai_settings), (SELECT count(*) FROM public.platform_audit_log WHERE action LIKE 'ai\_%'), (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'ai_subscription_events' AND column_name = 'payment_confirmed'), has_function_privilege('service_role', 'public.ai_admin_activate(uuid,uuid,text,date,text,boolean)', 'EXECUTE'), has_function_privilege('service_role', 'public.ai_admin_renew(uuid,uuid,date,text,boolean)', 'EXECUTE'), (SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'ai\_%')"
 ```
 
-**תקין:** `0|0|0|off|true|0` — אין חבילות, אין שימוש, אין התראות, העוזר כבוי ובלי מפתח.
+**תקין (לפני שעושים משהו במסך):** `0|0|0|off|true|0|1|t|t|24` — אין חבילות, שימוש, התראות; העוזר כבוי ובלי מפתח;
+אין רשומות AI ביומן; עמודת אישור התשלום והגרסה הסופית של ההפעלה / החידוש; 24 פונקציות. אם כבר עבדו במסך — החמישה
+הראשונים משקפים את מה שנעשה (בפריסה הזו: `2|1|0|on|false|5` — הכול של מנהל העל, נבדק אחד-אחד).
 
 ### V3 — בדפדפן (אתה, בסדר הזה)
 
