@@ -186,6 +186,20 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} הציג/ה באתר את החבילה ${target}`;
     case "packages.hidden":
       return `${actor} הסתיר/ה מהאתר את החבילה ${target}`;
+    case "documents.saved":
+      return `${actor} שמר/ה טיוטה של המסמך ${target}`;
+    case "documents.published":
+      return `${actor} פרסם/ה באתר את המסמך ${target}`;
+    case "documents.unpublished":
+      return `${actor} הסיר/ה מהאתר את המסמך ${target}`;
+    case "documents.reviewed":
+      return `${actor} סימן/ה שהמסמך ${target} נבדק`;
+    case "documents.review_cleared":
+      return `${actor} ביטל/ה את סימון הבדיקה של המסמך ${target}`;
+    case "documents.profile_saved":
+      return `${actor} עדכן/ה את פרטי העסק למסמכים`;
+    case "accessibility.confirmed":
+      return `${actor} אישר/ה את הסדרי הנגישות במתחם ${target}`;
     case "channels.calendar_added":
       return `${actor} חיבר/ה יומן חיצוני ל${target}`;
     case "channels.calendar_removed":

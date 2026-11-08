@@ -15,6 +15,7 @@ export type NavKey =
   | "emails"
   | "channels"
   | "website"
+  | "documents"
   | "settings"
   | "team"
   | "support"
@@ -41,6 +42,7 @@ export type NavPath =
   | "/manage/emails"
   | "/manage/settings"
   | "/manage/website"
+  | "/manage/documents"
   | "/manage/channels"
   | "/manage/team"
   | "/manage/units"
@@ -176,6 +178,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: "site",
     permission: "settings",
     keywords: "עורך תבנית",
+  },
+  {
+    key: "documents",
+    label: "מסמכים ומדיניות",
+    to: "/manage/documents",
+    group: "site",
+    permission: "settings",
+    keywords: "תקנון פרטיות ביטולים הצהרת נגישות תנאי הזמנה כללי המקום אירועים תשלומים",
   },
   {
     key: "setup",

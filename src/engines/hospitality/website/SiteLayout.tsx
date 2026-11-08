@@ -8,6 +8,7 @@ import { NurielCredit } from "@/platform/branding/NurielCredit";
 import { cn } from "@/platform/ui";
 import type { PublicSite } from "../types/website";
 import { A11Y_CSS } from "./a11y/prefs";
+import { DOC_SLUGS, type DocKind } from "../documents/kinds";
 import { AccessibilityWidget } from "./components/AccessibilityWidget";
 import {
   SidePanel,
@@ -352,11 +353,23 @@ function ContactButtons({ className }: { className?: string }) {
   );
 }
 
+/** סדר המסמכים בפוטר (פרטיות ונגישות — בסוף, תמיד) */
+const FOOTER_DOCS: readonly DocKind[] = [
+  "site_terms",
+  "booking_terms",
+  "cancellation",
+  "payments",
+  "house_rules",
+  "event_terms",
+];
+const FOOTER_LINK = "inline-flex min-h-11 items-center px-2 opacity-90 hover:underline";
+
 function SiteFooter() {
   const t = useCopy();
   const { site, preview } = useSite();
   const { pathname } = useLocation();
   const b = site.business;
+  const docs = site.documents ?? [];
   const year = Number(site.today.slice(0, 4)) || new Date().getFullYear();
   return (
     <footer
@@ -394,18 +407,32 @@ function SiteFooter() {
       <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs sm:flex-row sm:px-8">
           <p className="opacity-80">{t.footer.rights(b.name, year)}</p>
-          <nav aria-label={t.footer.legal} className="flex gap-1">
-            <Link
-              to="/stay/privacy"
-              className="inline-flex min-h-11 items-center px-2 opacity-90 hover:underline"
-            >
-              {t.footer.privacy}
+          {/* מיגרציה 60: המסמכים שבעל העסק פרסם; פרטיות ונגישות — תמיד (טקסט כללי עד הפרסום) */}
+          <nav
+            aria-label={t.footer.legal}
+            className="flex flex-wrap justify-center gap-x-1 sm:justify-end"
+            data-testid="footer-documents"
+          >
+            {FOOTER_DOCS.flatMap((kind) => {
+              const d = docs.find((x) => x.kind === kind);
+              return d
+                ? [
+                    <Link
+                      key={kind}
+                      to="/stay/docs/$docSlug"
+                      params={{ docSlug: DOC_SLUGS[kind] }}
+                      className={FOOTER_LINK}
+                    >
+                      {d.title}
+                    </Link>,
+                  ]
+                : [];
+            })}
+            <Link to="/stay/privacy" className={FOOTER_LINK}>
+              {docs.find((x) => x.kind === "privacy")?.title ?? t.footer.privacy}
             </Link>
-            <Link
-              to="/stay/accessibility"
-              className="inline-flex min-h-11 items-center px-2 opacity-90 hover:underline"
-            >
-              {t.footer.accessibility}
+            <Link to="/stay/accessibility" className={FOOTER_LINK}>
+              {docs.find((x) => x.kind === "accessibility")?.title ?? t.footer.accessibility}
             </Link>
           </nav>
         </div>

@@ -2,7 +2,8 @@
 // נתוני האתר נטענים פעם אחת במעטפת (SSR) ומשותפים לכל העמודים; עמוד יחידה שלא קיים → 404.
 import { notFound } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { hospitalityPublicSite } from "../api/website.functions";
+import { hospitalityPublicDocument, hospitalityPublicSite } from "../api/website.functions";
+import { kindFromSlug, type DocKind } from "../documents/kinds";
 import { hospitalitySiteOnly } from "../management/route-guard";
 import { MANAGE_SECURITY_HEADERS, SITE_SECURITY_HEADERS } from "../security/headers";
 import type { PublicSite } from "../types/website";
@@ -14,7 +15,7 @@ import { GuestAreaPage } from "./pages/GuestAreaPage";
 import { BookingReceivedPage, MyBookingPage } from "./pages/GuestBookingPages";
 import { HomePage } from "./pages/HomePage";
 import { PreviewPage } from "./pages/PreviewPage";
-import { AccessibilityPage, PrivacyPage } from "./pages/LegalPages";
+import { AccessibilityPage, PrivacyPage, SiteDocumentPage } from "./pages/DocumentPage";
 import { SiteError, SiteNotFound } from "./pages/SiteMessage";
 import { UnitPage } from "./pages/UnitPage";
 import { PackagePage } from "./pages/PackagePage";
@@ -107,8 +108,31 @@ export const siteAccountRoute = {
       ? { booking: raw["booking"].toLowerCase() }
       : {},
 };
-export const sitePrivacyRoute = privateRoute("מדיניות פרטיות", PrivacyPage);
-export const siteAccessibilityRoute = privateRoute("הצהרת נגישות", AccessibilityPage);
+/** מיגרציה 60: מסמך שבעל העסק פרסם (null — עוד לא פורסם, ואז הטקסט הכללי) */
+const documentLoader = (kind: DocKind) => () => hospitalityPublicDocument({ data: { kind } });
+
+export const sitePrivacyRoute = {
+  ...privateRoute("מדיניות פרטיות", PrivacyPage),
+  loader: documentLoader("privacy"),
+};
+export const siteAccessibilityRoute = {
+  ...privateRoute("הצהרת נגישות", AccessibilityPage),
+  loader: documentLoader("accessibility"),
+};
+/** /stay/docs/<slug> — תקנון, תנאי הזמנה, ביטולים, תשלומים, אירועים, כללי המקום (רק מה שפורסם) */
+export const siteDocumentRoute = {
+  loader: async ({ params }: { params: { docSlug: string } }) => {
+    const kind = kindFromSlug(params.docSlug);
+    const doc = kind ? await hospitalityPublicDocument({ data: { kind } }) : null;
+    if (!doc) throw notFound();
+    return doc;
+  },
+  head: (ctx: HeadContext & { loaderData?: { title: string } }) => ({
+    meta: privatePageMeta(ctx.loaderData?.title ?? "מסמך", parentSite(ctx)),
+  }),
+  component: SiteDocumentPage,
+  notFoundComponent: SiteNotFound,
+};
 
 /** התצוגה המקדימה של העורך (/manage/preview) — רק באתר אירוח, לצוות המחובר; בלי אינדוקס */
 export const sitePreviewRoute = {

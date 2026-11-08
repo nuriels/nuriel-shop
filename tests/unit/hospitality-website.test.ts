@@ -559,7 +559,7 @@ describe("4b: booking flow helpers", () => {
   });
 
   it("legal drafts are filled with the business details and carry the draft banner", async () => {
-    const { LEGAL_DRAFT_BANNER, accessibilitySections, privacySections } =
+    const { LEGAL_DRAFT_BANNER, accessibilityFallback, privacySections } =
       await import("@/engines/hospitality/website/lib/legal");
     expect(LEGAL_DRAFT_BANNER).toBe("טיוטה – טרם אושרה לפרסום (ממתינה לבדיקה משפטית)");
     const s = site();
@@ -569,9 +569,13 @@ describe("4b: booking flow helpers", () => {
     expect(privacy).toContain("צימרי הגליל");
     expect(privacy).toContain("050-0000101");
     expect(privacy).toContain("אין באתר עוגיות פרסום או מעקב");
-    const access = accessibilitySections(s).map((x) => x.title);
-    expect(access).toContain("נגישות המקום");
-    expect(access).toContain("פניות בנושא נגישות");
+    // מיגרציה 60: הצהרה שלא פורסמה — רק הדרך לפנות ותפריט התצוגה; בלי הצהרת עמידה בתקן ובלי "המתחם נגיש"
+    const access = accessibilityFallback(s);
+    expect(access.map((x) => x.title)).toContain("פניות בנושא נגישות");
+    const accessText = access.flatMap((x) => x.body).join(" ");
+    expect(accessText).toContain("050-0000101");
+    for (const claim of ["WCAG", "5568", "עומד בתקן", "נגיש לחלוטין"])
+      expect(accessText).not.toContain(claim);
   });
 });
 

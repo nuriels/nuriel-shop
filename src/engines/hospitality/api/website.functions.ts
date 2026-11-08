@@ -25,6 +25,8 @@ import type {
 } from "../types/website";
 import type { PackageQuote, PublicPackage } from "../types/packages";
 import { parsePackageQuote, parseRequestPackage } from "../validation/packages";
+import type { PublicDocument, PublicDocumentMeta } from "../types/documents";
+import { parseAcceptedDocuments, parseDocumentKind } from "../validation/documents";
 import type {
   GuestPaymentInfo,
   GuestPaymentMethod,
@@ -71,6 +73,15 @@ function botCheckInput(input: Record<string, unknown>) {
 
 const MAX_RANGE_DAYS = 120;
 
+/**
+ * מיגרציה 60: כשהטופס הציג מסמכים לאישור — הבקשה עוברת דרך העטיפה, שרושמת באותה טרנזקציה אילו גרסאות
+ * האורח אישר (ודוחה גרסה ישנה). בלי מסמכים באתר — הבקשה הרגילה, כמו קודם.
+ */
+type Accepted = { kind: string; version: number }[];
+const withDocuments = (fn: string, docs: Accepted) =>
+  docs.length > 0 ? `${fn}_with_documents` : fn;
+const documentsArg = (docs: Accepted) => (docs.length > 0 ? { _documents: docs } : {});
+
 export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
   async (): Promise<PublicSite> => {
     await throttle("site");
@@ -78,20 +89,45 @@ export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
       import("../server/rpc.server"),
       import("../server/media.server"),
     ]);
-    const [raw, types, packages, { currentSiteAddresses }, { canonicalOrigin, siteSeo }] =
-      await Promise.all([
-        callRpc<RawPublicSite>("public_site", {}),
-        callRpc<PublicRoomType[]>("public_room_types", {}),
-        // שלב א' 7 — בלי מיגרציה 59 (או כשהמסד לא ענה) האתר עובד כרגיל, בלי חבילות
-        callRpc<PublicPackage[]>("public_packages", {}).catch(() => [] as PublicPackage[]),
-        import("@/platform/tenancy/current-site.server"),
-        import("../website/seo"),
-      ]);
+    const [
+      raw,
+      types,
+      packages,
+      documents,
+      { currentSiteAddresses },
+      { canonicalOrigin, siteSeo },
+    ] = await Promise.all([
+      callRpc<RawPublicSite>("public_site", {}),
+      callRpc<PublicRoomType[]>("public_room_types", {}),
+      // שלב א' 7 — בלי מיגרציה 59 (או כשהמסד לא ענה) האתר עובד כרגיל, בלי חבילות
+      callRpc<PublicPackage[]>("public_packages", {}).catch(() => [] as PublicPackage[]),
+      // מיגרציה 60 — המסמכים שמוצגים (לפוטר ולטופס ההזמנה); בלי המיגרציה — בלי מסמכים
+      callRpc<PublicDocumentMeta[]>("public_site_documents", {}).catch(
+        () => [] as PublicDocumentMeta[],
+      ),
+      import("@/platform/tenancy/current-site.server"),
+      import("../website/seo"),
+    ]);
     const site = toPublicSite(raw, publicUrl, types, packages);
     // E5: הכתובת הקנונית — מרשומת האתר + הבחירה בגרסה המפורסמת
-    return { ...site, origin: canonicalOrigin(await currentSiteAddresses(), siteSeo(site)) };
+    return {
+      ...site,
+      documents,
+      origin: canonicalOrigin(await currentSiteAddresses(), siteSeo(site)),
+    };
   },
 );
+
+/** מסמך אחד מהאתר (הגרסה שמוצגת) — לעמוד המסמך; לא פורסם / בלי מיגרציה 60 — null */
+export const hospitalityPublicDocument = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseDocumentKind(input))
+  .handler(async ({ data }): Promise<PublicDocument | null> => {
+    await throttle("site");
+    const { callRpc } = await import("../server/rpc.server");
+    return callRpc<PublicDocument | null>("public_site_document", { _kind: data.kind }).catch(
+      () => null,
+    );
+  });
 
 export const hospitalityPublicAvailability = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => {
@@ -200,6 +236,7 @@ export const hospitalitySiteRequestBooking = createServerFn({ method: "POST" })
     ...parseRequestBooking(input),
     ...botCheckInput(input),
     paymentMethod: optionalPaymentMethod(input?.["paymentMethod"]),
+    documents: parseAcceptedDocuments(input?.["documents"]),
   }))
   .handler(async ({ data }): Promise<BookingRequestResult> => {
     const client = await guardRequest(data);
@@ -208,8 +245,9 @@ export const hospitalitySiteRequestBooking = createServerFn({ method: "POST" })
       import("../outbox/worker.server"),
     ]);
     const result = await callServerRpc<BookingRequestResult>(
-      "request_booking",
+      withDocuments("request_booking", data.documents),
       {
+        ...documentsArg(data.documents),
         _unit_id: data.unitId,
         _check_in: data.checkIn,
         _check_out: data.checkOut,
@@ -252,6 +290,7 @@ export const hospitalitySiteRequestGroup = createServerFn({ method: "POST" })
     ...parseRequestGroup(input),
     ...botCheckInput(input),
     paymentMethod: optionalPaymentMethod(input?.["paymentMethod"]),
+    documents: parseAcceptedDocuments(input?.["documents"]),
   }))
   .handler(async ({ data }): Promise<GroupRequestResult> => {
     const client = await guardRequest(data);
@@ -260,8 +299,9 @@ export const hospitalitySiteRequestGroup = createServerFn({ method: "POST" })
       import("../outbox/worker.server"),
     ]);
     const result = await callServerRpc<GroupRequestResult>(
-      "request_booking_group",
+      withDocuments("request_booking_group", data.documents),
       {
+        ...documentsArg(data.documents),
         _rooms: data.rooms.map((r) => ({
           unit_id: r.unitId,
           adults: r.adults,
@@ -318,6 +358,7 @@ export const hospitalitySiteRequestPackage = createServerFn({ method: "POST" })
     ...parseRequestPackage(input),
     ...botCheckInput(input),
     paymentMethod: optionalPaymentMethod(input?.["paymentMethod"]),
+    documents: parseAcceptedDocuments(input?.["documents"]),
   }))
   .handler(async ({ data }): Promise<BookingRequestResult> => {
     const client = await guardRequest(data);
@@ -326,8 +367,9 @@ export const hospitalitySiteRequestPackage = createServerFn({ method: "POST" })
       import("../outbox/worker.server"),
     ]);
     const result = await callServerRpc<BookingRequestResult>(
-      "request_booking_package",
+      withDocuments("request_booking_package", data.documents),
       {
+        ...documentsArg(data.documents),
         _package_id: data.packageId,
         _check_in: data.checkIn,
         _full_name: data.fullName,
@@ -537,6 +579,7 @@ export const hospitalitySiteRequestBookingType = createServerFn({ method: "POST"
       ...c,
       ...botCheckInput(input),
       paymentMethod: optionalPaymentMethod(input?.["paymentMethod"]),
+      documents: parseAcceptedDocuments(input?.["documents"]),
     };
   })
   .handler(async ({ data }): Promise<BookingRequestResult> => {
@@ -546,8 +589,9 @@ export const hospitalitySiteRequestBookingType = createServerFn({ method: "POST"
       import("../outbox/worker.server"),
     ]);
     const result = await callServerRpc<BookingRequestResult>(
-      "request_booking_type",
+      withDocuments("request_booking_type", data.documents),
       {
+        ...documentsArg(data.documents),
         _category_id: data.categoryId,
         _check_in: data.checkIn,
         _check_out: data.checkOut,

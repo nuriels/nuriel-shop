@@ -226,7 +226,7 @@ describe("navigation", () => {
     expect(more.map((i) => i.key)).toContain("team");
   });
 
-  it("every screen is a link now (2a → 2k, website editor 5b, packages A7)", () => {
+  it("every screen is a link now (2a → 2k, website editor 5b, packages A7, site documents 60)", () => {
     expect(NAV_ITEMS.filter((i) => i.to).map((i) => i.key)).toEqual([
       "dashboard",
       "calendar",
@@ -241,6 +241,7 @@ describe("navigation", () => {
       "emails",
       "channels",
       "website",
+      "documents",
       "setup",
       "settings",
       "team",

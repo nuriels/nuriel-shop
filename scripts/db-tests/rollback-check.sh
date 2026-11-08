@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_site_documents (60): הגנה (נעצר כשיש אישורי מסמכים / גרסאות / הסדרי נגישות / פרטי עוסק / טיוטות),
+#     rollback → חמש הטבלאות והפונקציות נעלמו; הבקשות הקיימות להזמנה לא השתנו; הסכמה זהה בדיוק ל-59
 #   • hosp_packages (59): הגנה (נעצר כשיש חבילות / הזמנות של חבילות), rollback → הטבלה, שתי העמודות בהזמנות
 #     ופונקציות החבילות נעלמו; _enqueue / _guest_view בגרסה של 13 ו-staff_booking_detail בגרסה של 16 מילה
 #     במילה; הסכמה זהה בדיוק ל-58
@@ -120,6 +122,7 @@ M56=20261108110000_hosp_guest_area
 M57=20261108120000_hosp_shabbat
 M58=20261108130000_hosp_platform_separation
 M59=20261108140000_hosp_packages
+M60=20261109100000_hosp_site_documents
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -140,6 +143,54 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- site documents, accessibility statement and arrangements (migration 60) ----------
+expect "before the rollback: the 5 tables (functions only), public documents for the site, the booking wrappers for the server only" \
+  "SELECT to_regclass('hospitality.site_documents') IS NOT NULL
+      AND to_regclass('hospitality.site_document_versions') IS NOT NULL
+      AND to_regclass('hospitality.booking_document_acceptances') IS NOT NULL
+      AND to_regclass('hospitality.property_accessibility') IS NOT NULL
+      AND to_regclass('hospitality.site_legal_profile') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'hospitality.site_documents', 'SELECT')
+      AND NOT has_table_privilege('anon', 'hospitality.site_document_versions', 'SELECT')
+      AND has_function_privilege('anon', 'hospitality.public_site_documents()', 'EXECUTE')
+      AND has_function_privilege('anon', 'hospitality.public_site_document(text)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'hospitality.request_booking_with_documents(jsonb,uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)', 'EXECUTE')
+      AND has_function_privilege('service_role', 'hospitality.request_booking_with_documents(jsonb,uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)', 'EXECUTE')"
+echo "rollback guard: $M60 refuses while a document draft exists"
+q "SET session_replication_role = replica;
+   INSERT INTO hospitality.site_documents (tenant_id, kind, draft_title, draft_body)
+   VALUES (gen_random_uuid(), 'privacy', 'rb-doc', 'rb-body')" >/dev/null
+if down "$M60" 2>/dev/null; then
+  echo "  FAIL rollback ran although a document exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT to_regclass('hospitality.site_documents') IS NOT NULL AND (SELECT count(*) FROM hospitality.site_documents) = 1"
+q "DELETE FROM hospitality.site_documents" >/dev/null
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M60" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M60"
+down "$M60"
+expect "the documents are gone: the 5 tables and the functions; the booking requests are the originals" \
+  "SELECT to_regclass('hospitality.site_documents') IS NULL
+      AND to_regclass('hospitality.booking_document_acceptances') IS NULL
+      AND to_regclass('hospitality.property_accessibility') IS NULL
+      AND to_regprocedure('hospitality.public_site_documents()') IS NULL
+      AND to_regprocedure('hospitality.request_booking_with_documents(jsonb,uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)') IS NULL
+      AND (SELECT prosrc NOT LIKE '%document%' FROM pg_proc WHERE oid = 'hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)'::regprocedure)"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m59.sql"
+schema_dump "$SCHEMA_DIR/after-m60-down.sql"
+if diff -q "$SCHEMA_DIR/m59.sql" "$SCHEMA_DIR/after-m60-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 59, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 59:"; diff "$SCHEMA_DIR/m59.sql" "$SCHEMA_DIR/after-m60-down.sql" | head -20; exit 1
+fi
 
 # ---------- A7: packages (migration 59) ----------
 expect "before the rollback: the packages table (functions only), the booking columns, quote / request for the server only, the package in emails and pages" \
@@ -1742,6 +1793,12 @@ up "$M56"
 up "$M57"
 up "$M58"
 up "$M59"
+up "$M60"
+expect "the site documents are back: 5 tables (functions only), the public list, the booking wrappers for the server only" \
+  "SELECT to_regclass('hospitality.site_documents') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'hospitality.site_documents', 'SELECT')
+      AND has_function_privilege('anon', 'hospitality.public_site_documents()', 'EXECUTE')
+      AND has_function_privilege('service_role', 'hospitality.request_booking_with_documents(jsonb,uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)', 'EXECUTE')"
 expect "the packages are back: table (functions only), the booking columns, the site list" \
   "SELECT to_regclass('hospitality.packages') IS NOT NULL
       AND NOT has_table_privilege('authenticated', 'hospitality.packages', 'SELECT')
@@ -1774,8 +1831,8 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 41 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions, the transfer proofs and the guest-area codes and sessions and the packages), RLS on all, role admin, 6 flags off (incl. management)" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 41
+expect "Hospitality schema back: 46 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions, the transfer proofs and the guest-area codes and sessions, the packages and the 5 site-document tables), RLS on all, role admin, 6 flags off (incl. management)" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 46
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
       AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 6"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"

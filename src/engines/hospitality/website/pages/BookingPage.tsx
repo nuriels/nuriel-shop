@@ -6,7 +6,7 @@
 // אימות נגד בוטים (D1): אתגר שנפתר ברקע (lib/bot-check) + שדה מלכודת מוסתר — בלי שום פעולה
 // מהאורח ובלי עוגיות.
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { Minus, Phone, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { cn } from "@/platform/ui";
@@ -31,6 +31,7 @@ import { useCopy } from "../copy";
 import { CandlesIcon } from "../components/ShabbatBadge";
 import { addDays, nightsBetween } from "../lib/dates";
 import { prefersReducedMotion } from "../a11y/prefs";
+import { BOOKING_DOC_KINDS, docPath } from "../../documents/kinds";
 import {
   findUnit,
   money,
@@ -943,6 +944,12 @@ function GuestForm({
   const [email, setEmail] = useState("");
   const [requests, setRequests] = useState("");
   const [accept, setAccept] = useState(false);
+  const router = useRouter();
+  // מיגרציה 60: מסמכי האתר שהאורח מאשר בהזמנה — בדיוק הגרסאות שמוצגות; נשמרות עם ההזמנה
+  const bookingDocs = (site.documents ?? [])
+    .filter((d) => BOOKING_DOC_KINDS.includes(d.kind))
+    .sort((a, b) => BOOKING_DOC_KINDS.indexOf(a.kind) - BOOKING_DOC_KINDS.indexOf(b.kind));
+  const cancellationDoc = bookingDocs.find((d) => d.kind === "cancellation");
   const [marketing, setMarketing] = useState(false);
   const [touched, setTouched] = useState(false);
   const [trap, setTrap] = useState("");
@@ -966,6 +973,7 @@ function GuestForm({
         idempotencyKey,
         policyHash: quote.policy_hash,
         policyAccepted: accept,
+        documents: bookingDocs.map((d) => ({ kind: d.kind, version: d.version })),
         marketingConsent: marketing,
         language: t.locale,
         captcha,
@@ -1037,6 +1045,11 @@ function GuestForm({
     },
     onError: (e) => {
       if (e instanceof Error && e.message.includes("התנאים")) onTermsChanged();
+      // מסמך עודכן בזמן המילוי — מסירים את הסימון, טוענים את הגרסאות החדשות, והאורח מאשר שוב
+      if (e instanceof Error && e.message.includes("מסמכי האתר עודכנו")) {
+        setAccept(false);
+        void router.invalidate();
+      }
       // האתגר חד-פעמי, והשרת מסמן אותו כמנוצל לפני שההזמנה נרשמת — כך שאחרי כל שגיאה (גם "התאריכים
       // נתפסו" או "התנאים השתנו", לא רק אתגר שפג) הוא כבר לא תקף. אתגר חדש מתחיל להיפתר כבר עכשיו,
       // לקראת הלחיצה הבאה — בלי "לא הצלחנו לאמת" מיותר בניסיון השני
@@ -1130,19 +1143,75 @@ function GuestForm({
         />
       </label>
       <div className="space-y-3 rounded-[var(--radius)] border border-border bg-card p-4">
+        {/* מיגרציה 60: הזמנה באתר = עסקת מכר מרחוק — הזכות לפי החוק לא נגרעת */}
+        <p
+          id="booking-distance"
+          className="text-xs text-muted-foreground"
+          data-testid="distance-notice"
+        >
+          {t.docs.distance}
+          {cancellationDoc && (
+            <>
+              {" "}
+              <a
+                href={docPath("cancellation")}
+                target="_blank"
+                rel="noopener"
+                className="underline underline-offset-4"
+              >
+                {t.docs.cancellationLink}
+                <span className="sr-only"> {t.docs.newTab}</span>
+              </a>
+            </>
+          )}
+        </p>
         <label className="flex items-start gap-3">
+          {/* לא מסומן מראש — האורח מסמן בעצמו */}
           <input
             type="checkbox"
             checked={accept}
             onChange={(e) => setAccept(e.target.checked)}
             className="mt-1 size-5 accent-[var(--primary)]"
             aria-invalid={touched && !accept}
+            aria-describedby={
+              bookingDocs.length > 0 ? "booking-docs booking-distance" : "booking-distance"
+            }
+            data-testid="accept-terms"
           />
-          <span className="text-sm">{pkg ? t.packages.acceptTerms : t.book.acceptTerms}</span>
+          <span className="text-sm">
+            {bookingDocs.length > 0
+              ? (pkg ? t.docs.acceptPackageLabel : t.docs.acceptLabel)(
+                  joinHe(bookingDocs.map((d) => d.title)),
+                )
+              : pkg
+                ? t.packages.acceptTerms
+                : t.book.acceptTerms}
+          </span>
         </label>
+        {bookingDocs.length > 0 && (
+          <div id="booking-docs" className="ps-8 text-sm" data-testid="booking-documents">
+            <p className="text-xs text-muted-foreground">{t.docs.listTitle}</p>
+            <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+              {bookingDocs.map((d) => (
+                <li key={d.kind}>
+                  <a
+                    href={docPath(d.kind)}
+                    target="_blank"
+                    rel="noopener"
+                    className="inline-flex min-h-8 items-center underline underline-offset-4"
+                    data-document-version={d.version}
+                  >
+                    {d.title}
+                    <span className="sr-only"> {t.docs.newTab}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {touched && !accept && (
           <p role="alert" className="text-xs text-destructive">
-            {t.book.mustAccept}
+            {bookingDocs.length > 0 ? t.docs.mustAccept : t.book.mustAccept}
           </p>
         )}
         <label className="flex items-start gap-3">
@@ -1501,4 +1570,10 @@ function BookingClosed() {
       </div>
     </PageFrame>
   );
+}
+
+/** "א, ב ו-ג" — רשימה בעברית */
+function joinHe(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} ו${items[items.length - 1]}`;
 }

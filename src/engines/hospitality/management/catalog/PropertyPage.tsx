@@ -28,6 +28,7 @@ import {
 import { PROPERTY_TYPES, type CatalogProperty, type CatalogView } from "../../types/catalog";
 import { PROPERTY_LABELS, WHOLE_MEMBERS_ERROR } from "../../validation/catalog";
 import { ArrivalInfoCard } from "../details/ArrivalInfoCard";
+import { AccessibilityArrangementsCard } from "../details/AccessibilityArrangementsCard";
 import { MediaGallery } from "../media/MediaGallery";
 import { useManagement } from "../shell/management-context";
 import { PropertyDetailSections } from "../details/PropertySections";
@@ -438,6 +439,8 @@ function PropertyEditor({ view, property }: { view: CatalogView; property: Catal
       {/* מחוץ לטופס של העמוד: שמירה משלו, ו-Enter בשדות הקודים לא שומר את העמוד */}
       {!gone && (
         <div className="mx-auto mt-5 flex max-w-3xl flex-col gap-5">
+          {/* מיגרציה 60: הסדרי הנגישות — רק מה שבעל המתחם מוסר ומאשר; שמירה משלהם (מחוץ לטופס) */}
+          <AccessibilityArrangementsCard propertyId={property.id} readOnly={readOnly || archived} />
           {canMedia && (
             <div id="gallery">
               <MediaGallery

@@ -265,11 +265,11 @@ SELECT pg_temp.after('rate: the cleanup removes expired counters only',
 SELECT tests.check('coverage: every SECURITY DEFINER function has a fixed, empty search_path',
   $$SELECT NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace AND p.prosecdef
       AND NOT COALESCE('search_path=""' = ANY (p.proconfig), false))$$);
-SELECT tests.check('coverage: anonymous visitors can call exactly the public functions (site, availability, free rooms for a request of several rooms, quote, the guest''s own booking by its secret link — incl. the payment choice and the transfer-proof upload, 55; the shown packages, 59)',
+SELECT tests.check('coverage: anonymous visitors can call exactly the public functions (site, availability, free rooms for a request of several rooms, quote, the guest''s own booking by its secret link — incl. the payment choice and the transfer-proof upload, 55; the shown packages, 59; the published site documents, 60)',
   $$SELECT array_agg(proname::text ORDER BY proname) = ARRAY['cancellation_quote', 'get_booking_by_token', 'guest_arrival_info',
       'guest_payment_info', 'guest_proof_slot', 'guest_set_payment_method', 'public_availability', 'public_free_units',
-      'public_packages', 'public_payment_methods', 'public_room_types', 'public_site',
-      'public_type_availability', 'quote', 'quote_type', 'request_cancellation', 'request_tenant', 'site_identity']
+      'public_packages', 'public_payment_methods', 'public_room_types', 'public_site', 'public_site_document',
+      'public_site_documents', 'public_type_availability', 'quote', 'quote_type', 'request_cancellation', 'request_tenant', 'site_identity']
       FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace AND has_function_privilege('anon', oid, 'EXECUTE')$$);
 DO $t$
 DECLARE _bad text;
@@ -297,7 +297,9 @@ BEGIN
                       'portal_open_site', 'portal_trial_days', 'guest_proof_ready', 'email_booking_payment_methods',
                       'guest_code_issue', 'guest_code_consume', 'guest_area_sign_out', 'guest_area_bookings',
                       'guest_area_booking', 'guest_area_set_payment_method', 'guest_area_proof_slot',
-                      'package_quote', 'request_booking_package']) f
+                      'package_quote', 'request_booking_package', 'request_booking_with_documents',
+                      'request_booking_group_with_documents', 'request_booking_package_with_documents',
+                      'request_booking_type_with_documents']) f
    WHERE EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace AND p.proname = f
                     AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE')))
       OR NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace AND p.proname = f

@@ -8,6 +8,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { Check, ChevronRight, LogIn, LogOut, Mail, Phone, UserX, X } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from "@/platform/ui";
+import { AcceptedDocumentsCard } from "./AcceptedDocumentsCard";
 import { GroupCard } from "./GroupCard";
 import { PaymentsCard } from "./PaymentsCard";
 import { PhonePaymentCard } from "./PhonePaymentCard";
@@ -329,6 +330,10 @@ function Booking({ b }: { b: BookingDetail }) {
           </div>
         </Section>
       )}
+
+      <Section title="סוג העסקה והמסמכים שאושרו">
+        <AcceptedDocumentsCard b={b} />
+      </Section>
 
       <Section title="מחיר">
         <table className="w-full text-sm">

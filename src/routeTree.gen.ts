@@ -47,6 +47,7 @@ import { Route as ManageIndexRouteImport } from './routes/manage.index'
 import { Route as ManageBookingsRouteImport } from './routes/manage.bookings'
 import { Route as ManageCalendarRouteImport } from './routes/manage.calendar'
 import { Route as ManageChannelsRouteImport } from './routes/manage.channels'
+import { Route as ManageDocumentsRouteImport } from './routes/manage.documents'
 import { Route as ManageEmailsRouteImport } from './routes/manage.emails'
 import { Route as ManageGuestsRouteImport } from './routes/manage.guests'
 import { Route as ManagePackagesRouteImport } from './routes/manage.packages'
@@ -104,6 +105,7 @@ import { Route as ManageUnitsUnitIdRouteImport } from './routes/manage.units_.$u
 import { Route as MarketingConfirmTokenRouteImport } from './routes/marketing.confirm.$token'
 import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
 import { Route as StayBrandAssetRouteImport } from './routes/stay.brand.$asset'
+import { Route as StayDocsDocSlugRouteImport } from './routes/stay.docs.$docSlug'
 import { Route as StayPackagesPackageSlugRouteImport } from './routes/stay.packages.$packageSlug'
 import { Route as StayRoomsTypeSlugRouteImport } from './routes/stay.rooms.$typeSlug'
 import { Route as StayUnitsUnitSlugRouteImport } from './routes/stay.units.$unitSlug'
@@ -296,6 +298,11 @@ const ManageCalendarRoute = ManageCalendarRouteImport.update({
 const ManageChannelsRoute = ManageChannelsRouteImport.update({
   id: '/channels',
   path: '/channels',
+  getParentRoute: () => ManageRoute,
+} as any)
+const ManageDocumentsRoute = ManageDocumentsRouteImport.update({
+  id: '/documents',
+  path: '/documents',
   getParentRoute: () => ManageRoute,
 } as any)
 const ManageEmailsRoute = ManageEmailsRouteImport.update({
@@ -587,6 +594,11 @@ const StayBrandAssetRoute = StayBrandAssetRouteImport.update({
   path: '/brand/$asset',
   getParentRoute: () => StayRoute,
 } as any)
+const StayDocsDocSlugRoute = StayDocsDocSlugRouteImport.update({
+  id: '/docs/$docSlug',
+  path: '/docs/$docSlug',
+  getParentRoute: () => StayRoute,
+} as any)
 const StayPackagesPackageSlugRoute = StayPackagesPackageSlugRouteImport.update({
   id: '/packages/$packageSlug',
   path: '/packages/$packageSlug',
@@ -641,6 +653,7 @@ export interface FileRoutesByFullPath {
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
   '/manage/channels': typeof ManageChannelsRoute
+  '/manage/documents': typeof ManageDocumentsRoute
   '/manage/emails': typeof ManageEmailsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/packages': typeof ManagePackagesRoute
@@ -699,6 +712,7 @@ export interface FileRoutesByFullPath {
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/stay/brand/$asset': typeof StayBrandAssetRoute
+  '/stay/docs/$docSlug': typeof StayDocsDocSlugRoute
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
@@ -739,6 +753,7 @@ export interface FileRoutesByTo {
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
   '/manage/channels': typeof ManageChannelsRoute
+  '/manage/documents': typeof ManageDocumentsRoute
   '/manage/emails': typeof ManageEmailsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/packages': typeof ManagePackagesRoute
@@ -797,6 +812,7 @@ export interface FileRoutesByTo {
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/stay/brand/$asset': typeof StayBrandAssetRoute
+  '/stay/docs/$docSlug': typeof StayDocsDocSlugRoute
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
@@ -840,6 +856,7 @@ export interface FileRoutesById {
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
   '/manage/channels': typeof ManageChannelsRoute
+  '/manage/documents': typeof ManageDocumentsRoute
   '/manage/emails': typeof ManageEmailsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/packages': typeof ManagePackagesRoute
@@ -898,6 +915,7 @@ export interface FileRoutesById {
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/stay/brand/$asset': typeof StayBrandAssetRoute
+  '/stay/docs/$docSlug': typeof StayDocsDocSlugRoute
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
@@ -942,6 +960,7 @@ export interface FileRouteTypes {
     | '/manage/bookings'
     | '/manage/calendar'
     | '/manage/channels'
+    | '/manage/documents'
     | '/manage/emails'
     | '/manage/guests'
     | '/manage/packages'
@@ -1000,6 +1019,7 @@ export interface FileRouteTypes {
     | '/marketing/confirm/$token'
     | '/platform/customers/$tenantId'
     | '/stay/brand/$asset'
+    | '/stay/docs/$docSlug'
     | '/stay/packages/$packageSlug'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
@@ -1040,6 +1060,7 @@ export interface FileRouteTypes {
     | '/manage/bookings'
     | '/manage/calendar'
     | '/manage/channels'
+    | '/manage/documents'
     | '/manage/emails'
     | '/manage/guests'
     | '/manage/packages'
@@ -1098,6 +1119,7 @@ export interface FileRouteTypes {
     | '/marketing/confirm/$token'
     | '/platform/customers/$tenantId'
     | '/stay/brand/$asset'
+    | '/stay/docs/$docSlug'
     | '/stay/packages/$packageSlug'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
@@ -1140,6 +1162,7 @@ export interface FileRouteTypes {
     | '/manage/bookings'
     | '/manage/calendar'
     | '/manage/channels'
+    | '/manage/documents'
     | '/manage/emails'
     | '/manage/guests'
     | '/manage/packages'
@@ -1198,6 +1221,7 @@ export interface FileRouteTypes {
     | '/marketing/confirm/$token'
     | '/platform_/customers/$tenantId'
     | '/stay/brand/$asset'
+    | '/stay/docs/$docSlug'
     | '/stay/packages/$packageSlug'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
@@ -1535,6 +1559,13 @@ declare module '@tanstack/react-router' {
       path: '/channels'
       fullPath: '/manage/channels'
       preLoaderRoute: typeof ManageChannelsRouteImport
+      parentRoute: typeof ManageRoute
+    }
+    '/manage/documents': {
+      id: '/manage/documents'
+      path: '/documents'
+      fullPath: '/manage/documents'
+      preLoaderRoute: typeof ManageDocumentsRouteImport
       parentRoute: typeof ManageRoute
     }
     '/manage/emails': {
@@ -1936,6 +1967,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StayBrandAssetRouteImport
       parentRoute: typeof StayRoute
     }
+    '/stay/docs/$docSlug': {
+      id: '/stay/docs/$docSlug'
+      path: '/docs/$docSlug'
+      fullPath: '/stay/docs/$docSlug'
+      preLoaderRoute: typeof StayDocsDocSlugRouteImport
+      parentRoute: typeof StayRoute
+    }
     '/stay/packages/$packageSlug': {
       id: '/stay/packages/$packageSlug'
       path: '/packages/$packageSlug'
@@ -1964,6 +2002,7 @@ interface ManageRouteChildren {
   ManageBookingsRoute: typeof ManageBookingsRoute
   ManageCalendarRoute: typeof ManageCalendarRoute
   ManageChannelsRoute: typeof ManageChannelsRoute
+  ManageDocumentsRoute: typeof ManageDocumentsRoute
   ManageEmailsRoute: typeof ManageEmailsRoute
   ManageGuestsRoute: typeof ManageGuestsRoute
   ManagePackagesRoute: typeof ManagePackagesRoute
@@ -1991,6 +2030,7 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManageBookingsRoute: ManageBookingsRoute,
   ManageCalendarRoute: ManageCalendarRoute,
   ManageChannelsRoute: ManageChannelsRoute,
+  ManageDocumentsRoute: ManageDocumentsRoute,
   ManageEmailsRoute: ManageEmailsRoute,
   ManageGuestsRoute: ManageGuestsRoute,
   ManagePackagesRoute: ManagePackagesRoute,
@@ -2026,6 +2066,7 @@ interface StayRouteChildren {
   StayPrivacyRoute: typeof StayPrivacyRoute
   StayIndexRoute: typeof StayIndexRoute
   StayBrandAssetRoute: typeof StayBrandAssetRoute
+  StayDocsDocSlugRoute: typeof StayDocsDocSlugRoute
   StayPackagesPackageSlugRoute: typeof StayPackagesPackageSlugRoute
   StayRoomsTypeSlugRoute: typeof StayRoomsTypeSlugRoute
   StayUnitsUnitSlugRoute: typeof StayUnitsUnitSlugRoute
@@ -2040,6 +2081,7 @@ const StayRouteChildren: StayRouteChildren = {
   StayPrivacyRoute: StayPrivacyRoute,
   StayIndexRoute: StayIndexRoute,
   StayBrandAssetRoute: StayBrandAssetRoute,
+  StayDocsDocSlugRoute: StayDocsDocSlugRoute,
   StayPackagesPackageSlugRoute: StayPackagesPackageSlugRoute,
   StayRoomsTypeSlugRoute: StayRoomsTypeSlugRoute,
   StayUnitsUnitSlugRoute: StayUnitsUnitSlugRoute,

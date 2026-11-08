@@ -1,5 +1,6 @@
 // האתר הציבורי של העסק (Stage 4) — מה שהאתר מקבל מהשרת (public_site, מיגרציה 19).
 // רק מידע ציבורי: בלי פרטי אורחים, קודי כניסה, הערות פנימיות או כללי מחיר.
+import type { PublicDocumentMeta } from "./documents";
 import type { PublicPackage } from "./packages";
 import type { ArrivalValues } from "./catalog";
 import type { GuestBookingView } from "./domain";
@@ -148,6 +149,8 @@ export interface PublicSite {
   room_types: PublicRoomType[];
   /** שלב א' 7: חבילות אירוח / חבילות מיוחדות שמוצגות באתר (ריק — אין) */
   packages?: PublicPackage[];
+  /** מיגרציה 60: מסמכי האתר שמוצגים (לפוטר ולאישור בהזמנה) — ריק / חסר: לא פורסם אף מסמך */
+  documents?: PublicDocumentMeta[];
   /** E5: הכתובת הקנונית של האתר (https://…, בלי / בסוף) — לכתובות הקנוניות ולשיתוף; null — לא ידוע */
   origin?: string | null;
 }
