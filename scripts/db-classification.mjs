@@ -46,7 +46,9 @@ const TABLES = {
     platform_product_roles platform_feature_flags tenant_feature_flags`,
   "platform-admin": `platform_addons platform_admin_handoffs platform_admins platform_agreement_acceptances
     platform_agreement_versions platform_audit_log platform_documents platform_email_log platform_plans
-    platform_pricing_settings`,
+    platform_pricing_settings
+    ai_packages ai_subscriptions ai_subscription_periods ai_subscription_events ai_settings ai_usage_log
+    ai_notifications`,
 };
 
 // ---------- functions: explicit platform / shared-utility lists; everything else is Ecommerce ----------
@@ -54,6 +56,8 @@ const PLATFORM_FUNCTIONS = new RegExp(
   "^(" +
     [
       "platform_.*",
+      // NURIEL AI ASSISTANT (migration 61): the paid add-on of both products — server-only functions
+      "ai_.*",
       "portal_.*",
       "tenants_.*",
       "tenant_for_host",

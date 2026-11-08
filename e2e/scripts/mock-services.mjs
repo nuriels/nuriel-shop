@@ -5,7 +5,53 @@
 //     הסטטוס האמיתי ("התקבל לשליחה" → "נמסר" רק אחרי אישור מסירה)
 //   • Grow (GROW_SANDBOX_URL): כל בקשה → 503 (אין סליקה בבדיקות; תשלום = mock)
 //   • GET /__calls → כל הבקשות שהתקבלו (לבדיקה שמייל "נשלח")
+//   • NURIEL AI (AI_ASSISTANT_TEST_API_URL): POST /v1/messages → "דגם" דטרמיניסטי שמסווג לפי רשימת
+//     המדריכים שבבקשה: המדריך הראשון שאחד הניסוחים שלו מופיע בשאלה; שאלה עם "מזג האוויר" → off_topic;
+//     שאלה עם "תקלה בשירות" → 529. בלי מפתח אמיתי ובלי קריאה החוצה.
 import { createServer } from "node:http";
+
+/** "דגם" מדומה: מסווג לפי הניסוחים (id | title | keywords | summary) שבהוראות */
+function anthropicMock(body) {
+  const request = JSON.parse(body);
+  const system = (request.system ?? []).map((b) => b.text ?? "").join("\n");
+  const message = String(request.messages?.at(-1)?.content ?? "");
+  const question = (/<question>\n([\s\S]*?)\n<\/question>/.exec(message)?.[1] ?? "").trim();
+  const allowed = new Set(
+    request.output_config?.format?.schema?.properties?.guides?.items?.enum ?? [],
+  );
+  let topic = "off_topic";
+  let guides = [];
+  if (!/מזג האוויר|weather/.test(question)) {
+    for (const line of system.split("\n")) {
+      const [id, title, keywords] = line.split(" | ");
+      if (!id || !allowed.has(id) || keywords === undefined) continue;
+      const phrases = [title, ...keywords.split(", ")]
+        .map((p) => p.trim())
+        .filter((p) => p.length >= 3);
+      if (phrases.some((p) => question.includes(p))) {
+        topic = "site_help";
+        guides = [id];
+        break;
+      }
+    }
+    if (guides.length === 0 && /איך|למה|איפה/.test(question)) topic = "site_help";
+  }
+  return {
+    id: "msg_e2e",
+    type: "message",
+    role: "assistant",
+    model: request.model,
+    content: [{ type: "text", text: JSON.stringify({ topic, guides }) }],
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: {
+      input_tokens: 1200,
+      output_tokens: 20,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 3000,
+    },
+  };
+}
 
 const port = Number(process.env.MOCK_PORT ?? 4010);
 const calls = [];
@@ -45,6 +91,21 @@ createServer((req, res) => {
       body: body.slice(0, 5_000_000),
       at: Date.now(),
     });
+    if (req.method === "POST" && req.url === "/v1/messages") {
+      if (/תקלה בשירות/.test(body))
+        return json(res, 529, {
+          type: "error",
+          error: { type: "overloaded_error", message: "Overloaded" },
+        });
+      try {
+        return json(res, 200, anthropicMock(body));
+      } catch {
+        return json(res, 400, {
+          type: "error",
+          error: { type: "invalid_request_error", message: "bad request" },
+        });
+      }
+    }
     if (req.url?.startsWith("/emails")) {
       const to = recipientsOf(body);
       if (to.some((a) => a.includes("+reject"))) {

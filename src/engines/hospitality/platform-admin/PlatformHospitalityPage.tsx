@@ -14,6 +14,7 @@ import {
   LifeBuoy,
   LogIn,
   Plus,
+  Sparkles,
   Store,
   UserPlus,
 } from "lucide-react";
@@ -97,6 +98,7 @@ function PanelHeader() {
     { to: "/platform/support", label: "תמיכה", icon: LifeBuoy },
     { to: "/platform/plans", label: "חבילות לחנויות", icon: Gem },
     { to: "/platform/upgrades", label: "בקשות שדרוג ותוספים", icon: UserPlus },
+    { to: "/platform/ai", label: "ניהול תוסף AI", icon: Sparkles },
   ] as const;
   return (
     <div className="border-b bg-card">

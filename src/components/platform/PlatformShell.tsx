@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { BedDouble, Gem, LifeBuoy, Lock, Store, UserPlus } from "lucide-react";
+import { BedDouble, Gem, LifeBuoy, Lock, Sparkles, Store, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthState } from "@/hooks/useAuthState";
 import { FORBIDDEN_PAGE } from "@/lib/blocked-pages";
@@ -16,7 +16,7 @@ export function PlatformShell({
   active,
   children,
 }: {
-  active: "stores" | "support" | "plans" | "upgrades";
+  active: "stores" | "support" | "plans" | "upgrades" | "ai";
   children: (props: { userId: string }) => ReactNode;
 }) {
   const { session, loading } = useAuthState();
@@ -71,6 +71,14 @@ export function PlatformShell({
                   icon={<UserPlus className="size-4" />}
                 >
                   בקשות שדרוג ותוספים
+                </NavLink>
+                {/* NURIEL AI: חבילות העוזר (150 ₪ לשנה) לחנויות ולמתחמים, מפתח, דגם, צריכה ועלויות */}
+                <NavLink
+                  to="/platform/ai"
+                  active={active === "ai"}
+                  icon={<Sparkles className="size-4" />}
+                >
+                  ניהול תוסף AI
                 </NavLink>
                 {/* מסך של מנוע האירוח — רק קישור (הקוד שלו לא מיובא לכאן). שלב א' 4: אתרי האירוח והחבילות
                     שלהם — רק שם (לא ברשימת החנויות ולא בחבילות של החנויות) */}
@@ -141,6 +149,7 @@ function NavLink({
     | "/platform/support"
     | "/platform/plans"
     | "/platform/upgrades"
+    | "/platform/ai"
     | "/platform/hospitality";
   active: boolean;
   icon: ReactNode;

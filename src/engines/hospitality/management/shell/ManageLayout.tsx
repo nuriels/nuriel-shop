@@ -2,7 +2,7 @@
 // (שלב F2b, "Deep Lagoon & Champagne"): סרגל צד כהה בקבוצות (מחשב) / שורה תחתונה + "עוד" (טלפון),
 // סרגל עליון (חיפוש מהיר Ctrl+K, "+ חדש", "דורש טיפול", צפייה באתר), הודעת מנוי, והמסך עצמו —
 // עם מסך שגיאה בעברית בתוך המעטפת (המסך נשבר — הניווט נשאר).
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { CatchBoundary, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, TriangleAlert } from "lucide-react";
@@ -19,6 +19,9 @@ import { BottomNav, SideNav } from "./Navigation";
 import { ErrorScreen, ForbiddenScreen, LoadingScreen, ManageRouteError } from "./StatusScreens";
 import { navBadges, useDashboardTasks, useSupportUnread } from "./tasks";
 import { TopBar } from "./TopBar";
+
+// NURIEL AI – Hospitality: נטען רק אחרי שהמעטפת עלתה (הקטלוג והחלון לא בחבילה הראשית)
+const HospitalityAssistant = lazy(() => import("../ai/HospitalityAssistant"));
 
 export function ManageLayout() {
   const navigate = useNavigate();
@@ -184,6 +187,9 @@ function Shell({
         />
       </div>
       <CommandMenu open={searchOpen} onOpenChange={setSearchOpen} items={items} />
+      <Suspense fallback={null}>
+        <HospitalityAssistant />
+      </Suspense>
     </div>
   );
 }

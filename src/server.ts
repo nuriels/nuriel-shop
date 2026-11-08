@@ -39,6 +39,8 @@ const STORE_ASSET_PATH = /^\/pwa\//;
 void import("./server/services/payment-expiry").then((m) => m.startPaymentExpiryJob());
 // תהליכי הרקע של המנועים (Hospitality: תור המיילים ותפוגת בקשות — רק כשהמנוע דולק)
 void import("./app/engines").then((m) => m.startEngineWorkers());
+// NURIEL AI: התראות החידוש (30 / 14 / 7 / 1 / 0 ימים לפני הסיום) — בדיקה כל שעה, פעם אחת לכל התראה
+void import("./platform/ai/renewals.server").then((m) => m.startAiRenewalJob());
 
 const STORE_NOT_FOUND_HTML = `<!doctype html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8" /><title>החנות לא נמצאה</title>

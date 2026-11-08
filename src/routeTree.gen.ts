@@ -66,6 +66,7 @@ import { Route as ManageLoginRouteImport } from './routes/manage_.login'
 import { Route as ManagePreviewRouteImport } from './routes/manage_.preview'
 import { Route as OwnerAgreementTokenRouteImport } from './routes/owner-agreement.$token'
 import { Route as PagesSlugRouteImport } from './routes/pages.$slug'
+import { Route as PlatformAiRouteImport } from './routes/platform_.ai'
 import { Route as PlatformHospitalityRouteImport } from './routes/platform_.hospitality'
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
 import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
@@ -395,6 +396,11 @@ const PagesSlugRoute = PagesSlugRouteImport.update({
   path: '/pages/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlatformAiRoute = PlatformAiRouteImport.update({
+  id: '/platform_/ai',
+  path: '/platform/ai',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlatformHospitalityRoute = PlatformHospitalityRouteImport.update({
   id: '/platform_/hospitality',
   path: '/platform/hospitality',
@@ -672,6 +678,7 @@ export interface FileRoutesByFullPath {
   '/manage/preview': typeof ManagePreviewRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
+  '/platform/ai': typeof PlatformAiRoute
   '/platform/hospitality': typeof PlatformHospitalityRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
@@ -772,6 +779,7 @@ export interface FileRoutesByTo {
   '/manage/preview': typeof ManagePreviewRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
+  '/platform/ai': typeof PlatformAiRoute
   '/platform/hospitality': typeof PlatformHospitalityRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
@@ -875,6 +883,7 @@ export interface FileRoutesById {
   '/manage_/preview': typeof ManagePreviewRoute
   '/owner-agreement/$token': typeof OwnerAgreementTokenRoute
   '/pages/$slug': typeof PagesSlugRoute
+  '/platform_/ai': typeof PlatformAiRoute
   '/platform_/hospitality': typeof PlatformHospitalityRoute
   '/platform_/plans': typeof PlatformPlansRoute
   '/platform_/support': typeof PlatformSupportRoute
@@ -979,6 +988,7 @@ export interface FileRouteTypes {
     | '/manage/preview'
     | '/owner-agreement/$token'
     | '/pages/$slug'
+    | '/platform/ai'
     | '/platform/hospitality'
     | '/platform/plans'
     | '/platform/support'
@@ -1079,6 +1089,7 @@ export interface FileRouteTypes {
     | '/manage/preview'
     | '/owner-agreement/$token'
     | '/pages/$slug'
+    | '/platform/ai'
     | '/platform/hospitality'
     | '/platform/plans'
     | '/platform/support'
@@ -1181,6 +1192,7 @@ export interface FileRouteTypes {
     | '/manage_/preview'
     | '/owner-agreement/$token'
     | '/pages/$slug'
+    | '/platform_/ai'
     | '/platform_/hospitality'
     | '/platform_/plans'
     | '/platform_/support'
@@ -1266,6 +1278,7 @@ export interface RootRouteChildren {
   ManagePreviewRoute: typeof ManagePreviewRoute
   OwnerAgreementTokenRoute: typeof OwnerAgreementTokenRoute
   PagesSlugRoute: typeof PagesSlugRoute
+  PlatformAiRoute: typeof PlatformAiRoute
   PlatformHospitalityRoute: typeof PlatformHospitalityRoute
   PlatformPlansRoute: typeof PlatformPlansRoute
   PlatformSupportRoute: typeof PlatformSupportRoute
@@ -1692,6 +1705,13 @@ declare module '@tanstack/react-router' {
       path: '/pages/$slug'
       fullPath: '/pages/$slug'
       preLoaderRoute: typeof PagesSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/platform_/ai': {
+      id: '/platform_/ai'
+      path: '/platform/ai'
+      fullPath: '/platform/ai'
+      preLoaderRoute: typeof PlatformAiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/platform_/hospitality': {
@@ -2128,6 +2148,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManagePreviewRoute: ManagePreviewRoute,
   OwnerAgreementTokenRoute: OwnerAgreementTokenRoute,
   PagesSlugRoute: PagesSlugRoute,
+  PlatformAiRoute: PlatformAiRoute,
   PlatformHospitalityRoute: PlatformHospitalityRoute,
   PlatformPlansRoute: PlatformPlansRoute,
   PlatformSupportRoute: PlatformSupportRoute,

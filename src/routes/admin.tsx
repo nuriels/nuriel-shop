@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo } from "react";
 import { createFileRoute, Link, useLoaderData, useRouteContext } from "@tanstack/react-router";
 import { AlertTriangle, Crown, Hourglass, Lock } from "lucide-react";
 import { toast } from "sonner";
@@ -136,6 +136,9 @@ export const Route = createFileRoute("/admin")({
   },
   component: AdminPage,
 });
+
+// NURIEL AI – Ecommerce: חלון העוזר נטען רק למנהלי החנות (owner / manager), ובשרת נבדקת הזכאות בכל שאלה
+const EcommerceAssistant = lazy(() => import("@/components/ai/EcommerceAssistant"));
 
 function AdminPage() {
   const { session, role, loading } = useAuthState();
@@ -528,6 +531,11 @@ function AdminPage() {
         )}
       </main>
       <AppFooter wide="panel" />
+      {isAdmin && session && (
+        <Suspense fallback={null}>
+          <EcommerceAssistant />
+        </Suspense>
+      )}
     </div>
   );
 }

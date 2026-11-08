@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • ai_assistant (61): הגנה (נעצר כשיש חבילות / תקופות / היסטוריה / התראות / יומן, או מפתח שמור / מצב פעיל),
+#     rollback → שבע הטבלאות והפונקציות נעלמו; יומן הפלטפורמה נשאר; הסכמה זהה בדיוק ל-60
 #   • hosp_site_documents (60): הגנה (נעצר כשיש אישורי מסמכים / גרסאות / הסדרי נגישות / פרטי עוסק / טיוטות),
 #     rollback → חמש הטבלאות והפונקציות נעלמו; הבקשות הקיימות להזמנה לא השתנו; הסכמה זהה בדיוק ל-59
 #   • hosp_packages (59): הגנה (נעצר כשיש חבילות / הזמנות של חבילות), rollback → הטבלה, שתי העמודות בהזמנות
@@ -123,6 +125,7 @@ M57=20261108120000_hosp_shabbat
 M58=20261108130000_hosp_platform_separation
 M59=20261108140000_hosp_packages
 M60=20261109100000_hosp_site_documents
+M61=20261110100000_ai_assistant
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -143,6 +146,63 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- NURIEL AI ASSISTANT (migration 61) ----------
+expect "before the rollback: the 7 AI tables closed to the browser (server: read only), the functions for the server only" \
+  "SELECT to_regclass('public.ai_subscriptions') IS NOT NULL
+      AND to_regclass('public.ai_subscription_periods') IS NOT NULL
+      AND to_regclass('public.ai_settings') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'public.ai_settings', 'SELECT')
+      AND NOT has_table_privilege('anon', 'public.ai_subscriptions', 'SELECT')
+      AND has_table_privilege('service_role', 'public.ai_subscriptions', 'SELECT')
+      AND NOT has_table_privilege('service_role', 'public.ai_subscription_periods', 'INSERT')
+      AND has_function_privilege('service_role', 'public.ai_entitlement(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.ai_entitlement(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.ai_admin_activate(uuid,uuid,text,date,text)', 'EXECUTE')"
+echo "rollback guard: $M61 refuses while a package exists, and while the assistant is configured"
+q "SET session_replication_role = replica;
+   INSERT INTO public.ai_subscriptions (tenant_id, package_code, product)
+   SELECT id, 'nuriel_ai_ecommerce', 'ecommerce' FROM public.tenants WHERE is_default" >/dev/null
+if down "$M61" 2>/dev/null; then
+  echo "  FAIL rollback ran although a package exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT to_regclass('public.ai_subscriptions') IS NOT NULL AND (SELECT count(*) FROM public.ai_subscriptions) = 1"
+q "DELETE FROM public.ai_subscriptions" >/dev/null
+q "UPDATE public.ai_settings SET mode = 'test'" >/dev/null
+if down "$M61" 2>/dev/null; then
+  echo "  FAIL rollback ran although the assistant is not off"; exit 1
+fi
+q "UPDATE public.ai_settings SET mode = 'off'" >/dev/null
+q "INSERT INTO public.platform_audit_log (tenant_id, actor_id, action, details) VALUES (NULL, NULL, 'ai_settings_changed', '{\"rb\": true}')" >/dev/null
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M61" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M61"
+down "$M61"
+expect "the AI add-on is gone: the 7 tables and every ai_ function; the platform log keeps its rows" \
+  "SELECT to_regclass('public.ai_packages') IS NULL
+      AND to_regclass('public.ai_subscriptions') IS NULL
+      AND to_regclass('public.ai_subscription_periods') IS NULL
+      AND to_regclass('public.ai_subscription_events') IS NULL
+      AND to_regclass('public.ai_settings') IS NULL
+      AND to_regclass('public.ai_usage_log') IS NULL
+      AND to_regclass('public.ai_notifications') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'ai\_%')
+      AND EXISTS (SELECT 1 FROM public.platform_audit_log WHERE action = 'ai_settings_changed')"
+q "DELETE FROM public.platform_audit_log WHERE action = 'ai_settings_changed'" >/dev/null
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m60.sql"
+schema_dump "$SCHEMA_DIR/after-m61-down.sql"
+if diff -q "$SCHEMA_DIR/m60.sql" "$SCHEMA_DIR/after-m61-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 60, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 60:"; diff "$SCHEMA_DIR/m60.sql" "$SCHEMA_DIR/after-m61-down.sql" | head -20; exit 1
+fi
 
 # ---------- site documents, accessibility statement and arrangements (migration 60) ----------
 expect "before the rollback: the 5 tables (functions only), public documents for the site, the booking wrappers for the server only" \
@@ -1794,6 +1854,14 @@ up "$M57"
 up "$M58"
 up "$M59"
 up "$M60"
+up "$M61"
+expect "the AI add-on is back: 7 tables closed to the browser, 2 packages at 150 ILS, the assistant off, functions for the server only" \
+  "SELECT to_regclass('public.ai_subscriptions') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'public.ai_settings', 'SELECT')
+      AND (SELECT count(*) FROM public.ai_packages WHERE price_agorot = 15000) = 2
+      AND (SELECT mode FROM public.ai_settings) = 'off'
+      AND has_function_privilege('service_role', 'public.ai_entitlement(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.ai_entitlement(uuid)', 'EXECUTE')"
 expect "the site documents are back: 5 tables (functions only), the public list, the booking wrappers for the server only" \
   "SELECT to_regclass('hospitality.site_documents') IS NOT NULL
       AND NOT has_table_privilege('authenticated', 'hospitality.site_documents', 'SELECT')

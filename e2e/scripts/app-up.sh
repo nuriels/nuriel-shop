@@ -13,6 +13,10 @@ export TENANT_BASE_DOMAIN=shop.localhost
 export PLATFORM_ADMIN_HOST=platform.shop.localhost
 export PUBLIC_SITE_URL=http://kobi.shop.localhost:3100
 export RESEND_API_KEY=re_e2e_mock RESEND_API_URL=http://127.0.0.1:4010
+# NURIEL AI: "הדגם" המדומה של mock-services (כתובת מקומית בלבד — אחרת השרת מתעלם ממנה)
+export AI_ASSISTANT_TEST_API_URL=http://127.0.0.1:4010
+# התראות החידוש רצות בבדיקות רק מהכפתור בפאנל ("בדיקת התראות עכשיו") — לא מתזמן שעתי שירוץ באמצע בדיקה
+export AI_RENEWAL_JOB=off
 export GROW_SANDBOX_URL=http://127.0.0.1:4010/grow GROW_SECRETS_KEY=ZTJlLW9ubHktbm90LWEtcmVhbC1rZXktMDEyMzQ1Njc=
 export LOGIN_CODE_SECRET=e2e-only-login-code-secret
 # מודול הרישיונות: סוד הצפנת המפתחות — לבדיקות בלבד (בשרת: נוצר ב-setup-selfhost)
