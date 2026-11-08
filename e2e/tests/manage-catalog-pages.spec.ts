@@ -159,6 +159,10 @@ async function twoBrowsers(
   const pb = await b.newPage();
   await open(pa, request, slug, path);
   await open(pb, request, slug, path);
+  // הנתונים נטענים בדפדפן אחרי אירוע ה-load: מחכים שבשני הדפים העורך (והכותרת שלו) כבר מוצג
+  // מהגרסה הנוכחית. בלי זה שמירה מהירה ב-A יכולה להקדים את הטעינה ב-B — ואז B מתחיל מהגרסה
+  // החדשה ואין "עודכן בינתיים" לבדוק.
+  for (const p of [pa, pb]) await expect(p.getByRole("heading", { level: 1 })).toBeVisible();
   return { pa, pb, close: () => Promise.all([a.close(), b.close()]) };
 }
 
