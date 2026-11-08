@@ -77,6 +77,7 @@ import { manageKeys } from "../lib/query-keys";
 import { editorTab } from "../setup/model";
 import { CalendarStyleField, FontField, LogoField } from "./BrandFields";
 import { SectionFields } from "./SectionFields";
+import { HeroMediaField } from "./HeroMediaField";
 import { SeoPanel } from "./SeoFields";
 import {
   CUSTOM_TYPES,
@@ -271,6 +272,7 @@ function Editor({
                 onChange={setDesign}
                 open={openSection}
                 setOpen={setOpenSection}
+                onMediaAdded={reloadPreview}
               />
             </TabsContent>
             <TabsContent value="design" className="p-3 pt-0">
@@ -523,12 +525,14 @@ function SectionsPanel({
   onChange,
   open,
   setOpen,
+  onMediaAdded,
 }: {
   design: SiteDesign;
   site: PublicSite;
   onChange: (d: SiteDesign) => void;
   open: string | null;
   setOpen: (id: string | null) => void;
+  onMediaAdded: () => void;
 }) {
   // מקטע שנפתח מהתצוגה המקדימה — גלילה אליו ברשימה
   useEffect(() => {
@@ -621,7 +625,9 @@ function SectionsPanel({
                 <SectionFields
                   section={s}
                   site={site}
+                  logo={design.logo}
                   onChange={(patch) => onChange(updateContent(design, s.id, patch))}
+                  onMediaAdded={onMediaAdded}
                 />
                 {!isCore(s.type) && (
                   <Button
@@ -742,6 +748,8 @@ function DesignPanel({
   onChange: (d: SiteDesign) => void;
   onMediaAdded: () => void;
 }) {
+  // התמונה הראשית והסרטון — התוכן של מקטע הפתיח (אותו ערך כמו בלשונית "מקטעים")
+  const hero = design.sections.find((x) => x.type === "hero");
   const theme = THEMES[design.theme];
   const overrides = useMemo(() => design.colors[design.theme] ?? {}, [design.colors, design.theme]);
   const effective = useMemo(() => themeColors(theme, overrides), [theme, overrides]);
@@ -755,6 +763,16 @@ function DesignPanel({
   return (
     <div className="flex flex-col gap-5">
       <LogoField design={design} site={site} onChange={onChange} onMediaAdded={onMediaAdded} />
+      {hero && (
+        <HeroMediaField
+          site={site}
+          image={hero.content.image}
+          video={hero.content.video}
+          logo={design.logo}
+          onChange={(patch) => onChange(updateContent(design, hero.id, patch))}
+          onMediaAdded={onMediaAdded}
+        />
+      )}
       <fieldset>
         <legend className="mb-2 text-sm font-medium">ערכת עיצוב</legend>
         <p className="mb-3 text-xs text-muted-foreground">

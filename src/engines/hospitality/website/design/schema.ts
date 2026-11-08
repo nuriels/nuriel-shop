@@ -60,6 +60,8 @@ export interface SectionContent {
   button?: string;
   /** מזהה תמונה (מתמונות האתר / המתחם / היחידות) */
   image?: string;
+  /** פתיח בלבד: סרטון קצר (עד 12 שניות, מגלריית האתר) — אחרי 5 שניות של התמונה, בלי קול ובלולאה */
+  video?: string;
   /** גלריה: התמונות שנבחרו (ריק = כל התמונות) */
   images?: string[];
   overlay?: Overlay;
@@ -178,6 +180,8 @@ function content(type: SectionType, raw: unknown): SectionContent {
   if (type === "cta" || type === "hero") set("button", str(c["button"], LIMITS.button));
   if (typeof c["image"] === "string" && UUID.test(c["image"]))
     set("image", c["image"].toLowerCase());
+  if (type === "hero" && typeof c["video"] === "string" && UUID.test(c["video"]))
+    set("video", c["video"].toLowerCase());
   if (type === "gallery" && Array.isArray(c["images"])) {
     const ids = [
       ...new Set(

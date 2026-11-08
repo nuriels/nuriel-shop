@@ -13,6 +13,7 @@ import type {
 import {
   parseAlt,
   parseGallery,
+  parseHeroVideoForm,
   parseImportInput,
   parseMediaId,
   parseMediaOrder,
@@ -139,6 +140,48 @@ export const hospitalityUploadMedia = createServerFn({ method: "POST" })
     // לוגו — תמונה בלבד (גם המסד בודק)
     const allowVideo = data.gallery.ownerKind !== "brand";
     return storeAndRecord(data.gallery, data.replaceId, bytes, { alt: data.alt }, allowVideo);
+  });
+
+export interface HeroVideoUpload {
+  id: string;
+  url: string | null;
+  seconds: number;
+  /** HEVC (אייפון, "יעילות גבוהה") — חלק מהדפדפנים לא מנגנים; שם האתר נשאר עם התמונה */
+  codec: "h264" | "hevc" | "av1" | "vp8" | "vp9" | null;
+}
+
+/**
+ * סרטון הפתיח (עיצוב האתר): עד 12 שניות ועד 20MB — נבדק כאן על הקובץ עצמו (סוג, גודל ואורך
+ * מתוך המכולה), לא לפי מה שהדפדפן דיווח. נשמר בגלריית האתר (כמו כל סרטון), והפתיח מפנה אליו.
+ */
+export const hospitalityUploadHeroVideo = createServerFn({ method: "POST" })
+  .inputValidator((data: FormData) => parseHeroVideoForm(data))
+  .handler(async ({ data }): Promise<HeroVideoUpload> => {
+    const [{ guardStaff }, { manageSession }, { videoInfo, heroVideoProblem }, { MediaError }] =
+      await Promise.all([
+        import("../security/guard.server"),
+        import("../server/manage.server"),
+        import("../media/video-info"),
+        import("../server/media.server"),
+      ]);
+    const session = await manageSession();
+    await guardStaff("mediaUpload", { userId: session.userId, siteId: session.siteId });
+    const bytes = Buffer.from(await data.file.arrayBuffer());
+    const info = videoInfo(bytes);
+    const problem = heroVideoProblem(info, bytes.length);
+    if (problem || !info || info.seconds === null)
+      throw new MediaError(problem ?? "הסרטון לא תקין");
+    const ref: GalleryRef = { ownerKind: "site", ownerId: null };
+    const before = new Set((await gallery(ref)).items.map((m) => m.id));
+    const after = await storeAndRecord(ref, null, bytes, { alt: data.alt }, true);
+    const added = after.items.find((m) => m.kind === "video" && !before.has(m.id));
+    if (!added) throw new MediaError("הסרטון נשמר, אבל לא נמצא בגלריה — רעננו את העמוד ונסו שוב");
+    return {
+      id: added.id,
+      url: added.url,
+      seconds: Math.round(info.seconds * 10) / 10,
+      codec: info.codec,
+    };
   });
 
 /** ייבוא מקישור: השרת מוריד (הגנת SSRF), בודק, מקודד מחדש ושומר עותק עצמאי */

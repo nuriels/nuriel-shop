@@ -106,6 +106,9 @@ export function LogoField({
             accept="image/png,image/jpeg,image/webp"
             className="sr-only"
             id="logo-upload"
+            // הכפתור שמתחת הוא הפקד הנגיש; השדה עצמו מחוץ לסדר המקלדת ולקורא המסך
+            tabIndex={-1}
+            aria-hidden="true"
             onChange={(e) => void upload(e.target.files?.[0])}
           />
           <Button

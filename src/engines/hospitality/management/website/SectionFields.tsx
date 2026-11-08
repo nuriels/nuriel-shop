@@ -15,6 +15,7 @@ import {
 import { firstSentence } from "../../website/lib/format";
 import { allMedia } from "../../website/lib/media";
 import { AmenityIcon } from "../details/AmenityIcon";
+import { HeroMediaField } from "./HeroMediaField";
 
 /** שדה ריק / undefined = חזרה לברירת המחדל */
 export type ContentPatch = { [K in keyof SectionContent]?: SectionContent[K] | undefined };
@@ -23,11 +24,17 @@ type Patch = (p: ContentPatch) => void;
 export function SectionFields({
   section,
   site,
+  logo,
   onChange,
+  onMediaAdded = () => {},
 }: {
   section: Section;
   site: PublicSite;
+  /** הלוגו — לא נבחר אוטומטית כתמונת הפתיח */
+  logo?: string | undefined;
   onChange: Patch;
+  /** אחרי העלאה (תמונה ראשית / סרטון בפתיח) — רענון נתוני האתר והתצוגה המקדימה */
+  onMediaAdded?: () => void;
 }) {
   const c = section.content;
   const prop = site.properties[0];
@@ -71,11 +78,13 @@ export function SectionFields({
               onChange={(e) => onChange({ button: e.target.value })}
             />
           </Field>
-          <ImagePicker
+          <HeroMediaField
             site={site}
-            value={c.image}
-            onChange={(image) => onChange({ image })}
-            label="תמונת הפתיח"
+            image={c.image}
+            video={c.video}
+            logo={logo}
+            onChange={onChange}
+            onMediaAdded={onMediaAdded}
           />
           <Choice
             label="הכהיית התמונה (לקריאות הטקסט)"

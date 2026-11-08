@@ -28,7 +28,9 @@ export function Gallery({ section }: { section?: Section | undefined }) {
   const t = useCopy();
   const { site, design } = useSite();
   const c = section?.content ?? {};
-  const all = siteGallery(site, design.logo);
+  // בלי הלוגו ובלי סרטון הפתיח (כבר בראש העמוד)
+  const heroVideo = design.sections.find((x) => x.type === "hero")?.content.video;
+  const all = siteGallery(site, [design.logo, heroVideo]);
   // נבחרו תמונות בעורך — רק הן, בסדר שנבחר
   const picked = c.images?.length
     ? c.images
@@ -72,7 +74,7 @@ export function MediaMosaic({
     <div className={className}>
       <ul className="grid auto-rows-[38vw] grid-cols-2 gap-2 sm:auto-rows-[15rem] sm:grid-cols-4 sm:gap-3">
         {shown.map((m, i) => (
-          <li key={m.id} className={cn("relative", tile[i] ?? "")}>
+          <li key={m.id} className={cn("relative", tile[i] ?? "")} data-media-id={m.id}>
             <button
               type="button"
               onClick={() => setOpen(i)}

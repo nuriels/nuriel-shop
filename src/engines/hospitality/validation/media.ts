@@ -2,6 +2,7 @@
 // (מיגרציה 12). קישור לסרטון: YouTube / Vimeo בלבד → ספק + מזהה (הקישור לא נפתח).
 import type { GalleryKind, GalleryRef } from "../types/media";
 import { InputError, uuid } from "./input";
+import { HERO_VIDEO_MAX_BYTES } from "../media/video-info";
 
 export const ALT_MAX = 250;
 export const GALLERY_MAX = 60;
@@ -126,6 +127,17 @@ export function parseUploadForm(data: unknown): {
     file,
     alt: alt(str("alt") ?? null),
   };
+}
+
+/** סרטון הפתיח (עיצוב האתר): קובץ אחד, עד 20MB (האורך — בשרת, מהקובץ עצמו) */
+export function parseHeroVideoForm(data: unknown): { file: File; alt: string | null } {
+  if (!(data instanceof FormData)) throw new InputError("בקשה לא תקינה");
+  const file = data.get("file");
+  if (!(file instanceof File) || file.size === 0) throw new InputError("לא נבחר קובץ");
+  if (file.size > HERO_VIDEO_MAX_BYTES)
+    throw new InputError("הסרטון גדול מ-20MB. צלמו ב-1080p (לא ב-4K) או קצרו אותו, ונסו שוב.");
+  const a = data.get("alt");
+  return { file, alt: alt(typeof a === "string" ? a : null) };
 }
 
 export const formatBytes = (n: number) =>

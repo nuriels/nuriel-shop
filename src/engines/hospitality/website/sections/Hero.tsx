@@ -6,11 +6,13 @@ import { Link } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/platform/ui";
+import type { PublicMedia } from "../../types/website";
 import type { Section } from "../design/schema";
+import { HeroVideo } from "../components/HeroVideo";
 import { Photo } from "../components/Photo";
 import { useCopy } from "../copy";
 import { firstSentence } from "../lib/format";
-import { heroImage, mediaById } from "../lib/media";
+import { heroImage, mediaById, videoById } from "../lib/media";
 import { useSite } from "../lib/site-context";
 import { Editable } from "../components/Editable";
 
@@ -25,6 +27,8 @@ export function Hero({ section }: { section?: Section | undefined }) {
   const { site, theme, design } = useSite();
   const c = section?.content ?? {};
   const image = mediaById(site, c.image) ?? heroImage(site, design.logo);
+  // סרטון (עד 12 שניות): רק קובץ שהועלה, לא הטמעה — אחרי 5 שניות של התמונה (HeroVideo)
+  const video = videoById(site, c.video);
   const property = site.properties[0];
   const kind = property?.property_type ? t.propertyTypes[property.property_type] : "";
   const area = site.business.address?.split(",").slice(-1)[0]?.trim() || property?.address || "";
@@ -57,11 +61,10 @@ export function Hero({ section }: { section?: Section | undefined }) {
             )}
             <div className="mt-8">{actions(false)}</div>
           </div>
-          <Photo
-            framed
-            media={image}
+          <FramedMedia
+            image={image}
+            video={video}
             alt={title}
-            priority
             sizes="(min-width: 1024px) 50vw, 100vw"
             className="order-1 aspect-[4/3] rounded-[var(--radius)] shadow-[var(--site-shadow)] lg:order-2 lg:aspect-[5/6]"
           />
@@ -93,11 +96,10 @@ export function Hero({ section }: { section?: Section | undefined }) {
               <div className="mt-6">{actions(false)}</div>
             </div>
           </div>
-          <Photo
-            framed
-            media={image}
+          <FramedMedia
+            image={image}
+            video={video}
             alt={title}
-            priority
             sizes="100vw"
             className="mt-8 aspect-[16/10] sm:aspect-[21/9]"
           />
@@ -122,6 +124,13 @@ export function Hero({ section }: { section?: Section | undefined }) {
         className="absolute inset-0 -z-10 h-full w-full"
         imgClassName="scale-[1.02]"
       />
+      {video && (
+        <HeroVideo
+          video={video}
+          className="absolute inset-0 -z-10 h-full w-full"
+          buttonClassName={centered ? undefined : "bottom-5 sm:bottom-6"}
+        />
+      )}
       <div
         aria-hidden="true"
         className={cn("absolute inset-0 -z-10 bg-[image:var(--site-hero-shade)]", SHADE[overlay])}
@@ -213,6 +222,37 @@ function HeroActions({ light, button }: { light: boolean; button?: string | unde
           {t.hero.contact}
         </Link>
       )}
+    </div>
+  );
+}
+
+/** תמונה ממוסגרת (פריסות "טבע" ו"מודרני") — ועם סרטון: הסרטון באותה מסגרת, מעל התמונה */
+function FramedMedia({
+  image,
+  video,
+  alt,
+  sizes,
+  className,
+}: {
+  image: PublicMedia | null | undefined;
+  video: PublicMedia | null;
+  alt: string;
+  sizes: string;
+  className: string;
+}) {
+  if (!video)
+    return <Photo framed media={image} alt={alt} priority sizes={sizes} className={className} />;
+  return (
+    <div className={cn("relative overflow-hidden", className)}>
+      <Photo
+        framed
+        media={image}
+        alt={alt}
+        priority
+        sizes={sizes}
+        className="absolute inset-0 h-full w-full"
+      />
+      <HeroVideo video={video} className="absolute inset-0 h-full w-full" />
     </div>
   );
 }

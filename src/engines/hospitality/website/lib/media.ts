@@ -32,10 +32,17 @@ export function unitMedia(unit: PublicUnit, site: PublicSite): PublicMedia[] {
   return dedupe([...unit.media, ...members.flatMap((u) => u.media), ...(property?.media ?? [])]);
 }
 
-/** הגלריה של עמוד הבית: האתר, המתחמים, היחידות. exclude — הלוגו (D2: לא מוצג כתמונה בגלריה) */
-export function siteGallery(site: PublicSite, exclude?: string): PublicMedia[] {
+/**
+ * הגלריה של עמוד הבית: האתר, המתחמים, היחידות. exclude — הלוגו (D2: לא מוצג כתמונה בגלריה)
+ * וסרטון הפתיח (H-1: כבר מוצג בראש העמוד)
+ */
+export function siteGallery(
+  site: PublicSite,
+  exclude?: string | readonly (string | undefined)[],
+): PublicMedia[] {
+  const skip = new Set(typeof exclude === "string" ? [exclude] : (exclude ?? []));
   return dedupe([
-    ...site.gallery.filter((m) => m.id !== exclude),
+    ...site.gallery.filter((m) => !skip.has(m.id)),
     ...site.properties.flatMap((p) => p.media),
     ...site.units.flatMap((u) => u.media),
   ]);
@@ -74,6 +81,12 @@ export function uniqueAmenities(list: PublicAmenity[]): PublicAmenity[] {
 /** כל התמונות והסרטונים של האתר (גלריה, מתחמים, יחידות) — לבחירה בעורך ולמקטעים */
 export function allMedia(site: PublicSite): PublicMedia[] {
   return siteGallery(site);
+}
+
+/** סרטון שהועלה (לא הטמעה) לפי מזהה — סרטון הפתיח (H-1); רק מהגלריה של האתר הזה */
+export function videoById(site: PublicSite, id: string | undefined): PublicMedia | null {
+  if (!id) return null;
+  return allMedia(site).find((m) => m.id === id && m.kind === "video" && Boolean(m.url)) ?? null;
 }
 
 /** תמונה לפי מזהה (רק מהתמונות של האתר הזה — וגם מהלוגואים שלו, מיגרציה 42) */
