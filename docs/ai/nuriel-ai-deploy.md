@@ -5,9 +5,9 @@
 >
 > 🔍 = קריאה בלבד · ✏️ = משנה משהו בשרת (כתוב בדיוק מה) · ⛔ = נקודת אישור שלך.
 >
-> **הקוד לפריסה:** `58a47dc` (ענף `hospitality/stage-2`).
+> **הקוד לפריסה:** `0df6fe0` (ענף `hospitality/stage-2`).
 > **מצב השרת לפני:** אחרי פריסת הנגישות והמסמכים — הקוד על `919ae23`, 176 מיגרציות, תג חזרה `before-a11y-docs`.
-> **אחרי:** הקוד על `58a47dc`, 177 מיגרציות, תג חזרה חדש `before-nuriel-ai`.
+> **אחרי:** הקוד על `0df6fe0`, 177 מיגרציות, תג חזרה חדש `before-nuriel-ai`.
 >
 > **נבדק מראש (בלי השרת):** מיגרציה 61 על מסד נקי (פעמיים) ועל מסד עם נתונים — 2756/2756 בדיקות מסד, מתוכן 101
 > של העוזר; Rollback ← הסכמה זהה בדיוק למיגרציה 60, ושוב קדימה; 930 בדיקות יחידה ואבטחה (157 של העוזר); בנייה;
@@ -60,16 +60,16 @@
 ### P1 — הענף והקומיט
 
 ```bash
-cd /root/nuriel-shop-git && git branch --show-current && git log --oneline -1 && git status --short --untracked-files=no | wc -l && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge-base --is-ancestor HEAD 58a47dc && echo "fast-forward possible" && git merge-base --is-ancestor 58a47dc origin/hospitality/stage-2 && echo "58a47dc is on origin" && git log --oneline -1 58a47dc
+cd /root/nuriel-shop-git && git branch --show-current && git log --oneline -1 && git status --short --untracked-files=no | wc -l && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge-base --is-ancestor HEAD 0df6fe0 && echo "fast-forward possible" && git merge-base --is-ancestor 0df6fe0 origin/hospitality/stage-2 && echo "0df6fe0 is on origin" && git log --oneline -1 0df6fe0
 ```
 
 **תקין:** `hospitality/stage-2`; `919ae23 Hospitality sites: upload the main image…`; `0`; `fast-forward possible`;
-`58a47dc is on origin`; השורה של הקומיט. אחרת — עוצרים.
+`0df6fe0 is on origin`; השורה של הקומיט. אחרת — עוצרים.
 
 ### P2 — Docker, המיגרציות, הדיסק
 
 ```bash
-cd /root/nuriel-shop-git && docker ps --format '{{.Names}}\t{{.Status}}' | grep '^nuriel-shop-' && docker images nuriel-shop-app-app --format '{{.Tag}}\t{{.CreatedSince}}' && docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied" && LC_ALL=C comm -23 <(git ls-tree --name-only 58a47dc supabase/migrations/ | xargs -n1 basename | LC_ALL=C sort) <(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT filename FROM public._migrations_applied" | LC_ALL=C sort) && df -h /var/lib/docker /root/backups/nuriel-shop | tail -n +2
+cd /root/nuriel-shop-git && docker ps --format '{{.Names}}\t{{.Status}}' | grep '^nuriel-shop-' && docker images nuriel-shop-app-app --format '{{.Tag}}\t{{.CreatedSince}}' && docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied" && LC_ALL=C comm -23 <(git ls-tree --name-only 0df6fe0 supabase/migrations/ | xargs -n1 basename | LC_ALL=C sort) <(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT filename FROM public._migrations_applied" | LC_ALL=C sort) && df -h /var/lib/docker /root/backups/nuriel-shop | tail -n +2
 ```
 
 **תקין:** הקונטיינרים ב-`Up` (ליד האפליקציה `(healthy)`); התגים כוללים `before-a11y-docs`; `176`; **שורה אחת**
@@ -114,7 +114,7 @@ docker exec nuriel-shop-db psql -U postgres -q -c "DROP DATABASE IF EXISTS resto
 ### S1 — הקוד (✏️ קבצים + עותק של קובץ ה-Rollback ליד הגיבוי)
 
 ```bash
-cd /root/nuriel-shop-git && git merge -q --ff-only 58a47dc && git log --oneline -1 && mkdir -p /root/backups/nuriel-shop/before-nuriel-ai/rollbacks && cp supabase/rollbacks/20261110100000_ai_assistant.down.sql /root/backups/nuriel-shop/before-nuriel-ai/rollbacks/ && ls /root/backups/nuriel-shop/before-nuriel-ai/rollbacks
+cd /root/nuriel-shop-git && git merge -q --ff-only 0df6fe0 && git log --oneline -1 && mkdir -p /root/backups/nuriel-shop/before-nuriel-ai/rollbacks && cp supabase/rollbacks/20261110100000_ai_assistant.down.sql /root/backups/nuriel-shop/before-nuriel-ai/rollbacks/ && ls /root/backups/nuriel-shop/before-nuriel-ai/rollbacks
 ```
 
 **תקין:** שורת הקומיט; `20261110100000_ai_assistant.down.sql`.
@@ -214,7 +214,7 @@ docker exec nuriel-shop-db pg_dump -U postgres -d postgres -Fc > /root/backups/n
 | ⛔ 1  |                |                                    |                             |
 | B1    | ✏️ גיבוי       | מסד, תג `before-nuriel-ai`         | `dump read to the end: ok`  |
 | B2    | ✏️ מסד נפרד    | בדיקת שחזור                        | שתי שורות זהות              |
-| S1    | ✏️ קבצים       | הקוד ← `58a47dc`                   | קובץ ה-Rollback             |
+| S1    | ✏️ קבצים       | הקוד ← `0df6fe0`                   | קובץ ה-Rollback             |
 | S2    | ✏️ image       | בנייה + הקוד החדש בתוך ה-image     | `Built`, מספר > 0           |
 | ⛔ 2  |                |                                    |                             |
 | M1    | ✏️ מסד + הפעלה | מיגרציה 61 + בדיקה + הפעלה         | `61 checks ok`, `Started`   |
