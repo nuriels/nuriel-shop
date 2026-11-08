@@ -4,6 +4,7 @@
 //   • ההרשאה במסד: רק הזמנות באתר הזה שהאימייל שלהן הוא הכתובת שהוכחה בקוד. בלי שיוך לחשבונות המערכת.
 //   • בקשת קוד — תשובה זהה תמיד; מייל נשלח רק כשיש באתר הזמנה עם הכתובת (בלי חשיפה מי הזמין).
 import { createServerFn } from "@tanstack/react-start";
+import type { GuestDocument } from "../types/contracts";
 import type { GuestAreaBooking, GuestAreaDetail, GuestAreaList } from "../types/guest-area";
 import type { GuestPaymentInfo } from "../types/payment-instructions";
 import type { LimitAction } from "../security/limits";
@@ -15,6 +16,7 @@ import {
   parseGuestAreaMethod,
   parseGuestAreaUpload,
 } from "../validation/guest-area";
+import { uuid as uuidOf } from "../validation/input";
 
 const COOKIE = "hosp_guest";
 const MAX_AGE_SECONDS = 14 * 86_400;
@@ -255,3 +257,38 @@ export const hospitalityGuestAreaSignOut = createServerFn({ method: "POST" }).ha
     return { ok: true };
   },
 );
+
+// ---------- מיגרציה 64: "המסמכים שלי" — החוזים החתומים של הכתובת המחוברת, באתר הזה ----------
+
+export const hospitalityGuestDocuments = createServerFn({ method: "POST" }).handler(
+  async (): Promise<{ state: "signed_in"; documents: GuestDocument[] } | { state: "signed_out" }> =>
+    withSession("guestDocuments", async (hash, client) => {
+      const { callServerRpc } = await import("../server/rpc.server");
+      const documents = await callServerRpc<GuestDocument[] | null>(
+        "guest_area_documents",
+        { _session_hash: hash },
+        client,
+      );
+      return { state: "signed_in" as const, documents: documents ?? [] };
+    }),
+);
+
+/** הורדה: קישור חתום ל-60 שניות — רק למסמך של הכתובת המחוברת (נבדק ונרשם במסד) */
+export const hospitalityGuestDocumentFile = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => ({
+    id: uuidOf((input ?? {})["id"]),
+  }))
+  .handler(async ({ data }): Promise<{ state: "ok"; url: string } | { state: "signed_out" }> =>
+    withSession("guestDocuments", async (hash, client) => {
+      const [{ callServerRpc }, { contractFileUrl }] = await Promise.all([
+        import("../server/rpc.server"),
+        import("../server/contracts.server"),
+      ]);
+      const f = await callServerRpc<{ path: string; number: number }>(
+        "guest_area_document_file",
+        { _session_hash: hash, _id: data.id },
+        client,
+      );
+      return { state: "ok" as const, url: await contractFileUrl(f.path, f.number, true) };
+    }),
+  );

@@ -12,6 +12,8 @@ export interface TeamMember {
   last_sign_in_at: string | null;
   /** שלב F3: צפייה בנתונים כספיים — לבעלים תמיד; למנהל רק אם הבעלים נתן */
   finance?: boolean;
+  /** מיגרציה 64: מסמכי הלקוחות (חוזים) — לבעלים תמיד; למנהל רק אם הבעלים נתן */
+  contracts?: boolean;
 }
 
 export interface TeamView {

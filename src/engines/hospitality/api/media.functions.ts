@@ -81,14 +81,53 @@ export const hospitalityGalleries = createServerFn({ method: "GET" }).handler(
   },
 );
 
-/** קובץ מוכן (תמונה מקודדת מחדש / סרטון) → הדלי → רשומה; כישלון ברישום — הקבצים נמחקים */
+interface VideoCheck {
+  seconds: number | null;
+  codec: HeroVideoUpload["codec"] | "other";
+  hero_ok: boolean;
+}
+
+/**
+ * סרטון שנשמר: האורך וה-codec מתוך הקובץ עצמו (video-info.ts — הארוך מבין הכותרת, הרצועות והפריים
+ * האחרון) → המסד, במפתח השירות (מיגרציה 62: הצוות לא יכול להצהיר על אורך). כישלון — הסרטון נשאר
+ * "לא נבדק" (לא מוצג בפתיח), והבדיקה ברקע תמדוד אותו שוב
+ */
+async function recordVideoInfo(
+  siteId: string,
+  id: string,
+  bytes: Uint8Array,
+): Promise<VideoCheck | null> {
+  const [{ videoInfo }, { callServerRpc }] = await Promise.all([
+    import("../media/video-info"),
+    import("../server/rpc.server"),
+  ]);
+  const info = videoInfo(bytes);
+  try {
+    return await callServerRpc<VideoCheck>(
+      "media_video_verified",
+      { _tenant: siteId, _id: id, _seconds: info?.seconds ?? null, _codec: info?.codec ?? null },
+      { ip: "unknown", userAgent: "hospitality-media-check" },
+    );
+  } catch (error) {
+    console.error(
+      "[hospitality] video length not recorded",
+      error instanceof Error ? error.message : error,
+    );
+    return null;
+  }
+}
+
+/**
+ * קובץ מוכן (תמונה מקודדת מחדש / סרטון) → הדלי → רשומה; כישלון ברישום — הקבצים נמחקים.
+ * סרטון — האורך שנמדד נרשם לפני שהגלריה נטענת מחדש
+ */
 async function storeAndRecord(
   ref: GalleryRef,
   replaceId: string | null,
   bytes: Buffer,
   extra: { alt: string | null; source_url?: string },
   allowVideo: boolean,
-): Promise<Gallery> {
+): Promise<{ gallery: Gallery; id: string; video: VideoCheck | null }> {
   const [{ manageRpc, manageSession }, media] = await Promise.all([
     import("../server/manage.server"),
     import("../server/media.server"),
@@ -101,6 +140,7 @@ async function storeAndRecord(
     alt: extra.alt,
     ...(extra.source_url ? { source_url: extra.source_url } : {}),
   };
+  let id: string;
   try {
     if (replaceId) {
       const r = await manageRpc<{ removed_files: string[] }>("media_replace", {
@@ -108,13 +148,15 @@ async function storeAndRecord(
         _item: item,
       });
       await media.removeFiles(siteId, accessToken, r.removed_files);
-      return gallery(ref);
+      id = replaceId;
+    } else {
+      const added = await manageRpc<{ id: string }>("media_add", {
+        _owner_kind: ref.ownerKind,
+        _owner_id: ref.ownerId,
+        _item: item,
+      });
+      id = added.id;
     }
-    await manageRpc("media_add", {
-      _owner_kind: ref.ownerKind,
-      _owner_id: ref.ownerId,
-      _item: item,
-    });
   } catch (error) {
     await media.removeFiles(
       siteId,
@@ -123,7 +165,8 @@ async function storeAndRecord(
     );
     throw error;
   }
-  return gallery(ref);
+  const video = prepared.kind === "video" ? await recordVideoInfo(siteId, id, bytes) : null;
+  return { gallery: await gallery(ref), id, video };
 }
 
 /** העלאה מהמחשב / מהטלפון (FormData: ownerKind, ownerId, file, alt) — או החלפה (replaceId) */
@@ -137,9 +180,16 @@ export const hospitalityUploadMedia = createServerFn({ method: "POST" })
     const session = await manageSession();
     await guardStaff("mediaUpload", { userId: session.userId, siteId: session.siteId });
     const bytes = Buffer.from(await data.file.arrayBuffer());
-    // לוגו — תמונה בלבד (גם המסד בודק)
+    // לוגו — תמונה בלבד (גם המסד בודק). סרטון בגלריה — כל אורך (עד 50MB), אבל נמדד: לפתיח רק עד 15 שניות
     const allowVideo = data.gallery.ownerKind !== "brand";
-    return storeAndRecord(data.gallery, data.replaceId, bytes, { alt: data.alt }, allowVideo);
+    const r = await storeAndRecord(
+      data.gallery,
+      data.replaceId,
+      bytes,
+      { alt: data.alt },
+      allowVideo,
+    );
+    return r.gallery;
   });
 
 export interface HeroVideoUpload {
@@ -151,8 +201,9 @@ export interface HeroVideoUpload {
 }
 
 /**
- * סרטון הפתיח (עיצוב האתר): עד 12 שניות ועד 20MB — נבדק כאן על הקובץ עצמו (סוג, גודל ואורך
- * מתוך המכולה), לא לפי מה שהדפדפן דיווח. נשמר בגלריית האתר (כמו כל סרטון), והפתיח מפנה אליו.
+ * סרטון הפתיח (עיצוב האתר): עד 15 שניות ועד 20MB — נבדק כאן על הקובץ עצמו (סוג, גודל ואורך
+ * מתוך המכולה), לא לפי מה שהדפדפן דיווח ולא לפי הסיומת. נשמר בגלריית האתר (כמו כל סרטון), האורך
+ * שנמדד נרשם במסד (מיגרציה 62) — והמסד מקבל אותו כסרטון הפתיח רק אחרי הרישום.
  */
 export const hospitalityUploadHeroVideo = createServerFn({ method: "POST" })
   .inputValidator((data: FormData) => parseHeroVideoForm(data))
@@ -172,10 +223,12 @@ export const hospitalityUploadHeroVideo = createServerFn({ method: "POST" })
     if (problem || !info || info.seconds === null)
       throw new MediaError(problem ?? "הסרטון לא תקין");
     const ref: GalleryRef = { ownerKind: "site", ownerId: null };
-    const before = new Set((await gallery(ref)).items.map((m) => m.id));
-    const after = await storeAndRecord(ref, null, bytes, { alt: data.alt }, true);
-    const added = after.items.find((m) => m.kind === "video" && !before.has(m.id));
+    const r = await storeAndRecord(ref, null, bytes, { alt: data.alt }, true);
+    const added = r.gallery.items.find((m) => m.id === r.id && m.kind === "video");
     if (!added) throw new MediaError("הסרטון נשמר, אבל לא נמצא בגלריה — רעננו את העמוד ונסו שוב");
+    // בלי רישום האורך המסד לא יקבל אותו לפתיח — עדיף להגיד עכשיו (הסרטון נשאר ב"תמונות")
+    if (!r.video?.hero_ok)
+      throw new MediaError('הסרטון נשמר ב"תמונות", אבל בדיקת האורך לא הושלמה — נסו להעלות שוב');
     return {
       id: added.id,
       url: added.url,
@@ -204,7 +257,8 @@ export const hospitalityImportMedia = createServerFn({ method: "POST" })
     } catch (error) {
       throw new HospitalityError(describeImageError(error), "22023");
     }
-    return storeAndRecord(data, null, bytes, { alt: data.alt, source_url: data.url }, false);
+    return (await storeAndRecord(data, null, bytes, { alt: data.alt, source_url: data.url }, false))
+      .gallery;
   });
 
 export const hospitalityAddVideoLink = createServerFn({ method: "POST" })

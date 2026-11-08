@@ -2,6 +2,16 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_customer_details (65): בלי הגנה (רק פונקציות), rollback → פונקציות התיקון והשליחה החוזרת
+#     נעלמו; הסכמה זהה בדיוק ל-64
+#   • hosp_client_contracts (64): הגנה (נעצר כשיש חוזים / קבצים בדלי, או כש-65 עוד קיימת), rollback →
+#     שלוש הטבלאות, הפונקציות, הדלי והדגל נעלמו; הרשאת contracts שניתנה נמחקת; permissions() / can() /
+#     team_members() בגרסה של 32 מילה במילה; הסכמה זהה בדיוק ל-63
+#   • hosp_events (63): הגנה (נעצר כשיש אירועים / תנאי עסק שנשמרו, או כש-64 עוד קיימת), rollback →
+#     שלוש הטבלאות והפונקציות נעלמו (btree_gist נשארת); הסכמה זהה בדיוק ל-62
+#   • hosp_hero_video_verified (62): בלי הגנה (האורך נמדד שוב), rollback → שלוש העמודות והפונקציות של
+#     המדידה נעלמו; _media_json / media_replace (12), _public_media (42), site_draft_save / site_publish (21)
+#     מילה במילה; הסכמה זהה בדיוק ל-61
 #   • ai_assistant (61): הגנה (נעצר כשיש חבילות / תקופות / היסטוריה / התראות / יומן, או מפתח שמור / מצב פעיל),
 #     rollback → שבע הטבלאות והפונקציות נעלמו; יומן הפלטפורמה נשאר; הסכמה זהה בדיוק ל-60
 #   • hosp_site_documents (60): הגנה (נעצר כשיש אישורי מסמכים / גרסאות / הסדרי נגישות / פרטי עוסק / טיוטות),
@@ -126,6 +136,10 @@ M58=20261108130000_hosp_platform_separation
 M59=20261108140000_hosp_packages
 M60=20261109100000_hosp_site_documents
 M61=20261110100000_ai_assistant
+M62=20261111100000_hosp_hero_video_verified
+M63=20261111110000_hosp_events
+M64=20261111120000_hosp_client_contracts
+M65=20261111130000_hosp_customer_details
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -146,6 +160,152 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ref_upto <migration>: rollback_ref = every migration before <migration> (the schema a rollback must return to)
+ref_upto() {
+  psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+    -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+    -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+  for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+    [ "$(basename "$f" .sql)" = "$1" ] && break
+    psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  done
+}
+# same_as_ref <label>: the schema now = rollback_ref's schema, exactly
+same_as_ref() {
+  pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/ref.sql"
+  schema_dump "$SCHEMA_DIR/now.sql"
+  if diff -q "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" >/dev/null; then
+    echo "  ok   schema after the rollback = the schema of $1, exactly"
+  else
+    echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
+  fi
+}
+
+# ---------- correcting the customer's details (migration 65) ----------
+expect "before the rollback: the correction / resend functions for signed-in staff; the helpers for nobody" \
+  "SELECT has_function_privilege('authenticated', 'hospitality.booking_customer_update(uuid,integer,jsonb,text,boolean)', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'hospitality.booking_resend_details(uuid)', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'hospitality.event_customer_update(uuid,integer,jsonb,text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality._customer_apply(uuid,hospitality.guests,jsonb,text,uuid[],uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('service_role', 'hospitality._send_booking_details(uuid,uuid)', 'EXECUTE')"
+echo "rollback guard: $M63 and $M64 refuse while the newer migrations exist"
+if down "$M64" 2>/dev/null; then
+  echo "  FAIL $M64 rolled back while $M65 exists"; exit 1
+fi
+if down "$M63" 2>/dev/null; then
+  echo "  FAIL $M63 rolled back while $M64 exists"; exit 1
+fi
+ref_upto "$M65"
+echo "rollback: $M65"
+down "$M65"
+expect "the correction functions are gone" \
+  "SELECT to_regprocedure('hospitality.booking_customer_update(uuid,integer,jsonb,text,boolean)') IS NULL
+      AND to_regprocedure('hospitality.booking_resend_details(uuid)') IS NULL
+      AND to_regprocedure('hospitality.event_customer_update(uuid,integer,jsonb,text)') IS NULL
+      AND to_regprocedure('hospitality._customer_apply(uuid,hospitality.guests,jsonb,text,uuid[],uuid)') IS NULL"
+same_as_ref "migration 64"
+
+# ---------- client contracts for digital signing (migration 64) ----------
+expect "before the rollback: 3 tables (RLS, functions only), the contracts permission, the flag (off), the private bucket, signing for the server only" \
+  "SELECT (SELECT count(*) FROM pg_class c WHERE c.relrowsecurity
+             AND c.oid IN ('hospitality.client_contracts'::regclass, 'hospitality.client_contract_log'::regclass,
+                           'hospitality.contract_templates'::regclass)) = 3
+      AND NOT has_table_privilege('authenticated', 'hospitality.client_contracts', 'SELECT')
+      AND NOT has_table_privilege('service_role', 'hospitality.client_contracts', 'SELECT')
+      AND 'contracts' = ANY (hospitality.permissions())
+      AND NOT (SELECT enabled FROM public.platform_feature_flags WHERE key = 'hospitality_contracts_enabled')
+      AND (to_regclass('storage.buckets') IS NULL OR EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-contracts' AND NOT public))
+      AND has_function_privilege('service_role', 'hospitality.contract_sign(text,jsonb,jsonb,boolean,text,text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality.contract_sign(text,jsonb,jsonb,boolean,text,text)', 'EXECUTE')"
+echo "rollback guard: $M64 refuses while a contract exists"
+q "SET session_replication_role = replica;
+   INSERT INTO hospitality.client_contracts (tenant_id, number, kind, template_version, booking_id, signer_name, signer_email, data)
+   SELECT id, 1001, 'hosting', 1, gen_random_uuid(), 'rb contract', 'rb@example.com', '{}'::jsonb
+     FROM public.tenants WHERE is_default;
+   INSERT INTO hospitality.staff_grants (tenant_id, user_id, permission)
+   SELECT id, gen_random_uuid(), 'contracts' FROM public.tenants WHERE is_default" >/dev/null
+if down "$M64" 2>/dev/null; then
+  echo "  FAIL rollback ran although a contract exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT to_regclass('hospitality.client_contracts') IS NOT NULL AND (SELECT count(*) FROM hospitality.client_contracts) = 1
+      AND 'contracts' = ANY (hospitality.permissions())"
+q "DELETE FROM hospitality.client_contracts" >/dev/null
+ref_upto "$M64"
+echo "rollback: $M64"
+down "$M64"
+expect "the contracts are gone: 3 tables, the functions, the bucket, the flag, the granted permission; permissions / can / team members are the migration-32 versions" \
+  "SELECT to_regclass('hospitality.client_contracts') IS NULL
+      AND to_regclass('hospitality.client_contract_log') IS NULL
+      AND to_regclass('hospitality.contract_templates') IS NULL
+      AND to_regprocedure('hospitality.contract_sign(text,jsonb,jsonb,boolean,text,text)') IS NULL
+      AND to_regprocedure('hospitality.team_set_contracts(uuid,boolean)') IS NULL
+      AND (to_regclass('storage.buckets') IS NULL OR NOT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-contracts'))
+      AND NOT EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key = 'hospitality_contracts_enabled')
+      AND NOT EXISTS (SELECT 1 FROM hospitality.staff_grants WHERE permission = 'contracts')
+      AND cardinality(hospitality.permissions()) = 14
+      AND (SELECT prosrc NOT LIKE '%contracts%' FROM pg_proc WHERE oid = 'hospitality.can(text)'::regprocedure)
+      AND (SELECT prosrc NOT LIKE '%contracts%' FROM pg_proc WHERE oid = 'hospitality.team_members()'::regprocedure)"
+same_as_ref "migration 63"
+
+# ---------- events in the pool compound and the business terms (migration 63) ----------
+expect "before the rollback: 3 tables (RLS, functions only), no two events at once in a compound (EXCLUDE), staff functions" \
+  "SELECT (SELECT count(*) FROM pg_class c WHERE c.relrowsecurity
+             AND c.oid IN ('hospitality.events'::regclass, 'hospitality.event_log'::regclass,
+                           'hospitality.business_terms'::regclass)) = 3
+      AND NOT has_table_privilege('authenticated', 'hospitality.events', 'SELECT')
+      AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'hospitality.events'::regclass AND contype = 'x')
+      AND has_function_privilege('authenticated', 'hospitality.event_create(jsonb)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'hospitality.event_create(jsonb)', 'EXECUTE')"
+echo "rollback guard: $M63 refuses while saved business terms exist"
+q "SET session_replication_role = replica;
+   INSERT INTO hospitality.business_terms (tenant_id) SELECT id FROM public.tenants WHERE is_default" >/dev/null
+if down "$M63" 2>/dev/null; then
+  echo "  FAIL rollback ran although business terms were saved"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT to_regclass('hospitality.business_terms') IS NOT NULL AND (SELECT count(*) FROM hospitality.business_terms) = 1"
+q "DELETE FROM hospitality.business_terms" >/dev/null
+ref_upto "$M63"
+echo "rollback: $M63"
+down "$M63"
+expect "the events are gone: 3 tables and the functions; btree_gist stays (the bookings use it)" \
+  "SELECT to_regclass('hospitality.events') IS NULL
+      AND to_regclass('hospitality.event_log') IS NULL
+      AND to_regclass('hospitality.business_terms') IS NULL
+      AND to_regprocedure('hospitality.event_create(jsonb)') IS NULL
+      AND to_regprocedure('hospitality._signature_paths(jsonb,boolean)') IS NULL
+      AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'btree_gist')"
+same_as_ref "migration 62"
+
+# ---------- hero video: the length measured on the server (migration 62) ----------
+expect "before the rollback: the measured length and codec on media; recording it — the app server only; the draft and publish check the hero video" \
+  "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'media'
+                   AND column_name IN ('video_codec', 'duration_checked_at') HAVING count(*) = 2)
+      AND has_function_privilege('service_role', 'hospitality.media_video_verified(uuid,uuid,numeric,text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality.media_video_verified(uuid,uuid,numeric,text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality.media_videos_to_check(integer)', 'EXECUTE')
+      AND (SELECT prosrc LIKE '%_hero_video_problem%' FROM pg_proc WHERE oid = 'hospitality.site_publish(integer,text)'::regprocedure)
+      AND (SELECT prosrc LIKE '%_hero_video_ref%' FROM pg_proc WHERE oid = 'hospitality.site_draft_save(integer,text,jsonb)'::regprocedure)"
+q "SET session_replication_role = replica;
+   INSERT INTO hospitality.media (tenant_id, kind, storage_path, duration_seconds, video_codec, duration_checked_at)
+   SELECT id, 'video', id || '/00000000-0000-4000-8000-000000000062.mp4', 9, 'h264', now()
+     FROM public.tenants WHERE is_default" >/dev/null
+ref_upto "$M62"
+echo "rollback: $M62"
+down "$M62"
+expect "the measuring is gone: the two columns and the functions; the measured length cleared; the draft / publish / site functions are the originals" \
+  "SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'media'
+                       AND column_name IN ('video_codec', 'duration_checked_at'))
+      AND to_regprocedure('hospitality.media_video_verified(uuid,uuid,numeric,text)') IS NULL
+      AND to_regprocedure('hospitality._hero_video_problem(uuid,jsonb,boolean)') IS NULL
+      AND (SELECT duration_seconds IS NULL FROM hospitality.media WHERE storage_path LIKE '%000000000062.mp4')
+      AND (SELECT prosrc NOT LIKE '%_hero_video%' FROM pg_proc WHERE oid = 'hospitality.site_publish(integer,text)'::regprocedure)
+      AND (SELECT prosrc NOT LIKE '%seconds%' FROM pg_proc WHERE oid = 'hospitality._public_media(uuid,text,uuid,uuid)'::regprocedure)"
+q "DELETE FROM hospitality.media WHERE storage_path LIKE '%000000000062.mp4'" >/dev/null
+same_as_ref "migration 61"
 
 # ---------- NURIEL AI ASSISTANT (migration 61) ----------
 expect "before the rollback: the 9 AI tables (RLS) closed to the browser (server: read only), the functions for the server only" \
@@ -1860,6 +2020,31 @@ up "$M58"
 up "$M59"
 up "$M60"
 up "$M61"
+up "$M62"
+up "$M63"
+up "$M64"
+up "$M65"
+expect "the customer-details correction is back: the staff functions, the helpers for nobody" \
+  "SELECT has_function_privilege('authenticated', 'hospitality.booking_customer_update(uuid,integer,jsonb,text,boolean)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality._send_booking_details(uuid,uuid)', 'EXECUTE')"
+expect "the client contracts are back: 3 closed tables, the two templates, the flag off, the private bucket, 15 permissions" \
+  "SELECT to_regclass('hospitality.client_contracts') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'hospitality.client_contracts', 'SELECT')
+      AND (SELECT count(*) FROM hospitality.contract_templates) = 2
+      AND NOT (SELECT enabled FROM public.platform_feature_flags WHERE key = 'hospitality_contracts_enabled')
+      AND (to_regclass('storage.buckets') IS NULL OR EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-contracts' AND NOT public))
+      AND cardinality(hospitality.permissions()) = 15"
+expect "the events are back: 3 closed tables, the overlap EXCLUDE, the staff functions" \
+  "SELECT to_regclass('hospitality.events') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'hospitality.events', 'SELECT')
+      AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'hospitality.events'::regclass AND contype = 'x')
+      AND has_function_privilege('authenticated', 'hospitality.event_create(jsonb)', 'EXECUTE')"
+expect "the hero video check is back: the measured length on media, recording it for the server only, draft / publish check it" \
+  "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'media'
+                   AND column_name = 'duration_checked_at')
+      AND has_function_privilege('service_role', 'hospitality.media_video_verified(uuid,uuid,numeric,text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality.media_video_verified(uuid,uuid,numeric,text)', 'EXECUTE')
+      AND (SELECT prosrc LIKE '%_hero_video_problem%' FROM pg_proc WHERE oid = 'hospitality.site_publish(integer,text)'::regprocedure)"
 expect "the AI add-on is back: 9 tables closed to the browser, 2 packages at 150 ILS, the assistant off, functions for the server only" \
   "SELECT to_regclass('public.ai_subscriptions') IS NOT NULL
       AND to_regclass('public.ai_usage_daily') IS NOT NULL
@@ -1907,10 +2092,10 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 46 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions, the transfer proofs and the guest-area codes and sessions, the packages and the 5 site-document tables), RLS on all, role admin, 6 flags off (incl. management)" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 46
+expect "Hospitality schema back: 52 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions, the transfer proofs and the guest-area codes and sessions, the packages, the 5 site-document tables, the 3 event tables and the 3 contract tables), RLS on all, role admin, 7 flags off (incl. management and contracts)" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 52
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
-      AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 6"
+      AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 7"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
 expect "hosp-support bucket back, private" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-support' AND NOT public)"
 expect "coupon release back" "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'bookings_coupon_usage')"
@@ -1919,15 +2104,15 @@ expect "management foundation back: seat trigger, Ecommerce guard branch, no sta
      AND (SELECT prosrc LIKE '%site_type <> ''ecommerce''%' FROM pg_proc WHERE oid = 'public.user_roles_admin_seat_guard()'::regprocedure)
      AND NOT has_table_privilege('authenticated', 'hospitality.notifications', 'SELECT')
      AND (SELECT max_managers FROM hospitality.plans WHERE code = 'trial') = 3"
-expect "settings and team back: guard trigger, action log, no direct settings writes, 14 permissions (12 + catalog.owner of migration 10 + reports.finance of migration 32)" \
+expect "settings and team back: guard trigger, action log, no direct settings writes, 15 permissions (12 + catalog.owner of migration 10 + reports.finance of migration 32 + contracts of migration 64)" \
   "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hospitality_admin_row_guard')
      AND to_regclass('hospitality.audit_log') IS NOT NULL
      AND NOT has_column_privilege('authenticated', 'hospitality.settings', 'check_in_time', 'UPDATE')
-     AND cardinality(hospitality.permissions()) = 14"
-expect "catalog back: functions, types, revision, no direct staff writes, 14 permissions" \
+     AND cardinality(hospitality.permissions()) = 15"
+expect "catalog back: functions, types, revision, no direct staff writes, 15 permissions" \
   "SELECT to_regprocedure('hospitality.whole_property_set(uuid, boolean, uuid[])') IS NOT NULL
      AND NOT has_table_privilege('authenticated', 'hospitality.units', 'INSERT')
-     AND cardinality(hospitality.permissions()) = 14"
+     AND cardinality(hospitality.permissions()) = 15"
 expect "site identity back: public name only, anon may call it" \
   "SELECT has_function_privilege('anon', 'hospitality.site_identity()', 'EXECUTE')
      AND (SELECT prosecdef FROM pg_proc WHERE oid = 'hospitality.site_identity()'::regprocedure)"
@@ -1944,7 +2129,7 @@ expect "booking engine back: EXCLUDE constraint, deferred integrity checks, gues
 
 schema_dump "$SCHEMA_DIR/after.sql"
 if diff -u "$SCHEMA_DIR/before.sql" "$SCHEMA_DIR/after.sql" > "$SCHEMA_DIR/schema.diff"; then
-  echo "  ok   whole schema after rollback 44 → 1 and re-apply 1 → 44 is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
+  echo "  ok   whole schema after rollback and re-apply of every migration is identical to the original ($(grep -c '^CREATE' "$SCHEMA_DIR/before.sql") CREATE statements compared)"
 else
   echo "  FAIL the schema differs after rollback and re-apply:"; head -60 "$SCHEMA_DIR/schema.diff"; exit 1
 fi

@@ -130,6 +130,25 @@ export function copyFor(event: string, p: EmailPayload, b: EmailBusiness): Copy 
           .filter(Boolean)
           .join(" · "),
       };
+    // מיגרציה 65: פרטי הלקוח תוקנו / שליחה חוזרת — הפרטים וקישור אישי חדש (הקודם כבר לא פעיל)
+    case "booking_details":
+      return {
+        subject: `פרטי ההזמנה שלך${n} — ${b.name}`,
+        intro: `שלום ${p.guest_name ?? ""}, אלה פרטי ההזמנה שלך אצלנו.${
+          hasManageToken(p)
+            ? " בכפתור שלמטה — עמוד ההזמנה האישי שלך. אם קיבלת קישור במייל קודם, הוא כבר לא פעיל."
+            : ""
+        }`,
+        details: true,
+        outro: [
+          b.checkInTime ? `כניסה מ-${b.checkInTime}` : "",
+          b.checkOutTime ? `יציאה עד ${b.checkOutTime}` : "",
+          b.address ?? "",
+          reach,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      };
     case "booking_declined":
       return {
         subject: `לא הצלחנו לאשר את הבקשה${n} — ${b.name}`,

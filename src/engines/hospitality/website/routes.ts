@@ -11,6 +11,7 @@ import { SITE_PATH } from "../config";
 import { privatePageMeta, siteHomeHead, siteUnitHead, type PageHead } from "./head";
 import { validateBookSearch } from "./lib/booking";
 import { BookingPage } from "./pages/BookingPage";
+import { ContractSignPage } from "./pages/ContractSignPage";
 import { GuestAreaPage } from "./pages/GuestAreaPage";
 import { BookingReceivedPage, MyBookingPage } from "./pages/GuestBookingPages";
 import { HomePage } from "./pages/HomePage";
@@ -100,6 +101,8 @@ export const siteBookRoute = {
 };
 export const siteReceivedRoute = privateRoute("הבקשה התקבלה", BookingReceivedPage);
 export const siteMyBookingRoute = privateRoute("ההזמנה שלי", MyBookingPage);
+/** מיגרציה 64: חתימה על הסכם — לפי הקישור האישי מהמייל (#t=…) */
+export const siteContractRoute = privateRoute("חתימה על הסכם", ContractSignPage);
 /** שלב א' 2: "ההזמנות שלי" — כניסה בקוד למייל; ?booking=<id> — הזמנה אחת */
 export const siteAccountRoute = {
   ...privateRoute("ההזמנות שלי", GuestAreaPage),

@@ -27,7 +27,7 @@ export function Hero({ section }: { section?: Section | undefined }) {
   const { site, theme, design } = useSite();
   const c = section?.content ?? {};
   const image = mediaById(site, c.image) ?? heroImage(site, design.logo);
-  // סרטון (עד 12 שניות): רק קובץ שהועלה, לא הטמעה — אחרי 5 שניות של התמונה (HeroVideo)
+  // סרטון (עד 15 שניות שהשרת מדד): רק קובץ שהועלה, לא הטמעה — הסרטון, ואחריו התמונה 5 שניות (HeroVideo)
   const video = videoById(site, c.video);
   const property = site.properties[0];
   const kind = property?.property_type ? t.propertyTypes[property.property_type] : "";

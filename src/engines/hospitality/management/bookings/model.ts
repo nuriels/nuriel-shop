@@ -3,6 +3,7 @@
 import type { BookingDetail, BookingRow, BookingState, BookingTab } from "../../types/bookings";
 import type { BookingPayments, PaymentKind } from "../../types/payments";
 import { manageKeys } from "../lib/query-keys";
+import type { Json } from "../../types/domain";
 
 export const bookingsKey = (tab: BookingTab, q: string) =>
   [...manageKeys.all, "bookings", tab, q] as const;
@@ -133,7 +134,37 @@ const EVENT_STATUS_TEXT: Partial<Record<string, string>> = {
   checked_out: "האורחים עזבו",
   no_show: "האורחים לא הגיעו",
 };
-export function eventText(e: { kind: string; from: string | null; to: string | null }): string {
+/** מיגרציה 65: אילו פרטי לקוח תוקנו (בהיסטוריה — אימייל וטלפון ממוסכים בלבד) */
+const CUSTOMER_FIELD_TEXT: Record<string, string> = {
+  full_name: "שם",
+  phone: "טלפון",
+  email: "אימייל",
+};
+function customerChangeText(changes: { [key: string]: Json } | undefined): string {
+  const fields = Array.isArray(changes?.["fields"]) ? (changes["fields"] as Json[]) : [];
+  const names = fields.map((f) => CUSTOMER_FIELD_TEXT[String(f)]).filter(Boolean);
+  const email = changes?.["email"];
+  const moved = changes?.["guest_changed"] === true;
+  let text = names.length ? `פרטי הלקוח תוקנו: ${names.join(", ")}` : "פרטי הלקוח תוקנו";
+  if (email && typeof email === "object" && !Array.isArray(email)) {
+    const from = typeof email["from"] === "string" ? email["from"] : "—";
+    const to = typeof email["to"] === "string" ? email["to"] : "בלי אימייל";
+    text += ` (${from} ← ${to})`;
+  }
+  return moved ? `${text} · רק בהזמנה הזו (כרטיס לקוח אחר)` : text;
+}
+
+export function eventText(e: {
+  kind: string;
+  from: string | null;
+  to: string | null;
+  changes?: { [key: string]: Json };
+}): string {
+  if (e.kind === "customer_updated") return customerChangeText(e.changes);
+  if (e.kind === "details_sent") {
+    const email = e.changes?.["email"];
+    return `פרטי ההזמנה וקישור אישי חדש נשלחו ללקוח${typeof email === "string" ? ` (${email})` : ""}`;
+  }
   if (e.kind === "created")
     return e.to === "confirmed"
       ? "ההזמנה נוצרה ואושרה"
@@ -184,6 +215,7 @@ export const EMAIL_EVENT: Record<string, string> = {
   group_booking_declined: "לאורח: הבקשה לכמה חדרים לא אושרה",
   new_group_request: "לעסק: בקשה חדשה לכמה חדרים",
   new_group_booking: "לעסק: הזמנה חדשה לכמה חדרים",
+  booking_details: "לאורח: פרטי ההזמנה וקישור אישי חדש",
 };
 
 /** סוגי תשלום ואמצעי תשלום (כרטיס התשלומים, הדוחות) */

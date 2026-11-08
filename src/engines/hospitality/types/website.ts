@@ -22,6 +22,11 @@ export interface PublicMedia {
   srcset: string | null;
   /** תמונה קטנה (רשימות, תצוגה מקדימה) */
   thumb_url: string | null;
+  /**
+   * סרטון שהועלה: האורך שהשרת מדד מהקובץ עצמו (מיגרציה 62). null / חסר — לא נמדד או לא נקרא,
+   * ואז הוא לא מוצג כסרטון הפתיח (רק עד 15 שניות שנמדדו)
+   */
+  seconds?: number | null;
 }
 
 export interface PublicAmenity {

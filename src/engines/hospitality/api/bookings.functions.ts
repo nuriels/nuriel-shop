@@ -2,6 +2,7 @@
 // הכללים (מי, מתי, revision, נעילה, יומן אירועים, מיילים בתור) — במסד (Stage 1f + מיגרציה 16).
 import { createServerFn } from "@tanstack/react-start";
 import type { BookingChange, BookingDetail, BookingList } from "../types/bookings";
+import type { CustomerUpdateResult, DetailsResendResult } from "../types/customer";
 import type { BookingGroup } from "../types/domain";
 import {
   parseBookingId,
@@ -12,6 +13,7 @@ import {
   parseModify,
   parseStay,
 } from "../validation/bookings";
+import { parseBookingCustomerUpdate } from "../validation/customer";
 
 type Changed = { booking_id: string; status: string; revision?: number };
 
@@ -215,6 +217,35 @@ export const hospitalityDecideGroup = createServerFn({ method: "POST" })
       "booking_group_decide",
       { _booking_id: data.id, _approve: data.approve, _reason: data.reason },
     );
+    await sendQueued();
+    return result;
+  });
+
+/** מיגרציה 65: תיקון פרטי הלקוח (שם / טלפון / אימייל) — בכרטיס או רק בהזמנה הזו; ובבקשה — "פרטי
+ *  ההזמנה" עם קישור אישי חדש לכתובת המעודכנת. ההרשאות, הקישורים שבוטלו, החוזים והתיעוד — במסד */
+export const hospitalityBookingCustomerUpdate = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseBookingCustomerUpdate(input))
+  .handler(async ({ data }): Promise<CustomerUpdateResult> => {
+    const { manageRpc } = await import("../server/manage.server");
+    const result = await manageRpc<CustomerUpdateResult>("booking_customer_update", {
+      _booking_id: data.id,
+      _expected_revision: data.revision,
+      _data: data.data,
+      _scope: data.scope,
+      _notify: data.notify,
+    });
+    if (data.notify) await sendQueued();
+    return result;
+  });
+
+/** מיגרציה 65: "פרטי ההזמנה" שוב לכתובת שבכרטיס — קישור אישי חדש (הקודם מתבטל) */
+export const hospitalityBookingResendDetails = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseBookingId(input))
+  .handler(async ({ data }): Promise<DetailsResendResult> => {
+    const { manageRpc } = await import("../server/manage.server");
+    const result = await manageRpc<DetailsResendResult>("booking_resend_details", {
+      _booking_id: data.id,
+    });
     await sendQueued();
     return result;
   });

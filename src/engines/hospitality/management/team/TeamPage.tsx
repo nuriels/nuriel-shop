@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Copy,
+  FileSignature,
   Loader2,
   MessageCircle,
   ShieldCheck,
@@ -47,6 +48,7 @@ import {
   hospitalityRemoveManager,
   hospitalityTeam,
   hospitalityTeamActivity,
+  hospitalityTeamSetContracts,
   hospitalityTeamSetFinance,
 } from "../../api/team.functions";
 import type { TeamMember, TeamView } from "../../types/team";
@@ -258,6 +260,7 @@ function TeamContent({ team, siteUrl }: { team: TeamView; siteUrl: string }) {
                   </p>
                 </div>
                 <FinanceAccess member={m} onChanged={refresh} />
+                <ContractsAccess member={m} onChanged={refresh} />
                 {m.role !== "owner" && (
                   <Button
                     variant="outline"
@@ -348,6 +351,53 @@ function FinanceAccess({ member, onChanged }: { member: TeamMember; onChanged: (
       <Label htmlFor={id} className="text-sm">
         נתונים כספיים
         <span className="sr-only"> — הכנסות וגבייה בלוח הבקרה, ל{name}</span>
+      </Label>
+    </div>
+  );
+}
+
+/** מסמכי לקוחות (חוזים לחתימה, הארכיון וה-PDF החתומים): לבעלים — תמיד; למנהל — מתג, כבוי כברירת מחדל */
+function ContractsAccess({ member, onChanged }: { member: TeamMember; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const id = `contracts-${member.user_id}`;
+  const name = member.display_name || member.email;
+  if (member.role === "owner")
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--hm-champagne-100)] px-2.5 py-1 text-xs font-semibold text-[var(--hm-champagne-700)]">
+        <FileSignature className="size-3.5" aria-hidden="true" />
+        מסמכי לקוחות — תמיד
+      </span>
+    );
+  const toggle = async (enabled: boolean) => {
+    setBusy(true);
+    try {
+      await hospitalityTeamSetContracts({ data: { userId: member.user_id, enabled } });
+      toast.success(
+        enabled
+          ? `${name} יוכל/תוכל מעכשיו לשלוח חוזים ולראות את הארכיון`
+          : `${name} כבר לא יראה/תראה את מסמכי הלקוחות`,
+      );
+    } catch (e) {
+      toast.error(errorText(e));
+    } finally {
+      setBusy(false);
+      onChanged();
+    }
+  };
+  return (
+    <div
+      className="flex min-h-11 items-center gap-2 rounded-lg border px-3"
+      data-contracts={member.email}
+    >
+      <Switch
+        id={id}
+        checked={member.contracts === true}
+        disabled={busy || member.is_blocked}
+        onCheckedChange={(v) => void toggle(v)}
+      />
+      <Label htmlFor={id} className="text-sm">
+        מסמכי לקוחות
+        <span className="sr-only"> — חוזים לחתימה, הארכיון והקבצים החתומים, ל{name}</span>
       </Label>
     </div>
   );

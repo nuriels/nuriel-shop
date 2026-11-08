@@ -3,7 +3,15 @@
 // החיבור — עוגייה HttpOnly של האתר; ההרשאות כולן בשרת ובמסד (מיגרציה 56).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
-import { ArrowRight, CalendarDays, LogOut, Mail, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarDays,
+  Download,
+  FileSignature,
+  LogOut,
+  Mail,
+  ShieldCheck,
+} from "lucide-react";
 import { useId, useState } from "react";
 import {
   hospitalityGuestAreaBooking,
@@ -12,7 +20,10 @@ import {
   hospitalityGuestAreaSignOut,
   hospitalityGuestAreaUploadProof,
   hospitalityGuestAreaVerifyCode,
+  hospitalityGuestDocumentFile,
+  hospitalityGuestDocuments,
 } from "../../api/guest-area.functions";
+import type { GuestDocument } from "../../types/contracts";
 import type { GuestAreaBooking } from "../../types/guest-area";
 import type { GuestPaymentInfo } from "../../types/payment-instructions";
 import { useCopy } from "../copy";
@@ -245,11 +256,93 @@ function AreaList({ email, bookings }: { email: string; bookings: GuestAreaBooki
           {past.length > 0 && <BookingList title={t.account.past} items={past} />}
         </div>
       )}
+      <MyDocuments />
       <p className="mt-10 flex items-start gap-2 text-xs text-muted-foreground">
         <ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         {t.account.privacy}
       </p>
     </Frame>
+  );
+}
+
+// ---------- המסמכים שלי (מיגרציה 64): רק ההסכמים החתומים של הכתובת המחוברת ----------
+
+const docDate = (iso: string, timeZone: string) =>
+  new Intl.DateTimeFormat("he-IL", { dateStyle: "long", timeZone }).format(new Date(iso));
+
+function MyDocuments() {
+  const t = useCopy();
+  const { site } = useSite();
+  const docs = useQuery({
+    queryKey: [...AREA_KEY, "documents"],
+    queryFn: () => hospitalityGuestDocuments(),
+    retry: false,
+    staleTime: 30_000,
+  });
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const list: GuestDocument[] = docs.data?.state === "signed_in" ? docs.data.documents : [];
+  if (list.length === 0) return null;
+  const download = async (d: GuestDocument) => {
+    setBusy(d.id);
+    setError(null);
+    try {
+      const r = await hospitalityGuestDocumentFile({ data: { id: d.id } });
+      if (r.state === "ok") window.location.assign(r.url);
+      else setError(t.account.signedOut);
+    } catch (e) {
+      setError(errText(e, t.account.retry));
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <section className="mt-10" data-testid="guest-area-documents">
+      <h2 className="mb-1 text-lg font-medium">{t.account.documents.title}</h2>
+      <p className="mb-4 text-sm text-muted-foreground">{t.account.documents.intro}</p>
+      <ul className="grid gap-3 md:grid-cols-2">
+        {list.map((d) => (
+          <li
+            key={d.id}
+            className="flex flex-col gap-3 rounded-[var(--radius)] border border-border bg-card p-5"
+            data-document={d.number}
+          >
+            <div className="flex items-start gap-3">
+              <FileSignature className="mt-0.5 size-5 shrink-0 opacity-70" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="font-medium">{d.title}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t.account.documents.number(d.number)} ·{" "}
+                  {t.account.documents.signedAt(docDate(d.signed_at, site.business.timezone))}
+                  {d.event_purpose ? ` · ${d.event_purpose}` : ""}
+                </p>
+                {d.status === "superseded" && (
+                  <p className="text-sm text-muted-foreground">{t.account.documents.superseded}</p>
+                )}
+              </div>
+            </div>
+            {d.has_pdf ? (
+              <button
+                type="button"
+                className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-sm border border-border px-4 text-sm font-medium hover:bg-muted disabled:opacity-60"
+                disabled={busy !== null}
+                onClick={() => void download(d)}
+              >
+                <Download className="size-4" aria-hidden="true" />
+                {busy === d.id ? t.account.documents.downloading : t.account.documents.download}
+              </button>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t.account.documents.notReady}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+      {error && (
+        <p className="mt-3 text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 

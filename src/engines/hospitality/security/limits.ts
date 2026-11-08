@@ -69,6 +69,18 @@ export const LIMITS = {
   ],
   /** יומן הייצוא (iCal) — Airbnb / Booking.com מושכים כל כמה דקות עד שעה */
   ical: [{ per: "token", limit: 120, window: HOUR }],
+  /** מיגרציה 64: פתיחת חוזה לחתימה לפי הקישור (גם ניחוש קישורים — נחסם כאן ובמסד הוא לא קיים) */
+  contractOpen: [
+    { per: "ip", limit: 60, window: 10 * MIN },
+    { per: "net", limit: 200, window: HOUR },
+  ],
+  /** חתימה (חד-פעמית במסד) — כולל הפקת ה-PDF ושליחת העותק */
+  contractSign: [
+    { per: "ip", limit: 10, window: 10 * MIN },
+    { per: "tenant", limit: 300, window: DAY },
+  ],
+  /** "המסמכים שלי": רשימה וקישור הורדה */
+  guestDocuments: [{ per: "ip", limit: 60, window: 10 * MIN }],
 
   // ---- אזור הניהול (צוות מחובר) — רק פעולות יקרות / רגישות ----
   /** ייבוא תמונה מקישור (הורדה מהרשת) */
@@ -97,6 +109,13 @@ export const LIMITS = {
   supportFile: [{ per: "user", limit: 120, window: 10 * MIN }],
   /** מדריך ההקמה: מעבר בין צעדים, "בדקתי" ודילוג (אישור ודילוג נרשמים ביומן) */
   setupWrite: [{ per: "user", limit: 120, window: 10 * MIN }],
+  /** מיגרציה 64: שליחת חוזה / עותק חתום במייל (כל שליחה — מייל ללקוח) */
+  contractSend: [
+    { per: "user", limit: 30, window: 10 * MIN },
+    { per: "tenant", limit: 300, window: DAY },
+  ],
+  /** קישור הורדה חתום ל-PDF של חוזה */
+  contractFile: [{ per: "user", limit: 120, window: 10 * MIN }],
 } as const satisfies Record<string, readonly LimitRule[]>;
 
 export type LimitAction = keyof typeof LIMITS;

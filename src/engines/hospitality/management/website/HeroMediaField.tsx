@@ -1,7 +1,8 @@
 // התמונה הראשית וסרטון הפתיח (H-1) — בלשונית "עיצוב" ובמקטע הפתיח (אותו ערך: התוכן של מקטע
 // הפתיח). תמונה: העלאה חדשה (נשמרת בגלריית האתר ונבחרת), בחירה מהתמונות, או אוטומטית. סרטון:
-// העלאה בלבד — עד 12 שניות ועד 20MB; נבדק כבר כאן (אורך מהדפדפן, גודל) ושוב בשרת על הקובץ עצמו.
-// באתר: 5 שניות של התמונה ואז הסרטון, בלי קול ובלולאה, עם כפתור עצירה (HeroVideo).
+// העלאה בלבד — עד 15 שניות ועד 20MB; נבדק כבר כאן (אורך מהדפדפן, גודל — רק לנוחות) ושוב בשרת על
+// הקובץ עצמו, והמסד מקבל לפתיח רק סרטון שהשרת מדד (מיגרציה 62). באתר: הסרטון בלי קול, ואחריו
+// התמונה הראשית 5 שניות — וחוזר חלילה, עם כפתור עצירה (HeroVideo).
 import { Film, ImagePlus, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -9,7 +10,7 @@ import { Button } from "@/platform/ui";
 import { hospitalityUploadHeroVideo, hospitalityUploadMedia } from "../../api/media.functions";
 import { HERO_VIDEO_MAX_BYTES, HERO_VIDEO_MAX_SECONDS } from "../../media/video-info";
 import type { PublicSite } from "../../types/website";
-import { heroImage, mediaById, videoById } from "../../website/lib/media";
+import { heroImage, heroVideoStatus, mediaById, videoById } from "../../website/lib/media";
 import { errorText } from "../catalog/refresh";
 import { shrink } from "../media/shrink";
 import { ImagePicker } from "./SectionFields";
@@ -75,6 +76,9 @@ export function HeroMediaField({
     chosen?.url ?? (image ? fresh[image] : undefined) ?? heroImage(site, logo)?.url;
   const clip = videoById(site, video);
   const clipUrl = clip?.url ?? (video ? fresh[video] : undefined);
+  // סרטון שנבחר בעבר ולא יוצג באתר (ארוך מ-15 שניות / עוד לא נמדד) — מסבירים ומציעים להסיר
+  const status = heroVideoStatus(site, video);
+  const unusable = Boolean(video) && !clip && !(video && fresh[video]) && status.status !== "ok";
 
   const uploadImage = async (file: File | undefined) => {
     if (!file) return;
@@ -155,8 +159,9 @@ export function HeroMediaField({
     <fieldset className="flex flex-col gap-3" data-testid="hero-media">
       <legend className="mb-1 text-sm font-medium">תמונה ראשית וסרטון (ראש העמוד)</legend>
       <p className="text-xs text-muted-foreground">
-        התמונה מוצגת 5 שניות, ואז — אם הוספתם — הסרטון: בלי קול, בלולאה, עם כפתור עצירה. מי שביקש
-        באתר "עצירת אנימציות" או גולש בחיסכון בנתונים יראה רק את התמונה.
+        אם הוספתם סרטון: הסרטון מתנגן בלי קול, ובסופו התמונה הראשית 5 שניות — וחוזר חלילה, עם כפתור
+        עצירה. עד שהסרטון נטען, ובכל תקלה, מוצגת התמונה. מי שביקש באתר "עצירת אנימציות" או גולש
+        בחיסכון בנתונים יראה רק את התמונה.
       </p>
 
       <div className="flex flex-col gap-2">
@@ -234,6 +239,16 @@ export function HeroMediaField({
               הסרטון נשמר גם ב"תמונות" (גלריית האתר) — אפשר למחוק אותו שם.
             </p>
           </>
+        ) : unusable ? (
+          <p
+            role="status"
+            className="rounded-md bg-amber-50 p-2 text-xs text-amber-900"
+            data-testid="hero-video-unusable"
+          >
+            {status.status === "too_long" && status.seconds !== null
+              ? `הסרטון שנבחר ארוך מדי (${Math.round(status.seconds)} שניות) ולכן לא מוצג באתר — באתר מוצגת התמונה הראשית. הסירו אותו או העלו סרטון של עד ${HERO_VIDEO_MAX_SECONDS} שניות.`
+              : `הסרטון שנבחר לא מוצג באתר (לא נמצא, או שאורכו עוד לא נבדק) — באתר מוצגת התמונה הראשית. הסירו אותו או העלו סרטון של עד ${HERO_VIDEO_MAX_SECONDS} שניות.`}
+          </p>
         ) : (
           <p className="text-xs text-muted-foreground">
             עד {HERO_VIDEO_MAX_SECONDS} שניות ועד 20MB — MP4 או MOV מהטלפון. בטלפון: צילום ב-1080p

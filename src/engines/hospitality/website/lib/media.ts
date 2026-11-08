@@ -1,4 +1,5 @@
 // בחירת תמונות לאתר: תמונת הפתיח, תמונה ראשית ליחידה, והגלריה המאוחדת (בלי כפילויות).
+import { heroVideoFits } from "../../media/video-info";
 import type { PublicAmenity, PublicMedia, PublicSite, PublicUnit } from "../../types/website";
 
 const isImage = (m: PublicMedia) => m.kind === "image" && !!m.url;
@@ -83,10 +84,30 @@ export function allMedia(site: PublicSite): PublicMedia[] {
   return siteGallery(site);
 }
 
-/** סרטון שהועלה (לא הטמעה) לפי מזהה — סרטון הפתיח (H-1); רק מהגלריה של האתר הזה */
+/**
+ * סרטון הפתיח לפי מזהה: רק סרטון שהועלה (לא הטמעה), מהגלריה של האתר הזה, שהשרת מדד ונמצא עד
+ * 15 שניות (מיגרציה 62). כל דבר אחר — null, והפתיח נשאר עם התמונה הראשית
+ */
 export function videoById(site: PublicSite, id: string | undefined): PublicMedia | null {
   if (!id) return null;
-  return allMedia(site).find((m) => m.id === id && m.kind === "video" && Boolean(m.url)) ?? null;
+  return (
+    allMedia(site).find(
+      (m) => m.id === id && m.kind === "video" && Boolean(m.url) && heroVideoFits(m.seconds),
+    ) ?? null
+  );
+}
+
+/** בעורך: למה סרטון הפתיח שנבחר לא יוצג באתר (או "ok") */
+export function heroVideoStatus(
+  site: PublicSite,
+  id: string | undefined,
+): { status: "none" | "ok" | "too_long" | "not_checked" | "missing"; seconds: number | null } {
+  if (!id) return { status: "none", seconds: null };
+  const m = allMedia(site).find((x) => x.id === id);
+  if (!m || m.kind !== "video" || !m.url) return { status: "missing", seconds: null };
+  const seconds = typeof m.seconds === "number" ? m.seconds : null;
+  if (heroVideoFits(seconds)) return { status: "ok", seconds };
+  return { status: seconds === null ? "not_checked" : "too_long", seconds };
 }
 
 /** תמונה לפי מזהה (רק מהתמונות של האתר הזה — וגם מהלוגואים שלו, מיגרציה 42) */

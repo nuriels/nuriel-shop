@@ -47,8 +47,10 @@ import { Route as ManageIndexRouteImport } from './routes/manage.index'
 import { Route as ManageBookingsRouteImport } from './routes/manage.bookings'
 import { Route as ManageCalendarRouteImport } from './routes/manage.calendar'
 import { Route as ManageChannelsRouteImport } from './routes/manage.channels'
+import { Route as ManageClientDocumentsRouteImport } from './routes/manage.client-documents'
 import { Route as ManageDocumentsRouteImport } from './routes/manage.documents'
 import { Route as ManageEmailsRouteImport } from './routes/manage.emails'
+import { Route as ManageEventsRouteImport } from './routes/manage.events'
 import { Route as ManageGuestsRouteImport } from './routes/manage.guests'
 import { Route as ManagePackagesRouteImport } from './routes/manage.packages'
 import { Route as ManagePhotosRouteImport } from './routes/manage.photos'
@@ -78,6 +80,7 @@ import { Route as StayAccessibilityRouteImport } from './routes/stay.accessibili
 import { Route as StayAccountRouteImport } from './routes/stay.account'
 import { Route as StayBookRouteImport } from './routes/stay.book'
 import { Route as StayBookingReceivedRouteImport } from './routes/stay.booking-received'
+import { Route as StayContractRouteImport } from './routes/stay.contract'
 import { Route as StayMyBookingRouteImport } from './routes/stay.my-booking'
 import { Route as StayPrivacyRouteImport } from './routes/stay.privacy'
 import { Route as UnsubscribeTokenRouteImport } from './routes/unsubscribe.$token'
@@ -99,6 +102,8 @@ import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$
 import { Route as CheckoutGrowOrderIdRouteImport } from './routes/checkout_.grow.$orderId'
 import { Route as ManageBookingsBookingIdRouteImport } from './routes/manage.bookings_.$bookingId'
 import { Route as ManageBookingsNewRouteImport } from './routes/manage.bookings_.new'
+import { Route as ManageEventsEventIdRouteImport } from './routes/manage.events_.$eventId'
+import { Route as ManageEventsNewRouteImport } from './routes/manage.events_.new'
 import { Route as ManageGuestsGuestIdRouteImport } from './routes/manage.guests_.$guestId'
 import { Route as ManagePropertiesPropertyIdRouteImport } from './routes/manage.properties.$propertyId'
 import { Route as ManageSupportTicketIdRouteImport } from './routes/manage.support_.$ticketId'
@@ -301,6 +306,11 @@ const ManageChannelsRoute = ManageChannelsRouteImport.update({
   path: '/channels',
   getParentRoute: () => ManageRoute,
 } as any)
+const ManageClientDocumentsRoute = ManageClientDocumentsRouteImport.update({
+  id: '/client-documents',
+  path: '/client-documents',
+  getParentRoute: () => ManageRoute,
+} as any)
 const ManageDocumentsRoute = ManageDocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
@@ -309,6 +319,11 @@ const ManageDocumentsRoute = ManageDocumentsRouteImport.update({
 const ManageEmailsRoute = ManageEmailsRouteImport.update({
   id: '/emails',
   path: '/emails',
+  getParentRoute: () => ManageRoute,
+} as any)
+const ManageEventsRoute = ManageEventsRouteImport.update({
+  id: '/events',
+  path: '/events',
   getParentRoute: () => ManageRoute,
 } as any)
 const ManageGuestsRoute = ManageGuestsRouteImport.update({
@@ -456,6 +471,11 @@ const StayBookingReceivedRoute = StayBookingReceivedRouteImport.update({
   path: '/booking-received',
   getParentRoute: () => StayRoute,
 } as any)
+const StayContractRoute = StayContractRouteImport.update({
+  id: '/contract',
+  path: '/contract',
+  getParentRoute: () => StayRoute,
+} as any)
 const StayMyBookingRoute = StayMyBookingRouteImport.update({
   id: '/my-booking',
   path: '/my-booking',
@@ -563,6 +583,16 @@ const ManageBookingsNewRoute = ManageBookingsNewRouteImport.update({
   path: '/bookings/new',
   getParentRoute: () => ManageRoute,
 } as any)
+const ManageEventsEventIdRoute = ManageEventsEventIdRouteImport.update({
+  id: '/events_/$eventId',
+  path: '/events/$eventId',
+  getParentRoute: () => ManageRoute,
+} as any)
+const ManageEventsNewRoute = ManageEventsNewRouteImport.update({
+  id: '/events_/new',
+  path: '/events/new',
+  getParentRoute: () => ManageRoute,
+} as any)
 const ManageGuestsGuestIdRoute = ManageGuestsGuestIdRouteImport.update({
   id: '/guests_/$guestId',
   path: '/guests/$guestId',
@@ -659,8 +689,10 @@ export interface FileRoutesByFullPath {
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
   '/manage/channels': typeof ManageChannelsRoute
+  '/manage/client-documents': typeof ManageClientDocumentsRoute
   '/manage/documents': typeof ManageDocumentsRoute
   '/manage/emails': typeof ManageEmailsRoute
+  '/manage/events': typeof ManageEventsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/packages': typeof ManagePackagesRoute
   '/manage/photos': typeof ManagePhotosRoute
@@ -689,6 +721,7 @@ export interface FileRoutesByFullPath {
   '/stay/account': typeof StayAccountRoute
   '/stay/book': typeof StayBookRoute
   '/stay/booking-received': typeof StayBookingReceivedRoute
+  '/stay/contract': typeof StayContractRoute
   '/stay/my-booking': typeof StayMyBookingRoute
   '/stay/privacy': typeof StayPrivacyRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
@@ -712,6 +745,8 @@ export interface FileRoutesByFullPath {
   '/checkout/grow/$orderId': typeof CheckoutGrowOrderIdRoute
   '/manage/bookings/$bookingId': typeof ManageBookingsBookingIdRoute
   '/manage/bookings/new': typeof ManageBookingsNewRoute
+  '/manage/events/$eventId': typeof ManageEventsEventIdRoute
+  '/manage/events/new': typeof ManageEventsNewRoute
   '/manage/guests/$guestId': typeof ManageGuestsGuestIdRoute
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/support/$ticketId': typeof ManageSupportTicketIdRoute
@@ -760,8 +795,10 @@ export interface FileRoutesByTo {
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
   '/manage/channels': typeof ManageChannelsRoute
+  '/manage/client-documents': typeof ManageClientDocumentsRoute
   '/manage/documents': typeof ManageDocumentsRoute
   '/manage/emails': typeof ManageEmailsRoute
+  '/manage/events': typeof ManageEventsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/packages': typeof ManagePackagesRoute
   '/manage/photos': typeof ManagePhotosRoute
@@ -790,6 +827,7 @@ export interface FileRoutesByTo {
   '/stay/account': typeof StayAccountRoute
   '/stay/book': typeof StayBookRoute
   '/stay/booking-received': typeof StayBookingReceivedRoute
+  '/stay/contract': typeof StayContractRoute
   '/stay/my-booking': typeof StayMyBookingRoute
   '/stay/privacy': typeof StayPrivacyRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
@@ -813,6 +851,8 @@ export interface FileRoutesByTo {
   '/checkout/grow/$orderId': typeof CheckoutGrowOrderIdRoute
   '/manage/bookings/$bookingId': typeof ManageBookingsBookingIdRoute
   '/manage/bookings/new': typeof ManageBookingsNewRoute
+  '/manage/events/$eventId': typeof ManageEventsEventIdRoute
+  '/manage/events/new': typeof ManageEventsNewRoute
   '/manage/guests/$guestId': typeof ManageGuestsGuestIdRoute
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/support/$ticketId': typeof ManageSupportTicketIdRoute
@@ -864,8 +904,10 @@ export interface FileRoutesById {
   '/manage/bookings': typeof ManageBookingsRoute
   '/manage/calendar': typeof ManageCalendarRoute
   '/manage/channels': typeof ManageChannelsRoute
+  '/manage/client-documents': typeof ManageClientDocumentsRoute
   '/manage/documents': typeof ManageDocumentsRoute
   '/manage/emails': typeof ManageEmailsRoute
+  '/manage/events': typeof ManageEventsRoute
   '/manage/guests': typeof ManageGuestsRoute
   '/manage/packages': typeof ManagePackagesRoute
   '/manage/photos': typeof ManagePhotosRoute
@@ -894,6 +936,7 @@ export interface FileRoutesById {
   '/stay/account': typeof StayAccountRoute
   '/stay/book': typeof StayBookRoute
   '/stay/booking-received': typeof StayBookingReceivedRoute
+  '/stay/contract': typeof StayContractRoute
   '/stay/my-booking': typeof StayMyBookingRoute
   '/stay/privacy': typeof StayPrivacyRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
@@ -917,6 +960,8 @@ export interface FileRoutesById {
   '/checkout_/grow/$orderId': typeof CheckoutGrowOrderIdRoute
   '/manage/bookings_/$bookingId': typeof ManageBookingsBookingIdRoute
   '/manage/bookings_/new': typeof ManageBookingsNewRoute
+  '/manage/events_/$eventId': typeof ManageEventsEventIdRoute
+  '/manage/events_/new': typeof ManageEventsNewRoute
   '/manage/guests_/$guestId': typeof ManageGuestsGuestIdRoute
   '/manage/properties/$propertyId': typeof ManagePropertiesPropertyIdRoute
   '/manage/support_/$ticketId': typeof ManageSupportTicketIdRoute
@@ -969,8 +1014,10 @@ export interface FileRouteTypes {
     | '/manage/bookings'
     | '/manage/calendar'
     | '/manage/channels'
+    | '/manage/client-documents'
     | '/manage/documents'
     | '/manage/emails'
+    | '/manage/events'
     | '/manage/guests'
     | '/manage/packages'
     | '/manage/photos'
@@ -999,6 +1046,7 @@ export interface FileRouteTypes {
     | '/stay/account'
     | '/stay/book'
     | '/stay/booking-received'
+    | '/stay/contract'
     | '/stay/my-booking'
     | '/stay/privacy'
     | '/unsubscribe/$token'
@@ -1022,6 +1070,8 @@ export interface FileRouteTypes {
     | '/checkout/grow/$orderId'
     | '/manage/bookings/$bookingId'
     | '/manage/bookings/new'
+    | '/manage/events/$eventId'
+    | '/manage/events/new'
     | '/manage/guests/$guestId'
     | '/manage/properties/$propertyId'
     | '/manage/support/$ticketId'
@@ -1070,8 +1120,10 @@ export interface FileRouteTypes {
     | '/manage/bookings'
     | '/manage/calendar'
     | '/manage/channels'
+    | '/manage/client-documents'
     | '/manage/documents'
     | '/manage/emails'
+    | '/manage/events'
     | '/manage/guests'
     | '/manage/packages'
     | '/manage/photos'
@@ -1100,6 +1152,7 @@ export interface FileRouteTypes {
     | '/stay/account'
     | '/stay/book'
     | '/stay/booking-received'
+    | '/stay/contract'
     | '/stay/my-booking'
     | '/stay/privacy'
     | '/unsubscribe/$token'
@@ -1123,6 +1176,8 @@ export interface FileRouteTypes {
     | '/checkout/grow/$orderId'
     | '/manage/bookings/$bookingId'
     | '/manage/bookings/new'
+    | '/manage/events/$eventId'
+    | '/manage/events/new'
     | '/manage/guests/$guestId'
     | '/manage/properties/$propertyId'
     | '/manage/support/$ticketId'
@@ -1173,8 +1228,10 @@ export interface FileRouteTypes {
     | '/manage/bookings'
     | '/manage/calendar'
     | '/manage/channels'
+    | '/manage/client-documents'
     | '/manage/documents'
     | '/manage/emails'
+    | '/manage/events'
     | '/manage/guests'
     | '/manage/packages'
     | '/manage/photos'
@@ -1203,6 +1260,7 @@ export interface FileRouteTypes {
     | '/stay/account'
     | '/stay/book'
     | '/stay/booking-received'
+    | '/stay/contract'
     | '/stay/my-booking'
     | '/stay/privacy'
     | '/unsubscribe/$token'
@@ -1226,6 +1284,8 @@ export interface FileRouteTypes {
     | '/checkout_/grow/$orderId'
     | '/manage/bookings_/$bookingId'
     | '/manage/bookings_/new'
+    | '/manage/events_/$eventId'
+    | '/manage/events_/new'
     | '/manage/guests_/$guestId'
     | '/manage/properties/$propertyId'
     | '/manage/support_/$ticketId'
@@ -1574,6 +1634,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageChannelsRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/client-documents': {
+      id: '/manage/client-documents'
+      path: '/client-documents'
+      fullPath: '/manage/client-documents'
+      preLoaderRoute: typeof ManageClientDocumentsRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/documents': {
       id: '/manage/documents'
       path: '/documents'
@@ -1586,6 +1653,13 @@ declare module '@tanstack/react-router' {
       path: '/emails'
       fullPath: '/manage/emails'
       preLoaderRoute: typeof ManageEmailsRouteImport
+      parentRoute: typeof ManageRoute
+    }
+    '/manage/events': {
+      id: '/manage/events'
+      path: '/events'
+      fullPath: '/manage/events'
+      preLoaderRoute: typeof ManageEventsRouteImport
       parentRoute: typeof ManageRoute
     }
     '/manage/guests': {
@@ -1791,6 +1865,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StayBookingReceivedRouteImport
       parentRoute: typeof StayRoute
     }
+    '/stay/contract': {
+      id: '/stay/contract'
+      path: '/contract'
+      fullPath: '/stay/contract'
+      preLoaderRoute: typeof StayContractRouteImport
+      parentRoute: typeof StayRoute
+    }
     '/stay/my-booking': {
       id: '/stay/my-booking'
       path: '/my-booking'
@@ -1938,6 +2019,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageBookingsNewRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/events_/$eventId': {
+      id: '/manage/events_/$eventId'
+      path: '/events/$eventId'
+      fullPath: '/manage/events/$eventId'
+      preLoaderRoute: typeof ManageEventsEventIdRouteImport
+      parentRoute: typeof ManageRoute
+    }
+    '/manage/events_/new': {
+      id: '/manage/events_/new'
+      path: '/events/new'
+      fullPath: '/manage/events/new'
+      preLoaderRoute: typeof ManageEventsNewRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/guests_/$guestId': {
       id: '/manage/guests_/$guestId'
       path: '/guests/$guestId'
@@ -2022,8 +2117,10 @@ interface ManageRouteChildren {
   ManageBookingsRoute: typeof ManageBookingsRoute
   ManageCalendarRoute: typeof ManageCalendarRoute
   ManageChannelsRoute: typeof ManageChannelsRoute
+  ManageClientDocumentsRoute: typeof ManageClientDocumentsRoute
   ManageDocumentsRoute: typeof ManageDocumentsRoute
   ManageEmailsRoute: typeof ManageEmailsRoute
+  ManageEventsRoute: typeof ManageEventsRoute
   ManageGuestsRoute: typeof ManageGuestsRoute
   ManagePackagesRoute: typeof ManagePackagesRoute
   ManagePhotosRoute: typeof ManagePhotosRoute
@@ -2040,6 +2137,8 @@ interface ManageRouteChildren {
   ManageIndexRoute: typeof ManageIndexRoute
   ManageBookingsBookingIdRoute: typeof ManageBookingsBookingIdRoute
   ManageBookingsNewRoute: typeof ManageBookingsNewRoute
+  ManageEventsEventIdRoute: typeof ManageEventsEventIdRoute
+  ManageEventsNewRoute: typeof ManageEventsNewRoute
   ManageGuestsGuestIdRoute: typeof ManageGuestsGuestIdRoute
   ManagePropertiesPropertyIdRoute: typeof ManagePropertiesPropertyIdRoute
   ManageSupportTicketIdRoute: typeof ManageSupportTicketIdRoute
@@ -2050,8 +2149,10 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManageBookingsRoute: ManageBookingsRoute,
   ManageCalendarRoute: ManageCalendarRoute,
   ManageChannelsRoute: ManageChannelsRoute,
+  ManageClientDocumentsRoute: ManageClientDocumentsRoute,
   ManageDocumentsRoute: ManageDocumentsRoute,
   ManageEmailsRoute: ManageEmailsRoute,
+  ManageEventsRoute: ManageEventsRoute,
   ManageGuestsRoute: ManageGuestsRoute,
   ManagePackagesRoute: ManagePackagesRoute,
   ManagePhotosRoute: ManagePhotosRoute,
@@ -2068,6 +2169,8 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManageIndexRoute: ManageIndexRoute,
   ManageBookingsBookingIdRoute: ManageBookingsBookingIdRoute,
   ManageBookingsNewRoute: ManageBookingsNewRoute,
+  ManageEventsEventIdRoute: ManageEventsEventIdRoute,
+  ManageEventsNewRoute: ManageEventsNewRoute,
   ManageGuestsGuestIdRoute: ManageGuestsGuestIdRoute,
   ManagePropertiesPropertyIdRoute: ManagePropertiesPropertyIdRoute,
   ManageSupportTicketIdRoute: ManageSupportTicketIdRoute,
@@ -2082,6 +2185,7 @@ interface StayRouteChildren {
   StayAccountRoute: typeof StayAccountRoute
   StayBookRoute: typeof StayBookRoute
   StayBookingReceivedRoute: typeof StayBookingReceivedRoute
+  StayContractRoute: typeof StayContractRoute
   StayMyBookingRoute: typeof StayMyBookingRoute
   StayPrivacyRoute: typeof StayPrivacyRoute
   StayIndexRoute: typeof StayIndexRoute
@@ -2097,6 +2201,7 @@ const StayRouteChildren: StayRouteChildren = {
   StayAccountRoute: StayAccountRoute,
   StayBookRoute: StayBookRoute,
   StayBookingReceivedRoute: StayBookingReceivedRoute,
+  StayContractRoute: StayContractRoute,
   StayMyBookingRoute: StayMyBookingRoute,
   StayPrivacyRoute: StayPrivacyRoute,
   StayIndexRoute: StayIndexRoute,

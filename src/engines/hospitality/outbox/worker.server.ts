@@ -6,7 +6,11 @@
 //      הולכים וגדלים (במסד), ואחרי 5 — "נכשל". מייל שנכשל לא מבטל אף פעולה;
 //   3. פעם ביום — apply_retention (מחיקת פרטי אורחים ישנים לפי ההגדרה של כל עסק);
 //   4. כל 5 דקות — סנכרון יומנים חיצוניים (iCal) שהגיע זמנם (channels/import.server.ts);
-//   5. כל 10 דקות — ניקוי מוני הגבלת הקצב שפג תוקפם (rate_sweep, מיגרציה 25).
+//   5. כל 10 דקות — ניקוי מוני הגבלת הקצב שפג תוקפם (rate_sweep, מיגרציה 25);
+//   6. כל 2 דקות (והסבב הראשון אחרי ההפעלה) — מדידת האורך של סרטונים שעוד לא נמדדו (מיגרציה 62:
+//      סרטונים ישנים; סרטון הפתיח מוצג רק אחרי שנמדד ונמצא עד 15 שניות);
+//   7. כל 2 דקות — חוזים שנחתמו ועוד לא הושלמו (מיגרציה 64): ה-PDF החתום לדלי הפרטי והעותק ללקוח,
+//      כשמשהו נכשל מיד אחרי החתימה.
 // הקריאות למסד במפתח השירות — אלה פונקציות שרק השרת רשאי להריץ.
 import { createServerOnlyFn } from "@tanstack/react-start";
 import { escapeHtml, sendBusinessEmail } from "@/platform/email/send.server";
@@ -45,6 +49,21 @@ const runChannelSyncs = createServerOnlyFn(async () => {
   await runDueChannelSyncs();
 });
 const CHANNELS_MS = 5 * 60 * 1000;
+// מיגרציה 62: האורך של סרטונים ישנים — ההורדה והקריאה בשרת בלבד
+let lastVideoCheck = 0;
+const VIDEO_CHECK_MS = 2 * 60 * 1000;
+const runVideoChecks = createServerOnlyFn(async () => {
+  const { checkPendingVideos } = await import("../server/video-check.server");
+  await checkPendingVideos();
+});
+
+// מיגרציה 64: השלמת חוזים חתומים (PDF + עותק במייל) — בשרת בלבד
+let lastContracts = 0;
+const CONTRACTS_MS = 2 * 60 * 1000;
+const runContractWork = createServerOnlyFn(async () => {
+  const { runContractPendingWork } = await import("../server/contracts.server");
+  await runContractPendingWork();
+});
 
 export function startOutboxWorker(): void {
   if (started || !hospitalitySwitchOn()) return;
@@ -115,6 +134,25 @@ async function tick(): Promise<void> {
       if (Date.now() - lastSweep > SWEEP_MS) {
         lastSweep = Date.now();
         await rpc("rate_sweep", {});
+      }
+      if (Date.now() - lastVideoCheck > VIDEO_CHECK_MS) {
+        lastVideoCheck = Date.now();
+        // בנפרד: תקלה כאן לא עוצרת את שאר הסבב
+        await runVideoChecks().catch((error: unknown) =>
+          console.error(
+            "[hospitality/worker] video check",
+            error instanceof Error ? error.message : error,
+          ),
+        );
+      }
+      if (Date.now() - lastContracts > CONTRACTS_MS) {
+        lastContracts = Date.now();
+        await runContractWork().catch((error: unknown) =>
+          console.error(
+            "[hospitality/worker] contracts",
+            error instanceof Error ? error.message : error,
+          ),
+        );
       }
     } while (again);
   } catch (error) {

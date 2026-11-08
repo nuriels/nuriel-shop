@@ -9,6 +9,10 @@ import { Check, ChevronRight, LogIn, LogOut, Mail, Phone, UserX, X } from "lucid
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from "@/platform/ui";
 import { AcceptedDocumentsCard } from "./AcceptedDocumentsCard";
+import { BookingContractsCard } from "./BookingContractsCard";
+import { CustomerDetailsEditor } from "../guests/CustomerDetailsEditor";
+import { hospitalityBookingGroup } from "../../api/bookings.functions";
+import { manageKeys } from "../lib/query-keys";
 import { GroupCard } from "./GroupCard";
 import { PaymentsCard } from "./PaymentsCard";
 import { PhonePaymentCard } from "./PhonePaymentCard";
@@ -304,6 +308,10 @@ function Booking({ b }: { b: BookingDetail }) {
             {b.guest.bookings_count > 1 && (
               <p className="text-muted-foreground">אורח חוזר — {b.guest.bookings_count} הזמנות.</p>
             )}
+            {/* מיגרציה 65: תיקון פרטי הלקוח (הרשאת אורחים) ושליחה חוזרת של פרטי ההזמנה */}
+            {ctx.permissions["guests"] && b.guest.contact_full && (
+              <BookingCustomerEditor b={b} onSaved={refresh} />
+            )}
           </div>
         )}
       </Section>
@@ -334,6 +342,8 @@ function Booking({ b }: { b: BookingDetail }) {
       <Section title="סוג העסקה והמסמכים שאושרו">
         <AcceptedDocumentsCard b={b} />
       </Section>
+
+      <BookingContractsCard b={b} />
 
       <Section title="מחיר">
         <table className="w-full text-sm">
@@ -437,6 +447,39 @@ function Booking({ b }: { b: BookingDetail }) {
       )}
 
       {declining && <DeclineSheet b={b} onClose={() => setDeclining(false)} onDone={refresh} />}
+    </div>
+  );
+}
+
+const ACTIVE_STATES = new Set([
+  "pending_approval",
+  "pending_payment",
+  "confirmed",
+  "cancel_requested",
+  "checked_in",
+]);
+
+function BookingCustomerEditor({ b, onSaved }: { b: BookingDetail; onSaved: () => void }) {
+  // קבוצת חדרים (בקשה אחת) — אותה שאילתה כמו כרטיס הקבוצה (מהמטמון)
+  const group = useQuery({
+    queryKey: [...manageKeys.all, "booking-group", b.id],
+    queryFn: () => hospitalityBookingGroup({ data: { id: b.id } }),
+  });
+  return (
+    <div className="mt-2 border-t pt-3">
+      <CustomerDetailsEditor
+        target={{
+          kind: "booking",
+          id: b.id,
+          number: b.number,
+          revision: b.revision,
+          active: ACTIVE_STATES.has(b.state),
+          group: Boolean(group.data),
+        }}
+        current={{ full_name: b.guest.name, phone: b.guest.phone, email: b.guest.email }}
+        bookingsCount={b.guest.bookings_count}
+        onSaved={onSaved}
+      />
     </div>
   );
 }

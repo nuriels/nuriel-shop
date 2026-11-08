@@ -315,7 +315,8 @@ SELECT pg_temp.call(:'sf', :OWNER_F, format('SELECT hospitality.team_set_finance
 SELECT pg_temp.call(:'sf', :OWNER_F, format('SELECT to_jsonb(hospitality.team_remove_manager(%L))', :MGR_F)) IS NOT NULL AS ok \gset
 SELECT tests.check('team: removing a manager removes the grants given to them',
   format($$SELECT NOT EXISTS (SELECT 1 FROM hospitality.staff_grants WHERE tenant_id = %L AND user_id = %L)$$, :'sf', :MGR_F));
-SELECT tests.check('permissions: 14, reports.finance last; the dashboard functions guard by reports / bookings',
-  $$SELECT cardinality(hospitality.permissions()) = 14 AND (hospitality.permissions())[14] = 'reports.finance'
+SELECT tests.check('permissions: 15 (+ contracts of migration 64 last), reports.finance before it; the dashboard functions guard by reports / bookings',
+  $$SELECT cardinality(hospitality.permissions()) = 15 AND (hospitality.permissions())[14] = 'reports.finance'
+       AND (hospitality.permissions())[15] = 'contracts'
        AND (SELECT prosrc LIKE '%_manage_tenant(''reports'')%' FROM pg_proc WHERE oid = 'hospitality.dashboard_overview(date,date)'::regprocedure)
        AND (SELECT prosrc LIKE '%_manage_tenant(''bookings'')%' FROM pg_proc WHERE oid = 'hospitality.dashboard_tasks()'::regprocedure)$$);

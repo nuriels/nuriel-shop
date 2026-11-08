@@ -22,6 +22,11 @@ export interface MediaItem {
   thumb_url: string | null;
   /** srcset לאתר: 480w, 960w, 1600w */
   srcset: string | null;
+  /** סרטון: האורך שהשרת מדד (מיגרציה 62); null — לא נמדד / לא נקרא */
+  duration_seconds?: number | null;
+  video_codec?: "h264" | "hevc" | "av1" | "vp8" | "vp9" | "other" | null;
+  /** השרת כבר בדק את הקובץ (גם אם לא הצליח לקרוא את האורך) */
+  duration_checked?: boolean;
 }
 
 export interface MediaUsage {

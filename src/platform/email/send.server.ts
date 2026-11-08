@@ -11,6 +11,8 @@ export interface BusinessEmail {
   replyTo: string | null;
   /** מזהה יציב (למשל מזהה ההודעה בתור) — אותו מפתח לא נשלח פעמיים */
   idempotencyKey: string;
+  /** קבצים מצורפים (למשל החוזה החתום כ-PDF) — התוכן ב-base64 */
+  attachments?: { filename: string; content: string }[];
 }
 
 export interface BusinessEmailResult {
@@ -28,6 +30,7 @@ export async function sendBusinessEmail(input: BusinessEmail): Promise<BusinessE
     html: input.html,
     platformSender: { name: input.senderName, replyTo: input.replyTo },
     headers: { "Idempotency-Key": input.idempotencyKey },
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   });
   return { sent: r.sent, skipped: r.skipped === true, id: r.id ?? null, reason: r.reason ?? null };
 }

@@ -421,6 +421,17 @@ export const he = {
     } as Record<string, string>,
     signedOut: "החיבור הסתיים — היכנסו שוב עם קוד למייל.",
     retry: "משהו השתבש — נסו שוב בעוד רגע.",
+    // מיגרציה 64: ההסכמים החתומים של הכתובת המחוברת
+    documents: {
+      title: "המסמכים שלי",
+      intro: "ההסכמים שחתמתם עליהם מול העסק — העותק החתום (PDF), כמו שנחתם.",
+      number: (n: number) => `הסכם מספר ${n}`,
+      signedAt: (date: string) => `נחתם ${date}`,
+      superseded: "הוחלף בהסכם מתוקן",
+      download: "הורדת ה-PDF",
+      downloading: "מכינים את הקובץ…",
+      notReady: "העותק החתום בהכנה — נסו שוב בעוד כמה דקות.",
+    },
   },
   my: {
     title: "ההזמנה שלי",

@@ -4,6 +4,7 @@ import { SETTINGS_KEYS, type SettingsKey } from "../../types/settings";
 import { SETTINGS_LABELS } from "../../validation/settings";
 import { PROPERTY_LABELS, UNIT_LABELS } from "../../validation/catalog";
 import { ARRIVAL_LABELS, PROPERTY_DETAIL_LABELS } from "../../validation/details";
+import { EVENT_STATUS_LABEL, type EventStatus } from "../../types/events";
 import { EMAIL_EVENT } from "../bookings/model";
 import { SETUP_STEP_DEFS } from "../setup/model";
 
@@ -224,6 +225,50 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} נתן/ה ל${target} גישה לנתונים הכספיים`;
     case "team.finance_revoked":
       return `${actor} הסיר/ה מ${target} את הגישה לנתונים הכספיים`;
+    // מיגרציה 63: אירועים ותנאי העסק
+    case "events.created":
+      return `${actor} הוסיף/ה את ${target}`;
+    case "events.updated":
+      return `${actor} עדכן/ה את פרטי ${target}`;
+    case "events.status": {
+      const to = entry.changes["to"];
+      const label = typeof to === "string" ? EVENT_STATUS_LABEL[to as EventStatus] : undefined;
+      return label
+        ? `${actor} שינה/תה את ${target} ל"${label}"`
+        : `${actor} שינה/תה את המצב של ${target}`;
+    }
+    case "terms.saved":
+      return `${actor} עדכן/ה את התנאים והפרטים לחוזים`;
+    case "terms.confirmed":
+      return `${actor} אישר/ה את התנאים והפרטים לחוזים`;
+    // מיגרציה 65: תיקון פרטי הלקוח
+    case "bookings.customer_updated":
+      return `${actor} תיקן/ה את פרטי הלקוח ב${target}`;
+    case "bookings.details_sent":
+      return `${actor} שלח/ה ללקוח את פרטי ${target} וקישור אישי חדש`;
+    case "events.customer_updated":
+      return `${actor} תיקן/ה את פרטי הלקוח ב${target}`;
+    // מיגרציה 64: מסמכי לקוחות
+    case "contracts.created":
+      return `${actor} הכין/ה את ${target} לשליחה`;
+    case "contracts.corrected":
+      return `${actor} הכין/ה חוזה מתוקן — ${target}`;
+    case "contracts.sent":
+      return `${target} נשלח ללקוח לחתימה`;
+    case "contracts.send_failed":
+      return `השליחה של ${target} נכשלה — לא סומן כנשלח`;
+    case "contracts.signed":
+      return `הלקוח חתם על ${target}`;
+    case "contracts.cancelled":
+      return `${actor} ביטל/ה את ${target}`;
+    case "contracts.file_view":
+      return `${actor} צפה/תה ב-PDF של ${target}`;
+    case "contracts.file_download":
+      return `${actor} הוריד/ה את ה-PDF של ${target}`;
+    case "team.contracts_granted":
+      return `${actor} נתן/ה ל${target} גישה למסמכי הלקוחות`;
+    case "team.contracts_revoked":
+      return `${actor} הסיר/ה מ${target} את הגישה למסמכי הלקוחות`;
     case "setup.confirm":
       return `${actor} סימן/ה במדריך ההקמה ש"${setupStep(entry)}" נבדק ומתאים`;
     case "setup.unconfirm":

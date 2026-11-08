@@ -6,6 +6,7 @@ export type NavKey =
   | "dashboard"
   | "calendar"
   | "bookings"
+  | "events"
   | "units"
   | "packages"
   | "photos"
@@ -16,6 +17,7 @@ export type NavKey =
   | "channels"
   | "website"
   | "documents"
+  | "contracts"
   | "settings"
   | "team"
   | "support"
@@ -38,11 +40,13 @@ export type NavPath =
   | "/manage"
   | "/manage/calendar"
   | "/manage/bookings"
+  | "/manage/events"
   | "/manage/guests"
   | "/manage/emails"
   | "/manage/settings"
   | "/manage/website"
   | "/manage/documents"
+  | "/manage/client-documents"
   | "/manage/channels"
   | "/manage/team"
   | "/manage/units"
@@ -95,6 +99,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: "bookings",
     also: ["/manage/bookings/"],
     keywords: "אישור בקשות ביטול",
+  },
+  {
+    key: "events",
+    label: "אירועים",
+    to: "/manage/events",
+    group: "operations",
+    permission: "bookings",
+    also: ["/manage/events/"],
+    keywords: "מסיבת כלה בר מצווה יום הולדת מסיבה פרטית אירוע משפחתי בריכה מתחם",
   },
   {
     key: "units",
@@ -186,6 +199,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: "site",
     permission: "settings",
     keywords: "תקנון פרטיות ביטולים הצהרת נגישות תנאי הזמנה כללי המקום אירועים תשלומים",
+  },
+  {
+    key: "contracts",
+    label: "מסמכי לקוחות",
+    to: "/manage/client-documents",
+    group: "site",
+    permission: "contracts",
+    keywords: "חוזה חוזים הסכם חתימה דיגיטלית חוזה אירוח חוזה אירוע ארכיון PDF",
   },
   {
     key: "setup",
