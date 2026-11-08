@@ -685,7 +685,15 @@ function SettingsCard({ overview, reload }: { overview: AiAdminOverview; reload:
                 data-testid={`ai-mode-${value}`}
               >
                 {label}
-                <span className="block text-xs font-normal text-muted-foreground">{hint}</span>
+                {/* על הרקע הצבעוני של המצב שנבחר — טקסט כהה יותר (ניגודיות 4.5:1) */}
+                <span
+                  className={cn(
+                    "block text-xs font-normal",
+                    settings.mode === value ? "text-foreground/80" : "text-muted-foreground",
+                  )}
+                >
+                  {hint}
+                </span>
               </button>
             ))}
           </div>

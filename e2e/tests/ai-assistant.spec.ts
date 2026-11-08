@@ -97,7 +97,9 @@ async function activateFrom(page: Page, filter: "Ecommerce" | "Hospitality", nam
   await expect(dialog).toContainText("150 ₪ לשנה");
   await dialog.getByLabel("הערה — למשל אסמכתת תשלום (לא חובה)").fill("E2E — שולם בהעברה");
   await dialog.getByTestId("ai-confirm").click();
-  await expect(page.getByText("החבילה הופעלה")).toBeVisible({ timeout: 15_000 });
+  // הוכחת ההפעלה היא הסטטוס בשורה; ההודעה — first(): הודעה מהפעלה קודמת יכולה עוד להיות על המסך
+  await expect(page.getByText("החבילה הופעלה").first()).toBeVisible({ timeout: 15_000 });
+  await expect(dialog).toBeHidden();
   await expect(row.locator("[data-status]")).toHaveAttribute("data-status", "active");
 }
 
@@ -130,6 +132,8 @@ test("platform admin: the key is saved encrypted, the assistant switched on, a s
   browser,
 }) => {
   test.skip(test.info().project.name === "mobile", "desktop flow");
+  // יומן הפלטפורמה לא נמחק — סופרים רק את מה שנרשם מתחילת הבדיקה (גם בניסיון חוזר)
+  const since = sql(`SELECT now()`);
   const page = await platformPage(browser);
   await expect(page.getByTestId("ai-key-status")).toContainText("אין מפתח שמור");
   await page.locator("#ai-key").fill(FAKE_KEY);
@@ -167,7 +171,7 @@ test("platform admin: the key is saved encrypted, the assistant switched on, a s
   ).toBe("ecommerce:15000:true,hospitality:15000:true");
   expect(
     sql(
-      `SELECT count(*) FROM public.platform_audit_log WHERE action = 'ai_subscription_activated' AND tenant_id IN ('${STORE_A.id}', '${zimmerId}')`,
+      `SELECT count(*) FROM public.platform_audit_log WHERE action = 'ai_subscription_activated' AND tenant_id IN ('${STORE_A.id}', '${zimmerId}') AND created_at >= '${since}'`,
     ),
   ).toBe("2");
   await expectAccessible(page, "platform — AI add-on management");
@@ -193,7 +197,7 @@ test("store owner: the Ecommerce assistant answers with Ecommerce guides only", 
   );
   await expectAccessible(page, "store admin — the assistant with a guide");
 
-  // מה נשלח ל"דגם": רק המדריכים של Ecommerce, בלי כלים
+  // מה נשלח ל"דגם": רק המדריכים של Ecommerce, בלי כלים, ובלי "חשיבה" (Haiku 5.5 — disabled)
   const calls = (await (await request.get("http://127.0.0.1:4010/__calls")).json()) as {
     url: string;
     body: string;
@@ -208,7 +212,9 @@ test("store owner: the Ecommerce assistant answers with Ecommerce guides only", 
     "model",
     "output_config",
     "system",
+    "thinking",
   ]);
+  expect(params["thinking"]).toEqual({ type: "disabled" });
   expect(JSON.stringify(params)).not.toMatch(/"hosp-/);
   expect(JSON.stringify(params)).not.toContain(FAKE_KEY);
 });
