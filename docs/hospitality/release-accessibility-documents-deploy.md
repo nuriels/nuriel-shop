@@ -1,15 +1,15 @@
-# פריסה לייצור: נגישות, תקנון ומסמכים משפטיים (מיגרציה 60) — nuriel-shop
+# פריסה לייצור: נגישות, תקנון ומסמכים משפטיים (מיגרציה 60), התאמה לטלפון ותמונה ראשית + סרטון — nuriel-shop
 
 > **פריסה נפרדת — רק אחרי שלב א'.** מיגרציה 60 נשענת על מיגרציה 59 (חבילות): אם שלב א' עוד לא נפרס
 > (175 מיגרציות בשרת) — עוצרים כאן. **אף פקודה כאן לא הורצה בשרת.**
 >
-> **הקוד לפריסה:** `39dabcc` (ענף `hospitality/stage-2`). שולחים לי פקודה אחת, מריצים, ומחזירים את
+> **הקוד לפריסה:** `919ae23` (ענף `hospitality/stage-2`). שולחים לי פקודה אחת, מריצים, ומחזירים את
 > הפלט — ורק אז הפקודה הבאה. שום פקודה לא מדפיסה סוד.
 >
 > 🔍 = קריאה בלבד · ✏️ = משנה משהו בשרת (כתוב בדיוק מה) · ⛔ = נקודת אישור שלך.
 >
 > **מצב השרת לפני:** אחרי שלב א' — הקוד על `d1df489`, 175 מיגרציות, תג חזרה `before-stage-a`.
-> **אחרי:** הקוד על `39dabcc`, 176 מיגרציות, תג חזרה חדש `before-a11y-docs`.
+> **אחרי:** הקוד על `919ae23`, 176 מיגרציות, תג חזרה חדש `before-a11y-docs`.
 >
 > **נבדק מראש (בלי השרת):** מיגרציה 60 על מסד נקי ועל מסד עם נתונים (2655/2655 בדיקות, פעמיים), Rollback
 > ← הסכמה זהה בדיוק למיגרציה 59, ושוב קדימה. לא נבדקו מקומית: הבנייה, ההפעלה והכתובות האמיתיות.
@@ -22,6 +22,8 @@
 | `0cc33c1` | כפתור נגישות צף בכל אתר אירוח (העדפות תצוגה — לא הצהרת עמידה בתקן) ותיקונים שנמצאו | אפליקציה              |
 | `2c660bf` | בדיקת E2E בלבד: בבדיקות "עודכן בינתיים" שני הדפדפנים מחכים שהנתונים ייטענו         | אין (בדיקות בלבד)     |
 | `39dabcc` | מסמכים ומדיניות האתר, הצהרת נגישות, הסדרי נגישות במתחם, אישור מסמכים בהזמנה        | אפליקציה + מיגרציה 60 |
+| `009ec72` | ניהול בטלפון: שם המתחם בשורה משלו, סינון היומן מקופל, כותרות שלא נקטעות            | אפליקציה              |
+| `919ae23` | עיצוב האתר: העלאת תמונה ראשית וסרטון עד 12 שניות (התמונה 5 שניות ואז הסרטון)       | אפליקציה              |
 
 **מיגרציה אחת** — `20261109100000_hosp_site_documents.sql`, עטופה ב-`BEGIN` / `COMMIT`. **לא משנה נתונים
 קיימים ולא משנה פונקציה קיימת:** חמש טבלאות חדשות ריקות (מסמכים, גרסאות, אישורי אורחים, הסדרי נגישות,
@@ -29,6 +31,9 @@
 טרנזקציה.
 
 - **בלי משתני סביבה חדשים** ובלי שינוי ב-`docker-compose.yml` / Nginx. **החנויות לא משתנות.**
+- **התמונה הראשית והסרטון — בלי שינוי במסד:** נשמרים בגלריית האתר הקיימת. הסרטון עד 20MB ו-12 שניות —
+  בתוך מגבלת ההעלאה של Nginx היום (`client_max_body_size 25m`), בלי שינוי בשרת. עד שבעל העסק מעלה סרטון —
+  האתר נראה בדיוק כמו היום.
 - **אחרי הפריסה שום מסמך לא מתפרסם לבד.** באתר: מדיניות הפרטיות הכללית (כמו היום) ועמוד נגישות קצר עם
   הדרך לפנות — עד שבעל העסק מפרסם. בטופס ההזמנה: ההודעה על עסקת מכר מרחוק; רשימת המסמכים לאישור מופיעה
   רק כשיש מסמכים שפורסמו.
@@ -44,16 +49,16 @@
 ### P1 — הענף והקומיט
 
 ```bash
-cd /root/nuriel-shop-git && git branch --show-current && git log --oneline -1 && git status --short --untracked-files=no | wc -l && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge-base --is-ancestor HEAD 39dabcc && echo "fast-forward possible" && git merge-base --is-ancestor 39dabcc origin/hospitality/stage-2 && echo "39dabcc is on origin" && git log --oneline -1 39dabcc
+cd /root/nuriel-shop-git && git branch --show-current && git log --oneline -1 && git status --short --untracked-files=no | wc -l && git fetch origin "+refs/heads/hospitality/stage-2:refs/remotes/origin/hospitality/stage-2" && git merge-base --is-ancestor HEAD 919ae23 && echo "fast-forward possible" && git merge-base --is-ancestor 919ae23 origin/hospitality/stage-2 && echo "919ae23 is on origin" && git log --oneline -1 919ae23
 ```
 
 **תקין:** `hospitality/stage-2`; `d1df489 CI fixes for stage A; …` (שלב א' נפרס); `0`; `fast-forward possible`;
-`39dabcc is on origin`; השורה של הקומיט. אחרת — עוצרים.
+`919ae23 is on origin`; השורה של הקומיט. אחרת — עוצרים.
 
 ### P2 — Docker, המיגרציות, הדיסק
 
 ```bash
-cd /root/nuriel-shop-git && docker ps --format '{{.Names}}\t{{.Status}}' | grep '^nuriel-shop-' && docker images nuriel-shop-app-app --format '{{.Tag}}\t{{.CreatedSince}}' && docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied" && LC_ALL=C comm -23 <(git ls-tree --name-only 39dabcc supabase/migrations/ | xargs -n1 basename | LC_ALL=C sort) <(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT filename FROM public._migrations_applied" | LC_ALL=C sort) && df -h /var/lib/docker /root/backups/nuriel-shop | tail -n +2
+cd /root/nuriel-shop-git && docker ps --format '{{.Names}}\t{{.Status}}' | grep '^nuriel-shop-' && docker images nuriel-shop-app-app --format '{{.Tag}}\t{{.CreatedSince}}' && docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied" && LC_ALL=C comm -23 <(git ls-tree --name-only 919ae23 supabase/migrations/ | xargs -n1 basename | LC_ALL=C sort) <(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT filename FROM public._migrations_applied" | LC_ALL=C sort) && df -h /var/lib/docker /root/backups/nuriel-shop | tail -n +2
 ```
 
 **תקין:** הקונטיינרים ב-`Up` (ליד האפליקציה `(healthy)`); התגים כוללים `before-stage-a`; `175`; **שורה אחת**
@@ -89,7 +94,7 @@ docker exec nuriel-shop-db psql -U postgres -q -c "DROP DATABASE IF EXISTS resto
 ### S1 — הקוד (✏️ קבצים + עותק של קובץ ה-Rollback ליד הגיבוי)
 
 ```bash
-cd /root/nuriel-shop-git && git merge -q --ff-only 39dabcc && git log --oneline -1 && mkdir -p /root/backups/nuriel-shop/before-a11y-docs/rollbacks && cp supabase/rollbacks/20261109100000_hosp_site_documents.down.sql /root/backups/nuriel-shop/before-a11y-docs/rollbacks/ && ls /root/backups/nuriel-shop/before-a11y-docs/rollbacks
+cd /root/nuriel-shop-git && git merge -q --ff-only 919ae23 && git log --oneline -1 && mkdir -p /root/backups/nuriel-shop/before-a11y-docs/rollbacks && cp supabase/rollbacks/20261109100000_hosp_site_documents.down.sql /root/backups/nuriel-shop/before-a11y-docs/rollbacks/ && ls /root/backups/nuriel-shop/before-a11y-docs/rollbacks
 ```
 
 **תקין:** שורת הקומיט; `20261109100000_hosp_site_documents.down.sql`.
@@ -150,6 +155,9 @@ docker exec nuriel-shop-db psql -U postgres -d postgres -c "SELECT t.slug, (SELE
 3. **בניהול:** "מסמכים ומדיניות" — שמונה מסמכים עם "לא מוצג באתר" ו"לבדיקת עורך דין / מורשה נגישות".
    **לא מפרסמים** לפני בדיקה. בעמוד המתחם — הכרטיס "הסדרי נגישות במתחם" (ריק).
 4. **הזמנה:** `/stay/book` — בשלב הפרטים ההודעה על עסקת מכר מרחוק, ותיבת האישור לא מסומנת. בלי לשלוח.
+5. **בטלפון, בניהול:** "יחידות" — שם המתחם בשורה אחת והכפתורים מתחתיו; "יומן" — "סינון וחיפוש" מקופל.
+6. **עיצוב האתר:** בלשונית "עיצוב" — "תמונה ראשית וסרטון". אפשר לנסות סרטון קצר מהטלפון (עד 12 שניות),
+   לפרסם, ולראות באתר: התמונה 5 שניות ואז הסרטון, עם כפתור עצירה. לא חובה בפריסה.
 
 ---
 
@@ -185,7 +193,7 @@ docker exec nuriel-shop-db pg_dump -U postgres -d postgres -Fc > /root/backups/n
 | ⛔ 1  |                |                                    |                             |
 | B1    | ✏️ גיבוי       | מסד, תג `before-a11y-docs`         | `dump read to the end: ok`  |
 | B2    | ✏️ מסד נפרד    | בדיקת שחזור                        | שתי שורות זהות              |
-| S1    | ✏️ קבצים       | הקוד ← `39dabcc`                   | קובץ ה-Rollback             |
+| S1    | ✏️ קבצים       | הקוד ← `919ae23`                   | קובץ ה-Rollback             |
 | S2    | ✏️ image       | בנייה                              | `Built`                     |
 | ⛔ 2  |                |                                    |                             |
 | M1    | ✏️ מסד + הפעלה | מיגרציה 60 + בדיקה + הפעלה         | `60 checks ok`, `Started`   |
