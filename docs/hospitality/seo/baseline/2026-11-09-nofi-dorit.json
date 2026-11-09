@@ -1,0 +1,338 @@
+{
+ "tool": "scripts/seo/snapshot.mjs",
+ "version": 1,
+ "origin": "https://nofi-dorit.nuri1.fit",
+ "capturedAt": "2026-11-09T11:53:10.921Z",
+ "robots": {
+  "status": 200,
+  "contentType": "text/plain; charset=utf-8",
+  "body": "User-agent: *\nAllow: /stay$\nAllow: /stay/units/\nAllow: /stay/rooms/\nAllow: /assets/\nAllow: /fonts/\nAllow: /sitemap.xml\nDisallow: /\n\nSitemap: https://nofi-dorit.nuri1.fit/sitemap.xml\n"
+ },
+ "sitemap": {
+  "status": 200,
+  "contentType": "application/xml; charset=utf-8",
+  "xRobotsTag": "noindex",
+  "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n  <url>\n    <loc>https://nofi-dorit.nuri1.fit/stay</loc>\n    <lastmod>2026-11-08</lastmod>\n  </url>\n  <url>\n    <loc>https://nofi-dorit.nuri1.fit/stay/units/%D7%92%D7%9F-%D7%A2%D7%93%D7%9F-vip</loc>\n  </url>\n  <url>\n    <loc>https://nofi-dorit.nuri1.fit/stay/units/%D7%90%D7%93%D7%99%D7%A8</loc>\n  </url>\n  <url>\n    <loc>https://nofi-dorit.nuri1.fit/stay/units/%D7%9E%D7%95%D7%A8%D7%99%D7%94</loc>\n  </url>\n  <url>\n    <loc>https://nofi-dorit.nuri1.fit/stay/units/%D7%9B%D7%9C-%D7%94%D7%9E%D7%AA%D7%97%D7%9D-%D7%A0%D7%95%D7%A4%D7%99-%D7%93%D7%95%D7%A8%D7%99%D7%AA-%D7%97%D7%95%D7%95%D7%99%D7%94-%D7%91%D7%9B%D7%A4%D7%A8</loc>\n  </url>\n</urlset>\n",
+  "urls": [
+   {
+    "loc": "https://nofi-dorit.nuri1.fit/stay",
+    "lastmod": "2026-11-08"
+   },
+   {
+    "loc": "https://nofi-dorit.nuri1.fit/stay/units/%D7%92%D7%9F-%D7%A2%D7%93%D7%9F-vip",
+    "lastmod": null
+   },
+   {
+    "loc": "https://nofi-dorit.nuri1.fit/stay/units/%D7%90%D7%93%D7%99%D7%A8",
+    "lastmod": null
+   },
+   {
+    "loc": "https://nofi-dorit.nuri1.fit/stay/units/%D7%9E%D7%95%D7%A8%D7%99%D7%94",
+    "lastmod": null
+   },
+   {
+    "loc": "https://nofi-dorit.nuri1.fit/stay/units/%D7%9B%D7%9C-%D7%94%D7%9E%D7%AA%D7%97%D7%9D-%D7%A0%D7%95%D7%A4%D7%99-%D7%93%D7%95%D7%A8%D7%99%D7%AA-%D7%97%D7%95%D7%95%D7%99%D7%94-%D7%91%D7%9B%D7%A4%D7%A8",
+    "lastmod": null
+   }
+  ]
+ },
+ "redirects": [
+  {
+   "path": "/",
+   "status": 302,
+   "location": "/stay"
+  },
+  {
+   "path": "/stay/",
+   "status": 307,
+   "location": "/stay"
+  }
+ ],
+ "pages": [
+  {
+   "url": "https://nofi-dorit.nuri1.fit/stay",
+   "status": 200,
+   "location": null,
+   "xRobotsTag": null,
+   "robotsAllowed": true,
+   "head": {
+    "title": "נופי דורית חוויה בכפר | מתחם צימרים",
+    "lang": "he",
+    "description": "מזמינים אתכם להנות מנופש חלומי במתחם האירוח \"נופי דורית חוויה בכפר\" בישוב ישעי השוכן בשפלת דן בית שמש והסביבה ולבלות רגעים קסומים ב3 יחידות אירוח אשר מותאמים לאירוח לזוג, משפחה,…",
+    "robots": "index, follow",
+    "googlebot": null,
+    "canonical": "https://nofi-dorit.nuri1.fit/stay",
+    "ogUrl": "https://nofi-dorit.nuri1.fit/stay",
+    "ogImage": "https://nofi-dorit.nuri1.fit/stay/brand/og-image?v=27221777071b",
+    "twitterCard": "summary_large_image",
+    "googleVerification": null,
+    "hreflang": [],
+    "icons": [
+     "/stay/brand/icon-192?v=27221777071b",
+     "/stay/brand/apple-touch-icon?v=27221777071b"
+    ],
+    "manifest": "/stay/brand/manifest?v=27221777071b",
+    "jsonld": [
+     {
+      "types": [
+       "LodgingBusiness"
+      ],
+      "sha256": "44f8a6ecfa0e98a1"
+     }
+    ],
+    "h1": [
+     "נופי דורית חוויה בכפר"
+    ],
+    "internalLinks": [
+     "/stay",
+     "/stay/accessibility",
+     "/stay/account",
+     "/stay/book",
+     "/stay/docs/payments",
+     "/stay/privacy",
+     "/stay/units/%D7%90%D7%93%D7%99%D7%A8",
+     "/stay/units/%D7%92%D7%9F-%D7%A2%D7%93%D7%9F-vip",
+     "/stay/units/%D7%9B%D7%9C-%D7%94%D7%9E%D7%AA%D7%97%D7%9D-%D7%A0%D7%95%D7%A4%D7%99-%D7%93%D7%95%D7%A8%D7%99%D7%AA-%D7%97%D7%95%D7%95%D7%99%D7%94-%D7%91%D7%9B%D7%A4%D7%A8",
+     "/stay/units/%D7%9E%D7%95%D7%A8%D7%99%D7%94"
+    ]
+   },
+   "error": null
+  },
+  {
+   "url": "https://nofi-dorit.nuri1.fit/stay/units/%D7%92%D7%9F-%D7%A2%D7%93%D7%9F-vip",
+   "status": 200,
+   "location": null,
+   "xRobotsTag": null,
+   "robotsAllowed": true,
+   "head": {
+    "title": "גן עדן VIP | נופי דורית חוויה בכפר",
+    "lang": "he",
+    "description": "מזמינים אתכם להנות מנופש חלומי במתחם האירוח \"נופי דורית חוויה בכפר\" בישוב ישעי השוכן בשפלת דן בית שמש והסביבה ולבלות רגעים קסומים ב3 יחידות אירוח אשר מותאמים לאירוח לזוג, משפחה,…",
+    "robots": "index, follow",
+    "googlebot": null,
+    "canonical": "https://nofi-dorit.nuri1.fit/stay/units/%D7%92%D7%9F-%D7%A2%D7%93%D7%9F-vip",
+    "ogUrl": "https://nofi-dorit.nuri1.fit/stay/units/%D7%92%D7%9F-%D7%A2%D7%93%D7%9F-vip",
+    "ogImage": "https://api-nuriel.nuri1.fit/storage/v1/object/public/hosp-media/0d601869-3dde-4f58-91d6-c004940c4380/441d1a91-e320-41b3-98ef-7399c72c95cf.webp",
+    "twitterCard": "summary_large_image",
+    "googleVerification": null,
+    "hreflang": [],
+    "icons": [
+     "/stay/brand/icon-192?v=27221777071b",
+     "/stay/brand/apple-touch-icon?v=27221777071b"
+    ],
+    "manifest": "/stay/brand/manifest?v=27221777071b",
+    "jsonld": [],
+    "h1": [
+     "גן עדן VIP"
+    ],
+    "internalLinks": [
+     "/stay",
+     "/stay/accessibility",
+     "/stay/account",
+     "/stay/book",
+     "/stay/book?unit=%D7%92%D7%9F-%D7%A2%D7%93%D7%9F-vip",
+     "/stay/docs/payments",
+     "/stay/privacy",
+     "/stay/units/%D7%90%D7%93%D7%99%D7%A8",
+     "/stay/units/%D7%9B%D7%9C-%D7%94%D7%9E%D7%AA%D7%97%D7%9D-%D7%A0%D7%95%D7%A4%D7%99-%D7%93%D7%95%D7%A8%D7%99%D7%AA-%D7%97%D7%95%D7%95%D7%99%D7%94-%D7%91%D7%9B%D7%A4%D7%A8",
+     "/stay/units/%D7%9E%D7%95%D7%A8%D7%99%D7%94"
+    ]
+   },
+   "error": null
+  },
+  {
+   "url": "https://nofi-dorit.nuri1.fit/stay/units/%D7%90%D7%93%D7%99%D7%A8",
+   "status": 200,
+   "location": null,
+   "xRobotsTag": null,
+   "robotsAllowed": true,
+   "head": {
+    "title": "אדיר | נופי דורית חוויה בכפר",
+    "lang": "he",
+    "description": "מזמינים אתכם להנות מנופש חלומי במתחם האירוח \"נופי דורית חוויה בכפר\" בישוב ישעי השוכן בשפלת דן בית שמש והסביבה ולבלות רגעים קסומים ב3 יחידות אירוח אשר מותאמים לאירוח לזוג, משפחה,…",
+    "robots": "index, follow",
+    "googlebot": null,
+    "canonical": "https://nofi-dorit.nuri1.fit/stay/units/%D7%90%D7%93%D7%99%D7%A8",
+    "ogUrl": "https://nofi-dorit.nuri1.fit/stay/units/%D7%90%D7%93%D7%99%D7%A8",
+    "ogImage": "https://api-nuriel.nuri1.fit/storage/v1/object/public/hosp-media/0d601869-3dde-4f58-91d6-c004940c4380/fddf1a7e-796a-4f30-b6b1-e093ca7839a4.webp",
+    "twitterCard": "summary_large_image",
+    "googleVerification": null,
+    "hreflang": [],
+    "icons": [
+     "/stay/brand/icon-192?v=27221777071b",
+     "/stay/brand/apple-touch-icon?v=27221777071b"
+    ],
+    "manifest": "/stay/brand/manifest?v=27221777071b",
+    "jsonld": [],
+    "h1": [
+     "אדיר"
+    ],
+    "internalLinks": [
+     "/stay",
+     "/stay/accessibility",
+     "/stay/account",
+     "/stay/book",
+     "/stay/book?unit=%D7%90%D7%93%D7%99%D7%A8",
+     "/stay/docs/payments",
+     "/stay/privacy",
+     "/stay/units/%D7%92%D7%9F-%D7%A2%D7%93%D7%9F-vip",
+     "/stay/units/%D7%9B%D7%9C-%D7%94%D7%9E%D7%AA%D7%97%D7%9D-%D7%A0%D7%95%D7%A4%D7%99-%D7%93%D7%95%D7%A8%D7%99%D7%AA-%D7%97%D7%95%D7%95%D7%99%D7%94-%D7%91%D7%9B%D7%A4%D7%A8",
+     "/stay/units/%D7%9E%D7%95%D7%A8%D7%99%D7%94"
+    ]
+   },
+   "error": null
+  },
+  {
+   "url": "https://nofi-dorit.nuri1.fit/stay/units/%D7%9E%D7%95%D7%A8%D7%99%D7%94",
+   "status": 200,
+   "location": null,
+   "xRobotsTag": null,
+   "robotsAllowed": true,
+   "head": {
+    "title": "מוריה | נופי דורית חוויה בכפר",
+    "lang": "he",
+    "description": "מזמינים אתכם להנות מנופש חלומי במתחם האירוח \"נופי דורית חוויה בכפר\" בישוב ישעי השוכן בשפלת דן בית שמש והסביבה ולבלות רגעים קסומים ב3 יחידות אירוח אשר מותאמים לאירוח לזוג, משפחה,…",
+    "robots": "index, follow",
+    "googlebot": null,
+    "canonical": "https://nofi-dorit.nuri1.fit/stay/units/%D7%9E%D7%95%D7%A8%D7%99%D7%94",
+    "ogUrl": "https://nofi-dorit.nuri1.fit/stay/units/%D7%9E%D7%95%D7%A8%D7%99%D7%94",
+    "ogImage": "https://api-nuriel.nuri1.fit/storage/v1/object/public/hosp-media/0d601869-3dde-4f58-91d6-c004940c4380/7a2c0f08-7907-49be-bf42-bc4351f032da.webp",
+    "twitterCard": "summary_large_image",
+    "googleVerification": null,
+    "hreflang": [],
+    "icons": [
+     "/stay/brand/icon-192?v=27221777071b",
+     "/stay/brand/apple-touch-icon?v=27221777071b"
+    ],
+    "manifest": "/stay/brand/manifest?v=27221777071b",
+    "jsonld": [],
+    "h1": [
+     "מוריה"
+    ],
+    "internalLinks": [
+     "/stay",
+     "/stay/accessibility",
+     "/stay/account",
+     "/stay/book",
+     "/stay/book?unit=%D7%9E%D7%95%D7%A8%D7%99%D7%94",
+     "/stay/docs/payments",
+     "/stay/privacy",
+     "/stay/units/%D7%90%D7%93%D7%99%D7%A8",
+     "/stay/units/%D7%92%D7%9F-%D7%A2%D7%93%D7%9F-vip",
+     "/stay/units/%D7%9B%D7%9C-%D7%94%D7%9E%D7%AA%D7%97%D7%9D-%D7%A0%D7%95%D7%A4%D7%99-%D7%93%D7%95%D7%A8%D7%99%D7%AA-%D7%97%D7%95%D7%95%D7%99%D7%94-%D7%91%D7%9B%D7%A4%D7%A8"
+    ]
+   },
+   "error": null
+  },
+  {
+   "url": "https://nofi-dorit.nuri1.fit/stay/units/%D7%9B%D7%9C-%D7%94%D7%9E%D7%AA%D7%97%D7%9D-%D7%A0%D7%95%D7%A4%D7%99-%D7%93%D7%95%D7%A8%D7%99%D7%AA-%D7%97%D7%95%D7%95%D7%99%D7%94-%D7%91%D7%9B%D7%A4%D7%A8",
+   "status": 200,
+   "location": null,
+   "xRobotsTag": null,
+   "robotsAllowed": true,
+   "head": {
+    "title": "כל המתחם — נופי דורית חוויה בכפר | נופי דורית חוויה בכפר",
+    "lang": "he",
+    "description": "מזמינים אתכם להנות מנופש חלומי במתחם האירוח \"נופי דורית חוויה בכפר\" בישוב ישעי השוכן בשפלת דן בית שמש והסביבה ולבלות רגעים קסומים ב3 יחידות אירוח אשר מותאמים לאירוח לזוג, משפחה,…",
+    "robots": "index, follow",
+    "googlebot": null,
+    "canonical": "https://nofi-dorit.nuri1.fit/stay/units/%D7%9B%D7%9C-%D7%94%D7%9E%D7%AA%D7%97%D7%9D-%D7%A0%D7%95%D7%A4%D7%99-%D7%93%D7%95%D7%A8%D7%99%D7%AA-%D7%97%D7%95%D7%95%D7%99%D7%94-%D7%91%D7%9B%D7%A4%D7%A8",
+    "ogUrl": "https://nofi-dorit.nuri1.fit/stay/units/%D7%9B%D7%9C-%D7%94%D7%9E%D7%AA%D7%97%D7%9D-%D7%A0%D7%95%D7%A4%D7%99-%D7%93%D7%95%D7%A8%D7%99%D7%AA-%D7%97%D7%95%D7%95%D7%99%D7%94-%D7%91%D7%9B%D7%A4%D7%A8",
+    "ogImage": "https://api-nuriel.nuri1.fit/storage/v1/object/public/hosp-media/0d601869-3dde-4f58-91d6-c004940c4380/441d1a91-e320-41b3-98ef-7399c72c95cf.webp",
+    "twitterCard": "summary_large_image",
+    "googleVerification": null,
+    "hreflang": [],
+    "icons": [
+     "/stay/brand/icon-192?v=27221777071b",
+     "/stay/brand/apple-touch-icon?v=27221777071b"
+    ],
+    "manifest": "/stay/brand/manifest?v=27221777071b",
+    "jsonld": [],
+    "h1": [
+     "כל המתחם — נופי דורית חוויה בכפר"
+    ],
+    "internalLinks": [
+     "/stay",
+     "/stay/accessibility",
+     "/stay/account",
+     "/stay/book",
+     "/stay/book?unit=%D7%9B%D7%9C-%D7%94%D7%9E%D7%AA%D7%97%D7%9D-%D7%A0%D7%95%D7%A4%D7%99-%D7%93%D7%95%D7%A8%D7%99%D7%AA-%D7%97%D7%95%D7%95%D7%99%D7%94-%D7%91%D7%9B%D7%A4%D7%A8",
+     "/stay/docs/payments",
+     "/stay/privacy",
+     "/stay/units/%D7%90%D7%93%D7%99%D7%A8",
+     "/stay/units/%D7%92%D7%9F-%D7%A2%D7%93%D7%9F-vip",
+     "/stay/units/%D7%9E%D7%95%D7%A8%D7%99%D7%94"
+    ]
+   },
+   "error": null
+  }
+ ],
+ "assets": [
+  {
+   "path": "/stay/brand/apple-touch-icon?v=27221777071b",
+   "status": 200,
+   "contentType": "image/png",
+   "robotsAllowed": false
+  },
+  {
+   "path": "/stay/brand/icon-192?v=27221777071b",
+   "status": 200,
+   "contentType": "image/png",
+   "robotsAllowed": false
+  },
+  {
+   "path": "/stay/brand/manifest?v=27221777071b",
+   "status": 200,
+   "contentType": "application/manifest+json; charset=utf-8",
+   "robotsAllowed": false
+  },
+  {
+   "path": "/stay/brand/og-image?v=27221777071b",
+   "status": 200,
+   "contentType": "image/png",
+   "robotsAllowed": false
+  }
+ ],
+ "homeLinks": [
+  {
+   "path": "/stay",
+   "robotsAllowed": true
+  },
+  {
+   "path": "/stay/accessibility",
+   "robotsAllowed": false
+  },
+  {
+   "path": "/stay/account",
+   "robotsAllowed": false
+  },
+  {
+   "path": "/stay/book",
+   "robotsAllowed": false
+  },
+  {
+   "path": "/stay/docs/payments",
+   "robotsAllowed": false
+  },
+  {
+   "path": "/stay/privacy",
+   "robotsAllowed": false
+  },
+  {
+   "path": "/stay/units/%D7%90%D7%93%D7%99%D7%A8",
+   "robotsAllowed": true
+  },
+  {
+   "path": "/stay/units/%D7%92%D7%9F-%D7%A2%D7%93%D7%9F-vip",
+   "robotsAllowed": true
+  },
+  {
+   "path": "/stay/units/%D7%9B%D7%9C-%D7%94%D7%9E%D7%AA%D7%97%D7%9D-%D7%A0%D7%95%D7%A4%D7%99-%D7%93%D7%95%D7%A8%D7%99%D7%AA-%D7%97%D7%95%D7%95%D7%99%D7%94-%D7%91%D7%9B%D7%A4%D7%A8",
+   "robotsAllowed": true
+  },
+  {
+   "path": "/stay/units/%D7%9E%D7%95%D7%A8%D7%99%D7%94",
+   "robotsAllowed": true
+  }
+ ]
+}
