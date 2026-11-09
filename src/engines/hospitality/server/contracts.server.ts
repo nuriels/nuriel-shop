@@ -11,6 +11,7 @@ import { serviceHeaders, supabaseUrl } from "@/platform/supabase/env.server";
 import { siteOrigin } from "@/platform/tenancy/current-site.server";
 import { HOSPITALITY_SCHEMA } from "../config";
 import { contractSignRequestEmail, contractSignedCopyEmail } from "../contracts/emails";
+import { poolNotice } from "../contracts/pool-notice";
 import { buildSignedContractPdf } from "../contracts/pdf.server";
 import type { ContractSignature } from "../contracts/signature";
 import type { ContractRow, ContractSendResult } from "../types/contracts";
@@ -112,6 +113,7 @@ export async function sendSignRequest(p: SendPrepared): Promise<ContractSendResu
       url: `${origin}/stay/contract#t=${token}`,
       expiresOn: dayText(link.expires_at),
       about,
+      poolNote: poolNotice(p.kind, p.pool),
     },
   );
   let ok = false;
@@ -282,6 +284,7 @@ export async function completeSignedContract(
       signedAtLocal: c.signed_at_local,
       signerIp: c.signer_ip,
       signerUserAgent: c.signer_user_agent,
+      poolNote: poolNotice(c.kind, c.pool),
     });
     const path = await uploadPdf(tenantId, contractId, bytes);
     await rpcAs(tenantId, "contract_pdf_stored", {

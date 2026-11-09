@@ -70,11 +70,23 @@ export interface StaffEvent {
   starts_at: string;
   ends_at: string;
   ends_next_day: boolean;
+  /** שעות האירוע חורגות משעות הבריכה (האירוע יכול — הבריכה לא) */
   outside_pool_hours: boolean;
+  /** השימוש בבריכה באירוע — נפרד משעות האירוע; null = בלי שימוש בבריכה */
+  pool_start_time: string | null;
+  pool_end_time: string | null;
+  /** החלון המותר: שעות האירוע ∩ שעות הבריכה; null — האירוע כולו מחוץ לשעות הבריכה */
+  pool_allowed_from: string | null;
+  pool_allowed_to: string | null;
   participants: number;
   price: number;
   advance_amount: number;
   amount_paid: number;
+  /** הוחזר ללקוח (למשל המקדמה אחרי ביטול) — רישום בלבד */
+  refund_amount: number;
+  /** נשאר אצל העסק: ששולם פחות שהוחזר */
+  kept_amount: number;
+  /** באירוע שבוטל — 0 */
   balance_due: number;
   payment_status: EventPaymentStatus;
   deposit_amount: number;
@@ -89,6 +101,21 @@ export interface StaffEvent {
   revision: number;
   created_at: string;
   updated_at: string;
+}
+
+/** אירוע במתחם בזמן השהייה של הזמנה (כרטיס ההזמנה) */
+export interface BookingEventOverlap {
+  id: string;
+  number: number;
+  event_type_label: string;
+  event_date: string;
+  start_time: string;
+  end_time: string;
+  ends_next_day: boolean;
+  participants: number;
+  status: StoredEventStatus;
+  pool_start_time: string | null;
+  pool_end_time: string | null;
 }
 
 export interface LodgingOverlap {
@@ -176,6 +203,11 @@ export interface EventCheck {
   conflicts: EventConflict[];
   lodging: LodgingOverlap[];
   outside_pool_hours: boolean;
+  /** השימוש בבריכה שיישמר אם לא בוחרים אחרת (באירוע חדש — כל החלון המותר) */
+  pool_start_time: string | null;
+  pool_end_time: string | null;
+  pool_allowed_from: string | null;
+  pool_allowed_to: string | null;
   ends_next_day: boolean;
   max_event_guests: number;
   pool_open_time: string;
@@ -192,10 +224,13 @@ export interface EventInput {
   event_date?: string;
   start_time?: string;
   end_time?: string;
+  pool_start_time?: string | null;
+  pool_end_time?: string | null;
   participants?: number;
   price?: number;
   advance_amount?: number | null;
   amount_paid?: number | null;
+  refund_amount?: number | null;
   deposit_amount?: number;
   deposit_status?: DepositStatus;
   internal_notes?: string | null;

@@ -3,6 +3,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { CustomerUpdateResult } from "../types/customer";
 import type {
+  BookingEventOverlap,
   BusinessTermsView,
   EventCheck,
   EventDetail,
@@ -34,6 +35,14 @@ export const hospitalityEvents = createServerFn({ method: "POST" })
       _limit: data.limit,
       _offset: data.offset,
     });
+  });
+
+/** אירועים פעילים במתחם בזמן השהייה של הזמנה — לכרטיס ההזמנה (הכיוון ההפוך של "אורחים בצימרים") */
+export const hospitalityBookingEvents = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseEventId(input))
+  .handler(async ({ data }): Promise<BookingEventOverlap[]> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<BookingEventOverlap[]>("staff_booking_events", { _booking_id: data.id });
   });
 
 export const hospitalityEventDetail = createServerFn({ method: "POST" })

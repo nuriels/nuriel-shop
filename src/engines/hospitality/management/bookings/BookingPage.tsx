@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from "@/platform/ui";
 import { AcceptedDocumentsCard } from "./AcceptedDocumentsCard";
 import { BookingContractsCard } from "./BookingContractsCard";
+import { BookingEventsCard } from "./BookingEventsCard";
 import { CustomerDetailsEditor } from "../guests/CustomerDetailsEditor";
 import { hospitalityBookingGroup } from "../../api/bookings.functions";
 import { manageKeys } from "../lib/query-keys";
@@ -344,6 +345,8 @@ function Booking({ b }: { b: BookingDetail }) {
       </Section>
 
       <BookingContractsCard b={b} />
+
+      <BookingEventsCard b={b} />
 
       <Section title="מחיר">
         <table className="w-full text-sm">

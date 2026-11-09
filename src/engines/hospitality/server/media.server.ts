@@ -3,7 +3,8 @@
 //   • תמונה: פענוח וקידוד מחדש עם sharp (מסיר מטא-דאטה ומיקום, מנטרל קבצים "כפולים"),
 //     4 גדלים ב-WebP: 1600 (המקור שלנו), 960, 480 ותמונה ממוזערת 320×240. בלי SVG, בלי
 //     HEIC, בלי אנימציה, עד 50 מגה-פיקסל;
-//   • סרטון: MP4 / MOV / WebM לפי החתימה, עד 50MB (נשמר כמו שהוא — אין קידוד מחדש);
+//   • סרטון: MP4 / MOV / WebM לפי החתימה, עד 50MB, בלי קידוד מחדש — אבל בלי המטא-דאטה האישי
+//     (מקום הצילום, דגם המכשיר, תאריך הצילום: media/video-metadata.ts) כי הדלי ציבורי;
 //   • כתיבה לדלי hosp-media עם הטוקן של המשתמש ו-x-tenant-id של האתר — מדיניות ה-Storage
 //     בודקת שוב נתיב "<tenant>/…", הרשאת media והדגל (G12, נבדק מול Storage האמיתי);
 //   • מחיקה — רק הנתיבים שפונקציות המסד החזירו.
@@ -13,6 +14,7 @@ import { apiClient } from "@/platform/supabase/api-client.server";
 import { supabaseUrl } from "@/platform/supabase/env.server";
 import { sniffImageType } from "@/platform/media/remote-image.server";
 import { HOSPITALITY_SCHEMA } from "../config";
+import { stripVideoMetadata } from "../media/video-metadata";
 import { HospitalityError } from "./rpc.server";
 
 export const MEDIA_BUCKET = "hosp-media";
@@ -79,16 +81,19 @@ export async function prepareMedia(
     if (!allowVideo) throw new MediaError("הקישור לא מוביל לקובץ תמונה");
     if (bytes.length > VIDEO_UPLOAD_MAX_BYTES) throw new MediaError("הסרטון גדול מדי — עד 50MB");
     const path = `${siteId}/${id}.${video}`;
+    // הדלי ציבורי: מקום הצילום, דגם המכשיר ותאריך הצילום לא עוברים לשם (באותו גודל — בלי קידוד מחדש)
+    const clean = stripVideoMetadata(bytes).bytes;
+    const stored = Buffer.from(clean.buffer, clean.byteOffset, clean.byteLength);
     return {
       kind: "video",
-      files: [{ path, bytes, contentType: VIDEO_TYPES[video] }],
+      files: [{ path, bytes: stored, contentType: VIDEO_TYPES[video] }],
       item: {
         kind: "video",
         storage_path: path,
         variants: {},
         width: null,
         height: null,
-        size_bytes: bytes.length,
+        size_bytes: stored.length,
       },
     };
   }

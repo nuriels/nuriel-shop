@@ -351,6 +351,124 @@ BEGIN
   END;
 END $$;
 
+-- ============================================================
+-- 8. Event hours vs pool-use hours (08:00–18:00); a date change with lodging guests; money after the end
+-- ============================================================
+SELECT revision AS trev FROM hospitality.business_terms WHERE tenant_id = :'st' \gset
+SELECT tests.check('terms: the pool hours only inside 08:00–18:00 (the contracts) — wider refused with the reason',
+  format($$SELECT pg_temp.err_of(%1$L, %2$L, format($s$SELECT hospitality.business_terms_save('{"pool_open_time": "07:00"}', %%s)$s$, %3$s)) LIKE 'שעות הבריכה — בין 08:00 ל-18:00%%'
+             AND pg_temp.err_of(%1$L, %2$L, format($s$SELECT hospitality.business_terms_save('{"pool_close_time": "19:00"}', %%s)$s$, %3$s)) LIKE 'שעות הבריכה — בין 08:00 ל-18:00%%'$$,
+         :'st', :OWNER63, :trev));
+DO $$
+BEGIN
+  UPDATE hospitality.business_terms SET pool_close_time = '19:00';
+  INSERT INTO tests.results (name, ok, detail) VALUES ('the table itself refuses pool hours past 18:00', false, 'updated');
+EXCEPTION WHEN check_violation THEN
+  INSERT INTO tests.results (name, ok, detail) VALUES ('the table itself refuses pool hours past 18:00', true, SQLERRM);
+END $$;
+
+-- the pool-use window is separate from the event hours (compound 2: nothing else there on these days)
+SELECT pg_temp.call(:'st', :OWNER63, pg_temp.create_sql(pg_temp.ev(:'p2', 45, '16:00', '23:00'))) AS pw1 \gset
+SELECT pg_temp.call(:'st', :OWNER63, pg_temp.create_sql(pg_temp.ev(:'p2', 46, '19:00', '23:00'))) AS pw2 \gset
+SELECT pg_temp.call(:'st', :OWNER63, pg_temp.create_sql(pg_temp.ev(:'p2', 47, '16:00', '01:00'))) AS pw3 \gset
+SELECT pg_temp.call(:'st', :OWNER63, pg_temp.create_sql(pg_temp.ev(:'p2', 48, '10:00', '14:00',
+  '{"pool_start_time": "11:00", "pool_end_time": "13:00"}'))) AS pw4 \gset
+SELECT pg_temp.call(:'st', :OWNER63, pg_temp.create_sql(pg_temp.ev(:'p2', 49, '10:00', '14:00',
+  '{"pool_start_time": null, "pool_end_time": null}'))) AS pw5 \gset
+SELECT tests.check('pool window: an event 16:00–23:00 — the pool 16:00–18:00 only (flagged as past the pool hours); 19:00–23:00 — no pool at all; across midnight 16:00–01:00 — 16:00–18:00; an explicit window inside — kept; "no pool" — kept',
+  format($$SELECT %1$L::jsonb ->> 'pool_start_time' = '16:00' AND %1$L::jsonb ->> 'pool_end_time' = '18:00'
+             AND %1$L::jsonb ->> 'pool_allowed_to' = '18:00' AND (%1$L::jsonb ->> 'outside_pool_hours')::boolean
+             AND %2$L::jsonb ->> 'pool_start_time' IS NULL AND %2$L::jsonb ->> 'pool_allowed_from' IS NULL
+             AND %3$L::jsonb ->> 'pool_start_time' = '16:00' AND %3$L::jsonb ->> 'pool_end_time' = '18:00'
+             AND %4$L::jsonb ->> 'pool_start_time' = '11:00' AND %4$L::jsonb ->> 'pool_end_time' = '13:00'
+             AND %5$L::jsonb ->> 'pool_start_time' IS NULL AND %5$L::jsonb ->> 'pool_allowed_from' = '10:00'
+             AND (SELECT changes ->> 'pool' FROM hospitality.event_log WHERE event_id = (%1$L::jsonb ->> 'id')::uuid
+                   AND kind = 'created') = '16:00–18:00'$$,
+         :'pw1', :'pw2', :'pw3', :'pw4', :'pw5'));
+SELECT tests.check('pool window: before the event starts, after it ends, past the pool hours, in an event outside the pool hours, or half filled — refused with the allowed window',
+  format($$SELECT pg_temp.err_of(%1$L, %2$L, pg_temp.create_sql(pg_temp.ev(%3$L, 51, '10:00', '14:00',
+                    '{"pool_start_time": "09:00", "pool_end_time": "12:00"}'))) LIKE 'השימוש בבריכה באירוע הזה — רק בין 10:00 ל-14:00%%'
+             AND pg_temp.err_of(%1$L, %2$L, pg_temp.create_sql(pg_temp.ev(%3$L, 51, '10:00', '14:00',
+                    '{"pool_start_time": "12:00", "pool_end_time": "15:00"}'))) LIKE 'השימוש בבריכה באירוע הזה — רק בין 10:00 ל-14:00%%'
+             AND pg_temp.err_of(%1$L, %2$L, pg_temp.create_sql(pg_temp.ev(%3$L, 51, '15:00', '22:00',
+                    '{"pool_start_time": "15:00", "pool_end_time": "20:00"}'))) LIKE 'השימוש בבריכה באירוע הזה — רק בין 15:00 ל-18:00%%'
+             AND pg_temp.err_of(%1$L, %2$L, pg_temp.create_sql(pg_temp.ev(%3$L, 51, '19:00', '23:00',
+                    '{"pool_start_time": "19:00", "pool_end_time": "20:00"}'))) LIKE 'האירוע כולו מחוץ לשעות הבריכה%%'
+             AND pg_temp.err_of(%1$L, %2$L, pg_temp.create_sql(pg_temp.ev(%3$L, 51, '10:00', '14:00',
+                    '{"pool_start_time": "11:00"}'))) LIKE 'השימוש בבריכה — יש למלא%%'$$,
+         :'st', :OWNER63, :'p2'));
+SELECT pg_temp.call(:'st', :OWNER63, format($q$SELECT hospitality.event_update(%L, 1, '{"end_time": "17:00"}')$q$, (:'pw1'::jsonb ->> 'id'))) AS pu1 \gset
+SELECT pg_temp.call(:'st', :OWNER63, format($q$SELECT hospitality.event_update(%L, 2, '{"start_time": "19:00", "end_time": "23:00"}')$q$, (:'pw1'::jsonb ->> 'id'))) AS pu2 \gset
+SELECT tests.check('pool window on update: the event shortened to 16:00–17:00 — the pool shrinks with it (logged); moved to 19:00–23:00 — no pool; asking for the pool there — refused',
+  format($$SELECT %1$L::jsonb ->> 'pool_start_time' = '16:00' AND %1$L::jsonb ->> 'pool_end_time' = '17:00'
+             AND %2$L::jsonb ->> 'pool_start_time' IS NULL
+             AND EXISTS (SELECT 1 FROM hospitality.event_log WHERE event_id = (%1$L::jsonb ->> 'id')::uuid AND kind = 'updated'
+                           AND changes -> 'pool_end_time' = '{"from": "18:00:00", "to": "17:00:00"}'::jsonb)
+             AND pg_temp.err_of(%3$L, %4$L, format($s$SELECT hospitality.event_update(%%L, 3, '{"pool_start_time": "19:00", "pool_end_time": "20:00"}')$s$,
+                                                  %1$L::jsonb ->> 'id')) LIKE 'האירוע כולו מחוץ לשעות הבריכה%%'$$,
+         :'pu1', :'pu2', :'st', :OWNER63));
+SELECT tests.check('check (no save) for the form: the allowed pool window and the default inside it',
+  format($$SELECT c ->> 'pool_allowed_from' = '15:00' AND c ->> 'pool_allowed_to' = '18:00'
+             AND c ->> 'pool_start_time' = '15:00' AND c ->> 'pool_end_time' = '18:00'
+          FROM (SELECT pg_temp.call(%1$L, %2$L, format('SELECT hospitality.event_check(%%L)',
+                  jsonb_build_object('property_id', %3$L, 'event_date', pg_temp.d(52), 'start_time', '15:00', 'end_time', '20:00')))) x(c)$$,
+         :'st', :OWNER63, :'p2'));
+DO $$
+BEGIN
+  UPDATE hospitality.events SET pool_end_time = '19:00' WHERE pool_end_time IS NOT NULL;
+  INSERT INTO tests.results (name, ok, detail) VALUES ('the table itself refuses pool use past 18:00', false, 'updated');
+EXCEPTION WHEN check_violation THEN
+  INSERT INTO tests.results (name, ok, detail) VALUES ('the table itself refuses pool use past 18:00', true, SQLERRM);
+END $$;
+
+-- a confirmed event moved to a day with guests in the zimmers: only with the explicit acknowledgement
+SELECT pg_temp.call(:'st', :OWNER63, format($q$SELECT hospitality.create_manual_booking(_unit_id => %L, _check_in => %L,
+   _check_out => %L, _full_name => 'אורח לן', _phone => '0526300009', _email => 'lodger2@example.com',
+   _terms_explained => true)$q$, :'u1', pg_temp.d(34), pg_temp.d(36))) ->> 'booking_id' AS bk3 \gset
+SELECT pg_temp.call(:'st', :OWNER63, pg_temp.create_sql(pg_temp.ev(:'p1', 33, '10:00', '14:00', '{"status": "confirmed"}'))) AS mv \gset
+-- (each call in its own statement: the refusal first, at revision 1; then the same change with the acknowledgement)
+SELECT COALESCE(pg_temp.err_of(:'st', :OWNER63, format($q$SELECT hospitality.event_update(%L, 1, '{"event_date": "%s"}')$q$,
+  (:'mv'::jsonb ->> 'id'), pg_temp.d(35))), 'ok') AS mv_err \gset
+SELECT pg_temp.call(:'st', :OWNER63, format($q$SELECT hospitality.event_update(%L, 1, '{"event_date": "%s", "lodging_ack": true}')$q$,
+  (:'mv'::jsonb ->> 'id'), pg_temp.d(35))) AS mv2 \gset
+SELECT tests.check('date change of a confirmed event into a day with lodging guests: refused without the acknowledgement (the reason), saved with it (and kept on the event)',
+  format($$SELECT %1$L LIKE 'באותו זמן יש אורחים בצימרים במתחם%%'
+             AND (%2$L::jsonb ->> 'lodging_ack')::boolean AND %2$L::jsonb ->> 'event_date' = pg_temp.d(35)::text
+             AND %2$L::jsonb ->> 'stored_status' = 'confirmed' AND (%2$L::jsonb ->> 'revision')::int = 2$$,
+         :'mv_err', :'mv2'));
+
+SELECT tests.check('the booking card: the events in the compound during the stay (the other direction of "guests in the zimmers"), with their pool window; another business sees nothing',
+  format($$SELECT jsonb_array_length(c) = 1 AND (c -> 0 ->> 'number')::int = %3$s AND c -> 0 ->> 'pool_start_time' = '10:00'
+             AND pg_temp.err_of(%5$L, %6$L, format('SELECT hospitality.staff_booking_events(%%L)', %4$L)) IS NOT NULL
+          FROM (SELECT pg_temp.call(%1$L, %2$L, format('SELECT hospitality.staff_booking_events(%%L)', %4$L))) x(c)$$,
+         :'st', :OWNER63, (:'mv2'::jsonb ->> 'number'), :'bk3', :'so', :OTHER63));
+
+-- money after the end: paid, refunded to the customer, the deposit — the rest is frozen
+SELECT pg_temp.call(:'st', :OWNER63, format($q$SELECT hospitality.event_update(%L, 1, '{"advance_amount": 1000, "amount_paid": 1000}')$q$, (:'pw2'::jsonb ->> 'id'))) IS NOT NULL AS ok \gset
+SELECT pg_temp.call(:'st', :OWNER63, format($q$SELECT hospitality.event_set_status(%L, 2, 'cancelled', 'הלקוח ביטל')$q$, (:'pw2'::jsonb ->> 'id'))) AS cx \gset
+SELECT pg_temp.call(:'st', :OWNER63, format($q$SELECT hospitality.event_update(%L, 3, '{"refund_amount": 1000, "deposit_status": "returned"}')$q$, (:'pw2'::jsonb ->> 'id'))) AS rf \gset
+SELECT tests.check('cancelled: no balance due; the log keeps the days before the event, the amount paid and the free-cancellation days; the refund and the deposit recorded afterwards (logged); a refund above the paid amount or a date change — refused',
+  format($$SELECT (%1$L::jsonb ->> 'balance_due')::numeric = 0
+             AND (SELECT (changes ->> 'days_before')::int = 46 AND (changes ->> 'amount_paid')::numeric = 1000
+                         AND (changes ->> 'free_cancellation_days')::int = 14
+                    FROM hospitality.event_log WHERE event_id = (%1$L::jsonb ->> 'id')::uuid AND kind = 'status_changed'
+                   ORDER BY id DESC LIMIT 1)
+             AND (%2$L::jsonb ->> 'refund_amount')::numeric = 1000 AND (%2$L::jsonb ->> 'kept_amount')::numeric = 0
+             AND %2$L::jsonb ->> 'deposit_status' = 'returned'
+             AND EXISTS (SELECT 1 FROM hospitality.event_log WHERE event_id = (%1$L::jsonb ->> 'id')::uuid AND kind = 'updated'
+                           AND changes -> 'refund_amount' = '{"from": 0, "to": 1000}'::jsonb)
+             AND pg_temp.err_of(%3$L, %4$L, format($s$SELECT hospitality.event_update(%%L, 4, '{"refund_amount": 1500}')$s$,
+                                                  %1$L::jsonb ->> 'id')) LIKE 'הסכום שהוחזר לא יכול%%'
+             AND pg_temp.err_of(%3$L, %4$L, format($s$SELECT hospitality.event_update(%%L, 4, '{"event_date": "%%s"}')$s$,
+                                                  %1$L::jsonb ->> 'id', pg_temp.d(60))) LIKE 'אירוע שבוטל או הסתיים — אפשר לעדכן רק%%'$$,
+         :'cx', :'rf', :'st', :OWNER63));
+SELECT pg_temp.call(:'st', :OWNER63, pg_temp.create_sql(pg_temp.ev(:'p2', -3, '10:00', '12:00', '{"status": "confirmed"}'))) AS past \gset
+SELECT pg_temp.call(:'st', :OWNER63, format($q$SELECT hospitality.event_set_status(%L, 1, 'completed')$q$, (:'past'::jsonb ->> 'id'))) IS NOT NULL AS ok \gset
+SELECT pg_temp.call(:'st', :OWNER63, format($q$SELECT hospitality.event_update(%L, 2, '{"deposit_status": "returned", "amount_paid": 3500}')$q$, (:'past'::jsonb ->> 'id'))) AS pd \gset
+SELECT tests.check('completed: the deposit can still be returned and a late payment recorded (the deposit is returned after the event)',
+  format($$SELECT %1$L::jsonb ->> 'deposit_status' = 'returned' AND (%1$L::jsonb ->> 'amount_paid')::numeric = 3500
+             AND %1$L::jsonb ->> 'stored_status' = 'completed'$$, :'pd'));
+
 -- ---------- cleanup: the platform flags as they were ----------
 UPDATE public.platform_feature_flags f SET enabled = m.enabled FROM m63_flags m WHERE f.key = m.key;
 DROP TABLE m63_flags;

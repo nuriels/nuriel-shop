@@ -15,7 +15,7 @@ import {
 import { SignatureImage, SignaturePad } from "../../contracts/SignaturePad";
 import type { ContractSignature } from "../../contracts/signature";
 import type { BusinessTermsView } from "../../types/events";
-import { EVENT_MAX_PARTICIPANTS } from "../../validation/events";
+import { EVENT_MAX_PARTICIPANTS, POOL_EARLIEST, POOL_LATEST } from "../../validation/events";
 import { LoadError, PageSkeleton } from "../catalog/parts";
 import { errorText } from "../catalog/refresh";
 import { TERMS_KEY } from "../events/model";
@@ -429,19 +429,23 @@ function TermsForm({ terms }: { terms: BusinessTermsView }) {
                 className="min-h-11"
               />
             </Field>
-            <Field id="tr-po" label="פתיחת הבריכה">
+            <Field id="tr-po" label="פתיחת הבריכה" hint="לא לפני 08:00 (לפי החוזים)">
               <Input
                 id="tr-po"
                 type="time"
+                min={POOL_EARLIEST}
+                max={POOL_LATEST}
                 value={d.pool_open_time}
                 onChange={(e) => set("pool_open_time", e.target.value)}
                 className="min-h-11"
               />
             </Field>
-            <Field id="tr-pc" label="סגירת הבריכה">
+            <Field id="tr-pc" label="סגירת הבריכה" hint="לא אחרי 18:00 (לפי החוזים)">
               <Input
                 id="tr-pc"
                 type="time"
+                min={POOL_EARLIEST}
+                max={POOL_LATEST}
                 value={d.pool_close_time}
                 onChange={(e) => set("pool_close_time", e.target.value)}
                 className="min-h-11"

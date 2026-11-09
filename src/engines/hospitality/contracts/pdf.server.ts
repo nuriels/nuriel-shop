@@ -1,6 +1,7 @@
 // ה-PDF החתום (מיגרציה 64): הנוסח המלא כפי שנחתם (מהמסד — signed_body), החתימות (צד א' — של הנציג
-// אם שמורה; צד ב' — של הלקוח: ציור או שם מוקלד), עמוד X מתוך Y, ובסוף "אישור חתימה אלקטרונית" —
-// מתי, מי, מאיזו כתובת IP ודפדפן, מספר המסמך וטביעת SHA-256 של הנוסח החתום. בשרת בלבד (jsPDF + Heebo).
+// אם שמורה; צד ב' — של הלקוח: ציור או שם מוקלד), עמוד X מתוך Y, ובסוף "תיעוד החתימה האלקטרונית" —
+// מתי, מי, מאיזו כתובת IP ודפדפן, מספר המסמך, טביעת SHA-256 של הנוסח החתום, ההודעה שהוצגה לחותם
+// (שעות הבריכה), ושזה תיעוד בלבד — לא אישור משפטי. בשרת בלבד (jsPDF + Heebo).
 import { jsPDF } from "jspdf";
 import { heeboFonts, toVisualRtl } from "@/platform/pdf/hebrew.server";
 import { contractBlocks, type ContractBlock } from "./blocks";
@@ -21,6 +22,8 @@ export interface SignedContractPdf {
   signedAtLocal: string;
   signerIp: string | null;
   signerUserAgent: string | null;
+  /** ההודעה שהוצגה לחותם לפני החתימה (שעות הבריכה — poolNotice), מחוץ לנוסח ההסכם */
+  poolNote?: string | null;
 }
 
 const MARGIN = 16;
@@ -229,10 +232,10 @@ export async function buildSignedContractPdf(c: SignedContractPdf): Promise<Uint
     }
   }
 
-  // ---- אישור חתימה אלקטרונית ----
+  // ---- תיעוד החתימה האלקטרונית (תיעוד — לא אישור משפטי) ----
   doc.addPage();
   y = MARGIN + 4;
-  write("אישור חתימה אלקטרונית", 14, { bold: true });
+  write("תיעוד החתימה האלקטרונית", 14, { bold: true });
   y += 2;
   const facts: [string, string][] = [
     ["המסמך", `${c.title} — מסמך מס' ${c.number}`],
@@ -251,8 +254,18 @@ export async function buildSignedContractPdf(c: SignedContractPdf): Promise<Uint
   ensure(6);
   doc.text(c.bodySha256, right, y, { align: "right" });
   y += 7;
+  if (c.poolNote) {
+    write("הודעה שהוצגה לחותם לפני החתימה (מחוץ לנוסח ההסכם):", 10, { bold: true });
+    write(c.poolNote, 10);
+    y += 2;
+  }
   write(
     "החתימה נעשתה באמצעות קישור אישי וחד-פעמי שנשלח לאימייל של החותם. לפני החתימה אישר החותם שקרא את כל סעיפי ההסכם ושהוא מסכים להם. הנוסח החתום נשמר במערכת ולא ניתן לשנותו; כל שינוי בפרטים מחייב הסכם מתוקן וחתימה חדשה.",
+    9.5,
+    { color: MUTED },
+  );
+  write(
+    "עמוד זה מתעד את אופן החתימה בלבד, ואינו אישור משפטי של תוכן ההסכם. החתימה היא חתימה אלקטרונית פשוטה — לא חתימה אלקטרונית מאובטחת או מאושרת.",
     9.5,
     { color: MUTED },
   );

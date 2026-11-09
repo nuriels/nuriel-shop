@@ -5,11 +5,12 @@
 // בבקשת העמוד ולא מופיע ביומני הגישה; הוא עובר רק בבקשה לפונקציה (POST).
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { CheckCircle2, Download, FileSignature, Phone } from "lucide-react";
+import { CheckCircle2, Download, FileSignature, Phone, Waves } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { cn } from "@/platform/ui";
 import { hospitalityContractOpen, hospitalityContractSign } from "../../api/contracts.functions";
 import { ContractBody } from "../../contracts/ContractBody";
+import { poolNotice } from "../../contracts/pool-notice";
 import { SignaturePad } from "../../contracts/SignaturePad";
 import type { ContractSignature } from "../../contracts/signature";
 import {
@@ -98,6 +99,7 @@ function SignForm({
   c: ContractForSigning;
   onSigned: (r: ContractSigned) => void;
 }) {
+  const pool = poolNotice(c.kind, c.pool);
   const [idNumber, setIdNumber] = useState("");
   const [address, setAddress] = useState("");
   const [method, setMethod] = useState<DepositMethod | "">("");
@@ -165,6 +167,24 @@ function SignForm({
           {dateTime(c.expires_at)} ולחתימה אחת בלבד.
         </p>
       </header>
+
+      {/* שעות הבריכה (ובאירוע — השימוש בבריכה בו): לפני הנוסח, מחוץ לו — הנוסח עצמו לא משתנה */}
+      {pool && (
+        <div
+          role="note"
+          aria-labelledby="cs-pool-title"
+          data-testid="contract-pool-notice"
+          className="mb-6 flex gap-3 rounded-[var(--radius)] border border-amber-400 bg-amber-50 p-4 text-amber-950"
+        >
+          <Waves className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+          <div className="flex flex-col gap-1">
+            <p id="cs-pool-title" className="font-semibold">
+              שימו לב — שעות הבריכה
+            </p>
+            <p>{pool}</p>
+          </div>
+        </div>
+      )}
 
       <section aria-labelledby="cs-body-title" className="mb-8">
         <h2 id="cs-body-title" className="sr-only">
@@ -315,6 +335,10 @@ function SignForm({
         >
           <h2 className="text-lg font-medium">החתימה</h2>
           <SignaturePad onChange={setSignature} label="החתימה שלכם" testId="customer-signature" />
+          <p className="text-xs text-muted-foreground" data-testid="contract-sign-record">
+            לתיעוד החתימה נשמרים עם ההסכם: מועד החתימה, כתובת ה-IP והדפדפן שממנו חתמתם. הם מופיעים
+            בעותק החתום (PDF), ומשמשים רק להוכחת החתימה.
+          </p>
         </section>
 
         <label

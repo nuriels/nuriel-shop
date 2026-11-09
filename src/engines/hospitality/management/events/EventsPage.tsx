@@ -249,9 +249,14 @@ function EventCard({ e }: { e: StaffEvent }) {
               {dayText(e.event_date)} · {hoursText(e)} · {e.participants} משתתפים
               {e.property_name ? ` · ${e.property_name}` : ""}
             </p>
+            <p className="text-sm text-muted-foreground">
+              {e.pool_start_time && e.pool_end_time
+                ? `בריכה ${e.pool_start_time}–${e.pool_end_time} בלבד`
+                : "בלי שימוש בבריכה"}
+              {e.outside_pool_hours ? " · האירוע חורג משעות הבריכה" : ""}
+            </p>
             <p className="text-sm">
               {formatMoney(e.price)} · {PAYMENT_STATUS_LABEL[e.payment_status]}
-              {e.outside_pool_hours ? " · חורג משעות הבריכה" : ""}
             </p>
           </CardContent>
         </Card>

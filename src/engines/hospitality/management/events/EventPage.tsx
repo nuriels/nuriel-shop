@@ -1,9 +1,19 @@
-// עמוד אירוע (/manage/events/$eventId): פרטים, לקוח, תשלום ופיקדון, אורחים בצימרים באותו זמן,
-// פעולות (אישור — עם בדיקת זמינות ואישור מפורש כשיש אורחים בצימרים, ביטול עם סיבה, פתיחה מחדש,
-// "הסתיים"), עריכה, החוזה של האירוע והיסטוריה. כל פעולה נבדקת ונרשמת במסד (מיגרציה 63).
+// עמוד אירוע (/manage/events/$eventId): פרטים (שעות האירוע והשימוש בבריכה — בנפרד), לקוח, תשלום
+// ופיקדון, אורחים בצימרים באותו זמן, פעולות (אישור — עם בדיקת זמינות ואישור מפורש כשיש אורחים
+// בצימרים, ביטול עם סיבה ותנאי הביטול שבחוזה, פתיחה מחדש, "הסתיים"), עריכה, ואחרי ביטול / סיום —
+// עדכון התשלום, ההחזר ללקוח ומצב הפיקדון; החוזה של האירוע והיסטוריה. הכל נבדק ונרשם במסד (מיגרציה 63).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import { Ban, CalendarClock, CheckCircle2, Mail, Phone, RotateCcw, Users } from "lucide-react";
+import {
+  Ban,
+  CalendarClock,
+  CheckCircle2,
+  Mail,
+  Phone,
+  RotateCcw,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
@@ -17,6 +27,7 @@ import {
   AlertDialogTitle,
   Button,
   Checkbox,
+  Input,
   Label,
   Textarea,
   cn,
@@ -26,7 +37,7 @@ import {
   hospitalityEventSetStatus,
   hospitalityEventUpdate,
 } from "../../api/events.functions";
-import type { EventDetail, EventInput, StoredEventStatus } from "../../types/events";
+import type { DepositStatus, EventDetail, EventInput, StoredEventStatus } from "../../types/events";
 import { LoadError, PageSkeleton } from "../catalog/parts";
 import { errorText } from "../catalog/refresh";
 import { formatDateTime, formatMoney } from "../lib/format";
@@ -61,6 +72,7 @@ export function EventPage() {
   });
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [paying, setPaying] = useState(false);
   const [action, setAction] = useState<Action>(null);
   const [reason, setReason] = useState("");
   const [ack, setAck] = useState(false);
@@ -74,6 +86,7 @@ export function EventPage() {
     onSuccess: () => {
       toast.success("האירוע עודכן");
       setEditing(false);
+      setPaying(false);
       refresh();
     },
     onError: (e) => setEditError(errorText(e)),
@@ -113,6 +126,7 @@ export function EventPage() {
     setAction(a);
   };
   const needsAck = action?.status === "confirmed" && e.lodging.length > 0;
+  const closed = e.stored_status === "cancelled" || e.stored_status === "completed";
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5" data-testid="event-page">
@@ -176,7 +190,14 @@ export function EventPage() {
           <SectionCard title="האירוע">
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
               <Row k="תאריך">{dayText(e.event_date)}</Row>
-              <Row k="שעות">{hoursText(e)}</Row>
+              <Row k="שעות האירוע">{hoursText(e)}</Row>
+              <Row k="השימוש בבריכה">
+                <span data-testid="event-pool-use">
+                  {e.pool_start_time && e.pool_end_time
+                    ? `${e.pool_start_time}–${e.pool_end_time} בלבד`
+                    : "בלי שימוש בבריכה"}
+                </span>
+              </Row>
               <Row k="מתחם">{e.property_name ?? "—"}</Row>
               <Row k="משתתפים">
                 {e.participants} (עד {e.terms.max_event_guests} לפי החוזה)
@@ -185,11 +206,12 @@ export function EventPage() {
             </dl>
             {e.outside_pool_hours && (
               <p
-                className="mt-3 rounded-md bg-sky-50 p-2 text-xs text-sky-950"
+                className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-950"
                 data-testid="event-pool-note"
               >
-                האירוע חורג משעות הבריכה ({e.terms.pool_open_time}–{e.terms.pool_close_time}): חל
-                איסור על שהייה במים מחוץ לשעות אלו.
+                האירוע חורג משעות הבריכה ({e.terms.pool_open_time}–{e.terms.pool_close_time}): מחוץ
+                לשעות אלו — בלי שימוש בבריכה, וחל איסור על שהייה במים. הלקוח מקבל על כך הודעה לפני
+                החתימה ובמייל.
               </p>
             )}
           </SectionCard>
@@ -242,13 +264,48 @@ export function EventPage() {
           </SectionCard>
 
           <SectionCard title="תשלום">
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+            <dl
+              className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm"
+              data-testid="event-payment"
+            >
               <Row k="מחיר">{formatMoney(e.price)}</Row>
               <Row k="מקדמה">{e.advance_amount ? formatMoney(e.advance_amount) : "—"}</Row>
               <Row k="שולם">{formatMoney(e.amount_paid)}</Row>
-              <Row k="יתרה">{formatMoney(e.balance_due)}</Row>
+              {(e.refund_amount > 0 || e.stored_status === "cancelled") && (
+                <Row k="הוחזר ללקוח">{formatMoney(e.refund_amount)}</Row>
+              )}
+              {e.stored_status === "cancelled" ? (
+                <Row k="נשאר אצל העסק">{formatMoney(e.kept_amount)}</Row>
+              ) : (
+                <Row k="יתרה">{formatMoney(e.balance_due)}</Row>
+              )}
               <Row k="מצב">{PAYMENT_STATUS_LABEL[e.payment_status]}</Row>
             </dl>
+            {closed && !paying && (
+              <Button
+                variant="outline"
+                className="mt-3 min-h-11 gap-2"
+                onClick={() => {
+                  setEditError(null);
+                  setPaying(true);
+                }}
+              >
+                <Wallet className="size-4" aria-hidden="true" />
+                עדכון תשלום, החזר ופיקדון
+              </Button>
+            )}
+            {closed && paying && (
+              <ClosedPayments
+                e={e}
+                busy={update.isPending}
+                error={editError}
+                onCancel={() => setPaying(false)}
+                onSave={(data) => {
+                  setEditError(null);
+                  update.mutate({ revision: e.revision, data });
+                }}
+              />
+            )}
           </SectionCard>
 
           <SectionCard title="פיקדון / ערבות לנזקים">
@@ -326,6 +383,7 @@ export function EventPage() {
               </label>
             </div>
           )}
+          {action?.status === "cancelled" && <CancelTerms e={e} />}
           {action?.reason && (
             <div className="flex flex-col gap-1">
               <Label htmlFor="ev-reason">סיבה (לא חובה)</Label>
@@ -470,6 +528,133 @@ function Actions({
         </Button>
       )}
     </>
+  );
+}
+
+/** כמה ימים לפני האירוע (היום — בשעון ישראל) */
+const daysBefore = (date: string) => {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+  return Math.round((Date.parse(date) - Date.parse(today)) / 86_400_000);
+};
+
+/** בביטול: תנאי הביטול שבחוזה, כמה ימים לפני האירוע ומה כבר שולם — כדי לרשום את ההחזר אחר כך */
+function CancelTerms({ e }: { e: EventDetail }) {
+  const days = daysBefore(e.event_date);
+  const free = e.terms.free_cancellation_days;
+  return (
+    <div
+      className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"
+      data-testid="event-cancel-terms"
+    >
+      <p className="font-medium">תנאי הביטול בחוזה (סעיף 3)</p>
+      <p>
+        ביטול עד {free} ימים לפני האירוע — החזר כספי מלא; ביטול מאוחר יותר — דמי ביטול לפי החוזה.
+      </p>
+      <p className="mt-1">
+        היום: {days >= 0 ? `${days} ימים לפני האירוע` : "אחרי מועד האירוע"} ·{" "}
+        {days >= free ? "בתוך תקופת הביטול בלי חיוב" : "אחרי תקופת הביטול בלי חיוב"}. שולם עד עכשיו:{" "}
+        {formatMoney(e.amount_paid)}.
+      </p>
+      <p className="mt-1 text-xs">
+        ההחזר עצמו נעשה מחוץ למערכת. אחרי הביטול רושמים כאן כמה הוחזר ללקוח ("עדכון תשלום, החזר
+        ופיקדון").
+      </p>
+    </div>
+  );
+}
+
+/** אחרי ביטול / סיום: רק הכסף — כמה שולם, כמה הוחזר ללקוח, ומצב הפיקדון (המסד מסרב לכל שינוי אחר) */
+function ClosedPayments({
+  e,
+  busy,
+  error,
+  onSave,
+  onCancel,
+}: {
+  e: EventDetail;
+  busy: boolean;
+  error: string | null;
+  onSave: (data: EventInput) => void;
+  onCancel: () => void;
+}) {
+  const [paid, setPaid] = useState(e.amount_paid ? String(e.amount_paid) : "");
+  const [refund, setRefund] = useState(e.refund_amount ? String(e.refund_amount) : "");
+  const [deposit, setDeposit] = useState<DepositStatus>(e.deposit_status);
+  const n = (s: string) => (s.trim() === "" ? 0 : Number(s));
+  const tooMuch = n(refund) > n(paid);
+  return (
+    <form
+      className="mt-3 flex flex-col gap-3 border-t pt-3"
+      data-testid="event-closed-payments"
+      onSubmit={(x) => {
+        x.preventDefault();
+        if (tooMuch) return;
+        onSave({ amount_paid: n(paid), refund_amount: n(refund), deposit_status: deposit });
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="cp-paid">שולם (₪)</Label>
+          <Input
+            id="cp-paid"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="0.01"
+            value={paid}
+            onChange={(x) => setPaid(x.target.value)}
+            className="min-h-11"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="cp-refund">הוחזר ללקוח (₪)</Label>
+          <Input
+            id="cp-refund"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="0.01"
+            value={refund}
+            onChange={(x) => setRefund(x.target.value)}
+            className="min-h-11"
+            aria-invalid={tooMuch}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="cp-deposit">מצב הפיקדון</Label>
+          <select
+            id="cp-deposit"
+            className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+            value={deposit}
+            onChange={(x) => setDeposit(x.target.value as DepositStatus)}
+          >
+            {(Object.keys(DEPOSIT_STATUS_LABEL) as DepositStatus[]).map((k) => (
+              <option key={k} value={k}>
+                {DEPOSIT_STATUS_LABEL[k]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {tooMuch && (
+        <p role="alert" className="text-sm text-destructive">
+          הסכום שהוחזר לא יכול להיות גדול מהסכום ששולם
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" className="min-h-11" disabled={busy || tooMuch}>
+          {busy ? "שומרים…" : "שמירת התשלום"}
+        </Button>
+        <Button type="button" variant="ghost" className="min-h-11" onClick={onCancel}>
+          ביטול
+        </Button>
+      </div>
+    </form>
   );
 }
 

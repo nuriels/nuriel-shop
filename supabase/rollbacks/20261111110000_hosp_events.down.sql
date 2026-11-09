@@ -32,6 +32,7 @@ DROP FUNCTION IF EXISTS hospitality._event_lodging(uuid,uuid,timestamp with time
 DROP FUNCTION IF EXISTS hospitality._event_log(uuid,uuid,text,text,text,jsonb,text);
 DROP FUNCTION IF EXISTS hospitality._event_outside_pool(uuid,time without time zone,time without time zone);
 DROP FUNCTION IF EXISTS hospitality._event_payment_status(hospitality.events);
+DROP FUNCTION IF EXISTS hospitality._event_pool_allowed(uuid,time without time zone,time without time zone);
 DROP FUNCTION IF EXISTS hospitality._event_type_label(text,text);
 DROP FUNCTION IF EXISTS hospitality._signature_paths(jsonb,boolean);
 DROP FUNCTION IF EXISTS hospitality._staff_event(uuid,uuid,integer);
@@ -44,6 +45,7 @@ DROP FUNCTION IF EXISTS hospitality.event_check(jsonb,uuid);
 DROP FUNCTION IF EXISTS hospitality.event_create(jsonb);
 DROP FUNCTION IF EXISTS hospitality.event_set_status(uuid,integer,text,text,boolean);
 DROP FUNCTION IF EXISTS hospitality.event_update(uuid,integer,jsonb);
+DROP FUNCTION IF EXISTS hospitality.staff_booking_events(uuid);
 DROP FUNCTION IF EXISTS hospitality.staff_event_detail(uuid);
 DROP FUNCTION IF EXISTS hospitality.staff_events(text,text,text,date,date,integer,integer);
 

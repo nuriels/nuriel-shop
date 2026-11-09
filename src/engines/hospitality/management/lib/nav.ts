@@ -206,7 +206,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/manage/client-documents",
     group: "site",
     permission: "contracts",
-    keywords: "חוזה חוזים הסכם חתימה דיגיטלית חוזה אירוח חוזה אירוע ארכיון PDF",
+    keywords: "חוזה חוזים הסכם חתימה אלקטרונית דיגיטלית חוזה אירוח חוזה אירוע ארכיון PDF",
   },
   {
     key: "setup",

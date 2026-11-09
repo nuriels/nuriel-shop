@@ -494,6 +494,133 @@ SELECT tests.check('booking group: a corrected contract from the other room repl
                                                   %5$L, %1$L::jsonb ->> 'id')) LIKE 'החוזה הקודם לא נמצא%%'$$,
          :'gc2', :'gc', :'st', :OWNER64, :'bk2'));
 
+-- ============================================================
+-- 12. A contract that no longer matches its event / booking cannot be signed; the pool notice for the customer
+-- ============================================================
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.event_create(%L)$q$, jsonb_build_object(
+  'property_id', :'p1', 'event_type', 'birthday', 'event_date', pg_temp.d(60), 'start_time', '16:00', 'end_time', '22:00',
+  'participants', 30, 'price', 2500, 'customer', jsonb_build_object('full_name', 'נועה ערב', 'phone', '0546400007',
+                                                                    'email', 'noa@example.com')))) AS ev2 \gset
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.contract_create('pool_event', NULL, %L)$q$, (:'ev2'::jsonb ->> 'id'))) AS c7 \gset
+SELECT pg_temp.send(:'st', (:'c7'::jsonb ->> 'id'), 'tok-c7', true) IS NOT NULL AS ok \gset
+SELECT pg_temp.srv(:'st', format('SELECT hospitality.contract_open(%L)', pg_temp.h('tok-c7'))) AS op7 \gset
+SELECT tests.check('pool notice: the customer gets the pool hours and this event''s pool-use window (16:00–18:00 of a 16:00–22:00 event), kept in the snapshot',
+  format($$SELECT %1$L::jsonb -> 'pool' ->> 'open' = '08:00' AND %1$L::jsonb -> 'pool' ->> 'close' = '18:00'
+             AND %1$L::jsonb -> 'pool' ->> 'start' = '16:00' AND %1$L::jsonb -> 'pool' ->> 'end' = '18:00'
+             AND %1$L::jsonb -> 'pool' ->> 'event_end' = '22:00'
+             AND (%1$L::jsonb -> 'pool' ->> 'window_known')::boolean
+             AND (SELECT data ->> 'pool_end_time' = '18:00' AND data ? 'options'
+                    FROM hospitality.client_contracts WHERE id = (%2$L::jsonb ->> 'id')::uuid)
+             AND (SELECT hospitality._contract_stale(c) IS NULL FROM hospitality.client_contracts c
+                   WHERE c.id = (%2$L::jsonb ->> 'id')::uuid)$$,
+         :'op7', :'c7'));
+-- the event moves to another day after the contract was sent
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.event_update(%L, 1, '{"event_date": "%s"}')$q$,
+  (:'ev2'::jsonb ->> 'id'), pg_temp.d(61))) IS NOT NULL AS ok \gset
+SELECT COALESCE(pg_temp.srv_err(:'st', format('SELECT hospitality.contract_open(%L)', pg_temp.h('tok-c7'))), 'ok') AS open_changed \gset
+SELECT COALESCE(pg_temp.err_of(:'st', :OWNER64, format('SELECT hospitality.contract_send_prepare(%L)', (:'c7'::jsonb ->> 'id'))), 'ok') AS resend_changed \gset
+SELECT COALESCE(pg_temp.srv_err(:'st', pg_temp.sign_sql('tok-c7', '{"id_number": "123456782", "address": "רחוב התאנה 2, ישעי"}',
+  pg_temp.sig(), true)), 'ok') AS sign_changed \gset
+SELECT tests.check('stale: the event date changed after sending — the customer cannot open or sign the old text (told an updated one will come), the business cannot resend it, and the staff see "changed"',
+  format($$SELECT %1$L LIKE 'פרטי ההזמנה / האירוע השתנו מאז שנשלח ההסכם%%'
+             AND %2$L LIKE 'פרטי ההזמנה / האירוע השתנו מאז שהחוזה נוצר%%'
+             AND %3$L LIKE 'פרטי ההזמנה / האירוע השתנו מאז שנשלח ההסכם%%'
+             AND (SELECT status FROM hospitality.client_contracts WHERE id = (%4$L::jsonb ->> 'id')::uuid) <> 'signed'
+             AND pg_temp.call(%5$L, %6$L, format('SELECT hospitality.staff_contract_detail(%%L)', %4$L::jsonb ->> 'id')) ->> 'stale' = 'changed'$$,
+         :'open_changed', :'resend_changed', :'sign_changed', :'c7', :'st', :OWNER64));
+-- back to the original day: it matches again; then only the pool window changes
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.event_update(%L, 2, '{"event_date": "%s"}')$q$,
+  (:'ev2'::jsonb ->> 'id'), pg_temp.d(60))) IS NOT NULL AS ok \gset
+SELECT COALESCE(pg_temp.srv_err(:'st', format('SELECT hospitality.contract_open(%L)', pg_temp.h('tok-c7'))), 'ok') AS open_back \gset
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.event_update(%L, 3, '{"pool_start_time": "16:00", "pool_end_time": "17:00"}')$q$,
+  (:'ev2'::jsonb ->> 'id'))) IS NOT NULL AS ok \gset
+SELECT COALESCE(pg_temp.srv_err(:'st', format('SELECT hospitality.contract_open(%L)', pg_temp.h('tok-c7'))), 'ok') AS open_pool \gset
+SELECT tests.check('stale: back to the sent details — the link works again; a change of the pool-use window alone also makes it "changed"',
+  format($$SELECT %1$L = 'ok' AND %2$L LIKE 'פרטי ההזמנה / האירוע השתנו%%'$$, :'open_back', :'open_pool'));
+-- the event is cancelled
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.event_update(%L, 4, '{"pool_start_time": "16:00", "pool_end_time": "18:00"}')$q$,
+  (:'ev2'::jsonb ->> 'id'))) IS NOT NULL AS ok \gset
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.event_set_status(%L, 5, 'cancelled', 'בוטל')$q$,
+  (:'ev2'::jsonb ->> 'id'))) IS NOT NULL AS ok \gset
+SELECT COALESCE(pg_temp.srv_err(:'st', format('SELECT hospitality.contract_open(%L)', pg_temp.h('tok-c7'))), 'ok') AS open_cancelled \gset
+SELECT tests.check('stale: the event cancelled — the contract can no longer be opened or signed ("no longer valid"), and the staff see "unavailable"',
+  format($$SELECT %1$L LIKE 'ההסכם כבר לא בתוקף%%'
+             AND pg_temp.call(%2$L, %3$L, format('SELECT hospitality.staff_contract_detail(%%L)', %4$L::jsonb ->> 'id')) ->> 'stale' = 'unavailable'$$,
+         :'open_cancelled', :'st', :OWNER64, :'c7'));
+-- a lodging booking whose price changes after the contract was sent
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.create_manual_booking(_unit_id => %L, _check_in => %L,
+   _check_out => %L, _full_name => 'יעל לינה', _phone => '0546400008', _email => 'yael@example.com',
+   _terms_explained => true, _total_override => 1200)$q$, :'u1', pg_temp.d(80), pg_temp.d(82))) ->> 'booking_id' AS bk8 \gset
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.contract_create('hosting', %L, NULL)$q$, :'bk8')) AS c8 \gset
+SELECT (SELECT hospitality._contract_stale(c) FROM hospitality.client_contracts c WHERE c.id = (:'c8'::jsonb ->> 'id')::uuid) IS NULL AS fresh8 \gset
+SELECT revision AS bk8rev FROM hospitality.bookings WHERE id = :'bk8' \gset
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.modify_booking(%L, %s, %L, %L, _total_override => 1500)$q$,
+  :'bk8', :bk8rev, pg_temp.d(80), pg_temp.d(82))) IS NOT NULL AS ok \gset
+SELECT tests.check('stale: a lodging contract — fresh when created, "changed" once the booking total changes (the price in the text)',
+  format($$SELECT %1$L::boolean AND (SELECT hospitality._contract_stale(c) FROM hospitality.client_contracts c
+                                       WHERE c.id = (%2$L::jsonb ->> 'id')::uuid) = 'changed'$$, :'fresh8', :'c8'));
+
+-- ============================================================
+-- 13. Privacy: deleting a customer's details now covers events and contracts; retention; the export
+-- ============================================================
+-- customer X: a lodging contract signed, then the booking cancelled; an event contract sent (unsigned), then the event cancelled
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.create_manual_booking(_unit_id => %L, _check_in => %L,
+   _check_out => %L, _full_name => 'פרטית מחיקה', _phone => '0546400011', _email => 'erase@example.com',
+   _terms_explained => true, _total_override => 900)$q$, :'u2', pg_temp.d(90), pg_temp.d(91))) ->> 'booking_id' AS bk9 \gset
+SELECT guest_id AS gx FROM hospitality.bookings WHERE id = :'bk9' \gset
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.contract_create('hosting', %L, NULL)$q$, :'bk9')) AS c9 \gset
+SELECT pg_temp.send(:'st', (:'c9'::jsonb ->> 'id'), 'tok-c9', true) IS NOT NULL AS ok \gset
+SELECT pg_temp.srv(:'st', pg_temp.sign_sql('tok-c9', '{"id_number": "123456782", "address": "רחוב האלה 4, ישעי", "deposit_method": "cash"}',
+  pg_temp.sig(), true)) IS NOT NULL AS ok \gset
+SELECT COALESCE(pg_temp.err_of(:'st', :OWNER64, format($s$SELECT hospitality.cancel_booking(%L, 'בדיקה')$s$, :'bk9')), 'ok') AS cx9 \gset
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.event_create(%L)$q$, jsonb_build_object(
+  'property_id', :'p1', 'event_type', 'family_event', 'event_date', pg_temp.d(95), 'start_time', '10:00', 'end_time', '14:00',
+  'participants', 20, 'price', 1500, 'guest_id', :'gx', 'internal_notes', 'הערה פרטית על הלקוחה'))) AS ev9 \gset
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.contract_create('pool_event', NULL, %L)$q$, (:'ev9'::jsonb ->> 'id'))) AS c10 \gset
+SELECT pg_temp.send(:'st', (:'c10'::jsonb ->> 'id'), 'tok-c10', true) IS NOT NULL AS ok \gset
+SELECT COALESCE(pg_temp.err_of(:'st', :OWNER64, format($s$SELECT to_jsonb(hospitality.anonymize_guest(%L))$s$, :'gx')), 'ok') AS anon_refused \gset
+SELECT pg_temp.call(:'st', :OWNER64, format('SELECT hospitality.export_guest_logged(%L)', :'gx')) AS exp9 \gset
+SELECT tests.check('privacy: a customer with a future event cannot be deleted yet (like a future booking); the export holds the events and every contract',
+  format($$SELECT %1$L = 'ok' AND %2$L LIKE 'ללקוח יש אירוע פעיל או עתידי%%'
+             AND jsonb_array_length(%3$L::jsonb -> 'pool_events') = 1
+             AND jsonb_array_length(%3$L::jsonb -> 'contracts') = 2
+             AND %3$L::jsonb -> 'contracts' @> '[{"status": "signed"}]'::jsonb$$,
+         :'cx9', :'anon_refused', :'exp9'));
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.event_set_status(%L, 1, 'cancelled', 'הלקוחה ביטלה')$q$,
+  (:'ev9'::jsonb ->> 'id'))) IS NOT NULL AS ok \gset
+SELECT COALESCE(pg_temp.err_of(:'st', :OWNER64, format($s$SELECT to_jsonb(hospitality.anonymize_guest(%L))$s$, :'gx')), 'ok') AS anon_ok \gset
+SELECT COALESCE(pg_temp.srv_err(:'st', format('SELECT hospitality.contract_open(%L)', pg_temp.h('tok-c10'))), 'ok') AS open_after \gset
+SELECT tests.check('privacy: deleting the details — the unsigned contract is gone with its history and its link; the signed one is kept exactly as signed; the event keeps its amounts but loses the free-text notes',
+  format($$SELECT %1$L = 'ok'
+             AND NOT EXISTS (SELECT 1 FROM hospitality.client_contracts WHERE id = (%2$L::jsonb ->> 'id')::uuid)
+             AND NOT EXISTS (SELECT 1 FROM hospitality.client_contract_log WHERE contract_id = (%2$L::jsonb ->> 'id')::uuid)
+             AND %3$L LIKE 'הקישור לחתימה לא תקין%%'
+             AND (SELECT status = 'signed' AND signer_name = 'פרטית מחיקה' AND signed_body IS NOT NULL
+                    FROM hospitality.client_contracts WHERE id = (%4$L::jsonb ->> 'id')::uuid)
+             AND (SELECT internal_notes IS NULL AND cancel_reason IS NULL AND price = 1500
+                    FROM hospitality.events WHERE id = (%5$L::jsonb ->> 'id')::uuid)
+             AND (SELECT anonymized_at IS NOT NULL FROM hospitality.guests WHERE id = %6$L)$$,
+         :'anon_ok', :'c10', :'open_after', :'c9', :'ev9', :'gx'));
+
+-- retention: a customer of an event only — deleted on time; one whose event ended inside the period — kept
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.event_create(%L)$q$, jsonb_build_object(
+  'property_id', :'p1', 'event_type', 'birthday', 'event_date', pg_temp.d(-300), 'start_time', '10:00', 'end_time', '12:00',
+  'participants', 10, 'price', 500, 'customer', jsonb_build_object('full_name', 'ישן מאוד', 'phone', '0546400012')))) AS old_ev \gset
+SELECT pg_temp.call(:'st', :OWNER64, format($q$SELECT hospitality.event_create(%L)$q$, jsonb_build_object(
+  'property_id', :'p1', 'event_type', 'birthday', 'event_date', pg_temp.d(-30), 'start_time', '10:00', 'end_time', '12:00',
+  'participants', 10, 'price', 500, 'customer', jsonb_build_object('full_name', 'לא מזמן', 'phone', '0546400013')))) AS new_ev \gset
+SELECT guest_id AS g_old FROM hospitality.events WHERE id = (:'old_ev'::jsonb ->> 'id')::uuid \gset
+SELECT guest_id AS g_new FROM hospitality.events WHERE id = (:'new_ev'::jsonb ->> 'id')::uuid \gset
+UPDATE hospitality.guests SET created_at = now() - interval '2 years' WHERE id IN (:'g_old', :'g_new');
+UPDATE hospitality.settings SET guest_retention_months = 6 WHERE tenant_id = :'st';
+SELECT hospitality.apply_retention() >= 1 AS ran \gset
+SELECT tests.check('retention: an event-only customer whose event ended 300 days ago (period 6 months) is deleted; one whose event ended 30 days ago is kept',
+  format($$SELECT %1$L::boolean
+             AND (SELECT anonymized_at IS NOT NULL FROM hospitality.guests WHERE id = %2$L)
+             AND (SELECT anonymized_at IS NULL FROM hospitality.guests WHERE id = %3$L)$$,
+         :'ran', :'g_old', :'g_new'));
+UPDATE hospitality.settings SET guest_retention_months = NULL WHERE tenant_id = :'st';
+
 -- ---------- cleanup: the platform flags as they were ----------
 UPDATE public.platform_feature_flags f SET enabled = m.enabled FROM m64_flags m WHERE f.key = m.key;
 DROP TABLE m64_flags;

@@ -145,14 +145,33 @@ function sampleSeconds(b: Uint8Array, stbl: Box | null, timescale: number): numb
   return total > 0 ? total / timescale : null;
 }
 
+/** מספר הדגימות ברצועה (stts) */
+function sampleCount(b: Uint8Array, stbl: Box | null): number {
+  const stts = stbl ? child(b, stbl, "stts") : null;
+  if (!stts || stts.end - stts.body < 8) return 0;
+  const count = u32(b, stts.body + 4);
+  let total = 0;
+  for (let i = 0, p = stts.body + 8; i < count && p + 8 <= stts.end; i++, p += 8)
+    total += u32(b, p);
+  return total;
+}
+
 const longest = (values: (number | null)[]): number | null => {
   const real = values.filter((v): v is number => v !== null && Number.isFinite(v) && v > 0);
   return real.length ? Math.max(...real) : null;
 };
 
+/**
+ * יותר פריימים בשנייה מזה — האורך שנמדד לא אמין: הרבה פריימים ב"כמעט אפס זמן" הם סימן לקובץ שנבנה
+ * כדי להיראות קצר (משכי הדגימות מכווצים, והזמן האמיתי במקום אחר בקובץ). גם סלואו-מושן מהטלפון
+ * (240 / 960) רחוק מזה
+ */
+const MAX_PLAUSIBLE_FPS = 1000;
+
 function isoInfo(b: Uint8Array): { seconds: number | null; codec: VideoCodec } {
   const candidates: (number | null)[] = [];
   let codec: VideoCodec = null;
+  let videoSamples = 0;
   for (const top of boxes(b, 0, b.length)) {
     if (top.type !== "moov") continue;
     const movie = headerDuration(b, child(b, top, "mvhd"));
@@ -167,17 +186,20 @@ function isoInfo(b: Uint8Array): { seconds: number | null; codec: VideoCodec } {
       const duration = v1 ? u64(b, mehd.body + 4) : u32(b, mehd.body + 4);
       if (duration > 0) candidates.push(duration / movie.timescale);
     }
-    candidates.push(fragmentedSeconds(b, top));
+    const fragments = fragmentedSeconds(b, top);
+    candidates.push(fragments.seconds);
+    videoSamples += fragments.samples;
     // כל רצועה: ה-mdhd שלה וסכום הדגימות בפועל — כותרת "קצרה" לא מסתירה תוכן ארוך
     for (const trak of boxes(b, top.body, top.end)) {
       if (trak.type !== "trak") continue;
       const mdia = child(b, trak, "mdia");
       const media = headerDuration(b, mdia ? child(b, mdia, "mdhd") : null);
       const minf = mdia ? child(b, mdia, "minf") : null;
-      candidates.push(
-        media.seconds,
-        sampleSeconds(b, minf ? child(b, minf, "stbl") : null, media.timescale),
-      );
+      const stbl = minf ? child(b, minf, "stbl") : null;
+      candidates.push(media.seconds, sampleSeconds(b, stbl, media.timescale));
+      const hdlr = mdia && child(b, mdia, "hdlr");
+      if (hdlr && hdlr.end - hdlr.body >= 12 && ascii(b, hdlr.body + 8, hdlr.body + 12) === "vide")
+        videoSamples += sampleCount(b, stbl);
     }
     for (const trak of boxes(b, top.body, top.end)) {
       if (trak.type !== "trak" || codec) continue;
@@ -190,11 +212,19 @@ function isoInfo(b: Uint8Array): { seconds: number | null; codec: VideoCodec } {
         codec = ISO_CODECS[ascii(b, stsd.body + 12, stsd.body + 16)] ?? null;
     }
   }
-  return { seconds: longest(candidates), codec };
+  let seconds = longest(candidates);
+  if (seconds !== null && videoSamples / seconds > MAX_PLAUSIBLE_FPS) seconds = null;
+  return { seconds, codec };
 }
 
-/** fMP4 בלי mehd (למשל ffmpeg, הקלטות מסך): סכום משכי הדגימות ב-moof/traf/trun של רצועת הווידאו */
-function fragmentedSeconds(b: Uint8Array, moov: Box): number | null {
+/**
+ * fMP4 (למשל ffmpeg, הקלטות מסך): האורך מ-moof/traf של רצועת הווידאו — הארוך מבין סכום משכי
+ * הדגימות (trun) לבין המקום שאליו מגיע המקטע האחרון: tfdt (baseMediaDecodeTime — לפיו נגנים ו-ffmpeg
+ * מציבים כל מקטע) ועוד משכי הדגימות שבו. אחרת קובץ עם "קפיצות" ב-tfdt ייראה קצר ויתנגן ארוך.
+ * גם מספר הדגימות — לבדיקת הסבירות (MAX_PLAUSIBLE_FPS)
+ */
+function fragmentedSeconds(b: Uint8Array, moov: Box): { seconds: number | null; samples: number } {
+  const none = { seconds: null, samples: 0 };
   // רצועת הווידאו: track_ID (tkhd), timescale (mdhd), ומשך ברירת מחדל (mvex/trex)
   let trackId = -1;
   let timescale = 0;
@@ -209,7 +239,7 @@ function fragmentedSeconds(b: Uint8Array, moov: Box): number | null {
     timescale = u32(b, mdhd.body + (b[mdhd.body] === 1 ? 20 : 12));
     break;
   }
-  if (trackId < 0 || timescale <= 0) return null;
+  if (trackId < 0 || timescale <= 0) return none;
   let trexDefault = 0;
   const mvex = child(b, moov, "mvex");
   for (const trex of mvex ? boxes(b, mvex.body, mvex.end) : []) {
@@ -217,6 +247,8 @@ function fragmentedSeconds(b: Uint8Array, moov: Box): number | null {
       trexDefault = u32(b, trex.body + 12);
   }
   let total = 0;
+  let end = 0;
+  let samples = 0;
   for (const moof of boxes(b, 0, b.length)) {
     if (moof.type !== "moof") continue;
     for (const traf of boxes(b, moof.body, moof.end)) {
@@ -228,21 +260,32 @@ function fragmentedSeconds(b: Uint8Array, moov: Box): number | null {
       if (tf & 0x01) at += 8; // base_data_offset
       if (tf & 0x02) at += 4; // sample_description_index
       const fallback = tf & 0x08 ? u32(b, at) : trexDefault;
+      let duration = 0;
       for (const trun of boxes(b, traf.body, traf.end)) {
         if (trun.type !== "trun") continue;
         const flags = u32(b, trun.body) & 0xffffff;
         const count = u32(b, trun.body + 4);
+        samples += count;
         if (!(flags & 0x100)) {
-          total += count * fallback;
+          duration += count * fallback;
           continue;
         }
         let p = trun.body + 8 + (flags & 0x01 ? 4 : 0) + (flags & 0x04 ? 4 : 0);
         const step = 4 * [0x100, 0x200, 0x400, 0x800].filter((f) => flags & f).length;
-        for (let i = 0; i < count && p + 4 <= trun.end; i++, p += step) total += u32(b, p);
+        for (let i = 0; i < count && p + 4 <= trun.end; i++, p += step) duration += u32(b, p);
+      }
+      total += duration;
+      // tfdt: גרסה + דגלים (4), ואז baseMediaDecodeTime — 32 ביט (גרסה 0) או 64 ביט (גרסה 1)
+      const tfdt = child(b, traf, "tfdt");
+      if (tfdt) {
+        const v1 = b[tfdt.body] === 1;
+        if (tfdt.end - tfdt.body >= (v1 ? 12 : 8))
+          end = Math.max(end, (v1 ? u64(b, tfdt.body + 4) : u32(b, tfdt.body + 4)) + duration);
       }
     }
   }
-  return total > 0 ? total / timescale : null;
+  const longestEnd = Math.max(total, end);
+  return { seconds: longestEnd > 0 ? longestEnd / timescale : null, samples };
 }
 
 // ---------- EBML (WebM) ----------

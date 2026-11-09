@@ -6,7 +6,11 @@
 --   • אין שני אירועים פעילים (ממתין / מאושר) באותו מתחם באותו זמן — EXCLUDE במסד (גם במקביל);
 --   • פיקדון / ערבות לנזקים: 2,000 ₪ קבוע (ברירת המחדל מתנאי העסק), מצב הפיקדון נרשם;
 --   • איחור בפינוי: 200 ₪ לכל שעה — נשמר באירוע (כמו שנקבע ביום ההזמנה);
---   • שעות הבריכה 08:00–18:00 — אירוע שחורג מהן מסומן ("אסור להיכנס למים מחוץ לשעות"), לא נחסם;
+--   • שעות האירוע ושעות השימוש בבריכה — נפרדות: האירוע יכול להימשך (גם אחרי חצות), השימוש בבריכה —
+--     רק בתוך שעות האירוע ובתוך שעות הבריכה, שהן לכל היותר 08:00–18:00 (CHECK במסד; העסק יכול לצמצם,
+--     לא להרחיב). אי אפשר לשמור / לאשר שימוש בבריכה מחוץ לשעות — לא דרך המסך ולא ישירות;
+--   • ביטול: "הוחזר ללקוח" נרשם באירוע (התשלום עצמו מחוץ למערכת); באירוע שבוטל / הסתיים אפשר לעדכן
+--     רק תשלום, החזר, מצב הפיקדון והערות;
 --   • לפני אישור: בדיקת זמינות — אירוע חופף נחסם; אורחים בצימרים באותו מתחם באותו זמן — אישור
 --     מפורש של בעל העסק ("אני יודע/ת"), נרשם באירוע ובהיסטוריה. הזמנות הלינה עצמן לא משתנות.
 -- תנאי העסק (business_terms): המספרים מהחוזים (פיקדון, דמי איחור, שעות הבריכה, מכסות, ימי ביטול)
@@ -55,7 +59,8 @@ CREATE TABLE IF NOT EXISTS hospitality.business_terms (
   confirmed_by              uuid,
   revision                  integer NOT NULL DEFAULT 1,
   updated_at                timestamptz NOT NULL DEFAULT now(),
-  CHECK (pool_close_time > pool_open_time),
+  -- שעות הבריכה — לפי החוזים לכל היותר 08:00–18:00 (העסק יכול לצמצם, לא להרחיב)
+  CHECK (pool_close_time > pool_open_time AND pool_open_time >= '08:00' AND pool_close_time <= '18:00'),
   CHECK ((confirmed_at IS NULL) = (confirmed_by IS NULL))
 );
 COMMENT ON TABLE hospitality.business_terms IS
@@ -79,10 +84,16 @@ CREATE TABLE IF NOT EXISTS hospitality.events (
   -- הזמן המלא באזור הזמן של העסק; שעת סיום קטנה משעת ההתחלה = למחרת (אירוע שנגמר אחרי חצות)
   starts_at         timestamptz NOT NULL,
   ends_at           timestamptz NOT NULL,
+  -- השימוש בבריכה באירוע — נפרד משעות האירוע: בתוך שעות האירוע ובתוך שעות הבריכה (08:00–18:00 לכל
+  -- היותר). שניהם ריקים = בלי שימוש בבריכה. האירוע יכול להימשך אחרי שהבריכה נסגרת — השימוש בבריכה לא
+  pool_start_time   time,
+  pool_end_time     time,
   participants      integer NOT NULL CHECK (participants BETWEEN 1 AND 50),
   price             numeric(10,2) NOT NULL CHECK (price BETWEEN 0 AND 1000000),
   advance_amount    numeric(10,2) NOT NULL DEFAULT 0 CHECK (advance_amount >= 0),
   amount_paid       numeric(10,2) NOT NULL DEFAULT 0 CHECK (amount_paid BETWEEN 0 AND 1000000),
+  -- הוחזר ללקוח (למשל המקדמה אחרי ביטול) — רישום בלבד; התשלום וההחזר עצמם מחוץ למערכת
+  refund_amount     numeric(10,2) NOT NULL DEFAULT 0 CHECK (refund_amount >= 0),
   deposit_amount    numeric(10,2) NOT NULL DEFAULT 2000 CHECK (deposit_amount BETWEEN 0 AND 100000),
   deposit_status    text NOT NULL DEFAULT 'pending' CHECK (deposit_status IN ('pending', 'held', 'returned', 'charged')),
   late_fee_per_hour numeric(10,2) NOT NULL DEFAULT 200 CHECK (late_fee_per_hour BETWEEN 0 AND 10000),
@@ -99,7 +110,11 @@ CREATE TABLE IF NOT EXISTS hospitality.events (
   UNIQUE (tenant_id, id),
   UNIQUE (tenant_id, number),
   CHECK (advance_amount <= price),
+  CHECK (refund_amount <= amount_paid),
   CHECK (ends_at > starts_at AND ends_at - starts_at <= interval '24 hours'),
+  CHECK ((pool_start_time IS NULL) = (pool_end_time IS NULL)),
+  CHECK (pool_start_time IS NULL OR (pool_end_time > pool_start_time
+                                     AND pool_start_time >= '08:00' AND pool_end_time <= '18:00')),
   CHECK ((event_type = 'other') = (event_type_other IS NOT NULL)),
   CHECK ((status = 'cancelled') = (cancelled_at IS NOT NULL)),
   FOREIGN KEY (tenant_id, property_id) REFERENCES hospitality.properties (tenant_id, id),
@@ -300,6 +315,26 @@ RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
 $$;
 REVOKE ALL ON FUNCTION hospitality._event_outside_pool(uuid, time, time) FROM PUBLIC, anon, authenticated;
 
+-- החלון המותר לשימוש בבריכה באירוע: החיתוך של שעות האירוע (עד סוף היום — אחרי חצות הבריכה סגורה)
+-- עם שעות הבריכה של העסק. שניהם NULL — האירוע כולו מחוץ לשעות הבריכה (אין שימוש בבריכה)
+CREATE OR REPLACE FUNCTION hospitality._event_pool_allowed(_t uuid, _start time, _end time,
+                                                           OUT allowed_from time, OUT allowed_to time)
+LANGUAGE plpgsql STABLE SET search_path = '' AS $$
+DECLARE
+  r hospitality.business_terms := hospitality._terms(_t);
+BEGIN
+  IF _start IS NULL OR _end IS NULL THEN
+    RETURN;
+  END IF;
+  allowed_from := greatest(_start, r.pool_open_time);
+  allowed_to := least(CASE WHEN _end <= _start THEN '24:00'::time ELSE _end END, r.pool_close_time);
+  IF allowed_from >= allowed_to THEN
+    allowed_from := NULL;
+    allowed_to := NULL;
+  END IF;
+END $$;
+REVOKE ALL ON FUNCTION hospitality._event_pool_allowed(uuid, time, time) FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION hospitality._event_json(e hospitality.events)
 RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT jsonb_build_object(
@@ -317,8 +352,16 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
     'starts_at', hospitality._ts(e.starts_at), 'ends_at', hospitality._ts(e.ends_at),
     'ends_next_day', e.end_time <= e.start_time,
     'outside_pool_hours', hospitality._event_outside_pool(e.tenant_id, e.start_time, e.end_time),
+    'pool_start_time', to_char(e.pool_start_time, 'HH24:MI'), 'pool_end_time', to_char(e.pool_end_time, 'HH24:MI'),
+    'pool_allowed_from', (SELECT to_char(a.allowed_from, 'HH24:MI')
+                            FROM hospitality._event_pool_allowed(e.tenant_id, e.start_time, e.end_time) a),
+    'pool_allowed_to', (SELECT to_char(a.allowed_to, 'HH24:MI')
+                          FROM hospitality._event_pool_allowed(e.tenant_id, e.start_time, e.end_time) a),
     'participants', e.participants, 'price', e.price, 'advance_amount', e.advance_amount,
-    'amount_paid', e.amount_paid, 'balance_due', greatest(e.price - e.amount_paid, 0),
+    'amount_paid', e.amount_paid, 'refund_amount', e.refund_amount,
+    'kept_amount', greatest(e.amount_paid - e.refund_amount, 0),
+    -- אירוע שבוטל — אין יתרה לתשלום (מה ששולם: הוחזר / נשאר כדמי ביטול — לפי ההחזר שנרשם)
+    'balance_due', CASE WHEN e.status = 'cancelled' THEN 0 ELSE greatest(e.price - e.amount_paid, 0) END,
     'payment_status', hospitality._event_payment_status(e),
     'deposit_amount', e.deposit_amount, 'deposit_status', e.deposit_status, 'late_fee_per_hour', e.late_fee_per_hour,
     'status', CASE WHEN e.status = 'confirmed' AND e.ends_at <= now() THEN 'past' ELSE e.status END,
@@ -397,14 +440,17 @@ DECLARE
   r hospitality.business_terms := hospitality._terms(_t);
   _tz text;
   k text;
+  _pool_from time;
+  _pool_to time;
 BEGIN
   IF _data IS NULL OR jsonb_typeof(_data) <> 'object' THEN
     RAISE EXCEPTION 'פרטי האירוע לא תקינים' USING ERRCODE = 'check_violation';
   END IF;
   FOR k IN SELECT jsonb_object_keys(_data) LOOP
     IF k NOT IN ('property_id', 'guest_id', 'customer', 'event_type', 'event_type_other', 'event_date', 'start_time',
-                 'end_time', 'participants', 'price', 'advance_amount', 'amount_paid', 'deposit_amount',
-                 'deposit_status', 'internal_notes', 'status', 'lodging_ack') THEN
+                 'end_time', 'pool_start_time', 'pool_end_time', 'participants', 'price', 'advance_amount',
+                 'amount_paid', 'refund_amount', 'deposit_amount', 'deposit_status', 'internal_notes', 'status',
+                 'lodging_ack') THEN
       RAISE EXCEPTION 'שדה לא מוכר: %', k USING ERRCODE = 'check_violation';
     END IF;
   END LOOP;
@@ -444,6 +490,38 @@ BEGIN
   IF e.end_time = e.start_time THEN
     RAISE EXCEPTION 'שעת הסיום צריכה להיות אחרי שעת ההתחלה' USING ERRCODE = 'check_violation';
   END IF;
+  -- השימוש בבריכה: רק בתוך שעות האירוע ובתוך שעות הבריכה. לא נשלח — באירוע חדש: כל החלון המותר;
+  -- בעדכון: נשאר כשהוא עדיין מותר, אחרת מצטמצם לחלון המותר (ובלי חלון — בלי שימוש בבריכה)
+  SELECT a.allowed_from, a.allowed_to INTO _pool_from, _pool_to
+    FROM hospitality._event_pool_allowed(_t, e.start_time, e.end_time) a;
+  IF _data ? 'pool_start_time' OR _data ? 'pool_end_time' THEN
+    e.pool_start_time := hospitality._cv_time(_data -> 'pool_start_time', 'תחילת השימוש בבריכה');
+    e.pool_end_time := hospitality._cv_time(_data -> 'pool_end_time', 'סוף השימוש בבריכה');
+    IF (e.pool_start_time IS NULL) <> (e.pool_end_time IS NULL) THEN
+      RAISE EXCEPTION 'השימוש בבריכה — יש למלא גם שעת התחלה וגם שעת סיום, או לבחור "בלי שימוש בבריכה"'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    IF e.pool_start_time IS NOT NULL AND _pool_from IS NULL THEN
+      RAISE EXCEPTION 'האירוע כולו מחוץ לשעות הבריכה (%–%) — אין בו שימוש בבריכה',
+        to_char(r.pool_open_time, 'HH24:MI'), to_char(r.pool_close_time, 'HH24:MI') USING ERRCODE = 'check_violation';
+    END IF;
+    IF e.pool_start_time IS NOT NULL
+       AND (e.pool_start_time < _pool_from OR e.pool_end_time > _pool_to OR e.pool_end_time <= e.pool_start_time) THEN
+      RAISE EXCEPTION 'השימוש בבריכה באירוע הזה — רק בין % ל-% (בתוך שעות האירוע ושעות הבריכה %–%)',
+        to_char(_pool_from, 'HH24:MI'), to_char(_pool_to, 'HH24:MI'),
+        to_char(r.pool_open_time, 'HH24:MI'), to_char(r.pool_close_time, 'HH24:MI') USING ERRCODE = 'check_violation';
+    END IF;
+  ELSIF _base.id IS NULL THEN
+    e.pool_start_time := _pool_from;
+    e.pool_end_time := _pool_to;
+  ELSIF e.pool_start_time IS NOT NULL THEN
+    e.pool_start_time := greatest(e.pool_start_time, _pool_from);
+    e.pool_end_time := least(e.pool_end_time, _pool_to);
+    IF _pool_from IS NULL OR e.pool_end_time <= e.pool_start_time THEN
+      e.pool_start_time := NULL;
+      e.pool_end_time := NULL;
+    END IF;
+  END IF;
   IF _data ? 'participants' THEN
     e.participants := hospitality._cv_int(_data -> 'participants', 'מספר המשתתפים', 1, 1000);
   END IF;
@@ -460,6 +538,9 @@ BEGIN
   IF _data ? 'amount_paid' THEN
     e.amount_paid := COALESCE(hospitality._cv_money(_data -> 'amount_paid', 'הסכום ששולם', 0, 1000000, true), 0);
   END IF;
+  IF _data ? 'refund_amount' THEN
+    e.refund_amount := COALESCE(hospitality._cv_money(_data -> 'refund_amount', 'הסכום שהוחזר', 0, 1000000, true), 0);
+  END IF;
   IF _data ? 'deposit_amount' THEN
     e.deposit_amount := hospitality._cv_money(_data -> 'deposit_amount', 'הפיקדון', 0, 100000, false);
   END IF;
@@ -475,8 +556,12 @@ BEGIN
   END IF;
   e.advance_amount := COALESCE(e.advance_amount, 0);
   e.amount_paid := COALESCE(e.amount_paid, 0);
+  e.refund_amount := COALESCE(e.refund_amount, 0);
   IF e.advance_amount > e.price THEN
     RAISE EXCEPTION 'המקדמה לא יכולה להיות גדולה מהמחיר' USING ERRCODE = 'check_violation';
+  END IF;
+  IF e.refund_amount > e.amount_paid THEN
+    RAISE EXCEPTION 'הסכום שהוחזר לא יכול להיות גדול מהסכום ששולם' USING ERRCODE = 'check_violation';
   END IF;
   SELECT COALESCE(s.timezone, 'Asia/Jerusalem') INTO _tz FROM hospitality.settings s WHERE s.tenant_id = _t;
   _tz := COALESCE(_tz, 'Asia/Jerusalem');
@@ -629,6 +714,11 @@ BEGIN
   END IF;
   IF n.pool_close_time <= n.pool_open_time THEN
     RAISE EXCEPTION 'שעת סגירת הבריכה צריכה להיות אחרי שעת הפתיחה' USING ERRCODE = 'check_violation';
+  END IF;
+  -- לפי החוזים: הבריכה לכל היותר 08:00–18:00 (אפשר לצמצם, לא להרחיב) — גם CHECK בטבלה
+  IF n.pool_open_time < '08:00'::time OR n.pool_close_time > '18:00'::time THEN
+    RAISE EXCEPTION 'שעות הבריכה — בין 08:00 ל-18:00 בלבד (לפי החוזים). אפשר לצמצם, לא להרחיב'
+      USING ERRCODE = 'check_violation';
   END IF;
   IF _data ? 'deposit_amount' THEN
     n.deposit_amount := hospitality._cv_money(_data -> 'deposit_amount', 'הפיקדון', 0, 100000, false);
@@ -786,6 +876,40 @@ END $$;
 REVOKE ALL ON FUNCTION hospitality.staff_event_detail(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION hospitality.staff_event_detail(uuid) TO authenticated, service_role;
 
+-- הכיוון ההפוך: אירועים פעילים במתחם בזמן השהייה של הזמנה (לכרטיס ההזמנה — האורחים חולקים איתם את
+-- הבריכה והחצר). מכניסה (שעת הכניסה) עד יציאה (שעת היציאה), כמו _event_lodging
+CREATE OR REPLACE FUNCTION hospitality.staff_booking_events(_booking_id uuid)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _t uuid := hospitality._manage_tenant('bookings');
+  b hospitality.bookings;
+  s hospitality.settings;
+  _prop uuid;
+  _tz text;
+BEGIN
+  SELECT * INTO b FROM hospitality.bookings x WHERE x.tenant_id = _t AND x.id = _booking_id;
+  IF b.id IS NULL THEN
+    RAISE EXCEPTION 'ההזמנה לא נמצאה' USING ERRCODE = 'no_data_found';
+  END IF;
+  SELECT * INTO s FROM hospitality.settings x WHERE x.tenant_id = _t;
+  _tz := COALESCE(s.timezone, 'Asia/Jerusalem');
+  SELECT u.property_id INTO _prop FROM hospitality.units u WHERE u.tenant_id = _t AND u.id = b.unit_id;
+  RETURN COALESCE((SELECT jsonb_agg(jsonb_build_object(
+           'id', e.id, 'number', e.number, 'event_type_label', hospitality._event_type_label(e.event_type, e.event_type_other),
+           'event_date', e.event_date, 'start_time', to_char(e.start_time, 'HH24:MI'), 'end_time', to_char(e.end_time, 'HH24:MI'),
+           'ends_next_day', e.end_time <= e.start_time, 'participants', e.participants, 'status', e.status,
+           'pool_start_time', to_char(e.pool_start_time, 'HH24:MI'), 'pool_end_time', to_char(e.pool_end_time, 'HH24:MI'))
+           ORDER BY e.starts_at)
+      FROM hospitality.events e
+     WHERE e.tenant_id = _t AND e.property_id = _prop AND e.status IN ('pending', 'confirmed')
+       AND tstzrange(e.starts_at, e.ends_at, '[)')
+           && tstzrange(((b.check_in + COALESCE(s.check_in_time, '14:00'::time))::timestamp) AT TIME ZONE _tz,
+                        ((b.check_out + COALESCE(s.check_out_time, '11:00'::time))::timestamp) AT TIME ZONE _tz, '[)')),
+    '[]'::jsonb);
+END $$;
+REVOKE ALL ON FUNCTION hospitality.staff_booking_events(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION hospitality.staff_booking_events(uuid) TO authenticated, service_role;
+
 -- בדיקה בלי שמירה (הטופס בודק תוך כדי): אירועים חופפים, אורחים בצימרים, שעות הבריכה, מכסת המשתתפים
 CREATE OR REPLACE FUNCTION hospitality.event_check(_data jsonb, _exclude uuid DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
@@ -813,6 +937,11 @@ BEGIN
     'conflicts', hospitality._event_conflicts(_t, e.property_id, e.starts_at, e.ends_at, _exclude),
     'lodging', hospitality._event_lodging(_t, e.property_id, e.starts_at, e.ends_at),
     'outside_pool_hours', hospitality._event_outside_pool(_t, e.start_time, e.end_time),
+    'pool_start_time', to_char(e.pool_start_time, 'HH24:MI'), 'pool_end_time', to_char(e.pool_end_time, 'HH24:MI'),
+    'pool_allowed_from', (SELECT to_char(a.allowed_from, 'HH24:MI')
+                            FROM hospitality._event_pool_allowed(_t, e.start_time, e.end_time) a),
+    'pool_allowed_to', (SELECT to_char(a.allowed_to, 'HH24:MI')
+                          FROM hospitality._event_pool_allowed(_t, e.start_time, e.end_time) a),
     'ends_next_day', e.end_time <= e.start_time,
     'max_event_guests', r.max_event_guests,
     'pool_open_time', to_char(r.pool_open_time, 'HH24:MI'), 'pool_close_time', to_char(r.pool_close_time, 'HH24:MI'));
@@ -851,16 +980,20 @@ BEGIN
   PERFORM hospitality._event_guard(_t, e, true);
   SELECT COALESCE(max(x.number), 1000) + 1 INTO e.number FROM hospitality.events x WHERE x.tenant_id = _t;
   INSERT INTO hospitality.events (id, tenant_id, number, property_id, guest_id, event_type, event_type_other, event_date,
-                                  start_time, end_time, starts_at, ends_at, participants, price, advance_amount, amount_paid,
-                                  deposit_amount, deposit_status, late_fee_per_hour, status, lodging_ack, internal_notes,
-                                  created_by)
+                                  start_time, end_time, starts_at, ends_at, pool_start_time, pool_end_time, participants,
+                                  price, advance_amount, amount_paid, refund_amount, deposit_amount, deposit_status,
+                                  late_fee_per_hour, status, lodging_ack, internal_notes, created_by)
   VALUES (e.id, _t, e.number, e.property_id, e.guest_id, e.event_type, e.event_type_other, e.event_date, e.start_time,
-          e.end_time, e.starts_at, e.ends_at, e.participants, e.price, e.advance_amount, e.amount_paid, e.deposit_amount,
-          e.deposit_status, e.late_fee_per_hour, e.status, e.lodging_ack, e.internal_notes, auth.uid())
+          e.end_time, e.starts_at, e.ends_at, e.pool_start_time, e.pool_end_time, e.participants, e.price,
+          e.advance_amount, e.amount_paid, e.refund_amount, e.deposit_amount, e.deposit_status, e.late_fee_per_hour,
+          e.status, e.lodging_ack, e.internal_notes, auth.uid())
   RETURNING * INTO e;
   PERFORM hospitality._event_log(_t, e.id, 'created', NULL, e.status,
     jsonb_build_object('event_type', e.event_type, 'event_date', e.event_date, 'start_time', to_char(e.start_time, 'HH24:MI'),
-                       'end_time', to_char(e.end_time, 'HH24:MI'), 'participants', e.participants, 'price', e.price,
+                       'end_time', to_char(e.end_time, 'HH24:MI'),
+                       'pool', CASE WHEN e.pool_start_time IS NOT NULL
+                                    THEN to_char(e.pool_start_time, 'HH24:MI') || '–' || to_char(e.pool_end_time, 'HH24:MI') END,
+                       'participants', e.participants, 'price', e.price,
                        'deposit_amount', e.deposit_amount, 'lodging_ack', e.lodging_ack), NULL);
   PERFORM hospitality._audit(_t, 'events.created', 'אירוע #' || e.number,
     jsonb_build_object('event_date', e.event_date, 'participants', e.participants, 'status', e.status));
@@ -882,23 +1015,50 @@ DECLARE
   _changes jsonb := '{}'::jsonb;
   k text;
 BEGIN
-  IF _data ? 'status' OR _data ? 'guest_id' OR _data ? 'customer' OR _data ? 'lodging_ack' THEN
+  IF _data ? 'status' OR _data ? 'guest_id' OR _data ? 'customer' THEN
     RAISE EXCEPTION 'מצב האירוע והלקוח משתנים בפעולות נפרדות' USING ERRCODE = 'check_violation';
+  END IF;
+  IF _data IS NULL OR jsonb_typeof(_data) <> 'object' THEN
+    RAISE EXCEPTION 'פרטי האירוע לא תקינים' USING ERRCODE = 'check_violation';
   END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended('hosp-events:' || _t, 0));
   o := hospitality._staff_event(_t, _id, _revision);
   IF o.status IN ('cancelled', 'completed') THEN
-    RAISE EXCEPTION 'אירוע שבוטל או הסתיים לא משתנה' USING ERRCODE = 'check_violation';
-  END IF;
-  n := hospitality._event_apply(_t, o, _data);
-  -- שינוי זמן / מתחם באירוע מאושר: אישור האורחים בצימרים נבדק מחדש
-  IF (n.starts_at, n.ends_at, n.property_id) IS DISTINCT FROM (o.starts_at, o.ends_at, o.property_id) THEN
-    n.lodging_ack := false;
-    PERFORM hospitality._event_guard(_t, n, true);
+    -- אחרי ביטול / סיום: רק הכסף והערות — ששולם, שהוחזר ללקוח (למשל המקדמה), מצב הפיקדון
+    IF EXISTS (SELECT 1 FROM jsonb_object_keys(_data) x
+                WHERE x NOT IN ('amount_paid', 'refund_amount', 'deposit_status', 'internal_notes')) THEN
+      RAISE EXCEPTION 'אירוע שבוטל או הסתיים — אפשר לעדכן רק את התשלום, ההחזר ללקוח, מצב הפיקדון וההערות'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    n := o;
+    IF _data ? 'amount_paid' THEN
+      n.amount_paid := COALESCE(hospitality._cv_money(_data -> 'amount_paid', 'הסכום ששולם', 0, 1000000, true), 0);
+    END IF;
+    IF _data ? 'refund_amount' THEN
+      n.refund_amount := COALESCE(hospitality._cv_money(_data -> 'refund_amount', 'הסכום שהוחזר', 0, 1000000, true), 0);
+    END IF;
+    IF _data ? 'deposit_status' THEN
+      n.deposit_status := hospitality._cv_choice(_data -> 'deposit_status', 'מצב הפיקדון',
+                                                 ARRAY['pending', 'held', 'returned', 'charged']);
+    END IF;
+    IF _data ? 'internal_notes' THEN
+      n.internal_notes := hospitality._cv_text(_data -> 'internal_notes', 'הערות פנימיות', 2000, false);
+    END IF;
+    IF n.refund_amount > n.amount_paid THEN
+      RAISE EXCEPTION 'הסכום שהוחזר לא יכול להיות גדול מהסכום ששולם' USING ERRCODE = 'check_violation';
+    END IF;
+  ELSE
+    n := hospitality._event_apply(_t, o, _data - 'lodging_ack');
+    -- שינוי זמן / מתחם: אירוע מאושר עם אורחים בצימרים באותו זמן — רק עם אישור מפורש מחדש (lodging_ack)
+    IF (n.starts_at, n.ends_at, n.property_id) IS DISTINCT FROM (o.starts_at, o.ends_at, o.property_id) THEN
+      n.lodging_ack := COALESCE((_data ->> 'lodging_ack')::boolean, false);
+      PERFORM hospitality._event_guard(_t, n, true);
+    END IF;
   END IF;
   FOR k IN SELECT unnest(ARRAY['property_id', 'event_type', 'event_type_other', 'event_date', 'start_time', 'end_time',
-                               'participants', 'price', 'advance_amount', 'amount_paid', 'deposit_amount',
-                               'deposit_status', 'internal_notes']) LOOP
+                               'pool_start_time', 'pool_end_time', 'participants', 'price', 'advance_amount',
+                               'amount_paid', 'refund_amount', 'deposit_amount', 'deposit_status',
+                               'internal_notes']) LOOP
     IF to_jsonb(o) -> k IS DISTINCT FROM to_jsonb(n) -> k THEN
       _changes := _changes || jsonb_build_object(k, jsonb_build_object(
         'from', CASE WHEN k = 'internal_notes' THEN to_jsonb(left(o.internal_notes, 80)) ELSE to_jsonb(o) -> k END,
@@ -911,9 +1071,11 @@ BEGIN
   UPDATE hospitality.events x
      SET property_id = n.property_id, event_type = n.event_type, event_type_other = n.event_type_other,
          event_date = n.event_date, start_time = n.start_time, end_time = n.end_time, starts_at = n.starts_at,
-         ends_at = n.ends_at, participants = n.participants, price = n.price, advance_amount = n.advance_amount,
-         amount_paid = n.amount_paid, deposit_amount = n.deposit_amount, deposit_status = n.deposit_status,
-         internal_notes = n.internal_notes, lodging_ack = n.lodging_ack, revision = x.revision + 1, updated_at = now()
+         ends_at = n.ends_at, pool_start_time = n.pool_start_time, pool_end_time = n.pool_end_time,
+         participants = n.participants, price = n.price, advance_amount = n.advance_amount,
+         amount_paid = n.amount_paid, refund_amount = n.refund_amount, deposit_amount = n.deposit_amount,
+         deposit_status = n.deposit_status, internal_notes = n.internal_notes, lodging_ack = n.lodging_ack,
+         revision = x.revision + 1, updated_at = now()
    WHERE x.tenant_id = _t AND x.id = _id
   RETURNING * INTO n;
   PERFORM hospitality._event_log(_t, n.id, 'updated', NULL, NULL, _changes, NULL);
@@ -969,7 +1131,13 @@ BEGIN
   PERFORM hospitality._event_log(_t, n.id, 'status_changed', o.status, n.status,
     jsonb_build_object('lodging_ack', n.lodging_ack,
                        'lodging', CASE WHEN _status = 'confirmed'
-                                       THEN jsonb_array_length(hospitality._event_lodging(_t, n.property_id, n.starts_at, n.ends_at)) END),
+                                       THEN jsonb_array_length(hospitality._event_lodging(_t, n.property_id, n.starts_at, n.ends_at)) END)
+    -- ביטול: כמה ימים לפני האירוע, מה ששולם, ותנאי הביטול שבחוזה — לרישום ההחזר
+    || CASE WHEN _status = 'cancelled' THEN jsonb_build_object(
+         'days_before', n.event_date - (now() AT TIME ZONE COALESCE((SELECT s.timezone FROM hospitality.settings s
+                                                                       WHERE s.tenant_id = _t), 'Asia/Jerusalem'))::date,
+         'amount_paid', n.amount_paid,
+         'free_cancellation_days', (hospitality._terms(_t)).free_cancellation_days) ELSE '{}'::jsonb END,
     _r);
   PERFORM hospitality._audit(_t, 'events.status', 'אירוע #' || n.number,
                              jsonb_build_object('from', o.status, 'to', n.status));

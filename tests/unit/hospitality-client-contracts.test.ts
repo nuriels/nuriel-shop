@@ -8,6 +8,7 @@ import {
   contractSignedCopyEmail,
 } from "@/engines/hospitality/contracts/emails";
 import { buildSignedContractPdf } from "@/engines/hospitality/contracts/pdf.server";
+import { poolNotice } from "@/engines/hospitality/contracts/pool-notice";
 import {
   SIGNATURE_HEIGHT,
   SIGNATURE_WIDTH,
@@ -37,6 +38,7 @@ import {
 import {
   EVENT_MAX_PARTICIPANTS,
   parseEventInput,
+  parseEventUpdate,
   parseTermsSave,
 } from "@/engines/hospitality/validation/events";
 
@@ -249,6 +251,21 @@ describe("the contract emails: the personal link only to the customer, everythin
     expect(m.html).toContain("22.11.2026");
     expect(m.html).toContain("נופי &lt;דורית&gt;");
     expect(m.html).not.toContain("<דורית>");
+    expect(m.html).not.toContain("שעות הבריכה");
+  });
+  it("the request to sign carries the pool notice when there is one (escaped)", () => {
+    const m = contractSignRequestEmail(ctx, {
+      signerName: "נועה",
+      title: "הסכם מתחם הבריכה",
+      number: 1002,
+      url: `https://nofi.example/stay/contract#t=${TOKEN}`,
+      expiresOn: "22.11.2026",
+      about: "אירוע — יום הולדת",
+      poolNote: "השימוש בבריכה באירוע: 16:00–18:00 בלבד. <b>",
+    });
+    expect(m.html).toContain("שימו לב — שעות הבריכה");
+    expect(m.html).toContain("16:00–18:00");
+    expect(m.html).toContain("&lt;b&gt;");
   });
   it("the signed copy: no link at all (the PDF is attached)", () => {
     const m = contractSignedCopyEmail(ctx, {
@@ -259,6 +276,52 @@ describe("the contract emails: the personal link only to the customer, everythin
     });
     expect(m.subject).toContain("העותק החתום");
     expect(m.html).not.toContain("#t=");
+  });
+});
+
+describe("the pool notice for the customer (outside the contract text)", () => {
+  const base = { open: "08:00", close: "18:00", event_start: "16:00", event_end: "22:00" };
+  it("an event: its pool-use window, and that the event goes on after it", () => {
+    expect(
+      poolNotice("pool_event", { ...base, start: "16:00", end: "18:00", window_known: true }),
+    ).toBe(
+      "השימוש בבריכה באירוע: 16:00–18:00 בלבד. הבריכה פתוחה 08:00–18:00, ואסור להיכנס למים מחוץ לשעות אלו — גם כשהאירוע ממשיך אחריהן.",
+    );
+    expect(
+      poolNotice("pool_event", {
+        ...base,
+        event_end: "14:00",
+        event_start: "10:00",
+        start: "11:00",
+        end: "14:00",
+        window_known: true,
+      }),
+    ).not.toContain("ממשיך");
+    // across midnight (ends the next day) — it goes on after the pool closes
+    expect(
+      poolNotice("pool_event", {
+        ...base,
+        event_end: "01:00",
+        start: "16:00",
+        end: "18:00",
+        window_known: true,
+      }),
+    ).toContain("ממשיך");
+  });
+  it("an event without pool use; a lodging contract; an old snapshot; nothing known", () => {
+    expect(
+      poolNotice("pool_event", { ...base, start: null, end: null, window_known: true }),
+    ).toContain("באירוע הזה אין שימוש בבריכה");
+    expect(poolNotice("hosting", { ...base, start: null, end: null, window_known: false })).toBe(
+      "הבריכה פתוחה 08:00–18:00 בלבד, ואסור להיכנס למים מחוץ לשעות אלו.",
+    );
+    expect(
+      poolNotice("pool_event", { ...base, start: null, end: null, window_known: false }),
+    ).toContain("הבריכה פתוחה 08:00–18:00 בלבד");
+    expect(poolNotice("hosting", null)).toBeNull();
+    expect(
+      poolNotice("hosting", { ...base, open: null, start: null, end: null, window_known: false }),
+    ).toBeNull();
   });
 });
 
@@ -278,6 +341,7 @@ describe("the signed PDF", () => {
       signedAtLocal: "18.11.2026 10:15",
       signerIp: "198.51.100.1",
       signerUserAgent: "Mozilla/5.0",
+      poolNote: "השימוש בבריכה באירוע: 16:00–18:00 בלבד.",
     });
     expect(pdf).toBeInstanceOf(Uint8Array);
     expect(new TextDecoder().decode(pdf.slice(0, 5))).toBe("%PDF-");
@@ -293,6 +357,50 @@ describe("events (migration 63): the input before the database", () => {
     });
     expect(() => parseEventInput({ participants: 51 })).toThrow();
     expect(() => parseEventInput({ event_type: "rave" })).toThrow();
+  });
+  it("the pool-use window: both times or neither, inside 08:00–18:00, after its start", () => {
+    expect(parseEventInput({ pool_start_time: "16:00", pool_end_time: "18:00" })).toMatchObject({
+      pool_start_time: "16:00",
+      pool_end_time: "18:00",
+    });
+    expect(parseEventInput({ pool_start_time: null, pool_end_time: null })).toMatchObject({
+      pool_start_time: null,
+      pool_end_time: null,
+    });
+    expect(() => parseEventInput({ pool_start_time: "16:00" })).toThrow("יש למלא גם שעת התחלה");
+    expect(() => parseEventInput({ pool_start_time: "17:00", pool_end_time: "19:00" })).toThrow(
+      "רק בין 08:00 ל-18:00",
+    );
+    expect(() => parseEventInput({ pool_start_time: "07:30", pool_end_time: "09:00" })).toThrow(
+      "רק בין 08:00 ל-18:00",
+    );
+    expect(() => parseEventInput({ pool_start_time: "12:00", pool_end_time: "11:00" })).toThrow(
+      "אחרי ההתחלה",
+    );
+  });
+  it("the refund amount; on update the lodging acknowledgement is allowed, the status is not", () => {
+    expect(parseEventInput({ refund_amount: 1000 })).toMatchObject({ refund_amount: 1000 });
+    expect(() => parseEventInput({ refund_amount: -1 })).toThrow();
+    const id = "6a1e0000-0000-4000-8000-000000000003";
+    expect(
+      parseEventUpdate({ id, revision: 2, data: { event_date: "2027-01-02", lodging_ack: true } })
+        .data,
+    ).toMatchObject({ lodging_ack: true });
+    expect(() => parseEventUpdate({ id, revision: 2, data: { status: "confirmed" } })).toThrow(
+      "מצב האירוע והלקוח",
+    );
+  });
+  it("the business terms: the pool hours only inside 08:00–18:00", () => {
+    expect(
+      parseTermsSave({ data: { pool_open_time: "09:00", pool_close_time: "17:00" }, revision: 1 })
+        .data,
+    ).toEqual({ pool_open_time: "09:00", pool_close_time: "17:00" });
+    expect(() => parseTermsSave({ data: { pool_open_time: "07:00" }, revision: 1 })).toThrow(
+      "בין 08:00 ל-18:00",
+    );
+    expect(() => parseTermsSave({ data: { pool_close_time: "19:00" }, revision: 1 })).toThrow(
+      "בין 08:00 ל-18:00",
+    );
   });
   it("the business terms: known fields, a real representative signature, the unit as a UUID", () => {
     expect(parseTermsSave({ data: { representative_signature: SIG }, revision: 1 }).data).toEqual({

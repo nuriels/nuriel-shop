@@ -418,6 +418,51 @@ check "38 8 addresses in parallel against a business limit of 3 → exactly 3 al
   "SELECT $(allowed_count r38) = 3 AND (SELECT hits FROM hospitality.rate_buckets WHERE key = 'conc-rate-business-total-02') = 3
           AND (SELECT count(*) FROM hospitality.rate_buckets WHERE key LIKE 'conc-rate-address-%') = 3"
 
+# ---- 39–42. events at the compound (migration 63): no two active events at once, also in parallel ----
+q "SELECT public.platform_set_flag('hospitality_management_enabled', true),
+          public.platform_set_flag('hospitality_management_enabled', true, '$SITE')" >/dev/null
+EVP=c1000000-0000-0000-0000-000000000001
+ev() { # ev <day> <start> <end> <tag> — an event in the compound, a new customer each time
+  echo "SELECT hospitality.event_create(jsonb_build_object('property_id', '$EVP', 'event_type', 'birthday',
+          'event_date', current_date + $1, 'start_time', '$2', 'end_time', '$3', 'participants', 20, 'price', 1000,
+          'customer', jsonb_build_object('full_name', 'לקוח $4', 'phone', '05463$(printf '%05d' $((RANDOM % 99999)))')));"
+}
+args=()
+for n in $(seq 1 10); do args+=("$(as_staff $OWNER) $(ev 90 10:00 14:00 e39-$n)"); done
+parallel e39 "${args[@]}"
+check "39 10 parallel new events, same compound, overlapping hours → exactly one is saved, 9 are told there is already an event" \
+  "SELECT $(ok_count e39) = 1 AND $(err_count e39 'יש כבר אירוע') = 9
+     AND (SELECT count(*) FROM hospitality.events WHERE tenant_id = '$SITE' AND event_date = current_date + 90) = 1"
+
+parallel e40 "$(as_staff $OWNER) $(ev 91 08:00 10:00 e40-a)" "$(as_staff $OWNER) $(ev 91 10:00 12:00 e40-b)" \
+             "$(as_staff $OWNER) $(ev 91 12:00 14:00 e40-c)" "$(as_staff $OWNER) $(ev 91 16:00 01:00 e40-d)"
+check "40 parallel back-to-back events (08–10, 10–12, 12–14, 16–01) → all four saved — no false clash" \
+  "SELECT $(ok_count e40) = 4
+     AND (SELECT count(*) FROM hospitality.events WHERE tenant_id = '$SITE' AND event_date = current_date + 91) = 4"
+
+EGUEST=$(q "SELECT guest_id FROM hospitality.events WHERE tenant_id = '$SITE' LIMIT 1")
+raw_event() { # raw_event <number> <start> <end> — around every function
+  echo "INSERT INTO hospitality.events (tenant_id, number, property_id, guest_id, event_type, event_date, start_time, end_time,
+          starts_at, ends_at, participants, price, status)
+        VALUES ('$SITE', $1, '$EVP', '$EGUEST', 'birthday', current_date + 92, '$2', '$3',
+                ((current_date + 92) + time '$2')::timestamp AT TIME ZONE 'Asia/Jerusalem',
+                ((current_date + 92) + time '$3')::timestamp AT TIME ZONE 'Asia/Jerusalem', 20, 1000, 'confirmed');"
+}
+held e41 "BEGIN; $(raw_event 9001 10:00 14:00) SELECT pg_sleep(2); COMMIT;" "BEGIN; $(raw_event 9002 13:00 17:00) COMMIT;"
+check "41 a raw overlapping event row from a second transaction waits for the first, then is refused by EXCLUDE" \
+  "SELECT $(rc e41 a) = 0 AND $(rc e41 b) <> 0 AND $(grep -c events_no_overlap "$TMP/e41/b.err") = 1 AND $(waited e41 && echo true || echo false)"
+
+# reopening a cancelled event races a new event for the same hours: one of them, never both
+q "$(as_staff $OWNER) $(ev 93 10:00 14:00 e42-old)" >/dev/null
+OLD42=$(q "SELECT id FROM hospitality.events WHERE tenant_id = '$SITE' AND event_date = current_date + 93")
+q "$(as_staff $OWNER) SELECT hospitality.event_set_status('$OLD42', 1, 'cancelled', 'בדיקה');" >/dev/null
+parallel e42 "$(as_staff $OWNER) SELECT hospitality.event_set_status('$OLD42', 2, 'pending');" \
+             "$(as_staff $OWNER) $(ev 93 11:00 15:00 e42-new)"
+check "42 reopening a cancelled event vs a new overlapping event, in parallel → exactly one active event at those hours" \
+  "SELECT $(ok_count e42) = 1 AND $(err_count e42 'יש כבר אירוע') = 1
+     AND (SELECT count(*) FROM hospitality.events WHERE tenant_id = '$SITE' AND event_date = current_date + 93
+            AND status IN ('pending', 'confirmed')) = 1"
+
 # ---- final invariants ----
 check "invariant: no two occupancy rows overlap on any physical unit" \
   "SELECT NOT EXISTS (SELECT 1 FROM hospitality.unit_occupancy a JOIN hospitality.unit_occupancy b

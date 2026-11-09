@@ -1,9 +1,10 @@
-// טופס אירוע (חדש / עריכה): מתחם, סוג, לקוח (קיים או חדש), תאריך ושעות, משתתפים (עד 50 — לפי
+// טופס אירוע (חדש / עריכה): מתחם, סוג, לקוח (קיים או חדש), תאריך ושעות האירוע, השימוש בבריכה (נפרד
+// משעות האירוע — רק בתוך שעות האירוע ושעות הבריכה, לכל היותר 08:00–18:00), משתתפים (עד 50 — לפי
 // החוזה), מחיר, מקדמה ותשלום, פיקדון, הערות פנימיות. בזמן ההקלדה המסד בודק: אירוע חופף באותו מתחם
-// (חוסם), אורחים בצימרים באותו זמן (צריך אישור מפורש כדי לאשר), שעות הבריכה (סימון). הכל נבדק שוב
-// בשמירה (מיגרציה 63).
+// (חוסם), אורחים בצימרים באותו זמן (צריך אישור מפורש כדי לאשר — גם כשמזיזים אירוע מאושר), החלון המותר
+// לבריכה. הכל נבדק שוב בשמירה (מיגרציה 63).
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Ban, Clock, Search, UserPlus, Users } from "lucide-react";
+import { AlertTriangle, Ban, Clock, Search, UserPlus, Users, Waves } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { Button, Checkbox, Input, Label, Textarea, cn } from "@/platform/ui";
 import { hospitalityEventCheck } from "../../api/events.functions";
@@ -31,6 +32,12 @@ interface Draft {
   event_date: string;
   start_time: string;
   end_time: string;
+  /** השימוש בבריכה: "pool" — בחלון שנבחר; "none" — בלי שימוש בבריכה */
+  pool_mode: "pool" | "none";
+  pool_start: string;
+  pool_end: string;
+  /** המנהל בחר שעות לבריכה בעצמו (אחרת — כל החלון המותר, ומתעדכן עם שעות האירוע) */
+  pool_touched: boolean;
   participants: string;
   price: string;
   advance_amount: string;
@@ -76,6 +83,10 @@ export function EventForm({
     event_date: event?.event_date ?? "",
     start_time: event?.start_time ?? "10:00",
     end_time: event?.end_time ?? "17:00",
+    pool_mode: event && !event.pool_start_time ? "none" : "pool",
+    pool_start: event?.pool_start_time ?? "",
+    pool_end: event?.pool_end_time ?? "",
+    pool_touched: Boolean(event?.pool_start_time),
     participants: event ? String(event.participants) : "",
     price: event ? String(event.price) : "",
     advance_amount: event && event.advance_amount ? String(event.advance_amount) : "",
@@ -121,7 +132,40 @@ export function EventForm({
   });
   const conflicts = check.data?.conflicts ?? [];
   const lodging = check.data?.lodging ?? [];
-  const confirming = !event && d.status === "confirmed";
+  // אירוע מאושר שזז (תאריך / שעות / מתחם) — האישור על אורחים בצימרים נדרש מחדש
+  const moved =
+    !!event &&
+    (d.event_date !== event.event_date ||
+      d.start_time !== event.start_time ||
+      d.end_time !== event.end_time ||
+      d.property_id !== event.property_id);
+  const confirming = event
+    ? event.stored_status === "confirmed" && moved
+    : d.status === "confirmed";
+
+  // ---- השימוש בבריכה: החלון המותר (שעות האירוע ∩ שעות הבריכה) מהמסד ----
+  const allowedFrom = check.data?.pool_allowed_from ?? null;
+  const allowedTo = check.data?.pool_allowed_to ?? null;
+  const noPoolWindow = !!check.data && !allowedFrom;
+  useEffect(() => {
+    if (!check.data || d.pool_touched) return;
+    setD((x) => ({
+      ...x,
+      pool_start: check.data.pool_allowed_from ?? "",
+      pool_end: check.data.pool_allowed_to ?? "",
+    }));
+  }, [check.data, d.pool_touched]);
+  const usesPool = d.pool_mode === "pool" && !noPoolWindow;
+  const poolError =
+    usesPool && allowedFrom && allowedTo
+      ? !d.pool_start || !d.pool_end
+        ? "יש לבחור שעות לשימוש בבריכה, או לבחור בלי שימוש בבריכה"
+        : d.pool_end <= d.pool_start
+          ? "סוף השימוש בבריכה צריך להיות אחרי ההתחלה"
+          : d.pool_start < allowedFrom || d.pool_end > allowedTo
+            ? `השימוש בבריכה באירוע הזה — רק בין ${allowedFrom} ל-${allowedTo}`
+            : null
+      : null;
 
   // ---- חיפוש לקוח קיים ----
   const [guestQ, setGuestQ] = useState("");
@@ -139,7 +183,10 @@ export function EventForm({
   const participants = num(d.participants);
   const tooMany = participants !== null && participants > terms.max_event_guests;
   const blocked =
-    conflicts.length > 0 || tooMany || (confirming && lodging.length > 0 && !d.lodging_ack);
+    conflicts.length > 0 ||
+    tooMany ||
+    !!poolError ||
+    (confirming && lodging.length > 0 && !d.lodging_ack);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,6 +197,9 @@ export function EventForm({
       event_date: d.event_date,
       start_time: d.start_time,
       end_time: d.end_time,
+      // תמיד נשלח: שעות הבריכה שנבחרו, או "בלי שימוש בבריכה" (המסד בודק שוב את החלון המותר)
+      pool_start_time: usesPool && d.pool_start ? d.pool_start : null,
+      pool_end_time: usesPool && d.pool_end ? d.pool_end : null,
       participants: participants ?? 0,
       price: num(d.price) ?? 0,
       advance_amount: num(d.advance_amount),
@@ -159,6 +209,7 @@ export function EventForm({
     };
     if (event) {
       data.deposit_status = d.deposit_status;
+      if (confirming) data.lodging_ack = d.lodging_ack;
     } else {
       data.status = d.status;
       data.lodging_ack = d.lodging_ack;
@@ -392,6 +443,91 @@ export function EventForm({
         </Field>
       </fieldset>
 
+      {/* ---- השימוש בבריכה — נפרד משעות האירוע ---- */}
+      <fieldset className="flex flex-col gap-3 rounded-xl border p-4" data-testid="event-pool">
+        <legend className="px-1 text-sm font-semibold">השימוש בבריכה</legend>
+        <p className="text-sm text-muted-foreground">
+          הבריכה פתוחה {terms.pool_open_time}–{terms.pool_close_time} בלבד. השימוש בה באירוע — רק
+          בתוך שעות האירוע ובתוך שעות הבריכה; האירוע עצמו יכול להימשך גם אחרי שהבריכה נסגרת.
+        </p>
+        {noPoolWindow ? (
+          <Notice tone="info" icon={Waves} testId="event-no-pool">
+            האירוע כולו מחוץ לשעות הבריכה ({terms.pool_open_time}–{terms.pool_close_time}) — אין בו
+            שימוש בבריכה, ואסור להיכנס למים.
+          </Notice>
+        ) : (
+          <>
+            <div role="radiogroup" aria-label="השימוש בבריכה" className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["pool", "עם שימוש בבריכה"],
+                  ["none", "בלי שימוש בבריכה"],
+                ] as const
+              ).map(([m, label]) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={d.pool_mode === m}
+                  onClick={() => set("pool_mode", m)}
+                  className={cn(
+                    "inline-flex min-h-11 items-center rounded-md border px-3 text-sm",
+                    d.pool_mode === m
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "bg-background",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {d.pool_mode === "pool" && (
+              <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+                <Field label="בבריכה משעה" htmlFor={`${id}-ps`}>
+                  <Input
+                    id={`${id}-ps`}
+                    type="time"
+                    step={900}
+                    min={allowedFrom ?? undefined}
+                    max={allowedTo ?? undefined}
+                    value={d.pool_start}
+                    onChange={(e) =>
+                      setD((x) => ({ ...x, pool_start: e.target.value, pool_touched: true }))
+                    }
+                    className="min-h-11"
+                    aria-invalid={!!poolError}
+                  />
+                </Field>
+                <Field label="בבריכה עד שעה" htmlFor={`${id}-pe`}>
+                  <Input
+                    id={`${id}-pe`}
+                    type="time"
+                    step={900}
+                    min={allowedFrom ?? undefined}
+                    max={allowedTo ?? undefined}
+                    value={d.pool_end}
+                    onChange={(e) =>
+                      setD((x) => ({ ...x, pool_end: e.target.value, pool_touched: true }))
+                    }
+                    className="min-h-11"
+                    aria-invalid={!!poolError}
+                  />
+                </Field>
+              </div>
+            )}
+            {d.pool_mode === "pool" && allowedFrom && allowedTo && (
+              <p
+                className={cn("text-sm", poolError ? "text-destructive" : "text-muted-foreground")}
+                role={poolError ? "alert" : undefined}
+                data-testid="event-pool-window"
+              >
+                {poolError ?? `באירוע הזה אפשר להשתמש בבריכה בין ${allowedFrom} ל-${allowedTo}.`}
+              </p>
+            )}
+          </>
+        )}
+      </fieldset>
+
       {/* ---- מה המסד מצא בזמן הזה ---- */}
       <div aria-live="polite" className="flex flex-col gap-2" data-testid="event-check">
         {conflicts.length > 0 && (
@@ -427,9 +563,14 @@ export function EventForm({
           </Notice>
         )}
         {check.data?.outside_pool_hours && (
-          <Notice tone="info" icon={Clock} testId="event-pool-hours">
-            שעות הבריכה {check.data.pool_open_time}–{check.data.pool_close_time} בלבד: חל איסור על
-            שהייה במים מחוץ לשעות אלו (סעיף 2 בחוזה). האירוע עצמו יכול להימשך.
+          <Notice tone="warn" icon={Clock} testId="event-pool-hours">
+            <p className="font-medium">
+              האירוע חורג משעות הבריכה ({check.data.pool_open_time}–{check.data.pool_close_time})
+            </p>
+            <p>
+              מחוץ לשעות אלו — בלי שימוש בבריכה, וחל איסור על שהייה במים (סעיף 2 בחוזה). האירוע עצמו
+              יכול להימשך. הלקוח יקבל על כך הודעה לפני החתימה ובמייל.
+            </p>
           </Notice>
         )}
         {check.data?.ends_next_day && (

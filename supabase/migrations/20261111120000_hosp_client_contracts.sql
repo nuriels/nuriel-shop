@@ -1,5 +1,5 @@
 -- ============================================================
--- Hospitality — מסמכי לקוחות: חוזים לחתימה דיגיטלית (מיגרציה 64)
+-- Hospitality — מסמכי לקוחות: חוזים לחתימה אלקטרונית (מיגרציה 64)
 --
 -- שני החוזים (המקור: החוזים של נופי דורית) הם תבניות לכל עסק צימרים, עם פרטי העסק מהחשבון:
 --   • hosting@1 — "הסכם הזמנת אירוח ושכירות לטווח קצר" — לכל הזמנת לינה;
@@ -29,7 +29,7 @@ SET LOCAL client_min_messages = warning;
 -- ------------------------------------------------------------
 INSERT INTO public.platform_feature_flags (key, enabled, description) VALUES
   ('hospitality_contracts_enabled', false,
-   'Hospitality: חוזים לחתימה דיגיטלית (מסמכי לקוחות) — להפעיל רק אחרי אישור משפטי של נוסח החוזים')
+   'Hospitality: חוזים לחתימה אלקטרונית (מסמכי לקוחות) — להפעיל רק אחרי אישור משפטי של נוסח החוזים')
 ON CONFLICT (key) DO NOTHING;
 
 ALTER TABLE hospitality.staff_grants DROP CONSTRAINT IF EXISTS staff_grants_permission_check;
@@ -629,7 +629,9 @@ BEGIN
     'max_event_guests', r.max_event_guests::text, 'max_lodging_guests', r.max_lodging_guests::text,
     'deposit_amount', hospitality._money_text(r.deposit_amount),
     'free_cancellation_days', r.free_cancellation_days::text,
-    'pool_open_time', to_char(r.pool_open_time, 'HH24:MI'), 'pool_close_time', to_char(r.pool_close_time, 'HH24:MI'));
+    'pool_open_time', to_char(r.pool_open_time, 'HH24:MI'), 'pool_close_time', to_char(r.pool_close_time, 'HH24:MI'),
+    -- מה שהעסק בחר בשליחה — כדי שאפשר יהיה לחשב שוב את הנוסח ולבדוק שלא השתנה (_contract_stale)
+    'options', jsonb_strip_nulls(jsonb_build_object('deposit_method', _method, 'event_fee', _event_fee)));
 
   IF _kind = 'pool_event' THEN
     SELECT * INTO e FROM hospitality.events x WHERE x.tenant_id = _t AND x.id = _event;
@@ -650,6 +652,8 @@ BEGIN
       'event_purpose', hospitality._event_type_label(e.event_type, e.event_type_other),
       'event_date', to_char(e.event_date, 'DD.MM.YYYY'),
       'start_time', to_char(e.start_time, 'HH24:MI'), 'end_time', to_char(e.end_time, 'HH24:MI'),
+      -- השימוש בבריכה באירוע (נפרד משעות האירוע) — להודעה ללקוח לפני החתימה, במייל וב-PDF; ריק = בלי בריכה
+      'pool_start_time', to_char(e.pool_start_time, 'HH24:MI'), 'pool_end_time', to_char(e.pool_end_time, 'HH24:MI'),
       'event_late_fee', hospitality._money_text(e.late_fee_per_hour),
       'price', hospitality._money_text(e.price),
       'deposit_amount', hospitality._money_text(e.deposit_amount),
@@ -747,6 +751,48 @@ RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
 $$;
 REVOKE ALL ON FUNCTION hospitality._contract_title(text, integer) FROM PUBLIC, anon, authenticated;
 
+-- חוזה פתוח שכבר לא מתאים למה שבמערכת — לא חותמים עליו, שולחים חוזה מעודכן:
+--   'unavailable' — ההזמנה / האירוע בוטלו (או שחסרים פרטים שבלעדיהם אין חוזה);
+--   'changed'     — הנוסח שהיה נשלח היום שונה ממה שנשלח (תאריכים, שעות, מחיר, יחידות, פרטי העסק / התנאים),
+--                   או שהשתנה השימוש בבריכה באירוע.
+-- NULL — מתאים (או שהחוזה כבר נחתם / בוטל — אז הוא לא משתנה בכל מקרה)
+CREATE OR REPLACE FUNCTION hospitality._contract_stale(c hospitality.client_contracts)
+RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _now jsonb;
+BEGIN
+  IF c.id IS NULL OR c.signed_at IS NOT NULL OR c.status NOT IN ('draft', 'sent', 'viewed') THEN
+    RETURN NULL;
+  END IF;
+  BEGIN
+    _now := hospitality._contract_data(c.tenant_id, c.kind, c.booking_id, c.event_id,
+              jsonb_build_object('full_name', c.data ->> 'signer_name', 'email', c.data ->> 'signer_email',
+                                 'phone', c.data ->> 'signer_phone'),
+              COALESCE(c.data -> 'options', '{}'::jsonb));
+  EXCEPTION WHEN OTHERS THEN
+    RETURN 'unavailable';
+  END;
+  IF hospitality._contract_body(c.kind, c.template_version, _now, '{}'::jsonb, NULL)
+       IS DISTINCT FROM hospitality._contract_body(c.kind, c.template_version, c.data, '{}'::jsonb, NULL)
+     OR (_now ->> 'pool_start_time', _now ->> 'pool_end_time')
+       IS DISTINCT FROM (c.data ->> 'pool_start_time', c.data ->> 'pool_end_time') THEN
+    RETURN 'changed';
+  END IF;
+  RETURN NULL;
+END $$;
+REVOKE ALL ON FUNCTION hospitality._contract_stale(hospitality.client_contracts) FROM PUBLIC, anon, authenticated;
+
+-- הודעת שעות הבריכה ללקוח (מה שנשלח — מהצילום של החוזה): שעות הבריכה, ובאירוע — השימוש בבריכה בו
+CREATE OR REPLACE FUNCTION hospitality._contract_pool(c hospitality.client_contracts)
+RETURNS jsonb LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT jsonb_build_object(
+    'open', c.data ->> 'pool_open_time', 'close', c.data ->> 'pool_close_time',
+    'event_start', c.data ->> 'start_time', 'event_end', c.data ->> 'end_time',
+    'start', c.data ->> 'pool_start_time', 'end', c.data ->> 'pool_end_time',
+    'window_known', c.kind = 'pool_event' AND c.data ? 'pool_start_time');
+$$;
+REVOKE ALL ON FUNCTION hospitality._contract_pool(hospitality.client_contracts) FROM PUBLIC, anon, authenticated;
+
 -- שורה ברשימה / בכרטיס לצוות (בלי הנוסח)
 CREATE OR REPLACE FUNCTION hospitality._contract_json(c hospitality.client_contracts)
 RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
@@ -767,6 +813,7 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
     'signed_body_sha256', c.signed_body_sha256,
     'copy_sent_at', hospitality._ts(c.copy_sent_at), 'copy_error', c.copy_error,
     'supersedes_id', c.supersedes_id, 'superseded_by_id', c.superseded_by_id, 'cancel_reason', c.cancel_reason,
+    'stale', hospitality._contract_stale(c), 'pool', hospitality._contract_pool(c),
     'created_at', hospitality._ts(c.created_at));
 $$;
 REVOKE ALL ON FUNCTION hospitality._contract_json(hospitality.client_contracts) FROM PUBLIC, anon, authenticated;
@@ -1003,6 +1050,15 @@ BEGIN
   IF c.status NOT IN ('draft', 'sent', 'viewed') THEN
     RAISE EXCEPTION 'אפשר לשלוח רק חוזה שעוד לא נחתם' USING ERRCODE = 'check_violation';
   END IF;
+  CASE hospitality._contract_stale(c)
+    WHEN 'changed' THEN
+      RAISE EXCEPTION 'פרטי ההזמנה / האירוע השתנו מאז שהחוזה נוצר — שלחו חוזה מעודכן (במסך "שליחת חוזה")'
+        USING ERRCODE = 'check_violation';
+    WHEN 'unavailable' THEN
+      RAISE EXCEPTION 'ההזמנה / האירוע בוטלו (או שחסרים פרטים לחוזה) — אי אפשר לשלוח את החוזה הזה'
+        USING ERRCODE = 'check_violation';
+    ELSE NULL;
+  END CASE;
   RETURN hospitality._contract_json(c) || jsonb_build_object('tenant_id', _t, 'actor_id', auth.uid(),
                                                              'business_name', c.data ->> 'business_name',
                                                              'business_email', c.data ->> 'business_email',
@@ -1336,6 +1392,16 @@ BEGIN
   IF c.token_expires_at <= now() THEN
     RAISE EXCEPTION 'הקישור לחתימה פג תוקף — בקשו מהעסק לשלוח קישור חדש' USING ERRCODE = 'no_data_found';
   END IF;
+  -- לא חותמים על פרטים שכבר לא נכונים: ההזמנה / האירוע בוטלו או השתנו מאז שנשלח ההסכם
+  CASE hospitality._contract_stale(c)
+    WHEN 'changed' THEN
+      RAISE EXCEPTION 'פרטי ההזמנה / האירוע השתנו מאז שנשלח ההסכם, ולכן אי אפשר לחתום עליו — העסק ישלח לכם הסכם מעודכן'
+        USING ERRCODE = 'no_data_found';
+    WHEN 'unavailable' THEN
+      RAISE EXCEPTION 'ההסכם כבר לא בתוקף (ההזמנה / האירוע בוטלו או השתנו) — לפרטים פנו לעסק'
+        USING ERRCODE = 'no_data_found';
+    ELSE NULL;
+  END CASE;
   RETURN c;
 END $$;
 REVOKE ALL ON FUNCTION hospitality._contract_by_token(text, boolean) FROM PUBLIC, anon, authenticated;
@@ -1358,6 +1424,7 @@ BEGIN
     'signer_name', c.signer_name, 'signer_phone', c.signer_phone, 'signer_email', c.signer_email,
     'body', hospitality._contract_body(c.kind, c.template_version, c.data, '{}'::jsonb, NULL),
     'needs_deposit_method', c.kind = 'hosting' AND c.data ->> 'deposit_method' IS NULL,
+    'pool', hospitality._contract_pool(c),
     'id_label', CASE WHEN c.kind = 'pool_event' THEN 'תעודת זהות / ח.פ' ELSE 'תעודת זהות' END,
     'expires_at', hospitality._ts(c.token_expires_at));
 END $$;
@@ -1495,5 +1562,142 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION hospitality.guest_area_document_file(text, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION hospitality.guest_area_document_file(text, uuid) TO service_role;
+
+-- ------------------------------------------------------------
+-- 8. פרטיות: מחיקת פרטי לקוח, השמירה האוטומטית והייצוא — עכשיו גם האירועים (63) והחוזים (64)
+-- ------------------------------------------------------------
+-- מחיקת הפרטים (בקשת לקוח / תקופת השמירה): כמו קודם — הכרטיס, ההזמנות, המיילים — ובנוסף:
+--   • אירוע פעיל / עתידי (ממתין / מאושר, עוד לא הסתיים) — כמו הזמנה פעילה: אי אפשר למחוק עכשיו;
+--   • האירועים: ההערות הפנימיות וסיבת הביטול (טקסט חופשי) נמחקים — הסכומים נשארים;
+--   • חוזים שלא נחתמו (טיוטה / נשלח / נפתח / בוטל / הוחלף לפני חתימה) — נמחקים לגמרי עם ההיסטוריה שלהם
+--     (אין להם ערך משפטי, ויש בהם שם, אימייל, טלפון וכתובת IP של צפייה). הקישור שנשלח מת איתם;
+--   • חוזים חתומים — נשמרים כמו שנחתמו (ראיה; תקופת השמירה שלהם — החלטה משפטית של בעל העסק).
+CREATE OR REPLACE FUNCTION hospitality._anonymize_guest(_tenant_id uuid, _guest_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM hospitality.bookings b WHERE b.tenant_id = _tenant_id AND b.guest_id = _guest_id
+                AND hospitality._holding(b.status)) THEN
+    RAISE EXCEPTION 'לאורח יש הזמנה פעילה או עתידית — אי אפשר למחוק את פרטיו עכשיו' USING ERRCODE = 'check_violation';
+  END IF;
+  IF EXISTS (SELECT 1 FROM hospitality.events e WHERE e.tenant_id = _tenant_id AND e.guest_id = _guest_id
+                AND e.status IN ('pending', 'confirmed') AND e.ends_at > now()) THEN
+    RAISE EXCEPTION 'ללקוח יש אירוע פעיל או עתידי — אי אפשר למחוק את פרטיו עכשיו' USING ERRCODE = 'check_violation';
+  END IF;
+  -- החוזים שלא נחתמו — לפני שמשנים את ההזמנות (כדי למצוא את כולם: לפי הכרטיס, ההזמנות והאירועים)
+  DELETE FROM hospitality.client_contracts c
+   WHERE c.tenant_id = _tenant_id AND c.signed_at IS NULL
+     AND (c.guest_id = _guest_id
+          OR c.booking_id IN (SELECT b.id FROM hospitality.bookings b WHERE b.tenant_id = _tenant_id AND b.guest_id = _guest_id)
+          OR c.event_id IN (SELECT e.id FROM hospitality.events e WHERE e.tenant_id = _tenant_id AND e.guest_id = _guest_id));
+  UPDATE hospitality.guests g
+     SET full_name = 'אורח שנמחק', email = NULL, phone = NULL, notes = NULL, user_id = NULL,
+         marketing_consent = false, anonymized_at = now()
+   WHERE g.tenant_id = _tenant_id AND g.id = _guest_id AND g.anonymized_at IS NULL;
+  UPDATE hospitality.bookings b
+     -- PRV-6: גם ההערות של הצוות וסיבת הביטול שהאורח כתב (טקסט חופשי — יכול להכיל מידע רגיש)
+     SET special_requests = NULL, notes = NULL, cancellation_reason = NULL,
+         policy_acceptance = b.policy_acceptance - 'ip' - 'user_agent',
+         manage_token_hash = NULL, manage_token2_hash = NULL, manage_token_expires_at = NULL
+   WHERE b.tenant_id = _tenant_id AND b.guest_id = _guest_id;
+  UPDATE hospitality.events e
+     SET internal_notes = NULL, cancel_reason = NULL, updated_at = now()
+   WHERE e.tenant_id = _tenant_id AND e.guest_id = _guest_id
+     AND (e.internal_notes IS NOT NULL OR e.cancel_reason IS NOT NULL);
+  UPDATE hospitality.notifications n
+     SET payload = '{}'::jsonb,
+         recipient_email = CASE WHEN n.recipient_kind = 'guest' THEN 'anonymized@invalid.invalid' ELSE n.recipient_email END,
+         status = CASE WHEN n.status IN ('queued', 'failed', 'sending') THEN 'dead' ELSE n.status END,
+         last_error = CASE WHEN n.status IN ('queued', 'failed', 'sending') THEN 'guest anonymized' ELSE n.last_error END,
+         updated_at = now()
+   WHERE n.tenant_id = _tenant_id
+     AND n.booking_id IN (SELECT b.id FROM hospitality.bookings b WHERE b.tenant_id = _tenant_id AND b.guest_id = _guest_id);
+END $$;
+REVOKE ALL ON FUNCTION hospitality._anonymize_guest(uuid, uuid) FROM PUBLIC, anon, authenticated;
+
+-- תקופת השמירה (הגדרות העסק): גם לקוח של אירוע בלבד נמחק בזמן; לקוח עם אירוע פעיל / עתידי, או שהאירוע
+-- שלו הסתיים בתוך התקופה — לא (כמו בהזמנות)
+CREATE OR REPLACE FUNCTION hospitality.apply_retention()
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  r record;
+  _n integer := 0;
+BEGIN
+  FOR r IN
+    SELECT g.tenant_id, g.id
+      FROM hospitality.guests g
+      JOIN hospitality.settings s ON s.tenant_id = g.tenant_id AND s.guest_retention_months IS NOT NULL
+     WHERE g.anonymized_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM hospitality.bookings b WHERE b.tenant_id = g.tenant_id AND b.guest_id = g.id
+                          AND (hospitality._holding(b.status)
+                               OR b.check_out > (now() - make_interval(months => s.guest_retention_months))::date))
+       AND NOT EXISTS (SELECT 1 FROM hospitality.events e WHERE e.tenant_id = g.tenant_id AND e.guest_id = g.id
+                          AND ((e.status IN ('pending', 'confirmed') AND e.ends_at > now())
+                               OR e.ends_at > now() - make_interval(months => s.guest_retention_months)))
+       AND g.created_at < now() - make_interval(months => s.guest_retention_months)
+  LOOP
+    PERFORM hospitality._anonymize_guest(r.tenant_id, r.id);
+    _n := _n + 1;
+  END LOOP;
+  RETURN _n;
+END $$;
+REVOKE ALL ON FUNCTION hospitality.apply_retention() FROM PUBLIC, anon, authenticated;
+
+-- הייצוא לבקשת הלקוח (זכות העיון): כמו קודם, ועכשיו גם האירועים שלו והחוזים (חתומים ולא חתומים —
+-- המספר, הסוג, המצב, התאריכים, מה שהלקוח מילא). את ה-PDF החתום העסק מוריד מהארכיון ומעביר
+CREATE OR REPLACE FUNCTION hospitality.export_guest(_guest_id uuid)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _t uuid := hospitality._staff_tenant('guests.privacy');
+  g hospitality.guests;
+BEGIN
+  SELECT * INTO g FROM hospitality.guests x WHERE x.tenant_id = _t AND x.id = _guest_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'האורח לא נמצא' USING ERRCODE = 'no_data_found';
+  END IF;
+  RETURN jsonb_build_object(
+    'guest', jsonb_build_object('full_name', g.full_name, 'email', g.email, 'phone', g.phone, 'notes', g.notes,
+                                'marketing_consent', g.marketing_consent, 'created_at', hospitality._ts(g.created_at),
+                                'anonymized_at', hospitality._ts(g.anonymized_at)),
+    'bookings', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                  'number', b.number, 'status', b.status, 'check_in', b.check_in, 'check_out', b.check_out,
+                  'adults', b.adults, 'children', b.children, 'total', b.total, 'currency', b.currency,
+                  'special_requests', b.special_requests, 'policy_acceptance', b.policy_acceptance,
+                  'created_at', hospitality._ts(b.created_at),
+                  'notes', b.notes, 'cancellation_reason', b.cancellation_reason,
+                  'events', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                              'kind', e.kind, 'from_status', e.from_status, 'to_status', e.to_status,
+                              'note', e.note, 'created_at', hospitality._ts(e.created_at)) ORDER BY e.created_at, e.id)
+                            FROM hospitality.booking_events e WHERE e.tenant_id = _t AND e.booking_id = b.id), '[]'::jsonb),
+                  'payments', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                              'kind', p.kind, 'method', p.method, 'amount', p.amount, 'currency', p.currency,
+                              'paid_at', p.paid_at, 'status', p.status, 'note', p.note,
+                              'created_at', hospitality._ts(p.created_at)) ORDER BY p.created_at)
+                            FROM hospitality.payments p WHERE p.tenant_id = _t AND p.booking_id = b.id), '[]'::jsonb)
+                  ) ORDER BY b.check_in)
+                FROM hospitality.bookings b WHERE b.tenant_id = _t AND b.guest_id = g.id), '[]'::jsonb),
+    -- מיגרציה 63: האירועים במתחם
+    'pool_events', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                  'number', e.number, 'status', e.status, 'event_type', e.event_type, 'event_date', e.event_date,
+                  'start_time', to_char(e.start_time, 'HH24:MI'), 'end_time', to_char(e.end_time, 'HH24:MI'),
+                  'participants', e.participants, 'price', e.price, 'amount_paid', e.amount_paid,
+                  'refund_amount', e.refund_amount, 'deposit_status', e.deposit_status,
+                  'internal_notes', e.internal_notes, 'cancel_reason', e.cancel_reason,
+                  'created_at', hospitality._ts(e.created_at)) ORDER BY e.starts_at)
+                FROM hospitality.events e WHERE e.tenant_id = _t AND e.guest_id = g.id), '[]'::jsonb),
+    -- מיגרציה 64: החוזים (של הכרטיס, ההזמנות והאירועים שלו)
+    'contracts', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                  'number', c.number, 'kind', c.kind, 'template_version', c.template_version, 'status', c.status,
+                  'signer_name', c.signer_name, 'signer_email', c.signer_email, 'signer_phone', c.signer_phone,
+                  'sent_at', hospitality._ts(c.sent_at), 'signed_at', hospitality._ts(c.signed_at),
+                  'customer_fields', c.customer_fields, 'signer_ip', c.signer_ip,
+                  'signed_body_sha256', c.signed_body_sha256, 'has_pdf', c.pdf_path IS NOT NULL) ORDER BY c.created_at)
+                FROM hospitality.client_contracts c
+               WHERE c.tenant_id = _t
+                 AND (c.guest_id = g.id
+                      OR c.booking_id IN (SELECT b.id FROM hospitality.bookings b WHERE b.tenant_id = _t AND b.guest_id = g.id)
+                      OR c.event_id IN (SELECT e.id FROM hospitality.events e WHERE e.tenant_id = _t AND e.guest_id = g.id))),
+              '[]'::jsonb));
+END $$;
+REVOKE ALL ON FUNCTION hospitality.export_guest(uuid) FROM PUBLIC, anon;
 
 COMMIT;

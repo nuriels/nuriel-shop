@@ -51,8 +51,9 @@ async function fillEvent(
   v: { date: string; from: string; to: string; participants: string },
 ) {
   await page.getByLabel("תאריך").fill(v.date);
-  await page.getByLabel("משעה").fill(v.from);
-  await page.getByLabel("עד שעה").fill(v.to);
+  // exact: the pool fields are "בבריכה משעה" / "בבריכה עד שעה"
+  await page.getByLabel("משעה", { exact: true }).fill(v.from);
+  await page.getByLabel("עד שעה", { exact: true }).fill(v.to);
   await page.getByLabel("מספר משתתפים").fill(v.participants);
 }
 
@@ -184,4 +185,123 @@ test("guests in the zimmers at the same time: confirming the event needs an expl
     ),
   ).toBe("confirmed|true");
   await expectAccessible(page, "event page");
+});
+
+test("pool use is separate from the event hours: only inside 08:00–18:00 (form and server); cancellation shows the contract's terms, then the refund is recorded", async ({
+  page,
+  request,
+}) => {
+  await open(page, request, "/manage/events/new");
+  await page.getByRole("radio", { name: "לקוח חדש" }).click();
+  await page.getByLabel("שם מלא").fill("טל בריכה");
+  await page.getByLabel("טלפון").fill("0546500104");
+  // 17:00–21:00: the pool only 17:00–18:00 (filled in by itself)
+  await fillEvent(page, { date: day(45), from: "17:00", to: "21:00", participants: "25" });
+  const window_ = page.getByTestId("event-pool-window");
+  await expect(window_).toContainText("בין 17:00 ל-18:00");
+  await expect(page.getByLabel("בבריכה משעה")).toHaveValue("17:00");
+  await expect(page.getByLabel("בבריכה עד שעה")).toHaveValue("18:00");
+  // the pool past 18:00 — blocked
+  await page.getByLabel("בבריכה עד שעה").fill("19:00");
+  await expect(window_).toContainText("השימוש בבריכה באירוע הזה — רק בין 17:00 ל-18:00");
+  await expect(page.getByRole("button", { name: "שמירת האירוע" })).toBeDisabled();
+  await page.getByLabel("בבריכה עד שעה").fill("18:00");
+  await expect(page.getByRole("button", { name: "שמירת האירוע" })).toBeEnabled();
+  // an event entirely after the pool closes — no pool at all
+  await fillEvent(page, { date: day(45), from: "19:00", to: "23:00", participants: "25" });
+  await expect(page.getByTestId("event-no-pool")).toContainText("אין בו שימוש בבריכה");
+  await expectAccessible(page, "new event — no pool");
+  // the server refuses too: past 18:00 (the input check), and outside this event's hours (the database)
+  const createWithPool = async (pool_start_time: string, pool_end_time: string) =>
+    (
+      await callServerFn(request, {
+        host: HOST,
+        file: "src/engines/hospitality/api/events.functions.ts",
+        name: "hospitalityEventCreate",
+        data: {
+          data: {
+            property_id: propertyId,
+            event_type: "birthday",
+            event_date: day(46),
+            start_time: "17:00",
+            end_time: "21:00",
+            pool_start_time,
+            pool_end_time,
+            participants: 20,
+            price: 1000,
+            status: "pending",
+            customer: { full_name: "טל בריכה", phone: "0546500104", email: null },
+          },
+        },
+        token: await accessToken(request, OWNER),
+      })
+    ).text();
+  expect(await createWithPool("17:00", "19:00")).toContain("השימוש בבריכה — רק בין 08:00 ל-18:00");
+  expect(await createWithPool("09:00", "12:00")).toContain(
+    "השימוש בבריכה באירוע הזה — רק בין 17:00 ל-18:00",
+  );
+  expect(
+    sql(
+      `SELECT count(*) FROM hospitality.events WHERE tenant_id = '${siteId}' AND event_date = '${day(46)}'`,
+    ),
+  ).toBe("0");
+  // 10:00–20:00 without the pool, paid 1,000 ₪
+  await fillEvent(page, { date: day(45), from: "10:00", to: "20:00", participants: "25" });
+  await page.getByRole("radio", { name: "בלי שימוש בבריכה" }).click();
+  await page.getByLabel("המחיר (₪)").fill("3000");
+  await page.getByLabel("שולם עד עכשיו (₪)").fill("1000");
+  await page.getByRole("button", { name: "שמירת האירוע" }).click();
+  await expect(page).toHaveURL(/\/manage\/events\/[0-9a-f-]{36}$/, { timeout: 15_000 });
+  await expect(page.getByTestId("event-pool-use")).toHaveText("בלי שימוש בבריכה");
+  expect(
+    sql(
+      `SELECT coalesce(pool_start_time::text, 'none') FROM hospitality.events WHERE tenant_id = '${siteId}' AND event_date = '${day(45)}'`,
+    ),
+  ).toBe("none");
+  // cancellation: the contract's terms in the dialog
+  await page.getByRole("button", { name: "ביטול", exact: true }).click();
+  const terms = page.getByTestId("event-cancel-terms");
+  await expect(terms).toContainText("תנאי הביטול בחוזה");
+  await expect(terms).toContainText("ימים לפני האירוע");
+  await expect(terms).toContainText("1,000");
+  await expectAccessible(page, "cancel dialog");
+  await page.getByRole("button", { name: "אישור", exact: true }).click();
+  await expect(page.getByTestId("event-status")).toContainText("בוטל");
+  // after cancellation: only the money — the refund can't exceed what was paid
+  await page.getByRole("button", { name: "עדכון תשלום, החזר ופיקדון" }).click();
+  const pay = page.getByTestId("event-closed-payments");
+  await pay.getByLabel("הוחזר ללקוח (₪)").fill("1500");
+  await expect(pay.getByRole("alert")).toContainText(
+    "הסכום שהוחזר לא יכול להיות גדול מהסכום ששולם",
+  );
+  await expect(pay.getByRole("button", { name: "שמירת התשלום" })).toBeDisabled();
+  await pay.getByLabel("הוחזר ללקוח (₪)").fill("800");
+  await pay.getByRole("button", { name: "שמירת התשלום" }).click();
+  const payment = page.getByTestId("event-payment");
+  await expect(payment).toContainText("הוחזר ללקוח");
+  await expect(payment).toContainText("800");
+  await expect(payment).toContainText("נשאר אצל העסק");
+  await expect(payment).toContainText("200");
+  expect(
+    sql(
+      `SELECT status || '|' || refund_amount FROM hospitality.events WHERE tenant_id = '${siteId}' AND event_date = '${day(45)}'`,
+    ),
+  ).toBe("cancelled|800.00");
+  await expectAccessible(page, "cancelled event — refund");
+});
+
+test("the booking page shows an event in the compound during the stay (with the pool hours)", async ({
+  page,
+  request,
+}) => {
+  const bookingId = sql(
+    `SELECT id FROM hospitality.bookings WHERE tenant_id = '${siteId}' AND check_in = '${day(20)}'`,
+  );
+  await open(page, request, `/manage/bookings/${bookingId}`);
+  const card = page.getByTestId("booking-events");
+  await expect(card).toContainText("אירועים במתחם בזמן השהייה");
+  await expect(card).toContainText("10:00–15:00");
+  await expect(card).toContainText("בריכה 10:00–15:00");
+  await expect(card).toContainText("מאושר");
+  await expectAccessible(page, "booking — events during the stay");
 });

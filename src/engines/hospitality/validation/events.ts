@@ -15,6 +15,9 @@ type Raw = Record<string, unknown> | null | undefined;
 
 /** החוזה: "כמות המשתתפים באירוע מוגבלת לעד 50 אורחים לכל היותר" */
 export const EVENT_MAX_PARTICIPANTS = 50;
+/** שעות הבריכה לפי החוזים — לכל היותר 08:00–18:00 (העסק יכול לצמצם, לא להרחיב; גם CHECK במסד) */
+export const POOL_EARLIEST = "08:00";
+export const POOL_LATEST = "18:00";
 const TABS: EventTab[] = ["upcoming", "pending", "past", "cancelled", "all"];
 const DEPOSIT: DepositStatus[] = ["pending", "held", "returned", "charged"];
 const STATUS: StoredEventStatus[] = ["pending", "confirmed", "cancelled", "completed"];
@@ -28,10 +31,13 @@ const KEYS = new Set([
   "event_date",
   "start_time",
   "end_time",
+  "pool_start_time",
+  "pool_end_time",
   "participants",
   "price",
   "advance_amount",
   "amount_paid",
+  "refund_amount",
   "deposit_amount",
   "deposit_status",
   "internal_notes",
@@ -104,6 +110,24 @@ export function parseEventInput(raw: unknown): EventInput {
   if ("end_time" in i) out.end_time = time(i["end_time"], "שעת הסיום");
   if (out.start_time && out.end_time && out.start_time === out.end_time)
     throw new InputError("שעת הסיום צריכה להיות אחרי שעת ההתחלה");
+  // השימוש בבריכה — נפרד משעות האירוע; null בשניהם = בלי שימוש בבריכה. החלון המותר (בתוך שעות האירוע
+  // ושעות הבריכה) נבדק במסד, שיודע את שעות הבריכה של העסק
+  if ("pool_start_time" in i || "pool_end_time" in i) {
+    const ps = i["pool_start_time"] ?? null;
+    const pe = i["pool_end_time"] ?? null;
+    if ((ps === null) !== (pe === null))
+      throw new InputError(
+        'השימוש בבריכה — יש למלא גם שעת התחלה וגם שעת סיום, או לבחור "בלי שימוש בבריכה"',
+      );
+    out.pool_start_time = ps === null ? null : time(ps, "תחילת השימוש בבריכה");
+    out.pool_end_time = pe === null ? null : time(pe, "סוף השימוש בבריכה");
+    if (out.pool_start_time && out.pool_end_time) {
+      if (out.pool_end_time <= out.pool_start_time)
+        throw new InputError("סוף השימוש בבריכה צריך להיות אחרי ההתחלה");
+      if (out.pool_start_time < POOL_EARLIEST || out.pool_end_time > POOL_LATEST)
+        throw new InputError(`השימוש בבריכה — רק בין ${POOL_EARLIEST} ל-${POOL_LATEST}`);
+    }
+  }
   if ("participants" in i) {
     const n = Number(i["participants"]);
     if (!Number.isInteger(n) || n < 1) throw new InputError("מספר המשתתפים חייב להיות מספר שלם");
@@ -117,6 +141,8 @@ export function parseEventInput(raw: unknown): EventInput {
   if ("advance_amount" in i)
     out.advance_amount = money(i["advance_amount"], "המקדמה", 1_000_000, true);
   if ("amount_paid" in i) out.amount_paid = money(i["amount_paid"], "הסכום ששולם", 1_000_000, true);
+  if ("refund_amount" in i)
+    out.refund_amount = money(i["refund_amount"], "הסכום שהוחזר", 1_000_000, true);
   if ("deposit_amount" in i)
     out.deposit_amount = money(i["deposit_amount"], "הפיקדון", 100_000, false) ?? 0;
   if (
@@ -180,7 +206,8 @@ export function parseEventCreate(input: Raw): { data: EventInput } {
 export function parseEventUpdate(input: Raw): { id: string; revision: number; data: EventInput } {
   const i = input ?? {};
   const data = parseEventInput(i["data"]);
-  if ("status" in data || "guest_id" in data || "customer" in data || "lodging_ack" in data)
+  // lodging_ack — מותר: שינוי זמן של אירוע מאושר כשיש אורחים בצימרים צריך אישור מפורש מחדש
+  if ("status" in data || "guest_id" in data || "customer" in data)
     throw new InputError("מצב האירוע והלקוח משתנים בפעולות נפרדות");
   return { id: uuid(i["id"], "האירוע"), revision: revision(i["revision"]), data };
 }
@@ -235,6 +262,15 @@ export function parseTermsSave(input: Raw): { data: Record<string, unknown>; rev
   const data = d as Record<string, unknown>;
   for (const k of Object.keys(data))
     if (!TERMS_KEYS.has(k)) throw new InputError(`שדה לא מוכר: ${k}`);
+  for (const k of ["pool_open_time", "pool_close_time"] as const) {
+    const v = data[k];
+    if (v === undefined || v === null || v === "") continue;
+    const t = time(v, k === "pool_open_time" ? "פתיחת הבריכה" : "סגירת הבריכה");
+    if (t < POOL_EARLIEST || t > POOL_LATEST)
+      throw new InputError(
+        `שעות הבריכה — בין ${POOL_EARLIEST} ל-${POOL_LATEST} בלבד (לפי החוזים). אפשר לצמצם, לא להרחיב`,
+      );
+  }
   if (data["max_event_guests"] !== undefined) {
     const n = Number(data["max_event_guests"]);
     if (!Number.isInteger(n) || n < 1 || n > EVENT_MAX_PARTICIPANTS)

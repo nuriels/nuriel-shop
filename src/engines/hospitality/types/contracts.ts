@@ -1,4 +1,4 @@
-// מסמכי לקוחות — חוזים לחתימה דיגיטלית (מיגרציה 64): מה שהמסד מחזיר לצוות, ללקוח ולאזור האישי
+// מסמכי לקוחות — חוזים לחתימה אלקטרונית (מיגרציה 64): מה שהמסד מחזיר לצוות, ללקוח ולאזור האישי
 import type { Json } from "./domain";
 import type { BusinessTerms } from "./events";
 
@@ -30,6 +30,22 @@ export const DEPOSIT_METHOD_LABEL: Record<DepositMethod, string> = {
   check: "צ'ק ביטחון",
   card: "כרטיס אשראי (תפיסת מסגרת)",
 };
+
+/** שעות הבריכה כפי שנשלחו (הצילום של החוזה); באירוע — גם השימוש בבריכה בו */
+export interface ContractPool {
+  open: string | null;
+  close: string | null;
+  event_start: string | null;
+  event_end: string | null;
+  /** השימוש בבריכה באירוע; null = בלי שימוש בבריכה (כש-window_known) */
+  start: string | null;
+  end: string | null;
+  /** חוזה לאירוע שבו נשמר חלון השימוש בבריכה */
+  window_known: boolean;
+}
+
+/** חוזה פתוח שכבר לא מתאים: 'unavailable' — ההזמנה / האירוע בוטלו; 'changed' — הפרטים השתנו מאז השליחה */
+export type ContractStale = "unavailable" | "changed";
 
 export interface ContractRow {
   id: string;
@@ -66,6 +82,9 @@ export interface ContractRow {
   supersedes_id: string | null;
   superseded_by_id: string | null;
   cancel_reason: string | null;
+  /** חוזה פתוח שכבר לא מתאים להזמנה / לאירוע — הלקוח לא יוכל לחתום; null — מתאים */
+  stale: ContractStale | null;
+  pool: ContractPool;
   created_at: string;
 }
 
@@ -135,6 +154,8 @@ export interface ContractForSigning {
   signer_email: string;
   body: string;
   needs_deposit_method: boolean;
+  /** הודעת שעות הבריכה (מחוץ לנוסח) */
+  pool: ContractPool;
   id_label: string;
   expires_at: string;
 }

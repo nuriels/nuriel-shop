@@ -1,6 +1,8 @@
 // Stage 2e — תמונות וגלריות: בדיקת התוכן האמיתי וקידוד מחדש (sharp), סירוב ל-SVG / HTML /
 // קבצים "כפולים", סרטונים לפי החתימה, הגנת SSRF של מתאם ההורדה (בלי רשת: הכתובת נחסמת לפני
 // החיבור), קישורי YouTube / Vimeo וקלט הגלריה.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { prepareMedia, sniffVideoType } from "@/engines/hospitality/server/media.server";
@@ -94,6 +96,18 @@ describe("prepareMedia: real content, re-encoded", () => {
     expect(out.item).toMatchObject({ kind: "video", variants: {}, width: null });
     expect(out.item.storage_path).toMatch(new RegExp(`^${SITE}/[0-9a-f-]{36}\\.mp4$`));
     await expect(prepareMedia(SITE, mp4, false)).rejects.toThrow(/לא מוביל לקובץ תמונה/);
+  });
+
+  it("a video from the phone is stored without its location, device and date (same size, no re-encoding)", async () => {
+    const src = readFileSync(join(__dirname, "../fixtures/video/location-2s.mov"));
+    expect(src.toString("latin1")).toContain("+32.0853+034.7818");
+    const out = await prepareMedia(SITE, src, true);
+    const stored = out.files[0]!.bytes;
+    expect(out.item.storage_path).toMatch(/\.mov$/);
+    expect(stored.length).toBe(src.length);
+    expect(out.item.size_bytes).toBe(src.length);
+    for (const s of ["+32.0853", "com.apple", "iPhone"])
+      expect(stored.toString("latin1")).not.toContain(s);
   });
   it("size limits: image 15MB, empty file", async () => {
     const big = Buffer.concat([await jpeg(10, 10), Buffer.alloc(16 * 1024 * 1024)]);

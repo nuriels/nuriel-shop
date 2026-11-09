@@ -590,3 +590,39 @@ test("a longer file put over the measured one in storage still plays at most 15.
   });
   expect(back.ok(), await back.text()).toBe(true);
 });
+
+test("a phone video (MOV with the location, the device and the date) reaches the public bucket without them — same size, still measured", async ({
+  page,
+  request,
+}) => {
+  const src = fixture("location-2s.mov");
+  expect(src.toString("latin1")).toContain("+32.0853+034.7818");
+  const videos = () =>
+    Number(
+      sql(
+        `SELECT count(*) FROM hospitality.media WHERE tenant_id = '${siteId}' AND kind = 'video'`,
+      ),
+    );
+  const before = videos();
+  await open(page, request, "/manage/photos");
+  await page.getByTestId("gallery-site").getByTestId("media-file").setInputFiles({
+    name: "IMG_0001.MOV",
+    mimeType: "video/quicktime",
+    buffer: src,
+  });
+  await expect.poll(videos, { timeout: 30_000 }).toBe(before + 1);
+  const [path, size, seconds] = sql(
+    `SELECT storage_path || '|' || size_bytes || '|' || duration_seconds FROM hospitality.media
+      WHERE tenant_id = '${siteId}' AND kind = 'video' ORDER BY created_at DESC LIMIT 1`,
+  ).split("|");
+  expect(path).toMatch(/\.mov$/);
+  expect(Number(size)).toBe(src.length);
+  expect(seconds).toBe("2.00");
+  // the file as anyone can download it from the public bucket
+  const { url: api } = supabaseEnv();
+  const stored = await request.get(`${api}/storage/v1/object/public/hosp-media/${path}`);
+  expect(stored.status()).toBe(200);
+  const body = (await stored.body()).toString("latin1");
+  expect(body.length).toBe(src.length);
+  for (const s of ["+32.0853", "034.7818", "com.apple", "iPhone"]) expect(body).not.toContain(s);
+});

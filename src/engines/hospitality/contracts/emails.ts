@@ -32,12 +32,15 @@ export function contractSignRequestEmail(
     url: string;
     expiresOn: string;
     about: string | null;
+    /** הודעת שעות הבריכה (poolNotice) — מחוץ לנוסח ההסכם */
+    poolNote?: string | null;
   },
 ): { subject: string; html: string } {
   const e = ctx.escape;
   const subject = `${c.title} — לחתימה`;
   const inner = `<p style="margin:0;font-size:15px;line-height:1.6">שלום ${e(c.signerName)},</p>
 <p style="margin:8px 0 0;font-size:15px;line-height:1.6">מצורף אליך ההסכם מ${e(ctx.businessName)}${c.about ? ` (${e(c.about)})` : ""}. אפשר לקרוא את כל הסעיפים, להשלים את הפרטים החסרים ולחתום באצבע או בעכבר.</p>
+${c.poolNote ? `<p style="margin:12px 0 0;padding:10px 12px;font-size:14px;line-height:1.6;background:#fff7e6;border:1px solid #f0c36d;border-radius:8px"><strong>שימו לב — שעות הבריכה:</strong> ${e(c.poolNote)}</p>` : ""}
 <p style="margin:20px 0"><a href="${e(c.url)}" style="background:#1f3d2b;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">לקריאה ולחתימה על ההסכם</a></p>
 <p style="margin:0 0 8px;font-size:12px;color:#777">הקישור אישי וחד-פעמי — אין להעביר אותו לאחרים. הוא בתוקף עד ${e(c.expiresOn)}. מספר המסמך: ${c.number}.</p>`;
   return { subject, html: layout(ctx, subject, inner) };

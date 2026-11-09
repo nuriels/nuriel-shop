@@ -1,6 +1,7 @@
 // סרטון הפתיח (H-1, מיגרציה 62): האורך וה-codec נקראים מהקובץ עצמו — MP4 / MOV / WebM, moov בסוף,
 // רצועת קול ראשונה, fMP4, הקלטה בלי Duration, וקובץ ש"מצהיר" על אורך קצר מהתוכן — וההחלטה אם הסרטון
-// מתאים (עד 15 שניות, עד 20MB). קבצי הבדיקה נוצרו ב-ffmpeg (tests/fixtures/video, 96×54, כמה KB).
+// מתאים (עד 15 שניות, עד 20MB). קבצי הבדיקה נוצרו ב-ffmpeg (tests/fixtures/video, 96×54, כמה KB);
+// frag-tfdt-lie-20s.mp4 ו-squashed-timeline.mp4 — אותם קבצים אחרי תיקון בייטים (משכי דגימות של טיק).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -13,6 +14,7 @@ import {
   heroVideoProblem,
   videoInfo,
 } from "@/engines/hospitality/media/video-info";
+import { stripVideoMetadata } from "@/engines/hospitality/media/video-metadata";
 import { normalizeDesign } from "@/engines/hospitality/website/design/schema";
 import { heroVideoStatus, videoById } from "@/engines/hospitality/website/lib/media";
 import type { PublicMedia, PublicSite } from "@/engines/hospitality/types/website";
@@ -42,6 +44,22 @@ describe("reading a video's length and codec from the file", () => {
     expect(info?.container).toBe(container);
     expect(info?.seconds).toBeCloseTo(seconds, 0);
     expect(info?.codec).toBe(codec);
+  });
+
+  it("a file built to look short: fMP4 with the real timeline only in tfdt; a squashed timeline", () => {
+    // כל דגימה "באורך" טיק אחד, אבל tfdt של כל מקטע מציב אותו על ציר של 20 שניות (כך נגנים
+    // ו-ffmpeg מנגנים אותו) — נמדד לפי המקום שאליו מגיע המקטע האחרון, לא לפי סכום הדגימות
+    const tfdt = fixture("frag-tfdt-lie-20s.mp4");
+    const info = videoInfo(tfdt);
+    expect(info?.seconds).toBeCloseTo(19.5, 0);
+    expect(heroVideoProblem(info, tfdt.length)).toContain("ארוך מדי");
+    // דגימות וכותרות של טיק אחד: אלפי פריימים לשנייה — האורך לא אמין, הקובץ לא מתקבל
+    const squashed = fixture("squashed-timeline.mp4");
+    const squashedInfo = videoInfo(squashed);
+    expect(squashedInfo).toEqual({ container: "mp4", seconds: null, codec: "h264" });
+    expect(heroVideoProblem(squashedInfo, squashed.length)).toContain(
+      "לא הצלחנו לקרוא את אורך הסרטון",
+    );
   });
 
   it("not a video, an empty or a cut file → no crash", () => {
@@ -197,5 +215,35 @@ describe("the site shows a hero video only when the server measured it at up to 
     expect(heroVideoStatus(site, "legacy")).toEqual({ status: "not_checked", seconds: null });
     expect(heroVideoStatus(site, "photo")).toEqual({ status: "missing", seconds: null });
     expect(heroVideoStatus(site, "nope")).toEqual({ status: "missing", seconds: null });
+  });
+});
+
+describe("a video goes to the public bucket without the personal metadata (no re-encoding)", () => {
+  // location-2s.mov: מיקום (©xyz / loci), com.apple.quicktime.location.ISO6709, דגם המכשיר ותאריך הצילום
+  const text = (b: Uint8Array) => Buffer.from(b).toString("latin1");
+  it("the location, the device and the date are gone; the size, the length and the frames stay", () => {
+    const src = fixture("location-2s.mov");
+    expect(text(src)).toContain("+32.0853+034.7818");
+    expect(text(src)).toContain("iPhone 15 Pro");
+    const out = stripVideoMetadata(src);
+    expect(out.removed).toContain("moov/udta");
+    for (const s of ["+32.0853", "034.7818", "com.apple", "iPhone", "loci"])
+      expect(text(out.bytes)).not.toContain(s);
+    // באותו גודל — שום היסט לא זז, והסרטון נקרא בדיוק כמו קודם
+    expect(out.bytes.length).toBe(src.length);
+    expect(videoInfo(out.bytes)).toEqual(videoInfo(src));
+    // המקור לא השתנה (עותק)
+    expect(text(src)).toContain("+32.0853+034.7818");
+  });
+
+  it("a file without metadata, a WebM, garbage — unchanged", () => {
+    const webm = fixture("hero-2s.webm");
+    expect(stripVideoMetadata(webm).bytes).toBe(webm);
+    const junk = new Uint8Array([1, 2, 3, 4, 5]);
+    expect(stripVideoMetadata(junk).bytes).toBe(junk);
+    const plain = fixture("h264-4s.mp4");
+    const out = stripVideoMetadata(plain);
+    expect(videoInfo(out.bytes)).toEqual(videoInfo(plain));
+    expect(out.bytes.length).toBe(plain.length);
   });
 });

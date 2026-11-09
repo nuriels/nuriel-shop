@@ -37,6 +37,8 @@ DROP FUNCTION IF EXISTS hospitality._contract_log(uuid,uuid,text,text,uuid,text,
 DROP FUNCTION IF EXISTS hospitality._contract_render(text,jsonb);
 DROP FUNCTION IF EXISTS hospitality._contract_signer(uuid,text,uuid,uuid,uuid,jsonb);
 DROP FUNCTION IF EXISTS hospitality._contract_state(hospitality.client_contracts);
+DROP FUNCTION IF EXISTS hospitality._contract_stale(hospitality.client_contracts);
+DROP FUNCTION IF EXISTS hospitality._contract_pool(hospitality.client_contracts);
 DROP FUNCTION IF EXISTS hospitality._contract_title(text,integer);
 DROP FUNCTION IF EXISTS hospitality._contract_value(text);
 DROP FUNCTION IF EXISTS hospitality._contracts_gate(uuid);
@@ -168,5 +170,98 @@ END $$;
 
 -- הדגל (וההפעלות לעסקים — tenant_feature_flags נמחקות ב-CASCADE)
 DELETE FROM public.platform_feature_flags WHERE key = 'hospitality_contracts_enabled';
+
+-- פרטיות (סעיף 8 במיגרציה 64): מחיקת פרטי הלקוח, תקופת השמירה והייצוא — כמו לפני מיגרציה 64
+-- (מיגרציה 64 החליפה אותן — חזרה לגרסה הקודמת, מילה במילה)
+CREATE OR REPLACE FUNCTION hospitality._anonymize_guest(_tenant_id uuid, _guest_id uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+BEGIN
+  IF EXISTS (SELECT 1 FROM hospitality.bookings b WHERE b.tenant_id = _tenant_id AND b.guest_id = _guest_id
+                AND hospitality._holding(b.status)) THEN
+    RAISE EXCEPTION 'לאורח יש הזמנה פעילה או עתידית — אי אפשר למחוק את פרטיו עכשיו' USING ERRCODE = 'check_violation';
+  END IF;
+  UPDATE hospitality.guests g
+     SET full_name = 'אורח שנמחק', email = NULL, phone = NULL, notes = NULL, user_id = NULL,
+         marketing_consent = false, anonymized_at = now()
+   WHERE g.tenant_id = _tenant_id AND g.id = _guest_id AND g.anonymized_at IS NULL;
+  UPDATE hospitality.bookings b
+     -- PRV-6: גם ההערות של הצוות וסיבת הביטול שהאורח כתב (טקסט חופשי — יכול להכיל מידע רגיש)
+     SET special_requests = NULL, notes = NULL, cancellation_reason = NULL,
+         policy_acceptance = b.policy_acceptance - 'ip' - 'user_agent',
+         manage_token_hash = NULL, manage_token2_hash = NULL, manage_token_expires_at = NULL
+   WHERE b.tenant_id = _tenant_id AND b.guest_id = _guest_id;
+  UPDATE hospitality.notifications n
+     SET payload = '{}'::jsonb,
+         recipient_email = CASE WHEN n.recipient_kind = 'guest' THEN 'anonymized@invalid.invalid' ELSE n.recipient_email END,
+         status = CASE WHEN n.status IN ('queued', 'failed', 'sending') THEN 'dead' ELSE n.status END,
+         last_error = CASE WHEN n.status IN ('queued', 'failed', 'sending') THEN 'guest anonymized' ELSE n.last_error END,
+         updated_at = now()
+   WHERE n.tenant_id = _tenant_id
+     AND n.booking_id IN (SELECT b.id FROM hospitality.bookings b WHERE b.tenant_id = _tenant_id AND b.guest_id = _guest_id);
+END $function$;
+
+CREATE OR REPLACE FUNCTION hospitality.export_guest(_guest_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  _t uuid := hospitality._staff_tenant('guests.privacy');
+  g hospitality.guests;
+BEGIN
+  SELECT * INTO g FROM hospitality.guests x WHERE x.tenant_id = _t AND x.id = _guest_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'האורח לא נמצא' USING ERRCODE = 'no_data_found';
+  END IF;
+  RETURN jsonb_build_object(
+    'guest', jsonb_build_object('full_name', g.full_name, 'email', g.email, 'phone', g.phone, 'notes', g.notes,
+                                'marketing_consent', g.marketing_consent, 'created_at', hospitality._ts(g.created_at),
+                                'anonymized_at', hospitality._ts(g.anonymized_at)),
+    'bookings', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                  'number', b.number, 'status', b.status, 'check_in', b.check_in, 'check_out', b.check_out,
+                  'adults', b.adults, 'children', b.children, 'total', b.total, 'currency', b.currency,
+                  'special_requests', b.special_requests, 'policy_acceptance', b.policy_acceptance,
+                  'created_at', hospitality._ts(b.created_at),
+                  -- PRV-6: כל המידע על האורח בהזמנה — ההערות, סיבת הביטול, ההיסטוריה והתשלומים
+                  'notes', b.notes, 'cancellation_reason', b.cancellation_reason,
+                  'events', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                              'kind', e.kind, 'from_status', e.from_status, 'to_status', e.to_status,
+                              'note', e.note, 'created_at', hospitality._ts(e.created_at)) ORDER BY e.created_at, e.id)
+                            FROM hospitality.booking_events e WHERE e.tenant_id = _t AND e.booking_id = b.id), '[]'::jsonb),
+                  'payments', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                              'kind', p.kind, 'method', p.method, 'amount', p.amount, 'currency', p.currency,
+                              'paid_at', p.paid_at, 'status', p.status, 'note', p.note,
+                              'created_at', hospitality._ts(p.created_at)) ORDER BY p.created_at)
+                            FROM hospitality.payments p WHERE p.tenant_id = _t AND p.booking_id = b.id), '[]'::jsonb)
+                  ) ORDER BY b.check_in)
+                FROM hospitality.bookings b WHERE b.tenant_id = _t AND b.guest_id = g.id), '[]'::jsonb));
+END $function$;
+
+CREATE OR REPLACE FUNCTION hospitality.apply_retention()
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  r record;
+  _n integer := 0;
+BEGIN
+  FOR r IN
+    SELECT g.tenant_id, g.id
+      FROM hospitality.guests g
+      JOIN hospitality.settings s ON s.tenant_id = g.tenant_id AND s.guest_retention_months IS NOT NULL
+     WHERE g.anonymized_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM hospitality.bookings b WHERE b.tenant_id = g.tenant_id AND b.guest_id = g.id
+                          AND (hospitality._holding(b.status)
+                               OR b.check_out > (now() - make_interval(months => s.guest_retention_months))::date))
+       AND g.created_at < now() - make_interval(months => s.guest_retention_months)
+  LOOP
+    PERFORM hospitality._anonymize_guest(r.tenant_id, r.id);
+    _n := _n + 1;
+  END LOOP;
+  RETURN _n;
+END $$;
 
 COMMIT;

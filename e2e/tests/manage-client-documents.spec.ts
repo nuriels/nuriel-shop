@@ -539,3 +539,91 @@ test("correcting the customer's email: the details and a new personal link to th
            FROM hospitality.client_contracts WHERE booking_id = '${bookingId}'`),
   ).toBe("signed:false,sent:true");
 });
+
+test("an event's contract: the pool hours before signing; after the event changes the old link can't be signed, the archive says so, and an updated contract replaces it", async ({
+  page,
+  request,
+}) => {
+  const POOL_GUEST = "cd.pool@e2e.test";
+  const property = sql(`SELECT id FROM hospitality.properties WHERE tenant_id = '${siteId}'`);
+  const ev = JSON.parse(
+    asOwner(
+      `SELECT hospitality.event_create('${JSON.stringify({
+        property_id: property,
+        event_type: "birthday",
+        event_date: day(50),
+        start_time: "16:00",
+        end_time: "21:00",
+        participants: 20,
+        price: 1800,
+        customer: { full_name: "נועה בריכה", phone: "0546400005", email: POOL_GUEST },
+      })}'::jsonb)`,
+    ),
+  ).id as string;
+  // with no pool hours given — the allowed window (the event's hours inside 08:00–18:00)
+  expect(
+    sql(
+      `SELECT pool_start_time || '-' || pool_end_time FROM hospitality.events WHERE id = '${ev}'`,
+    ),
+  ).toBe("16:00:00-18:00:00");
+  await open(page, request, `/manage/events/${ev}`);
+  await page.getByRole("link", { name: "שליחת חוזה לחתימה" }).click();
+  const send = page.getByTestId("contract-send");
+  await expect(send.getByTestId("kind-pool-event").getByRole("radio")).toBeChecked();
+  const since = Date.now();
+  await send.getByTestId("contract-send-button").click();
+  await expect(send.getByTestId("contract-send-result")).toContainText(`נשלח ל-${POOL_GUEST}`);
+  let body = "";
+  await expect
+    .poll(async () => {
+      body = (await mails(request, POOL_GUEST, since)).pop()?.body ?? "";
+      return /\/stay\/contract#t=[A-Za-z0-9_-]{43}/.test(body);
+    })
+    .toBe(true);
+  expect(body).toContain("16:00–18:00");
+  const link = URL_(`/stay/contract#t=${/#t=([A-Za-z0-9_-]{43})/.exec(body)![1]!}`);
+  // the customer sees the pool hours above the contract, and what is recorded with the signature
+  await page.goto(link);
+  const notice = page.getByTestId("contract-pool-notice");
+  await expect(notice).toContainText("השימוש בבריכה באירוע: 16:00–18:00 בלבד");
+  await expect(notice).toContainText("גם כשהאירוע ממשיך אחריהן");
+  await expect(page.getByTestId("contract-sign-record")).toContainText("כתובת ה-IP");
+  await expectAccessible(page, "contract signing — the pool hours");
+  // the event moves an hour later → the sent contract no longer matches it
+  const rev = sql(`SELECT revision FROM hospitality.events WHERE id = '${ev}'`);
+  asOwner(
+    `SELECT hospitality.event_update('${ev}', ${rev}, '{"start_time":"17:00","end_time":"22:00"}'::jsonb)`,
+  );
+  expect(
+    sql(
+      `SELECT pool_start_time || '-' || pool_end_time FROM hospitality.events WHERE id = '${ev}'`,
+    ),
+  ).toBe("17:00:00-18:00:00");
+  await page.goto(URL_("/robots.txt"));
+  await page.goto(link);
+  await expect(page.getByRole("alert")).toContainText("השתנו מאז שנשלח ההסכם");
+  await expect(page.getByTestId("contract-sign-form")).toHaveCount(0);
+  // the archive: a clear note and no resend; "חוזה מעודכן" replaces it
+  const n = sql(`SELECT number FROM hospitality.client_contracts WHERE event_id = '${ev}'`);
+  await open(page, request, "/manage/client-documents?tab=archive");
+  const table = page.getByTestId("contracts-table");
+  await expect(table.getByTestId(`contract-stale-${n}`)).toContainText("השתנו מאז שהחוזה נשלח");
+  const actions = table.getByTestId(`contract-actions-${n}`);
+  await expect(actions.getByRole("button", { name: /^שליחה/ })).toHaveCount(0);
+  await actions.getByRole("link", { name: "חוזה מעודכן" }).click();
+  await expect(send.getByTestId("contract-open-notice")).toBeVisible();
+  await send.getByTestId("contract-replace-open").check();
+  const since2 = Date.now();
+  await send.getByTestId("contract-send-button").click();
+  await expect(send.getByTestId("contract-send-result")).toContainText(`נשלח ל-${POOL_GUEST}`);
+  expect(
+    sql(
+      `SELECT string_agg(status, ',' ORDER BY number) FROM hospitality.client_contracts WHERE event_id = '${ev}'`,
+    ),
+  ).toBe("superseded,sent");
+  await expect
+    .poll(async () =>
+      (await mails(request, POOL_GUEST, since2)).some((m) => m.body.includes("17:00–18:00")),
+    )
+    .toBe(true);
+});
