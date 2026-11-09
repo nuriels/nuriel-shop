@@ -107,6 +107,10 @@ export function robotsTxt(open: boolean, origin: string | null): string {
     `Allow: ${SITE_PATH}$`,
     `Allow: ${SITE_PATH}/units/`,
     `Allow: ${SITE_PATH}/rooms/`,
+    // עמודי החבילות נכנסים ל-sitemap (sitemapEntries) — בלי השורה הזו robots.txt חסם אותם
+    `Allow: ${SITE_PATH}/packages/`,
+    // האייקון, תמונת השיתוף והמניפסט (A1): Google מחייב שקובץ ה-favicon יהיה פתוח לסריקה
+    `Allow: ${SITE_PATH}/brand/`,
     // הסגנון והקוד של העמודים — גוגל צריך אותם כדי להציג את העמוד כמו לגולש
     "Allow: /assets/",
     "Allow: /fonts/",

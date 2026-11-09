@@ -5,7 +5,8 @@ import type { SiteRef } from "@/platform/engines/contract";
 import { hospitalityGate } from "@/engines/hospitality/edge/gate";
 import type { PublicSite, PublicUnit } from "@/engines/hospitality/types/website";
 import { defaultDesign, normalizeDesign } from "@/engines/hospitality/website/design/schema";
-import { siteHomeHead, siteUnitHead } from "@/engines/hospitality/website/head";
+import { postalAddress, siteHomeHead, siteUnitHead } from "@/engines/hospitality/website/head";
+import { parseRobots, robotsAllows } from "../../scripts/seo/lib.mjs";
 import {
   buildSitemap,
   canonicalOrigin,
@@ -210,7 +211,7 @@ describe("robots.txt and the gate", () => {
     expect(robotsTxt(false, "https://galil.example")).toBe("User-agent: *\nDisallow: /\n");
     const open = robotsTxt(true, "https://galil.example");
     expect(open).toContain(
-      "Allow: /stay$\nAllow: /stay/units/\nAllow: /stay/rooms/\nAllow: /assets/\nAllow: /fonts/\nAllow: /sitemap.xml\nDisallow: /\n",
+      "Allow: /stay$\nAllow: /stay/units/\nAllow: /stay/rooms/\nAllow: /stay/packages/\nAllow: /stay/brand/\nAllow: /assets/\nAllow: /fonts/\nAllow: /sitemap.xml\nDisallow: /\n",
     );
     expect(open).toContain("\nSitemap: https://galil.example/sitemap.xml\n");
     expect(open).not.toContain("/manage");
@@ -310,5 +311,84 @@ describe("page head: title, description, share image, canonical, Open Graph, Twi
       { rel: "canonical", href: "https://galil.example/stay/rooms/deluxe" },
     ]);
     expect(h.meta.find((m) => "title" in m)?.["title"]).toBe("יחידה room-101 | צימרי הגליל");
+  });
+});
+
+// ---------- פרויקט Google SEO, שלב 2 ----------
+describe("SEO stage 2: robots.txt opens what Google needs, nothing private", () => {
+  const robots = parseRobots(robotsTxt(true, "https://galil.example"));
+  const withPackages = site({
+    packages: [{ slug: "חבילת-כלה" }, { slug: "vip-2-nights" }] as unknown as NonNullable<
+      PublicSite["packages"]
+    >,
+  });
+
+  it("every URL in the sitemap — home, units, room types and packages — is allowed by robots.txt", () => {
+    const paths = sitemapEntries(withPackages).map((e) => encodeURI(e.path));
+    expect(paths.some((p) => p.startsWith("/stay/packages/"))).toBe(true);
+    expect(paths.some((p) => p.startsWith("/stay/rooms/"))).toBe(true);
+    for (const path of paths) expect(robotsAllows(robots, path), path).toBe(true);
+  });
+
+  it("the favicon, the share image and the manifest are allowed (Google must crawl the favicon file)", () => {
+    for (const asset of ["icon-192", "icon-512", "apple-touch-icon", "og-image", "manifest"])
+      expect(robotsAllows(robots, `/stay/brand/${asset}`), asset).toBe(true);
+  });
+
+  it("private and management pages stay blocked, and the root (/) is unchanged — still blocked", () => {
+    for (const path of [
+      "/manage",
+      "/manage/login",
+      "/stay/book",
+      "/stay/account",
+      "/stay/privacy",
+      "/stay/docs/terms",
+      "/admin",
+      "/",
+    ])
+      expect(robotsAllows(robots, path), path).toBe(false);
+    expect(
+      robotsAllows(parseRobots(robotsTxt(false, "https://galil.example")), "/stay/brand/icon-192"),
+    ).toBe(false);
+  });
+});
+
+describe("SEO stage 2: the address in the structured data is a PostalAddress", () => {
+  const ldOf = (s: PublicSite): Record<string, unknown> => {
+    const meta = siteHomeHead(s).meta.find((m) => "script:ld+json" in m) as unknown as
+      Record<string, Record<string, unknown>> | undefined;
+    return meta?.["script:ld+json"] ?? {};
+  };
+
+  it("the business address → PostalAddress with the country; the place address when the business has none", () => {
+    expect(postalAddress("ישעי 22", "אחר")).toEqual({
+      "@type": "PostalAddress",
+      streetAddress: "ישעי 22",
+      addressCountry: "IL",
+    });
+    expect(postalAddress("  ", "מושב דלתון")).toEqual({
+      "@type": "PostalAddress",
+      streetAddress: "מושב דלתון",
+      addressCountry: "IL",
+    });
+    expect(postalAddress(null, undefined)).toBeNull();
+  });
+
+  it("in the home page JSON-LD: an object, never a plain string; no address → no field", () => {
+    const withAddress = site({
+      business: {
+        name: "צימרי הגליל",
+        phone: null,
+        email: null,
+        address: "ישעי 22",
+        currency: "ILS",
+      },
+    } as unknown as Partial<PublicSite>);
+    expect(ldOf(withAddress)["address"]).toEqual({
+      "@type": "PostalAddress",
+      streetAddress: "ישעי 22",
+      addressCountry: "IL",
+    });
+    expect(ldOf(site())).not.toHaveProperty("address");
   });
 });

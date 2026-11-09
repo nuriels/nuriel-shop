@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_unit_seo (SEO): rollback → שתי הפונקציות של כותרת ותיאור לגוגל ליחידה נעלמו; העמודות נשארות;
+#     הסכמה זהה בדיוק ל-61
 #   • ai_assistant (61): הגנה (נעצר כשיש חבילות / תקופות / היסטוריה / התראות / יומן, או מפתח שמור / מצב פעיל),
 #     rollback → שבע הטבלאות והפונקציות נעלמו; יומן הפלטפורמה נשאר; הסכמה זהה בדיוק ל-60
 #   • hosp_site_documents (60): הגנה (נעצר כשיש אישורי מסמכים / גרסאות / הסדרי נגישות / פרטי עוסק / טיוטות),
@@ -126,6 +128,7 @@ M58=20261108130000_hosp_platform_separation
 M59=20261108140000_hosp_packages
 M60=20261109100000_hosp_site_documents
 M61=20261110100000_ai_assistant
+M62=20261110200000_hosp_unit_seo
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -146,6 +149,35 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- SEO: Google title and description per unit (20261110200000) ----------
+expect "before the rollback: the two unit SEO functions, for staff only (never anon)" \
+  "SELECT has_function_privilege('authenticated', 'hospitality.unit_seo_set(uuid,text,text,integer)', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'hospitality.unit_seo_get(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'hospitality.unit_seo_set(uuid,text,text,integer)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'hospitality.unit_seo_get(uuid)', 'EXECUTE')"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M62" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M62"
+down "$M62"
+expect "both unit SEO functions are gone; the unit columns stay (they were there before)" \
+  "SELECT to_regprocedure('hospitality.unit_seo_set(uuid,text,text,integer)') IS NULL
+      AND to_regprocedure('hospitality.unit_seo_get(uuid)') IS NULL
+      AND (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'units'
+            AND column_name IN ('seo_title', 'seo_description')) = 2"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m61.sql"
+schema_dump "$SCHEMA_DIR/after-m62-down.sql"
+if diff -q "$SCHEMA_DIR/m61.sql" "$SCHEMA_DIR/after-m62-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of migration 61, exactly"
+else
+  echo "  FAIL schema after the rollback differs from migration 61:"; diff "$SCHEMA_DIR/m61.sql" "$SCHEMA_DIR/after-m62-down.sql" | head -20; exit 1
+fi
 
 # ---------- NURIEL AI ASSISTANT (migration 61) ----------
 expect "before the rollback: the 9 AI tables (RLS) closed to the browser (server: read only), the functions for the server only" \
@@ -1860,6 +1892,7 @@ up "$M58"
 up "$M59"
 up "$M60"
 up "$M61"
+up "$M62"
 expect "the AI add-on is back: 9 tables closed to the browser, 2 packages at 150 ILS, the assistant off, functions for the server only" \
   "SELECT to_regclass('public.ai_subscriptions') IS NOT NULL
       AND to_regclass('public.ai_usage_daily') IS NOT NULL
