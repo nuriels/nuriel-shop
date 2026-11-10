@@ -339,6 +339,8 @@ test("way B: a hosting contract the customer fills — a link to copy (shown onc
   await expect(box).toBeVisible();
   linkB = await box.getByTestId("sign-link-url").inputValue();
   expect(linkB).toMatch(/\/stay\/contract#t=[A-Za-z0-9_-]{43}$/);
+  // the business's own public site address (https), never another host
+  expect(linkB.startsWith(`https://${HOST}/stay/contract#t=`)).toBe(true);
   await expect(box.getByRole("link", { name: "שליחה בוואטסאפ" })).toHaveAttribute(
     "href",
     /^https:\/\/wa\.me\/\?text=/,
@@ -361,16 +363,18 @@ test("way B, the customer on a phone: writes name, email, phone, ID and address,
   browser,
   request,
 }) => {
+  // the copied link is the site's public https address — locally the same path and token on the test port
+  const tokenB = /#t=([A-Za-z0-9_-]{43})/.exec(linkB)![1]!;
   // another business's site — the link does not open there
   const strangerCtx = await browser.newContext(IPHONE);
   const stranger = await strangerCtx.newPage();
-  await stranger.goto(linkB.replace(HOST, hostOf(OTHER_SLUG)));
+  await stranger.goto(`http://${hostOf(OTHER_SLUG)}:${PORT}/stay/contract#t=${tokenB}`);
   await expect(stranger.getByText("הקישור לחתימה לא תקין או שכבר שומש")).toBeVisible();
   await strangerCtx.close();
 
   const ctx = await browser.newContext(IPHONE);
   const page = await ctx.newPage();
-  await page.goto(linkB);
+  await page.goto(URL_(`/stay/contract#t=${tokenB}`));
   await expect(page.getByRole("heading", { level: 1, name: "חתימה על ההסכם" })).toBeVisible();
   await expect(page.getByTestId("contract-identity")).toBeVisible();
   await page.getByTestId("contract-sign-submit").click();
