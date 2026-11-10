@@ -20,8 +20,15 @@ import {
   parseUpdateUnit,
   parseWholeProperty,
 } from "../validation/catalog";
+import { parseUnitSeoGet, parseUnitSeoSet } from "../validation/unit-seo";
 
 type Saved = { id: string; revision: number };
+export type UnitSeo = {
+  id: string;
+  seo_title: string | null;
+  seo_description: string | null;
+  revision: number;
+};
 type Rpc = <T>(fn: string, args: Record<string, unknown>) => Promise<T>;
 
 /** יחידה מסוג "חדר" נשמרת כחדר; השאר — יחידה. נקבע ביצירה בלבד (לא משנה התנהגות) */
@@ -89,6 +96,26 @@ export const hospitalityUpdateUnit = createServerFn({ method: "POST" })
     saveWithRevision("unit_update", {
       _id: data.id,
       _changes: data.changes,
+      _expected_revision: data.revision,
+    }),
+  );
+
+/** כותרת ותיאור לגוגל של יחידה (שלב 2 של פרויקט SEO) — הערכים והגרסה */
+export const hospitalityUnitSeo = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseUnitSeoGet(input))
+  .handler(async ({ data }): Promise<UnitSeo> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<UnitSeo>("unit_seo_get", { _id: data.id });
+  });
+
+/** שמירה עם הגרסה שנטענה; ריק = ברירת המחדל של האתר. "עודכן בינתיים" — תשובה, לא שגיאה */
+export const hospitalitySaveUnitSeo = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseUnitSeoSet(input))
+  .handler(({ data }): Promise<CatalogSaveResult> =>
+    saveWithRevision("unit_seo_set", {
+      _id: data.id,
+      _seo_title: data.title,
+      _seo_description: data.description,
       _expected_revision: data.revision,
     }),
   );

@@ -29,6 +29,7 @@ import { MediaGallery } from "../media/MediaGallery";
 import { useManagement } from "../shell/management-context";
 import { manageKeys } from "../lib/query-keys";
 import { ConflictNotice } from "./CatalogSheets";
+import { UnitSeoCard } from "./UnitSeoCard";
 import { PROPERTY_TYPE_LABELS, UNIT_TYPE_LABELS } from "./labels";
 import {
   ARCHIVED_FOR_MANAGER,
@@ -528,6 +529,19 @@ function UnitEditor({
             </CardContent>
           </Card>
         )}
+
+        <UnitSeoCard
+          unitId={unit.id}
+          unitName={unit.name}
+          unitDescription={unit.description ?? ""}
+          revision={revision}
+          disabled={readOnly}
+          onSaved={(next) => {
+            setRevision(next);
+            refresh();
+          }}
+          onConflict={refresh}
+        />
 
         {!whole && !readOnly && (
           <Card data-section="status">

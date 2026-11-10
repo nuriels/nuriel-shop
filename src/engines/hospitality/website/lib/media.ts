@@ -64,11 +64,14 @@ function dedupe(items: PublicMedia[]): PublicMedia[] {
   });
 }
 
-/** כתובת ההטמעה של סרטון (YouTube בלי עוגיות / Vimeo) */
+/**
+ * כתובת ההטמעה של סרטון — נטענת רק כשהגולש פותח את הסרטון: YouTube בדומיין בלי עוגיות, Vimeo עם dnt=1
+ * (Google SEO שלב 4: בלי מעקב ובלי Cookies של Vimeo — לא דורש הסכמה)
+ */
 export function embedSrc(m: PublicMedia): string | null {
   if (m.kind !== "embed" || !m.embed_id) return null;
   return m.embed_provider === "vimeo"
-    ? `https://player.vimeo.com/video/${encodeURIComponent(m.embed_id)}`
+    ? `https://player.vimeo.com/video/${encodeURIComponent(m.embed_id)}?dnt=1`
     : `https://www.youtube-nocookie.com/embed/${encodeURIComponent(m.embed_id)}`;
 }
 

@@ -104,9 +104,16 @@ export function robotsTxt(open: boolean, origin: string | null): string {
   const base = clean(origin);
   return [
     "User-agent: *",
+    // עמוד הבית של הכתובת (רק "/" עצמו, לא שאר הכתובות): גוגל מציג favicon רק כש-Googlebot יכול לסרוק
+    // את עמוד הבית ולעבור בהפניה ממנו (301 ל-/stay, edge/gate.ts) — ושם גם אימות Search Console
+    "Allow: /$",
     `Allow: ${SITE_PATH}$`,
     `Allow: ${SITE_PATH}/units/`,
     `Allow: ${SITE_PATH}/rooms/`,
+    // עמודי החבילות נכנסים ל-sitemap (sitemapEntries) — בלי השורה הזו robots.txt חסם אותם
+    `Allow: ${SITE_PATH}/packages/`,
+    // האייקון, תמונת השיתוף והמניפסט (A1): Google מחייב שקובץ ה-favicon יהיה פתוח לסריקה
+    `Allow: ${SITE_PATH}/brand/`,
     // הסגנון והקוד של העמודים — גוגל צריך אותם כדי להציג את העמוד כמו לגולש
     "Allow: /assets/",
     "Allow: /fonts/",

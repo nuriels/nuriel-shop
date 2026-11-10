@@ -158,6 +158,11 @@ export interface PublicSite {
   documents?: PublicDocumentMeta[];
   /** E5: הכתובת הקנונית של האתר (https://…, בלי / בסוף) — לכתובות הקנוניות ולשיתוף; null — לא ידוע */
   origin?: string | null;
+  /**
+   * Google SEO שלב 4: מדידה באתר — רק כשהמתג hospitality_analytics_enabled דולק לאתר ויש מזהה GA4
+   * בגרסה המפורסמת. null / חסר — אין באתר שום דבר שדורש הסכמה (אין באנר, אין תגית).
+   */
+  analytics?: { ga4: string } | null;
 }
 
 export interface PublicRoomType {

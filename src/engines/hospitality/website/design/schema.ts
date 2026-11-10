@@ -103,6 +103,11 @@ export interface SiteSeo {
   image?: string;
   /** אימות Google Search Console — רק הקוד (ה-content של התגית) */
   google?: string;
+  /**
+   * Google SEO שלב 4: מזהה המדידה של Google Analytics 4 (G-…). נכנס לאתר רק כשהמדידה זמינה (המתג
+   * hospitality_analytics_enabled), ונטען בדפדפן רק אחרי שהגולש אישר Cookies של מדידה
+   */
+  ga4?: string;
   /** הכתובת הקנונית: ריק — הדומיין של העסק (אם יש), "subdomain" — הכתובת בפלטפורמה */
   canonical?: "subdomain";
 }
@@ -110,6 +115,8 @@ export interface SiteSeo {
 export const SEO_LIMITS = { title: 70, description: 200 } as const;
 /** קוד האימות של Google Search Console (בפועל ~43 תווים: אותיות, ספרות, _ ו--) */
 export const GOOGLE_TOKEN = /^[A-Za-z0-9_-]{10,100}$/;
+/** מזהה מדידה של Google Analytics 4 ("Measurement ID") — G- ואחריו אותיות גדולות וספרות */
+export const GA4_ID = /^G-[A-Z0-9]{4,16}$/;
 
 export interface SiteDesign {
   v: 1;
@@ -335,6 +342,8 @@ export function normalizeSeo(raw: unknown): SiteSeo | undefined {
   if (typeof r["image"] === "string" && UUID.test(r["image"])) out.image = r["image"].toLowerCase();
   if (typeof r["google"] === "string" && GOOGLE_TOKEN.test(r["google"].trim()))
     out.google = r["google"].trim();
+  if (typeof r["ga4"] === "string" && GA4_ID.test(r["ga4"].trim().toUpperCase()))
+    out.ga4 = r["ga4"].trim().toUpperCase();
   if (r["canonical"] === "subdomain") out.canonical = "subdomain";
   return Object.keys(out).length ? out : undefined;
 }

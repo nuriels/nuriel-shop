@@ -24,9 +24,11 @@ export interface SiteEditorView {
   versions: { version: number; theme: string; note: string | null; published_at: string }[];
   /** E5: הכתובות של האתר — לבחירת הכתובת הקנונית ולתצוגה המקדימה של גוגל */
   addresses: { primary: string | null; subdomain: string | null };
+  /** Google SEO שלב 4: המדידה (GA4) זמינה לאתר (המתג hospitality_analytics_enabled) — רק אז יש שדה למזהה */
+  analytics_enabled: boolean;
 }
 
-type RawEditor = Omit<SiteEditorView, "draft" | "published" | "addresses"> & {
+type RawEditor = Omit<SiteEditorView, "draft" | "published" | "addresses" | "analytics_enabled"> & {
   draft: (Omit<NonNullable<SiteEditorView["draft"]>, "document"> & { document: unknown }) | null;
   published:
     (Omit<NonNullable<SiteEditorView["published"]>, "document"> & { document: unknown }) | null;
@@ -46,13 +48,16 @@ export const hospitalitySiteEditor = createServerFn({ method: "GET" }).handler(
       import("../server/manage.server"),
       import("@/platform/tenancy/current-site.server"),
     ]);
-    const [raw, addresses] = await Promise.all([
+    const [raw, addresses, analytics] = await Promise.all([
       manageRpc<RawEditor>("site_editor", {}),
       currentSiteAddresses(),
+      // בלי מיגרציית ההסכמה / כשהמסד לא ענה — כאילו כבוי (אין שדה)
+      manageRpc<boolean>("analytics_enabled", {}).catch(() => false),
     ]);
     return {
       ...raw,
       addresses,
+      analytics_enabled: analytics === true,
       draft: raw.draft
         ? { ...raw.draft, document: JSON.stringify(raw.draft.document ?? {}) }
         : null,

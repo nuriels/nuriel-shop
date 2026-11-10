@@ -76,6 +76,19 @@ const photo = (url: string | null | undefined): ShareImage | null =>
   url ? { url, size: null } : null;
 
 const canonical = (url: string | null): Link[] => (url ? [{ rel: "canonical", href: url }] : []);
+
+/**
+ * הכתובת בנתונים המובנים: Google דורש ב-LocalBusiness שדה address מסוג PostalAddress, לא מחרוזת.
+ * במערכת יש רק כתובת חופשית (של העסק, ואם אין — של המקום) — היא נכנסת כ-streetAddress, והמדינה
+ * ישראל (הפלטפורמה בעברית ובשקלים). בלי כתובת — בלי השדה.
+ */
+export function postalAddress(
+  business: string | null | undefined,
+  place: string | null | undefined,
+): { "@type": "PostalAddress"; streetAddress: string; addressCountry: "IL" } | null {
+  const street = business?.trim() || place?.trim();
+  return street ? { "@type": "PostalAddress", streetAddress: street, addressCountry: "IL" } : null;
+}
 const absolute = (site: PublicSite, path: string) => (site.origin ? `${site.origin}${path}` : null);
 
 function describe(site: PublicSite): string {
@@ -102,6 +115,7 @@ export function siteHomeHead(site: PublicSite | undefined): PageHead {
   const logo = mediaById(site, logoId)?.url ?? null;
   const url = absolute(site, SITE_PATH);
   const prices = site.units.map((u) => u.base_price);
+  const address = postalAddress(site.business.address, p?.address);
   const ld = {
     "@context": "https://schema.org",
     "@type": "LodgingBusiness",
@@ -112,7 +126,7 @@ export function siteHomeHead(site: PublicSite | undefined): PageHead {
     ...(logo ? { logo } : {}),
     ...(site.business.phone ? { telephone: site.business.phone } : {}),
     ...(site.business.email ? { email: site.business.email } : {}),
-    ...(site.business.address ? { address: site.business.address } : {}),
+    ...(address ? { address } : {}),
     ...(site.business.check_in_time ? { checkinTime: site.business.check_in_time } : {}),
     ...(site.business.check_out_time ? { checkoutTime: site.business.check_out_time } : {}),
     ...(p?.location
