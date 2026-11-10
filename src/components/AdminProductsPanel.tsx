@@ -25,6 +25,7 @@ import { AdminProductDialog, type ProductDraft } from "@/components/AdminProduct
 import { ScanIntakeDialog } from "@/components/ScanIntakeDialog";
 import { ProductImportDialog } from "@/components/products/ProductImportDialog";
 import { ProductUrlImportDialog } from "@/components/products/ProductUrlImportDialog";
+import { ProductDuplicatesDialog } from "@/components/products/ProductDuplicatesDialog";
 import { SourceScanPanel } from "@/components/products/SourceScanPanel";
 import { ProductGrid } from "@/components/ProductGrid";
 import { usePriceTiersEnabled } from "@/hooks/usePriceTiers";
@@ -379,6 +380,11 @@ export function AdminProductsPanel({
     </div>
   );
 
+  // הקטגוריות של המוצרים — לסינון הצעות ה-AI בחנות גדולה
+  const productCategoryNames = [...new Set(products.map((product) => product.category))]
+    .filter((name) => name !== "")
+    .sort((a, b) => a.localeCompare(b, "he"));
+
   const directProduct = openProductId
     ? (products.find((product) => product.id === openProductId) ?? null)
     : null;
@@ -457,6 +463,13 @@ export function AdminProductsPanel({
             onImported={load}
             productCount={products.length}
             maxProducts={maxProducts}
+          />
+          {/* מוצרים כפולים: זיהוי, מיזוג והצעות AI (20261110230000) */}
+          <ProductDuplicatesDialog
+            onMerged={load}
+            refreshKey={products.length}
+            productCount={products.length}
+            categories={productCategoryNames}
           />
           {/* ייבוא מוצר בודד מקישור — AliExpress, Amazon, חנות אחרת (חלק 29) */}
           <ProductUrlImportDialog

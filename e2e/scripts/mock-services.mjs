@@ -8,11 +8,51 @@
 //   • NURIEL AI (AI_ASSISTANT_TEST_API_URL): POST /v1/messages → "דגם" דטרמיניסטי שמסווג לפי רשימת
 //     המדריכים שבבקשה: המדריך הראשון שאחד הניסוחים שלו מופיע בשאלה; שאלה עם "מזג האוויר" → off_topic;
 //     שאלה עם "תקלה בשירות" → 529. בלי מפתח אמיתי ובלי קריאה החוצה.
+//     בקשת "הצעות למוצרים כפולים" (סכמה עם groups) → מקבץ מוצרים שיש להם אותן מילים בסדר אחר
+//     (אותו מוצר בניסוח אחר); שמות זהים לא מוצעים (הם כבר ברשימה הרגילה).
 import { createServer } from "node:http";
+
+/** "דגם" מדומה להצעות כפילויות: אותן מילים בסדר אחר = אותו מוצר */
+function duplicatesMock(request) {
+  const message = String(request.messages?.at(-1)?.content ?? "");
+  const block = /<products>\n([\s\S]*?)\n<\/products>/.exec(message)?.[1] ?? "";
+  const byWords = new Map();
+  for (const line of block.split("\n")) {
+    const [n, name] = line.split(" | ");
+    const number = Number(n);
+    if (!Number.isInteger(number) || !name) continue;
+    const exact = name.trim().toLowerCase().replace(/\s+/g, " ");
+    const key = exact.split(" ").sort().join(" ");
+    const list = byWords.get(key) ?? [];
+    list.push({ number, exact });
+    byWords.set(key, list);
+  }
+  const groups = [];
+  for (const list of byWords.values()) {
+    if (list.length >= 2 && new Set(list.map((x) => x.exact)).size > 1)
+      groups.push({ items: list.map((x) => x.number), reason: "reworded", confidence: "high" });
+  }
+  return {
+    id: "msg_e2e_duplicates",
+    type: "message",
+    role: "assistant",
+    model: request.model,
+    content: [{ type: "text", text: JSON.stringify({ groups }) }],
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: {
+      input_tokens: 900,
+      output_tokens: 30,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+    },
+  };
+}
 
 /** "דגם" מדומה: מסווג לפי הניסוחים (id | title | keywords | summary) שבהוראות */
 function anthropicMock(body) {
   const request = JSON.parse(body);
+  if (request.output_config?.format?.schema?.properties?.groups) return duplicatesMock(request);
   const system = (request.system ?? []).map((b) => b.text ?? "").join("\n");
   const message = String(request.messages?.at(-1)?.content ?? "");
   const question = (/<question>\n([\s\S]*?)\n<\/question>/.exec(message)?.[1] ?? "").trim();

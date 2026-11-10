@@ -3717,6 +3717,22 @@ export type Database = {
       };
       store_rest_state: { Args: { _tenant?: string | null; _at?: string }; Returns: Json };
       store_staff_role: { Args: { _user_id?: string }; Returns: string | null };
+      // מוצרים כפולים (20261110230000)
+      product_duplicate_groups: { Args: never; Returns: Json };
+      product_duplicate_cards: { Args: { _ids: string[] }; Returns: Json };
+      product_duplicate_dismiss: { Args: { _product_ids: string[] }; Returns: Json };
+      product_duplicate_dismissals_clear: { Args: never; Returns: Json };
+      product_merge: {
+        Args: {
+          _keep: string;
+          _others: string[];
+          _stock_mode: string;
+          _stock_from?: string | null;
+          _stock?: number | null;
+          _hide?: string[] | null;
+        };
+        Returns: Json;
+      };
       staff_can: { Args: { _permission: string; _user_id?: string }; Returns: boolean };
       is_cashier: { Args: { _user_id: string }; Returns: boolean };
       store_set_staff_role: { Args: { _user_id: string; _staff_role: string }; Returns: string };
