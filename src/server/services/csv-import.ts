@@ -33,6 +33,11 @@ import {
   type ImportSummary,
 } from "@/lib/csv-import";
 import { describeImageError, saveImportedImage, settledPool } from "@/server/services/image-fetch";
+import {
+  emptySyncSummary,
+  type RowDecision,
+  type SyncBatchSummary,
+} from "@/lib/product-import-sync";
 
 /** כמה תמונות יורדות בו-זמנית */
 const IMAGE_CONCURRENCY = 6;
@@ -154,28 +159,24 @@ export async function importCsvBatch(
 }
 
 /**
- * המשך המנה: הורדת התמונות + יצירה במסד. משותף ל-CSV ולסריקת אתר מקור (חלק 44) —
- * אותם בדיקות כפילות (ברקוד / מק"ט), אותה הורדת תמונות בטוחה ואותה יצירת קטגוריות.
+ * כל קישורי התמונות של השורות (בלי כפילויות) יורדים במקביל ונשמרים ב-Storage של החנות. מחזיר את
+ * השורות עם הקישורים אצלנו בלבד, ואזהרה לכל תמונה שדולגה (עם הסיבה). משותף לייבוא הישן ולייבוא
+ * שמזהה מוצרים קיימים (STORE-2), שם רק לשורות שיתווספו כמוצר חדש.
  */
-async function runImport(
+async function localizeImages(
   rows: ImportRow[],
-  supabase: SupabaseClient<Database>,
-  summary: ImportSummary,
-): Promise<ImportSummary> {
-  const tenantId = currentTenantId();
-  const prepared = { rows };
-  // 1) שורות שייכשלו בכל מקרה — בלי הורדת תמונות
-  const blocked = await rowsThatWillFail(prepared.rows);
-
-  // 2) כל הקישורים של המנה, בלי כפילויות (אותה תמונה בכמה מוצרים — הורדה אחת)
-  const urls = [
-    ...new Set(prepared.rows.filter((row) => !blocked.has(row.row)).flatMap((row) => row.images)),
-  ];
+  tenantId: string,
+): Promise<{
+  localized: Map<number, ImportRow>;
+  imageWarnings: Map<number, ImportIssue[]>;
+  imageCounts: Map<number, { saved: number; failed: number }>;
+}> {
+  const urls = [...new Set(rows.flatMap((row) => row.images))];
   if (urls.length > BATCH_MAX_IMAGES) {
     throw new Error(`עד ${BATCH_MAX_IMAGES} תמונות בכל מנה`);
   }
 
-  // 3) הורדה + שמירה במקביל (Promise.allSettled — כל תמונה לחוד)
+  // הורדה + שמירה במקביל (Promise.allSettled — כל תמונה לחוד)
   const deadline = Date.now() + BATCH_IMAGES_DEADLINE_MS;
   const outcomes = await settledPool(urls, IMAGE_CONCURRENCY, (url) =>
     saveImportedImage(tenantId, url, { deadline }),
@@ -188,11 +189,10 @@ async function runImport(
     else failed.set(url, describeImageError(outcome.reason));
   });
 
-  // 4) השורות למסד — עם הקישורים אצלנו בלבד
+  const localized = new Map<number, ImportRow>();
   const imageWarnings = new Map<number, ImportIssue[]>();
   const imageCounts = new Map<number, { saved: number; failed: number }>();
-  const rpcRows = prepared.rows.map((row) => {
-    if (blocked.has(row.row)) return { ...row, images: [], image_url: "" };
+  for (const row of rows) {
     const local: string[] = [];
     const warnings: ImportIssue[] = [];
     row.images.forEach((url, index) => {
@@ -210,8 +210,37 @@ async function runImport(
     });
     imageWarnings.set(row.row, warnings);
     imageCounts.set(row.row, { saved: local.length, failed: warnings.length });
-    return { ...row, images: local, image_url: local[0] ?? "" };
-  });
+    localized.set(row.row, { ...row, images: local, image_url: local[0] ?? "" });
+  }
+  return { localized, imageWarnings, imageCounts };
+}
+
+/**
+ * המשך המנה: הורדת התמונות + יצירה במסד. משותף ל-CSV ולסריקת אתר מקור (חלק 44) —
+ * אותם בדיקות כפילות (ברקוד / מק"ט), אותה הורדת תמונות בטוחה ואותה יצירת קטגוריות.
+ */
+async function runImport(
+  rows: ImportRow[],
+  supabase: SupabaseClient<Database>,
+  summary: ImportSummary,
+): Promise<ImportSummary> {
+  const tenantId = currentTenantId();
+  const prepared = { rows };
+  // 1) שורות שייכשלו בכל מקרה — בלי הורדת תמונות
+  const blocked = await rowsThatWillFail(prepared.rows);
+
+  // 2) הורדה + שמירה של התמונות (אותה תמונה בכמה מוצרים — הורדה אחת)
+  const { localized, imageWarnings, imageCounts } = await localizeImages(
+    prepared.rows.filter((row) => !blocked.has(row.row)),
+    tenantId,
+  );
+
+  // 3) השורות למסד — עם הקישורים אצלנו בלבד
+  const rpcRows = prepared.rows.map((row) =>
+    blocked.has(row.row)
+      ? { ...row, images: [], image_url: "" }
+      : (localized.get(row.row) ?? { ...row, images: [], image_url: "" }),
+  );
 
   const { data, error } = await supabase.rpc("import_products", {
     _rows: rpcRows as unknown as Json,
@@ -259,4 +288,97 @@ export async function importRows(
   summary.total = rows.length;
   if (rows.length === 0) return summary;
   return runImport(rows, supabase, summary);
+}
+
+// ============================================================
+// STORE-2: ייבוא שמזהה מוצרים קיימים — מנה עם החלטה לכל שורה
+// ============================================================
+export type SyncBatchInput = CsvBatchInput & { importId: string; decisions: RowDecision[] };
+
+/**
+ * מנה אחת: פענוח מחדש של השורות (לא סומכים על הדפדפן) → ההחלטה של כל שורה לפי מספר השורה בקובץ
+ * (שורה בלי החלטה — מדלגים) → תמונות רק לשורות שיתווספו כמוצר חדש → product_import_apply במסד,
+ * שבודק שוב כל החלטה.
+ */
+export async function applySyncBatch(
+  input: SyncBatchInput,
+  supabase: SupabaseClient<Database>,
+): Promise<SyncBatchSummary> {
+  const tenantId = currentTenantId();
+  const prepared = prepareImport(
+    { headers: input.headers, rows: input.rows, delimiter: "," },
+    detectMapping(input.headers),
+    input.firstRow,
+  );
+  if (prepared.missing.length > 0) {
+    throw new Error(
+      `חסרות עמודות חובה: ${prepared.missing.map(fieldLabel).join(", ")}. בדקו ששורת הכותרות תואמת לקובץ הדוגמה.`,
+    );
+  }
+  if (prepared.rows.length > BATCH_MAX_PRODUCTS) {
+    throw new Error(`עד ${BATCH_MAX_PRODUCTS} מוצרים בכל מנה`);
+  }
+  const summary = emptySyncSummary();
+  summary.total = prepared.rows.length;
+  if (prepared.rows.length === 0) return summary;
+
+  const byRow = new Map(input.decisions.map((decision) => [decision.row, decision]));
+  const decisionOf = (row: ImportRow): RowDecision =>
+    byRow.get(row.row) ?? { row: row.row, action: "skip", reason: "לא נבחרה פעולה לשורה" };
+  const creating = prepared.rows.filter(
+    (row) => decisionOf(row).action === "create" && PRICE_FORMAT.test(row.price),
+  );
+  const { localized, imageWarnings, imageCounts } = await localizeImages(creating, tenantId);
+
+  const rpcRows = prepared.rows.map((row) => {
+    const decision = decisionOf(row);
+    const base =
+      decision.action === "create"
+        ? (localized.get(row.row) ?? { ...row, images: [], image_url: "" })
+        : { ...row, images: [], image_url: "", description: "" };
+    return {
+      ...base,
+      action: decision.action,
+      product_id: decision.product_id,
+      force_new: decision.force_new === true,
+      match: decision.match,
+      candidates: decision.candidates,
+      reason: decision.reason,
+    };
+  });
+
+  const { data, error } = await supabase.rpc("product_import_apply", {
+    _import: input.importId,
+    _rows: rpcRows as unknown as Json,
+  });
+  if (error) throw new Error(error.message);
+
+  const result = (data ?? {}) as Record<string, unknown>;
+  summary.created = Number(result["created"] ?? 0);
+  summary.updated = Number(result["updated"] ?? 0);
+  summary.unchanged = Number(result["unchanged"] ?? 0);
+  summary.skipped = Number(result["skipped"] ?? 0);
+  summary.failed = Number(result["failed"] ?? 0);
+  summary.limitReached = result["limit_reached"] === true;
+  summary.newCategories = ((result["new_categories"] as string[] | undefined) ?? []).filter(
+    (name, index, list) => list.indexOf(name) === index,
+  );
+  summary.errors = issuesOf(result["errors"]).slice(0, IMPORT_MAX_LISTED);
+
+  // אזהרות התמונות — רק במוצרים שנוצרו בפועל
+  const failedRows = new Set(summary.errors.map((issue) => issue.row));
+  const warnings: ImportIssue[] = [];
+  for (const row of creating) {
+    if (failedRows.has(row.row)) continue;
+    warnings.push(...(imageWarnings.get(row.row) ?? []));
+    const counts = imageCounts.get(row.row);
+    if (counts) {
+      summary.images.saved += counts.saved;
+      summary.images.failed += counts.failed;
+    }
+  }
+  summary.warnings = [...issuesOf(result["warnings"]), ...warnings]
+    .sort((a, b) => a.row - b.row)
+    .slice(0, IMPORT_MAX_LISTED);
+  return summary;
 }

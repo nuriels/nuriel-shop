@@ -3470,6 +3470,24 @@ export type Database = {
         Args: { _rows: Json };
         Returns: Json;
       };
+      // STORE-2: ייבוא שמזהה מוצרים קיימים (מיגרציה 64)
+      product_import_match: { Args: { _rows: Json }; Returns: Json };
+      product_import_missing_count: {
+        Args: { _present: string[]; _missing: string };
+        Returns: Json;
+      };
+      product_import_begin: {
+        Args: { _file_name: string; _options: Json; _expected_rows: number };
+        Returns: string;
+      };
+      product_import_apply: { Args: { _import: string; _rows: Json }; Returns: Json };
+      product_import_finish: {
+        Args: { _import: string; _confirm_missing?: number | null };
+        Returns: Json;
+      };
+      product_import_report: { Args: { _import: string }; Returns: Json };
+      product_imports_recent: { Args: Record<PropertyKey, never>; Returns: Json };
+      product_import_undo: { Args: { _import: string }; Returns: Json };
       check_coupon: {
         Args: {
           _code: string;

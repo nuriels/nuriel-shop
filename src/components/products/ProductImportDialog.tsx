@@ -1,16 +1,16 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Download,
   FileSpreadsheet,
   FileUp,
-  FolderPlus,
   ImageIcon,
-  ImageOff,
   Loader2,
   Play,
+  Search,
   Square,
   Upload,
   XCircle,
@@ -30,19 +30,51 @@ import {
   IMPORT_FIELDS,
   SAMPLE_CSV,
   decodeCsvBytes,
-  emptyImportSummary,
   fieldLabel,
-  mergeImportSummary,
   parseCsv,
   planImportBatches,
   prepareImport,
   type CsvTable,
   type ImportBatchPlan,
-  type ImportSummary,
   type PreparedImport,
 } from "@/lib/csv-import";
-import { importProductsBatch } from "@/lib/product-import.functions";
+import {
+  MATCH_CHUNK,
+  emptySyncSummary,
+  matchInput,
+  mergeSyncSummary,
+  planDecisions,
+  presentProductIds,
+  summarizePlan,
+  type ImportInfo,
+  type ImportReport,
+  type MatchRow,
+  type RowChoice,
+  type SyncBatchSummary,
+} from "@/lib/product-import-sync";
+import {
+  applyProductImportBatch,
+  beginProductImport,
+  finishProductImport,
+  matchProductsBatch,
+  productImportMissingCount,
+  productImportReport,
+  recentProductImports,
+  undoProductImport,
+  type UndoResult,
+} from "@/lib/product-import.functions";
 import { refreshCategories } from "@/hooks/useCategories";
+import {
+  ImportReview,
+  type MissingInfo,
+  type ReviewOptions,
+} from "@/components/products/ProductImportReview";
+import {
+  ImportReportView,
+  RecentImports,
+  UndoNotice,
+} from "@/components/products/ProductImportReport";
+import { downloadCsv } from "@/lib/download-csv";
 import { cn } from "@/lib/utils";
 
 type Loaded = {
@@ -60,30 +92,18 @@ type Loaded = {
 type RunStatus = "running" | "stopping" | "stopped" | "failed" | "done";
 
 type Run = {
+  importId: string;
   status: RunStatus;
   /** המנה הבאה לשליחה (להמשך אחרי עצירה / תקלה) */
   nextBatch: number;
   /** כמה מוצרים כבר טופלו (נשלחו לשרת וחזרו) */
   doneProducts: number;
-  summary: ImportSummary;
+  summary: SyncBatchSummary;
   error: string | null;
-  startedAt: number;
   /** זמן ממוצע למנה (מ"ש) — להערכת הזמן שנשאר */
   avgBatchMs: number;
   batchesDone: number;
 };
-
-function downloadText(fileName: string, text: string) {
-  const blob = new Blob(["﻿", text], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-const csvCell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
 
 const he = (value: number) => value.toLocaleString("he-IL");
 
@@ -94,12 +114,14 @@ function remainingText(ms: number): string {
   return minutes === 1 ? "כדקה" : `כ-${he(minutes)} דקות`;
 }
 
+const errorText = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;
+
 /**
- * ייבוא קטלוג מוצרים מקובץ CSV (חלק 14, שודרג בחלק 18): בחירת קובץ (או
- * גרירה), תצוגה מקדימה עם זיהוי העמודות, הקטגוריות והתמונות — ואז ייבוא
- * במנות קטנות: בכל מנה השרת מוריד את התמונות (במקביל) ושומר אותן אצלנו,
- * יוצר קטגוריות חסרות ומוסיף את המוצרים. סרגל התקדמות, מונים, עצירה
- * והמשך מאותה נקודה. בסוף — סיכום ודוח להורדה.
+ * ייבוא מוצרים מקובץ CSV (חלק 14 → 18 → STORE-2): בחירת קובץ (או גרירה), תצוגה מקדימה עם זיהוי
+ * העמודות — ואז בדיקה מול המוצרים בחנות: מוצר קיים מזוהה (ברקוד → מק"ט → מק"ט ספק → שם) ולא נוסף
+ * שוב. המנהל בוחר מה לעשות במוצרים קיימים (מלאי / מלאי ומחיר / כלום), בחדשים ובמוצרים שלא בקובץ,
+ * הייבוא רץ במנות (תמונות רק למוצרים חדשים), ובסוף — דוח שינויים להורדה, וביטול היבוא.
  * קבצים מאקסל בעברית (Windows-1255), מ-WooCommerce ומ-Shopify נתמכים.
  */
 export function ProductImportDialog({
@@ -111,14 +133,50 @@ export function ProductImportDialog({
   productCount: number;
   maxProducts: number | null;
 }) {
-  const importBatch = useServerFn(importProductsBatch);
+  const matchBatch = useServerFn(matchProductsBatch);
+  const missingCount = useServerFn(productImportMissingCount);
+  const beginImport = useServerFn(beginProductImport);
+  const applyBatch = useServerFn(applyProductImportBatch);
+  const finishImport = useServerFn(finishProductImport);
+  const loadReport = useServerFn(productImportReport);
+  const loadRecent = useServerFn(recentProductImports);
+  const undoImport = useServerFn(undoProductImport);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const stopRef = useRef(false);
+  const reviewRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const [run, setRun] = useState<Run | null>(null);
   const [dragging, setDragging] = useState(false);
+
+  // בדיקה מול החנות
+  const [matches, setMatches] = useState<Map<number, MatchRow> | null>(null);
+  const [tiers, setTiers] = useState(false);
+  const [matching, setMatching] = useState<{ done: number; total: number } | null>(null);
+  const [matchError, setMatchError] = useState<string | null>(null);
+  const [options, setOptions] = useState<ReviewOptions>({
+    existing: null,
+    createNew: true,
+    missing: "keep",
+  });
+  const [choices, setChoices] = useState<Record<number, RowChoice>>({});
+  const [requiredError, setRequiredError] = useState(false);
+  const [missing, setMissing] = useState<{ zero: MissingInfo | null; hide: MissingInfo | null }>({
+    zero: null,
+    hide: null,
+  });
+  const [missingLoading, setMissingLoading] = useState(false);
+  const [missingError, setMissingError] = useState<string | null>(null);
+
+  // הייבוא, הדוח והיבואים האחרונים
+  const [run, setRun] = useState<Run | null>(null);
+  const [report, setReport] = useState<ImportReport | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [recent, setRecent] = useState<ImportInfo[] | null>(null);
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [undoing, setUndoing] = useState(false);
+  const [undoResult, setUndoResult] = useState<UndoResult | null>(null);
 
   const busy = run?.status === "running" || run?.status === "stopping";
 
@@ -133,10 +191,39 @@ export function ProductImportDialog({
     return () => window.removeEventListener("beforeunload", warn);
   }, [busy]);
 
+  const refreshRecent = useCallback(async () => {
+    setRecentLoading(true);
+    try {
+      setRecent(await loadRecent());
+    } catch {
+      setRecent(null);
+    } finally {
+      setRecentLoading(false);
+    }
+  }, [loadRecent]);
+
+  useEffect(() => {
+    if (open && !loaded && !report) void refreshRecent();
+  }, [open, loaded, report, refreshRecent]);
+
+  const resetMatch = () => {
+    setMatches(null);
+    setMatching(null);
+    setMatchError(null);
+    setOptions({ existing: null, createNew: true, missing: "keep" });
+    setChoices({});
+    setRequiredError(false);
+    setMissing({ zero: null, hide: null });
+    setMissingError(null);
+  };
+
   const reset = () => {
     setLoaded(null);
     setProblem(null);
     setRun(null);
+    setReport(null);
+    setUndoResult(null);
+    resetMatch();
     stopRef.current = false;
     if (inputRef.current) inputRef.current.value = "";
   };
@@ -145,6 +232,8 @@ export function ProductImportDialog({
     if (!file) return;
     setProblem(null);
     setRun(null);
+    setReport(null);
+    resetMatch();
     if (!/\.(csv|txt)$/i.test(file.name) && !/csv|text/i.test(file.type)) {
       setProblem("נא לבחור קובץ CSV (באקסל: קובץ ← שמירה בשם ← CSV UTF-8)");
       return;
@@ -180,39 +269,156 @@ export function ProductImportDialog({
     void readFile(event.dataTransfer.files?.[0]);
   };
 
-  /** שליחת המנות לשרת, אחת אחרי השנייה — מההתחלה או מהמקום שבו נעצרנו */
-  const runImport = async (from: Run | null) => {
+  /** בדיקה מול המוצרים בחנות — במנות של עד 400 שורות (קריאה בלבד) */
+  const runMatch = async () => {
     if (!loaded) return;
-    const { plan, table, fileName } = loaded;
+    const rows = loaded.prepared.rows;
+    setMatchError(null);
+    setMatching({ done: 0, total: rows.length });
+    const found = new Map<number, MatchRow>();
+    try {
+      for (let start = 0; start < rows.length; start += MATCH_CHUNK) {
+        const chunk = rows.slice(start, start + MATCH_CHUNK);
+        const result = await matchBatch({ data: { rows: chunk.map(matchInput) } });
+        setTiers(result.tiers);
+        for (const row of result.rows) found.set(row.row, row);
+        setMatching({ done: Math.min(rows.length, start + chunk.length), total: rows.length });
+      }
+      setMatches(found);
+      setMatching(null);
+      window.setTimeout(() => reviewRef.current?.querySelector<HTMLElement>("h3")?.focus(), 50);
+    } catch (error) {
+      setMatching(null);
+      setMatchError(errorText(error, "הבדיקה מול החנות נכשלה — נסו שוב"));
+    }
+  };
+
+  const plan = useMemo(
+    () =>
+      loaded && matches
+        ? planDecisions(loaded.prepared.rows, matches, { createNew: options.createNew }, choices)
+        : null,
+    [loaded, matches, options.createNew, choices],
+  );
+  const summary = useMemo(
+    () =>
+      plan
+        ? summarizePlan(plan, {
+            existing: options.existing ?? "none",
+            createNew: options.createNew,
+            missing: options.missing,
+          })
+        : null,
+    [plan, options],
+  );
+  const presentKey = useMemo(() => (plan ? presentProductIds(plan).sort().join(",") : ""), [plan]);
+
+  // כמה מוצרים בחנות לא בקובץ (לאיפוס / להסתרה) — מתעדכן כשהבחירות לשורות משתנות
+  useEffect(() => {
+    if (!plan) return;
+    let cancelled = false;
+    const present = presentKey ? presentKey.split(",") : [];
+    setMissingLoading(true);
+    setMissingError(null);
+    Promise.all([
+      missingCount({ data: { present, missing: "zero" } }),
+      missingCount({ data: { present, missing: "hide" } }),
+    ])
+      .then(([zero, hide]) => {
+        if (!cancelled) setMissing({ zero, hide });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setMissingError(errorText(error, "לא הצלחנו לספור את המוצרים שלא בקובץ"));
+      })
+      .finally(() => {
+        if (!cancelled) setMissingLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- presentKey מייצג את plan
+  }, [presentKey, matches]);
+
+  const missingConfirm =
+    options.missing === "zero" ? missing.zero : options.missing === "hide" ? missing.hide : null;
+  const canRun =
+    plan !== null &&
+    !busy &&
+    (options.missing === "keep" ||
+      (missingConfirm !== null && !missingLoading && missingError === null));
+
+  const showReport = async (importId: string) => {
+    setReportLoading(true);
+    try {
+      setReport(await loadReport({ data: { importId } }));
+    } catch (error) {
+      toast.error(errorText(error, "הדוח לא נטען"));
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  /** שליחת המנות לשרת, אחת אחרי השנייה — מההתחלה או מהמקום שבו נעצרנו; בסוף — סיום ודוח */
+  const runImport = async (from: Run | null) => {
+    if (!loaded || !plan) return;
+    if (!options.existing) {
+      setRequiredError(true);
+      return;
+    }
+    const { plan: batches, table, fileName } = loaded;
     stopRef.current = false;
-    let state: Run = from
-      ? { ...from, status: "running", error: null }
-      : {
+    let state: Run;
+    if (from) {
+      state = { ...from, status: "running", error: null };
+    } else {
+      try {
+        const begun = await beginImport({
+          data: {
+            fileName,
+            options: {
+              existing: options.existing,
+              createNew: options.createNew,
+              missing: options.missing,
+            },
+            expectedRows: plan.length,
+          },
+        });
+        state = {
+          importId: begun.importId,
           status: "running",
           nextBatch: 0,
           doneProducts: 0,
-          summary: emptyImportSummary(),
+          summary: emptySyncSummary(),
           error: null,
-          startedAt: Date.now(),
           avgBatchMs: 0,
           batchesDone: 0,
         };
+      } catch (error) {
+        toast.error(errorText(error, "הייבוא לא התחיל"));
+        return;
+      }
+    }
     setRun(state);
+    const decisions = new Map(plan.map((p) => [p.item.row, p.decision]));
 
-    while (state.nextBatch < plan.length) {
+    while (state.nextBatch < batches.length) {
       if (stopRef.current) {
         state = { ...state, status: "stopped" };
         break;
       }
-      const batch = plan[state.nextBatch]!;
+      const batch = batches[state.nextBatch]!;
+      const firstRow = batch.start + 2;
+      const lastRow = batch.end + 1;
       const started = Date.now();
       try {
-        const result = await importBatch({
+        const result = await applyBatch({
           data: {
+            importId: state.importId,
             headers: table.headers,
             rows: table.rows.slice(batch.start, batch.end),
-            firstRow: batch.start + 2,
+            firstRow,
             fileName,
+            decisions: [...decisions.values()].filter((d) => d.row >= firstRow && d.row <= lastRow),
           },
         });
         const took = Date.now() - started;
@@ -221,63 +427,61 @@ export function ProductImportDialog({
           ...state,
           nextBatch: state.nextBatch + 1,
           doneProducts: state.doneProducts + batch.products,
-          summary: mergeImportSummary(state.summary, result),
+          summary: mergeSyncSummary(state.summary, result),
           avgBatchMs: (state.avgBatchMs * state.batchesDone + took) / batchesDone,
           batchesDone,
         };
-        if (result.limitReached) {
-          // מגבלת החבילה — אין טעם לשלוח את השאר
-          const rest = plan.slice(state.nextBatch);
-          const restProducts = rest.reduce((sum, b) => sum + b.products, 0);
-          if (restProducts > 0) {
-            state.summary = {
-              ...state.summary,
-              total: state.summary.total + restProducts,
-              failed: state.summary.failed + restProducts,
-              errors: [
-                ...state.summary.errors,
-                {
-                  row: rest[0]!.start + 2,
-                  name: "",
-                  message: `${he(restProducts)} המוצרים הבאים בקובץ לא נשלחו — הגעתם למגבלת המוצרים של החבילה`,
-                },
-              ],
-            };
-          }
-          state = {
-            ...state,
-            nextBatch: plan.length,
-            doneProducts: state.doneProducts + restProducts,
-          };
-        }
         setRun(state);
       } catch (error) {
-        state = {
-          ...state,
-          status: "failed",
-          error: error instanceof Error ? error.message : "הייבוא נכשל",
-        };
+        state = { ...state, status: "failed", error: errorText(error, "הייבוא נכשל") };
         break;
       }
     }
+
     if (state.status === "running" || state.status === "stopping") {
-      state = {
-        ...state,
-        status: stopRef.current && state.nextBatch < plan.length ? "stopped" : "done",
-      };
+      if (stopRef.current && state.nextBatch < batches.length) {
+        state = { ...state, status: "stopped" };
+      } else {
+        try {
+          await finishImport({
+            data: {
+              importId: state.importId,
+              confirmMissing: options.missing === "keep" ? null : (missingConfirm?.count ?? null),
+            },
+          });
+          state = { ...state, status: "done" };
+        } catch (error) {
+          state = { ...state, status: "failed", error: errorText(error, "סיום הייבוא נכשל") };
+        }
+      }
     }
     setRun(state);
 
-    const { summary } = state;
-    if (summary.newCategories.length > 0) await refreshCategories().catch(() => undefined);
-    if (summary.created > 0) await Promise.resolve(onImported()).catch(() => undefined);
+    const { summary: total } = state;
+    if (total.newCategories.length > 0) await refreshCategories().catch(() => undefined);
+    if (total.created > 0 || total.updated > 0)
+      await Promise.resolve(onImported()).catch(() => undefined);
     if (state.status === "done") {
-      if (summary.created > 0) toast.success(`${he(summary.created)} מוצרים נוספו לקטלוג`);
-      else toast.warning("לא נוספו מוצרים — ראו את הפירוט");
+      toast.success(
+        `הייבוא הסתיים: ${he(total.created)} נוספו, ${he(total.updated)} עודכנו${total.failed > 0 ? `, ${he(total.failed)} לא בוצעו` : ""}`,
+      );
+      await showReport(state.importId);
     } else if (state.status === "failed") {
       toast.error(state.error ?? "הייבוא נעצר");
     } else {
       toast.info("הייבוא נעצר — אפשר להמשיך מאותה נקודה");
+    }
+  };
+
+  /** סיום יבוא שנעצר — בלי לשנות מוצרים שלא בקובץ */
+  const finishStopped = async () => {
+    if (!run) return;
+    try {
+      await finishImport({ data: { importId: run.importId, confirmMissing: null } });
+      setRun({ ...run, status: "done" });
+      await showReport(run.importId);
+    } catch (error) {
+      toast.error(errorText(error, "סיום הייבוא נכשל"));
     }
   };
 
@@ -286,22 +490,27 @@ export function ProductImportDialog({
     setRun((current) => (current ? { ...current, status: "stopping" } : current));
   };
 
-  const downloadReport = () => {
-    if (!run) return;
-    const { summary } = run;
-    const lines = [
-      ["שורה בקובץ", "מוצר", "מה קרה"].map(csvCell).join(","),
-      ...summary.errors.map((e) => [e.row, e.name, e.message].map(csvCell).join(",")),
-      ...summary.warnings.map((w) => [w.row, w.name, w.message].map(csvCell).join(",")),
-      ...summary.skipped.map((s) => [s.row, "", s.reason].map(csvCell).join(",")),
-    ];
-    downloadText("import-report.csv", lines.join("\r\n"));
+  const undo = async () => {
+    if (!report) return;
+    setUndoing(true);
+    try {
+      const result = await undoImport({ data: { importId: report.import.id } });
+      setUndoResult(result);
+      toast.success("היבוא בוטל");
+      await Promise.resolve(onImported()).catch(() => undefined);
+      await refreshCategories().catch(() => undefined);
+      setReport(await loadReport({ data: { importId: report.import.id } }));
+    } catch (error) {
+      toast.error(errorText(error, "הביטול נכשל"));
+    } finally {
+      setUndoing(false);
+    }
   };
 
   const prepared = loaded?.prepared ?? null;
   const rowCount = prepared?.rows.length ?? 0;
   const room = maxProducts !== null ? Math.max(0, maxProducts - productCount) : null;
-  const overLimit = room !== null && rowCount > room;
+  const overLimit = room !== null && summary !== null && summary.create > room;
   const tooMany = rowCount > CSV_MAX_ROWS;
   const canImport =
     prepared !== null && prepared.missing.length === 0 && rowCount > 0 && !tooMany && !busy;
@@ -315,7 +524,6 @@ export function ProductImportDialog({
         }),
       )
     : [];
-  const finished = run !== null && !busy;
 
   return (
     <>
@@ -333,7 +541,7 @@ export function ProductImportDialog({
       >
         <DialogContent
           dir="rtl"
-          className="max-h-[92vh] grid-cols-[minmax(0,1fr)] overflow-y-auto text-right sm:max-w-2xl"
+          className="max-h-[92vh] grid-cols-[minmax(0,1fr)] overflow-y-auto text-right sm:max-w-3xl"
         >
           <DialogHeader className="text-right">
             <DialogTitle className="flex items-center gap-2">
@@ -341,22 +549,112 @@ export function ProductImportDialog({
               ייבוא מוצרים מקובץ CSV
             </DialogTitle>
             <DialogDescription>
-              מעבירים קטלוג שלם בבת אחת — מאקסל, מ-WooCommerce או מ-Shopify. המוצרים נוספים כמוצרים
-              חדשים; מוצר שהברקוד או המק"ט שלו כבר קיים בחנות לא נדרס. התמונות יורדות ונשמרות באתר
-              שלכם, וקטגוריות חסרות נוצרות לבד.
+              מאקסל, מ-WooCommerce או מ-Shopify. לפני הייבוא הקובץ נבדק מול המוצרים בחנות: מוצר שכבר
+              קיים (לפי ברקוד, מק"ט או שם) לא נוסף שוב — ואתם בוחרים אם לעדכן לו מלאי ומחיר. בסוף
+              מקבלים דוח שינויים, ואפשר לבטל את היבוא.
             </DialogDescription>
           </DialogHeader>
 
-          {run && busy && loaded ? (
-            <ImportProgress run={run} loaded={loaded} onStop={stop} />
-          ) : finished && run && loaded ? (
-            <ImportResult
+          {report ? (
+            <div className="space-y-4">
+              {undoResult && <UndoNotice result={undoResult} />}
+              <ImportReportView report={report} onUndo={() => void undo()} undoing={undoing} />
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button type="button" variant="outline" className="flex-1" onClick={reset}>
+                  ייבוא קובץ נוסף
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="flex-1"
+                  onClick={() => {
+                    setOpen(false);
+                    reset();
+                  }}
+                >
+                  סגירה
+                </Button>
+              </div>
+            </div>
+          ) : run && busy && loaded ? (
+            <SyncProgress run={run} loaded={loaded} onStop={stop} />
+          ) : run && run.status !== "done" && loaded ? (
+            <SyncStopped
               run={run}
               loaded={loaded}
-              onReport={downloadReport}
               onResume={() => void runImport(run)}
-              onAgain={reset}
+              onFinish={() => void finishStopped()}
             />
+          ) : reportLoading ? (
+            <p
+              className="flex items-center gap-2 py-6 text-sm text-muted-foreground"
+              aria-live="polite"
+            >
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              טוענים את דוח השינויים…
+            </p>
+          ) : plan && summary ? (
+            <div ref={reviewRef}>
+              <ImportReview
+                plan={plan}
+                summary={summary}
+                options={options}
+                onOptions={(next) => {
+                  setOptions(next);
+                  if (next.existing) setRequiredError(false);
+                }}
+                choices={choices}
+                onChoice={(row, choice) => setChoices((current) => ({ ...current, [row]: choice }))}
+                onSkipAllAmbiguous={() =>
+                  setChoices((current) => {
+                    const next = { ...current };
+                    for (const p of plan)
+                      if (p.match?.status === "ambiguous") next[p.item.row] = "skip";
+                    return next;
+                  })
+                }
+                missing={missing}
+                missingLoading={missingLoading}
+                missingError={missingError}
+                tiers={tiers}
+                requiredError={requiredError}
+                canRun={canRun}
+                onRun={() => void runImport(null)}
+                onBack={resetMatch}
+              />
+              {overLimit && room !== null && (
+                <p className="mt-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  בחבילה הבסיסית נשאר מקום ל-{he(room)} מוצרים חדשים — השאר לא יתווספו (העדכונים
+                  כן). מוצרים ללא הגבלה זמינים בחבילת פרימיום.
+                </p>
+              )}
+            </div>
+          ) : matching ? (
+            <div className="space-y-3 py-4" aria-live="polite" data-import-matching>
+              <p className="flex items-center gap-2 text-sm font-semibold">
+                <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+                בודקים את הקובץ מול המוצרים בחנות…
+              </p>
+              <div
+                role="progressbar"
+                aria-label="התקדמות הבדיקה"
+                aria-valuemin={0}
+                aria-valuemax={matching.total}
+                aria-valuenow={matching.done}
+                className="h-2 overflow-hidden rounded-full bg-secondary"
+              >
+                <div
+                  className="h-full rounded-full bg-primary transition-[width]"
+                  style={{
+                    width: `${Math.max(2, Math.round((matching.done / Math.max(1, matching.total)) * 100))}%`,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {he(matching.done)} מתוך {he(matching.total)} מוצרים. הבדיקה לא משנה שום דבר בחנות.
+              </p>
+            </div>
           ) : !loaded ? (
             <div className="space-y-4">
               <label
@@ -397,6 +695,11 @@ export function ProductImportDialog({
                   {problem}
                 </p>
               )}
+              <RecentImports
+                imports={recent}
+                loading={recentLoading}
+                onOpen={(info) => void showReport(info.id)}
+              />
               <div className="space-y-2 rounded-xl bg-secondary/50 p-4 text-sm">
                 <p className="font-semibold">העמודות בקובץ (שורה ראשונה = כותרות)</p>
                 <p className="leading-6 text-muted-foreground">
@@ -423,7 +726,7 @@ export function ProductImportDialog({
                   type="button"
                   variant="link"
                   className="h-auto p-0"
-                  onClick={() => downloadText("products-sample.csv", SAMPLE_CSV)}
+                  onClick={() => downloadCsv("products-sample.csv", SAMPLE_CSV)}
                 >
                   <Download className="size-4" />
                   הורדת קובץ לדוגמה
@@ -561,13 +864,6 @@ export function ProductImportDialog({
                   עד {he(CSV_MAX_ROWS)} מוצרים בקובץ אחד — פצלו לכמה קבצים.
                 </p>
               )}
-              {overLimit && room !== null && (
-                <p className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                  בחבילה הבסיסית נשאר מקום ל-{he(room)} מוצרים — רק הם ייובאו. מוצרים ללא הגבלה
-                  זמינים בחבילת פרימיום.
-                </p>
-              )}
               {loaded.imageCount > 0 && canImport && (
                 <p className="text-xs leading-5 text-muted-foreground">
                   הורדת התמונות לוקחת זמן (בערך שנייה לתמונה). אפשר לעצור באמצע ולהמשיך אחר כך —
@@ -575,16 +871,29 @@ export function ProductImportDialog({
                 </p>
               )}
 
+              {matchError && (
+                <p
+                  role="alert"
+                  className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive"
+                >
+                  <XCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  {matchError}
+                </p>
+              )}
               <Button
                 type="button"
                 size="lg"
                 className="w-full"
                 disabled={!canImport}
-                onClick={() => void runImport(null)}
+                onClick={() => void runMatch()}
+                data-import-check
               >
-                <Upload className="size-4" />
-                {`ייבוא ${he(rowCount)} מוצרים`}
+                <Search className="size-4" aria-hidden="true" />
+                {`בדיקה מול המוצרים בחנות (${he(rowCount)} מוצרים בקובץ)`}
               </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                הבדיקה רק קוראת — שום דבר לא משתנה עד שבוחרים ומאשרים.
+              </p>
             </div>
           )}
         </DialogContent>
@@ -594,7 +903,7 @@ export function ProductImportDialog({
 }
 
 /** בזמן הייבוא: סרגל התקדמות, מונים ועצירה */
-function ImportProgress({ run, loaded, onStop }: { run: Run; loaded: Loaded; onStop: () => void }) {
+function SyncProgress({ run, loaded, onStop }: { run: Run; loaded: Loaded; onStop: () => void }) {
   const totalProducts = loaded.prepared.rows.length;
   const percent =
     totalProducts > 0 ? Math.min(100, Math.round((run.doneProducts / totalProducts) * 100)) : 0;
@@ -632,7 +941,7 @@ function ImportProgress({ run, loaded, onStop }: { run: Run; loaded: Loaded; onS
         <p className="text-xs text-muted-foreground">
           {he(run.doneProducts)} מתוך {he(totalProducts)} מוצרים
           {current && current.images > 0 && firstRow !== null
-            ? ` · מורידים ${he(current.images)} תמונות (שורות ${firstRow}–${lastRow})`
+            ? ` · שורות ${firstRow}–${lastRow} (כולל תמונות למוצרים חדשים)`
             : firstRow !== null
               ? ` · שורות ${firstRow}–${lastRow}`
               : ""}
@@ -642,18 +951,19 @@ function ImportProgress({ run, loaded, onStop }: { run: Run; loaded: Loaded; onS
 
       <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
         <Counter label="נוספו" value={run.summary.created} tone="emerald" />
-        <Counter label="תמונות נשמרו" value={run.summary.images.saved} />
+        <Counter label="עודכנו" value={run.summary.updated} tone="emerald" />
+        <Counter label="ללא שינוי / דולגו" value={run.summary.unchanged + run.summary.skipped} />
         <Counter
-          label="תמונות דולגו"
-          value={run.summary.images.failed}
-          tone={run.summary.images.failed > 0 ? "amber" : undefined}
+          label="לא בוצעו"
+          value={run.summary.failed}
+          tone={run.summary.failed > 0 ? "amber" : undefined}
         />
-        <Counter label="קטגוריות חדשות" value={run.summary.newCategories.length} />
       </div>
-
-      {run.summary.failed > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {he(run.summary.failed)} שורות לא נוספו עד עכשיו — הפירוט בסוף.
+      {run.summary.images.saved + run.summary.images.failed > 0 && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <ImageIcon className="size-3.5" aria-hidden="true" />
+          {he(run.summary.images.saved)} תמונות נשמרו
+          {run.summary.images.failed > 0 ? ` · ${he(run.summary.images.failed)} דולגו` : ""}
         </p>
       )}
 
@@ -669,6 +979,76 @@ function ImportProgress({ run, loaded, onStop }: { run: Run; loaded: Loaded; onS
           <Square className="size-3.5" aria-hidden="true" />
           עצירה
         </Button>
+      </div>
+    </div>
+  );
+}
+
+/** הייבוא נעצר (בבקשה או בתקלה): להמשיך מאותה נקודה, או לסיים בלי לגעת במוצרים שלא בקובץ */
+function SyncStopped({
+  run,
+  loaded,
+  onResume,
+  onFinish,
+}: {
+  run: Run;
+  loaded: Loaded;
+  onResume: () => void;
+  onFinish: () => void;
+}) {
+  const resumeRow = loaded.plan[run.nextBatch] ? loaded.plan[run.nextBatch]!.start + 2 : null;
+  const leftProducts = loaded.plan
+    .slice(run.nextBatch)
+    .reduce((sum, batch) => sum + batch.products, 0);
+  const atEnd = run.nextBatch >= loaded.plan.length;
+  return (
+    <div className="space-y-4" data-import-result={run.status}>
+      <div
+        className={cn(
+          "space-y-2 rounded-xl border-2 p-3 text-sm",
+          run.status === "failed"
+            ? "border-destructive/40 bg-destructive/5"
+            : "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30",
+        )}
+      >
+        <p className="flex items-start gap-2 font-semibold">
+          {run.status === "failed" ? (
+            <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
+          ) : (
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+          )}
+          {run.status === "failed"
+            ? `הייבוא נעצר${resumeRow ? ` בשורה ${resumeRow}` : ""}: ${run.error ?? "תקלה"}`
+            : `הייבוא נעצר לפני שורה ${resumeRow}`}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {atEnd
+            ? "כל השורות נשלחו — נשאר רק הסיום."
+            : `נשארו ${he(leftProducts)} מוצרים. מה שכבר יובא נשמר — ההמשך מתחיל מהשורה הבאה, בלי לייבא פעמיים.`}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" onClick={onResume}>
+            <Play className="size-4" aria-hidden="true" />
+            {atEnd ? "לנסות לסיים שוב" : `המשך הייבוא משורה ${resumeRow}`}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={onFinish}>
+            <CheckCircle2 className="size-4" aria-hidden="true" />
+            לסיים כאן ולראות דוח
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          "לסיים כאן" לא משנה מוצרים שלא בקובץ (איפוס / הסתרה נעשים רק אחרי ייבוא מלא).
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+        <Counter label="נוספו" value={run.summary.created} tone="emerald" />
+        <Counter label="עודכנו" value={run.summary.updated} tone="emerald" />
+        <Counter label="ללא שינוי / דולגו" value={run.summary.unchanged + run.summary.skipped} />
+        <Counter
+          label="לא בוצעו"
+          value={run.summary.failed}
+          tone={run.summary.failed > 0 ? "amber" : undefined}
+        />
       </div>
     </div>
   );
@@ -704,180 +1084,6 @@ function Counter({
         {he(value)}
       </p>
       <p className="text-xs text-muted-foreground">{label}</p>
-    </div>
-  );
-}
-
-function ImportResult({
-  run,
-  loaded,
-  onReport,
-  onResume,
-  onAgain,
-}: {
-  run: Run;
-  loaded: Loaded;
-  onReport: () => void;
-  onResume: () => void;
-  onAgain: () => void;
-}) {
-  const { summary } = run;
-  const issues = summary.errors.length + summary.warnings.length + summary.skipped.length;
-  const notAdded = Math.max(0, summary.failed - summary.duplicates);
-  const canResume = run.status !== "done" && run.nextBatch < loaded.plan.length;
-  const resumeRow = canResume ? loaded.plan[run.nextBatch]!.start + 2 : null;
-  const leftProducts = loaded.plan
-    .slice(run.nextBatch)
-    .reduce((sum, batch) => sum + batch.products, 0);
-
-  return (
-    <div className="space-y-4" data-import-result={run.status}>
-      {canResume && (
-        <div
-          className={cn(
-            "space-y-2 rounded-xl border-2 p-3 text-sm",
-            run.status === "failed"
-              ? "border-destructive/40 bg-destructive/5"
-              : "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30",
-          )}
-        >
-          <p className="flex items-start gap-2 font-semibold">
-            {run.status === "failed" ? (
-              <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
-            ) : (
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
-            )}
-            {run.status === "failed"
-              ? `הייבוא נעצר בשורה ${resumeRow}: ${run.error ?? "תקלה"}`
-              : `הייבוא נעצר לפני שורה ${resumeRow}`}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            נשארו {he(leftProducts)} מוצרים. מה שכבר נוסף נשמר — ההמשך מתחיל מהשורה הבאה בקובץ, בלי
-            לייבא פעמיים.
-          </p>
-          <Button type="button" size="sm" onClick={onResume}>
-            <Play className="size-4" aria-hidden="true" />
-            המשך הייבוא משורה {resumeRow}
-          </Button>
-        </div>
-      )}
-
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-xl bg-emerald-50 p-3 dark:bg-emerald-950/40">
-          <p
-            className="text-2xl font-black text-emerald-700 dark:text-emerald-300"
-            data-import-created
-          >
-            {he(summary.created)}
-          </p>
-          <p className="text-xs text-emerald-800 dark:text-emerald-200">נוספו</p>
-        </div>
-        <div className="rounded-xl bg-secondary p-3">
-          <p className="text-2xl font-black">{he(summary.duplicates)}</p>
-          <p className="text-xs text-muted-foreground">כבר קיימים</p>
-        </div>
-        <div className={cn("rounded-xl p-3", notAdded > 0 ? "bg-destructive/10" : "bg-secondary")}>
-          <p className={cn("text-2xl font-black", notAdded > 0 && "text-destructive")}>
-            {he(notAdded)}
-          </p>
-          <p className="text-xs text-muted-foreground">לא נוספו</p>
-        </div>
-      </div>
-
-      {(summary.images.saved > 0 || summary.images.failed > 0) && (
-        <div className="flex flex-wrap gap-2 text-sm" data-import-images>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1">
-            <ImageIcon className="size-4 text-emerald-600" aria-hidden="true" />
-            {he(summary.images.saved)} תמונות נשמרו באתר
-          </span>
-          {summary.images.failed > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-              <ImageOff className="size-4" aria-hidden="true" />
-              {he(summary.images.failed)} תמונות דולגו (קישור שבור / לא זמין) — אפשר להוסיף אותן
-              בעריכת המוצר
-            </span>
-          )}
-        </div>
-      )}
-
-      {summary.limitReached && (
-        <p className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          הגעתם למגבלת המוצרים של החבילה הבסיסית — שאר המוצרים לא נוספו. מוצרים ללא הגבלה זמינים
-          בחבילת פרימיום.
-        </p>
-      )}
-      {summary.newCategories.length > 0 && (
-        <p
-          className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-sm text-sky-900 dark:bg-sky-950/40 dark:text-sky-100"
-          data-import-new-categories
-        >
-          <FolderPlus className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          נוצרו קטגוריות חדשות: {summary.newCategories.join(", ")}
-        </p>
-      )}
-      {summary.skuReplaced > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {summary.skuReplaced} מוצרים קיבלו מק"ט פנימי חדש (מק"ט בחנות = 8 ספרות). המק"ט המקורי לא
-          נשמר — אפשר להוסיף אותו לתיאור או כברקוד.
-        </p>
-      )}
-
-      {issues > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold">פירוט ({issues})</p>
-            <Button type="button" variant="outline" size="sm" onClick={onReport}>
-              <Download className="size-4" />
-              הורדת הדוח
-            </Button>
-          </div>
-          <ul className="max-h-60 space-y-1 overflow-y-auto rounded-xl border p-2 text-sm">
-            {summary.errors.map((issue, index) => (
-              <li
-                key={`e${index}`}
-                className="flex gap-2 rounded-md px-2 py-1 hover:bg-secondary/50"
-              >
-                <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
-                <span className="min-w-0 break-words">
-                  <span className="text-muted-foreground">שורה {issue.row}</span>
-                  {issue.name ? ` · ${issue.name}` : ""} — {issue.message}
-                </span>
-              </li>
-            ))}
-            {summary.warnings.map((issue, index) => (
-              <li
-                key={`w${index}`}
-                className="flex gap-2 rounded-md px-2 py-1 hover:bg-secondary/50"
-              >
-                <AlertTriangle
-                  className="mt-0.5 size-4 shrink-0 text-amber-600"
-                  aria-hidden="true"
-                />
-                <span className="min-w-0 break-words">
-                  <span className="text-muted-foreground">שורה {issue.row}</span>
-                  {issue.name ? ` · ${issue.name}` : ""} — נוסף, אבל: {issue.message}
-                </span>
-              </li>
-            ))}
-            {summary.skipped.map((skip, index) => (
-              <li
-                key={`s${index}`}
-                className="flex gap-2 rounded-md px-2 py-1 text-muted-foreground hover:bg-secondary/50"
-              >
-                <span className="mt-0.5 size-4 shrink-0 text-center">·</span>
-                <span>
-                  שורה {skip.row} — {skip.reason}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <Button type="button" variant="outline" className="w-full" onClick={onAgain}>
-        ייבוא קובץ נוסף
-      </Button>
     </div>
   );
 }
