@@ -3,10 +3,12 @@
 // (בוחרים רק תאריך הגעה — העזיבה לפי מספר הלילות בחבילה) והזמנה.
 import { Link, useParams } from "@tanstack/react-router";
 import { ArrowRight, CalendarDays, Home, Images, Moon, Sparkles, Users } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AvailabilityCalendar, type DateRange } from "../components/AvailabilityCalendar";
 import { Lightbox } from "../components/Lightbox";
 import { Photo } from "../components/Photo";
+import { checkoutParams, siteItem } from "../consent/events";
+import { gaEvent } from "../consent/ga";
 import { useCopy } from "../copy";
 import { money, stayText } from "../lib/format";
 import { findPackage, packageImages, packagePeriod, packageUnit } from "../lib/packages";
@@ -27,6 +29,14 @@ export function PackagePage() {
   const [open, setOpen] = useState<number | null>(null);
   const [range, setRange] = useState<DateRange>({ from: null, to: null });
   const special = pkg.kind === "special";
+  // GA4 (רק אחרי הסכמה — consent/ga.ts): צפייה בחבילה, לפי השם והמחיר הציבוריים
+  useEffect(() => {
+    gaEvent(
+      "view_item",
+      checkoutParams([siteItem(pkg, "package", pkg.price)], pkg.price, site.business.currency),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pkg.slug]);
 
   return (
     <article data-testid="package-page">

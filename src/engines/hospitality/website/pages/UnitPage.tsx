@@ -2,12 +2,14 @@
 // מתקנים, תנאי השהייה של המתחם, מיקום — ובצד: "החל מ-", מינימום לילות ולוח זמינות.
 import { Link, useParams } from "@tanstack/react-router";
 import { ArrowRight, Bath, BedDouble, DoorOpen, Images, Ruler, Users } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { PublicUnit } from "../../types/website";
 import { AvailabilityCalendar, type DateRange } from "../components/AvailabilityCalendar";
 import { Lightbox } from "../components/Lightbox";
 import { Photo } from "../components/Photo";
 import { PriceFrom } from "../components/PriceFrom";
+import { checkoutParams, siteItem } from "../consent/events";
+import { gaEvent } from "../consent/ga";
 import { useCopy } from "../copy";
 import { findUnit, stayText } from "../lib/format";
 import { findType } from "../lib/listing";
@@ -55,6 +57,16 @@ export function UnitPage({
         : "";
   const amenities = uniqueAmenities([...unit.amenities, ...members.flatMap((m) => m.amenities)]);
   const rooms = groupBeds(unit, members);
+  // GA4 (רק אחרי הסכמה — consent/ga.ts): צפייה ביחידה / בסוג החדר, לפי השם והמחיר הציבוריים
+  const itemSlug = roomType?.type.slug ?? unit.slug;
+  useEffect(() => {
+    const item = roomType
+      ? siteItem(roomType.type, "room_type", fromPrice)
+      : siteItem(unit, "unit", fromPrice);
+    gaEvent("view_item", checkoutParams([item], fromPrice, site.business.currency));
+    // פעם אחת לכל יחידה / סוג שמוצגים (לא בכל שינוי תאריכים בלוח)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemSlug]);
 
   return (
     <article>

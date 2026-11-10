@@ -281,6 +281,56 @@ test("accept from the banner loads GA4; the choice is remembered on the next pag
   await expect.poll(() => gtagLoads(hits)).toBe(2);
 });
 
+test("measurement events: nothing before the choice, then only this page's events — clean address, no personal data", async ({
+  page,
+  context,
+}) => {
+  test.skip(test.info().project.name === "mobile", "desktop flow");
+  const hits = await watchGoogle(context);
+  const banner = page.getByTestId("consent-banner");
+  // עמוד ראשון (עם # "אישי" ושאילתה פרטית), ואז מעבר בתוך האתר לעמוד היחידה — לפני החלטה
+  await page.goto(url("/stay?ref=private#t=secret-token"));
+  await expect(banner).toBeVisible({ timeout: 20_000 });
+  await page.locator('a[href$="/stay/units/consent-u"]').first().click();
+  await expect(page).toHaveURL(/\/stay\/units\/consent-u$/);
+  await page.waitForLoadState("networkidle");
+  expect(hits).toEqual([]);
+  expect(await dataLayer(page)).toBeNull();
+
+  await banner.getByRole("button", { name: "אישור", exact: true }).click();
+  await expect.poll(() => gtagLoads(hits)).toBe(1);
+  const unitUrl = `http://${host}:${PORT}/stay/units/consent-u`;
+  const sent = async () =>
+    (JSON.parse((await dataLayer(page)) ?? "[]") as unknown[][]).filter((a) => a[0] === "event");
+  // רק של העמוד הנוכחי: הצפייה, ואחריה הצפייה ביחידה (שום דבר מהעמוד הראשון)
+  await expect
+    .poll(async () => (await sent()).map((e) => e[1]))
+    .toEqual(["page_view", "view_item"]);
+  const [view, item] = await sent();
+  expect(view![2]).toMatchObject({ page_location: unitUrl });
+  expect(item![2]).toMatchObject({
+    page_location: unitUrl,
+    currency: "ILS",
+    value: 600,
+    items: [{ item_id: "consent-u", item_name: "צימר האלה", item_category: "unit", price: 600 }],
+  });
+
+  // קישור קשר (כאן — נוסף לעמוד): רק סוג הקישור ומיקומו, בלי המספר
+  await page.evaluate(() => {
+    const a = document.createElement("a");
+    a.href = "https://wa.me/972500000000?text=secret-token";
+    a.textContent = "WhatsApp";
+    a.id = "e2e-wa";
+    a.addEventListener("click", (e) => e.preventDefault());
+    document.querySelector("main")?.appendChild(a);
+  });
+  await page.locator("#e2e-wa").click();
+  await expect.poll(async () => (await sent()).map((e) => e[1])).toContain("click_whatsapp");
+  const click = (await sent()).find((e) => e[1] === "click_whatsapp");
+  expect(click![2]).toEqual({ page_location: unitUrl, link_location: "page" });
+  expect((await dataLayer(page)) ?? "").not.toMatch(/secret-token|ref=private|972500000000/);
+});
+
 test("@mobile phone: the banner sits above the action bar, nothing sideways, accessible", async ({
   page,
 }) => {

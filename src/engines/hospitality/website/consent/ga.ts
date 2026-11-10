@@ -7,7 +7,8 @@
 // האירועים (gaEvent): נשלחים רק אחרי אישור; לפני החלטה — נשמרים בזיכרון הדף (עד 20, רק של העמוד הנוכחי)
 // ונשלחים אם הגולש מאשר בעמוד הזה; סירוב / ביטול / אתר בלי מדידה — נמחקים ולא נשמר כלום. צפייה בעמוד —
 // אנחנו שולחים (send_page_view: false), עם כתובת בלי ה-# ובלי השאילתה (רק utm_*) — הקישורים האישיים לא
-// מגיעים ל-Google. בלי Google signals ובלי התאמה אישית של פרסום.
+// מגיעים ל-Google. גם כל אירוע אחר נשלח עם הכתובת הנקייה של העמוד שבו קרה (אחרת, אחרי מעבר עמוד באתר,
+// הוא היה מיוחס לעמוד הראשון). בלי Google signals ובלי התאמה אישית של פרסום.
 import { analyticsCookieNames } from "./consent";
 import { cleanPageLocation } from "./events";
 
@@ -21,8 +22,14 @@ let loaded: string | null = null;
 let consented = false;
 /** אין מה לשמור: האתר בלי מדידה, או שהגולש סירב / ביטל */
 let closed = true;
-const pending: [string, Record<string, unknown>][] = [];
+/** אירועים שמחכים להחלטה — כל אחד עם העמוד שבו קרה (מעבר עמוד מוחק את אלה של העמוד הקודם) */
+const pending: { path: string; name: string; params: Record<string, unknown> }[] = [];
 const PENDING_MAX = 20;
+
+/** הכתובת הנקייה של העמוד — בכל אירוע (אם האירוע לא קבע אחרת) */
+function withPage(params: Record<string, unknown>): Record<string, unknown> {
+  return { page_location: cleanPageLocation(window.location.href), ...params };
+}
 
 function gtagOf(w: GaWindow): Gtag {
   w.dataLayer = w.dataLayer ?? [];
@@ -76,8 +83,10 @@ export function grantAnalytics(measurementId: string): void {
   flush(gtag);
 }
 
+/** שליחת מה שנשמר — רק של העמוד הנוכחי */
 function flush(gtag: Gtag) {
-  for (const [name, params] of pending.splice(0)) gtag("event", name, params);
+  const path = window.location.pathname;
+  for (const e of pending.splice(0)) if (e.path === path) gtag("event", e.name, e.params);
 }
 
 /**
@@ -98,22 +107,31 @@ export function armAnalytics(available: boolean): void {
 export function gaEvent(name: string, params: Record<string, unknown> = {}): void {
   if (typeof window === "undefined") return;
   const w = window as GaWindow;
+  const full = withPage(params);
   if (consented && loaded && w.gtag) {
-    w.gtag("event", name, params);
+    w.gtag("event", name, full);
     return;
   }
   if (closed || pending.length >= PENDING_MAX) return;
-  pending.push([name, params]);
+  pending.push({ path: window.location.pathname, name, params: full });
 }
 
-/** צפייה בעמוד (גם במעבר בין עמודי האתר): מה שנשמר לעמוד הקודם — נמחק */
+/**
+ * צפייה בעמוד (גם במעבר בין עמודי האתר): מה שנשמר לעמוד קודם — נמחק; אירוע שכבר נשמר לעמוד הזה
+ * (למשל view_item שקדם לצפייה) — נשאר, אחרי הצפייה
+ */
 export function gaPageView(): void {
   if (typeof window === "undefined") return;
-  if (!consented) pending.length = 0;
-  gaEvent("page_view", {
-    page_location: cleanPageLocation(window.location.href),
-    page_title: document.title.slice(0, 120),
-  });
+  const view = { page_title: document.title.slice(0, 120) };
+  if (consented) {
+    gaEvent("page_view", view);
+    return;
+  }
+  const path = window.location.pathname;
+  for (let i = pending.length - 1; i >= 0; i--) if (pending[i]!.path !== path) pending.splice(i, 1);
+  if (closed) return;
+  pending.unshift({ path, name: "page_view", params: withPage(view) });
+  if (pending.length > PENDING_MAX) pending.length = PENDING_MAX;
 }
 
 /** ביטול מדידה: Consent Mode ל-denied, ומחיקת ה-Cookies של המדידה מהכתובת הזו */

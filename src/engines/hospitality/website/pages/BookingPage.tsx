@@ -27,6 +27,8 @@ import { CAPTCHA_RETRY, TRAP_FIELD } from "../../security/messages";
 import type { PublicUnit } from "../../types/website";
 import { AvailabilityCalendar, type DateRange } from "../components/AvailabilityCalendar";
 import { Photo } from "../components/Photo";
+import { checkoutParams, siteItem, type GaItem } from "../consent/events";
+import { gaEvent } from "../consent/ga";
 import { useCopy } from "../copy";
 import { CandlesIcon } from "../components/ShabbatBadge";
 import { addDays, nightsBetween } from "../lib/dates";
@@ -957,6 +959,23 @@ function GuestForm({
   // נגישות: הכפתור "המשך" נעלם במעבר לשלב הזה — הפוקוס עובר לכותרת השלב (קורא מסך מקריא אותה)
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus(), []);
+  // GA4 (רק אחרי הסכמה — consent/ga.ts): תחילת הזמנה ובקשה שנשלחה — הפריטים, הסכום והמטבע בלבד,
+  // בלי פרטי האורח ובלי מספר ההזמנה
+  const ga = useMemo(() => {
+    const items: GaItem[] = pkg
+      ? [siteItem(pkg, "package", Number(quote.total))]
+      : [
+          roomType
+            ? siteItem(roomType.type, "room_type", Number(quote.total))
+            : siteItem(unit, "unit", Number(quote.total)),
+          ...extras.map((x) => siteItem(x.unit, "unit", Number(x.quote.total))),
+        ];
+    const total = Number(quote.total) + extras.reduce((sum, x) => sum + Number(x.quote.total), 0);
+    return checkoutParams(items, total, quote.currency);
+  }, [pkg, roomType, unit, extras, quote.total, quote.currency]);
+  // פעם אחת בכל כניסה לשלב הפרטים
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => gaEvent("begin_checkout", ga), []);
   const send = useMutation({
     mutationFn: async () => {
       const captcha = await bot.solution();
@@ -1012,6 +1031,7 @@ function GuestForm({
         : hospitalitySiteRequestBooking({ data: { unitId: unit.id, ...guest } });
     },
     onSuccess: (r) => {
+      gaEvent("generate_lead", ga);
       if ("group_id" in r) {
         const group = r as GroupRequestResult;
         const first = group.bookings[0];

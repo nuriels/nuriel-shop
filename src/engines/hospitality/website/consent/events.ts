@@ -39,7 +39,9 @@ export function contactMethodOf(href: string | null | undefined): ContactMethod 
   if (h.startsWith("mailto:")) return "email";
   if (
     h.startsWith("whatsapp:") ||
-    /^https?:\/\/(wa\.me|api\.whatsapp\.com|chat\.whatsapp\.com|web\.whatsapp\.com)(\/|$|\?)/.test(h)
+    /^https?:\/\/(wa\.me|api\.whatsapp\.com|chat\.whatsapp\.com|web\.whatsapp\.com)(\/|$|\?)/.test(
+      h,
+    )
   )
     return "whatsapp";
   return null;
