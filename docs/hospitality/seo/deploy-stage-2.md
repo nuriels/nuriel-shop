@@ -1,5 +1,8 @@
 # Google SEO — שלב 2: פריסה לייצור (Hospitality בלבד)
 
+> **✅ נפרס ב-10.11.2026** — S, M, U הורצו בדיוק כפי שמופיעות כאן (M ו-U בגרסה שמדפיסה את המצב ו-`STOPPED`),
+> כל הפלטים תקינים, ובדיקות V: 0 קריטיים בנופי דורית, 0 הבדלים בחנות ובפורטל (ראו "V — התוצאות בפועל").
+
 **הקוד:** `de766ac` בענף `hospitality/seo` (נבנה מ-`6dd034b`, הגרסה שרצה היום בייצור).
 **מיגרציה:** אחת — `20261110200000_hosp_unit_seo.sql` (שתי פונקציות חדשות, בלי שינוי בטבלאות ובלי נתונים).
 **כל פקודה בנפרד, ואחרי אישור.** מיגרציה, בנייה והפעלה מחדש — לא באותה פקודה.
@@ -52,10 +55,10 @@ cd /root/nuriel-shop-git && test -z "$(git status --porcelain --untracked-files=
 ## ⛔ אישור 2 — M: המיגרציה (✏️ המסד; שתי פונקציות חדשות בלבד)
 
 ```bash
-cd /root/nuriel-shop-git && f=20261110200000_hosp_unit_seo && [ "$(git rev-parse --short=7 HEAD)" = de766ac ] && [ "$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied")" = 177 ] && echo "code de766ac, 177 applied: ok" && docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < supabase/migrations/$f.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "INSERT INTO public._migrations_applied (filename) VALUES ('$f.sql')" && echo "$f ok" && row=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public._migrations_applied WHERE filename = '$f.sql'), has_function_privilege('authenticated', 'hospitality.unit_seo_get(uuid)', 'EXECUTE'), has_function_privilege('anon', 'hospitality.unit_seo_get(uuid)', 'EXECUTE'), has_function_privilege('authenticated', 'hospitality.unit_seo_set(uuid,text,text,integer)', 'EXECUTE'), has_function_privilege('anon', 'hospitality.unit_seo_set(uuid,text,text,integer)', 'EXECUTE'), (SELECT count(*) FROM public._migrations_applied)") && echo "$row" && [ "$row" = "1|t|f|t|f|178" ] && echo "SEO migration checks ok"
+cd /root/nuriel-shop-git && f=20261110200000_hosp_unit_seo && n=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied") && echo "code $(git rev-parse --short=7 HEAD), applied before: $n" && [ "$(git rev-parse --short=7 HEAD)" = de766ac ] && [ "$n" = 177 ] && docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < supabase/migrations/$f.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "INSERT INTO public._migrations_applied (filename) VALUES ('$f.sql')" && echo "$f ok" && row=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public._migrations_applied WHERE filename = '$f.sql'), has_function_privilege('authenticated', 'hospitality.unit_seo_get(uuid)', 'EXECUTE'), has_function_privilege('anon', 'hospitality.unit_seo_get(uuid)', 'EXECUTE'), has_function_privilege('authenticated', 'hospitality.unit_seo_set(uuid,text,text,integer)', 'EXECUTE'), has_function_privilege('anon', 'hospitality.unit_seo_set(uuid,text,text,integer)', 'EXECUTE'), (SELECT count(*) FROM public._migrations_applied)") && echo "$row" && [ "$row" = "1|t|f|t|f|178" ] && echo "SEO migration checks ok" || echo "STOPPED"
 ```
 
-**תקין:** `code de766ac, 177 applied: ok`; `20261110200000_hosp_unit_seo ok`; `1|t|f|t|f|178` — לפי הסדר: רשומה
+**תקין:** `code de766ac, applied before: 177`; `20261110200000_hosp_unit_seo ok`; `1|t|f|t|f|178` — לפי הסדר: רשומה
 אחת; צוות מחובר יכול לקרוא; אורח אנונימי **לא**; צוות מחובר יכול לשמור; אורח אנונימי **לא**; 178 מיגרציות. ואז
 `SEO migration checks ok`.
 
@@ -65,10 +68,10 @@ cd /root/nuriel-shop-git && f=20261110200000_hosp_unit_seo && [ "$(git rev-parse
 ## ⛔ אישור 3 — U: הפעלה מחדש על הגרסה החדשה (✏️ זו הפריסה עצמה; בשעה שקטה)
 
 ```bash
-cd /root/nuriel-shop-git && docker compose up -d && sleep 60 && docker compose ps app && curl -s -o /dev/null -w 'local: %{http_code}\n' http://127.0.0.1:3700/robots.txt && docker logs --since 2m nuriel-shop-app 2>&1 | grep -iE "error|fatal" | grep -v aborted | tail -20
+cd /root/nuriel-shop-git && [ "$(git rev-parse --short=7 HEAD)" = de766ac ] && docker compose up -d && sleep 60 && docker compose ps app && [ "$(docker inspect -f '{{.Image}}' nuriel-shop-app)" = "$(docker image inspect -f '{{.Id}}' nuriel-shop-app-app:latest)" ] && echo "running the new image" && curl -s -o /dev/null -w 'local: %{http_code}\n' http://127.0.0.1:3700/robots.txt && docker logs --since 2m nuriel-shop-app 2>&1 | grep -iE "error|fatal" | grep -v aborted | tail -20 || echo "STOPPED"
 ```
 
-**תקין:** שורות ה-compose (רק האפליקציה מתחלפת); `Up … (healthy)`; `local: 200`; לוג ריק.
+**תקין:** שורות ה-compose (רק האפליקציה מתחלפת); `Up … (healthy)`; `running the new image`; `local: 200`; לוג ריק.
 **לא תקין** (`unhealthy`, לא 200, שגיאות) — R1 מיד (אחרי אישור).
 
 ## V — בדיקות אחרי (🔍; אני מריץ מהסשן, בלי פקודה בשרת)
@@ -80,6 +83,19 @@ cd /root/nuriel-shop-git && docker compose up -d && sleep 60 && docker compose p
 3. **robots.txt החי** — כל כתובת ב-sitemap פתוחה לסריקה; `/`, ההזמנה, אזור האורח והניהול — חסומים כמו היום.
 4. **בדפדפן (אתה, לא חובה):** ניהול נופי דורית ← יחידה ← כרטיס "גוגל ושיתוף" מופיע, השדות ריקים (= כמו היום).
    לא שומרים כלום כרגע — את הכותרות והתיאורים כותבים בשלב התוכן.
+
+### V — התוצאות בפועל (10.11.2026)
+
+- **נופי דורית מול שלב 0** (וגם מול הצילום הטרי שלפני): `7 differences: 0 critical, 3 warning, 4 info` — בדיוק
+  המצופה: שתי שורות robots, ה-JSON-LD של `/stay` (הכתובת — עכשיו
+  `{"@type":"PostalAddress","streetAddress":"ישעי 22","addressCountry":"IL"}`), וארבעת קבצי המותג נפתחו לסריקה.
+  סטטוס, canonical, noindex, ההפניות, title, description ו-sitemap — זהים.
+- **החנות `nuriel-shop` (60 עמודים) והפורטל `nuriel-app2`:** `0 differences`.
+- **robots.txt החי:** 5/5 כתובות ה-sitemap פתוחות; `/`, `/stay/book`, `/stay/my-booking`, `/manage/login`, `/admin`
+  — חסומים כמו קודם.
+- **כ-Googlebot:** `/` → 302 → `/stay` (כמו קודם); `/stay` → 200, canonical `/stay`, `index, follow`, 3 קישורי אייקון,
+  בלי קוד אימות ובלי GA/GTM (נכנסים בשלבים 3–4). **כ-Googlebot-Image:** 4 קבצי המותג → 200, הסוג הנכון, בלי
+  `x-robots-tag`.
 
 ---
 
@@ -111,19 +127,24 @@ docker exec nuriel-shop-db pg_dump -U postgres -d postgres -Fc > /root/backups/n
   62–65 לפי התאריך. ב-`scripts/db-tests/rollback-check.sh` היא `M62` כאן, ושם 62–65 הן של האירועים — במיזוג:
   SEO = `M62`, האירועים `M63`–`M66` (ובדיקת הארכיטקטורה של סדר ה-down/up). בפריסת האירועים בדיקת P2 תראה 4
   מיגרציות ממתינות (לא 5), כי זו כבר תהיה בייצור.
-- **ה-favicon של `/` (מחכה להחלטה):** גוגל מחייב שגם עמוד הבית של הכתובת (`/`) יהיה פתוח לסריקה, והיום
-  `Disallow: /` חוסם אותו. ההצעה: `Allow: /$` (רק השורש, לא שאר הכתובות) + `/` → **301** ל-`/stay` במקום 302 (עם
-  `no-store`, כך שדפדפנים לא שומרים את ההפניה). זה שינוי בהפניה ובאינדוקס — לא בפריסה הזו; אם יאושר, ייכנס
-  לפריסה הבאה (שלבים 3–4), בלי פקודות נוספות.
+- **ה-favicon של `/` (מחכה להחלטה):** לפי התיעוד של גוגל ("Favicon in Search"), favicon אחד לכל hostname, ועמוד
+  הבית הוא `https://nofi-dorit.nuri1.fit/` — עמוד בתת-תיקייה (`/stay`) "Not supported" כעמוד בית. ו-"Googlebot must
+  be able to crawl the home page, follow any redirects from there to the page where the favicon is specified, and
+  Googlebot-Image must be able to crawl the favicon file. These URLs must not be blocked from crawling by a robots.txt
+  file". הפריסה הזו פתחה את קבצי האייקון; `/` עדיין חסום ב-`Disallow: /`. ההצעה: `Allow: /$` (רק השורש) + `/` →
+  **301** ל-`/stay` במקום 302 (עם `no-store`), כך ש-`/stay` נשאר הכתובת הקנונית. זה שינוי בהפניה ובאינדוקס — אם
+  יאושר, ייכנס לפריסה של שלבים 3–4, בלי פקודות נוספות. אותו שינוי גם מבטיח שבדיקת האימות של Search Console (תגית
+  Meta בעמוד הבית — "the page where your browser goes when you visit the URL that defines your Search Console
+  property") תגיע ל-`/stay` בלי חסימה.
 - **תיאור אחד ל-5 העמודים (178 תווים):** ליחידות בנופי דורית אין תיאור, ולכן כולן מקבלות את התיאור של האתר. אחרי
   הפריסה בעל העסק כותב בכרטיס החדש כותרת ותיאור לכל יחידה (עד 60 / 155 תווים מומלץ).
 
 ## כל הפקודות לפי הסדר
 
-| #        | סוג              | מה                               | תקין                                            |
-| -------- | ---------------- | -------------------------------- | ----------------------------------------------- |
-| ⛔ 1 · S | ✏️ קבצים + image | הקוד ← `de766ac` + בנייה         | `build ok`, `unit_seo_set: 1 PostalAddress: 3`  |
-| ⛔ 2 · M | ✏️ מסד           | מיגרציה `20261110200000` + בדיקה | `1\|t\|f\|t\|f\|178`, `SEO migration checks ok` |
-| ⛔ 3 · U | ✏️ הפעלה מחדש    | הגרסה החדשה עולה                 | `(healthy)`, `local: 200`, לוג ריק              |
-| V        | 🔍 מהסשן         | צילומים חיים מול שלב 0 ומול לפני | 0 קריטיים; Ecommerce — 0 הבדלים                 |
-| R1 / R2  | ✏️               | רק בתקלה                         | `6dd034b` / `177`                               |
+| #        | סוג              | מה                               | תקין                                                        |
+| -------- | ---------------- | -------------------------------- | ----------------------------------------------------------- |
+| ⛔ 1 · S | ✏️ קבצים + image | הקוד ← `de766ac` + בנייה         | `build ok`, `unit_seo_set: 1 PostalAddress: 3`              |
+| ⛔ 2 · M | ✏️ מסד           | מיגרציה `20261110200000` + בדיקה | `1\|t\|f\|t\|f\|178`, `SEO migration checks ok`             |
+| ⛔ 3 · U | ✏️ הפעלה מחדש    | הגרסה החדשה עולה                 | `(healthy)`, `running the new image`, `local: 200`, לוג ריק |
+| V        | 🔍 מהסשן         | צילומים חיים מול שלב 0 ומול לפני | 0 קריטיים; Ecommerce — 0 הבדלים                             |
+| R1 / R2  | ✏️               | רק בתקלה                         | `6dd034b` / `177`                                           |
