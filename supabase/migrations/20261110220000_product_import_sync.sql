@@ -685,6 +685,8 @@ BEGIN
   IF jsonb_array_length(_rows) > 500 THEN
     RAISE EXCEPTION 'עד 500 שורות בכל שליחה';
   END IF;
+  -- יבוא אחד בכל רגע בחנות (שני חלונות / שני מנהלים): בלי שני מוצרים חדשים זהים במקביל
+  PERFORM pg_advisory_xact_lock(hashtextextended('product-import:' || _tenant::text, 64));
   SELECT * INTO _imp FROM public.product_imports
    WHERE id = _import AND tenant_id = _tenant
    FOR UPDATE;
@@ -779,6 +781,7 @@ DECLARE
   _applied boolean := false;
   p record;
 BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('product-import:' || _tenant::text, 64));
   SELECT * INTO _imp FROM public.product_imports
    WHERE id = _import AND tenant_id = _tenant
    FOR UPDATE;
@@ -935,6 +938,7 @@ DECLARE
   _list jsonb := '[]'::jsonb;
   _cat text;
 BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('product-import:' || _tenant::text, 64));
   SELECT * INTO _imp FROM public.product_imports
    WHERE id = _import AND tenant_id = _tenant
    FOR UPDATE;

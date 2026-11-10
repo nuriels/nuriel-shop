@@ -593,6 +593,27 @@ export function ProductImportDialog({
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               טוענים את דוח השינויים…
             </p>
+          ) : run?.status === "done" ? (
+            // הייבוא הסתיים אבל הדוח לא נטען — לא חוזרים למסך הבדיקה (שם "ייבוא" היה מתחיל יבוא חדש)
+            <div className="space-y-3 py-2" role="status">
+              <p className="flex items-center gap-2 font-semibold">
+                <CheckCircle2 className="size-4 text-emerald-600" aria-hidden="true" />
+                הייבוא הסתיים: {he(run.summary.created)} נוספו, {he(run.summary.updated)} עודכנו
+                {run.summary.failed > 0 ? `, ${he(run.summary.failed)} לא בוצעו` : ""}.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  className="flex-1"
+                  onClick={() => void showReport(run.importId)}
+                >
+                  הצגת דוח השינויים
+                </Button>
+                <Button type="button" variant="outline" className="flex-1" onClick={reset}>
+                  ייבוא קובץ נוסף
+                </Button>
+              </div>
+            </div>
           ) : plan && summary ? (
             <div ref={reviewRef}>
               <ImportReview
