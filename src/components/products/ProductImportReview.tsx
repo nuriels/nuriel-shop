@@ -261,6 +261,7 @@ export function ImportReview({
           המוצרים שכבר בחנות? <span className="text-destructive">*</span>
         </legend>
         <RadioGroup
+          dir="rtl"
           value={options.existing ?? ""}
           onValueChange={(value) => onOptions({ ...options, existing: value as ExistingMode })}
           aria-label="מה לעשות במוצרים שכבר בחנות"
@@ -308,6 +309,7 @@ export function ImportReview({
           {he(summary.status.new)} מוצרים חדשים (לא נמצאו בחנות)
         </legend>
         <RadioGroup
+          dir="rtl"
           value={options.createNew ? "yes" : "no"}
           onValueChange={(value) => onOptions({ ...options, createNew: value === "yes" })}
           aria-label="מה לעשות במוצרים החדשים"
@@ -332,6 +334,7 @@ export function ImportReview({
           {notInFile !== null ? ` (${he(notInFile)})` : ""}
         </legend>
         <RadioGroup
+          dir="rtl"
           value={options.missing}
           onValueChange={(value) => onOptions({ ...options, missing: value as MissingMode })}
           aria-label="מה לעשות במוצרים שבחנות ולא בקובץ"
