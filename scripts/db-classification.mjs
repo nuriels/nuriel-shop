@@ -38,7 +38,8 @@ const TABLES = {
     product_categories product_drafts product_locations product_relations product_reviews product_serials
     product_stickers product_variants service_agreements shared_carts shipping_methods stock_count_lines
     stock_counts tenant_addons tenant_subscriptions user_custom_prices
-    license_files license_deliveries license_download_links license_audit`,
+    license_files license_deliveries license_download_links license_audit
+    product_imports product_import_changes product_supplier_keys`,
   platform: `tenants user_roles site_settings email_settings tenant_email_secrets login_codes
     password_reset_requests password_reset_tokens staff_notifications contact_messages support_tickets
     support_messages marketing_consents marketing_consent_events notification_logs tenant_ssl

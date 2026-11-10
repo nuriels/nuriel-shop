@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • product_import_sync (64, STORE-2): הגנה (נעצר כשיש יבואים / מק"טים של ספקים), rollback → שלוש הטבלאות
+#     והפונקציות של הייבוא החדש נעלמו; import_products לא השתנתה; הסכמה זהה בדיוק ל-SEO שלב 4
 #   • hosp_consent (SEO שלב 4): rollback → טבלת ההסכמה, שתי הפונקציות והמתג נעלמו; הסכמה זהה בדיוק ל-SEO
 #   • hosp_unit_seo (SEO): rollback → שתי הפונקציות של כותרת ותיאור לגוגל ליחידה נעלמו; העמודות נשארות;
 #     הסכמה זהה בדיוק ל-61
@@ -131,6 +133,7 @@ M60=20261109100000_hosp_site_documents
 M61=20261110100000_ai_assistant
 M62=20261110200000_hosp_unit_seo
 M63=20261110210000_hosp_consent
+M64=20261110220000_product_import_sync
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -151,6 +154,49 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- STORE-2: the import that matches existing products (20261110220000) ----------
+expect "before the rollback: the three import tables (RLS, no browser access), the functions for signed-in admins only" \
+  "SELECT to_regclass('public.product_imports') IS NOT NULL AND to_regclass('public.product_import_changes') IS NOT NULL
+      AND to_regclass('public.product_supplier_keys') IS NOT NULL
+      AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.product_imports'::regclass)
+      AND NOT has_table_privilege('authenticated', 'public.product_imports', 'SELECT')
+      AND NOT has_table_privilege('authenticated', 'public.product_supplier_keys', 'SELECT')
+      AND has_function_privilege('authenticated', 'public.product_import_apply(uuid,jsonb)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.product_import_apply(uuid,jsonb)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public._product_import_update(uuid,uuid,jsonb,boolean,jsonb)', 'EXECUTE')"
+q "INSERT INTO public.product_imports (tenant_id, file_name, options, expected_rows)
+   SELECT id, 'rb.csv', '{\"existing\": \"stock\", \"create_new\": true, \"missing\": \"keep\"}'::jsonb, 1
+     FROM public.tenants WHERE is_default" >/dev/null
+if "${PSQL[@]}" -f "$ROOT/supabase/rollbacks/$M64.down.sql" >/dev/null 2>&1; then
+  echo "  FAIL the rollback ran although there is an import"; exit 1
+else
+  echo "  ok   the guard stops the rollback while there is an import"
+fi
+q "DELETE FROM public.product_imports" >/dev/null
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M64" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M64"
+down "$M64"
+expect "the import tables and functions are gone; import_products is still there" \
+  "SELECT to_regclass('public.product_imports') IS NULL AND to_regclass('public.product_import_changes') IS NULL
+      AND to_regclass('public.product_supplier_keys') IS NULL
+      AND to_regprocedure('public.product_import_match(jsonb)') IS NULL
+      AND to_regprocedure('public._product_import_name_key(text)') IS NULL
+      AND to_regprocedure('public.import_products(jsonb)') IS NOT NULL"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m63.sql"
+schema_dump "$SCHEMA_DIR/after-m64-down.sql"
+if diff -q "$SCHEMA_DIR/m63.sql" "$SCHEMA_DIR/after-m64-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of the SEO stage 4 migration, exactly"
+else
+  echo "  FAIL schema after the rollback differs from the SEO stage 4 migration:"; diff "$SCHEMA_DIR/m63.sql" "$SCHEMA_DIR/after-m64-down.sql" | head -20; exit 1
+fi
 
 # ---------- SEO stage 4: cookie consent, off behind a flag (20261110210000) ----------
 expect "before the rollback: the consent table (RLS, no direct privileges), the flag (off), recording for the server only" \
@@ -1931,6 +1977,7 @@ up "$M60"
 up "$M61"
 up "$M62"
 up "$M63"
+up "$M64"
 expect "the AI add-on is back: 9 tables closed to the browser, 2 packages at 150 ILS, the assistant off, functions for the server only" \
   "SELECT to_regclass('public.ai_subscriptions') IS NOT NULL
       AND to_regclass('public.ai_usage_daily') IS NOT NULL
