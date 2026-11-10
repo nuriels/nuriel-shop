@@ -7,6 +7,8 @@
 //     (אחרי "דילוג לתוכן"), ונראה בתחתית המסך — מעל שורת הפעולות בטלפון. החלון — מגירת הצד של האתר
 //     (מלכודת פוקוס, Esc, הפוקוס חוזר).
 //   • בתצוגה המקדימה של העורך — כלום (לא באנר ולא מדידה).
+//   • האירועים (אחרי אישור בלבד, בלי מידע אישי — events.ts): צפייה בעמוד בכל מעבר עמוד, וקליק על קישור
+//     טלפון / וואטסאפ / אימייל בכל מקום באתר (click_phone / click_whatsapp / click_email, ואיפה בעמוד).
 import { Link, useLocation } from "@tanstack/react-router";
 import { Cookie } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -30,7 +32,8 @@ import {
   needsDecision,
   type ConsentState,
 } from "./consent";
-import { denyAnalytics, grantAnalytics } from "./ga";
+import { CONTACT_EVENT, contactMethodOf } from "./events";
+import { armAnalytics, denyAnalytics, gaEvent, gaPageView, grantAnalytics } from "./ga";
 import { consentStore, useConsent, useConsentAnnouncement, useConsentPanel } from "./store";
 
 /** שומר בחירה: בדפדפן מיד, ובשרת ברקע (רשומה אנונימית — כישלון לא מפריע לגולש) */
@@ -50,8 +53,10 @@ export function ConsentManager() {
   const ga4 = site.analytics?.ga4 ?? null;
   const granted = analyticsGranted(consent, available);
   const wasGranted = useRef(false);
+  const pathname = useLocation({ select: (l) => l.pathname });
 
-  // החלת הבחירה: אישור — טוענים / מעדכנים; ביטול אחרי אישור — חוסמים ומוחקים את ה-Cookies של המדידה
+  // החלת הבחירה: אישור — טוענים / מעדכנים (ונשלח מה שנשמר לעמוד הזה); ביטול אחרי אישור — חוסמים ומוחקים
+  // את ה-Cookies של המדידה; עוד אין החלטה — אירועי העמוד נשמרים בזיכרון בלבד; סירוב / בלי מדידה — כלום
   useEffect(() => {
     if (granted && ga4) {
       grantAnalytics(ga4);
@@ -59,8 +64,35 @@ export function ConsentManager() {
     } else if (wasGranted.current) {
       denyAnalytics();
       wasGranted.current = false;
+    } else {
+      armAnalytics(!preview && available && consent === null);
     }
-  }, [granted, ga4]);
+  }, [granted, ga4, available, consent, preview]);
+
+  // צפייה בעמוד — בכל מעבר עמוד באתר (הכתובת בלי ה-# ובלי השאילתה)
+  useEffect(() => {
+    if (!preview) gaPageView();
+  }, [pathname, preview]);
+
+  // קליק על טלפון / וואטסאפ / אימייל — בכל מקום באתר (בלי המספר / הכתובת עצמם)
+  useEffect(() => {
+    if (preview) return;
+    const onClick = (e: MouseEvent) => {
+      const a = e.target instanceof Element ? e.target.closest("a[href]") : null;
+      const method = contactMethodOf(a?.getAttribute("href"));
+      if (!a || !method) return;
+      const place = a.closest("[data-action-bar]")
+        ? "action_bar"
+        : a.closest("header")
+          ? "header"
+          : a.closest("footer")
+            ? "footer"
+            : "page";
+      gaEvent(CONTACT_EVENT[method], { link_location: place });
+    };
+    document.addEventListener("click", onClick, { capture: true });
+    return () => document.removeEventListener("click", onClick, { capture: true });
+  }, [preview]);
 
   if (preview) return null;
   return (

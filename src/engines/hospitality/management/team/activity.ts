@@ -255,6 +255,9 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} הכין/ה חוזה מתוקן — ${target}`;
     case "contracts.sent":
       return `${target} נשלח ללקוח לחתימה`;
+    // מסמך עצמאי שהלקוח ממלא: נוצר קישור לחתימה, להעברה ללקוח (הקישור עצמו לא נשמר)
+    case "contracts.link_created":
+      return `${actor} יצר/ה קישור לחתימה על ${target}, להעברה ללקוח`;
     case "contracts.send_failed":
       return `השליחה של ${target} נכשלה — לא סומן כנשלח`;
     case "contracts.signed":

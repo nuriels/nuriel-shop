@@ -1,5 +1,6 @@
-// עמוד החתימה של הלקוח (/stay/contract#t=…) — לפי הקישור האישי מהמייל, בלי חשבון: הנוסח המלא,
-// השדות שחסרים (ת"ז / ח.פ, כתובת, ובחוזה אירוח — אמצעי הפיקדון אם העסק לא קבע), חתימה באצבע / בעכבר
+// עמוד החתימה של הלקוח (/stay/contract#t=…) — לפי הקישור האישי, בלי חשבון: הנוסח המלא, השדות שחסרים
+// (בחוזה: ת"ז / ח.פ וכתובת, ובחוזה אירוח — אמצעי הפיקדון אם העסק לא קבע; במסמך מדיניות — רק אישור;
+// ובמסמך שהלקוח ממלא בעצמו — גם השם, האימייל והטלפון), חתימה באצבע / בעכבר
 // (או בהקלדת השם — חלופה נגישה), ואישור "קראתי ואני מסכים/ה" — ורק אז חתימה. פעם אחת: אחרי החתימה
 // הקישור מת, העותק החתום (PDF) נשלח במייל ואפשר להוריד אותו כאן מיד. הטוקן אחרי ה-# — לא נשלח לשרת
 // בבקשת העמוד ולא מופיע ביומני הגישה; הוא עובר רק בבקשה לפונקציה (POST).
@@ -90,6 +91,8 @@ export function ContractSignPage() {
   return <SignForm token={token} c={open.data} onSigned={setSigned} />;
 }
 
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function SignForm({
   token,
   c,
@@ -100,6 +103,12 @@ function SignForm({
   onSigned: (r: ContractSigned) => void;
 }) {
   const pool = poolNotice(c.kind, c.pool);
+  const policy = c.kind === "policy";
+  const doc = policy ? "המסמך" : "ההסכם";
+  // דרך ב': הלקוח כותב את הפרטים שלו (העסק אולי מילא מראש — אפשר לתקן)
+  const [fullName, setFullName] = useState(c.signer_name ?? "");
+  const [email, setEmail] = useState(c.signer_email ?? "");
+  const [phone, setPhone] = useState(c.signer_phone ?? "");
   const [idNumber, setIdNumber] = useState("");
   const [address, setAddress] = useState("");
   const [method, setMethod] = useState<DepositMethod | "">("");
@@ -111,18 +120,41 @@ function SignForm({
   const digits = idNumber.replace(/\D/g, "");
   const problems = useMemo(() => {
     const p: { field: string; text: string }[] = [];
-    if (!israeliIdOk(digits))
-      p.push({
-        field: "cs-id",
-        text: `${c.id_label} — מספר לא תקין (עד 9 ספרות, כולל ספרת ביקורת)`,
-      });
-    if (address.trim().length < 4) p.push({ field: "cs-address", text: "כתובת מגורים מלאה" });
+    if (c.needs_identity) {
+      if (fullName.trim().length < 2) p.push({ field: "cs-name", text: "שם מלא" });
+      if (!EMAIL.test(email.trim()))
+        p.push({ field: "cs-email", text: "אימייל תקין (לשם יישלח העותק החתום)" });
+      if (phone.trim() && phone.replace(/\D/g, "").length < 9)
+        p.push({ field: "cs-phone", text: "מספר טלפון תקין (או להשאיר ריק)" });
+    }
+    if (c.needs_id_address) {
+      if (!israeliIdOk(digits))
+        p.push({
+          field: "cs-id",
+          text: `${c.id_label} — מספר לא תקין (עד 9 ספרות, כולל ספרת ביקורת)`,
+        });
+      if (address.trim().length < 4) p.push({ field: "cs-address", text: "כתובת מגורים מלאה" });
+    }
     if (c.needs_deposit_method && !method)
       p.push({ field: "cs-method-cash", text: "אמצעי הפיקדון" });
     if (!signature) p.push({ field: "cs-signature", text: "חתימה" });
-    if (!agreed) p.push({ field: "cs-agree", text: "אישור שקראתם את ההסכם ושאתם מסכימים לו" });
+    if (!agreed) p.push({ field: "cs-agree", text: `אישור שקראתם את ${doc} ושאתם מסכימים לו` });
     return p;
-  }, [digits, address, method, signature, agreed, c.needs_deposit_method, c.id_label]);
+  }, [
+    digits,
+    address,
+    method,
+    signature,
+    agreed,
+    fullName,
+    email,
+    phone,
+    doc,
+    c.needs_identity,
+    c.needs_id_address,
+    c.needs_deposit_method,
+    c.id_label,
+  ]);
   const bad = (field: string) => tried && problems.some((p) => p.field === field);
 
   const sign = useMutation({
@@ -131,9 +163,15 @@ function SignForm({
         data: {
           token,
           fields: {
-            id_number: digits,
-            address: address.trim(),
+            ...(c.needs_id_address ? { id_number: digits, address: address.trim() } : {}),
             ...(method ? { deposit_method: method } : {}),
+            ...(c.needs_identity
+              ? {
+                  full_name: fullName.trim(),
+                  email: email.trim(),
+                  ...(phone.trim() ? { phone: phone.trim() } : {}),
+                }
+              : {}),
           },
           signature: signature!,
           agreed: true,
@@ -159,12 +197,13 @@ function SignForm({
     <Frame>
       <header className="mb-6 flex flex-col gap-2 border-b border-border pb-6">
         <p className="text-sm text-muted-foreground">
-          {c.business_name} · הסכם מספר {c.number}
+          {c.business_name} · {policy ? c.title : "הסכם"} · מסמך מספר {c.number}
         </p>
-        <h1 className="font-display text-3xl font-medium sm:text-4xl">חתימה על ההסכם</h1>
+        <h1 className="font-display text-3xl font-medium sm:text-4xl">חתימה על {doc}</h1>
         <p className="text-sm text-muted-foreground">
-          קראו את כל סעיפי ההסכם, השלימו את הפרטים שחסרים וחתמו בסוף העמוד. הקישור אישי — תקף עד{" "}
-          {dateTime(c.expires_at)} ולחתימה אחת בלבד.
+          {policy ? "קראו את המסמך במלואו" : "קראו את כל סעיפי ההסכם"}
+          {c.needs_identity || c.needs_id_address ? ", מלאו את הפרטים שלכם" : ""} וחתמו בסוף העמוד.
+          הקישור אישי — תקף עד {dateTime(c.expires_at)} ולחתימה אחת בלבד.
         </p>
       </header>
 
@@ -188,7 +227,7 @@ function SignForm({
 
       <section aria-labelledby="cs-body-title" className="mb-8">
         <h2 id="cs-body-title" className="sr-only">
-          נוסח ההסכם
+          {policy ? "נוסח המסמך" : "נוסח ההסכם"}
         </h2>
         <div className="rounded-[var(--radius)] border border-border bg-white p-4 text-[#1f2421] sm:p-8">
           <ContractBody
@@ -196,7 +235,9 @@ function SignForm({
             highlightBlanks
             signatures={
               <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                החתימות — בטופס שבהמשך. אחרי החתימה תקבלו עותק חתום (PDF) הכולל את חתימת שני הצדדים.
+                {policy
+                  ? "החתימה — בטופס שבהמשך. אחרי החתימה תקבלו עותק חתום (PDF)."
+                  : "החתימות — בטופס שבהמשך. אחרי החתימה תקבלו עותק חתום (PDF) הכולל את חתימת שני הצדדים."}
               </p>
             }
           />
@@ -239,91 +280,153 @@ function SignForm({
           ) : null}
         </div>
 
-        <section className="flex flex-col gap-4 rounded-[var(--radius)] border border-border bg-card p-5 sm:p-6">
-          <h2 className="text-lg font-medium">הפרטים שלכם (צד ב')</h2>
-          <p className="text-sm">
-            שם מלא: <strong>{c.signer_name}</strong>
-            {c.signer_phone && (
-              <>
-                {" "}
-                · טלפון: <span dir="ltr">{c.signer_phone}</span>
-              </>
-            )}
-            <br />
-            <span className="text-muted-foreground">
-              השם או הטלפון לא נכונים? אל תחתמו — פנו לעסק
-              {c.business_phone ? ` (${c.business_phone})` : ""} ונשלח לכם הסכם מתוקן.
-            </span>
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="cs-id" className="text-sm font-medium">
-                {c.id_label}
-              </label>
-              <input
-                id="cs-id"
-                className={FIELD}
-                inputMode="numeric"
-                autoComplete="off"
-                dir="ltr"
-                maxLength={12}
-                value={idNumber}
-                onChange={(e) => setIdNumber(e.target.value)}
-                aria-invalid={bad("cs-id")}
-                aria-describedby="cs-id-hint"
-              />
-              <p id="cs-id-hint" className="text-xs text-muted-foreground">
-                עד 9 ספרות. נשמר רק בהסכם החתום, ומוצג לעסק חלקית.
-              </p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="cs-address" className="text-sm font-medium">
-                כתובת מגורים
-              </label>
-              <input
-                id="cs-address"
-                className={FIELD}
-                autoComplete="street-address"
-                maxLength={200}
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                aria-invalid={bad("cs-address")}
-              />
-            </div>
-          </div>
-          {c.needs_deposit_method && (
-            <fieldset className="flex flex-col gap-2">
-              <legend className="mb-1 text-sm font-medium">הפיקדון יימסר באמצעות</legend>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {METHODS.map((m) => (
-                  <label
-                    key={m}
-                    className={cn(
-                      "flex min-h-12 cursor-pointer items-center gap-2 rounded-[var(--radius)] border p-3 text-sm",
-                      method === m ? "border-primary bg-primary/5" : "border-border",
-                    )}
-                  >
-                    <input
-                      id={`cs-method-${m}`}
-                      type="radio"
-                      name="deposit-method"
-                      className="size-4"
-                      checked={method === m}
-                      onChange={() => setMethod(m)}
-                      aria-invalid={bad("cs-method-cash")}
-                    />
-                    {DEPOSIT_METHOD_LABEL[m]}
+        {(c.needs_identity || c.needs_id_address || c.needs_deposit_method || c.signer_name) && (
+          <section className="flex flex-col gap-4 rounded-[var(--radius)] border border-border bg-card p-5 sm:p-6">
+            <h2 className="text-lg font-medium">
+              {policy ? "הפרטים שלכם" : "הפרטים שלכם (צד ב')"}
+            </h2>
+            {c.needs_identity ? (
+              <div className="grid gap-4 sm:grid-cols-3" data-testid="contract-identity">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="cs-name" className="text-sm font-medium">
+                    שם מלא
                   </label>
-                ))}
+                  <input
+                    id="cs-name"
+                    className={FIELD}
+                    autoComplete="name"
+                    maxLength={120}
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    aria-invalid={bad("cs-name")}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="cs-email" className="text-sm font-medium">
+                    אימייל
+                  </label>
+                  <input
+                    id="cs-email"
+                    type="email"
+                    className={FIELD}
+                    autoComplete="email"
+                    dir="ltr"
+                    maxLength={254}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    aria-invalid={bad("cs-email")}
+                    aria-describedby="cs-email-hint"
+                  />
+                  <p id="cs-email-hint" className="text-xs text-muted-foreground">
+                    לשם יישלח העותק החתום, ואיתו תוכלו להיכנס לאזור האישי.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="cs-phone" className="text-sm font-medium">
+                    טלפון (לא חובה)
+                  </label>
+                  <input
+                    id="cs-phone"
+                    type="tel"
+                    className={FIELD}
+                    autoComplete="tel"
+                    dir="ltr"
+                    maxLength={30}
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    aria-invalid={bad("cs-phone")}
+                  />
+                </div>
               </div>
-              {method === "card" && (
-                <p className="text-xs text-muted-foreground">
-                  פרטי הכרטיס לא נמסרים כאן — רק לעסק ישירות (בטלפון או במסוף התשלום).
-                </p>
-              )}
-            </fieldset>
-          )}
-        </section>
+            ) : (
+              <p className="text-sm">
+                שם מלא: <strong>{c.signer_name}</strong>
+                {c.signer_phone && (
+                  <>
+                    {" "}
+                    · טלפון: <span dir="ltr">{c.signer_phone}</span>
+                  </>
+                )}
+                <br />
+                <span className="text-muted-foreground">
+                  השם או הטלפון לא נכונים? אל תחתמו — פנו לעסק
+                  {c.business_phone ? ` (${c.business_phone})` : ""} ונשלח לכם{" "}
+                  {policy ? "מסמך מתוקן" : "הסכם מתוקן"}.
+                </span>
+              </p>
+            )}
+            {c.needs_id_address && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="cs-id" className="text-sm font-medium">
+                    {c.id_label}
+                  </label>
+                  <input
+                    id="cs-id"
+                    className={FIELD}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    dir="ltr"
+                    maxLength={12}
+                    value={idNumber}
+                    onChange={(e) => setIdNumber(e.target.value)}
+                    aria-invalid={bad("cs-id")}
+                    aria-describedby="cs-id-hint"
+                  />
+                  <p id="cs-id-hint" className="text-xs text-muted-foreground">
+                    עד 9 ספרות. נשמר רק בהסכם החתום, ומוצג לעסק חלקית.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="cs-address" className="text-sm font-medium">
+                    כתובת מגורים
+                  </label>
+                  <input
+                    id="cs-address"
+                    className={FIELD}
+                    autoComplete="street-address"
+                    maxLength={200}
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    aria-invalid={bad("cs-address")}
+                  />
+                </div>
+              </div>
+            )}
+            {c.needs_deposit_method && (
+              <fieldset className="flex flex-col gap-2">
+                <legend className="mb-1 text-sm font-medium">הפיקדון יימסר באמצעות</legend>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {METHODS.map((m) => (
+                    <label
+                      key={m}
+                      className={cn(
+                        "flex min-h-12 cursor-pointer items-center gap-2 rounded-[var(--radius)] border p-3 text-sm",
+                        method === m ? "border-primary bg-primary/5" : "border-border",
+                      )}
+                    >
+                      <input
+                        id={`cs-method-${m}`}
+                        type="radio"
+                        name="deposit-method"
+                        className="size-4"
+                        checked={method === m}
+                        onChange={() => setMethod(m)}
+                        aria-invalid={bad("cs-method-cash")}
+                      />
+                      {DEPOSIT_METHOD_LABEL[m]}
+                    </label>
+                  ))}
+                </div>
+                {method === "card" && (
+                  <p className="text-xs text-muted-foreground">
+                    פרטי הכרטיס לא נמסרים כאן — רק לעסק ישירות (בטלפון או במסוף התשלום).
+                  </p>
+                )}
+              </fieldset>
+            )}
+          </section>
+        )}
 
         <section
           id="cs-signature"
@@ -356,8 +459,9 @@ function SignForm({
             aria-invalid={bad("cs-agree")}
           />
           <span>
-            קראתי את כל סעיפי ההסכם, הבנתי אותם ואני מסכים/ה להם. ידוע לי שהחתימה כאן היא חתימה
-            אלקטרונית על ההסכם, ושאחרי החתימה הנוסח לא ישתנה.
+            {policy
+              ? "קראתי את המסמך במלואו, הבנתי אותו ואני מסכים/ה לתנאיו. ידוע לי שהחתימה כאן היא חתימה אלקטרונית על המסמך, ושאחרי החתימה הנוסח לא ישתנה."
+              : "קראתי את כל סעיפי ההסכם, הבנתי אותם ואני מסכים/ה להם. ידוע לי שהחתימה כאן היא חתימה אלקטרונית על ההסכם, ושאחרי החתימה הנוסח לא ישתנה."}
           </span>
         </label>
 
@@ -368,12 +472,12 @@ function SignForm({
           data-testid="contract-sign-submit"
         >
           <FileSignature className="size-5" aria-hidden="true" />
-          {sign.isPending ? "חותם…" : "חתימה על ההסכם"}
+          {sign.isPending ? "חותם…" : `חתימה על ${doc}`}
         </button>
         {(c.business_phone || c.business_email) && (
           <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <Phone className="size-4" aria-hidden="true" />
-            שאלות על ההסכם? {c.business_name}
+            שאלות על {doc}? {c.business_name}
             {c.business_phone ? ` · ${c.business_phone}` : ""}
             {c.business_email ? (
               <>
@@ -417,10 +521,10 @@ function Signed({ result }: { result: ContractSigned }) {
           tabIndex={-1}
           className="font-display text-3xl font-medium focus:outline-none"
         >
-          ההסכם נחתם — תודה!
+          {result.kind === "policy" ? "המסמך נחתם — תודה!" : "ההסכם נחתם — תודה!"}
         </h1>
         <p>
-          הסכם מספר {result.number} נחתם ונשמר.{" "}
+          {result.kind === "policy" ? "מסמך" : "הסכם"} מספר {result.number} נחתם ונשמר.{" "}
           {result.copy_sent
             ? "עותק חתום (PDF) נשלח אליכם עכשיו במייל."
             : "עותק חתום (PDF) יישלח אליכם במייל בדקות הקרובות."}
@@ -428,7 +532,7 @@ function Signed({ result }: { result: ContractSigned }) {
         {url && (
           <a
             href={url}
-            download={`הסכם-${result.number}.pdf`}
+            download={`${result.kind === "policy" ? "מסמך" : "הסכם"}-${result.number}.pdf`}
             className="inline-flex min-h-12 items-center gap-2 self-start rounded-[var(--radius)] border border-border px-5 font-medium hover:bg-muted"
             data-testid="contract-signed-download"
           >
@@ -437,7 +541,7 @@ function Signed({ result }: { result: ContractSigned }) {
           </a>
         )}
         <p className="text-sm text-muted-foreground">
-          ההסכם החתום שמור גם ב
+          {result.kind === "policy" ? "המסמך החתום" : "ההסכם החתום"} שמור גם ב
           <Link to="/stay/account" className="underline">
             אזור האישי
           </Link>{" "}

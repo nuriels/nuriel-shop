@@ -257,7 +257,7 @@ async function sendDue(): Promise<void> {
         const email = renderBookingEmail(n.event, n.recipient_kind, n.payload, {
           business,
           // לעסק: ההזמנה; התנגשות ביומן חיצוני (D3) — מסך הערוצים; תזכורת לפתיחת תאריכים (43) —
-          // היומן; תשובה מהתמיכה (E4) — הפנייה
+          // היומן; תשובה מהתמיכה (E4) — הפנייה; מסמך שנחתם — "מסמכים חתומים"
           bookingUrl: !ctx.origin
             ? null
             : n.booking_id
@@ -268,7 +268,9 @@ async function sendDue(): Promise<void> {
                   ? `${ctx.origin}/manage/calendar?open=1`
                   : n.event === "support_reply" && UUID.test(String(n.payload["ticket_id"] ?? ""))
                     ? `${ctx.origin}/manage/support/${String(n.payload["ticket_id"])}`
-                    : null,
+                    : n.event === "document_signed"
+                      ? `${ctx.origin}/manage/client-documents?tab=signed`
+                      : null,
           siteOrigin: ctx.origin,
           escape: escapeHtml,
         });

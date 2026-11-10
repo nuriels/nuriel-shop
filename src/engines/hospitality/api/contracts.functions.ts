@@ -1,7 +1,9 @@
-// מסמכי לקוחות (מיגרציה 64): הצוות — מצב, תצוגה מקדימה, שליחה לחתימה, שליחה חוזרת, ביטול, חוזה
-// מתוקן, ארכיון, צפייה / הורדה ועותק חתום; הלקוח — פתיחת החוזה לפי הקישור וחתימה.
-// ההרשאות, סוג החוזה מול ההזמנה / האירוע, החתימה החד-פעמית והנעילה — במסד. הקישור נוצר ונשלח בשרת
-// בלבד; הדפדפן של הצוות לא מקבל אותו.
+// מסמכי לקוחות (מיגרציה 64 + מסמכים עצמאיים): הצוות — מצב, תצוגה מקדימה, שליחה לחתימה, שליחה חוזרת,
+// ביטול, חוזה מתוקן, ארכיון, צפייה / הורדה ועותק חתום; מסמך עצמאי (בלי הזמנה): חוזה אירוח, חוזה אירוע
+// או מסמך מדיניות — א' העסק ממלא ושולח במייל, ב' הלקוח ממלא בקישור; "מסמכים חתומים" ו"נצפה";
+// הלקוח — פתיחת המסמך לפי הקישור וחתימה.
+// ההרשאות, סוג החוזה מול ההזמנה / האירוע, החתימה החד-פעמית והנעילה — במסד. הקישור נוצר בשרת; בדרך א'
+// הוא נשלח במייל בלבד (הדפדפן של הצוות לא מקבל אותו); בדרך ב' הוא מוחזר לצוות פעם אחת להעברה ללקוח.
 import { createServerFn } from "@tanstack/react-start";
 import type {
   ContractDetail,
@@ -12,6 +14,9 @@ import type {
   ContractSendResult,
   ContractSigned,
   ContractsView,
+  SignedDocumentList,
+  StandalonePreview,
+  StandaloneResult,
 } from "../types/contracts";
 import {
   parseContractCancel,
@@ -22,6 +27,10 @@ import {
   parseContractTarget,
   parseContractToken,
   parseContractsQuery,
+  parseSeenIds,
+  parseSignedQuery,
+  parseStandaloneCreate,
+  parseStandaloneTarget,
 } from "../validation/contracts";
 import { uuid } from "../validation/input";
 
@@ -144,6 +153,113 @@ export const hospitalityContractsFor = createServerFn({ method: "POST" })
     });
   });
 
+// ---------- מסמך עצמאי (בלי הזמנה / אירוע) ----------
+
+export const hospitalityContractStandalonePreview = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseStandaloneTarget(input))
+  .handler(async ({ data }): Promise<StandalonePreview> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<StandalonePreview>("contract_standalone_preview", {
+      _kind: data.kind,
+      _fill_mode: data.fillMode,
+      _guest_id: data.guestId,
+      _signer: data.signer,
+      _input: data.input,
+    });
+  });
+
+/**
+ * יצירה + מסירה: הטיוטה במסד (בשם הצוות), ואז — במייל (א', וגם ב' כשהעסק כתב אימייל), או קישור
+ * להעתקה (ב'), שמוחזר כאן פעם אחת ולא נשמר. מייל שנכשל — המסמך נשאר "טיוטה"
+ */
+export const hospitalityContractStandaloneCreate = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseStandaloneCreate(input))
+  .handler(async ({ data }): Promise<StandaloneResult> => {
+    await staffLimit("contractSend");
+    const [{ manageRpc }, { sendSignRequest, shareSignLink }] = await Promise.all([
+      import("../server/manage.server"),
+      import("../server/contracts.server"),
+    ]);
+    const created = await manageRpc<ContractRow>("contract_standalone_create", {
+      _kind: data.kind,
+      _fill_mode: data.fillMode,
+      _guest_id: data.guestId,
+      _signer: data.signer,
+      _input: data.input,
+    });
+    if (data.deliver === "email") {
+      const prepared = await manageRpc<SendPrepared>("contract_send_prepare", { _id: created.id });
+      const r = await sendSignRequest(prepared);
+      return { contract: r.contract, delivery: "email", sent: r.sent, error: r.error, link: null };
+    }
+    const prepared = await manageRpc<{ tenant_id: string; id: string; actor_id: string }>(
+      "contract_link_prepare",
+      { _id: created.id },
+    );
+    const link = await shareSignLink(prepared);
+    return {
+      contract: link.contract,
+      delivery: "link",
+      sent: true,
+      error: null,
+      link: { url: link.url, expires_at: link.expires_at },
+    };
+  });
+
+/** דרך ב': קישור חדש להעתקה (הקודם מת) — למסמך שהלקוח ממלא ועוד לא נחתם */
+export const hospitalityContractShareLink = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseContractId(input))
+  .handler(async ({ data }): Promise<StandaloneResult> => {
+    await staffLimit("contractSend");
+    const [{ manageRpc }, { shareSignLink }] = await Promise.all([
+      import("../server/manage.server"),
+      import("../server/contracts.server"),
+    ]);
+    const prepared = await manageRpc<{ tenant_id: string; id: string; actor_id: string }>(
+      "contract_link_prepare",
+      { _id: data.id },
+    );
+    const link = await shareSignLink(prepared);
+    return {
+      contract: link.contract,
+      delivery: "link",
+      sent: true,
+      error: null,
+      link: { url: link.url, expires_at: link.expires_at },
+    };
+  });
+
+/** "מסמכים חתומים": חיפוש לפי לקוח / אימייל / טלפון / מספר / שם המסמך, סוג, מקור ותאריך החתימה */
+export const hospitalitySignedDocuments = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseSignedQuery(input))
+  .handler(async ({ data }): Promise<SignedDocumentList> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<SignedDocumentList>("staff_signed_documents", {
+      _q: data.q,
+      _kind: data.kind,
+      _origin: data.origin,
+      _from: data.from,
+      _to: data.to,
+      _limit: data.limit,
+      _offset: data.offset,
+    });
+  });
+
+/** ההתראה באזור הניהול: כמה חתימות עוד לא נצפו (התג בניווט) */
+export const hospitalityContractsUnseen = createServerFn({ method: "GET" }).handler(
+  async (): Promise<{ unseen: number }> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<{ unseen: number }>("contracts_unseen", {});
+  },
+);
+
+export const hospitalityContractsMarkSeen = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseSeenIds(input))
+  .handler(async ({ data }): Promise<{ seen: number }> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<{ seen: number }>("contracts_mark_seen", { _ids: data.ids });
+  });
+
 /** צפייה / הורדה של ה-PDF החתום: קישור ל-60 שניות (ביומן) */
 export const hospitalityContractFile = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseContractFile(input))
@@ -206,11 +322,18 @@ export const hospitalityContractSign = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseContractSign(input))
   .handler(async ({ data }): Promise<ContractSigned> => {
     const client = await publicClient("contractSign");
-    const [{ callServerRpc }, { tokenHash, completeSignedContract }] = await Promise.all([
-      import("../server/rpc.server"),
-      import("../server/contracts.server"),
-    ]);
-    const signed = await callServerRpc<{ tenant_id: string; id: string; number: number }>(
+    const [{ callServerRpc }, { tokenHash, completeSignedContract }, { kickOutbox }] =
+      await Promise.all([
+        import("../server/rpc.server"),
+        import("../server/contracts.server"),
+        import("../outbox/worker.server"),
+      ]);
+    const signed = await callServerRpc<{
+      tenant_id: string;
+      id: string;
+      number: number;
+      kind?: ContractSigned["kind"];
+    }>(
       "contract_sign",
       {
         _token_hash: tokenHash(data.token),
@@ -222,10 +345,13 @@ export const hospitalityContractSign = createServerFn({ method: "POST" })
       },
       client,
     );
+    // ההתראה לבעל העסק (document_signed) כבר בתור — לשלוח עכשיו, בלי לחכות לסבב הבא
+    kickOutbox();
     try {
       const done = await completeSignedContract(signed.tenant_id, signed.id);
       return {
         number: signed.number,
+        kind: signed.kind ?? "hosting",
         pdf: done.pdf ? Buffer.from(done.pdf).toString("base64") : null,
         copy_sent: done.copySent,
       };
@@ -234,6 +360,6 @@ export const hospitalityContractSign = createServerFn({ method: "POST" })
         "[hospitality/contracts] after signing",
         error instanceof Error ? error.message : error,
       );
-      return { number: signed.number, pdf: null, copy_sent: false };
+      return { number: signed.number, kind: signed.kind ?? "hosting", pdf: null, copy_sent: false };
     }
   });

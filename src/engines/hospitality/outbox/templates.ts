@@ -294,6 +294,29 @@ export function copyFor(event: string, p: EmailPayload, b: EmailBusiness): Copy 
         platform: true,
       };
     }
+    // מסמכים עצמאיים: כל חתימה (גם על חוזה של הזמנה / אירוע) — התראה לעסק. מי חתם ועל מה; בלי הנוסח
+    // ובלי מה שהלקוח מילא (ת"ז, כתובת) — אלה רק באזור הניהול
+    case "document_signed": {
+      const title = typeof p["title"] === "string" && p["title"] ? p["title"] : "מסמך";
+      const num = p["contract_number"] ? ` #${String(p["contract_number"])}` : "";
+      const who =
+        typeof p["signer_name"] === "string" && p["signer_name"] ? p["signer_name"] : "הלקוח";
+      const about = p["link_number"]
+        ? p["kind"] === "pool_event"
+          ? ` (אירוע #${String(p["link_number"])})`
+          : ` (הזמנה #${String(p["link_number"])})`
+        : p["origin"] === "standalone"
+          ? " (מסמך עצמאי)"
+          : "";
+      return {
+        subject: `נחתם: ${title}${num}`,
+        intro: `${who} חתם/ה על "${title}"${about}. העותק החתום (PDF) נשמר במערכת ונשלח ללקוח במייל.`,
+        details: false,
+        outro:
+          'אפשר לצפות במסמך, להוריד אותו ולשלוח עותק שוב — ב"מסמכי לקוחות", בלשונית "מסמכים חתומים".',
+        button: "למסמכים החתומים",
+      };
+    }
     default:
       return null;
   }

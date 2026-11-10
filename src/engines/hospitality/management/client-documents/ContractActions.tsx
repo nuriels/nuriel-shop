@@ -1,8 +1,10 @@
-// פעולות על חוזה (בארכיון ובכרטיס של הזמנה / אירוע): צפייה / הורדה של ה-PDF החתום, שליחת עותק שוב,
-// שליחה חוזרת של קישור (לא נחתם), ביטול, וחוזה מתוקן (נחתם — הקודם נשאר בארכיון עד שהמתוקן נחתם)
+// פעולות על חוזה / מסמך (בארכיון, ב"מסמכים חתומים" ובכרטיס של הזמנה / אירוע): צפייה / הורדה של ה-PDF
+// החתום, שליחת עותק שוב (המסמך לא משתנה), שליחה חוזרת של קישור במייל (לא נחתם), קישור חדש להעתקה
+// (מסמך שהלקוח ממלא), ביטול, וחוזה מתוקן (חוזה של הזמנה / אירוע שנחתם — הקודם נשאר עד שהמתוקן נחתם)
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Ban, Download, Eye, FilePen, Mail, Send, TriangleAlert } from "lucide-react";
+import { Ban, Download, Eye, FilePen, Link2, Mail, Send, TriangleAlert } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/platform/ui";
 import {
@@ -10,10 +12,12 @@ import {
   hospitalityContractCopy,
   hospitalityContractFile,
   hospitalityContractResend,
+  hospitalityContractShareLink,
 } from "../../api/contracts.functions";
-import type { ContractRow } from "../../types/contracts";
+import type { ContractRow, StandaloneResult } from "../../types/contracts";
 import { errorText } from "../catalog/refresh";
 import { CONTRACTS_KEY } from "./model";
+import { SignLinkBox } from "./SignLinkBox";
 
 export function ContractActions({ c, compact = false }: { c: ContractRow; compact?: boolean }) {
   const qc = useQueryClient();
@@ -55,6 +59,16 @@ export function ContractActions({ c, compact = false }: { c: ContractRow; compac
     },
     onError: (e) => toast.error(errorText(e)),
   });
+  const [shared, setShared] = useState<StandaloneResult | null>(null);
+  const share = useMutation({
+    mutationFn: () => hospitalityContractShareLink({ data: { id: c.id } }),
+    onSuccess: (r) => {
+      setShared(r);
+      toast.success("נוצר קישור חדש — הקישור הקודם בוטל");
+      refresh();
+    },
+    onError: (e) => toast.error(errorText(e)),
+  });
   const cancel = useMutation({
     mutationFn: () => hospitalityContractCancel({ data: { id: c.id, reason: null } }),
     onSuccess: () => {
@@ -68,8 +82,11 @@ export function ContractActions({ c, compact = false }: { c: ContractRow; compac
   const signed = c.stored_status === "signed" || c.stored_status === "superseded";
   const open =
     c.stored_status === "draft" || c.stored_status === "sent" || c.stored_status === "viewed";
-  // חוזה פתוח שכבר לא מתאים להזמנה / לאירוע: הלקוח לא יוכל לחתום, והמסד לא ישלח אותו שוב
+  // חוזה פתוח שכבר לא מתאים להזמנה / לאירוע (או מסמך עצמאי שפרטי העסק / גרסת המסמך השתנו בו):
+  // הלקוח לא יוכל לחתום, והמסד לא ישלח אותו שוב
   const stale = open ? c.stale : null;
+  const standalone = c.origin === "standalone";
+  const customerFills = standalone && c.fill_mode === "customer";
   const sendSearch = c.booking_id
     ? { tab: "send" as const, booking: c.booking_id }
     : c.event_id
@@ -85,9 +102,13 @@ export function ContractActions({ c, compact = false }: { c: ContractRow; compac
         >
           <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <span>
-            {stale === "changed"
-              ? "פרטי ההזמנה / האירוע השתנו מאז שהחוזה נשלח — הלקוח לא יוכל לחתום עליו. שלחו חוזה מעודכן."
-              : "ההזמנה / האירוע בוטלו — הלקוח לא יוכל לחתום על החוזה הזה. אפשר לבטל אותו."}
+            {standalone
+              ? stale === "changed"
+                ? "פרטי העסק / התנאים / גרסת המסמך השתנו מאז שהמסמך נוצר — הלקוח לא יוכל לחתום עליו. בטלו אותו וצרו מסמך חדש."
+                : "המסמך כבר לא בתוקף (חסרים פרטים, או שהמסמך הוסר מהאתר) — הלקוח לא יוכל לחתום. אפשר לבטל אותו."
+              : stale === "changed"
+                ? "פרטי ההזמנה / האירוע השתנו מאז שהחוזה נשלח — הלקוח לא יוכל לחתום עליו. שלחו חוזה מעודכן."
+                : "ההזמנה / האירוע בוטלו — הלקוח לא יוכל לחתום על החוזה הזה. אפשר לבטל אותו."}
           </span>
         </p>
       )}
@@ -129,7 +150,7 @@ export function ContractActions({ c, compact = false }: { c: ContractRow; compac
             </Button>
           </>
         )}
-        {(c.stored_status === "signed" || stale === "changed") && (
+        {!standalone && (c.stored_status === "signed" || stale === "changed") && (
           <Link
             to="/manage/client-documents"
             search={sendSearch}
@@ -141,7 +162,7 @@ export function ContractActions({ c, compact = false }: { c: ContractRow; compac
         )}
         {open && (
           <>
-            {!stale && (
+            {!stale && c.signer_email && (
               <Button
                 type="button"
                 size={size}
@@ -151,7 +172,21 @@ export function ContractActions({ c, compact = false }: { c: ContractRow; compac
                 onClick={() => resend.mutate()}
               >
                 <Send className="size-4" aria-hidden="true" />
-                {c.stored_status === "draft" ? "שליחה" : "שליחה חוזרת"}
+                {c.stored_status === "draft" ? "שליחה במייל" : "שליחה חוזרת במייל"}
+              </Button>
+            )}
+            {!stale && customerFills && (
+              <Button
+                type="button"
+                size={size}
+                variant="outline"
+                className={btn}
+                disabled={share.isPending}
+                onClick={() => share.mutate()}
+                data-testid={`contract-share-${c.number}`}
+              >
+                <Link2 className="size-4" aria-hidden="true" />
+                קישור חדש להעתקה
               </Button>
             )}
             <Button
@@ -168,6 +203,15 @@ export function ContractActions({ c, compact = false }: { c: ContractRow; compac
           </>
         )}
       </div>
+      {shared?.link && (
+        <SignLinkBox
+          url={shared.link.url}
+          expiresAt={shared.link.expires_at}
+          title={c.title}
+          phone={c.signer_phone}
+          number={c.number}
+        />
+      )}
     </div>
   );
 }

@@ -1,10 +1,13 @@
-// "מסמכי לקוחות" (/manage/client-documents, מיגרציה 64) — חוזים לחתימה אלקטרונית מול הלקוחות:
-// שליחת חוזה (אירוח ↔ הזמנת לינה · מתחם הבריכה ↔ אירוע), ארכיון החוזים, ותנאים ופרטי החוזה.
+// "מסמכי לקוחות" (/manage/client-documents, מיגרציה 64 + מסמכים עצמאיים) — מסמכים לחתימה אלקטרונית:
+// מסמך חדש לחתימה (עצמאי — בלי הזמנה: חוזה אירוח, חוזה אירוע, מסמך מדיניות; העסק ממלא ושולח במייל, או
+// הלקוח ממלא בקישור), חוזה להזמנה / לאירוע (אירוח ↔ הזמנת לינה · מתחם הבריכה ↔ אירוע), מסמכים חתומים
+// (חיפוש, צפייה, הורדה, עותק שוב; "חדש" על חתימות שלא נצפו), ארכיון, ותנאים ופרטי החוזה.
 // הנוסח הוכן מתוך החוזים של העסק לבדיקה משפטית: עד שהפלטפורמה מפעילה את החוזים (אחרי האישור) —
 // תצוגה מקדימה בלבד, בלי שליחה ללקוחות. ההרשאות נבדקות במסד; כאן רק מה שמוצג.
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Archive, FileSignature, Scale, Send, TriangleAlert } from "lucide-react";
+import { useEffect } from "react";
+import { Archive, FilePlus2, FileSignature, Scale, Send, TriangleAlert } from "lucide-react";
 import { cn } from "@/platform/ui";
 import { hospitalityContractsView } from "../../api/contracts.functions";
 import { LoadError, PageSkeleton } from "../catalog/parts";
@@ -13,10 +16,14 @@ import { NoAccess, PageHeader } from "../ui/kit";
 import { ContractsArchive } from "./ContractsArchive";
 import { contractsViewKey, parseClientDocsSearch, type ClientDocsTab } from "./model";
 import { SendContract } from "./SendContract";
+import { SignedDocuments } from "./SignedDocuments";
+import { StandaloneDocument } from "./StandaloneDocument";
 import { TermsEditor } from "./TermsEditor";
 
 const TABS: { key: ClientDocsTab; label: string; icon: typeof Send }[] = [
-  { key: "send", label: "שליחת חוזה", icon: Send },
+  { key: "new", label: "מסמך חדש לחתימה", icon: FilePlus2 },
+  { key: "send", label: "חוזה להזמנה / לאירוע", icon: Send },
+  { key: "signed", label: "מסמכים חתומים", icon: FileSignature },
   { key: "archive", label: "ארכיון החוזים", icon: Archive },
   { key: "terms", label: "תנאים ופרטי החוזה", icon: Scale },
 ];
@@ -29,15 +36,21 @@ export function ClientDocumentsPage() {
   // בלי הרשאת חוזים — רק התנאים (מי שמנהל הזמנות ואירועים רואה אותם; עריכה — לפי ההרשאה במסד)
   const canTerms = Boolean(ctx.permissions["bookings"]);
   const linked = Boolean(search.booking || search.event);
-  const tab: ClientDocsTab = !canContracts
-    ? "terms"
-    : (search.tab ?? (linked ? "send" : "archive"));
   const view = useQuery({
     queryKey: contractsViewKey,
     queryFn: () => hospitalityContractsView(),
     enabled: canContracts,
   });
-
+  // ברירת המחדל: מתוך הזמנה / אירוע — החוזה שלהם; יש חתימות חדשות — "מסמכים חתומים" (ונקבע בכתובת, כדי
+  // שהלשונית לא תתחלף כשהן מסומנות "נצפה"); אחרת — מסמך חדש
+  const unseenLanding = !search.tab && !linked && (view.data?.counts.unseen ?? 0) > 0;
+  const tab: ClientDocsTab = !canContracts
+    ? "terms"
+    : (search.tab ?? (linked ? "send" : unseenLanding ? "signed" : "new"));
+  useEffect(() => {
+    if (canContracts && unseenLanding)
+      void navigate({ to: "/manage/client-documents", search: { tab: "signed" }, replace: true });
+  }, [canContracts, unseenLanding, navigate]);
   if (!canContracts && !canTerms)
     return <NoAccess text="מסמכי הלקוחות — לבעלים ולמנהלים שקיבלו הרשאה לחוזים." />;
   if (canContracts && view.isError && !view.data) return <LoadError error={view.error} />;
@@ -57,7 +70,7 @@ export function ClientDocumentsPage() {
     <div className="mx-auto flex max-w-5xl flex-col gap-5" data-testid="client-documents">
       <PageHeader
         title="מסמכי לקוחות"
-        description="חוזים לחתימה אלקטרונית: חוזה אירוח להזמנת לינה, וחוזה מתחם הבריכה לאירוע בלי לינה. הלקוח מקבל קישור אישי במייל, חותם בטלפון או במחשב, והעותק החתום (PDF) נשמר כאן ונשלח אליו. החתימה מתעדת את הסכמת הלקוח לנוסח שנשלח — היא אינה אישור משפטי של החוזה."
+        description="מסמכים לחתימה אלקטרונית: חוזה אירוח, חוזה אירוע ומסמכי המדיניות של העסק — מתוך הזמנה / אירוע, או כמסמך עצמאי. הלקוח חותם בטלפון או במחשב, באצבע או בעכבר; העותק החתום (PDF) נשמר כאן, נשלח אליו ומופיע באזור האישי שלו, ואתם מקבלים התראה על כל חתימה. החתימה מתעדת את הסכמת הלקוח לנוסח שנשלח — היא אינה אישור משפטי של המסמך."
       />
 
       {v && !v.enabled && (
@@ -130,6 +143,17 @@ export function ClientDocumentsPage() {
                     {v.counts.all}
                   </span>
                 )}
+                {t.key === "signed" && v && v.counts.unseen > 0 && (
+                  <span
+                    className={cn(
+                      "rounded-full px-2 text-xs font-semibold",
+                      selected ? "bg-primary-foreground/20" : "bg-sky-100 text-sky-950",
+                    )}
+                    data-testid="signed-unseen-count"
+                  >
+                    {v.counts.unseen} חדשים
+                  </span>
+                )}
               </button>
             );
           })}
@@ -141,6 +165,8 @@ export function ClientDocumentsPage() {
         id={`cd-panel-${tab}`}
         aria-labelledby={canContracts ? `cd-tab-${tab}` : undefined}
       >
+        {tab === "new" && v && <StandaloneDocument view={v} />}
+        {tab === "signed" && v && <SignedDocuments />}
         {tab === "send" && v && (
           <SendContract
             key={`${search.booking ?? ""}:${search.event ?? ""}`}

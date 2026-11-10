@@ -1,5 +1,6 @@
-// המיילים של מסמכי הלקוחות (מיגרציה 64), באותו עיצוב של מיילי ההזמנות: בקשה לחתימה (קישור אישי)
-// ועותק חתום (PDF מצורף). טהור — escape מגיע מהשרת. הקישור מופיע רק כאן, אף פעם לא אצל הצוות.
+// המיילים של מסמכי הלקוחות (מיגרציה 64 + מסמכים עצמאיים), באותו עיצוב של מיילי ההזמנות: בקשה לחתימה
+// (קישור אישי) ועותק חתום (PDF מצורף, וקישור לאזור האישי). טהור — escape מגיע מהשרת. בדרך א' הקישור
+// לחתימה מופיע רק כאן; בדרך ב' העסק מקבל אותו פעם אחת כדי להעביר ללקוח.
 export interface ContractEmailContext {
   businessName: string;
   businessPhone: string | null;
@@ -23,10 +24,15 @@ ${contact ? `<p style="margin:16px 0 0;font-size:13px;color:#555">שאלות? ${
 </div></body></html>`;
 };
 
+/** "ההסכם" בחוזה, "המסמך" במסמך מדיניות */
+const docWord = (kind: string | undefined) => (kind === "policy" ? "המסמך" : "ההסכם");
+const hello = (e: (s: string) => string, name: string | null | undefined) =>
+  name ? `שלום ${e(name)},` : "שלום,";
+
 export function contractSignRequestEmail(
   ctx: ContractEmailContext,
   c: {
-    signerName: string;
+    signerName: string | null;
     title: string;
     number: number;
     url: string;
@@ -34,25 +40,44 @@ export function contractSignRequestEmail(
     about: string | null;
     /** הודעת שעות הבריכה (poolNotice) — מחוץ לנוסח ההסכם */
     poolNote?: string | null;
+    /** policy — מסמך מדיניות ("המסמך"); אחרת — חוזה ("ההסכם") */
+    kind?: string;
+    /** דרך ב': הלקוח משלים את הפרטים שלו בעצמו */
+    customerFills?: boolean;
   },
 ): { subject: string; html: string } {
   const e = ctx.escape;
+  const doc = docWord(c.kind);
   const subject = `${c.title} — לחתימה`;
-  const inner = `<p style="margin:0;font-size:15px;line-height:1.6">שלום ${e(c.signerName)},</p>
-<p style="margin:8px 0 0;font-size:15px;line-height:1.6">מצורף אליך ההסכם מ${e(ctx.businessName)}${c.about ? ` (${e(c.about)})` : ""}. אפשר לקרוא את כל הסעיפים, להשלים את הפרטים החסרים ולחתום באצבע או בעכבר.</p>
+  const what =
+    c.kind === "policy"
+      ? `מצורף אליך המסמך "${e(c.title)}" מ${e(ctx.businessName)}. אפשר לקרוא אותו במלואו ולחתום באצבע או בעכבר.`
+      : `מצורף אליך ההסכם מ${e(ctx.businessName)}${c.about ? ` (${e(c.about)})` : ""}. אפשר לקרוא את כל הסעיפים, ${c.customerFills ? "למלא את הפרטים שלכם" : "להשלים את הפרטים החסרים"} ולחתום באצבע או בעכבר.`;
+  const inner = `<p style="margin:0;font-size:15px;line-height:1.6">${hello(e, c.signerName)}</p>
+<p style="margin:8px 0 0;font-size:15px;line-height:1.6">${what}</p>
 ${c.poolNote ? `<p style="margin:12px 0 0;padding:10px 12px;font-size:14px;line-height:1.6;background:#fff7e6;border:1px solid #f0c36d;border-radius:8px"><strong>שימו לב — שעות הבריכה:</strong> ${e(c.poolNote)}</p>` : ""}
-<p style="margin:20px 0"><a href="${e(c.url)}" style="background:#1f3d2b;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">לקריאה ולחתימה על ההסכם</a></p>
+<p style="margin:20px 0"><a href="${e(c.url)}" style="background:#1f3d2b;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">לקריאה ולחתימה על ${doc}</a></p>
 <p style="margin:0 0 8px;font-size:12px;color:#777">הקישור אישי וחד-פעמי — אין להעביר אותו לאחרים. הוא בתוקף עד ${e(c.expiresOn)}. מספר המסמך: ${c.number}.</p>`;
   return { subject, html: layout(ctx, subject, inner) };
 }
 
 export function contractSignedCopyEmail(
   ctx: ContractEmailContext,
-  c: { signerName: string; title: string; number: number; signedOn: string },
+  c: {
+    signerName: string | null;
+    title: string;
+    number: number;
+    signedOn: string;
+    kind?: string;
+    /** "ההזמנות שלי" באתר — שם המסמכים החתומים זמינים בכל עת (כניסה עם קוד למייל, בלי סיסמה) */
+    areaUrl?: string | null;
+  },
 ): { subject: string; html: string } {
   const e = ctx.escape;
+  const doc = docWord(c.kind);
   const subject = `${c.title} — העותק החתום שלך`;
-  const inner = `<p style="margin:0;font-size:15px;line-height:1.6">שלום ${e(c.signerName)},</p>
-<p style="margin:8px 0 0;font-size:15px;line-height:1.6">תודה! ההסכם נחתם ב-${e(c.signedOn)}. העותק החתום מצורף למייל הזה כקובץ PDF (מסמך מס' ${c.number}). כדאי לשמור אותו.</p>`;
+  const inner = `<p style="margin:0;font-size:15px;line-height:1.6">${hello(e, c.signerName)}</p>
+<p style="margin:8px 0 0;font-size:15px;line-height:1.6">תודה! ${doc} נחתם ב-${e(c.signedOn)}. העותק החתום מצורף למייל הזה כקובץ PDF (מסמך מס' ${c.number}). כדאי לשמור אותו.</p>
+${c.areaUrl ? `<p style="margin:12px 0 0;font-size:14px;line-height:1.6">המסמכים החתומים שלכם שמורים גם <a href="${e(c.areaUrl)}" style="color:#1f3d2b">באזור האישי באתר</a> — כניסה עם קוד שנשלח לאימייל הזה, בלי סיסמה.</p>` : ""}`;
   return { subject, html: layout(ctx, subject, inner) };
 }

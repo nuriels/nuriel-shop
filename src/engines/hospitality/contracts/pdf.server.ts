@@ -10,6 +10,13 @@ import { pathPoints, SIGNATURE_HEIGHT, SIGNATURE_WIDTH, type ContractSignature }
 export interface SignedContractPdf {
   number: number;
   title: string;
+  /** policy — מסמך מדיניות: חתימת הלקוח בלבד (אין צד א'); ברירת מחדל — חוזה עם שני הצדדים */
+  kind?: "hosting" | "pool_event" | "policy";
+  /** customer — דרך ב': הלקוח מילא את פרטיו בעצמו (הקישור הועבר לו על ידי העסק) */
+  fillMode?: "business" | "customer";
+  /** מסמך מדיניות: הגרסה שפורסמה באתר וטביעת ה-SHA-256 שלה */
+  documentVersion?: string | null;
+  documentHash?: string | null;
   body: string;
   bodySha256: string;
   businessName: string;
@@ -109,46 +116,50 @@ export async function buildSignedContractPdf(c: SignedContractPdf): Promise<Uint
       }
     }
   };
+  const policy = c.kind === "policy";
   const signatures = () => {
     ensure(52);
     y += 4;
     const colW = (width - 10) / 2;
     const top = y;
+    const customer = {
+      label: policy ? "חתימת הלקוח/ה" : "חתימת השוכר / המזמין (צד ב')",
+      x: policy ? right - colW : MARGIN,
+      name: c.signerName,
+      render: (x: number, t: number) => {
+        if (c.signature.kind === "drawn") drawSignature(c.signature.paths, x + 4, t, colW - 8, 22);
+        else {
+          font(15, true);
+          doc.text(toVisualRtl(c.signature.name), x + colW / 2, t + 14, {
+            align: "center",
+            isInputVisual: true,
+            isOutputVisual: true,
+          });
+        }
+      },
+    };
     const cols: {
       label: string;
       x: number;
       render: (x: number, top: number) => void;
       name: string;
-    }[] = [
-      {
-        label: "חתימת המשכיר (צד א')",
-        x: right - colW,
-        name: c.representativeName
-          ? `${c.representativeName} — בשם ${c.businessName}`
-          : c.businessName,
-        render: (x, t) => {
-          if (c.representativeSignature?.length)
-            drawSignature(c.representativeSignature, x + 4, t, colW - 8, 22);
-        },
-      },
-      {
-        label: "חתימת השוכר / המזמין (צד ב')",
-        x: MARGIN,
-        name: c.signerName,
-        render: (x, t) => {
-          if (c.signature.kind === "drawn")
-            drawSignature(c.signature.paths, x + 4, t, colW - 8, 22);
-          else {
-            font(15, true);
-            doc.text(toVisualRtl(c.signature.name), x + colW / 2, t + 14, {
-              align: "center",
-              isInputVisual: true,
-              isOutputVisual: true,
-            });
-          }
-        },
-      },
-    ];
+    }[] = policy
+      ? [customer]
+      : [
+          {
+            label: "חתימת המשכיר (צד א')",
+            x: right - colW,
+            name: c.representativeName
+              ? `${c.representativeName} — בשם ${c.businessName}`
+              : c.businessName,
+            render: (x, t) => {
+              if (c.representativeSignature?.length)
+                drawSignature(c.representativeSignature, x + 4, t, colW - 8, 22);
+            },
+          },
+          customer,
+        ];
+    const dateX = policy ? right - colW : MARGIN;
     for (const col of cols) {
       font(10, true);
       doc.text(toVisualRtl(col.label), col.x + colW, top, {
@@ -168,13 +179,13 @@ export async function buildSignedContractPdf(c: SignedContractPdf): Promise<Uint
       });
     }
     font(9, false, MUTED);
-    doc.text(toVisualRtl(`נחתם ביום ${c.signedAtLocal}`), MARGIN + colW, top + 39, {
+    doc.text(toVisualRtl(`נחתם ביום ${c.signedAtLocal}`), dateX + colW, top + 39, {
       align: "right",
       isInputVisual: true,
       isOutputVisual: true,
     });
     if (c.signature.kind === "typed") {
-      doc.text(toVisualRtl("(חתימה בהקלדת השם המלא)"), MARGIN + colW, top + 43, {
+      doc.text(toVisualRtl("(חתימה בהקלדת השם המלא)"), dateX + colW, top + 43, {
         align: "right",
         isInputVisual: true,
         isOutputVisual: true,
@@ -241,31 +252,50 @@ export async function buildSignedContractPdf(c: SignedContractPdf): Promise<Uint
     ["המסמך", `${c.title} — מסמך מס' ${c.number}`],
     ["העסק", c.businessName],
     ["נחתם על ידי", c.signerName],
-    ["אימייל החותם (אליו נשלח הקישור האישי)", c.signerEmail],
+    [
+      c.fillMode === "customer"
+        ? "אימייל החותם (כפי שמסר בחתימה; אליו נשלח העותק)"
+        : "אימייל החותם (אליו נשלח הקישור האישי)",
+      c.signerEmail,
+    ],
     ["מועד החתימה (שעון ישראל)", c.signedAtLocal],
     ["אופן החתימה", c.signature.kind === "drawn" ? "ציור באצבע / בעכבר" : "הקלדת השם המלא"],
     ["כתובת IP", c.signerIp ?? "—"],
     ["דפדפן", (c.signerUserAgent ?? "—").slice(0, 160)],
   ];
+  if (policy && c.documentVersion)
+    facts.splice(1, 0, ["גרסת המסמך באתר", `גרסה ${c.documentVersion}`]);
   for (const [k, v] of facts) write(`${k}: ${v}`, 10);
   y += 2;
-  write("טביעת SHA-256 של נוסח ההסכם החתום:", 10, { bold: true });
+  write(policy ? "טביעת SHA-256 של הנוסח החתום:" : "טביעת SHA-256 של נוסח ההסכם החתום:", 10, {
+    bold: true,
+  });
   font(9, false, INK);
   ensure(6);
   doc.text(c.bodySha256, right, y, { align: "right" });
   y += 7;
+  if (policy && c.documentHash) {
+    write("טביעת SHA-256 של המסמך כפי שפורסם באתר:", 10, { bold: true });
+    font(9, false, INK);
+    ensure(6);
+    doc.text(c.documentHash, right, y, { align: "right" });
+    y += 7;
+  }
   if (c.poolNote) {
     write("הודעה שהוצגה לחותם לפני החתימה (מחוץ לנוסח ההסכם):", 10, { bold: true });
     write(c.poolNote, 10);
     y += 2;
   }
+  const how =
+    c.fillMode === "customer"
+      ? "החתימה נעשתה באמצעות קישור אישי וחד-פעמי שהעסק העביר לחותם; את שמו ואת פרטי הקשר שלו מילא החותם בעצמו."
+      : "החתימה נעשתה באמצעות קישור אישי וחד-פעמי שנשלח לאימייל של החותם.";
+  const agreed = policy
+    ? "לפני החתימה אישר החותם שקרא את המסמך במלואו ושהוא מסכים לתנאיו. הנוסח החתום נשמר במערכת ולא ניתן לשנותו; כל שינוי מחייב מסמך חדש וחתימה חדשה."
+    : "לפני החתימה אישר החותם שקרא את כל סעיפי ההסכם ושהוא מסכים להם. הנוסח החתום נשמר במערכת ולא ניתן לשנותו; כל שינוי בפרטים מחייב הסכם מתוקן וחתימה חדשה.";
+  write(`${how} ${agreed}`, 9.5, { color: MUTED });
   write(
-    "החתימה נעשתה באמצעות קישור אישי וחד-פעמי שנשלח לאימייל של החותם. לפני החתימה אישר החותם שקרא את כל סעיפי ההסכם ושהוא מסכים להם. הנוסח החתום נשמר במערכת ולא ניתן לשנותו; כל שינוי בפרטים מחייב הסכם מתוקן וחתימה חדשה.",
-    9.5,
-    { color: MUTED },
-  );
-  write(
-    "עמוד זה מתעד את אופן החתימה בלבד, ואינו אישור משפטי של תוכן ההסכם. החתימה היא חתימה אלקטרונית פשוטה — לא חתימה אלקטרונית מאובטחת או מאושרת.",
+    `עמוד זה מתעד את אופן החתימה בלבד, ואינו אישור משפטי של תוכן ${policy ? "המסמך" : "ההסכם"}. החתימה היא חתימה אלקטרונית פשוטה — לא חתימה אלקטרונית מאובטחת או מאושרת.`,
     9.5,
     { color: MUTED },
   );

@@ -1,6 +1,7 @@
 // נוסח החוזה (כפי שהמסד מרכיב אותו מהתבנית — מיגרציה 64) → בלוקים לתצוגה, ל-PDF ולבדיקות.
 // הסימון: "# " כותרת · "^ " שורת משנה · "## " סעיף · "- " נקודה · "**…**" שורה מודגשת · "> " תיבה ·
-// "[[signatures]]" אזור החתימות · שורה ריקה — סוף פסקה. טהור (בלי HTML — הכל טקסט).
+// "[[signatures]]" אזור החתימות · "\ " פסקה כלשונה (בלי סימון) · שורה ריקה — סוף פסקה.
+// טהור (בלי HTML — הכל טקסט).
 export type ContractBlock =
   | { kind: "title"; text: string }
   | { kind: "subtitle"; text: string }
@@ -24,7 +25,10 @@ export function contractBlocks(body: string): ContractBlock[] {
       flush();
       continue;
     }
-    if (line === "[[signatures]]") {
+    // "\ " — פסקה כלשונה (במסמך מדיניות: שורה של מסמך האתר שהייתה נקראת כסימון, למשל "# …" או "**…**")
+    if (line.startsWith("\\ ")) {
+      para.push(line.slice(2).trim());
+    } else if (line === "[[signatures]]") {
       flush();
       out.push({ kind: "signatures" });
     } else if (line.startsWith("## ")) {

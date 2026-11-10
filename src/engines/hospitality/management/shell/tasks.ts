@@ -1,9 +1,11 @@
 // "דורש טיפול" במעטפת (שלב F2b): אותה שאילתה כמו בלוח הבקרה (מטמון משותף — קריאה אחת לשרת),
 // לפעמון שבסרגל העליון ולספירות שליד "הזמנות" ו"ערוצי הזמנה" בניווט.
 import { useQuery } from "@tanstack/react-query";
+import { hospitalityContractsUnseen } from "../../api/contracts.functions";
 import { hospitalityDashboardTasks } from "../../api/dashboard.functions";
 import { hospitalitySupportUnread } from "../../api/support.functions";
 import type { DashboardTasks } from "../../types/dashboard";
+import { contractsUnseenKey } from "../client-documents/model";
 import { dashboardKeys } from "../dashboard/model";
 import type { NavBadges } from "../lib/nav";
 import { supportKeys } from "../support/keys";
@@ -35,6 +37,17 @@ export function useSupportUnread(enabled: boolean) {
   return useQuery({
     queryKey: supportKeys.unread,
     queryFn: () => hospitalitySupportUnread(),
+    enabled,
+    refetchInterval: 120_000,
+    staleTime: 60_000,
+  });
+}
+
+/** מסמכי לקוחות: חתימות חדשות שעוד לא נצפו — לתג ליד "מסמכי לקוחות" (ההתראה במערכת על כל חתימה) */
+export function useContractsUnseen(enabled: boolean) {
+  return useQuery({
+    queryKey: contractsUnseenKey,
+    queryFn: () => hospitalityContractsUnseen(),
     enabled,
     refetchInterval: 120_000,
     staleTime: 60_000,

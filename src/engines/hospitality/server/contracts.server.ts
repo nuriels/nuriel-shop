@@ -1,6 +1,7 @@
-// מסמכי לקוחות (מיגרציה 64) — צד שרת בלבד:
-//   • הקישור לחתימה: 32 בתים אקראיים (base64url) — נוצר כאן, במסד רק ה-SHA-256 שלו, והוא יוצא רק
-//     במייל ללקוח (לא חוזר לדפדפן של הצוות). כל שליחה — קישור חדש, והקודם מת;
+// מסמכי לקוחות (מיגרציה 64 + מסמכים עצמאיים) — צד שרת בלבד:
+//   • הקישור לחתימה: 32 בתים אקראיים (base64url) — נוצר כאן, במסד רק ה-SHA-256 שלו. בדרך א' הוא יוצא
+//     רק במייל ללקוח (לא חוזר לדפדפן של הצוות); בדרך ב' (הלקוח ממלא) הוא מוחזר לצוות פעם אחת, כדי
+//     להעביר אותו ללקוח, ולא נשמר בשום מקום. כל שליחה / קישור — קישור חדש, והקודם מת;
 //   • שליחה: קישור → מייל → התוצאה במסד. מייל שנכשל — החוזה לא מסומן "נשלח" (והקישור מבוטל);
 //   • אחרי החתימה: PDF (contracts/pdf.server.ts) → הדלי הפרטי hosp-contracts (מפתח השירות) → טביעה
 //     במסד (פעם אחת) → עותק ללקוח עם ה-PDF מצורף. תקלה באמצע לא מבטלת את החתימה — הבדיקה ברקע משלימה;
@@ -79,8 +80,14 @@ interface SendPrepared extends ContractRow {
   business_phone: string | null;
 }
 
+const signUrl = (origin: string, token: string) => `${origin}/stay/contract#t=${token}`;
+/** "ההזמנות שלי" — שם המסמכים החתומים (כניסה עם קוד למייל) */
+const areaUrl = (origin: string) => `${origin}/stay/account`;
+
 /** שליחה (או שליחה חוזרת) של חוזה לחתימה: קישור חדש → מייל → התוצאה במסד */
 export async function sendSignRequest(p: SendPrepared): Promise<ContractSendResult> {
+  if (!p.signer_email)
+    throw new HospitalityError("אין אימייל ללקוח — העתיקו את הקישור ושלחו אותו ללקוח בעצמכם", null);
   const origin = await siteLink(p.tenant_id);
   if (!origin)
     throw new HospitalityError("כתובת האתר של העסק לא ידועה — אי אפשר לשלוח קישור", null);
@@ -110,10 +117,12 @@ export async function sendSignRequest(p: SendPrepared): Promise<ContractSendResu
       signerName: p.signer_name,
       title: p.title,
       number: p.number,
-      url: `${origin}/stay/contract#t=${token}`,
+      url: signUrl(origin, token),
       expiresOn: dayText(link.expires_at),
       about,
       poolNote: poolNotice(p.kind, p.pool),
+      kind: p.kind,
+      customerFills: p.fill_mode === "customer",
     },
   );
   let ok = false;
@@ -148,6 +157,33 @@ export async function sendSignRequest(p: SendPrepared): Promise<ContractSendResu
     sent: ok,
     error: ok ? null : "שליחת המייל נכשלה — החוזה לא סומן כנשלח. בדקו את כתובת האימייל ונסו שוב.",
   };
+}
+
+/**
+ * דרך ב' (הלקוח ממלא): קישור חדש לחתימה — מוחזר לצוות פעם אחת להעברה ללקוח (וואטסאפ / הודעה).
+ * במסד: רק הטביעה שלו, ו"נוצר קישור" ביומן. קישור קודם מת
+ */
+export async function shareSignLink(p: {
+  tenant_id: string;
+  id: string;
+  actor_id: string;
+}): Promise<{ contract: ContractRow; url: string; expires_at: string }> {
+  const origin = await siteLink(p.tenant_id);
+  if (!origin)
+    throw new HospitalityError("כתובת האתר של העסק לא ידועה — אי אפשר ליצור קישור", null);
+  const { token, hash } = newSignToken();
+  const link = await rpcAs<{ expires_at: string }>(p.tenant_id, "contract_issue_link", {
+    _tenant: p.tenant_id,
+    _id: p.id,
+    _token_hash: hash,
+    _actor: p.actor_id,
+  });
+  const contract = await rpcAs<ContractRow>(p.tenant_id, "contract_link_shared", {
+    _tenant: p.tenant_id,
+    _id: p.id,
+    _actor: p.actor_id,
+  });
+  return { contract, url: signUrl(origin, token), expires_at: link.expires_at };
 }
 
 async function uploadPdf(tenantId: string, id: string, bytes: Uint8Array): Promise<string> {
@@ -217,6 +253,7 @@ interface ForPdf extends ContractRow {
 }
 
 async function sendCopy(c: ForPdf, bytes: Uint8Array, actorId: string | null): Promise<boolean> {
+  const origin = await siteLink(c.tenant_id).catch(() => null);
   const { subject, html } = contractSignedCopyEmail(
     {
       businessName: c.business_name,
@@ -224,11 +261,19 @@ async function sendCopy(c: ForPdf, bytes: Uint8Array, actorId: string | null): P
       businessEmail: c.business_email,
       escape: escapeHtml,
     },
-    { signerName: c.signer_name, title: c.title, number: c.number, signedOn: c.signed_at_local },
+    {
+      signerName: c.signer_name,
+      title: c.title,
+      number: c.number,
+      signedOn: c.signed_at_local,
+      kind: c.kind,
+      areaUrl: origin ? areaUrl(origin) : null,
+    },
   );
   let ok = false;
   let error: string | null = null;
   try {
+    if (!c.signer_email) throw new Error("אין אימייל לחותם");
     const r = await sendBusinessEmail({
       to: c.signer_email,
       subject,
@@ -273,13 +318,17 @@ export async function completeSignedContract(
     bytes = await buildSignedContractPdf({
       number: c.number,
       title: c.title,
+      kind: c.kind,
+      fillMode: c.fill_mode,
+      documentVersion: c.document_version,
+      documentHash: c.document_hash,
       body: c.body,
       bodySha256: c.signed_body_sha256 ?? "",
       businessName: c.business_name,
       representativeName: c.representative_name,
       representativeSignature: c.representative_signature,
-      signerName: c.signer_name,
-      signerEmail: c.signer_email,
+      signerName: c.signer_name ?? "",
+      signerEmail: c.signer_email ?? "",
       signature: c.signature,
       signedAtLocal: c.signed_at_local,
       signerIp: c.signer_ip,

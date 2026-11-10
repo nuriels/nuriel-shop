@@ -25,6 +25,8 @@ import {
   CONTRACT_KIND_LABEL,
   CONTRACT_STATUS_LABEL,
   DEPOSIT_METHOD_LABEL,
+  FILL_MODE_LABEL,
+  ORIGIN_LABEL,
   type ContractKind,
   type ContractRow,
   type ContractStatus,
@@ -35,7 +37,14 @@ import { errorText } from "../catalog/refresh";
 import { formatDateTime } from "../lib/format";
 import { EmptyState } from "../ui/kit";
 import { ContractActions } from "./ContractActions";
-import { CONTRACT_STATUS_TONE, contractKey, contractsListKey, serviceDateText } from "./model";
+import {
+  CONTRACT_STATUS_TONE,
+  contractKey,
+  contractsListKey,
+  linkText,
+  serviceText,
+  signerText,
+} from "./model";
 
 const PAGE = 30;
 const SELECT = "min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm";
@@ -65,10 +74,11 @@ const LOG_TEXT: Record<string, string> = {
   staff_download: "הורדת ה-PDF (צוות)",
   customer_download: "הלקוח הוריד את ה-PDF",
   signer_updated: "פרטי החותם תוקנו (הקישור הקודם בוטל)",
+  link_created: "נוצר קישור להעתקה — הלקוח ממלא בעצמו",
 };
 const ACTOR_TEXT = { staff: "צוות", customer: "הלקוח", system: "המערכת" } as const;
 
-function StatusTag({ status }: { status: ContractStatus }) {
+export function StatusTag({ status }: { status: ContractStatus }) {
   return (
     <span
       className={cn(
@@ -80,9 +90,6 @@ function StatusTag({ status }: { status: ContractStatus }) {
     </span>
   );
 }
-
-const serviceText = (c: ContractRow) =>
-  `${serviceDateText(c.service_date, c.service_end)}${c.event_purpose ? ` · ${c.event_purpose}` : ""}`;
 
 export function ContractsArchive({ counts }: { counts: ContractsView["counts"] }) {
   const [text, setText] = useState("");
@@ -154,6 +161,7 @@ export function ContractsArchive({ counts }: { counts: ContractsView["counts"] }
             <option value="">הכל</option>
             <option value="hosting">{CONTRACT_KIND_LABEL.hosting}</option>
             <option value="pool_event">{CONTRACT_KIND_LABEL.pool_event}</option>
+            <option value="policy">{CONTRACT_KIND_LABEL.policy}</option>
           </select>
         </div>
         <div className="flex flex-col gap-1">
@@ -261,7 +269,7 @@ export function ContractsArchive({ counts }: { counts: ContractsView["counts"] }
                 {list.data.rows.map((c) => (
                   <tr key={c.id} className="border-t align-top" data-contract={c.number}>
                     <td className="px-3 py-3">
-                      <p className="font-medium">{c.signer_name}</p>
+                      <p className="font-medium">{signerText(c)}</p>
                       {c.signer_phone && (
                         <p className="text-xs text-muted-foreground" dir="ltr">
                           {c.signer_phone}
@@ -273,12 +281,9 @@ export function ContractsArchive({ counts }: { counts: ContractsView["counts"] }
                     </td>
                     <td className="px-3 py-3">
                       <p>
-                        #{c.number} · {CONTRACT_KIND_LABEL[c.kind]}
+                        #{c.number} · {c.kind === "policy" ? c.title : CONTRACT_KIND_LABEL[c.kind]}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {BOOKING_TYPE_LABEL[c.booking_type]}
-                        {c.link_number ? ` #${c.link_number}` : ""}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{linkText(c)}</p>
                     </td>
                     <td className="px-3 py-3">{serviceText(c)}</td>
                     <td className="px-3 py-3">{c.signed_at ? formatDateTime(c.signed_at) : "—"}</td>
@@ -314,9 +319,9 @@ export function ContractsArchive({ counts }: { counts: ContractsView["counts"] }
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-medium">{c.signer_name}</p>
+                    <p className="font-medium">{signerText(c)}</p>
                     <p className="text-xs text-muted-foreground">
-                      #{c.number} · {CONTRACT_KIND_LABEL[c.kind]}
+                      #{c.number} · {c.kind === "policy" ? c.title : CONTRACT_KIND_LABEL[c.kind]}
                     </p>
                   </div>
                   <StatusTag status={c.status} />
@@ -328,11 +333,21 @@ export function ContractsArchive({ counts }: { counts: ContractsView["counts"] }
                   </dd>
                   <dt className="text-muted-foreground">אימייל</dt>
                   <dd dir="ltr" className="text-start break-all">
-                    {c.signer_email}
+                    {c.signer_email ?? "—"}
                   </dd>
-                  <dt className="text-muted-foreground">{BOOKING_TYPE_LABEL[c.booking_type]}</dt>
+                  <dt className="text-muted-foreground">
+                    {c.origin === "standalone"
+                      ? "מקור"
+                      : c.booking_type
+                        ? BOOKING_TYPE_LABEL[c.booking_type]
+                        : "—"}
+                  </dt>
                   <dd>
-                    {c.link_number ? `#${c.link_number} · ` : ""}
+                    {c.origin === "standalone"
+                      ? `${ORIGIN_LABEL.standalone} · `
+                      : c.link_number
+                        ? `#${c.link_number} · `
+                        : ""}
                     {serviceText(c)}
                   </dd>
                   <dt className="text-muted-foreground">נחתם</dt>
@@ -371,7 +386,7 @@ export function ContractsArchive({ counts }: { counts: ContractsView["counts"] }
   );
 }
 
-function ContractDetailSheet({ id, onClose }: { id: string | null; onClose: () => void }) {
+export function ContractDetailSheet({ id, onClose }: { id: string | null; onClose: () => void }) {
   const isMobile = useIsMobile();
   const detail = useQuery({
     queryKey: contractKey(id ?? "none"),
@@ -387,7 +402,9 @@ function ContractDetailSheet({ id, onClose }: { id: string | null; onClose: () =
         data-testid="contract-detail"
       >
         <SheetHeader className="ps-10 text-start sm:text-start">
-          <SheetTitle>{d ? `חוזה #${d.number}` : "חוזה"}</SheetTitle>
+          <SheetTitle>
+            {d ? `${d.kind === "policy" ? "מסמך" : "חוזה"} #${d.number}` : "מסמך"}
+          </SheetTitle>
           <SheetDescription>{d ? d.title : "טוען…"}</SheetDescription>
         </SheetHeader>
         {detail.isError && !d ? (
@@ -406,7 +423,13 @@ function ContractDetailSheet({ id, onClose }: { id: string | null; onClose: () =
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
               <dt className="text-muted-foreground">הלקוח</dt>
               <dd>
-                {d.signer_name} · <span dir="ltr">{d.signer_email}</span>
+                {signerText(d)}
+                {d.signer_email && (
+                  <>
+                    {" "}
+                    · <span dir="ltr">{d.signer_email}</span>
+                  </>
+                )}
                 {d.signer_phone && (
                   <>
                     {" "}
@@ -414,9 +437,17 @@ function ContractDetailSheet({ id, onClose }: { id: string | null; onClose: () =
                   </>
                 )}
               </dd>
-              <dt className="text-muted-foreground">{BOOKING_TYPE_LABEL[d.booking_type]}</dt>
+              <dt className="text-muted-foreground">
+                {d.origin === "standalone"
+                  ? "מקור"
+                  : d.booking_type
+                    ? BOOKING_TYPE_LABEL[d.booking_type]
+                    : "—"}
+              </dt>
               <dd>
-                {d.booking_id ? (
+                {d.origin === "standalone" ? (
+                  `${ORIGIN_LABEL.standalone} · ${FILL_MODE_LABEL[d.fill_mode]}`
+                ) : d.booking_id ? (
                   <Link
                     to="/manage/bookings/$bookingId"
                     params={{ bookingId: d.booking_id }}
@@ -478,7 +509,14 @@ function ContractDetailSheet({ id, onClose }: { id: string | null; onClose: () =
                 <>
                   <dt className="text-muted-foreground">מה שהלקוח מילא</dt>
                   <dd>
-                    ת"ז / ח.פ <span dir="ltr">{d.customer_fields.id_number_masked}</span>
+                    {d.customer_fields.full_name ? `${d.customer_fields.full_name} · ` : ""}
+                    {d.customer_fields.id_number_masked ? (
+                      <>
+                        ת"ז / ח.פ <span dir="ltr">{d.customer_fields.id_number_masked}</span>
+                      </>
+                    ) : d.kind === "policy" ? (
+                      "אישור קריאה והסכמה"
+                    ) : null}
                     {d.customer_fields.address ? ` · ${d.customer_fields.address}` : ""}
                     {d.customer_fields.deposit_method
                       ? ` · פיקדון: ${DEPOSIT_METHOD_LABEL[d.customer_fields.deposit_method]}`
@@ -500,6 +538,14 @@ function ContractDetailSheet({ id, onClose }: { id: string | null; onClose: () =
                   <dt className="text-muted-foreground">טביעת הנוסח החתום</dt>
                   <dd className="font-mono text-xs break-all" dir="ltr">
                     sha256 {d.signed_body_sha256}
+                  </dd>
+                </>
+              )}
+              {d.document_hash && (
+                <>
+                  <dt className="text-muted-foreground">המסמך כפי שפורסם באתר</dt>
+                  <dd className="font-mono text-xs break-all" dir="ltr">
+                    v{d.document_version} · sha256 {d.document_hash}
                   </dd>
                 </>
               )}

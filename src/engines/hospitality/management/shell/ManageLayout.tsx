@@ -17,7 +17,7 @@ import { CommandMenu } from "./CommandMenu";
 import { ManagementCtx } from "./management-context";
 import { BottomNav, SideNav } from "./Navigation";
 import { ErrorScreen, ForbiddenScreen, LoadingScreen, ManageRouteError } from "./StatusScreens";
-import { navBadges, useDashboardTasks, useSupportUnread } from "./tasks";
+import { navBadges, useContractsUnseen, useDashboardTasks, useSupportUnread } from "./tasks";
 import { TopBar } from "./TopBar";
 
 // NURIEL AI – Hospitality: נטען רק אחרי שהמעטפת עלתה (הקטלוג והחלון לא בחבילה הראשית)
@@ -94,7 +94,12 @@ function Shell({
   const roleText = context.role === "owner" ? "בעלים" : "מנהל/ת";
   const tasks = useDashboardTasks(context.permissions["bookings"] === true);
   const support = useSupportUnread(context.permissions["settings"] === true);
-  const badges = { ...navBadges(tasks.data), ...(support.data ? { support: support.data } : {}) };
+  const signed = useContractsUnseen(context.permissions["contracts"] === true);
+  const badges = {
+    ...navBadges(tasks.data),
+    ...(support.data ? { support: support.data } : {}),
+    ...(signed.data?.unseen ? { contracts: signed.data.unseen } : {}),
+  };
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [searchOpen, setSearchOpen] = useState(false);
 

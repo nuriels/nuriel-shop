@@ -4,8 +4,8 @@
 // כבר יש חוזה חתום — חוזה מתוקן (החתום נשאר בארכיון ובתוקף עד שהמתוקן נחתם).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { CalendarDays, CheckCircle2, Search, Send, UserRound, X } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { CalendarDays, CheckCircle2, Send, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button, Input, Label, cn } from "@/platform/ui";
 import { hospitalityBookings } from "../../api/bookings.functions";
@@ -15,7 +15,6 @@ import {
   hospitalityContractsFor,
 } from "../../api/contracts.functions";
 import { hospitalityEvents } from "../../api/events.functions";
-import { hospitalityGuests } from "../../api/guests.functions";
 import { BLANK } from "../../contracts/blocks";
 import { ContractBody } from "../../contracts/ContractBody";
 import type { BookingState } from "../../types/bookings";
@@ -35,80 +34,16 @@ import { errorText } from "../catalog/refresh";
 import { formatDateTime, formatMoney } from "../lib/format";
 import { SectionCard } from "../ui/kit";
 import { ContractActions } from "./ContractActions";
-import { CONTRACTS_KEY, contractsForKey, serviceDateText } from "./model";
+import { Choice, GuestPicker, PickList, SearchBox, Step } from "./form-parts";
+import { CONTRACTS_KEY, SELECT, contractsForKey, serviceDateText, useDebounced } from "./model";
 
 type CustomerMode = "link" | "existing" | "manual";
-const SELECT = "min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm";
 const CLOSED_BOOKING: BookingState[] = ["declined", "cancelled", "expired", "no_show"];
 const OPEN = ["draft", "sent", "viewed"];
 const dmy = (iso: string) => {
   const [y, m, d] = iso.split("-");
   return `${Number(d)}.${Number(m)}.${y}`;
 };
-
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
-}
-
-function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
-  return (
-    <fieldset className="flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 sm:p-5">
-      <legend className="flex items-center gap-2 px-1 text-sm font-bold">
-        <span
-          className="flex size-6 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground"
-          aria-hidden="true"
-        >
-          {n}
-        </span>
-        {title}
-      </legend>
-      {children}
-    </fieldset>
-  );
-}
-
-function Choice({
-  checked,
-  onChange,
-  name,
-  title,
-  text,
-  testId,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  name: string;
-  title: string;
-  text?: string;
-  testId?: string;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm",
-        checked ? "border-primary bg-primary/5" : "bg-background hover:bg-muted/50",
-      )}
-      data-testid={testId}
-    >
-      <input
-        type="radio"
-        name={name}
-        checked={checked}
-        onChange={onChange}
-        className="mt-1 size-4"
-      />
-      <span className="flex flex-col gap-0.5">
-        <span className="font-medium">{title}</span>
-        {text && <span className="text-xs text-muted-foreground">{text}</span>}
-      </span>
-    </label>
-  );
-}
 
 export function SendContract({
   view,
@@ -620,55 +555,6 @@ function LinkSummary({
   );
 }
 
-function SearchBox({
-  id,
-  label,
-  value,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <Label htmlFor={id}>{label}</Label>
-      <div className="relative">
-        <Search
-          className="pointer-events-none absolute start-3 top-3.5 size-4 text-muted-foreground"
-          aria-hidden="true"
-        />
-        <Input
-          id={id}
-          type="search"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="min-h-11 ps-9"
-          autoComplete="off"
-        />
-      </div>
-    </div>
-  );
-}
-
-function PickList({
-  children,
-  empty,
-  loading,
-  error,
-}: {
-  children: ReactNode[];
-  empty: string;
-  loading: boolean;
-  error: unknown;
-}) {
-  if (error) return <p className="text-sm text-destructive">{errorText(error)}</p>;
-  if (loading) return <p className="text-sm text-muted-foreground">מחפש…</p>;
-  if (children.length === 0) return <p className="text-sm text-muted-foreground">{empty}</p>;
-  return <ul className="flex flex-col gap-1.5">{children}</ul>;
-}
-
 function BookingPicker({ onPick }: { onPick: (id: string, label: string) => void }) {
   const [text, setText] = useState("");
   const q = useDebounced(text.trim(), 300);
@@ -769,71 +655,6 @@ function EventPicker({ onPick }: { onPick: (id: string, label: string) => void }
           );
         })}
       </PickList>
-    </div>
-  );
-}
-
-function GuestPicker({
-  guest,
-  onPick,
-}: {
-  guest: { id: string; name: string } | null;
-  onPick: (g: { id: string; name: string } | null) => void;
-}) {
-  const [text, setText] = useState("");
-  const q = useDebounced(text.trim(), 300);
-  const list = useQuery({
-    queryKey: [...CONTRACTS_KEY, "pick-guest", q],
-    enabled: q.length >= 2,
-    queryFn: () => hospitalityGuests({ data: { q, limit: 8, offset: 0 } }),
-  });
-  if (guest)
-    return (
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 p-3 text-sm">
-        <span className="flex items-center gap-2">
-          <UserRound className="size-4 text-muted-foreground" aria-hidden="true" />
-          {guest.name}
-        </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="min-h-10 gap-1"
-          onClick={() => onPick(null)}
-        >
-          <X className="size-4" aria-hidden="true" />
-          החלפה
-        </Button>
-      </div>
-    );
-  return (
-    <div className="flex flex-col gap-2" data-testid="guest-picker">
-      <SearchBox
-        id="cs-guest-q"
-        label="חיפוש לקוח — שם, טלפון או אימייל"
-        value={text}
-        onChange={setText}
-      />
-      {q.length >= 2 && (
-        <PickList loading={list.isLoading} error={list.error} empty="לא נמצאו לקוחות.">
-          {(list.data?.items ?? [])
-            .filter((g) => !g.anonymized)
-            .map((g) => (
-              <li key={g.id}>
-                <button
-                  type="button"
-                  onClick={() => onPick({ id: g.id, name: g.name })}
-                  className="flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-start text-sm hover:bg-muted"
-                >
-                  <span>{g.name}</span>
-                  <span className="text-xs text-muted-foreground" dir="ltr">
-                    {[g.email, g.phone].filter(Boolean).join(" · ")}
-                  </span>
-                </button>
-              </li>
-            ))}
-        </PickList>
-      )}
     </div>
   );
 }
