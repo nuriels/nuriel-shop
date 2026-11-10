@@ -2,6 +2,9 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_standalone_documents (68): הגנה (נעצר כשיש מסמך עצמאי / מסמך מדיניות / מסמך שהלקוח ממלא),
+#     rollback → העמודות origin / fill_mode / staff_seen_at, הפונקציות החדשות ותבנית מסמך המדיניות נעלמו;
+#     האילוצים והפונקציות של 66 מילה במילה; הסכמה זהה בדיוק ל-67
 #   • hosp_customer_details (67): בלי הגנה (רק פונקציות), rollback → פונקציות התיקון והשליחה החוזרת
 #     נעלמו; הסכמה זהה בדיוק ל-66
 #   • hosp_client_contracts (66): הגנה (נעצר כשיש חוזים / קבצים בדלי, או כש-67 עוד קיימת), rollback →
@@ -145,6 +148,7 @@ M64=20261111100000_hosp_hero_video_verified
 M65=20261111110000_hosp_events
 M66=20261111120000_hosp_client_contracts
 M67=20261111130000_hosp_customer_details
+M68=20261111140000_hosp_standalone_documents
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -187,6 +191,45 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- standalone documents for signing (migration 68) ----------
+expect "before the rollback: origin / fill mode / seen columns, the policy template, the new staff functions (signed-in staff), the copy-link record (the app server only)" \
+  "SELECT (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'client_contracts'
+             AND column_name IN ('origin', 'fill_mode', 'staff_seen_at')) = 3
+      AND EXISTS (SELECT 1 FROM hospitality.contract_templates WHERE key = 'policy')
+      AND has_function_privilege('authenticated', 'hospitality.contract_standalone_create(text,text,uuid,jsonb,jsonb)', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'hospitality.staff_signed_documents(text,text,text,date,date,integer,integer)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'hospitality.contract_standalone_create(text,text,uuid,jsonb,jsonb)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality.contract_link_shared(uuid,uuid,uuid)', 'EXECUTE')
+      AND has_function_privilege('service_role', 'hospitality.contract_link_shared(uuid,uuid,uuid)', 'EXECUTE')"
+echo "rollback guard: $M66 refuses while $M68 exists; $M68 refuses while a standalone document exists"
+if down "$M66" 2>/dev/null; then
+  echo "  FAIL $M66 rolled back while $M68 exists"; exit 1
+fi
+q "SET session_replication_role = replica;
+   INSERT INTO hospitality.client_contracts (tenant_id, number, kind, template_version, origin, fill_mode, signer_name, signer_email, data)
+   SELECT id, 1001, 'policy', 1, 'standalone', 'customer', NULL, NULL, '{}'::jsonb FROM public.tenants WHERE is_default" >/dev/null
+if down "$M68" 2>/dev/null; then
+  echo "  FAIL rollback ran although a standalone document exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT (SELECT count(*) FROM hospitality.client_contracts WHERE origin = 'standalone') = 1
+      AND EXISTS (SELECT 1 FROM hospitality.contract_templates WHERE key = 'policy')"
+q "DELETE FROM hospitality.client_contracts" >/dev/null
+ref_upto "$M68"
+echo "rollback: $M68"
+down "$M68"
+expect "the standalone documents are gone: the columns, the new functions, the policy template; the migration-66 constraints back" \
+  "SELECT (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'client_contracts'
+             AND column_name IN ('origin', 'fill_mode', 'staff_seen_at')) = 0
+      AND NOT EXISTS (SELECT 1 FROM hospitality.contract_templates WHERE key = 'policy')
+      AND to_regprocedure('hospitality.contract_standalone_create(text,text,uuid,jsonb,jsonb)') IS NULL
+      AND to_regprocedure('hospitality.staff_signed_documents(text,text,text,date,date,integer,integer)') IS NULL
+      AND to_regprocedure('hospitality.contract_link_shared(uuid,uuid,uuid)') IS NULL
+      AND to_regprocedure('hospitality._policy_lines(text)') IS NULL
+      AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'hospitality.client_contracts'::regclass AND conname = 'client_contracts_check')
+      AND (SELECT attnotnull FROM pg_attribute WHERE attrelid = 'hospitality.client_contracts'::regclass AND attname = 'signer_email')"
+same_as_ref "migration 67"
 
 # ---------- correcting the customer's details (migration 67) ----------
 expect "before the rollback: the correction / resend functions for signed-in staff; the helpers for nobody" \
@@ -2094,13 +2137,20 @@ up "$M64"
 up "$M65"
 up "$M66"
 up "$M67"
+up "$M68"
+expect "the standalone documents are back: the columns, the policy template, the staff functions, the copy-link record for the server only" \
+  "SELECT (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'client_contracts'
+             AND column_name IN ('origin', 'fill_mode', 'staff_seen_at')) = 3
+      AND EXISTS (SELECT 1 FROM hospitality.contract_templates WHERE key = 'policy')
+      AND has_function_privilege('authenticated', 'hospitality.contract_standalone_create(text,text,uuid,jsonb,jsonb)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality.contract_link_shared(uuid,uuid,uuid)', 'EXECUTE')"
 expect "the customer-details correction is back: the staff functions, the helpers for nobody" \
   "SELECT has_function_privilege('authenticated', 'hospitality.booking_customer_update(uuid,integer,jsonb,text,boolean)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'hospitality._send_booking_details(uuid,uuid)', 'EXECUTE')"
 expect "the client contracts are back: 3 closed tables, the two templates, the flag off, the private bucket, 15 permissions" \
   "SELECT to_regclass('hospitality.client_contracts') IS NOT NULL
       AND NOT has_table_privilege('authenticated', 'hospitality.client_contracts', 'SELECT')
-      AND (SELECT count(*) FROM hospitality.contract_templates) = 2
+      AND (SELECT count(*) FROM hospitality.contract_templates WHERE key IN ('hosting', 'pool_event')) = 2
       AND NOT (SELECT enabled FROM public.platform_feature_flags WHERE key = 'hospitality_contracts_enabled')
       AND (to_regclass('storage.buckets') IS NULL OR EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-contracts' AND NOT public))
       AND cardinality(hospitality.permissions()) = 15"

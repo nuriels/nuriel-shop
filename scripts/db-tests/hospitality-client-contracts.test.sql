@@ -150,7 +150,7 @@ SELECT tests.check('structure: staff functions for signed-in staff; the link, th
        AND NOT has_function_privilege('service_role', 'hospitality._contract_render(text,jsonb)', 'EXECUTE')
        AND NOT has_function_privilege('anon', 'hospitality.client_contracts_guard()', 'EXECUTE')$$);
 SELECT tests.check('structure: the two templates from the source contracts; the contracts flag registered and off; a private bucket for PDF only',
-  $$SELECT (SELECT count(*) FROM hospitality.contract_templates) = 2
+  $$SELECT (SELECT count(*) FROM hospitality.contract_templates WHERE key IN ('hosting', 'pool_event')) = 2
        AND (SELECT title FROM hospitality.contract_templates WHERE key = 'hosting') = 'הסכם הזמנת אירוח ושכירות לטווח קצר'
        AND (SELECT title FROM hospitality.contract_templates WHERE key = 'pool_event') = 'הסכם שכירות והזמנת אירוח - מתחם הבריכה לאירועים'
        AND (SELECT body LIKE '%אין שירותי מציל בבריכת השחייה!%' AND body LIKE '%עד {{max_event_guests}} אורחים לכל היותר%'

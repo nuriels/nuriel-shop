@@ -14,6 +14,9 @@ SET LOCAL client_min_messages = warning;
 
 DO $$
 BEGIN
+  IF to_regprocedure('hospitality.contract_standalone_create(text,text,uuid,jsonb,jsonb)') IS NOT NULL THEN
+    RAISE EXCEPTION 'קודם rollback של המסמכים העצמאיים (20261111140000_hosp_standalone_documents)';
+  END IF;
   IF to_regprocedure('hospitality.booking_customer_update(uuid,integer,jsonb,text,boolean)') IS NOT NULL THEN
     RAISE EXCEPTION 'קודם rollback של מיגרציה 65 (20261111130000_hosp_customer_details)';
   END IF;
