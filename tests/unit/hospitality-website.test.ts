@@ -73,10 +73,11 @@ describe("edge gate: the public website", () => {
     }
   });
 
-  it("sends the site root to /stay when open (404 while closed)", async () => {
+  it("sends the site root to /stay when open — permanent, not cached (404 while closed)", async () => {
     const res = await hospitalityGate(HOSP, get("/"), siteOpen);
-    expect(res?.status).toBe(302);
+    expect(res?.status).toBe(301);
     expect(res?.headers.get("location")).toBe("/stay");
+    expect(res?.headers.get("cache-control")).toBe("no-store");
     expect((await hospitalityGate(HOSP, get("/"), siteClosed))?.status).toBe(404);
   });
 

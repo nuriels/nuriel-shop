@@ -8,7 +8,8 @@
 //     /admin (כתובת הנחיתה של ה-handoff הקיים) → 302 ל-/manage;
 //   • אתר מושעה (כשאזור הניהול פעיל) → עמוד "האתר מושעה" (403);
 //   • האתר הציבורי (Stage 4; /stay/**) → ממשיך, רק כשהאתר פתוח (מתג הסביבה + דגל המסד +
-//     hospitality_frontend_enabled); "/" → 302 ל-/stay; אתר מושעה → "האתר מושעה" (403);
+//     hospitality_frontend_enabled); "/" → 301 ל-/stay (קבועה — /stay הכתובת הקנונית של עמוד הבית;
+//     no-store, כך שדפדפן לא שומר אותה כשהאתר נסגר); אתר מושעה → "האתר מושעה" (403);
 //   • כל עמוד / קובץ אחר → 404 — אף עמוד של החנויות לא מוצג בכתובת של אתר אירוח. כשהאתר פתוח —
 //     "העמוד לא נמצא" עם קישור לדף הבית; כשהוא סגור — "האתר עדיין לא פתוח".
 //   • בכל העמודים הסטטיים — קרדיט נוריאל הקבוע (F1), כמו בכל עמוד של האתר.
@@ -119,8 +120,10 @@ export async function hospitalityGate(
   if ((request.pathname === "/" || isSitePath(request.pathname)) && (await siteOpen())) {
     if (site.status === "suspended") return html(SUSPENDED_HTML, 403);
     if (request.pathname === "/") {
+      // Google SEO שלב 3: 301 ולא 302 — robots.txt פותח את "/" (favicon, אימות Search Console), וההפניה
+      // הקבועה אומרת לגוגל ש-/stay הוא הכתובת של עמוד הבית (כמו ה-canonical וה-sitemap)
       return new Response(null, {
-        status: 302,
+        status: 301,
         headers: { location: SITE_PATH, "cache-control": "no-store" },
       });
     }

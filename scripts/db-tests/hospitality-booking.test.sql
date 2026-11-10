@@ -196,8 +196,8 @@ SELECT tests.check('structure: staff cannot update the booking-number counter (n
   $$SELECT NOT has_column_privilege('authenticated', 'hospitality.settings', 'last_booking_number', 'UPDATE')
        AND NOT has_column_privilege('authenticated', 'hospitality.settings', 'check_in_time', 'UPDATE')
        AND NOT has_table_privilege('authenticated', 'hospitality.settings', 'UPDATE')$$);
-SELECT tests.check('structure: anon can execute only the public guest functions (+ the site name for the page head, R-1; the guest''s arrival info, 2d; the public site, 4a; room types, RT; free rooms to add to a request, 44; the guest''s payment choice and transfer-proof upload by the secret link, 55; the shown packages, 59; the published site documents, 60) — booking requests only through the app server (D1)',
-  $$SELECT array_agg(proname::text ORDER BY proname) = ARRAY['cancellation_quote', 'get_booking_by_token', 'guest_arrival_info',
+SELECT tests.check('structure: anon can execute only the public guest functions (+ the site name for the page head, R-1; the guest''s arrival info, 2d; the public site, 4a; room types, RT; free rooms to add to a request, 44; the guest''s payment choice and transfer-proof upload by the secret link, 55; the shown packages, 59; the published site documents, 60; whether analytics is on for the site, SEO stage 4) — booking requests only through the app server (D1)',
+  $$SELECT array_agg(proname::text ORDER BY proname) = ARRAY['analytics_enabled', 'cancellation_quote', 'get_booking_by_token', 'guest_arrival_info',
       'guest_payment_info', 'guest_proof_slot', 'guest_set_payment_method', 'public_availability', 'public_free_units',
       'public_packages', 'public_payment_methods', 'public_room_types', 'public_site', 'public_site_document',
       'public_site_documents', 'public_type_availability', 'quote', 'quote_type', 'request_cancellation', 'request_tenant', 'site_identity']

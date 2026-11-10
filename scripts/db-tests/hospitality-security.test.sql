@@ -265,8 +265,8 @@ SELECT pg_temp.after('rate: the cleanup removes expired counters only',
 SELECT tests.check('coverage: every SECURITY DEFINER function has a fixed, empty search_path',
   $$SELECT NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'hospitality'::regnamespace AND p.prosecdef
       AND NOT COALESCE('search_path=""' = ANY (p.proconfig), false))$$);
-SELECT tests.check('coverage: anonymous visitors can call exactly the public functions (site, availability, free rooms for a request of several rooms, quote, the guest''s own booking by its secret link — incl. the payment choice and the transfer-proof upload, 55; the shown packages, 59; the published site documents, 60)',
-  $$SELECT array_agg(proname::text ORDER BY proname) = ARRAY['cancellation_quote', 'get_booking_by_token', 'guest_arrival_info',
+SELECT tests.check('coverage: anonymous visitors can call exactly the public functions (site, availability, free rooms for a request of several rooms, quote, the guest''s own booking by its secret link — incl. the payment choice and the transfer-proof upload, 55; the shown packages, 59; the published site documents, 60; whether analytics is on for the site, SEO stage 4)',
+  $$SELECT array_agg(proname::text ORDER BY proname) = ARRAY['analytics_enabled', 'cancellation_quote', 'get_booking_by_token', 'guest_arrival_info',
       'guest_payment_info', 'guest_proof_slot', 'guest_set_payment_method', 'public_availability', 'public_free_units',
       'public_packages', 'public_payment_methods', 'public_room_types', 'public_site', 'public_site_document',
       'public_site_documents', 'public_type_availability', 'quote', 'quote_type', 'request_cancellation', 'request_tenant', 'site_identity']

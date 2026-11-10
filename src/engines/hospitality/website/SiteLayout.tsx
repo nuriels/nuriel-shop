@@ -10,6 +10,7 @@ import type { PublicSite } from "../types/website";
 import { A11Y_CSS } from "./a11y/prefs";
 import { DOC_SLUGS, type DocKind } from "../documents/kinds";
 import { AccessibilityWidget } from "./components/AccessibilityWidget";
+import { ConsentManager, CookieSettingsButton } from "./consent/ConsentManager";
 import {
   SidePanel,
   SidePanelClose,
@@ -110,6 +111,8 @@ export function SiteShell({
           >
             {copy.nav.skip}
           </a>
+          {/* Google SEO שלב 4: הסכמה ל-Cookies — באנר רק כשיש באתר מדידה שדורשת הסכמה (היום — אין) */}
+          <ConsentManager />
           <SiteHeader />
           <main id="main-content" tabIndex={-1} className="outline-none">
             {children}
@@ -434,6 +437,7 @@ function SiteFooter() {
             <Link to="/stay/accessibility" className={FOOTER_LINK}>
               {docs.find((x) => x.kind === "accessibility")?.title ?? t.footer.accessibility}
             </Link>
+            <CookieSettingsButton className={FOOTER_LINK} />
           </nav>
         </div>
       </div>
@@ -456,7 +460,10 @@ function MobileActionBar() {
   const wa = b.whatsapp || b.phone;
   if (!hasActionBar(pathname)) return null;
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md md:hidden">
+    <div
+      data-action-bar=""
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md md:hidden"
+    >
       <div className="flex items-center gap-2">
         {b.phone && (
           <a

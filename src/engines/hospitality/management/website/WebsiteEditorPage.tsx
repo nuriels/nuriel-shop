@@ -288,6 +288,7 @@ function Editor({
                 design={design}
                 site={site}
                 addresses={view.addresses}
+                analyticsEnabled={view.analytics_enabled}
                 onChange={setDesign}
               />
             </TabsContent>

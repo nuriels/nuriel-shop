@@ -2,6 +2,7 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_consent (SEO שלב 4): rollback → טבלת ההסכמה, שתי הפונקציות והמתג נעלמו; הסכמה זהה בדיוק ל-SEO
 #   • hosp_unit_seo (SEO): rollback → שתי הפונקציות של כותרת ותיאור לגוגל ליחידה נעלמו; העמודות נשארות;
 #     הסכמה זהה בדיוק ל-61
 #   • ai_assistant (61): הגנה (נעצר כשיש חבילות / תקופות / היסטוריה / התראות / יומן, או מפתח שמור / מצב פעיל),
@@ -129,6 +130,7 @@ M59=20261108140000_hosp_packages
 M60=20261109100000_hosp_site_documents
 M61=20261110100000_ai_assistant
 M62=20261110200000_hosp_unit_seo
+M63=20261110210000_hosp_consent
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -149,6 +151,41 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- SEO stage 4: cookie consent, off behind a flag (20261110210000) ----------
+expect "before the rollback: the consent table (RLS, no direct privileges), the flag (off), recording for the server only" \
+  "SELECT to_regclass('hospitality.consent_records') IS NOT NULL
+      AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'hospitality.consent_records'::regclass)
+      AND NOT has_table_privilege('anon', 'hospitality.consent_records', 'SELECT')
+      AND NOT has_table_privilege('authenticated', 'hospitality.consent_records', 'INSERT')
+      AND NOT has_table_privilege('service_role', 'hospitality.consent_records', 'SELECT')
+      AND (SELECT NOT enabled FROM public.platform_feature_flags WHERE key = 'hospitality_analytics_enabled')
+      AND has_function_privilege('service_role', 'hospitality.site_consent_record(uuid,boolean,text,text)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'hospitality.site_consent_record(uuid,boolean,text,text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality.site_consent_record(uuid,boolean,text,text)', 'EXECUTE')
+      AND has_function_privilege('anon', 'hospitality.analytics_enabled()', 'EXECUTE')"
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M63" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M63"
+down "$M63"
+expect "the consent table, both functions and the analytics flag are gone" \
+  "SELECT to_regclass('hospitality.consent_records') IS NULL
+      AND to_regprocedure('hospitality.site_consent_record(uuid,boolean,text,text)') IS NULL
+      AND to_regprocedure('hospitality.analytics_enabled()') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key = 'hospitality_analytics_enabled')"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m62.sql"
+schema_dump "$SCHEMA_DIR/after-m63-down.sql"
+if diff -q "$SCHEMA_DIR/m62.sql" "$SCHEMA_DIR/after-m63-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of the unit SEO migration, exactly"
+else
+  echo "  FAIL schema after the rollback differs from the unit SEO migration:"; diff "$SCHEMA_DIR/m62.sql" "$SCHEMA_DIR/after-m63-down.sql" | head -20; exit 1
+fi
 
 # ---------- SEO: Google title and description per unit (20261110200000) ----------
 expect "before the rollback: the two unit SEO functions, for staff only (never anon)" \
@@ -1893,6 +1930,7 @@ up "$M59"
 up "$M60"
 up "$M61"
 up "$M62"
+up "$M63"
 expect "the AI add-on is back: 9 tables closed to the browser, 2 packages at 150 ILS, the assistant off, functions for the server only" \
   "SELECT to_regclass('public.ai_subscriptions') IS NOT NULL
       AND to_regclass('public.ai_usage_daily') IS NOT NULL
@@ -1940,10 +1978,10 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 46 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions, the transfer proofs and the guest-area codes and sessions, the packages and the 5 site-document tables), RLS on all, role admin, 6 flags off (incl. management)" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 46
+expect "Hospitality schema back: 47 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions, the transfer proofs and the guest-area codes and sessions, the packages, the 5 site-document tables and the consent records), RLS on all, role admin, 7 flags off (incl. management and analytics)" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 47
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
-      AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 6"
+      AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 7"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
 expect "hosp-support bucket back, private" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-support' AND NOT public)"
 expect "coupon release back" "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'bookings_coupon_usage')"

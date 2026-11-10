@@ -104,6 +104,9 @@ export function robotsTxt(open: boolean, origin: string | null): string {
   const base = clean(origin);
   return [
     "User-agent: *",
+    // עמוד הבית של הכתובת (רק "/" עצמו, לא שאר הכתובות): גוגל מציג favicon רק כש-Googlebot יכול לסרוק
+    // את עמוד הבית ולעבור בהפניה ממנו (301 ל-/stay, edge/gate.ts) — ושם גם אימות Search Console
+    "Allow: /$",
     `Allow: ${SITE_PATH}$`,
     `Allow: ${SITE_PATH}/units/`,
     `Allow: ${SITE_PATH}/rooms/`,

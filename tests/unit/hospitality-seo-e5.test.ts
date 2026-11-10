@@ -211,7 +211,7 @@ describe("robots.txt and the gate", () => {
     expect(robotsTxt(false, "https://galil.example")).toBe("User-agent: *\nDisallow: /\n");
     const open = robotsTxt(true, "https://galil.example");
     expect(open).toContain(
-      "Allow: /stay$\nAllow: /stay/units/\nAllow: /stay/rooms/\nAllow: /stay/packages/\nAllow: /stay/brand/\nAllow: /assets/\nAllow: /fonts/\nAllow: /sitemap.xml\nDisallow: /\n",
+      "User-agent: *\nAllow: /$\nAllow: /stay$\nAllow: /stay/units/\nAllow: /stay/rooms/\nAllow: /stay/packages/\nAllow: /stay/brand/\nAllow: /assets/\nAllow: /fonts/\nAllow: /sitemap.xml\nDisallow: /\n",
     );
     expect(open).toContain("\nSitemap: https://galil.example/sitemap.xml\n");
     expect(open).not.toContain("/manage");
@@ -335,7 +335,7 @@ describe("SEO stage 2: robots.txt opens what Google needs, nothing private", () 
       expect(robotsAllows(robots, `/stay/brand/${asset}`), asset).toBe(true);
   });
 
-  it("private and management pages stay blocked, and the root (/) is unchanged — still blocked", () => {
+  it("private and management pages stay blocked", () => {
     for (const path of [
       "/manage",
       "/manage/login",
@@ -344,12 +344,40 @@ describe("SEO stage 2: robots.txt opens what Google needs, nothing private", () 
       "/stay/privacy",
       "/stay/docs/terms",
       "/admin",
-      "/",
     ])
       expect(robotsAllows(robots, path), path).toBe(false);
     expect(
       robotsAllows(parseRobots(robotsTxt(false, "https://galil.example")), "/stay/brand/icon-192"),
     ).toBe(false);
+  });
+});
+
+// ---------- פרויקט Google SEO, שלב 3: עמוד הבית של הכתובת (favicon, אימות Search Console) ----------
+describe("SEO stage 3: the root (/) is open to crawling — only the root itself", () => {
+  const robots = parseRobots(robotsTxt(true, "https://galil.example"));
+
+  it("allows exactly / (Google: the home page must be crawlable to show the favicon)", () => {
+    expect(robotsAllows(robots, "/")).toBe(true);
+    expect(robotsAllows(robots, "/", "googlebot-image")).toBe(true);
+  });
+
+  it("opens nothing else at the root level — store paths, admin and unknown pages stay blocked", () => {
+    for (const path of [
+      "/index.html",
+      "/x",
+      "/admin",
+      "/login",
+      "/checkout",
+      "/products/a",
+      "/?q=1",
+    ])
+      expect(robotsAllows(robots, path), path).toBe(false);
+  });
+
+  it("a closed site still blocks everything, the root included", () => {
+    const closed = parseRobots(robotsTxt(false, "https://galil.example"));
+    expect(robotsAllows(closed, "/")).toBe(false);
+    expect(robotsAllows(closed, "/stay")).toBe(false);
   });
 });
 

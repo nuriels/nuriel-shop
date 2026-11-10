@@ -41,6 +41,7 @@ import type { LimitAction } from "../security/limits";
 import { TRAP_FIELD } from "../security/messages";
 import { parsePowSolution, type PowChallenge } from "../security/pow";
 import { toPublicSite } from "../website/lib/site-map";
+import { parseConsentInput } from "../website/consent/consent";
 import {
   InputError,
   isoDate,
@@ -94,6 +95,7 @@ export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
       types,
       packages,
       documents,
+      analyticsOn,
       { currentSiteAddresses },
       { canonicalOrigin, siteSeo },
     ] = await Promise.all([
@@ -105,18 +107,52 @@ export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
       callRpc<PublicDocumentMeta[]>("public_site_documents", {}).catch(
         () => [] as PublicDocumentMeta[],
       ),
+      // Google SEO שלב 4 — המדידה זמינה באתר (המתג); בלי המיגרציה / כשהמסד לא ענה — לא זמינה
+      callRpc<boolean>("analytics_enabled", {}).catch(() => false),
       import("@/platform/tenancy/current-site.server"),
       import("../website/seo"),
     ]);
     const site = toPublicSite(raw, publicUrl, types, packages);
+    const seo = siteSeo(site);
     // E5: הכתובת הקנונית — מרשומת האתר + הבחירה בגרסה המפורסמת
     return {
       ...site,
       documents,
-      origin: canonicalOrigin(await currentSiteAddresses(), siteSeo(site)),
+      origin: canonicalOrigin(await currentSiteAddresses(), seo),
+      // מדידה רק כשהמתג דולק וגם יש מזהה GA4 בגרסה המפורסמת; אחרת אין באתר שום דבר שדורש הסכמה
+      analytics: analyticsOn === true && seo.ga4 ? { ga4: seo.ga4 } : null,
     };
   },
 );
+
+/**
+ * Google SEO שלב 4: רישום הבחירה של הגולש ב-Cookies — רשומה אנונימית (מזהה אקראי, מה נבחר, גרסה, מתי;
+ * בלי IP ובלי דפדפן — לא מועברים למסד). רק השרת כותב, אחרי הגבלת הקצב; המסד מקבל רק באתר פתוח שהמדידה
+ * בו זמינה.
+ */
+export const hospitalitySiteConsent = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => {
+    try {
+      return parseConsentInput(input);
+    } catch {
+      throw new InputError("הבחירה לא תקינה");
+    }
+  })
+  .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    await throttle("consent");
+    const { callServerRpc } = await import("../server/rpc.server");
+    await callServerRpc(
+      "site_consent_record",
+      {
+        _consent_id: data.consentId,
+        _analytics: data.analytics,
+        _action: data.action,
+        _policy_version: data.policyVersion,
+      },
+      { ip: "unknown", userAgent: "" },
+    );
+    return { ok: true };
+  });
 
 /** מסמך אחד מהאתר (הגרסה שמוצגת) — לעמוד המסמך; לא פורסם / בלי מיגרציה 60 — null */
 export const hospitalityPublicDocument = createServerFn({ method: "POST" })
