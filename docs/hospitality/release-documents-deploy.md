@@ -1,0 +1,118 @@
+# שחרור הצימרים: סרטון הפתיח, אירועים, חוזים, תיקון פרטי לקוח, מסמכים לחתימה ומדידה — פריסה לייצור
+
+> **לא נפרס.** אף פקודה כאן לא הורצה בשרת. כל שלב מסומן ⛔ — מריצים רק אחרי אישור מפורש, פקודה אחת בכל פעם,
+> ושולחים את הפלט לפני הפקודה הבאה. מה נכנס ולמה — `release-events-contracts.md`.
+
+**הקוד:** `PIN` בענף `hospitality/release` — המשך ישיר של מה שרץ בייצור (`0206a99`, שחרור החנויות): העבודה על
+הצימרים מוזגה **מעל** גרסת החנויות, כך שתיקון הייבוא ומנהל הכפילויות נשארים.
+**מיגרציות (5, כל אחת באישור נפרד, לפי הסדר):**
+
+| #   | קובץ                                           | מה                                                                                       |
+| --- | ---------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 66  | `20261111100000_hosp_hero_video_verified.sql`  | אורך סרטון הפתיח נמדד בשרת                                                               |
+| 67  | `20261111110000_hosp_events.sql`               | אירועים במתחם (בלי לינה), תנאי העסק                                                      |
+| 68  | `20261111120000_hosp_client_contracts.sql`     | חוזים לחתימה, הדלי הפרטי `hosp-contracts`, הדגל `hospitality_contracts_enabled` **כבוי** |
+| 69  | `20261111130000_hosp_customer_details.sql`     | תיקון פרטי לקוח בהזמנה / באירוע ושליחה חוזרת                                             |
+| 70  | `20261111140000_hosp_standalone_documents.sql` | מסמכים לחתימה בלי הזמנה, מסמכי מדיניות, "מסמכים חתומים" — באותו דגל כבוי                 |
+
+(במסמכים הישנים — 62–65 ו-68; המספור כאן הוא הסדר בשרת, אחרי 64–65 של החנויות.)
+
+**כבוי אחרי הפריסה:** החוזים והמסמכים לחתימה (הדגל `hospitality_contracts_enabled`, עד אישור משפטי של הנוסח);
+המדידה (`hospitality_analytics_enabled`, בלי מזהה GA4) — בלי שום בקשה ל-Google. **פעיל:** אירועים במתחם, בדיקת
+סרטון הפתיח, תיקון פרטי לקוח.
+
+סימנים: 🔍 קריאה בלבד · ✏️ משנה · ⛔ עוצרים לאישור.
+
+## בדיקות מקומיות (על `PIN`)
+
+- Typecheck · Lint (הרשימה המחמירה של ה-CI) · Build: תקין. Unit: 1107/1107.
+- SQL: TESTS בשלושה מעברים (5 המיגרציות החדשות מוחלות פעמיים, גם על מסד עם נתונים).
+- Rollback: 70 → 66 ואז 65 → 64 — אחרי כל אחת הסכמה זהה **בדיוק** לזו שלפניה; ההגנות עוצרות כשיש נתונים.
+- E2E: E2E_RESULT.
+
+---
+
+## ⛔ אישור 1 — BS: גיבוי + קוד + בנייה (✏️ גיבוי, קבצים, image חדש; האתר ממשיך לרוץ על `0206a99`)
+
+```bash
+B=/root/backups/nuriel-shop/before-hosp-release && mkdir -m 700 "$B" && docker exec nuriel-shop-db pg_dump -U postgres -d postgres -Fc > "$B/db.dump" && docker exec -i nuriel-shop-db pg_restore -f /dev/null < "$B/db.dump" && echo "dump read to the end: ok ($(du -h "$B/db.dump" | cut -f1))" && docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT filename FROM public._migrations_applied" | LC_ALL=C sort > "$B/applied-before.txt" && echo "applied: $(wc -l < "$B/applied-before.txt")" && docker tag nuriel-shop-app-app:latest nuriel-shop-app-app:before-hosp-release && echo "rollback image before-hosp-release: ok" && cd /root/nuriel-shop-git && test -z "$(git status --porcelain --untracked-files=no)" && git fetch -q origin "+refs/heads/hospitality/release:refs/remotes/origin/hospitality/release" && git merge-base --is-ancestor HEAD PIN && git merge-base --is-ancestor PIN origin/hospitality/release && echo "PIN: fast-forward, on origin" && git checkout -q -B hospitality/release PIN && git log --oneline -1 && cp supabase/rollbacks/20261111100000_hosp_hero_video_verified.down.sql supabase/rollbacks/20261111110000_hosp_events.down.sql supabase/rollbacks/20261111120000_hosp_client_contracts.down.sql supabase/rollbacks/20261111130000_hosp_customer_details.down.sql supabase/rollbacks/20261111140000_hosp_standalone_documents.down.sql "$B/" && docker compose build > "$B/build.log" 2>&1 && echo "build ok" && docker run --rm --entrypoint sh nuriel-shop-app-app:latest -c "echo documents: \$(grep -rl contract_standalone_create /app/.output | wc -l) events: \$(grep -rl event_create /app/.output | wc -l) store: \$(grep -rl product_duplicate_groups /app/.output | wc -l)" || { echo "STOPPED"; tail -n 30 "$B/build.log" 2>/dev/null; }
+```
+
+**תקין:** `dump … ok`; `applied: 181`; `rollback image before-hosp-release: ok`; `PIN: fast-forward, on origin`; שורת
+הקומיט; `build ok` (כמה דקות, בלי פלט בינתיים); `documents: … events: … store: …` — שלושה מספרים גדולים מ-0
+(`store` — תיקון החנויות נשאר בגרסה).
+
+## ⛔ אישורים 2–6 — M66…M70: המיגרציות, אחת בכל פעם (✏️ המסד)
+
+כל פקודה: בודקת שהקוד הוא `PIN` ושמספר המיגרציות הוא בדיוק המצופה, מריצה את המיגרציה (`BEGIN … COMMIT` — כישלון לא
+משאיר כלום), רושמת אותה ובודקת. הגרסה שרצה (`0206a99`) לא נוגעת בטבלאות / בפונקציות החדשות — האתר ממשיך כרגיל עד U.
+
+**M66 — סרטון הפתיח** (לפני: 181 → אחרי: 182)
+
+```bash
+cd /root/nuriel-shop-git && f=20261111100000_hosp_hero_video_verified && n=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied") && echo "code $(git rev-parse --short=7 HEAD), applied before: $n" && [ "$(git rev-parse --short=7 HEAD)" = PIN ] && [ "$n" = 181 ] && docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < supabase/migrations/$f.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "INSERT INTO public._migrations_applied (filename) VALUES ('$f.sql')" && echo "$f ok" && row=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public._migrations_applied WHERE filename = '$f.sql'), EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'media' AND column_name = 'duration_checked_at'), has_function_privilege('service_role', 'hospitality.media_video_verified(uuid,uuid,numeric,text)', 'EXECUTE'), has_function_privilege('authenticated', 'hospitality.media_video_verified(uuid,uuid,numeric,text)', 'EXECUTE'), (SELECT count(*) FROM public._migrations_applied)") && echo "$row" && [ "$row" = "1|t|t|f|182" ] && echo "M66 checks ok" || echo "STOPPED"
+```
+
+**תקין:** `1|t|t|f|182` ואז `M66 checks ok`.
+
+**M67 — אירועים במתחם** (182 → 183)
+
+```bash
+cd /root/nuriel-shop-git && f=20261111110000_hosp_events && n=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied") && echo "code $(git rev-parse --short=7 HEAD), applied before: $n" && [ "$(git rev-parse --short=7 HEAD)" = PIN ] && [ "$n" = 182 ] && docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < supabase/migrations/$f.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "INSERT INTO public._migrations_applied (filename) VALUES ('$f.sql')" && echo "$f ok" && row=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public._migrations_applied WHERE filename = '$f.sql'), to_regclass('hospitality.events') IS NOT NULL, has_table_privilege('authenticated', 'hospitality.events', 'SELECT'), EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'hospitality.events'::regclass AND contype = 'x'), has_function_privilege('authenticated', 'hospitality.event_create(jsonb)', 'EXECUTE'), (SELECT count(*) FROM hospitality.events), (SELECT count(*) FROM public._migrations_applied)") && echo "$row" && [ "$row" = "1|t|f|t|t|0|183" ] && echo "M67 checks ok" || echo "STOPPED"
+```
+
+**תקין:** `1|t|f|t|t|0|183` — הטבלה קיימת, סגורה לדפדפן, החפיפה נחסמת במסד, הצוות יוצר אירוע דרך הפונקציה; 0 אירועים.
+
+**M68 — חוזים** (183 → 184)
+
+```bash
+cd /root/nuriel-shop-git && f=20261111120000_hosp_client_contracts && n=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied") && echo "code $(git rev-parse --short=7 HEAD), applied before: $n" && [ "$(git rev-parse --short=7 HEAD)" = PIN ] && [ "$n" = 183 ] && docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < supabase/migrations/$f.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "INSERT INTO public._migrations_applied (filename) VALUES ('$f.sql')" && echo "$f ok" && row=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public._migrations_applied WHERE filename = '$f.sql'), to_regclass('hospitality.client_contracts') IS NOT NULL, has_table_privilege('authenticated', 'hospitality.client_contracts', 'SELECT'), (SELECT enabled FROM public.platform_feature_flags WHERE key = 'hospitality_contracts_enabled'), EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-contracts' AND NOT public), (SELECT count(*) FROM hospitality.contract_templates WHERE key IN ('hosting', 'pool_event')), (SELECT count(*) FROM public._migrations_applied)") && echo "$row" && [ "$row" = "1|t|f|f|t|2|184" ] && echo "M68 checks ok" || echo "STOPPED"
+```
+
+**תקין:** `1|t|f|f|t|2|184` — הטבלה קיימת וסגורה לדפדפן; **הדגל כבוי**; הדלי הפרטי קיים ולא ציבורי; שתי התבניות.
+
+**M69 — תיקון פרטי לקוח** (184 → 185)
+
+```bash
+cd /root/nuriel-shop-git && f=20261111130000_hosp_customer_details && n=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied") && echo "code $(git rev-parse --short=7 HEAD), applied before: $n" && [ "$(git rev-parse --short=7 HEAD)" = PIN ] && [ "$n" = 184 ] && docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < supabase/migrations/$f.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "INSERT INTO public._migrations_applied (filename) VALUES ('$f.sql')" && echo "$f ok" && row=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public._migrations_applied WHERE filename = '$f.sql'), has_function_privilege('authenticated', 'hospitality.booking_customer_update(uuid,integer,jsonb,text,boolean)', 'EXECUTE'), has_function_privilege('authenticated', 'hospitality._send_booking_details(uuid,uuid)', 'EXECUTE'), (SELECT count(*) FROM public._migrations_applied)") && echo "$row" && [ "$row" = "1|t|f|185" ] && echo "M69 checks ok" || echo "STOPPED"
+```
+
+**תקין:** `1|t|f|185`.
+
+**M70 — מסמכים לחתימה** (185 → 186)
+
+```bash
+cd /root/nuriel-shop-git && f=20261111140000_hosp_standalone_documents && n=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM public._migrations_applied") && echo "code $(git rev-parse --short=7 HEAD), applied before: $n" && [ "$(git rev-parse --short=7 HEAD)" = PIN ] && [ "$n" = 185 ] && docker exec -i nuriel-shop-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < supabase/migrations/$f.sql && docker exec nuriel-shop-db psql -U postgres -d postgres -qc "INSERT INTO public._migrations_applied (filename) VALUES ('$f.sql')" && echo "$f ok" && row=$(docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT (SELECT count(*) FROM public._migrations_applied WHERE filename = '$f.sql'), (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'client_contracts' AND column_name IN ('origin', 'fill_mode', 'staff_seen_at')), EXISTS (SELECT 1 FROM hospitality.contract_templates WHERE key = 'policy'), has_function_privilege('authenticated', 'hospitality.contract_link_shared(uuid,uuid,uuid)', 'EXECUTE'), (SELECT enabled FROM public.platform_feature_flags WHERE key = 'hospitality_contracts_enabled'), (SELECT count(*) FROM public._migrations_applied)") && echo "$row" && [ "$row" = "1|3|t|f|f|186" ] && echo "M70 checks ok" || echo "STOPPED"
+```
+
+**תקין:** `1|3|t|f|f|186` — שלוש העמודות החדשות, תבנית מסמך המדיניות, רישום הקישור לשרת בלבד, הדגל עדיין כבוי.
+
+## ⛔ אישור 7 — U: הפעלה מחדש (✏️ זו הפריסה עצמה; בשעה שקטה)
+
+```bash
+cd /root/nuriel-shop-git && [ "$(git rev-parse --short=7 HEAD)" = PIN ] && docker compose up -d && sleep 60 && docker compose ps app && [ "$(docker inspect -f '{{.Image}}' nuriel-shop-app)" = "$(docker image inspect -f '{{.Id}}' nuriel-shop-app-app:latest)" ] && echo "running the new image" && curl -s -o /dev/null -w 'local: %{http_code}\n' http://127.0.0.1:3700/robots.txt && docker logs --since 2m nuriel-shop-app 2>&1 | grep -iE "error|fatal" | grep -v aborted | tail -20 || echo "STOPPED"
+```
+
+**תקין:** `Started`; `(healthy)`; `running the new image`; `local: 200`; לוג ריק. תהליך הרקע מודד סרטוני פתיח ישנים בדקות
+הראשונות (עד אז מוצגת התמונה הראשית).
+
+## V — בדיקות אחרי
+
+1. **(אני, קריאה בלבד):** נופי דורית, החנות והפורטל — 200; sitemap; תגית Google; אין קוד Google Analytics; החנות
+   עדיין עם הייבוא החדש ומנהל הכפילויות.
+2. **(את/ה, בניהול של נופי דורית):** `/manage/events` נפתח; "מסמכי לקוחות" מציג "ממתינים לאישור משפטי" (הדגל כבוי);
+   סרטון הפתיח מוצג.
+
+---
+
+## Rollback (רק בתקלה; ⛔ אישור לפני כל פעולה)
+
+**R1 — האפליקציה** (חוזרים ל-`0206a99`, שחרור החנויות):
+
+```bash
+docker tag nuriel-shop-app-app:before-hosp-release nuriel-shop-app-app:latest && cd /root/nuriel-shop-git && git checkout -q -B ecommerce/store-release 0206a99 && git log --oneline -1 && docker compose up -d && sleep 60 && docker compose ps app && curl -s -o /dev/null -w 'local: %{http_code}\n' http://127.0.0.1:3700/robots.txt
+```
+
+**המיגרציות יכולות להישאר** אחרי R1 — הגרסה הקודמת לא נוגעת בהן. **R2 (המסד)** — רק אם צריך, בסדר הפוך 70 → 66,
+מקובצי ה-rollback שבתיקיית הגיבוי; כל אחד מסרב כשיש בו נתונים (מסמכים / חוזים / אירועים) — פקודות נפרדות, אכין לפי
+המצב.
