@@ -24,6 +24,10 @@ import {
 
 const OUT = fileURLToPath(new URL("./out/guide/", import.meta.url));
 mkdirSync(OUT, { recursive: true });
+// GUIDE_SHOTS=1: במקום סרטון — צילומי מסך חדים (×2) בכל נקודת כיתוב, בלי הכיתוב (למסמך PDF ללקוח)
+const SHOTS = process.env["GUIDE_SHOTS"] === "1";
+let shot = 0;
+if (SHOTS) mkdirSync(`${OUT}shots`, { recursive: true });
 const SLUG = "guide-demo";
 const HOST = hostOf(SLUG);
 const URL_ = (path = "/") => `http://${HOST}:${PORT}${path}`;
@@ -91,6 +95,12 @@ const CAPTION_JS = `(() => {
 })();`;
 
 async function cap(page: Page, text: string, ms = 3600) {
+  if (SHOTS) {
+    await page.waitForTimeout(700);
+    shot += 1;
+    await page.screenshot({ path: `${OUT}shots/${String(shot).padStart(2, "0")}.png` });
+    return;
+  }
   await page.evaluate((t) => (window as unknown as { __cap: (s: string) => void }).__cap(t), text);
   await page.waitForTimeout(ms);
 }
@@ -99,17 +109,19 @@ async function recorded(browser: Browser, phone = false): Promise<BrowserContext
   const size = phone ? { width: 390, height: 844 } : { width: 1280, height: 800 };
   const ctx = await browser.newContext({
     viewport: size,
-    ...(phone ? { isMobile: true, hasTouch: true, deviceScaleFactor: 1 } : {}),
+    ...(phone ? { isMobile: true, hasTouch: true } : {}),
+    deviceScaleFactor: SHOTS ? 2 : 1,
     locale: "he-IL",
     timezoneId: "Asia/Jerusalem",
-    recordVideo: { dir: `${OUT}raw`, size },
+    ...(SHOTS ? {} : { recordVideo: { dir: `${OUT}raw`, size } }),
   });
-  await ctx.addInitScript(CAPTION_JS);
+  if (!SHOTS) await ctx.addInitScript(CAPTION_JS);
   return ctx;
 }
 
 async function keep(ctx: BrowserContext, page: Page, name: string) {
   await ctx.close();
+  if (SHOTS) return;
   await page.video()!.saveAs(`${OUT}${name}.webm`);
 }
 
