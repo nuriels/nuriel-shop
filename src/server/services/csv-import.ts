@@ -80,8 +80,10 @@ function shortUrl(url: string): string {
 /**
  * שורות שהמסד ידחה בכל מקרה — לא מורידים להן תמונות (חוסך זמן ולא משאיר
  * קבצים יתומים). המסד עדיין מקבל אותן ומחזיר את השגיאה הרגילה.
+ * רק מול המוצרים של החנות הזו: ברקוד / מק"ט של חנות אחרת לא מונע יבוא (המסד בודק לפי החנות),
+ * ואסור שידלג על התמונות של המוצר — ולא מגלה דבר על חנויות אחרות.
  */
-async function rowsThatWillFail(rows: ImportRow[]): Promise<Set<number>> {
+async function rowsThatWillFail(rows: ImportRow[], tenantId: string): Promise<Set<number>> {
   const blocked = new Set<number>();
   for (const row of rows) {
     if (!PRICE_FORMAT.test(row.price)) blocked.add(row.row);
@@ -97,11 +99,16 @@ async function rowsThatWillFail(rows: ImportRow[]): Promise<Set<number>> {
       const { data } = await supabaseAdmin
         .from("global_products")
         .select("barcode")
+        .eq("tenant_id", tenantId)
         .in("barcode", barcodes);
       for (const entry of data ?? []) if (entry.barcode) existingBarcodes.add(entry.barcode);
     }
     if (skus.length > 0) {
-      const { data } = await supabaseAdmin.from("global_products").select("sku").in("sku", skus);
+      const { data } = await supabaseAdmin
+        .from("global_products")
+        .select("sku")
+        .eq("tenant_id", tenantId)
+        .in("sku", skus);
       for (const entry of data ?? []) if (entry.sku) existingSkus.add(entry.sku);
     }
   } catch (error) {
@@ -227,7 +234,7 @@ async function runImport(
   const tenantId = currentTenantId();
   const prepared = { rows };
   // 1) שורות שייכשלו בכל מקרה — בלי הורדת תמונות
-  const blocked = await rowsThatWillFail(prepared.rows);
+  const blocked = await rowsThatWillFail(prepared.rows, tenantId);
 
   // 2) הורדה + שמירה של התמונות (אותה תמונה בכמה מוצרים — הורדה אחת)
   const { localized, imageWarnings, imageCounts } = await localizeImages(
