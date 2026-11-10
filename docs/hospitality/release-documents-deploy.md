@@ -110,6 +110,34 @@ cd /root/nuriel-shop-git && [ "$(git rev-parse --short=7 HEAD)" = 538f336 ] && d
 
 ---
 
+## ✅ הפעלת "מסמכי לקוחות" לנופי דורית בלבד — בוצע 10.11.2026
+
+`hospitality_contracts_enabled` = דגל הפלטפורמה **וגם** הדגל של האתר (`platform_feature_enabled`); אתר בלי שורה משלו —
+כבוי. לכן הודלקו שניהם, בטרנזקציה אחת עם בדיקה שאף אתר אחר לא מקבל את התכונה (אחרת `STOP` ו-ROLLBACK), ושתי שורות
+ביומן (`platform_audit_log`, `via: server psql` — אין `auth.uid()` ב-psql, לכן לא `platform_set_flag`).
+
+- **לפני:** אתר צימרים אחד (`nofi-dorit`); הדגל כבוי; אין שורות לאתרים; 2 מסמכי אתר פורסמו; "תנאים ופרטי החוזה" עוד
+  לא אושרו (בלי האישור — רק מסמכי מדיניות, לא חוזה אירוח / אירוע).
+- **אחרי:** `nofi-dorit documents switch : true`, `other sites with it on : 0`; 4 דפים 200 (`/stay`, `/stay/contract`,
+  `/manage/login`, החנות); 2 שורות ביומן; 0 שגיאות. בלי קוד, בלי restart (מטמון הדגלים באפליקציה — 15 שניות).
+- **כיבוי (רק אם צריך; ⛔ אישור):**
+
+```bash
+docker exec -i nuriel-shop-db psql -U postgres -d postgres -X -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+UPDATE public.tenant_feature_flags SET enabled = false, updated_at = now()
+ WHERE key = 'hospitality_contracts_enabled' AND tenant_id = (SELECT id FROM public.tenants WHERE slug = 'nofi-dorit');
+UPDATE public.platform_feature_flags SET enabled = false, updated_at = now() WHERE key = 'hospitality_contracts_enabled';
+INSERT INTO public.platform_audit_log (tenant_id, actor_id, action, details) VALUES
+  (NULL, NULL, 'feature_flag_set', '{"key":"hospitality_contracts_enabled","enabled":false,"scope":"platform","via":"server psql"}');
+COMMIT;
+SQL
+```
+
+מסמכים שכבר נשלחו / נחתמו נשמרים גם אחרי כיבוי (הקישורים שלא נחתמו מפסיקים לעבוד).
+
+---
+
 ## Rollback (רק בתקלה; ⛔ אישור לפני כל פעולה)
 
 **R1 — האפליקציה** (חוזרים ל-`0206a99`, שחרור החנויות):
