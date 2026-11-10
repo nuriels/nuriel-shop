@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • product_duplicates (מוצרים כפולים, Ecommerce): הגנה (נעצר כשיש מיזוגים ביומן), rollback → שתי הטבלאות
+#     והפונקציות נעלמו; הסכמה זהה בדיוק למיגרציה שלפניה
 #   • hosp_consent (SEO שלב 4): rollback → טבלת ההסכמה, שתי הפונקציות והמתג נעלמו; הסכמה זהה בדיוק ל-SEO
 #   • hosp_unit_seo (SEO): rollback → שתי הפונקציות של כותרת ותיאור לגוגל ליחידה נעלמו; העמודות נשארות;
 #     הסכמה זהה בדיוק ל-61
@@ -131,6 +133,7 @@ M60=20261109100000_hosp_site_documents
 M61=20261110100000_ai_assistant
 M62=20261110200000_hosp_unit_seo
 M63=20261110210000_hosp_consent
+M64=20261110230000_product_duplicates
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -151,6 +154,59 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 SCHEMA_DIR=$(mktemp -d)
 schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
+
+# ---------- product duplicates: groups, "not a duplicate", merge, AI list (20261110230000) ----------
+expect "before the rollback: the 2 duplicate tables (RLS, closed to the browser), the store functions for signed-in users, the AI list for the server only" \
+  "SELECT to_regclass('public.product_merges') IS NOT NULL
+      AND to_regclass('public.product_duplicate_dismissals') IS NOT NULL
+      AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.product_merges'::regclass)
+      AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.product_duplicate_dismissals'::regclass)
+      AND NOT has_table_privilege('authenticated', 'public.product_merges', 'SELECT')
+      AND NOT has_table_privilege('anon', 'public.product_duplicate_dismissals', 'SELECT')
+      AND has_function_privilege('authenticated', 'public.product_merge(uuid,uuid[],text,uuid,integer,uuid[])', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'public.product_duplicate_groups()', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.product_duplicate_groups()', 'EXECUTE')
+      AND has_function_privilege('service_role', 'public.product_duplicate_ai_candidates(uuid,text,integer)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.product_duplicate_ai_candidates(uuid,text,integer)', 'EXECUTE')"
+echo "rollback guard: $M64 refuses while the merge log has rows"
+q "SET session_replication_role = replica;
+   INSERT INTO public.product_merges (tenant_id, kept_product_id, kept_name, stock_mode, kept_before)
+   SELECT id, gen_random_uuid(), 'rb', 'keep', '{}'::jsonb FROM public.tenants WHERE is_default" >/dev/null
+if down "$M64" 2>/dev/null; then
+  echo "  FAIL rollback ran although the merge log has rows"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT to_regclass('public.product_merges') IS NOT NULL AND (SELECT count(*) FROM public.product_merges) = 1"
+q "DELETE FROM public.product_merges" >/dev/null
+q "INSERT INTO public.product_duplicate_dismissals (tenant_id, product_ids)
+   SELECT id, ARRAY[gen_random_uuid(), gen_random_uuid()] FROM public.tenants WHERE is_default" >/dev/null
+# the reference: every migration before this one (whichever migration comes right before it)
+psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
+  -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+for f in $(ls "$MIGRATIONS"/*.sql | sort); do
+  [ "$(basename "$f" .sql)" = "$M64" ] && break
+  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+done
+echo "rollback: $M64 (\"not a duplicate\" marks are dropped with it)"
+down "$M64"
+expect "the duplicates tables and all their functions are gone; the products are untouched" \
+  "SELECT to_regclass('public.product_merges') IS NULL
+      AND to_regclass('public.product_duplicate_dismissals') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+                       AND proname IN ('product_merge', 'product_duplicate_groups', 'product_duplicate_cards',
+                                       'product_duplicate_dismiss', 'product_duplicate_dismissals_clear',
+                                       'product_duplicate_ai_candidates', '_product_duplicate_cards',
+                                       '_product_keep_reasons', 'product_name_key'))
+      AND to_regclass('public.global_products') IS NOT NULL"
+pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/before-m64.sql"
+schema_dump "$SCHEMA_DIR/after-m64-down.sql"
+if diff -q "$SCHEMA_DIR/before-m64.sql" "$SCHEMA_DIR/after-m64-down.sql" >/dev/null; then
+  echo "  ok   schema after the rollback = the schema of the migration before it, exactly"
+else
+  echo "  FAIL schema after the rollback differs from the migration before it:"; diff "$SCHEMA_DIR/before-m64.sql" "$SCHEMA_DIR/after-m64-down.sql" | head -20; exit 1
+fi
 
 # ---------- SEO stage 4: cookie consent, off behind a flag (20261110210000) ----------
 expect "before the rollback: the consent table (RLS, no direct privileges), the flag (off), recording for the server only" \
@@ -1931,6 +1987,13 @@ up "$M60"
 up "$M61"
 up "$M62"
 up "$M63"
+up "$M64"
+expect "the duplicates are back: 2 tables closed to the browser, the merge for signed-in users, the AI list for the server only" \
+  "SELECT to_regclass('public.product_merges') IS NOT NULL
+      AND to_regclass('public.product_duplicate_dismissals') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'public.product_merges', 'SELECT')
+      AND has_function_privilege('authenticated', 'public.product_merge(uuid,uuid[],text,uuid,integer,uuid[])', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.product_duplicate_ai_candidates(uuid,text,integer)', 'EXECUTE')"
 expect "the AI add-on is back: 9 tables closed to the browser, 2 packages at 150 ILS, the assistant off, functions for the server only" \
   "SELECT to_regclass('public.ai_subscriptions') IS NOT NULL
       AND to_regclass('public.ai_usage_daily') IS NOT NULL
