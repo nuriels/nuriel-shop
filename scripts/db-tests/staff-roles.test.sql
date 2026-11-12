@@ -157,7 +157,16 @@ SELECT tests.run('staff: 4th manager → plan seat limit',
 SELECT tests.run('staff: manager cannot demote another manager in the table',
   $$UPDATE public.user_roles SET role = 'cashier' WHERE tenant_id = '70000000-0000-0000-0000-00000000000b' AND user_id = 'a0000000-0000-0000-0000-0000000000d8'$$, :B2, 'רק בעל החנות');
 SELECT tests.run('staff: manager cannot block another manager',
-  $$UPDATE public.user_roles SET is_blocked = true WHERE tenant_id = '70000000-0000-0000-0000-00000000000b' AND user_id = 'a0000000-0000-0000-0000-0000000000d8'$$, :B2, 'רק בעל החנות יכול לחסום מנהל');
+  $$UPDATE public.user_roles SET is_blocked = true WHERE tenant_id = '70000000-0000-0000-0000-00000000000b' AND user_id = 'a0000000-0000-0000-0000-0000000000d8'$$, :B2, 'רק בעל החנות יכול לחסום או לשחרר מנהל');
+-- הבעלים חוסם, מנהל אחר לא משחרר (גם ישירות בטבלה); הבעלים משחרר
+SELECT tests.run('staff: owner blocks the manager',
+  $$UPDATE public.user_roles SET is_blocked = true WHERE tenant_id = '70000000-0000-0000-0000-00000000000b' AND user_id = 'a0000000-0000-0000-0000-0000000000d8'$$, :B1, NULL, 1);
+SELECT tests.run('staff: manager cannot unblock a manager the owner blocked',
+  $$UPDATE public.user_roles SET is_blocked = false WHERE tenant_id = '70000000-0000-0000-0000-00000000000b' AND user_id = 'a0000000-0000-0000-0000-0000000000d8'$$, :B2, 'רק בעל החנות יכול לחסום או לשחרר מנהל');
+SELECT tests.check('staff: d8 is still blocked',
+  $$SELECT is_blocked FROM public.user_roles WHERE tenant_id = '70000000-0000-0000-0000-00000000000b' AND user_id = 'a0000000-0000-0000-0000-0000000000d8'$$);
+SELECT tests.run('staff: owner unblocks the manager',
+  $$UPDATE public.user_roles SET is_blocked = false WHERE tenant_id = '70000000-0000-0000-0000-00000000000b' AND user_id = 'a0000000-0000-0000-0000-0000000000d8'$$, :B1, NULL, 1);
 SELECT tests.run('staff: manager cannot remove another manager',
   $$DELETE FROM public.user_roles WHERE tenant_id = '70000000-0000-0000-0000-00000000000b' AND user_id = 'a0000000-0000-0000-0000-0000000000d8'$$, :B2, 'רק בעל החנות יכול להסיר מנהל');
 SELECT tests.run('staff: manager can still rename a manager (not a role change)',

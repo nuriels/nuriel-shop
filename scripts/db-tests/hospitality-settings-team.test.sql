@@ -492,21 +492,22 @@ SELECT tests.check('ecommerce: store user_roles, site_settings, email_settings a
 SELECT tests.check('ecommerce: the dual user keeps the store role (store row untouched by the Hospitality addition)',
   format($$SELECT role = 'admin' AND NOT is_protected AND NOT is_blocked AND email = 'm2b_dual_shop@test.local'
        FROM public.user_roles WHERE tenant_id = %L AND user_id = %L$$, :SHOP, :DUAL));
--- existing store behaviour, unchanged (including the gap that exists for stores — reported, not changed)
+-- existing store behaviour, unchanged — except the gap reported here before: a store manager could unblock a
+-- manager the owner blocked (closed in migration 20261112100000)
 SELECT pg_temp.after('ecommerce: a store manager can still rename another store manager (existing store behaviour)',
   format($$SELECT pg_temp.call(%L, %L, %L)$$, :SHOP, :SHOP_MGR, format(:'UPD_OTHER', 'display_name = ''שם חדש''', :SHOP, :DUAL)),
   $$SELECT $1 = '1'::jsonb$$);
-SELECT pg_temp.after('ecommerce: a store manager can still unblock a store manager (existing store behaviour, not changed by 2b)',
-  format($$SELECT pg_temp.call(%L, %L, %L)$$, :SHOP, :SHOP_MGR, format(:'UPD_OTHER', 'is_blocked = false', :SHOP, :SHOP_MGR2)),
-  $$SELECT $1 = '1'::jsonb$$);
+UPDATE public.user_roles SET is_blocked = false WHERE tenant_id = :SHOP AND user_id = :SHOP_MGR2;
 SELECT pg_temp.expect_error('ecommerce: a store manager still cannot block a store manager (existing owner rule)',
-  format($$SELECT pg_temp.call(%L, %L, %L)$$, :SHOP, :SHOP_MGR, format(:'UPD_OTHER', 'is_blocked = true', :SHOP, :SHOP_MGR2)), 'רק בעל החנות יכול לחסום מנהל');
+  format($$SELECT pg_temp.call(%L, %L, %L)$$, :SHOP, :SHOP_MGR, format(:'UPD_OTHER', 'is_blocked = true', :SHOP, :SHOP_MGR2)), 'רק בעל החנות יכול לחסום או לשחרר מנהל');
 SELECT pg_temp.after('ecommerce: the dual user, acting in the store, edits a store row as before',
   format($$SELECT pg_temp.call(%L, %L, %L)$$, :SHOP, :DUAL, format(:'UPD_OTHER', 'display_name = ''עובד''', :SHOP, :SHOP_MGR)),
   $$SELECT $1 = '1'::jsonb$$);
 SELECT pg_temp.after('ecommerce: the store owner manages store managers as before',
   format($$SELECT pg_temp.call(%L, %L, %L)$$, :SHOP, :SHOP_OWNER, format(:'UPD_OTHER', 'is_blocked = true', :SHOP, :SHOP_MGR2)),
   $$SELECT $1 = '1'::jsonb$$);
+SELECT pg_temp.expect_error('ecommerce: a store manager cannot unblock a store manager the owner blocked',
+  format($$SELECT pg_temp.call(%L, %L, %L)$$, :SHOP, :SHOP_MGR, format(:'UPD_OTHER', 'is_blocked = false', :SHOP, :SHOP_MGR2)), 'רק בעל החנות יכול לחסום או לשחרר מנהל');
 SELECT tests.check('ecommerce: no Hospitality object references a store row',
   format($$SELECT NOT EXISTS (SELECT 1 FROM hospitality.audit_log WHERE tenant_id = %1$L)
              AND NOT EXISTS (SELECT 1 FROM hospitality.settings WHERE tenant_id = %1$L)$$, :SHOP));

@@ -136,7 +136,8 @@ SELECT tests.check('roles: the Ecommerce registration is unchanged (5 roles)',
   $$SELECT array_agg(role ORDER BY role) = ARRAY['admin','agent','cashier','customer','warehouse']
       FROM public.platform_product_roles WHERE product = 'ecommerce'$$);
 -- permission and membership functions of Ecommerce / the platform are byte-for-byte unchanged
--- (hashes of the bodies before this migration; migration 3 defines nothing in public)
+-- (hashes of the bodies before this migration; migration 3 defines nothing in public. user_roles_owner_guard:
+-- the 20261112100000 body — a manager can no longer unblock a manager the owner blocked)
 SELECT tests.check('roles: store permission and membership functions are unchanged',
   $$SELECT count(*) = 8 AND bool_and(md5(prosrc) = CASE proname
         WHEN 'current_tenant_id' THEN '0be1396f2cc9d476f03a8975a19c2833'
@@ -145,7 +146,7 @@ SELECT tests.check('roles: store permission and membership functions are unchang
         WHEN 'staff_can' THEN '7f0dc33ba1d7e031c430ac22e9eeed44'
         WHEN 'store_staff_role' THEN '288aff3ff585456fdd3ace428227033a'
         WHEN 'user_roles_membership_guard' THEN '9ccf1352f00bf7cc34a6f324e876b1cb'
-        WHEN 'user_roles_owner_guard' THEN '2a64aaa92ae7a36901bdf1e04b84a13c'
+        WHEN 'user_roles_owner_guard' THEN '90c7befa2bc215925d2ca0c4092564a7'
         WHEN 'user_roles_product_role_guard' THEN '858b548c1ab63e66d05c9cfe5796bc2d' END)
       FROM pg_proc WHERE pronamespace = 'public'::regnamespace
        AND proname IN ('current_tenant_id', 'is_admin', 'is_super_admin', 'staff_can', 'store_staff_role',
