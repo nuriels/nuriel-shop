@@ -251,6 +251,13 @@ export async function recordCustomerEmail(
   }
 }
 
+/** כמה לחכות לפני הניסיון החוזר אחרי 429: לפי Retry-After (שניות), בין חצי שנייה ל-2 שניות */
+function retryAfterMs(response: Response): number {
+  const seconds = Number(response.headers.get("retry-after"));
+  const ms = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 1000;
+  return Math.min(2000, Math.max(500, ms));
+}
+
 async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
   const apiKey = input.transport?.apiKey ?? resendApiKey();
   if (!apiKey) {
@@ -281,24 +288,30 @@ async function deliverEmail(input: SendEmailInput): Promise<SendResult> {
       ? input.replyTo.trim().toLowerCase()
       : sender.replyTo;
   try {
-    const response = await fetch(`${resendApiUrl()}/emails`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to,
-        subject: input.subject,
-        html: input.html,
-        ...(replyTo ? { reply_to: replyTo } : {}),
-        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-        ...(input.headers && Object.keys(input.headers).length > 0
-          ? { headers: input.headers }
-          : {}),
-      }),
+    const requestBody = JSON.stringify({
+      from,
+      to,
+      subject: input.subject,
+      html: input.html,
+      ...(replyTo ? { reply_to: replyTo } : {}),
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+      ...(input.headers && Object.keys(input.headers).length > 0 ? { headers: input.headers } : {}),
     });
+    const post = () =>
+      fetch(`${resendApiUrl()}/emails`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: requestBody,
+      });
+    let response = await post();
+    // 429 = מגבלת הקצב של Resend (כמה בקשות בשנייה לחשבון): המייל לא התקבל, ולכן ניסיון חוזר
+    // אחד בטוח (אין כפילות). בלי זה קוד כניסה שנשלח בדיוק כשתור המיילים שולח כמה מיילים ברצף
+    // נכשל, והלקוח רואה "לא הצלחנו לשלוח את הקוד".
+    if (response.status === 429) {
+      await response.text().catch(() => "");
+      await new Promise((resolve) => setTimeout(resolve, retryAfterMs(response)));
+      response = await post();
+    }
     if (!response.ok) {
       const body = await response.text();
       console.error("[email] Resend error", response.status, body);
