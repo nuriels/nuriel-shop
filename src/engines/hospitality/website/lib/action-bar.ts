@@ -1,8 +1,8 @@
 // שורת הפעולות הקבועה בטלפון (חיוג, WhatsApp, הזמנה): באיזה עמוד היא מוצגת, וכמה מקום הפוטר
 // משאיר לה כדי שהקרדיט וקישורי הפרטיות והנגישות לא יוסתרו (F1).
 
-/** עמודים עם פעולה משלהם — בלי שורת הפעולות הקבועה */
-const NO_ACTION_BAR = /^\/stay\/(book|booking-received|my-booking)(\/|$)/;
+/** עמודים עם פעולה משלהם — בלי שורת הפעולות הקבועה (גם עמוד החתימה: שם הפעולה היא החתימה) */
+const NO_ACTION_BAR = /^\/stay\/(book|booking-received|my-booking|contract)(\/|$)/;
 
 export function hasActionBar(pathname: string): boolean {
   return !NO_ACTION_BAR.test(pathname);

@@ -1,5 +1,8 @@
 // לוח חתימה: ציור באצבע או בעכבר (Pointer Events), נשמר כקווים בלבד בתוך 600×200 — אותו כלל כמו
 // במסד. ולמי שלא יכול לצייר (נגישות — WCAG 2.5.1: פעולה בתנועה צריכה חלופה) — חתימה בהקלדת השם המלא.
+// בטלפון הלוח גבוה יותר (3:2 במקום 3:1) — מקום נוח לאצבע: המסך ממופה לתחום 600×200 בקנה מידה אחיד
+// (כמו "slice" בתצוגה), כך שהחתימה נשמרת בפרופורציות שלה, ממורכזת, ותמיד בתוך התחום שהמסד בודק.
+// קו ארוך מאוד מתפצל לשני קווים (המסד מגביל אורך של קו אחד).
 import { Eraser, PenLine, Type } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { Button, Input, Label, cn } from "@/platform/ui";
@@ -11,6 +14,10 @@ import {
   validSignaturePaths,
   type ContractSignature,
 } from "./signature";
+
+/** אורך קו (בתווים) שאחריו הוא מתפצל; המסד מקבל עד 8000 לקו */
+const STROKE_SPLIT = 7000;
+const STROKE_MAX = 7900;
 
 export function SignaturePad({
   onChange,
@@ -33,9 +40,11 @@ export function SignaturePad({
   const point = (e: React.PointerEvent) => {
     const r = area.current?.getBoundingClientRect();
     if (!r || r.width === 0 || r.height === 0) return null;
+    // קנה מידה אחיד: כל הלוח נכנס ל-600×200 (בלוח 3:1 — בדיוק כמו קודם), ממורכז
+    const k = Math.min(SIGNATURE_WIDTH / r.width, SIGNATURE_HEIGHT / r.height);
     return clampPoint(
-      ((e.clientX - r.left) / r.width) * SIGNATURE_WIDTH,
-      ((e.clientY - r.top) / r.height) * SIGNATURE_HEIGHT,
+      (SIGNATURE_WIDTH - r.width * k) / 2 + (e.clientX - r.left) * k,
+      (SIGNATURE_HEIGHT - r.height * k) / 2 + (e.clientY - r.top) * k,
     );
   };
   const emit = (all: string[]) =>
@@ -99,7 +108,7 @@ export function SignaturePad({
             aria-labelledby={`${id}-label`}
             aria-describedby={`${id}-hint`}
             data-testid={`${testId}-area`}
-            className="relative aspect-[3/1] w-full touch-none rounded-lg border-2 border-dashed border-border bg-white"
+            className="relative aspect-[3/2] max-h-64 w-full touch-none rounded-lg border-2 border-dashed border-border bg-white select-none sm:aspect-[3/1] sm:max-h-none"
             onPointerDown={(e) => {
               if (strokes.length >= SIGNATURE_MAX_PATHS) return;
               (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -109,7 +118,12 @@ export function SignaturePad({
             onPointerMove={(e) => {
               if (current === null) return;
               const p = point(e);
-              if (p && !current.endsWith(p)) setCurrent(`${current} L${p}`);
+              if (!p || current.endsWith(p)) return;
+              if (current.length > STROKE_SPLIT && strokes.length < SIGNATURE_MAX_PATHS - 1) {
+                // קו ארוך — נסגר כאן וממשיך כקו חדש מאותה נקודה
+                setStrokes([...strokes, `${current} L${p}`]);
+                setCurrent(`M${p}`);
+              } else if (current.length < STROKE_MAX) setCurrent(`${current} L${p}`);
             }}
             onPointerUp={() => {
               if (current === null) return;
@@ -123,6 +137,7 @@ export function SignaturePad({
           >
             <svg
               viewBox={`0 0 ${SIGNATURE_WIDTH} ${SIGNATURE_HEIGHT}`}
+              preserveAspectRatio="xMidYMid slice"
               className="pointer-events-none absolute inset-0 size-full"
               aria-hidden="true"
             >

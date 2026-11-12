@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Circle,
   ExternalLink,
+  FileSignature,
   Globe,
   Lock,
   Palette,
@@ -206,6 +207,15 @@ function QuickActions() {
         </Link>
       ),
     });
+  if (p["contracts"])
+    actions.push({
+      key: "document",
+      node: (
+        <Link to="/manage/client-documents" search={{ tab: "new" }} className={cls} data-lift="">
+          {body("מסמך לחתימה", "חוזה או תקנון — הלקוח חותם בטלפון", FileSignature, "success")}
+        </Link>
+      ),
+    });
   if (p["catalog"])
     actions.push({
       key: "unit",
@@ -236,7 +246,16 @@ function QuickActions() {
   if (actions.length === 0) return null;
   return (
     <nav aria-label="פעולות מהירות">
-      <ul className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
+      <ul
+        className={cn(
+          "grid grid-cols-2 gap-2 sm:gap-3",
+          // מספר אי-זוגי בטלפון — האחרונה ברוחב מלא
+          "[&>li:last-child:nth-child(odd)]:col-span-2",
+          actions.length > 4
+            ? "xl:grid-cols-5 xl:[&>li:last-child:nth-child(odd)]:col-span-1"
+            : "xl:grid-cols-4 xl:[&>li:last-child:nth-child(odd)]:col-span-1",
+        )}
+      >
         {actions.map((a) => (
           <li key={a.key} data-action={a.key}>
             {a.node}

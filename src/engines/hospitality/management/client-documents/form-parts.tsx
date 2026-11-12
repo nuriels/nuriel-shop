@@ -112,12 +112,20 @@ export function PickList({
   return <ul className="flex flex-col gap-1.5">{children}</ul>;
 }
 
+/** לקוח שנבחר מהרשימה (האימייל והטלפון — למילוי מראש, למי שצריך) */
+export interface PickedGuest {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+}
+
 export function GuestPicker({
   guest,
   onPick,
 }: {
   guest: { id: string; name: string } | null;
-  onPick: (g: { id: string; name: string } | null) => void;
+  onPick: (g: PickedGuest | null) => void;
 }) {
   const [text, setText] = useState("");
   const q = useDebounced(text.trim(), 300);
@@ -161,7 +169,14 @@ export function GuestPicker({
               <li key={g.id}>
                 <button
                   type="button"
-                  onClick={() => onPick({ id: g.id, name: g.name })}
+                  onClick={() =>
+                    onPick({
+                      id: g.id,
+                      name: g.name,
+                      email: g.email ?? null,
+                      phone: g.phone ?? null,
+                    })
+                  }
                   className="flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-start text-sm hover:bg-muted"
                 >
                   <span>{g.name}</span>

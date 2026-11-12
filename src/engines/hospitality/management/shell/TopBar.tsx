@@ -10,6 +10,7 @@ import {
   CalendarPlus,
   CircleCheckBig,
   ExternalLink,
+  FileSignature,
   Images,
   LifeBuoy,
   Plus,
@@ -145,6 +146,12 @@ function NewMenu() {
       label: "חסימת תאריכים",
       icon: Ban,
       go: () => void navigate({ to: "/manage/calendar", search: { block: "1" } }),
+    },
+    p["contracts"] && {
+      key: "document",
+      label: "מסמך לחתימה",
+      icon: FileSignature,
+      go: () => void navigate({ to: "/manage/client-documents", search: { tab: "new" } }),
     },
     p["catalog"] && {
       key: "unit",

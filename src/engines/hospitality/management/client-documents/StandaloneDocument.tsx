@@ -4,13 +4,26 @@
 //     ב' — הלקוח ממלא: העסק ממלא רק את הפרטים העסקיים, יוצר קישור ומעביר ללקוח (וואטסאפ / הודעה /
 //          מייל); הלקוח כותב את השם, האימייל והטלפון (ובחוזה — ת"ז וכתובת) וחותם באצבע או בעכבר;
 //   → תצוגה מקדימה של הנוסח המלא → יצירה ושליחה. המסד בודק הכול שוב (הוא הסמכות), כולל ההרשאות.
+// בשתי הדרכים אפשר לבחור לקוח קיים (בדרך ב' — הפרטים שלו ממולאים מראש מהכרטיס, במסד). התצוגה המקדימה —
+// גם במסך מלא. בטלפון: שורת פעולה קבועה בתחתית (בדיקת המסמך + שליחה / יצירת קישור), והקישור — גם בשיתוף
+// מהמכשיר ובחתימה כאן, במכשיר הזה.
 // מסמך עצמאי לא שומר תאריכים ולא יוצר הזמנה / אירוע.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { CheckCircle2, Info, Link2, Send } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { CheckCircle2, Eye, Info, Link2, Send } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Button, Input, Label, cn } from "@/platform/ui";
+import {
+  Button,
+  Input,
+  Label,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  cn,
+} from "@/platform/ui";
 import {
   hospitalityContractStandaloneCreate,
   hospitalityContractStandalonePreview,
@@ -40,6 +53,8 @@ import { SignLinkBox } from "./SignLinkBox";
 type CustomerMode = "existing" | "new";
 type PoolMode = "window" | "custom" | "none";
 const TIME = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+/** רשימת בחירה — 16px בטלפון (בלי הגדלת מסך ב-iOS) */
+const SEL = cn(SELECT, "max-sm:text-base");
 const num = (s: string) => (s.trim() === "" ? null : Number(s));
 const badMoney = (s: string) => {
   const n = num(s);
@@ -169,18 +184,19 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
   ]);
 
   const signer = useMemo(() => {
-    if (fill === "business" && customerMode === "existing") return null;
+    if (customerMode === "existing") return null;
     const s = {
       ...(person.full_name.trim() ? { full_name: person.full_name.trim() } : {}),
       ...(person.email.trim() ? { email: person.email.trim() } : {}),
       ...(person.phone.trim() ? { phone: person.phone.trim() } : {}),
     };
     return Object.keys(s).length ? s : null;
-  }, [fill, customerMode, person]);
-  const guestId = fill === "business" && customerMode === "existing" ? (guest?.id ?? null) : null;
+  }, [customerMode, person]);
+  const guestId = customerMode === "existing" ? (guest?.id ?? null) : null;
   const customerReady =
-    fill === "customer" ||
-    (customerMode === "existing" ? guestId !== null : Boolean(signer?.full_name && signer.email));
+    customerMode === "existing"
+      ? guestId !== null
+      : fill === "customer" || Boolean(signer?.full_name && signer.email);
 
   const target: StandaloneTarget | null = useMemo(
     () =>
@@ -199,7 +215,12 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
   const p = preview.data && debounced === target ? preview.data : null;
   const stale = preview.data !== undefined && debounced !== target;
   const blanks = p ? p.body.split(BLANK).length - 1 : 0;
-  const deliver: "email" | "link" = fill === "business" || alsoEmail ? "email" : "link";
+  // דרך ב' — במייל רק אם יש לאן (אימייל שנכתב, או של הלקוח הקיים)
+  const linkEmail = customerMode === "existing" ? (p?.signer.email ?? "") : person.email.trim();
+  const deliver: "email" | "link" =
+    fill === "business" || (alsoEmail && linkEmail !== "") ? "email" : "link";
+  const [fullView, setFullView] = useState(false);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   const create = useMutation({
     mutationFn: () => hospitalityContractStandaloneCreate({ data: { ...target!, deliver } }),
@@ -215,6 +236,10 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
   });
 
   const reset = () => setResult(null);
+  // אחרי היצירה — התוצאה (הקישור / "נשלח") מול העיניים, גם כשלחצו מהשורה הקבועה בטלפון
+  useEffect(() => {
+    if (result) resultRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [result]);
   const chooseKind = (k: ContractKind) => {
     setKind(k);
     reset();
@@ -222,9 +247,47 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
   const toggleUnit = (name: string) =>
     setUnits((u) => (u.includes(name) ? u.filter((x) => x !== name) : [...u, name]));
   const blocked = !p || !p.can_send || create.isPending || moneyProblem;
+  const waitingText = !customerReady
+    ? customerMode === "existing"
+      ? "בחרו לקוח מהרשימה."
+      : "מלאו שם ואימייל של הלקוח."
+    : moneyProblem
+      ? "יש סכום או מספר לא תקין."
+      : kind === "policy"
+        ? "בחרו מסמך."
+        : "מלאו את פרטי החוזה.";
+  const actionIcon =
+    deliver === "email" ? (
+      <Send className="size-4" aria-hidden="true" />
+    ) : (
+      <Link2 className="size-4" aria-hidden="true" />
+    );
+  const actionLabel = create.isPending
+    ? "יוצר…"
+    : deliver === "email"
+      ? `שליחה לחתימה${p?.signer.email ? ` ל-${p.signer.email}` : ""}`
+      : "יצירת קישור לחתימה";
+  // השורה הקבועה בטלפון: מה המצב, במשפט אחד
+  const barStatus =
+    target === null
+      ? waitingText
+      : preview.isError && !stale
+        ? "יש בעיה בפרטים — ראו בתצוגה המקדימה."
+        : !p
+          ? "מכין את התצוגה המקדימה…"
+          : !p.can_send
+            ? p.legal_pending
+              ? "תצוגה מקדימה בלבד — השליחה עוד לא נפתחה."
+              : 'צריך לאשר קודם את "תנאים ופרטי החוזה".'
+            : deliver === "email"
+              ? "מוכן — בדקו את המסמך ושלחו לחתימה."
+              : "מוכן — בדקו את המסמך וצרו קישור ללקוח.";
 
   return (
-    <div className="flex flex-col gap-4" data-testid="standalone-document">
+    <div
+      className={cn("flex flex-col gap-4", result === null && "max-md:pb-28")}
+      data-testid="standalone-document"
+    >
       <p className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm">
         <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span>
@@ -299,34 +362,38 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
       </Step>
 
       <Step n={3} title="הלקוח">
-        {fill === "business" ? (
-          <>
-            <div role="radiogroup" aria-label="הלקוח" className="grid gap-2 sm:grid-cols-2">
-              <Choice
-                name="sd-customer"
-                checked={customerMode === "new"}
-                onChange={() => setCustomerMode("new")}
-                title="לקוח חדש"
-                text="נוצר כרטיס לקוח (אם אין כבר לקוח עם האימייל הזה)."
-                testId="sd-customer-new"
-              />
-              <Choice
-                name="sd-customer"
-                checked={customerMode === "existing"}
-                onChange={() => setCustomerMode("existing")}
-                title="לקוח קיים"
-                testId="sd-customer-existing"
-              />
-            </div>
-            {customerMode === "existing" && <GuestPicker guest={guest} onPick={setGuest} />}
-          </>
-        ) : (
+        <div role="radiogroup" aria-label="הלקוח" className="grid gap-2 sm:grid-cols-2">
+          <Choice
+            name="sd-customer"
+            checked={customerMode === "new"}
+            onChange={() => setCustomerMode("new")}
+            title={fill === "business" ? "לקוח חדש" : "לקוח חדש (הוא ימלא את הפרטים)"}
+            text={
+              fill === "business"
+                ? "נוצר כרטיס לקוח (אם אין כבר לקוח עם האימייל הזה)."
+                : "אפשר לכתוב מראש שם, אימייל או טלפון — לא חובה."
+            }
+            testId="sd-customer-new"
+          />
+          <Choice
+            name="sd-customer"
+            checked={customerMode === "existing"}
+            onChange={() => setCustomerMode("existing")}
+            title="לקוח קיים"
+            {...(fill === "customer"
+              ? { text: "הפרטים שלו ממולאים מראש מהכרטיס — והוא יכול לתקן אותם בחתימה." }
+              : {})}
+            testId="sd-customer-existing"
+          />
+        </div>
+        {customerMode === "existing" && <GuestPicker guest={guest} onPick={setGuest} />}
+        {fill === "customer" && customerMode === "new" && (
           <p className="text-sm text-muted-foreground">
             לא חובה — הלקוח כותב את הפרטים שלו בחתימה (ויכול לתקן את מה שמילאתם). כתבתם אימייל? אפשר
             לשלוח אליו את הקישור גם במייל.
           </p>
         )}
-        {(fill === "customer" || customerMode === "new") && (
+        {customerMode === "new" && (
           <div className="grid gap-3 sm:grid-cols-3" data-testid="sd-person">
             <Field id="sd-name" label={fill === "business" ? "שם מלא" : "שם מלא (לא חובה)"}>
               <Input
@@ -367,16 +434,18 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
             </Field>
           </div>
         )}
-        {fill === "customer" && person.email.trim() && (
+        {fill === "customer" && linkEmail && (
           <label className="flex min-h-11 items-center gap-2 text-sm">
             <input
               type="checkbox"
-              className="size-4"
+              className="size-5 shrink-0"
               checked={alsoEmail}
               onChange={(e) => setAlsoEmail(e.target.checked)}
               data-testid="sd-also-email"
             />
-            לשלוח את הקישור גם במייל ל-<span dir="ltr">{person.email.trim()}</span>
+            <span>
+              לשלוח את הקישור גם במייל ל-<span dir="ltr">{linkEmail}</span>
+            </span>
           </label>
         )}
       </Step>
@@ -399,7 +468,7 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
             >
               <select
                 id="sd-doc"
-                className={SELECT}
+                className={SEL}
                 value={docKind}
                 onChange={(e) => setDocKind(e.target.value as PolicyDocKind)}
                 aria-describedby="sd-doc-hint"
@@ -507,7 +576,7 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
               <Field id="sd-deposit" label="אמצעי הפיקדון">
                 <select
                   id="sd-deposit"
-                  className={SELECT}
+                  className={SEL}
                   value={deposit}
                   onChange={(e) => setDeposit(e.target.value as DepositMethod | "")}
                 >
@@ -563,7 +632,7 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
               <Field id="sd-type" label="סוג האירוע">
                 <select
                   id="sd-type"
-                  className={SELECT}
+                  className={SEL}
                   value={eventType}
                   onChange={(e) => setEventType(e.target.value)}
                 >
@@ -710,15 +779,7 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
       >
         {target === null ? (
           <p className="text-sm text-muted-foreground" data-testid="sd-preview-waiting">
-            {!customerReady
-              ? customerMode === "existing"
-                ? "בחרו לקוח מהרשימה."
-                : "מלאו שם ואימייל של הלקוח."
-              : moneyProblem
-                ? "יש סכום או מספר לא תקין."
-                : kind === "policy"
-                  ? "בחרו מסמך."
-                  : "מלאו את פרטי החוזה."}
+            {waitingText}
           </p>
         ) : preview.isError && !stale ? (
           <p className="text-sm text-destructive" role="alert" data-testid="sd-preview-error">
@@ -730,6 +791,16 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
           </p>
         ) : (
           <div className="flex flex-col gap-3" data-testid="sd-preview">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 gap-2 self-start max-sm:w-full"
+              onClick={() => setFullView(true)}
+              data-testid="sd-preview-full"
+            >
+              <Eye className="size-4" aria-hidden="true" />
+              קריאת המסמך במסך מלא
+            </Button>
             {blanks > 0 && (
               <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-950">
                 השדות המסומנים (<mark className="rounded bg-amber-100 px-1">{BLANK}</mark>) ימולאו
@@ -737,7 +808,7 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
               </p>
             )}
             <div
-              className="max-h-[70vh] overflow-y-auto rounded-lg border bg-white p-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:p-6"
+              className="max-h-[60vh] overflow-y-auto rounded-lg border bg-white p-3 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:max-h-[70vh] sm:p-6"
               role="region"
               aria-label="נוסח המסמך — תצוגה מקדימה"
               tabIndex={0}
@@ -763,46 +834,58 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
           <p className="text-sm text-muted-foreground" data-testid="sd-send-blocked">
             {p.legal_pending
               ? "השליחה ללקוחות תיפתח אחרי הבדיקה והאישור המשפטי של המסמכים. בינתיים — תצוגה מקדימה בלבד."
-              : 'בעל העסק צריך לאשר את "תנאים ופרטי החוזה" לפני שליחת החוזה הראשון.'}
+              : 'בעל העסק צריך לאשר את "תנאים ופרטי החוזה" לפני שליחת החוזה הראשון.'}{" "}
+            {!p.legal_pending && (
+              <Link
+                to="/manage/client-documents"
+                search={{ tab: "terms" }}
+                className="font-medium text-foreground underline"
+              >
+                לתנאים ופרטי החוזה
+              </Link>
+            )}
           </p>
         )}
-        {result && result.delivery === "email" && (
-          <div
-            className={cn(
-              "flex flex-col gap-2 rounded-lg border p-3 text-sm",
-              result.sent
-                ? "border-emerald-300 bg-emerald-50 text-emerald-950"
-                : "border-red-300 bg-red-50 text-red-950",
-            )}
-            role="status"
-            data-testid="sd-result"
-          >
-            {result.sent ? (
-              <p className="flex items-center gap-2">
-                <CheckCircle2 className="size-4" aria-hidden="true" />
-                מסמך #{result.contract.number} נשלח ל-
-                <span dir="ltr">{result.contract.signer_email}</span>
-                {result.contract.link_expires_at
-                  ? ` · הקישור תקף עד ${formatDateTime(result.contract.link_expires_at)}`
-                  : ""}
-              </p>
-            ) : (
-              <p>
-                השליחה נכשלה — מסמך #{result.contract.number} נשמר כטיוטה ולא סומן כנשלח.
-                {result.error ? ` (${result.error})` : ""} אפשר לנסות שוב מהארכיון.
-              </p>
-            )}
-          </div>
-        )}
-        {result && result.delivery === "link" && result.link && (
-          <SignLinkBox
-            url={result.link.url}
-            expiresAt={result.link.expires_at}
-            title={result.contract.title}
-            phone={person.phone.trim() || null}
-            number={result.contract.number}
-          />
-        )}
+        <div ref={resultRef} className="flex scroll-mb-40 flex-col gap-3 empty:hidden">
+          {result && result.delivery === "email" && (
+            <div
+              className={cn(
+                "flex flex-col gap-2 rounded-lg border p-3 text-sm",
+                result.sent
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                  : "border-red-300 bg-red-50 text-red-950",
+              )}
+              role="status"
+              data-testid="sd-result"
+            >
+              {result.sent ? (
+                <p className="flex items-center gap-2">
+                  <CheckCircle2 className="size-4" aria-hidden="true" />
+                  מסמך #{result.contract.number} נשלח ל-
+                  <span dir="ltr">{result.contract.signer_email}</span>
+                  {result.contract.link_expires_at
+                    ? ` · הקישור תקף עד ${formatDateTime(result.contract.link_expires_at)}`
+                    : ""}
+                </p>
+              ) : (
+                <p>
+                  השליחה נכשלה — מסמך #{result.contract.number} נשמר כטיוטה ולא סומן כנשלח.
+                  {result.error ? ` (${result.error})` : ""} אפשר לנסות שוב מהארכיון.
+                </p>
+              )}
+            </div>
+          )}
+          {result && result.delivery === "link" && result.link && (
+            <SignLinkBox
+              url={result.link.url}
+              expiresAt={result.link.expires_at}
+              title={result.contract.title}
+              phone={(customerMode === "existing" ? p?.signer.phone : person.phone.trim()) || null}
+              number={result.contract.number}
+              deviceActions
+            />
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
@@ -811,16 +894,8 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
             onClick={() => create.mutate()}
             data-testid="sd-create"
           >
-            {deliver === "email" ? (
-              <Send className="size-4" aria-hidden="true" />
-            ) : (
-              <Link2 className="size-4" aria-hidden="true" />
-            )}
-            {create.isPending
-              ? "יוצר…"
-              : deliver === "email"
-                ? `שליחה לחתימה${p?.signer.email ? ` ל-${p.signer.email}` : ""}`
-                : "יצירת קישור לחתימה"}
+            {actionIcon}
+            {actionLabel}
           </Button>
           {result && (
             <Button type="button" variant="outline" className="min-h-11" onClick={reset}>
@@ -835,6 +910,100 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
           אחרי החתימה — העותק החתום (PDF) נשלח ללקוח, נשמר ב"מסמכים חתומים", ותקבלו התראה.
         </p>
       </Step>
+
+      {/* בטלפון: הפעולה תמיד בהישג יד, מעל הניווט התחתון */}
+      {result === null && (
+        <div
+          className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 border-t bg-card/95 px-3 pt-2 pb-2.5 shadow-[0_-8px_24px_-18px_rgb(12_48_47/0.35)] backdrop-blur md:hidden"
+          data-testid="sd-mobile-bar"
+        >
+          <p className="mb-1.5 text-xs text-muted-foreground" aria-live="polite">
+            {barStatus}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 flex-1 gap-1.5 px-2"
+              disabled={!p}
+              onClick={() => setFullView(true)}
+              data-testid="sd-mobile-review"
+            >
+              <Eye className="size-4" aria-hidden="true" />
+              בדיקת המסמך
+            </Button>
+            <Button
+              type="button"
+              className="min-h-11 flex-[1.6] gap-1.5 px-2"
+              disabled={blocked}
+              onClick={() => create.mutate()}
+              data-testid="sd-mobile-create"
+            >
+              {actionIcon}
+              {create.isPending ? "יוצר…" : deliver === "email" ? "שליחה לחתימה" : "יצירת קישור"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* המסמך המלא, לקריאה לפני השליחה — נוח במיוחד בטלפון */}
+      <Sheet open={fullView && p !== null} onOpenChange={setFullView}>
+        <SheetContent
+          side="bottom"
+          dir="rtl"
+          className="flex h-[94dvh] flex-col gap-0 rounded-t-2xl p-0"
+          data-testid="sd-full"
+        >
+          <SheetHeader className="border-b p-4 pe-12 text-start">
+            <SheetTitle>{p?.title ?? "המסמך"}</SheetTitle>
+            <SheetDescription>
+              כפי שהלקוח יראה{p ? ` · נוסח גרסה ${p.template_version}` : ""}
+              {blanks > 0 ? " · השדות המסומנים ימולאו בחתימה" : ""}
+            </SheetDescription>
+          </SheetHeader>
+          <div
+            className="min-h-0 flex-1 overflow-y-auto bg-white p-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset sm:p-8"
+            role="region"
+            aria-label="נוסח המסמך — מסך מלא"
+            tabIndex={0}
+          >
+            {p && (
+              <ContractBody
+                body={p.body}
+                highlightBlanks
+                signatures={
+                  <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    {kind === "policy" ? "חתימת הלקוח/ה" : "החתימות — בחתימה של הלקוח"}
+                  </p>
+                }
+              />
+            )}
+          </div>
+          <div className="flex gap-2 border-t bg-card p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 flex-1"
+              onClick={() => setFullView(false)}
+            >
+              חזרה לעריכה
+            </Button>
+            <Button
+              type="button"
+              className="min-h-11 flex-[1.6] gap-1.5"
+              disabled={blocked || result !== null}
+              onClick={() => {
+                setFullView(false);
+                create.mutate();
+              }}
+              data-testid="sd-full-create"
+            >
+              {actionIcon}
+              {deliver === "email" ? "שליחה לחתימה" : "יצירת קישור"}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
