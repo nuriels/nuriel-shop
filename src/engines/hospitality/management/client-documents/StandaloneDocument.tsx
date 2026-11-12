@@ -91,6 +91,12 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
   const [fill, setFill] = useState<ContractFillMode>("business");
   const [customerMode, setCustomerMode] = useState<CustomerMode>("new");
   const [guest, setGuest] = useState<{ id: string; name: string } | null>(null);
+  // האימייל של הלקוח הקיים — מהתצוגה המקדימה (מהכרטיס, במסד), נשמר גם בזמן שהיא מתרעננת
+  const [guestEmail, setGuestEmail] = useState("");
+  const pickGuest = (g: { id: string; name: string } | null) => {
+    setGuest(g);
+    setGuestEmail("");
+  };
   const [person, setPerson] = useState({ full_name: "", email: "", phone: "" });
   const [alsoEmail, setAlsoEmail] = useState(false);
   // מסמך מדיניות
@@ -216,7 +222,7 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
   const stale = preview.data !== undefined && debounced !== target;
   const blanks = p ? p.body.split(BLANK).length - 1 : 0;
   // דרך ב' — במייל רק אם יש לאן (אימייל שנכתב, או של הלקוח הקיים)
-  const linkEmail = customerMode === "existing" ? (p?.signer.email ?? "") : person.email.trim();
+  const linkEmail = customerMode === "existing" ? guestEmail : person.email.trim();
   const deliver: "email" | "link" =
     fill === "business" || (alsoEmail && linkEmail !== "") ? "email" : "link";
   const [fullView, setFullView] = useState(false);
@@ -236,10 +242,17 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
   });
 
   const reset = () => setResult(null);
-  // אחרי היצירה — התוצאה (הקישור / "נשלח") מול העיניים, גם כשלחצו מהשורה הקבועה בטלפון
+  // אחרי היצירה — התוצאה (הקישור / "נשלח") מול העיניים והפוקוס עליה, גם כשלחצו מהשורה הקבועה בטלפון
+  // (שנעלמת)
   useEffect(() => {
-    if (result) resultRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (!result) return;
+    resultRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    resultRef.current?.focus({ preventScroll: true });
   }, [result]);
+  const previewEmail = customerMode === "existing" && guestId ? (p?.signer.email ?? "") : "";
+  useEffect(() => {
+    if (previewEmail) setGuestEmail(previewEmail);
+  }, [previewEmail]);
   const chooseKind = (k: ContractKind) => {
     setKind(k);
     reset();
@@ -386,7 +399,12 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
             testId="sd-customer-existing"
           />
         </div>
-        {customerMode === "existing" && <GuestPicker guest={guest} onPick={setGuest} />}
+        {customerMode === "existing" && <GuestPicker guest={guest} onPick={pickGuest} />}
+        {fill === "customer" && customerMode === "existing" && guest && (
+          <p className="text-xs text-muted-foreground" data-testid="sd-existing-note">
+            המסמך החתום יישמר בכרטיס של {guest.name} — ודאו שזה הלקוח הנכון, ושהקישור נשלח אליו.
+          </p>
+        )}
         {fill === "customer" && customerMode === "new" && (
           <p className="text-sm text-muted-foreground">
             לא חובה — הלקוח כותב את הפרטים שלו בחתימה (ויכול לתקן את מה שמילאתם). כתבתם אימייל? אפשר
@@ -839,14 +857,21 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
               <Link
                 to="/manage/client-documents"
                 search={{ tab: "terms" }}
+                target="_blank"
+                rel="noopener"
                 className="font-medium text-foreground underline"
               >
                 לתנאים ופרטי החוזה
+                <span className="sr-only"> (נפתח בחלון חדש — מה שמילאתם כאן נשמר)</span>
               </Link>
             )}
           </p>
         )}
-        <div ref={resultRef} className="flex scroll-mb-40 flex-col gap-3 empty:hidden">
+        <div
+          ref={resultRef}
+          tabIndex={-1}
+          className="flex scroll-mb-40 flex-col gap-3 outline-none empty:hidden"
+        >
           {result && result.delivery === "email" && (
             <div
               className={cn(
@@ -880,7 +905,7 @@ export function StandaloneDocument({ view }: { view: ContractsView }) {
               url={result.link.url}
               expiresAt={result.link.expires_at}
               title={result.contract.title}
-              phone={(customerMode === "existing" ? p?.signer.phone : person.phone.trim()) || null}
+              phone={result.contract.signer_phone}
               number={result.contract.number}
               deviceActions
             />

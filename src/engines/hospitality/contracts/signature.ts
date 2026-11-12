@@ -33,3 +33,18 @@ export function clampPoint(x: number, y: number): string {
   const cy = Math.max(0, Math.min(SIGNATURE_HEIGHT, Math.round(y)));
   return `${cx},${cy}`;
 }
+
+/**
+ * נקודה על לוח החתימה (בפיקסלים, מהפינה של אזור הציור; w×h — גודל האזור) → בתוך 600×200: קנה מידה
+ * אחיד אחד (כמו "slice" בתצוגה), ממורכז — כך שהחתימה נשמרת בפרופורציות שלה בכל צורת לוח. נקודה מחוץ
+ * ללוח (האצבע / העכבר יצאו ממנו באמצע קו) נצמדת לקצה הלוח — אין "דיו" מחוץ למה שהחותם רואה.
+ */
+export function padPoint(x: number, y: number, w: number, h: number): string {
+  const k = Math.min(SIGNATURE_WIDTH / w, SIGNATURE_HEIGHT / h);
+  const px = Math.max(0, Math.min(w, x));
+  const py = Math.max(0, Math.min(h, y));
+  return clampPoint(
+    (SIGNATURE_WIDTH - w * k) / 2 + px * k,
+    (SIGNATURE_HEIGHT - h * k) / 2 + py * k,
+  );
+}

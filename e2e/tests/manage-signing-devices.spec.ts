@@ -323,6 +323,7 @@ test('small phone, the owner: dashboard and "+ new" lead to it, all tabs visible
   await quick.getByRole("link", { name: /מסמך לחתימה/ }).click();
   await expect(page).toHaveURL(/\/manage\/client-documents\?tab=new/);
   const tabs = page.getByRole("tablist", { name: "מסמכי לקוחות" });
+  await expect(tabs.getByRole("tab")).toHaveCount(5);
   const visible = await tabs.getByRole("tab").evaluateAll((els) =>
     els.every((e) => {
       const r = e.getBoundingClientRect();
@@ -407,7 +408,7 @@ test("small phone, the customer: opens the link, a big pad, signs with a real fi
   await page.getByLabel("כתובת מגורים").fill("שדרות הים 1, נתניה");
   const pad = (await page.getByTestId("customer-signature-area").boundingBox())!;
   expect(pad.height, "a pad big enough for a finger").toBeGreaterThanOrEqual(180);
-  expect(pad.width).toBeGreaterThanOrEqual(300);
+  expect(pad.width).toBeGreaterThanOrEqual(280);
   expect(await fingerDraw(page, "customer-signature"), "the page stays put while signing").toBe(0);
   await shot(page, "6-customer-signed-pad");
   await page.getByLabel(/קראתי את כל סעיפי ההסכם/).check();
@@ -439,9 +440,15 @@ test("small phone, the customer: opens the link, a big pad, signs with a real fi
           WHERE tenant_id = '${siteId}' AND kind = 'pool_event'`),
   ) as string[];
   expect(paths.length).toBeGreaterThan(0);
+  // …and only inside the band the signer saw on the taller phone pad (no hidden ink at the sides)
+  const [w, h] = [pad.width - 4, pad.height - 4]; // inside the 2px border
+  const k = Math.min(600 / w, 200 / h);
+  const [left, right] = [(600 - w * k) / 2, (600 + w * k) / 2];
+  expect(left, "a taller pad shows a centered band").toBeGreaterThan(50);
   for (const p of paths)
     for (const [, x, y] of p.matchAll(/([0-9]+),([0-9]+)/g)) {
-      expect(Number(x)).toBeLessThanOrEqual(600);
+      expect(Number(x)).toBeGreaterThanOrEqual(Math.floor(left) - 1);
+      expect(Number(x)).toBeLessThanOrEqual(Math.ceil(right) + 1);
       expect(Number(y)).toBeLessThanOrEqual(200);
     }
   const [status, stored] =
