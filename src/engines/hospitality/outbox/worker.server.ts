@@ -102,6 +102,19 @@ async function select<T>(table: string, query: string, schema: string): Promise<
   return (await res.json()) as T[];
 }
 
+/**
+ * שלב אחד בסבב — תקלה בו נרשמת בלוג ולא עוצרת את שאר השלבים. לפני כן כל הסבב היה ב-try אחד:
+ * כשל ב-expire_holds (השלב הראשון) דילג על שליחת המיילים בכל סבב, וכשל בסנכרון היומנים דילג על
+ * ניקוי המונים, מדידת הסרטונים והשלמת החוזים — בשקט, בלי שאף מייל ייצא.
+ */
+async function step(name: string, run: () => Promise<unknown>): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    console.error(`[hospitality/worker] ${name}`, error instanceof Error ? error.message : error);
+  }
+}
+
 async function tick(): Promise<void> {
   if (running) {
     again = true;
@@ -111,56 +124,40 @@ async function tick(): Promise<void> {
   try {
     do {
       again = false;
-      await rpc("expire_holds", { _limit: 200 });
+      await step("expire_holds", () => rpc("expire_holds", { _limit: 200 }));
       if (Date.now() - lastOpenDates > DAY_MS) {
         lastOpenDates = Date.now();
-        // בנפרד: תקלה כאן לא עוצרת את שליחת המיילים ואת שאר הסבב
-        await rpc("open_dates_remind", {}).catch((error: unknown) =>
-          console.error(
-            "[hospitality/worker] open_dates_remind",
-            error instanceof Error ? error.message : error,
-          ),
-        );
+        await step("open_dates_remind", () => rpc("open_dates_remind", {}));
       }
-      await sendDue();
+      await step("emails", sendDue);
       if (Date.now() - lastRetention > DAY_MS) {
         lastRetention = Date.now();
-        await rpc("apply_retention", {});
+        await step("apply_retention", () => rpc("apply_retention", {}));
       }
       if (Date.now() - lastChannels > CHANNELS_MS) {
         lastChannels = Date.now();
-        await runChannelSyncs();
+        await step("channels", runChannelSyncs);
       }
       if (Date.now() - lastSweep > SWEEP_MS) {
         lastSweep = Date.now();
-        await rpc("rate_sweep", {});
+        await step("rate_sweep", () => rpc("rate_sweep", {}));
       }
       if (Date.now() - lastVideoCheck > VIDEO_CHECK_MS) {
         lastVideoCheck = Date.now();
-        // בנפרד: תקלה כאן לא עוצרת את שאר הסבב
-        await runVideoChecks().catch((error: unknown) =>
-          console.error(
-            "[hospitality/worker] video check",
-            error instanceof Error ? error.message : error,
-          ),
-        );
+        await step("video check", runVideoChecks);
       }
       if (Date.now() - lastContracts > CONTRACTS_MS) {
         lastContracts = Date.now();
-        await runContractWork().catch((error: unknown) =>
-          console.error(
-            "[hospitality/worker] contracts",
-            error instanceof Error ? error.message : error,
-          ),
-        );
+        await step("contracts", runContractWork);
       }
     } while (again);
-  } catch (error) {
-    console.error("[hospitality/worker]", error instanceof Error ? error.message : error);
   } finally {
     running = false;
   }
 }
+
+/** סבב אחד עכשיו, וממתינים לסופו (בדיקות; kickOutbox לא ממתין) */
+export const outboxTickNow = tick;
 
 interface SiteContext {
   business: EmailBusiness;
