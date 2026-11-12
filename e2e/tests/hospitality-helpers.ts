@@ -62,6 +62,8 @@ export async function callServerFn(
     data?: unknown;
     method?: "GET" | "POST" | undefined;
     token?: string | undefined;
+    /** כותרות נוספות (למשל X-Forwarded-For מזויף בבדיקת IP) */
+    headers?: Record<string, string> | undefined;
   },
 ) {
   const id = createHash("sha256")
@@ -75,6 +77,7 @@ export async function callServerFn(
     "x-tsr-serverFn": "true",
     accept: "application/json",
     ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}),
+    ...opts.headers,
   };
   const url = `http://127.0.0.1:${PORT}/_serverFn/${id}`;
   return (opts.method ?? "POST") === "GET"

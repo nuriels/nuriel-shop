@@ -153,9 +153,15 @@ export const submitAgreement = createServerFn({ method: "POST" })
     let ip: string | null = null;
     let userAgent: string | null = null;
     try {
-      const { getRequest } = await import("@tanstack/react-start/server");
+      const [{ getRequest }, { clientIp }] = await Promise.all([
+        import("@tanstack/react-start/server"),
+        import("@/platform/security/client-ip"),
+      ]);
       const request = getRequest();
-      ip = request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+      // תיעוד החתימה: ה-IP רק ממקור שהשרת קובע (X-Real-IP / ההופ האחרון — SEC-M2), לא ההופ הראשון
+      // ב-X-Forwarded-For שהדפדפן שולח ויכול לזייף
+      const fromProxy = request ? clientIp(request.headers) : "unknown";
+      ip = fromProxy === "unknown" ? null : fromProxy;
       userAgent = request?.headers.get("user-agent") ?? null;
     } catch {
       // אין הקשר בקשה — נשמור בלי פרטי הזיהוי
