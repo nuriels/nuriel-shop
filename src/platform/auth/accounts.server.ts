@@ -6,7 +6,7 @@ import { supabaseAdminUnscoped } from "@/integrations/supabase/client.server";
 export async function ensureAccount(
   email: string,
   meta: Record<string, string> = {},
-): Promise<{ created: boolean }> {
+): Promise<{ created: boolean; existed: boolean }> {
   const { error } = await supabaseAdminUnscoped.auth.admin.createUser({
     email,
     email_confirm: true,
@@ -19,8 +19,18 @@ export async function ensureAccount(
   if (error && !/already|exists|registered/i.test(error.message)) {
     throw new Error("פתיחת החשבון נכשלה. נסו שוב.");
   }
-  return { created: !error };
+  // existed: כבר יש חשבון עם הכתובת. אם הוא לא "מאומת" (SEC-H1 — לא נוצר בידי המערכת, לא Google
+  // ולא נכנס פעם בקוד למייל), המסד לא יקשר אליו תפקיד — ומי שקורא מסביר מה לעשות
+  return { created: !error, existed: Boolean(error) };
 }
+
+/**
+ * SEC-H1: לכתובת יש חשבון שעוד לא אומת — המסד לא מקשר אליו תפקיד לפי אימייל (כדי שמי שפתח חשבון
+ * עם כתובת של אדם אחר לא יקבל את התפקיד). כניסה אחת בקוד למייל מוכיחה שהכתובת שלו ומאמתת את החשבון.
+ */
+export const UNVERIFIED_ACCOUNT_MESSAGE =
+  "לכתובת הזו כבר יש חשבון במערכת שעדיין לא אומת. בעל הכתובת צריך להיכנס פעם אחת עם קוד שנשלח " +
+  "למייל (בכניסה לניהול), ואז לנסות שוב.";
 
 /**
  * שלב א' 3: סיסמה חדשה לחשבון של החיבור — רק אחרי שמי שקורא אימת את המשתמש (קוד חד-פעמי למייל) ובדק
