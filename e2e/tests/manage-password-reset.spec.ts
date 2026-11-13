@@ -99,6 +99,17 @@ test("forgot password: a code by email, a new password — signed in to the same
   expect(await passwordWorks(MANAGER.email, MANAGER.password)).toBe(false);
   // אותו חשבון — אין חשבון כפול לאותו אימייל
   expect(sql(`SELECT count(*) FROM auth.users WHERE lower(email) = '${MANAGER.email}'`)).toBe("1");
+  // אף מייל (הקוד, או כל מייל אחר מאז) לא מכיל את הסיסמה — לא החדשה ולא הישנה
+  const calls = (await (await request.get("http://127.0.0.1:4010/__calls")).json()) as {
+    url: string;
+    body: string;
+    at: number;
+  }[];
+  const mails = calls.filter((c) => c.url.startsWith("/emails") && c.at >= since);
+  expect(mails.some((c) => c.body.includes(MANAGER.email))).toBe(true);
+  expect(
+    mails.filter((c) => c.body.includes(NEW_PASSWORD) || c.body.includes(MANAGER.password)),
+  ).toEqual([]);
 });
 
 test("an account without management rights here does not get a password", async ({
