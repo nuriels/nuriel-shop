@@ -7,7 +7,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sendEmail, renderEmailHtml, escapeHtml } from "@/lib/email.server";
-import { tenantSiteOrigin } from "@/integrations/supabase/tenant.server";
+import { maybeCurrentTenant, slugOriginForTenant } from "@/integrations/supabase/tenant.server";
 
 /** תוקף הקישור: 3 שעות בדיוק */
 export const RESET_TOKEN_TTL_MS = 3 * 60 * 60 * 1000;
@@ -30,7 +30,11 @@ async function resolveSiteOrigin(): Promise<string> {
   // חשוב: לא נגזר מכותרות הבקשה. כותרת Origin/Host נשלטת ע"י הפונה,
   // ולכן קודם אפשר היה לבקש איפוס סיסמה עם Origin מזויף ולקבל קישור
   // שמצביע לדומיין של התוקף — עם טוקן תקף. הכתובת נבנית מרשומת החנות במסד.
-  return tenantSiteOrigin();
+  // SEC-H2 (גם כאן): תמיד <slug>.<base> ולא הדומיין של החנות. חשבון ההתחברות משותף לכל החנויות של
+  // המשתמש, ואת ה-DNS של הדומיין בעל החנות מפנה לשרת שלו — קישור איפוס / כניסה שנפתח שם נותן לו את
+  // הטוקן, והסיסמה שנקבעת בו היא של החשבון בכל החנויות.
+  const tenant = maybeCurrentTenant();
+  return slugOriginForTenant(tenant ? { slug: tenant.slug, is_default: tenant.is_default } : null);
 }
 
 /**
