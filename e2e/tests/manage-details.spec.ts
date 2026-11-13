@@ -393,6 +393,10 @@ test("two browsers: beds saved in one, amenities in the other — merged, nothin
   const pb = await b.newPage();
   await open(pa, request, slug, `/manage/units/${unit}`);
   await open(pb, request, slug, `/manage/units/${unit}`, MANAGER);
+  // both pages finish loading first: data that arrives late refreshes the form, and a change made
+  // before that would be dropped (a race in the test, not the merge being tested)
+  await Promise.all([pa.waitForLoadState("networkidle"), pb.waitForLoadState("networkidle")]);
+  await expect(pb.getByText("אין שינויים")).toBeVisible();
   // A: one double bed
   await pa.getByTestId("beds-editor").getByRole("button", { name: "הוספת מיטה" }).click();
   await save(pa);
