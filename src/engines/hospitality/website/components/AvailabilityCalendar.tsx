@@ -245,7 +245,15 @@ export function AvailabilityCalendar({
                               {dot}
                             </button>
                           ) : (
-                            <span className={cls} aria-label={label} data-night={kind}>
+                            // יום שעבר — לא פעיל (אי אפשר לבחור אותו): aria-disabled. כך גם קוראי מסך מבינים
+                            // שהוא לא זמין, ובדיקת הניגודיות (WCAG 1.4.3 — רכיב לא פעיל פטור) לא נכשלת
+                            // בימים שעברו בחודש הנוכחי (נכשלה רק בחלק מהחודש — תלוי תאריך)
+                            <span
+                              className={cls}
+                              aria-label={label}
+                              aria-disabled={kind === "past" ? true : undefined}
+                              data-night={kind}
+                            >
                               {Number(day.slice(8))}
                               {dot}
                             </span>
