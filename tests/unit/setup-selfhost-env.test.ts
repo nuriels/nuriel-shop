@@ -19,7 +19,14 @@ afterEach(() => {
   dir = "";
 });
 
+let tmp = "";
+afterEach(() => {
+  if (tmp) rmSync(tmp, { recursive: true, force: true });
+  tmp = "";
+});
+
 function run(env: Record<string, string> = {}): string {
+  tmp ||= mkdtempSync(join(tmpdir(), "selfhost-tmp-"));
   const script = [
     "set -euo pipefail",
     'log() { echo "$*"; }',
@@ -39,6 +46,7 @@ function run(env: Record<string, string> = {}): string {
       SITE_URL: "https://shop.example.test",
       TENANT_BASE_DOMAIN: "example.test",
       PLATFORM_ADMIN_HOST: "admin.example.test",
+      TMPDIR: tmp,
       ...env,
     },
   });
@@ -81,8 +89,11 @@ describe("setup-selfhost.sh write_app_env", () => {
     // the summary never prints values
     expect(out).not.toContain("keep-me-0123456789");
     expect(out).toContain("נשמרו 2 משתנים");
-    // no temporary copy left behind
-    expect(readdirSync(dir).filter((f) => f.startsWith(".env.prev"))).toEqual([]);
+    // the temporary copy is outside the code folder and removed
+    expect(
+      readdirSync(dir).filter((f) => f !== ".env" && f !== "docker-compose.override.yml"),
+    ).toEqual([]);
+    expect(readdirSync(tmp)).toEqual([]);
   });
 
   it("a value passed to this run wins over the old file, and nothing is duplicated", () => {
@@ -93,5 +104,29 @@ describe("setup-selfhost.sh write_app_env", () => {
     expect(value("EMAIL_FROM_ADDRESS")).toEqual(["new@verified.example"]);
     expect(value("EXTRA_FLAG")).toEqual(["1"]);
     expect(envFile().match(/^COMPOSE_PROJECT_NAME=/gm)).toHaveLength(1);
+  });
+
+  it("a key written twice keeps its last value; a value over several lines and retired keys are not copied", () => {
+    dir = mkdtempSync(join(tmpdir(), "selfhost-env-"));
+    writeFileSync(
+      join(dir, ".env"),
+      [
+        "EXTRA=first",
+        "EXTRA=second",
+        'MULTI="line one',
+        'line two"',
+        "VITE_SUPABASE_URL=https://old.example.test",
+        "SUPABASE_PROJECT_ID=old",
+        "",
+      ].join("\n"),
+    );
+    const out = run();
+    expect(value("EXTRA")).toEqual(["second"]);
+    expect(value("MULTI")).toEqual([]);
+    expect(envFile()).not.toContain("line two");
+    expect(value("VITE_SUPABASE_URL")).toEqual([]);
+    expect(value("SUPABASE_PROJECT_ID")).toEqual([]);
+    expect(out).toContain("MULTI");
+    expect(out).not.toContain("line one");
   });
 });
