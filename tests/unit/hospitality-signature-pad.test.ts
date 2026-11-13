@@ -22,7 +22,7 @@ describe("padPoint — the signature pad mapping", () => {
         [w / 2, h / 2],
         [w, h],
         [w * 0.13, h * 0.77],
-      ])
+      ] as [number, number][])
         expect(padPoint(x, y, w, h)).toBe(
           `${Math.round((x / w) * SIGNATURE_WIDTH)},${Math.round((y / h) * SIGNATURE_HEIGHT)}`,
         );
@@ -48,7 +48,7 @@ describe("padPoint — the signature pad mapping", () => {
       [999, -40],
       [-1, -1],
       [w + 30, h / 2],
-    ]) {
+    ] as [number, number][]) {
       const [px, py] = xy(padPoint(x, y, w, h));
       expect(px).toBeGreaterThanOrEqual(Math.floor(left));
       expect(px).toBeLessThanOrEqual(Math.ceil(right));
