@@ -112,8 +112,8 @@ test.beforeAll(async ({ request, browser }, testInfo) => {
   sessions.platform = await platformSession(browser, SLUG_A, siteA);
 });
 
-test.afterAll(({}, testInfo) => {
-  if (testInfo.project.name === "mobile") return;
+test.afterAll(() => {
+  if (test.info().project.name === "mobile") return;
   cleanup();
   sql(`UPDATE public.platform_feature_flags SET enabled = false WHERE key LIKE 'hospitality%'`);
 });
