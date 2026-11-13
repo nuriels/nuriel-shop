@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Check, Copy, Dices } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -12,13 +11,11 @@ export type PasswordSetup = {
   /** "link" = הלקוח קובע סיסמה בעצמו · "temp" = המנהל קובע סיסמה זמנית */
   mode: "link" | "temp";
   tempPassword: string;
-  emailTempPassword: boolean;
 };
 
 export const defaultPasswordSetup: PasswordSetup = {
   mode: "link",
   tempPassword: "",
-  emailTempPassword: false,
 };
 
 /** בחירת דרך הגדרת הסיסמה בעת הקמת משתמש חדש */
@@ -82,15 +79,10 @@ export function PasswordSetupFields({
               </Button>
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={value.emailTempPassword}
-              onCheckedChange={(checked) =>
-                onChange({ ...value, emailTempPassword: checked === true })
-              }
-            />
-            שלח את הסיסמה הזמנית גם למייל של הלקוח
-          </label>
+          <p className="text-xs text-muted-foreground">
+            מטעמי אבטחה הסיסמה הזמנית לא נשלחת במייל. כדי שהמשתמש יקבל מייל — בחרו «שליחת קישור
+            ליצירת סיסמה».
+          </p>
         </div>
       )}
     </div>
@@ -101,15 +93,7 @@ export function PasswordSetupFields({
  * מוצג אחרי יצירת המשתמש במצב "סיסמה זמנית".
  * זו ההזדמנות היחידה להעתיק את הסיסמה — היא לא נשמרת בשום מקום קריא.
  */
-export function TempPasswordNotice({
-  email,
-  password,
-  emailed,
-}: {
-  email: string;
-  password: string;
-  emailed: boolean;
-}) {
+export function TempPasswordNotice({ email, password }: { email: string; password: string }) {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -138,10 +122,8 @@ export function TempPasswordNotice({
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        {emailed
-          ? "הסיסמה נשלחה גם למייל של הלקוח. "
-          : "הסיסמה לא נשלחה במייל — יש להעביר אותה ללקוח. "}
-        זו הפעם היחידה שהיא מוצגת. בכניסה הראשונה הלקוח יחויב להחליף אותה ולהשלים את פרטי העסק.
+        הסיסמה לא נשלחת במייל — יש להעביר אותה ללקוח בעצמכם. זו הפעם היחידה שהיא מוצגת. בכניסה
+        הראשונה הלקוח יחויב להחליף אותה ולהשלים את פרטי העסק.
       </p>
     </div>
   );

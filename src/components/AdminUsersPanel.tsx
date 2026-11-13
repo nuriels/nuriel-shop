@@ -485,126 +485,147 @@ export function AdminUsersPanel({
     void load();
   };
 
-  const renderStaffRow = (user: RoleRow) => (
-    <div
-      key={user.user_id}
-      className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3"
-    >
-      <span className="min-w-56 flex-1 basis-56">
-        <span className="block truncate text-sm font-semibold text-foreground">
-          {user.display_name?.trim() || (
-            <span className="font-normal text-destructive">חסר שם בעברית — להוסיף ב"עריכה"</span>
+  const renderStaffRow = (user: RoleRow) => {
+    // חלק 33: שורה של מנהל — שינוי תפקיד, חסימה / שחרור ומחיקה רק לבעל החנות (המסד אוכף; כאן רק לא
+    // מציגים לשאר הצוות כפתורים שתמיד נדחים)
+    const ownerOnly = user.role === "admin" && !canManageManagers;
+    return (
+      <div
+        key={user.user_id}
+        data-staff-row={user.email}
+        className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3"
+      >
+        <span className="min-w-56 flex-1 basis-56">
+          <span className="block truncate text-sm font-semibold text-foreground">
+            {user.display_name?.trim() || (
+              <span className="font-normal text-destructive">חסר שם בעברית — להוסיף ב"עריכה"</span>
+            )}
+          </span>
+          <span dir="ltr" className="block truncate text-right text-xs text-muted-foreground">
+            {user.username ? `${user.username} · ` : ""}
+            {user.email}
+          </span>
+        </span>
+        <Badge variant={user.role === "admin" ? "default" : "secondary"}>
+          {ROLE_LABEL[user.role]}
+        </Badge>
+        <Badge variant={user.is_blocked ? "destructive" : "outline"}>
+          {user.is_blocked ? "חסום" : "פעיל"}
+        </Badge>
+
+        {user.role === "agent" && (
+          <div className="flex items-center gap-1.5">
+            <Label
+              htmlFor={`agent-number-${user.user_id}`}
+              className="text-xs text-muted-foreground"
+            >
+              מספר סוכן
+            </Label>
+            <Input
+              id={`agent-number-${user.user_id}`}
+              dir="ltr"
+              className="numeric h-9 w-24 text-center"
+              value={agentNumberDraft[user.user_id] ?? user.agent_number ?? ""}
+              onChange={(e) =>
+                setAgentNumberDraft((current) => ({
+                  ...current,
+                  [user.user_id]: e.target.value,
+                }))
+              }
+              onBlur={() => void saveAgentNumber(user)}
+            />
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {!ownerOnly && (
+            <ChangeRoleDialog
+              userId={user.user_id}
+              name={staffName(user)}
+              currentRole={user.role}
+              isProtected={user.is_protected}
+              allowAdmin={canManageManagers}
+              onChanged={(next) => roleChanged(next)}
+            />
           )}
-        </span>
-        <span dir="ltr" className="block truncate text-right text-xs text-muted-foreground">
-          {user.username ? `${user.username} · ` : ""}
-          {user.email}
-        </span>
-      </span>
-      <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-        {ROLE_LABEL[user.role]}
-      </Badge>
-      <Badge variant={user.is_blocked ? "destructive" : "outline"}>
-        {user.is_blocked ? "חסום" : "פעיל"}
-      </Badge>
-
-      {user.role === "agent" && (
-        <div className="flex items-center gap-1.5">
-          <Label htmlFor={`agent-number-${user.user_id}`} className="text-xs text-muted-foreground">
-            מספר סוכן
-          </Label>
-          <Input
-            id={`agent-number-${user.user_id}`}
-            dir="ltr"
-            className="numeric h-9 w-24 text-center"
-            value={agentNumberDraft[user.user_id] ?? user.agent_number ?? ""}
-            onChange={(e) =>
-              setAgentNumberDraft((current) => ({
-                ...current,
-                [user.user_id]: e.target.value,
-              }))
-            }
-            onBlur={() => void saveAgentNumber(user)}
+          <EditUserDialog
+            userId={user.user_id}
+            label={user.email}
+            currentRole={user.role}
+            currentAgentNumber={user.agent_number}
+            currentDisplayName={user.display_name}
+            isProtected={user.is_protected}
+            canManageRole={!ownerOnly}
+            allowAdmin={canManageManagers}
+            agents={agentOptions}
+            onSaved={load}
           />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy === user.user_id}
+            onClick={() => void resetPassword(user)}
+          >
+            <KeyRound className="size-4" />
+            איפוס סיסמה
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy === user.user_id}
+            onClick={() => void sendLoginLink(user)}
+          >
+            <Mail className="size-4" />
+            שליחת קישור כניסה
+          </Button>
+          {!ownerOnly && (
+            <Button
+              size="sm"
+              variant={user.is_blocked ? "default" : "outline"}
+              disabled={busy === user.user_id}
+              onClick={() =>
+                run(
+                  user.user_id,
+                  () =>
+                    supabase
+                      .from("user_roles")
+                      .update({ is_blocked: !user.is_blocked })
+                      .eq("user_id", user.user_id),
+                  user.is_blocked ? "המשתמש שוחרר" : "המשתמש נחסם",
+                )
+              }
+            >
+              {user.is_blocked ? <UserCheck className="size-4" /> : <UserX className="size-4" />}
+              {user.is_blocked ? "שחרור" : "חסימה"}
+            </Button>
+          )}
+          {!ownerOnly && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              disabled={busy === user.user_id}
+              onClick={() => void requestDelete(user)}
+            >
+              <Trash2 className="size-4" />
+              מחיקה
+            </Button>
+          )}
         </div>
-      )}
-
-      <div className="flex flex-wrap gap-2">
-        <ChangeRoleDialog
-          userId={user.user_id}
-          name={staffName(user)}
-          currentRole={user.role}
-          isProtected={user.is_protected}
-          onChanged={(next) => roleChanged(next)}
-        />
-        <EditUserDialog
-          userId={user.user_id}
-          label={user.email}
-          currentRole={user.role}
-          currentAgentNumber={user.agent_number}
-          currentDisplayName={user.display_name}
-          isProtected={user.is_protected}
-          canManageRole={true}
-          agents={agentOptions}
-          onSaved={load}
-        />
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy === user.user_id}
-          onClick={() => void resetPassword(user)}
-        >
-          <KeyRound className="size-4" />
-          איפוס סיסמה
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy === user.user_id}
-          onClick={() => void sendLoginLink(user)}
-        >
-          <Mail className="size-4" />
-          שליחת קישור כניסה
-        </Button>
-        <Button
-          size="sm"
-          variant={user.is_blocked ? "default" : "outline"}
-          disabled={busy === user.user_id}
-          onClick={() =>
-            run(
-              user.user_id,
-              () =>
-                supabase
-                  .from("user_roles")
-                  .update({ is_blocked: !user.is_blocked })
-                  .eq("user_id", user.user_id),
-              user.is_blocked ? "המשתמש שוחרר" : "המשתמש נחסם",
-            )
-          }
-        >
-          {user.is_blocked ? <UserCheck className="size-4" /> : <UserX className="size-4" />}
-          {user.is_blocked ? "שחרור" : "חסימה"}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-destructive hover:text-destructive"
-          disabled={busy === user.user_id}
-          onClick={() => void requestDelete(user)}
-        >
-          <Trash2 className="size-4" />
-          מחיקה
-        </Button>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderCustomerRow = (user: RoleRow) => {
     const profile = profiles[user.user_id];
     const isPending = !user.is_approved && !user.is_blocked;
     const currentChoice = pendingTier[user.user_id] ?? "";
     return (
-      <div key={user.user_id} className="space-y-2 rounded-lg border border-border p-3">
+      <div
+        key={user.user_id}
+        data-customer-row={user.email}
+        className="space-y-2 rounded-lg border border-border p-3"
+      >
         <div className="flex flex-wrap items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm font-medium">
             {profile?.business_name ?? user.email}
@@ -686,6 +707,7 @@ export function AdminUsersPanel({
             name={profile?.business_name || user.email}
             currentRole={user.role}
             isProtected={user.is_protected}
+            allowAdmin={canManageManagers}
             onChanged={(next) => roleChanged(next)}
           />
           <EditUserDialog
@@ -696,6 +718,7 @@ export function AdminUsersPanel({
             currentDisplayName={user.display_name}
             isProtected={user.is_protected}
             canManageRole={true}
+            allowAdmin={canManageManagers}
             agents={agentOptions}
             onSaved={load}
           />

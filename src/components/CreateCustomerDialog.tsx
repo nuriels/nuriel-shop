@@ -63,7 +63,6 @@ export function CreateCustomerDialog({
   const [created, setCreated] = useState<{
     email: string;
     password: string;
-    emailed: boolean;
   } | null>(null);
   const createUser = useServerFn(createStaffUser);
   const notifyAssigned = useServerFn(notifyCustomerAssigned);
@@ -107,7 +106,6 @@ export function CreateCustomerDialog({
           ...(agents ? { agentId: agentId === "none" ? null : agentId, priceListType } : {}),
           passwordMode: passwordSetup.mode,
           tempPassword: passwordSetup.tempPassword,
-          emailTempPassword: passwordSetup.emailTempPassword,
         },
       });
       onCreated();
@@ -119,7 +117,7 @@ export function CreateCustomerDialog({
 
       if (result.mode === "temp" && result.tempPassword) {
         // לא סוגרים את הדיאלוג: המנהל צריך להעתיק את הסיסמה קודם
-        setCreated({ email, password: result.tempPassword, emailed: result.emailed });
+        setCreated({ email, password: result.tempPassword });
         toast.success("הלקוח נוצר. יש להעתיק את הסיסמה הזמנית");
         return;
       }
@@ -162,11 +160,7 @@ export function CreateCustomerDialog({
 
         {created ? (
           <div className="space-y-4">
-            <TempPasswordNotice
-              email={created.email}
-              password={created.password}
-              emailed={created.emailed}
-            />
+            <TempPasswordNotice email={created.email} password={created.password} />
             <Button
               className="w-full"
               size="lg"

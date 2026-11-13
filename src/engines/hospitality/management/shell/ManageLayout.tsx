@@ -91,7 +91,13 @@ function Shell({
 }) {
   const items = visibleNav(context.permissions);
   const notice = planNotice(context);
-  const roleText = context.role === "owner" ? "בעלים" : "מנהל/ת";
+  // מיגרציה 188: מנהל/ת עסק — מנהל עם ניהול הצוות (כל ההרשאות חוץ ממנוי ובעלות)
+  const roleText =
+    context.role === "owner"
+      ? "בעלים"
+      : context.permissions["staff.managers"] === true
+        ? "מנהל/ת עסק"
+        : "מנהל/ת";
   const tasks = useDashboardTasks(context.permissions["bookings"] === true);
   const support = useSupportUnread(context.permissions["settings"] === true);
   const signed = useContractsUnseen(context.permissions["contracts"] === true);

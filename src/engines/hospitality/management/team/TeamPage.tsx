@@ -12,6 +12,7 @@ import {
   Loader2,
   MessageCircle,
   ShieldCheck,
+  Sparkles,
   Trash2,
   UserPlus,
   WalletCards,
@@ -48,6 +49,7 @@ import {
   hospitalityRemoveManager,
   hospitalityTeam,
   hospitalityTeamActivity,
+  hospitalityTeamSetBusinessAdmin,
   hospitalityTeamSetContracts,
   hospitalityTeamSetFinance,
 } from "../../api/team.functions";
@@ -63,24 +65,26 @@ const errorText = (e: unknown) =>
 
 export function TeamPage() {
   const ctx = useManagement();
-  const isOwner = ctx.permissions["staff.managers"] === true;
+  // ניהול הצוות: הבעלים ומנהלי עסק (מיגרציה 188 — נאכף במסד); מינוי מנהלי עסק — הבעלים בלבד
+  const canTeam = ctx.permissions["staff.managers"] === true;
+  const isOwner = ctx.permissions["ownership"] === true;
   const team = useQuery({
     queryKey: manageKeys.team,
     queryFn: () => hospitalityTeam(),
-    enabled: isOwner,
+    enabled: canTeam,
   });
   const activity = useQuery({
     queryKey: manageKeys.activity,
     queryFn: () => hospitalityTeamActivity(),
-    enabled: isOwner,
+    enabled: canTeam,
   });
 
-  if (!isOwner) {
+  if (!canTeam) {
     return (
       <div className="mx-auto max-w-3xl">
         <h1 className="text-2xl font-semibold">צוות ניהול</h1>
         <p role="status" className="mt-3 rounded-md border p-4 text-muted-foreground">
-          המסך הזה זמין לבעל העסק בלבד.
+          המסך הזה זמין לבעל העסק ולמנהלי עסק בלבד.
         </p>
       </div>
     );
@@ -91,11 +95,12 @@ export function TeamPage() {
       <div>
         <h1 className="text-2xl font-semibold">צוות ניהול</h1>
         <p className="mt-1 text-muted-foreground">
-          מי מנהל איתך את העסק. רק בעל העסק רואה את המסך הזה.
+          מי מנהל איתך את העסק. בעל העסק ומנהלי עסק רואים את המסך הזה.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           מנהלים רואים הזמנות, יומן ותפוסה. הכנסות וגבייה — רק למי שתפעילו לו &quot;נתונים
-          כספיים&quot;.
+          כספיים&quot;. <strong>מנהל/ת עסק</strong> — כל ההרשאות של הבעלים, חוץ ממנוי, תשלום ובעלות;
+          רק בעל העסק ממנה.
         </p>
       </div>
       {team.isError ? (
@@ -111,6 +116,7 @@ export function TeamPage() {
       ) : (
         <TeamContent
           team={team.data}
+          isOwner={isOwner}
           siteUrl={typeof window === "undefined" ? "" : window.location.origin}
         />
       )}
@@ -148,7 +154,15 @@ export function TeamPage() {
   );
 }
 
-function TeamContent({ team, siteUrl }: { team: TeamView; siteUrl: string }) {
+function TeamContent({
+  team,
+  siteUrl,
+  isOwner,
+}: {
+  team: TeamView;
+  siteUrl: string;
+  isOwner: boolean;
+}) {
   const ctx = useManagement();
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
@@ -239,6 +253,11 @@ function TeamContent({ team, siteUrl }: { team: TeamView; siteUrl: string }) {
                         <ShieldCheck className="size-3" aria-hidden="true" />
                         בעלים
                       </span>
+                    ) : m.business_admin ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                        <Sparkles className="size-3" aria-hidden="true" />
+                        מנהל/ת עסק
+                      </span>
                     ) : (
                       <span className="rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary-foreground">
                         מנהל/ת
@@ -259,9 +278,11 @@ function TeamContent({ team, siteUrl }: { team: TeamView; siteUrl: string }) {
                       : "עוד לא נכנס/ה"}
                   </p>
                 </div>
+                {isOwner && <BusinessAdminAccess member={m} onChanged={refresh} />}
                 <FinanceAccess member={m} onChanged={refresh} />
                 <ContractsAccess member={m} onChanged={refresh} />
-                {m.role !== "owner" && (
+                {/* מנהל/ת עסק מסיר/ה רק מנהלים רגילים; מנהל/ת עסק — רק הבעלים */}
+                {m.role !== "owner" && (isOwner || !m.business_admin) && (
                   <Button
                     variant="outline"
                     className="min-h-11 gap-2"
@@ -309,12 +330,53 @@ function TeamContent({ team, siteUrl }: { team: TeamView; siteUrl: string }) {
   );
 }
 
+/** מיגרציה 188: מנהל/ת עסק — הבעלים בלבד רואה את המתג; כבוי כברירת מחדל */
+function BusinessAdminAccess({ member, onChanged }: { member: TeamMember; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  if (member.role === "owner") return null;
+  const id = `business-admin-${member.user_id}`;
+  const name = member.display_name || member.email;
+  const toggle = async (enabled: boolean) => {
+    setBusy(true);
+    try {
+      await hospitalityTeamSetBusinessAdmin({ data: { userId: member.user_id, enabled } });
+      toast.success(
+        enabled
+          ? `${name} מנהל/ת עסק מעכשיו — כל ההרשאות חוץ ממנוי ותשלום`
+          : `${name} חזר/ה להיות מנהל/ת רגיל/ה`,
+      );
+    } catch (e) {
+      toast.error(errorText(e));
+    } finally {
+      setBusy(false);
+      onChanged();
+    }
+  };
+  return (
+    <div
+      className="flex min-h-11 items-center gap-2 rounded-lg border px-3"
+      data-business-admin={member.email}
+    >
+      <Switch
+        id={id}
+        checked={member.business_admin === true}
+        disabled={busy || member.is_blocked}
+        onCheckedChange={(v) => void toggle(v)}
+      />
+      <Label htmlFor={id} className="text-sm">
+        מנהל/ת עסק
+        <span className="sr-only"> — כל ההרשאות חוץ ממנוי, תשלום ובעלות, ל{name}</span>
+      </Label>
+    </div>
+  );
+}
+
 /** נתונים כספיים (הכנסות וגבייה בלוח הבקרה): לבעלים — תמיד; למנהל — מתג, כבוי כברירת מחדל */
 function FinanceAccess({ member, onChanged }: { member: TeamMember; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const id = `finance-${member.user_id}`;
   const name = member.display_name || member.email;
-  if (member.role === "owner")
+  if (member.role === "owner" || member.business_admin)
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--hm-champagne-100)] px-2.5 py-1 text-xs font-semibold text-[var(--hm-champagne-700)]">
         <WalletCards className="size-3.5" aria-hidden="true" />
@@ -361,7 +423,7 @@ function ContractsAccess({ member, onChanged }: { member: TeamMember; onChanged:
   const [busy, setBusy] = useState(false);
   const id = `contracts-${member.user_id}`;
   const name = member.display_name || member.email;
-  if (member.role === "owner")
+  if (member.role === "owner" || member.business_admin)
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--hm-champagne-100)] px-2.5 py-1 text-xs font-semibold text-[var(--hm-champagne-700)]">
         <FileSignature className="size-3.5" aria-hidden="true" />

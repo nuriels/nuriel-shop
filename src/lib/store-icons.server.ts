@@ -34,8 +34,15 @@ async function tenantLogo(tenantId: string): Promise<{ key: string; bytes: Buffe
       const { bytes } = await fetchRemoteImage(path);
       found = { key: path, bytes };
     } else if (path) {
-      const { data: blob } = await supabaseAdmin.storage.from("branding").download(path);
-      if (blob) found = { key: path, bytes: Buffer.from(await blob.arrayBuffer()) };
+      // נתיב בדלי בלבד, של החנות הזו (בלי "../" — ההורדה במפתח השירות)
+      const { safeBrandingPath } = await import("@/lib/branding-path");
+      const safe = safeBrandingPath(path, tenantId);
+      if (!safe)
+        console.warn("[store-icons] the store logo path is not a plain bucket path — ignoring");
+      const { data: blob } = safe
+        ? await supabaseAdmin.storage.from("branding").download(safe)
+        : { data: null };
+      if (blob && safe) found = { key: safe, bytes: Buffer.from(await blob.arrayBuffer()) };
     }
     // SEC-H3: רק תמונת raster מגיעה ל-sharp (librsvg לא מופעל → CVE ב-sharp<0.35.5 לא ניתן-להפעלה)
     if (found) {

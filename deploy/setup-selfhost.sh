@@ -97,6 +97,23 @@ write_app_env() {
   if [[ -z "$resend_key" && -f "$APP_DIR/.env" ]]; then
     resend_key=$(grep '^RESEND_API_KEY=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/^"//; s/"$//' || true)
   fi
+  # כתובת השולח: מהרצה הזו, אחרת מהקובץ הקודם, ורק אם אין — orders@<הדומיין>. לפני כן כל הרצה
+  # (גם --env-only) דרסה כתובת שהוגדרה ידנית בכתובת ברירת המחדל — ואם הדומיין שלה לא מאומת
+  # ב-Resend, כל מייל נדחה (403) בלי שום סימן בשרת מלבד הלוג.
+  local from_address="${EMAIL_FROM_ADDRESS:-}"
+  if [[ -z "$from_address" && -f "$APP_DIR/.env" ]]; then
+    from_address=$(grep '^EMAIL_FROM_ADDRESS=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/^"//; s/"$//' || true)
+  fi
+  [[ -z "$from_address" ]] && from_address="orders@${TENANT_BASE_DOMAIN}"
+  # משתנים שהסקריפט לא כותב בעצמו (למשל GOOGLE_*, AI_*, SERVER_PUBLIC_IPS שהוגדרו ידנית) — עותק
+  # של הקובץ הקודם, כדי להחזיר אותם בסוף הקובץ החדש במקום למחוק אותם בשקט
+  local prev_env=""
+  if [[ -f "$APP_DIR/.env" ]]; then
+    # מחוץ לתיקיית הקוד (לא נכנס בטעות ל-git add), 0600, ונמחק גם אם הסקריפט נעצר באמצע
+    prev_env=$(umask 077; mktemp "${TMPDIR:-/tmp}/app-env-prev.XXXXXX")
+    trap 'rm -f "$prev_env"' EXIT
+    cp "$APP_DIR/.env" "$prev_env"
+  fi
   # מפתח הצפנת פרטי הסליקה (חלק 43): נוצר פעם אחת ונשמר בין הרצות. אם יוחלף —
   # פרטי המסופים השמורים לא ייפתחו וצריך להזין אותם מחדש, לכן לעולם לא דורסים.
   local grow_key="${GROW_SECRETS_KEY:-}" grow_url="${GROW_API_URL:-}"
@@ -158,7 +175,7 @@ RESEND_API_KEY=${resend_key}
 GROW_SECRETS_KEY=${grow_key}
 GROW_API_URL=${grow_url}
 # השולח: "שם החנות <כתובת>" — הכתובת על דומיין מאומת ב-Resend
-EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-orders@${TENANT_BASE_DOMAIN}}
+EMAIL_FROM_ADDRESS=${from_address}
 # כתובת חנות ברירת המחדל — לקישורים במיילים
 PUBLIC_SITE_URL=${SITE_URL}
 # חנויות בתת-דומיין: <slug>.${TENANT_BASE_DOMAIN}
@@ -174,6 +191,42 @@ LOGIN_CODE_SECRET=${login_secret}
 # שליחת רישיונות דיגיטליים: מפתח הצפנת מפתחות הרישיון (סוד — לגבות! אם יאבד, מפתחות שנשמרו לא יפוענחו)
 LICENSE_KEYS_SECRET=${license_secret}
 EOF
+  if [[ -n "$prev_env" ]]; then
+    # מפתח שמופיע כמה פעמים — הערך האחרון (כמו tail -1 בקריאות של הסקריפט עצמו); ערך במרכאות שנמשך על
+    # כמה שורות — לא מועתק (רק אזהרה עם שם המפתח); מפתחות שהסקריפט הפסיק לכתוב בכוונה — לא חוזרים
+    local line key val kept=0 skipped=""
+    local -A carry=()
+    local -a order=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+      key="${BASH_REMATCH[1]}"
+      val="${BASH_REMATCH[2]}"
+      grep -q "^${key}=" "$APP_DIR/.env" && continue
+      [[ "$key" == VITE_SUPABASE_* || "$key" == SUPABASE_PROJECT_ID ]] && continue
+      if [[ ( "$val" == \"* && ( "$val" != *\" || "$val" == \" ) ) || ( "$val" == \'* && ( "$val" != *\' || "$val" == \' ) ) ]]; then
+        skipped+=" ${key}"
+        continue
+      fi
+      [[ -n "${carry[$key]+x}" ]] || order+=("$key")
+      carry[$key]="$line"
+    done < "$prev_env"
+    rm -f "$prev_env"
+    trap - EXIT
+    for key in "${order[@]}"; do
+      [[ " $skipped " == *" $key "* ]] && continue
+      if [[ $kept -eq 0 ]]; then
+        printf '%s\n' "# נשמרו מהקובץ הקודם — משתנים שהסקריפט לא כותב בעצמו" >> "$APP_DIR/.env"
+      fi
+      printf '%s\n' "${carry[$key]}" >> "$APP_DIR/.env"
+      kept=$((kept + 1))
+    done
+    if [[ $kept -gt 0 ]]; then
+      echo "  ✓ נשמרו ${kept} משתנים נוספים מה-.env הקודם (בלי להציג ערכים)"
+    fi
+    if [[ -n "$skipped" ]]; then
+      echo "  ⚠ לא הועתקו (ערך על כמה שורות — להעתיק ידנית):${skipped}"
+    fi
+  fi
   umask 022
   # פורט מקומי בלבד — הגישה מבחוץ רק דרך Nginx (כמו שאר האפליקציות בשרת)
   cat > "$APP_DIR/docker-compose.override.yml" <<EOF

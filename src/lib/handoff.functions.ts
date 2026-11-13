@@ -59,7 +59,7 @@ export const createStoreAdminHandoff = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { isPlatformAdminUser, supabaseAdminUnscoped } =
       await import("@/integrations/supabase/client.server");
-    const { originForTenant } = await import("@/integrations/supabase/tenant.server");
+    const { slugOriginForTenant } = await import("@/integrations/supabase/tenant.server");
     const { allowAction } = await import("@/lib/rate-limit.server");
     const { randomBytes } = await import("node:crypto");
 
@@ -100,8 +100,10 @@ export const createStoreAdminHandoff = createServerFn({ method: "POST" })
       action: "admin_entered_store",
     });
 
+    // SEC-H2: הקוד (שנותן חיבור של מנהל-על) רק לכתובת שבשליטת הפלטפורמה — <slug>.<base>, לעולם לא
+    // הדומיין של החנות: את ה-DNS שלו בעל החנות מפנה לשרת שלו, והסקריפט שם קורא את ה-#code
     return {
-      url: `${originForTenant(tenant)}/admin-handoff#code=${code}`,
+      url: `${slugOriginForTenant(tenant)}/admin-handoff#code=${code}`,
       storeName: tenant.name,
     };
   });

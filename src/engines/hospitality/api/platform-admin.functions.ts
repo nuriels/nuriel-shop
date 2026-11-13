@@ -72,7 +72,11 @@ async function withUrls(row: RawSiteRow, switches: SiteSwitches): Promise<Hospit
 
 /** שיוך הבעלים; חשבון חדש (אימייל מאומת, בלי סיסמה) רק כשהמסד מחזיר needs_account */
 async function setOwner(siteId: string, email: string, name: string | null): Promise<OwnerResult> {
-  const [{ platformRpc, platformSession }, { guardStaff }, { ensureAccount }] = await Promise.all([
+  const [
+    { platformRpc, platformSession },
+    { guardStaff },
+    { ensureAccount, UNVERIFIED_ACCOUNT_MESSAGE },
+  ] = await Promise.all([
     import("../server/platform-admin.server"),
     import("../security/guard.server"),
     import("@/platform/auth/accounts.server"),
@@ -80,13 +84,16 @@ async function setOwner(siteId: string, email: string, name: string | null): Pro
   const args = { _tenant_id: siteId, _email: email, _display_name: name };
   let result = await platformRpc<RpcOwner>("admin_set_owner", args);
   let created = false;
+  let existed = false;
   if (result.status === "needs_account") {
     const session = await platformSession();
     await guardStaff("platformAccount", { userId: session.userId });
-    created = (await ensureAccount(email, { signup_method: "hospitality_owner" })).created;
+    ({ created, existed } = await ensureAccount(email, { signup_method: "hospitality_owner" }));
     result = await platformRpc<RpcOwner>("admin_set_owner", args);
   }
-  if (result.status === "needs_account") throw new Error("פתיחת החשבון נכשלה. נסו שוב.");
+  if (result.status === "needs_account") {
+    throw new Error(existed ? UNVERIFIED_ACCOUNT_MESSAGE : "פתיחת החשבון נכשלה. נסו שוב.");
+  }
   return { status: result.status, account_created: created };
 }
 

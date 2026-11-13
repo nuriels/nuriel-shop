@@ -55,7 +55,6 @@ export function CreateStaffAccountDialog({
   const [created, setCreated] = useState<{
     email: string;
     password: string;
-    emailed: boolean;
   } | null>(null);
   const createUser = useServerFn(createStaffUser);
 
@@ -78,7 +77,6 @@ export function CreateStaffAccountDialog({
           displayName,
           passwordMode: passwordSetup.mode,
           tempPassword: passwordSetup.tempPassword,
-          emailTempPassword: passwordSetup.emailTempPassword,
         },
       });
       onCreated();
@@ -94,7 +92,7 @@ export function CreateStaffAccountDialog({
       }
 
       if (result.mode === "temp" && result.tempPassword) {
-        setCreated({ email, password: result.tempPassword, emailed: result.emailed });
+        setCreated({ email, password: result.tempPassword });
         toast.success("המשתמש נוצר. יש להעתיק את הסיסמה הזמנית");
         return;
       }
@@ -134,11 +132,7 @@ export function CreateStaffAccountDialog({
 
         {created ? (
           <div className="space-y-4">
-            <TempPasswordNotice
-              email={created.email}
-              password={created.password}
-              emailed={created.emailed}
-            />
+            <TempPasswordNotice email={created.email} password={created.password} />
             <Button
               className="w-full"
               size="lg"

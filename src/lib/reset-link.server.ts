@@ -7,7 +7,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sendEmail, renderEmailHtml, escapeHtml } from "@/lib/email.server";
-import { tenantSiteOrigin } from "@/integrations/supabase/tenant.server";
+import { maybeCurrentTenant, slugOriginForTenant } from "@/integrations/supabase/tenant.server";
 
 /** תוקף הקישור: 3 שעות בדיוק */
 export const RESET_TOKEN_TTL_MS = 3 * 60 * 60 * 1000;
@@ -30,7 +30,11 @@ async function resolveSiteOrigin(): Promise<string> {
   // חשוב: לא נגזר מכותרות הבקשה. כותרת Origin/Host נשלטת ע"י הפונה,
   // ולכן קודם אפשר היה לבקש איפוס סיסמה עם Origin מזויף ולקבל קישור
   // שמצביע לדומיין של התוקף — עם טוקן תקף. הכתובת נבנית מרשומת החנות במסד.
-  return tenantSiteOrigin();
+  // SEC-H2 (גם כאן): תמיד <slug>.<base> ולא הדומיין של החנות. חשבון ההתחברות משותף לכל החנויות של
+  // המשתמש, ואת ה-DNS של הדומיין בעל החנות מפנה לשרת שלו — קישור איפוס / כניסה שנפתח שם נותן לו את
+  // הטוקן, והסיסמה שנקבעת בו היא של החשבון בכל החנויות.
+  const tenant = maybeCurrentTenant();
+  return slugOriginForTenant(tenant ? { slug: tenant.slug, is_default: tenant.is_default } : null);
 }
 
 /**
@@ -117,49 +121,6 @@ export async function sendPasswordResetLinkInternal(
       <p>הקישור תקף עד <strong>${escapeHtml(expiresLabel)}</strong> (3 שעות), וניתן לשימוש פעם אחת בלבד.</p>
       <p style="color:#6b7280;font-size:13px;">${footNote}</p>
     `,
-    ),
-  });
-}
-
-/**
- * שליחת הסיסמה הזמנית למייל של הלקוח (אופציונלי, לפי בחירת המנהל).
- * מודגש בהודעה שיהיה עליו להחליף אותה בכניסה הראשונה.
- */
-export async function sendTempPasswordEmail(
-  userId: string,
-  tempPassword: string,
-): Promise<{ sent: boolean; reason?: string }> {
-  const { data: user } = await supabaseAdmin
-    .from("user_roles")
-    .select("email, username")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (!user) return { sent: false, reason: "המשתמש לא נמצא" };
-
-  const origin = await resolveSiteOrigin();
-
-  return sendEmail({
-    to: [user.email],
-    subject: "פרטי הכניסה שלך למערכת ההזמנות",
-    // הסיסמה הזמנית עצמה לא נשמרת ביומן — רק העובדה שנשלח מייל כניסה
-    logFor: { userId, kind: "temp_password" },
-    html: await renderEmailHtml(
-      "החשבון שלך נפתח",
-      `
-        <p>שלום,</p>
-        <p>נפתח עבורכם חשבון במערכת ההזמנות. אלו פרטי הכניסה:</p>
-        <p style="margin:14px 0;">
-          שם משתמש: <strong dir="ltr">${escapeHtml(user.username ?? user.email)}</strong><br/>
-          סיסמה זמנית:
-          <strong dir="ltr" style="display:inline-block;background:#f3f5f3;padding:6px 12px;border-radius:6px;letter-spacing:1px;">${escapeHtml(tempPassword)}</strong>
-        </p>
-        <p style="margin:20px 0;">
-          <a href="${origin}/login" style="background:#12211F;color:#ffffff;padding:12px 22px;border-radius:8px;text-decoration:none;display:inline-block;">
-            כניסה למערכת
-          </a>
-        </p>
-        <p><strong>בכניסה הראשונה</strong> תתבקשו להחליף את הסיסמה הזמנית לסיסמה קבועה ולהשלים את פרטי העסק.</p>
-      `,
     ),
   });
 }

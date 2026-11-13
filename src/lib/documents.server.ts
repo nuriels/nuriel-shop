@@ -85,7 +85,14 @@ export async function loadLogoDataUrl(logoPath: string | null): Promise<string |
       const { fetchRemoteImage } = await import("@/server/services/image-fetch");
       bytes = (await fetchRemoteImage(logoPath)).bytes;
     } else {
-      const { data, error } = await supabaseAdmin.storage.from(BRANDING_BUCKET).download(logoPath);
+      // נתיב בדלי בלבד, של החנות הנוכחית (בלי "../" — ההורדה במפתח השירות)
+      const [{ safeBrandingPath }, { maybeCurrentTenant }] = await Promise.all([
+        import("@/lib/branding-path"),
+        import("@/integrations/supabase/tenant.server"),
+      ]);
+      const safe = safeBrandingPath(logoPath, maybeCurrentTenant()?.id ?? null);
+      if (!safe) return null;
+      const { data, error } = await supabaseAdmin.storage.from(BRANDING_BUCKET).download(safe);
       if (error || !data) return null;
       bytes = Buffer.from(await data.arrayBuffer());
     }

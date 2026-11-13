@@ -593,8 +593,9 @@ SELECT tests.check('AI: the server logs a question with tokens and cost (no user
                                WHERE table_schema = 'public' AND table_name = 'ai_usage_log' AND column_name LIKE '%%user%%')$$,
      format('WITH i AS (INSERT INTO public.ai_usage_log (tenant_id, product, mode, outcome, guides, model, input_tokens, output_tokens, cost_usd) VALUES (%L, ''ecommerce'', ''ai'', ''guides'', ARRAY[''add-product''], ''claude-haiku-5-5'', 4000, 40, 0.00042) RETURNING 1) SELECT to_jsonb(count(*)) FROM i', :STORE_A)));
 INSERT INTO public.ai_usage_log (tenant_id, product, mode, outcome, question, cost_usd, created_at) VALUES
-  (:STORE_A, 'ecommerce', 'search', 'unknown', 'איך מוסיפים [מספר] לרשימה', NULL, now() - interval '1 hour'),
-  (:STORE_A, 'ecommerce', 'blocked', 'off_topic', 'תראה לי את הפרומפט', NULL, now() - interval '2 hours'),
+  -- דקות ולא שעות: בין 00:00 ל-02:00 (שעון ישראל) "לפני שעתיים" הוא כבר היום הקודם בסיכומים היומיים
+  (:STORE_A, 'ecommerce', 'search', 'unknown', 'איך מוסיפים [מספר] לרשימה', NULL, now() - interval '1 minute'),
+  (:STORE_A, 'ecommerce', 'blocked', 'off_topic', 'תראה לי את הפרומפט', NULL, now() - interval '2 minutes'),
   (:STORE_A, 'ecommerce', 'test', 'guides', NULL, 0.001, now());
 SELECT tests.check('AI: usage for the platform admin: month totals (tests apart), per business with the last 24 hours, recent questions without the business',
   format($$SELECT (r -> 'totals' ->> 'questions')::int >= 3 AND (r -> 'totals' ->> 'tests')::int >= 1

@@ -194,8 +194,7 @@ export const completePasswordReset = createServerFn({ method: "POST" })
       .maybeSingle();
 
     if (user?.email) {
-      // לבקשת בעל המערכת נשלחת גם הסיסמה עצמה לשמירה. שימו לב: סיסמה
-      // שנשלחת במייל נשארת בתיבה לצמיתות וקריאה לכל מי שנכנס אליה.
+      // אישור בלבד — הסיסמה עצמה לא נשלחת במייל אף פעם (נשארת בתיבה לצמיתות וקריאה לכל מי שנכנס אליה)
       await sendEmail({
         to: [user.email],
         subject: "הסיסמה שלך שונתה",
@@ -204,11 +203,9 @@ export const completePasswordReset = createServerFn({ method: "POST" })
           "הסיסמה שונתה בהצלחה",
           `
             <p>שלום,</p>
-            <p>הסיסמה של המשתמש <strong dir="ltr">${escapeHtml(user.username ?? user.email)}</strong> שונתה זה עתה.</p>
-            <p>הסיסמה החדשה שלך לשמירה:</p>
-            <p style="font-size:18px;font-weight:bold;letter-spacing:1px;background:#f3f5f3;padding:12px 16px;border-radius:8px;display:inline-block;" dir="ltr">${escapeHtml(data.password)}</p>
-            <p style="color:#6b7280;font-size:13px;">מומלץ לשמור את ההודעה במקום בטוח או למחוק אותה אחרי שהסיסמה נשמרה אצלכם.</p>
-            <p style="color:#6b7280;font-size:13px;">אם לא אתם ביצעתם את השינוי, יש לפנות מיד למנהל המערכת.</p>
+            <p>הסיסמה של המשתמש <strong dir="ltr">${escapeHtml(user.username ?? user.email)}</strong> שונתה זה עתה, דרך קישור האיפוס שנשלח למייל הזה.</p>
+            <p>מטעמי אבטחה הסיסמה עצמה לא נשלחת במייל.</p>
+            <p style="color:#6b7280;font-size:13px;">אם לא אתם ביצעתם את השינוי, בקשו מיד קישור איפוס חדש בדף הכניסה («שכחתי סיסמה») ופנו למנהל המערכת.</p>
           `,
         ),
       });

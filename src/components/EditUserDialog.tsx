@@ -55,6 +55,7 @@ export function EditUserDialog({
   currentDisplayName = null,
   isProtected = false,
   canManageRole,
+  allowAdmin = true,
   agents,
   onSaved,
 }: {
@@ -66,6 +67,8 @@ export function EditUserDialog({
   isProtected?: boolean;
   /** true עבור מנהל בלבד — סוכן לא רשאי לשנות תפקיד/קבוצת מחיר */
   canManageRole: boolean;
+  /** חלק 33: רק בעל החנות ממנה מנהלים — לשאר הצוות האפשרות "מנהל" לא מוצגת */
+  allowAdmin?: boolean;
   agents: { user_id: string; label: string }[];
   onSaved: () => void;
 }) {
@@ -203,7 +206,9 @@ export function EditUserDialog({
                       <SelectItem value="customer">לקוח</SelectItem>
                       <SelectItem value="agent">סוכן</SelectItem>
                       <SelectItem value="warehouse">מחסנאי (ליקוט בלבד)</SelectItem>
-                      <SelectItem value="admin">מנהל</SelectItem>
+                      {(allowAdmin || currentRole === "admin") && (
+                        <SelectItem value="admin">מנהל</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   {isProtected && (

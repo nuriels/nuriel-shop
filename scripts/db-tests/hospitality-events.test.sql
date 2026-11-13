@@ -14,7 +14,9 @@
 \set MGR63 '''a0000000-0000-0000-0000-000000063a02'''
 \set OTHER63 '''a0000000-0000-0000-0000-000000063a03'''
 
-CREATE OR REPLACE FUNCTION pg_temp.d(_n integer) RETURNS date LANGUAGE sql AS $$ SELECT current_date + _n $$;
+-- תאריך לפי שעון ישראל, כמו הפונקציות של המערכת (בין 00:00 ל-02:00 current_date של השרת הוא עוד אתמול)
+CREATE OR REPLACE FUNCTION pg_temp.d(_n integer) RETURNS date LANGUAGE sql AS $$
+  SELECT (now() AT TIME ZONE 'Asia/Jerusalem')::date + _n $$;
 CREATE OR REPLACE FUNCTION pg_temp.call(_site text, _uid uuid, _sql text) RETURNS jsonb LANGUAGE plpgsql AS $f$
 DECLARE r jsonb;
 BEGIN

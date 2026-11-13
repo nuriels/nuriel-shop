@@ -199,11 +199,22 @@ async function uploadPdf(tenantId: string, id: string, bytes: Uint8Array): Promi
     body: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: "application/pdf" }),
   });
   // כבר קיים (ניסיון קודם שלא נרשם) — לא דורסים: הקובץ החתום לא משתנה
-  if (!res.ok && res.status !== 409 && res.status !== 400) {
+  if (!res.ok && !isDuplicateUpload(res.status, await res.text().catch(() => ""))) {
     console.error("[hospitality/contracts] upload failed", res.status);
     throw new HospitalityError("שמירת הקובץ החתום נכשלה", null);
   }
   return path;
+}
+
+/**
+ * "הקובץ כבר קיים" משירות האחסון: 409, או 400 עם statusCode 409 / Duplicate בגוף (כך עונות גרסאות
+ * של Supabase Storage). לפני כן כל 400 נחשב "קיים" — העלאה שנדחתה (גודל / סוג / בקשה פגומה) נרשמה
+ * כאילו נשמרה, וההורדה נכשלה אחר כך.
+ */
+export function isDuplicateUpload(status: number, body: string): boolean {
+  if (status === 409) return true;
+  if (status !== 400) return false;
+  return /"statusCode"\s*:\s*"?409"?|"error"\s*:\s*"Duplicate"|already exists/i.test(body);
 }
 
 async function downloadPdf(path: string): Promise<Uint8Array> {

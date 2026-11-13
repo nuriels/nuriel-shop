@@ -41,12 +41,15 @@ export function ChangeRoleDialog({
   currentRole,
   isProtected,
   onChanged,
+  allowAdmin = true,
 }: {
   userId: string;
   name: string;
   currentRole: Role;
   isProtected: boolean;
   onChanged: (next: Role) => void;
+  /** חלק 33: רק בעל החנות ממנה מנהלים — לשאר הצוות האפשרות "מנהל" לא מוצגת (המסד דוחה ממילא) */
+  allowAdmin?: boolean;
 }) {
   const save = useServerFn(updateUserDetails);
   const [open, setOpen] = useState(false);
@@ -56,7 +59,7 @@ export function ChangeRoleDialog({
   if (isProtected) return null;
 
   const options = (["customer", "agent", "cashier", "warehouse", "admin"] as Role[]).filter(
-    (role) => role !== currentRole,
+    (role) => role !== currentRole && (allowAdmin || role !== "admin"),
   );
 
   const confirm = async () => {

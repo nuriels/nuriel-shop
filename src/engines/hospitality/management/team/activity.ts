@@ -272,6 +272,10 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} נתן/ה ל${target} גישה למסמכי הלקוחות`;
     case "team.contracts_revoked":
       return `${actor} הסיר/ה מ${target} את הגישה למסמכי הלקוחות`;
+    case "team.business_admin_granted":
+      return `${actor} מינה/תה את ${target} למנהל/ת עסק (כל ההרשאות חוץ ממנוי ותשלום)`;
+    case "team.business_admin_revoked":
+      return `${actor} ביטל/ה את המינוי של ${target} למנהל/ת עסק`;
     case "setup.confirm":
       return `${actor} סימן/ה במדריך ההקמה ש"${setupStep(entry)}" נבדק ומתאים`;
     case "setup.unconfirm":

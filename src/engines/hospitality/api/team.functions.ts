@@ -26,26 +26,34 @@ export const hospitalityTeamActivity = createServerFn({ method: "GET" }).handler
 export const hospitalityAddManager = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseAddManager(input))
   .handler(async ({ data }): Promise<AddManagerResult> => {
-    const [{ manageRpc }, { hospitalitySiteId }, { guardStaff }, { ensureAccount }] =
-      await Promise.all([
-        import("../server/manage.server"),
-        import("../server/rpc.server"),
-        import("../security/guard.server"),
-        import("@/platform/auth/accounts.server"),
-      ]);
+    const [
+      { manageRpc },
+      { hospitalitySiteId },
+      { guardStaff },
+      { ensureAccount, UNVERIFIED_ACCOUNT_MESSAGE },
+    ] = await Promise.all([
+      import("../server/manage.server"),
+      import("../server/rpc.server"),
+      import("../security/guard.server"),
+      import("@/platform/auth/accounts.server"),
+    ]);
     const args = { _email: data.email, _display_name: data.displayName };
     let result = await manageRpc<RpcAdd>("team_add_manager", args);
     let created = false;
+    let existed = false;
     if (result.status === "needs_account") {
       // המסד כבר בדק: בעלים, מקום פנוי, מנוי פעיל. הגבלת קצב רק על פתיחת חשבונות
       // (אחרי בדיקת ההרשאה — מנהל לא יכול לנצל את המכסה של הבעלים)
       // משותף לכל השרתים, לפי העסק
       await guardStaff("teamAccount", { siteId: await hospitalitySiteId() });
-      created = (await ensureAccount(data.email, { signup_method: "hospitality_manager" })).created;
+      ({ created, existed } = await ensureAccount(data.email, {
+        signup_method: "hospitality_manager",
+      }));
       result = await manageRpc<RpcAdd>("team_add_manager", args);
     }
     if (result.status === "needs_account" || !result.user_id) {
-      throw new Error("פתיחת החשבון נכשלה. נסו שוב.");
+      // SEC-H1: חשבון קיים שלא אומת — לפני כן "נסו שוב" בלי סוף, וכל ניסיון גם ניצל את מכסת הפתיחה
+      throw new Error(existed ? UNVERIFIED_ACCOUNT_MESSAGE : "פתיחת החשבון נכשלה. נסו שוב.");
     }
     return { status: result.status, user_id: result.user_id, account_created: created };
   });
@@ -64,6 +72,17 @@ export const hospitalityTeamSetFinance = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<TeamView> => {
     const { manageRpc } = await import("../server/manage.server");
     return manageRpc<TeamView>("team_set_finance", {
+      _user_id: data.userId,
+      _enabled: data.enabled,
+    });
+  });
+
+/** מיגרציה 188: הבעלים בלבד ממנה / מבטל מנהל/ת עסק (כל ההרשאות חוץ ממנוי / תשלום ובעלות; במסד, ביומן) */
+export const hospitalityTeamSetBusinessAdmin = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseFinanceGrant(input))
+  .handler(async ({ data }): Promise<TeamView> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<TeamView>("team_set_business_admin", {
       _user_id: data.userId,
       _enabled: data.enabled,
     });
