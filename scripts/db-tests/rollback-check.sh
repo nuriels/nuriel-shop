@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • store_owner_guard_unblock (71): בלי הגנה (רק פונקציה), rollback → user_roles_owner_guard של מיגרציה
+#     20261019390000 מילה במילה (שחרור מנהל חסום שוב פתוח לכל מנהל); הסכמה זהה בדיוק ל-70
 #   • hosp_standalone_documents (70): הגנה (נעצר כשיש מסמך עצמאי / מסמך מדיניות / מסמך שהלקוח ממלא),
 #     rollback → העמודות origin / fill_mode / staff_seen_at, הפונקציות החדשות ותבנית מסמך המדיניות נעלמו;
 #     האילוצים והפונקציות של 68 מילה במילה; הסכמה זהה בדיוק ל-69
@@ -155,6 +157,7 @@ M67=20261111110000_hosp_events
 M68=20261111120000_hosp_client_contracts
 M69=20261111130000_hosp_customer_details
 M70=20261111140000_hosp_standalone_documents
+M71=20261112100000_store_owner_guard_unblock
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -197,6 +200,18 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- store staff: only the owner blocks or unblocks a manager (migration 71) ----------
+expect "before the rollback: the owner guard refuses any change of is_blocked on a manager row" \
+  "SELECT position('NEW.is_blocked IS DISTINCT FROM OLD.is_blocked' IN prosrc) > 0
+     FROM pg_proc WHERE proname = 'user_roles_owner_guard' AND pronamespace = 'public'::regnamespace"
+ref_upto "$M71"
+echo "rollback: $M71"
+down "$M71"
+expect "the guard is the 20261019390000 body again, word for word (only blocking is refused)" \
+  "SELECT md5(prosrc) = '2a64aaa92ae7a36901bdf1e04b84a13c'
+     FROM pg_proc WHERE proname = 'user_roles_owner_guard' AND pronamespace = 'public'::regnamespace"
+same_as_ref "migration 70"
 
 # ---------- standalone documents for signing (migration 70) ----------
 expect "before the rollback: origin / fill mode / seen columns, the policy template, the new staff functions (signed-in staff), the copy-link record (the app server only)" \
@@ -2242,6 +2257,7 @@ up "$M67"
 up "$M68"
 up "$M69"
 up "$M70"
+up "$M71"
 expect "the duplicates are back: 2 tables closed to the browser, the merge for signed-in users, the AI list for the server only" \
   "SELECT to_regclass('public.product_merges') IS NOT NULL
       AND to_regclass('public.product_duplicate_dismissals') IS NOT NULL
