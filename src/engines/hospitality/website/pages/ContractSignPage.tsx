@@ -432,7 +432,7 @@ function SignForm({
           id="cs-signature"
           tabIndex={-1}
           className={cn(
-            "flex flex-col gap-3 rounded-[var(--radius)] border bg-card p-5 sm:p-6",
+            "flex flex-col gap-3 rounded-[var(--radius)] border bg-card p-3 sm:p-6",
             bad("cs-signature") ? "border-red-400" : "border-border",
           )}
         >
@@ -468,7 +468,7 @@ function SignForm({
         <button
           type="submit"
           disabled={sign.isPending}
-          className="inline-flex min-h-12 items-center justify-center gap-2 self-start rounded-[var(--radius)] bg-primary px-6 text-base font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-primary px-6 text-base font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60 sm:w-auto sm:self-start"
           data-testid="contract-sign-submit"
         >
           <FileSignature className="size-5" aria-hidden="true" />

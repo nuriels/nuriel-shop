@@ -70,7 +70,21 @@ export function ClientDocumentsPage() {
     <div className="mx-auto flex max-w-5xl flex-col gap-5" data-testid="client-documents">
       <PageHeader
         title="מסמכי לקוחות"
-        description="מסמכים לחתימה אלקטרונית: חוזה אירוח, חוזה אירוע ומסמכי המדיניות של העסק — מתוך הזמנה / אירוע, או כמסמך עצמאי. הלקוח חותם בטלפון או במחשב, באצבע או בעכבר; העותק החתום (PDF) נשמר כאן, נשלח אליו ומופיע באזור האישי שלו, ואתם מקבלים התראה על כל חתימה. החתימה מתעדת את הסכמת הלקוח לנוסח שנשלח — היא אינה אישור משפטי של המסמך."
+        description={
+          <>
+            {/* בטלפון — קצר, כדי שהפעולות ייראו מיד */}
+            <span className="sm:hidden">
+              מסמכים לחתימה אלקטרונית: הלקוח חותם בטלפון באצבע, והעותק החתום (PDF) נשמר כאן ונשלח
+              אליו. החתימה מתעדת את הסכמת הלקוח לנוסח שנשלח — היא אינה אישור משפטי של המסמך.
+            </span>
+            <span className="max-sm:hidden">
+              מסמכים לחתימה אלקטרונית: חוזה אירוח, חוזה אירוע ומסמכי המדיניות של העסק — מתוך הזמנה /
+              אירוע, או כמסמך עצמאי. הלקוח חותם בטלפון או במחשב, באצבע או בעכבר; העותק החתום (PDF)
+              נשמר כאן, נשלח אליו ומופיע באזור האישי שלו, ואתם מקבלים התראה על כל חתימה. החתימה
+              מתעדת את הסכמת הלקוח לנוסח שנשלח — היא אינה אישור משפטי של המסמך.
+            </span>
+          </>
+        }
       />
 
       {v && !v.enabled && (
@@ -113,7 +127,11 @@ export function ClientDocumentsPage() {
       )}
 
       {canContracts && (
-        <div role="tablist" aria-label="מסמכי לקוחות" className="flex gap-1 overflow-x-auto pb-1">
+        <div
+          role="tablist"
+          aria-label="מסמכי לקוחות"
+          className="grid grid-cols-2 gap-1.5 pb-1 sm:flex sm:gap-1 sm:overflow-x-auto"
+        >
           {TABS.map((t) => {
             const Icon = t.icon;
             const selected = tab === t.key;
@@ -127,7 +145,9 @@ export function ClientDocumentsPage() {
                 aria-controls={`cd-panel-${t.key}`}
                 onClick={() => go(t.key)}
                 className={cn(
-                  "flex min-h-11 shrink-0 items-center gap-2 rounded-md border px-3 text-sm",
+                  "flex min-h-11 shrink-0 items-center gap-2 rounded-md border px-3 py-1.5 text-start text-sm",
+                  // בטלפון: כל הלשוניות גלויות (שתי עמודות), "מסמך חדש לחתימה" ברוחב מלא
+                  t.key === "new" && "col-span-2 sm:col-span-1",
                   selected ? "border-primary bg-primary text-primary-foreground" : "bg-background",
                 )}
               >

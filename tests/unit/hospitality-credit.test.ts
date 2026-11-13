@@ -153,8 +153,13 @@ describe("every theme, every page", () => {
       const footer = shellAt(path, "luxury").match(/<footer[^>]*>/)?.[0] ?? "";
       for (const cls of FOOTER_BAR_SPACE.split(" ")) expect(footer, path).toContain(cls);
     }
-    // עמודי ההזמנה בלי השורה — ובלי ריפוד מיותר
-    for (const path of ["/stay/book", "/stay/booking-received", "/stay/my-booking"]) {
+    // עמודי ההזמנה ועמוד החתימה בלי השורה — ובלי ריפוד מיותר
+    for (const path of [
+      "/stay/book",
+      "/stay/booking-received",
+      "/stay/my-booking",
+      "/stay/contract",
+    ]) {
       expect(hasActionBar(path), path).toBe(false);
       const footer = shellAt(path, "luxury").match(/<footer[^>]*>/)?.[0] ?? "";
       expect(footer, path).not.toContain("safe-area-inset-bottom");

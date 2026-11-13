@@ -1,16 +1,24 @@
 // לוח חתימה: ציור באצבע או בעכבר (Pointer Events), נשמר כקווים בלבד בתוך 600×200 — אותו כלל כמו
 // במסד. ולמי שלא יכול לצייר (נגישות — WCAG 2.5.1: פעולה בתנועה צריכה חלופה) — חתימה בהקלדת השם המלא.
+// בטלפון הלוח גבוה יותר (3:2 במקום 3:1) — מקום נוח לאצבע: המסך ממופה לתחום 600×200 בקנה מידה אחיד
+// (padPoint — כמו "slice" בתצוגה), כך שהחתימה נשמרת בפרופורציות שלה, ממורכזת, ותמיד בתוך התחום שהמסד
+// בודק; אצבע שיוצאת מהלוח נצמדת לקצה (אין דיו שלא רואים). הלוח שינה צורה באמצע (סיבוב המסך) — החתימה
+// נמחקת וחותמים שוב, כדי שמה שנשמר יהיה בדיוק מה שנראה. קו ארוך מאוד מתפצל (המסד מגביל קו אחד).
 import { Eraser, PenLine, Type } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button, Input, Label, cn } from "@/platform/ui";
 import {
   SIGNATURE_HEIGHT,
   SIGNATURE_MAX_PATHS,
   SIGNATURE_WIDTH,
-  clampPoint,
+  padPoint,
   validSignaturePaths,
   type ContractSignature,
 } from "./signature";
+
+/** אורך קו (בתווים) שאחריו הוא מתפצל; המסד מקבל עד 8000 לקו */
+const STROKE_SPLIT = 7000;
+const STROKE_MAX = 7900;
 
 export function SignaturePad({
   onChange,
@@ -29,13 +37,44 @@ export function SignaturePad({
   const [strokes, setStrokes] = useState<string[]>([]);
   const [current, setCurrent] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
+  const [reshaped, setReshaped] = useState(false);
+  // לשימוש בתוך ה-ResizeObserver (בלי להירשם מחדש בכל ציור)
+  const live = useRef({ strokes, onChange });
+  useEffect(() => {
+    live.current = { strokes, onChange };
+  });
+
+  // הלוח שינה צורה (סיבוב המסך / רוחב החלון): מה שצויר כבר לא יוצג כפי שנשמר — מוחקים וחותמים שוב
+  useEffect(() => {
+    const el = area.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let ratio: number | null = null;
+    const ro = new ResizeObserver(() => {
+      if (!el.clientWidth || !el.clientHeight) return;
+      const r = el.clientWidth / el.clientHeight;
+      const before = ratio;
+      ratio = r;
+      if (before !== null && Math.abs(r - before) / before > 0.02 && live.current.strokes.length) {
+        setStrokes([]);
+        setCurrent(null);
+        live.current.onChange(null);
+        setReshaped(true);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mode]);
 
   const point = (e: React.PointerEvent) => {
-    const r = area.current?.getBoundingClientRect();
-    if (!r || r.width === 0 || r.height === 0) return null;
-    return clampPoint(
-      ((e.clientX - r.left) / r.width) * SIGNATURE_WIDTH,
-      ((e.clientY - r.top) / r.height) * SIGNATURE_HEIGHT,
+    const el = area.current;
+    if (!el || el.clientWidth === 0 || el.clientHeight === 0) return null;
+    // אזור הציור = בתוך המסגרת (כמו ה-SVG); נקודה מחוץ ללוח נצמדת לקצה
+    const r = el.getBoundingClientRect();
+    return padPoint(
+      e.clientX - r.left - el.clientLeft,
+      e.clientY - r.top - el.clientTop,
+      el.clientWidth,
+      el.clientHeight,
     );
   };
   const emit = (all: string[]) =>
@@ -44,6 +83,15 @@ export function SignaturePad({
     setStrokes([]);
     setCurrent(null);
     onChange(null);
+  };
+  // סוף קו (הרמת האצבע — או ביטול של הדפדפן): מה שצויר נשמר, וההורה מקבל את המצב העדכני
+  const finish = () => {
+    if (current === null) return;
+    // נקודה בודדת (הקשה) — לא קו
+    const next = current.includes(" L") ? [...strokes, current] : strokes;
+    setStrokes(next);
+    setCurrent(null);
+    emit(next);
   };
 
   return (
@@ -99,8 +147,9 @@ export function SignaturePad({
             aria-labelledby={`${id}-label`}
             aria-describedby={`${id}-hint`}
             data-testid={`${testId}-area`}
-            className="relative aspect-[3/1] w-full touch-none rounded-lg border-2 border-dashed border-border bg-white"
+            className="relative aspect-[3/2] max-h-64 w-full touch-none rounded-lg border-2 border-dashed border-border bg-white select-none sm:aspect-[3/1] sm:max-h-none"
             onPointerDown={(e) => {
+              setReshaped(false);
               if (strokes.length >= SIGNATURE_MAX_PATHS) return;
               (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
               const p = point(e);
@@ -109,20 +158,19 @@ export function SignaturePad({
             onPointerMove={(e) => {
               if (current === null) return;
               const p = point(e);
-              if (p && !current.endsWith(p)) setCurrent(`${current} L${p}`);
+              if (!p || current.endsWith(p)) return;
+              if (current.length > STROKE_SPLIT && strokes.length < SIGNATURE_MAX_PATHS - 1) {
+                // קו ארוך — נסגר כאן וממשיך כקו חדש מאותה נקודה
+                setStrokes([...strokes, `${current} L${p}`]);
+                setCurrent(`M${p}`);
+              } else if (current.length < STROKE_MAX) setCurrent(`${current} L${p}`);
             }}
-            onPointerUp={() => {
-              if (current === null) return;
-              // נקודה בודדת (הקשה) — לא קו
-              const next = current.includes(" L") ? [...strokes, current] : strokes;
-              setStrokes(next);
-              setCurrent(null);
-              emit(next);
-            }}
-            onPointerCancel={() => setCurrent(null)}
+            onPointerUp={finish}
+            onPointerCancel={finish}
           >
             <svg
               viewBox={`0 0 ${SIGNATURE_WIDTH} ${SIGNATURE_HEIGHT}`}
+              preserveAspectRatio="xMidYMid slice"
               className="pointer-events-none absolute inset-0 size-full"
               aria-hidden="true"
             >
@@ -145,8 +193,12 @@ export function SignaturePad({
             )}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p id={`${id}-hint`} className="text-xs text-muted-foreground">
-              {allowTyped ? 'קשה לצייר? אפשר לבחור "הקלדת השם".' : "חתמו בתוך המסגרת."}
+            <p id={`${id}-hint`} className="text-xs text-muted-foreground" aria-live="polite">
+              {reshaped
+                ? "גודל הלוח השתנה (סיבוב המסך) — החתימה נמחקה, חתמו שוב."
+                : allowTyped
+                  ? 'קשה לצייר? אפשר לבחור "הקלדת השם".'
+                  : "חתמו בתוך המסגרת."}
             </p>
             <Button
               type="button"
