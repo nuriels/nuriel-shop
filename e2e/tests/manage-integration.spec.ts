@@ -515,7 +515,7 @@ for (const who of ["owner", "manager"] as const) {
       await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
       await expect(page.locator("html")).toHaveAttribute("lang", "he");
       if (screen.path === "/manage/team" && who === "manager") {
-        await expect(page.getByText("המסך הזה זמין לבעל העסק בלבד.")).toBeVisible();
+        await expect(page.getByText("המסך הזה זמין לבעל העסק ולמנהלי עסק בלבד.")).toBeVisible();
       }
       if (screen.path === "/manage") {
         await expect(

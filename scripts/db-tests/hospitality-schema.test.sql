@@ -137,7 +137,8 @@ SELECT tests.check('roles: the Ecommerce registration is unchanged (5 roles)',
       FROM public.platform_product_roles WHERE product = 'ecommerce'$$);
 -- permission and membership functions of Ecommerce / the platform are byte-for-byte unchanged
 -- (hashes of the bodies before this migration; migration 3 defines nothing in public. user_roles_owner_guard:
--- the 20261112100000 body — a manager can no longer unblock a manager the owner blocked)
+-- the 20261113100000 body — a manager can no longer unblock a manager the owner blocked (187), and a
+-- zimmer business admin adds / removes managers only through the team functions (188))
 SELECT tests.check('roles: store permission and membership functions are unchanged',
   $$SELECT count(*) = 8 AND bool_and(md5(prosrc) = CASE proname
         WHEN 'current_tenant_id' THEN '0be1396f2cc9d476f03a8975a19c2833'
@@ -146,7 +147,7 @@ SELECT tests.check('roles: store permission and membership functions are unchang
         WHEN 'staff_can' THEN '7f0dc33ba1d7e031c430ac22e9eeed44'
         WHEN 'store_staff_role' THEN '288aff3ff585456fdd3ace428227033a'
         WHEN 'user_roles_membership_guard' THEN '9ccf1352f00bf7cc34a6f324e876b1cb'
-        WHEN 'user_roles_owner_guard' THEN '90c7befa2bc215925d2ca0c4092564a7'
+        WHEN 'user_roles_owner_guard' THEN '699f0ad8e04b72126b31acf57b73de8c'
         WHEN 'user_roles_product_role_guard' THEN '858b548c1ab63e66d05c9cfe5796bc2d' END)
       FROM pg_proc WHERE pronamespace = 'public'::regnamespace
        AND proname IN ('current_tenant_id', 'is_admin', 'is_super_admin', 'staff_can', 'store_staff_role',
@@ -251,14 +252,14 @@ DELETE FROM public.user_roles WHERE tenant_id = :SHOP_E AND user_id = :GUEST;
 -- 4. Permissions: hospitality.can() (RPC, as the user, on a site)
 -- ============================================================
 -- Stage 2a (migration 7) added guests.privacy, Stage 2b (migration 8) settings.owner — both owner only: 12
-SELECT tests.check('can: the permission list is the Hospitality list (15 permissions: + catalog.owner in 2c.1, + reports.finance in F3, + contracts in migration 64)',
-  $$SELECT cardinality(hospitality.permissions()) = 15$$);
+SELECT tests.check('can: the permission list is the Hospitality list (16 permissions: + catalog.owner in 2c.1, + reports.finance in F3, + contracts in migration 64, + ownership in migration 188)',
+  $$SELECT cardinality(hospitality.permissions()) = 16$$);
 SELECT pg_temp.run_at(:hosp_a, 'can: owner has every Hospitality permission',
-  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :H_OWNER_A, NULL, 15);
+  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :H_OWNER_A, NULL, 16);
 SELECT pg_temp.run_at(:hosp_a, 'can: manager has all but the owner-only permissions (and no finance / contracts without a grant)',
   $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :H_MANAGER_A, NULL, 8);
-SELECT pg_temp.run_at(:hosp_a, 'can: manager lacks exactly staff.managers, billing.manage, guests.privacy, settings.owner and catalog.owner',
-  $$SELECT 1 FROM unnest(ARRAY['staff.managers', 'billing.manage', 'guests.privacy', 'settings.owner', 'catalog.owner']) p WHERE NOT hospitality.can(p)$$, :H_MANAGER_A, NULL, 5);
+SELECT pg_temp.run_at(:hosp_a, 'can: manager lacks exactly staff.managers, billing.manage, guests.privacy, settings.owner, catalog.owner and ownership',
+  $$SELECT 1 FROM unnest(ARRAY['staff.managers', 'billing.manage', 'guests.privacy', 'settings.owner', 'catalog.owner', 'ownership']) p WHERE NOT hospitality.can(p)$$, :H_MANAGER_A, NULL, 6);
 SELECT pg_temp.run_at(:hosp_a, 'can: owner gets no Ecommerce or unknown permission (pos, admin, products.view, inventory)',
   $$SELECT 1 FROM unnest(ARRAY['pos', 'admin', 'products.view', 'inventory', 'orders.fulfill', '', 'catalog ']) p
      WHERE hospitality.can(p)$$, :H_OWNER_A, NULL, 0);
@@ -281,7 +282,7 @@ SELECT pg_temp.run_at(:hosp_a, 'can: a member of both products is a manager on t
 SELECT pg_temp.run_at(NULL, 'can: a member of both products without a site header gets nothing',
   $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :DUAL, NULL, 0);
 SELECT pg_temp.run_at(:hosp_a, 'can: the platform admin is owner (as in stores)',
-  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :PLATFORM, NULL, 15);
+  $$SELECT 1 FROM unnest(hospitality.permissions()) p WHERE hospitality.can(p)$$, :PLATFORM, NULL, 16);
 SELECT pg_temp.run_at(:hosp_a, 'can: anon cannot call it',
   $$SELECT hospitality.can('catalog')$$, NULL, 'permission denied');
 

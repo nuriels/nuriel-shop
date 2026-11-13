@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • hosp_business_admin (72): בלי הגנה (מינויי מנהל/ת עסק נמחקים — הרשאות בלבד), rollback → כל
+#     הפונקציות בגרסה הקודמת מילה במילה, שתי פונקציות העזר והפונקציה החדשה נמחקות; הסכמה זהה בדיוק ל-71
 #   • store_owner_guard_unblock (71): בלי הגנה (רק פונקציה), rollback → user_roles_owner_guard של מיגרציה
 #     20261019390000 מילה במילה (שחרור מנהל חסום שוב פתוח לכל מנהל); הסכמה זהה בדיוק ל-70
 #   • hosp_standalone_documents (70): הגנה (נעצר כשיש מסמך עצמאי / מסמך מדיניות / מסמך שהלקוח ממלא),
@@ -158,6 +160,7 @@ M68=20261111120000_hosp_client_contracts
 M69=20261111130000_hosp_customer_details
 M70=20261111140000_hosp_standalone_documents
 M71=20261112100000_store_owner_guard_unblock
+M72=20261113100000_hosp_business_admin
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -200,6 +203,24 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- zimmer business admin (migration 72) ----------
+expect "before the rollback: the business-admin grant, the owner-only key, the team function for signed-in staff" \
+  "SELECT 'ownership' = ANY (hospitality.permissions())
+      AND has_function_privilege('authenticated', 'hospitality.team_set_business_admin(uuid,boolean)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'hospitality._team_op_allows(uuid,uuid)', 'EXECUTE')"
+q "SET session_replication_role = replica;
+   INSERT INTO hospitality.staff_grants (tenant_id, user_id, permission)
+   SELECT id, gen_random_uuid(), 'business.admin' FROM public.tenants WHERE is_default" >/dev/null
+ref_upto "$M72"
+echo "rollback: $M72"
+down "$M72"
+expect "no business-admin grant left, the key and the functions are gone" \
+  "SELECT NOT EXISTS (SELECT 1 FROM hospitality.staff_grants WHERE permission = 'business.admin')
+      AND NOT ('ownership' = ANY (hospitality.permissions()))
+      AND to_regprocedure('hospitality.team_set_business_admin(uuid,boolean)') IS NULL
+      AND to_regprocedure('hospitality._is_business_admin(uuid,uuid)') IS NULL"
+same_as_ref "migration 71"
 
 # ---------- store staff: only the owner blocks or unblocks a manager (migration 71) ----------
 expect "before the rollback: the owner guard refuses any change of is_blocked on a manager row" \
@@ -2258,6 +2279,7 @@ up "$M68"
 up "$M69"
 up "$M70"
 up "$M71"
+up "$M72"
 expect "the duplicates are back: 2 tables closed to the browser, the merge for signed-in users, the AI list for the server only" \
   "SELECT to_regclass('public.product_merges') IS NOT NULL
       AND to_regclass('public.product_duplicate_dismissals') IS NOT NULL
@@ -2273,13 +2295,13 @@ expect "the standalone documents are back: the columns, the policy template, the
 expect "the customer-details correction is back: the staff functions, the helpers for nobody" \
   "SELECT has_function_privilege('authenticated', 'hospitality.booking_customer_update(uuid,integer,jsonb,text,boolean)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'hospitality._send_booking_details(uuid,uuid)', 'EXECUTE')"
-expect "the client contracts are back: 3 closed tables, the two templates, the flag off, the private bucket, 15 permissions" \
+expect "the client contracts are back: 3 closed tables, the two templates, the flag off, the private bucket, 16 permissions" \
   "SELECT to_regclass('hospitality.client_contracts') IS NOT NULL
       AND NOT has_table_privilege('authenticated', 'hospitality.client_contracts', 'SELECT')
       AND (SELECT count(*) FROM hospitality.contract_templates WHERE key IN ('hosting', 'pool_event')) = 2
       AND NOT (SELECT enabled FROM public.platform_feature_flags WHERE key = 'hospitality_contracts_enabled')
       AND (to_regclass('storage.buckets') IS NULL OR EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-contracts' AND NOT public))
-      AND cardinality(hospitality.permissions()) = 15"
+      AND cardinality(hospitality.permissions()) = 16"
 expect "the events are back: 3 closed tables, the overlap EXCLUDE, the staff functions" \
   "SELECT to_regclass('hospitality.events') IS NOT NULL
       AND NOT has_table_privilege('authenticated', 'hospitality.events', 'SELECT')
@@ -2350,15 +2372,15 @@ expect "management foundation back: seat trigger, Ecommerce guard branch, no sta
      AND (SELECT prosrc LIKE '%site_type <> ''ecommerce''%' FROM pg_proc WHERE oid = 'public.user_roles_admin_seat_guard()'::regprocedure)
      AND NOT has_table_privilege('authenticated', 'hospitality.notifications', 'SELECT')
      AND (SELECT max_managers FROM hospitality.plans WHERE code = 'trial') = 3"
-expect "settings and team back: guard trigger, action log, no direct settings writes, 15 permissions (12 + catalog.owner of migration 10 + reports.finance of migration 32 + contracts of migration 64)" \
+expect "settings and team back: guard trigger, action log, no direct settings writes, 16 permissions (12 + catalog.owner of migration 10 + reports.finance of migration 32 + contracts of migration 64 + ownership of migration 72)" \
   "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hospitality_admin_row_guard')
      AND to_regclass('hospitality.audit_log') IS NOT NULL
      AND NOT has_column_privilege('authenticated', 'hospitality.settings', 'check_in_time', 'UPDATE')
-     AND cardinality(hospitality.permissions()) = 15"
-expect "catalog back: functions, types, revision, no direct staff writes, 15 permissions" \
+     AND cardinality(hospitality.permissions()) = 16"
+expect "catalog back: functions, types, revision, no direct staff writes, 16 permissions" \
   "SELECT to_regprocedure('hospitality.whole_property_set(uuid, boolean, uuid[])') IS NOT NULL
      AND NOT has_table_privilege('authenticated', 'hospitality.units', 'INSERT')
-     AND cardinality(hospitality.permissions()) = 15"
+     AND cardinality(hospitality.permissions()) = 16"
 expect "site identity back: public name only, anon may call it" \
   "SELECT has_function_privilege('anon', 'hospitality.site_identity()', 'EXECUTE')
      AND (SELECT prosecdef FROM pg_proc WHERE oid = 'hospitality.site_identity()'::regprocedure)"

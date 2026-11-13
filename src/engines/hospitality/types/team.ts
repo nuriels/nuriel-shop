@@ -14,6 +14,8 @@ export interface TeamMember {
   finance?: boolean;
   /** מיגרציה 64: מסמכי הלקוחות (חוזים) — לבעלים תמיד; למנהל רק אם הבעלים נתן */
   contracts?: boolean;
+  /** מיגרציה 188: מנהל/ת עסק — הבעלים מינה; כל ההרשאות חוץ ממנוי / תשלום ובעלות */
+  business_admin?: boolean;
 }
 
 export interface TeamView {

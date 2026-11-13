@@ -77,6 +77,17 @@ export const hospitalityTeamSetFinance = createServerFn({ method: "POST" })
     });
   });
 
+/** מיגרציה 188: הבעלים בלבד ממנה / מבטל מנהל/ת עסק (כל ההרשאות חוץ ממנוי / תשלום ובעלות; במסד, ביומן) */
+export const hospitalityTeamSetBusinessAdmin = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseFinanceGrant(input))
+  .handler(async ({ data }): Promise<TeamView> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<TeamView>("team_set_business_admin", {
+      _user_id: data.userId,
+      _enabled: data.enabled,
+    });
+  });
+
 /** מיגרציה 64: הבעלים נותן / מבטל למנהל גישה למסמכי הלקוחות — שליחת חוזים, ארכיון, הורדה (במסד, ביומן) */
 export const hospitalityTeamSetContracts = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseFinanceGrant(input))

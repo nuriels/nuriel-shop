@@ -355,7 +355,7 @@ test("a manager: no team screen, and every team action or change to another user
     page.getByRole("navigation", { name: "ניווט ראשי" }).getByText("צוות ניהול"),
   ).toHaveCount(0);
   await page.goto(URL_("/manage/team"));
-  await expect(page.getByRole("status")).toContainText("המסך הזה זמין לבעל העסק בלבד");
+  await expect(page.getByRole("status")).toContainText("המסך הזה זמין לבעל העסק ולמנהלי עסק בלבד");
   await expect(page.getByText("2 מתוך")).toHaveCount(0);
   await expectAccessible(page, "team (manager)");
 
