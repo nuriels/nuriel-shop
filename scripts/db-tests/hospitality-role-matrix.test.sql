@@ -235,3 +235,16 @@ SELECT tests.check('regular manager: cannot appoint anyone (not even themselves)
              AND NOT EXISTS (SELECT 1 FROM hospitality.staff_grants WHERE tenant_id = %1$L AND user_id = %2$L
                               AND permission = 'business.admin')$$,
          :'sm', :MGR));
+
+-- ---------- cleanup: leave the shared state as found (later files check that the global flags are off
+-- and that no business has the Shabbat badge on) ----------
+SELECT pg_temp.call(:'sm', :OWNER, 'SELECT to_jsonb(hospitality.settings_set_shabbat(false))') IS NOT NULL AS ok \gset
+SELECT pg_temp.as_platform($$SELECT to_jsonb(ARRAY[
+       public.platform_set_flag('hospitality_backend_enabled', false),
+       public.platform_set_flag('hospitality_management_enabled', false),
+       public.platform_set_flag('hospitality_contracts_enabled', false)])$$) IS NOT NULL AS ok \gset
+SELECT tests.check('matrix cleanup: global flags off again, no business with the Shabbat badge on',
+  $$SELECT NOT EXISTS (SELECT 1 FROM public.platform_feature_flags
+                        WHERE key IN ('hospitality_backend_enabled', 'hospitality_management_enabled',
+                                      'hospitality_contracts_enabled') AND enabled)
+       AND NOT EXISTS (SELECT 1 FROM hospitality.settings WHERE shabbat_observant)$$);
