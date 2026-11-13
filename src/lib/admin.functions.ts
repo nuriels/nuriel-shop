@@ -25,8 +25,6 @@ type CreateUserInput = {
   tempPassword?: string;
   /** שם מלא בעברית לעובד (סוכן/מנהל) — מוצג ללקוחות במקום שם המשתמש */
   displayName?: string;
-  /** במצב "temp": לשלוח את הסיסמה הזמנית גם למייל של הלקוח */
-  emailTempPassword?: boolean;
 };
 
 function parsePriceListType(value: unknown): PriceListType | undefined {
@@ -93,7 +91,6 @@ export const createStaffUser = createServerFn({ method: "POST" })
       agentId: input?.agentId ?? null,
       passwordMode: input?.passwordMode === "temp" ? ("temp" as const) : ("link" as const),
       tempPassword: String(input?.tempPassword ?? ""),
-      emailTempPassword: input?.emailTempPassword === true,
       displayName: (() => {
         const name = String(input?.displayName ?? "")
           .trim()
@@ -242,15 +239,9 @@ export const createStaffUser = createServerFn({ method: "POST" })
       };
     }
 
-    let emailed = false;
-    if (data.emailTempPassword) {
-      const { sendTempPasswordEmail } = await import("@/lib/reset-link.server");
-      const result = await sendTempPasswordEmail(created.user.id, tempPassword);
-      emailed = result.sent;
-    }
-
-    // הסיסמה מוחזרת פעם אחת בלבד, כדי שהמנהל יוכל להעתיק ולשלוח בוואטסאפ
-    return { userId: created.user.id, mode: "temp" as const, tempPassword, emailed };
+    // הסיסמה הזמנית לא נשלחת במייל אף פעם: מוחזרת פעם אחת בלבד, כדי שהמנהל יעביר אותה בעצמו
+    // (למשל בוואטסאפ); בכניסה הראשונה המשתמש חייב לבחור סיסמה משלו (must_change_password)
+    return { userId: created.user.id, mode: "temp" as const, tempPassword, emailed: false };
   });
 
 /**

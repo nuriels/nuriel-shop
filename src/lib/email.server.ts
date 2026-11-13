@@ -28,14 +28,7 @@ export type EmailAttachment = {
 export type EmailLogTarget = {
   userId: string;
   kind:
-    | "order"
-    | "quote"
-    | "password_reset"
-    | "temp_password"
-    | "password_changed"
-    | "agreement"
-    | "manual"
-    | "other";
+    "order" | "quote" | "password_reset" | "password_changed" | "agreement" | "manual" | "other";
   sentBy?: string | null;
 };
 
@@ -221,6 +214,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendResult> {
  * כשיש logFor, או ישירות — כשמייל עבר כמה ניסיונות (מפתח החנות ואז מפתח
  * הפלטפורמה) ורק התוצאה הסופית נרשמת בתיק.
  */
+// "temp_password": מיילים ישנים בלבד (לפני שהסיסמה הזמנית הפסיקה לצאת במייל) — עדיין מוסתרים ביומן
 const SECRET_EMAIL_KINDS = new Set<string>(["password_reset", "temp_password", "password_changed"]);
 
 export async function recordCustomerEmail(
