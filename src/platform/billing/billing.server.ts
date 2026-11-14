@@ -32,7 +32,11 @@ async function rpc<T>(
   args: Record<string, unknown>,
   opts: { siteId: string | null; accessToken: string },
 ): Promise<T> {
-  const client = apiClient({ schema: "public", siteId: opts.siteId, accessToken: opts.accessToken });
+  const client = apiClient({
+    schema: "public",
+    siteId: opts.siteId,
+    accessToken: opts.accessToken,
+  });
   const { data, error } = await client.rpc(fn, args);
   if (error) {
     const userFacing = USER_FACING.test(error.message ?? "");

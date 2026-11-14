@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { platformBillingHistory } from "@/lib/billing.functions";
+import { BillingAdminCard } from "@/platform/billing/ui/BillingAdminCard";
 import {
   getGrowSettings,
   saveGrowSettings,
@@ -184,6 +185,9 @@ export function CustomerFile({ tenantId }: { tenantId: string }) {
           <TabsTrigger value="grow" data-testid="tab-grow">
             סליקה
           </TabsTrigger>
+          <TabsTrigger value="billing" data-testid="tab-billing">
+            הסכם ותשלומים
+          </TabsTrigger>
           <TabsTrigger value="subscription" data-testid="tab-subscription">
             מנוי וניסיון
           </TabsTrigger>
@@ -273,6 +277,9 @@ export function CustomerFile({ tenantId }: { tenantId: string }) {
         </TabsContent>
         <TabsContent value="grow">
           <GrowTab tenantId={tenantId} onChanged={refresh} />
+        </TabsContent>
+        <TabsContent value="billing">
+          <BillingAdminCard tenantId={tenantId} />
         </TabsContent>
         <TabsContent value="subscription">
           <SubscriptionTab tenantId={tenantId} />

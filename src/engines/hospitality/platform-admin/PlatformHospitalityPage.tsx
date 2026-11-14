@@ -30,8 +30,14 @@ import {
   CardTitle,
   Input,
   Label,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
   Switch,
   cn,
+  useIsMobile,
 } from "@/platform/ui";
 import {
   hospitalityPlatformOpenSite,
@@ -58,6 +64,8 @@ import { THEME_LIST } from "../website/theme/themes";
 import { FormSheet } from "../management/catalog/CatalogSheets";
 import { errorText } from "../management/catalog/refresh";
 import { SupportInbox } from "./SupportInbox";
+import { BillingAdminCard } from "@/platform/billing/ui/BillingAdminCard";
+import { BillingRequestsPanel } from "@/platform/billing/ui/BillingRequestsPanel";
 
 const KEY = ["hospitality-platform"] as const;
 
@@ -150,6 +158,7 @@ function AccessProblem({ message }: { message: string }) {
 function Content({ view }: { view: PlatformHospitalityView }) {
   const [owner, setOwner] = useState<HospitalitySiteRow | null>(null);
   const [plan, setPlan] = useState<HospitalitySiteRow | null>(null);
+  const [billing, setBilling] = useState<HospitalitySiteRow | null>(null);
   // שלב E2: "פתיחת עסק מהבקשה" — ממלא את הטופס (מפתח חדש = הטופס נטען מחדש עם הערכים)
   const [prefill, setPrefill] = useState<{ key: number; values: OpenSitePrefill } | null>(null);
   return (
@@ -165,6 +174,7 @@ function Content({ view }: { view: PlatformHospitalityView }) {
         }}
       />
       <SupportInbox />
+      <BillingRequestsPanel engine="hospitality" />
       <OpenSiteCard key={prefill?.key ?? 0} view={view} prefill={prefill?.values ?? null} />
       <section className="flex flex-col gap-3" aria-labelledby="sites-title">
         <h2 id="sites-title" className="text-xl font-semibold">
@@ -175,7 +185,13 @@ function Content({ view }: { view: PlatformHospitalityView }) {
         ) : (
           <ul className="grid gap-3 md:grid-cols-2">
             {view.sites.map((s) => (
-              <SiteCard key={s.id} site={s} onOwner={() => setOwner(s)} onPlan={() => setPlan(s)} />
+              <SiteCard
+                key={s.id}
+                site={s}
+                onOwner={() => setOwner(s)}
+                onPlan={() => setPlan(s)}
+                onBilling={() => setBilling(s)}
+              />
             ))}
           </ul>
         )}
@@ -183,6 +199,7 @@ function Content({ view }: { view: PlatformHospitalityView }) {
       <PlansCard plans={view.flags.plans} />
       {owner && <OwnerSheet site={owner} onClose={() => setOwner(null)} />}
       {plan && <PlanSheet site={plan} plans={view.flags.plans} onClose={() => setPlan(null)} />}
+      {billing && <BillingSheet site={billing} onClose={() => setBilling(null)} />}
     </>
   );
 }
@@ -621,7 +638,36 @@ const STATUS_TEXT: Record<string, string> = {
 const dateText = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem" }) : null;
 
-function SiteCard(props: { site: HospitalitySiteRow; onOwner: () => void; onPlan: () => void }) {
+/** Billing & Agreements (מיגרציה 189): ההסכם, היומן הכספי והחידוש של האתר — הכרטיס המשותף לשני המנועים */
+function BillingSheet({ site, onClose }: { site: HospitalitySiteRow; onClose: () => void }) {
+  const refresh = useRefresh();
+  const isMobile = useIsMobile();
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        side={isMobile ? "bottom" : "left"}
+        className="max-h-[92dvh] w-full overflow-y-auto sm:max-w-2xl"
+      >
+        <SheetHeader className="ps-10 text-start sm:text-start">
+          <SheetTitle>{site.name}</SheetTitle>
+          <SheetDescription>
+            הסכם, מחיר מוסכם, חיובים ותשלומים. שינוי חבילה כאן שומר את תאריך החידוש.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="mt-4">
+          <BillingAdminCard tenantId={site.id} onChanged={() => void refresh()} />
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function SiteCard(props: {
+  site: HospitalitySiteRow;
+  onOwner: () => void;
+  onPlan: () => void;
+  onBilling: () => void;
+}) {
   const s = props.site;
   const refresh = useRefresh();
   const [busy, setBusy] = useState(false);
@@ -776,6 +822,15 @@ function SiteCard(props: { site: HospitalitySiteRow; onOwner: () => void; onPlan
             )}
             <Button type="button" variant="outline" className="min-h-11" onClick={props.onPlan}>
               שינוי חבילה
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              onClick={props.onBilling}
+              data-testid="site-billing"
+            >
+              הסכם ותשלומים
             </Button>
             {s.site_flags.backend && s.site_flags.management && (
               <Button

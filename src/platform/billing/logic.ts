@@ -118,10 +118,15 @@ function text(value: unknown, max: number): string | null {
 }
 
 /** סכום: ריק → null; מספר אי-שלילי עד מיליון, מעוגל לאגורות */
-export function parseAmount(value: unknown, label: string, opts: { positive?: boolean } = {}): number | null {
+export function parseAmount(
+  value: unknown,
+  label: string,
+  opts: { positive?: boolean } = {},
+): number | null {
   if (value === null || value === undefined || String(value).trim() === "") return null;
   const n = Number(String(value).replace(/[,₪\s]/g, ""));
-  if (!Number.isFinite(n) || n < 0 || n > MAX_AMOUNT) throw new BillingInputError(`${label}: סכום לא תקין`);
+  if (!Number.isFinite(n) || n < 0 || n > MAX_AMOUNT)
+    throw new BillingInputError(`${label}: סכום לא תקין`);
   if (opts.positive && n <= 0) throw new BillingInputError(`${label}: הסכום חייב להיות גדול מאפס`);
   return Math.round(n * 100) / 100;
 }
@@ -149,14 +154,20 @@ export function parseVatRate(value: unknown): number | null {
   return Math.round(n * 100) / 100;
 }
 
-export function parseAgreementInput(raw: Record<string, unknown> | null | undefined): AgreementInput {
+export function parseAgreementInput(
+  raw: Record<string, unknown> | null | undefined,
+): AgreementInput {
   const r = raw ?? {};
   const plan = String(r["plan"] ?? "")
     .trim()
     .toLowerCase();
   if (!PLAN_CODE.test(plan)) throw new BillingInputError("בחרו חבילה");
   const cycle = r["billing_cycle"] === "yearly" ? "yearly" : "monthly";
-  if (r["billing_cycle"] !== undefined && r["billing_cycle"] !== "monthly" && r["billing_cycle"] !== "yearly")
+  if (
+    r["billing_cycle"] !== undefined &&
+    r["billing_cycle"] !== "monthly" &&
+    r["billing_cycle"] !== "yearly"
+  )
     throw new BillingInputError("מחזור חיוב: חודשי או שנתי");
   const vatMode = r["vat_mode"] === "included" ? "included" : "excluded";
   if (r["vat_mode"] !== undefined && r["vat_mode"] !== "included" && r["vat_mode"] !== "excluded")
@@ -164,7 +175,11 @@ export function parseAgreementInput(raw: Record<string, unknown> | null | undefi
   const vatRate = parseVatRate(r["vat_rate"]);
   if (vatRate === null) throw new BillingInputError("שיעור מע״מ: 0 עד 100");
   let commitment: number | null = null;
-  if (r["commitment_months"] !== null && r["commitment_months"] !== undefined && String(r["commitment_months"]).trim() !== "") {
+  if (
+    r["commitment_months"] !== null &&
+    r["commitment_months"] !== undefined &&
+    String(r["commitment_months"]).trim() !== ""
+  ) {
     commitment = Number(r["commitment_months"]);
     if (!Number.isInteger(commitment) || commitment < 1 || commitment > 120)
       throw new BillingInputError("תקופת התחייבות: 1 עד 120 חודשים");
@@ -236,7 +251,8 @@ export function parsePlanCode(value: unknown): string {
 
 export function parseCycle(value: unknown): BillingCycle {
   if (value === undefined || value === null || value === "") return "monthly";
-  if (value !== "monthly" && value !== "yearly") throw new BillingInputError("מחזור חיוב: חודשי או שנתי");
+  if (value !== "monthly" && value !== "yearly")
+    throw new BillingInputError("מחזור חיוב: חודשי או שנתי");
   return value;
 }
 
@@ -248,4 +264,8 @@ export function israelToday(now: Date = new Date()): string {
     month: "2-digit",
     day: "2-digit",
   }).format(now);
+}
+
+export function errorMessage(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : "הפעולה נכשלה — נסו שוב";
 }

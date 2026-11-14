@@ -15,6 +15,7 @@ import {
 } from "@/lib/admin-seats";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { AddonRequestsPanel } from "@/components/platform/AddonRequestsPanel";
+import { BillingRequestsPanel } from "@/platform/billing/ui/BillingRequestsPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,6 +38,7 @@ function UpgradesPage() {
     <PlatformShell active="upgrades">
       {() => (
         <div className="space-y-8">
+          <BillingRequestsPanel />
           <AddonRequestsPanel />
           <UpgradeRequestsPanel />
         </div>

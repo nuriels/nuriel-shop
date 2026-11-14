@@ -35,7 +35,8 @@ function str(value: unknown, max: number): string {
 // ---------------------------------------------------------------- בעל העסק
 
 export const myBillingSummary = createServerFn({ method: "POST" }).handler(
-  async (): Promise<BillingSummary> => (await server()).ownerRpc<BillingSummary>("my_billing_summary"),
+  async (): Promise<BillingSummary> =>
+    (await server()).ownerRpc<BillingSummary>("my_billing_summary"),
 );
 
 export const myBillingRequestUpgrade = createServerFn({ method: "POST" })
@@ -53,15 +54,21 @@ export const myBillingRequestUpgrade = createServerFn({ method: "POST" })
   );
 
 export const myBillingCancelRequest = createServerFn({ method: "POST" })
-  .inputValidator((input: { requestId: string }) => ({ requestId: parseUuid(input?.requestId, "בקשה") }))
+  .inputValidator((input: { requestId: string }) => ({
+    requestId: parseUuid(input?.requestId, "בקשה"),
+  }))
   .handler(async ({ data }): Promise<UpgradeRequest> =>
-    (await server()).ownerRpc<UpgradeRequest>("my_billing_cancel_request", { _request: data.requestId }),
+    (await server()).ownerRpc<UpgradeRequest>("my_billing_cancel_request", {
+      _request: data.requestId,
+    }),
   );
 
 // ---------------------------------------------------------------- מנהל הפלטפורמה
 
 export const platformBillingCard = createServerFn({ method: "POST" })
-  .inputValidator((input: { tenantId: string }) => ({ tenantId: parseUuid(input?.tenantId, "עסק") }))
+  .inputValidator((input: { tenantId: string }) => ({
+    tenantId: parseUuid(input?.tenantId, "עסק"),
+  }))
   .handler(async ({ data }): Promise<BillingCard> =>
     (await server()).platformRpc<BillingCard>("platform_billing_card", { _tenant: data.tenantId }),
   );
@@ -90,7 +97,8 @@ export const platformBillingSaveAgreement = createServerFn({ method: "POST" })
       requestMessage?: string;
     }) => {
       const expected = Number(input?.expectedVersion);
-      if (!Number.isInteger(expected) || expected < 0) throw new BillingInputError("גרסת הסכם לא תקינה");
+      if (!Number.isInteger(expected) || expected < 0)
+        throw new BillingInputError("גרסת הסכם לא תקינה");
       return {
         tenantId: parseUuid(input?.tenantId, "עסק"),
         agreement: parseAgreementInput(input?.agreement),
@@ -164,7 +172,9 @@ export const platformBillingRenew = createServerFn({ method: "POST" })
           method: recordPayment ? method : null,
           reference: str(input?.reference, 120) || null,
           paid_on: parseIsoDate(input?.paidOn, "תאריך התשלום"),
-          amount: recordPayment ? parseAmount(input?.amount, "סכום התשלום", { positive: true }) : null,
+          amount: recordPayment
+            ? parseAmount(input?.amount, "סכום התשלום", { positive: true })
+            : null,
         },
       };
     },
@@ -188,7 +198,9 @@ export const platformBillingRequests = createServerFn({ method: "POST" })
     return { status };
   })
   .handler(async ({ data }): Promise<UpgradeRequest[]> =>
-    (await server()).platformRpc<UpgradeRequest[]>("platform_billing_requests", { _status: data.status }),
+    (await server()).platformRpc<UpgradeRequest[]>("platform_billing_requests", {
+      _status: data.status,
+    }),
   );
 
 export const platformBillingRejectRequest = createServerFn({ method: "POST" })

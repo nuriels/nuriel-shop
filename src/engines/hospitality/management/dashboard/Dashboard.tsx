@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { cn } from "@/platform/ui";
+import { MyBillingCard } from "@/platform/billing/ui/MyBillingCard";
 import { hospitalityDashboardOverview, hospitalityPlans } from "../../api/dashboard.functions";
 import type { PlanOption } from "../../types/platform-admin";
 import { CHECKLIST_STEPS, checklistProgress } from "../lib/checklist";
@@ -176,6 +177,12 @@ export function Dashboard() {
         <SiteStatusCard />
         {ctx.permissions["billing.manage"] && <PlanCard />}
       </div>
+      {/* Billing & Agreements (מיגרציה 189): ההסכם, המחיר המוסכם, התשלומים והחידוש — לבעלים בלבד */}
+      {ctx.permissions["billing.manage"] && (
+        <section id="billing" className="scroll-mt-20">
+          <MyBillingCard title="ההסכם והתשלומים" />
+        </section>
+      )}
     </div>
   );
 }

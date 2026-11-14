@@ -50,6 +50,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { MyBillingCard } from "@/platform/billing/ui/MyBillingCard";
 
 type PaidPlan = Exclude<PlanType, "trial">;
 
@@ -137,6 +138,9 @@ export function BillingPanel({
           {error}
         </p>
       )}
+
+      {/* Billing & Agreements (מיגרציה 189): המחיר המוסכם, מע"מ, הקמה, תשלומים וחידוש — לבעלים בלבד */}
+      {canManageBilling && <MyBillingCard title="ההסכם והתשלומים שלי" />}
 
       {sub ? (
         <>
