@@ -56,6 +56,8 @@
   - `scripts/db-classification.mjs`, `scripts/db-tests/db-classification.test.sql`,
     `docs/architecture/db-classification.md`: המיון של הפונקציות החדשות.
 
+- `.github/workflows/tests.yml`: התקנת `pdftotext` בשלב ה-E2E ב-CI, רק אם חסר. שינוי בהגדרות הבדיקה בלבד.
+
 **מסמכים וכלים:**
 
 - `docs/billing/billing-history-mapping.md` ו-`scripts/billing/legacy-mapping-dry-run.sql`: מיפוי
