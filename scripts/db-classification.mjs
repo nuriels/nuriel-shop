@@ -60,6 +60,9 @@ const PLATFORM_FUNCTIONS = new RegExp(
       "platform_.*",
       // NURIEL AI ASSISTANT (migration 61): the paid add-on of both products — server-only functions
       "ai_.*",
+      // Billing & Agreements (migrations 189–190): the shared financial layer of both products
+      "my_billing_.*",
+      "billing_history_guard",
       "portal_.*",
       "tenants_.*",
       "tenant_for_host",

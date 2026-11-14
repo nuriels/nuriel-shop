@@ -135,15 +135,18 @@ SELECT tests.check('matrix super admin (platform): every key in any business, wi
 -- ============================================================
 -- 2. The business admin does the business: every management screen's data, and real changes
 -- ============================================================
-SELECT tests.check('business admin: every staff screen loads (bookings, dashboard, tasks, channels, payments, terms, catalog, room types, packages, contracts, media, pricing, settings, site editor, documents, support, entitlements, team)',
+SELECT tests.check('business admin: every staff screen loads (bookings, dashboard, tasks, channels, payments, terms, catalog, room types, packages, contracts, media, pricing, settings, site editor, documents, support, team)',
   format($$SELECT bool_and(pg_temp.err(%L, %L, 'SELECT to_jsonb(hospitality.' || f || ')') IS NULL)
           FROM unnest(ARRAY['blocks_upcoming()', 'dashboard()', 'channels_view()', 'dashboard_today()', 'dashboard_tasks()',
                             'payment_proofs_waiting()', 'business_terms_view()', 'catalog_view()', 'room_types_view()',
                             'packages_view()', 'contracts_view()', 'contracts_unseen()', 'media_galleries()', 'pricing_view()',
-                            'my_entitlements()', 'settings_view()', 'site_preview()', 'site_editor()', 'support_list()',
+                            'settings_view()', 'site_preview()', 'site_editor()', 'support_list()',
                             'support_unread()', 'setup_guide()', 'payment_settings_view()', 'site_documents_view()',
                             'team_members()', 'team_activity()']) f$$,
          :'sm', :BA));
+-- migration 190: the plan and subscription are the owner's only (billing.manage), also for the business admin
+SELECT tests.check('business admin: the full plan / subscription (my_entitlements) is refused — owner only (migration 190)',
+  format($$SELECT pg_temp.err(%L, %L, 'SELECT to_jsonb(hospitality.my_entitlements())') LIKE '%%הרשאה%%'$$, :'sm', :BA));
 -- the actions first, each in its own statement (an AND in one query is evaluated in any order)
 SELECT COALESCE(pg_temp.err(:'sm', :BA, 'SELECT to_jsonb(hospitality.settings_set_shabbat(true))'), '') AS shabbat_err \gset
 SELECT COALESCE(pg_temp.err(:'sm', :BA, $q$SELECT hospitality.property_create('{"name": "מתחם המטריצה", "property_type": "zimmer_complex", "status": "active"}')$q$), '') AS property_err \gset

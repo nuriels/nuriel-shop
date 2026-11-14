@@ -42,7 +42,10 @@ SELECT tests.check('extend trial: no add-ons / features granted by the extension
                         AND status = 'active' AND created_at > now() - interval '1 minute')$$);
 
 -- ניקוי
+-- migration 190: billing_history is append-only (paid rows are never deleted); test cleanup only, on purpose
+SET session_replication_role = replica;
 DELETE FROM public.billing_history WHERE tenant_id = :TA AND kind = 'trial_extension' AND created_at > now() - interval '5 minutes';
+SET session_replication_role = origin;
 UPDATE public.tenant_subscriptions s
    SET plan_type = b.plan_type, status = b.status, trial_ends_at = b.trial_ends_at, current_period_end = b.current_period_end
   FROM sub_backup b WHERE s.tenant_id = b.tenant_id;

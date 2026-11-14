@@ -107,7 +107,10 @@ SELECT tests.check('addon catalog: Zap add-on title is not "Zapier"',
   $$SELECT title NOT ILIKE '%zapier%' FROM public.platform_addons WHERE addon_name = 'zapier'$$);
 
 -- ניקוי
+-- migration 190: billing_history is append-only (paid rows are never deleted); test cleanup only, on purpose
+SET session_replication_role = replica;
 DELETE FROM public.billing_history WHERE tenant_id = :TA AND addon_name IN ('zapier', 'google_sso');
+SET session_replication_role = origin;
 DELETE FROM public.tenant_addons WHERE tenant_id = :TA AND addon_name IN ('zapier', 'google_sso');
 UPDATE public.platform_addons p SET available = b.available FROM addon_avail_backup b WHERE b.addon_name = p.addon_name;
 DROP TABLE addon_avail_backup;

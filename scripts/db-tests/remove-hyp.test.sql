@@ -257,9 +257,12 @@ DELETE FROM public.orders
 DELETE FROM public.global_products WHERE id = '9e000000-0000-0000-0000-000000000001';
 DELETE FROM public.shipping_methods WHERE id = '5e000000-0000-0000-0000-000000000001';
 DELETE FROM public.categories WHERE tenant_id = '70000000-0000-0000-0000-00000000000a' AND name = 'בדיקת תשלום';
+-- migration 190: billing_history is append-only (paid rows are never deleted); test cleanup only, on purpose
+SET session_replication_role = replica;
 DELETE FROM public.billing_history
  WHERE tenant_id = '70000000-0000-0000-0000-00000000000a'
    AND (addon_name = 'google_sso' OR reference = 'העברה בנקאית 28');
+SET session_replication_role = origin;
 DELETE FROM public.tenant_addons WHERE tenant_id = '70000000-0000-0000-0000-00000000000a' AND addon_name = 'google_sso';
 UPDATE public.tenant_subscriptions SET plan_type = 'basic', status = 'active', current_period_end = now() + interval '1 year'
  WHERE tenant_id = '70000000-0000-0000-0000-00000000000a';

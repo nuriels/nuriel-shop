@@ -41,7 +41,10 @@ SELECT tests.check('m5: the platform audit log is still append-only (kept rows c
   $$SELECT pg_temp.audit_update_blocked()$$);
 
 -- ניקוי
+-- migration 190: billing_history is append-only (paid rows are never deleted); test cleanup only, on purpose
+SET session_replication_role = replica;
 DELETE FROM public.billing_history WHERE note = 'm5-invoice';
+SET session_replication_role = origin;
 SET session_replication_role = replica;
 DELETE FROM public.platform_audit_log WHERE tenant_id = '70000000-0000-0000-0000-0000000000d5';
 SET session_replication_role = origin;

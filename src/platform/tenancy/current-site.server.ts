@@ -61,3 +61,12 @@ export async function currentSiteAddresses(): Promise<{
   const base = tenantBaseDomain();
   return { primary, subdomain: base ? `https://${tenant.slug}.${base}` : null };
 }
+
+/**
+ * Billing & Agreements (מיגרציה 189): אחרי החלפת חבילה או חידוש תקופה — המטמון של האתר (המנוי שנטען
+ * לבקשות) מתנקה, כדי שהנעילה / הפתיחה / המגבלות יחולו מיד ולא רק אחרי 15 שניות
+ */
+export async function invalidateSiteCache(siteId: string): Promise<void> {
+  const { invalidateTenantCache } = await import("@/integrations/supabase/tenant.server");
+  invalidateTenantCache(siteId);
+}

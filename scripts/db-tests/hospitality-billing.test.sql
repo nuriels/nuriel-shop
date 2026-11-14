@@ -226,8 +226,11 @@ SELECT pg_temp.after('admin: the platform admin moves a site to the basic plan �
                            AND actor_id = 'a0000000-0000-0000-0000-0000000000f0')$$, :'sp'));
 SELECT tests.check('owner: sees the plan and usage of their own site',
   format($$SELECT (pg_temp.call(%L, %L, 'SELECT hospitality.my_entitlements()') ->> 'plan') = 'basic'$$, :'sp', :OWNER_P));
-SELECT tests.check('owner: the manager sees it too (read-only)',
-  format($$SELECT (pg_temp.call(%L, %L, 'SELECT hospitality.my_entitlements()') ->> 'units_used')::integer = 2$$, :'sp', :MANAGER_P));
+-- migration 190: the plan, its dates and the subscription are the owner's only (billing.manage); managers get the
+-- short form of management_context (active / unit limit / units used) — unchanged
+SELECT pg_temp.expect_error('owner: a manager no longer reads the plan and subscription (migration 190 — owner only)',
+  format($$SELECT pg_temp.call(%L, %L, 'SELECT hospitality.my_entitlements()')$$, :'sp', :MANAGER_P), 'אין הרשאה');
+
 SELECT pg_temp.expect_error('owner: a guest cannot read a site''s plan',
   format($$SELECT pg_temp.call(%L, %L, 'SELECT hospitality.my_entitlements()')$$, :'sp', :GUEST), 'אין הרשאה');
 SELECT pg_temp.expect_error('owner: another site''s owner cannot read it',

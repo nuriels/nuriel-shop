@@ -2,6 +2,11 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • billing_owner_access (74): בלי הגנה (רק הרשאות / פונקציות / טריגר), rollback → קריאת המנוי וההיסטוריה שוב
+#     לכל מנהל, store_billing / my_entitlements / admin_set_subscription מילה במילה, בלי שומר ההיסטוריה;
+#     הסכמה זהה בדיוק ל-73
+#   • billing_agreements (73): הגנה (נעצר כשיש הסכם / רישום ביומן / בקשה, או כש-74 עוד קיימת), rollback →
+#     הסכמה billing ו-13 הפונקציות נעלמו; הסכמה זהה בדיוק ל-72
 #   • hosp_business_admin (72): בלי הגנה (מינויי מנהל/ת עסק נמחקים — הרשאות בלבד), rollback → כל
 #     הפונקציות בגרסה הקודמת מילה במילה, שתי פונקציות העזר והפונקציה החדשה נמחקות; הסכמה זהה בדיוק ל-71
 #   • store_owner_guard_unblock (71): בלי הגנה (רק פונקציה), rollback → user_roles_owner_guard של מיגרציה
@@ -161,6 +166,8 @@ M69=20261111130000_hosp_customer_details
 M70=20261111140000_hosp_standalone_documents
 M71=20261112100000_store_owner_guard_unblock
 M72=20261113100000_hosp_business_admin
+M73=20261114100000_billing_agreements
+M74=20261114110000_billing_owner_access
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -203,6 +210,55 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- financial data: owner only, the old history append-only (migration 74) ----------
+expect "before the rollback: owner-only reads, the history guard, the owner-only zimmer subscription" \
+  "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'billing_history_guard')
+      AND (SELECT qual LIKE '%staff_can(''billing.manage''%' FROM pg_policies WHERE tablename = 'tenant_subscriptions'
+             AND policyname = 'store admin reads subscription')
+      AND (SELECT qual LIKE '%billing.manage%' FROM pg_policies WHERE schemaname = 'hospitality' AND tablename = 'subscriptions'
+             AND policyname = 'staff')"
+echo "rollback guard: $M73 refuses while $M74 exists"
+if down "$M73" 2>/dev/null; then
+  echo "  FAIL rollback of 73 ran while 74 was still applied"; exit 1
+fi
+ref_upto "$M74"
+echo "rollback: $M74"
+down "$M74"
+expect "every manager reads again, no history guard, store_billing without owner_view" \
+  "SELECT NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'billing_history_guard')
+      AND to_regprocedure('public.billing_history_guard()') IS NULL
+      AND (SELECT qual LIKE 'is_admin(%' FROM pg_policies WHERE tablename = 'billing_history' AND policyname = 'store admin reads billing history')
+      AND (SELECT prosrc NOT LIKE '%owner_view%' FROM pg_proc WHERE oid = 'public.store_billing()'::regprocedure)"
+same_as_ref "migration 73"
+
+# ---------- billing & agreements: the shared financial layer (migration 73) ----------
+expect "before the rollback: the billing schema closed to the API (4 tables, RLS), 13 functions for signed-in users only" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'billing'::regnamespace AND relkind = 'r' AND relrowsecurity) = 4
+      AND NOT has_schema_privilege('authenticated', 'billing', 'USAGE')
+      AND (SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+             AND (proname LIKE 'my\_billing\_%' OR proname LIKE 'platform\_billing\_%') AND proname <> 'platform_billing_history') = 13
+      AND has_function_privilege('authenticated', 'public.my_billing_summary()', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.my_billing_summary()', 'EXECUTE')"
+echo "rollback guard: $M73 refuses while a financial record exists"
+q "SET session_replication_role = replica;
+   INSERT INTO billing.upgrade_requests (tenant_id, tenant_label, engine, current_plan, requested_plan, requested_cycle)
+   SELECT id, 'rb', 'ecommerce', 'trial', 'premium', 'monthly' FROM public.tenants WHERE is_default" >/dev/null
+if down "$M73" 2>/dev/null; then
+  echo "  FAIL rollback ran although a billing record exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT to_regclass('billing.upgrade_requests') IS NOT NULL AND (SELECT count(*) FROM billing.upgrade_requests) = 1"
+q "SET session_replication_role = replica; DELETE FROM billing.upgrade_requests" >/dev/null
+ref_upto "$M73"
+echo "rollback: $M73"
+down "$M73"
+expect "the billing schema and the 13 functions are gone; the old billing_history is untouched" \
+  "SELECT to_regnamespace('billing') IS NULL AND to_regprocedure('public.my_billing_summary()') IS NULL
+      AND to_regprocedure('public.platform_billing_card(uuid)') IS NULL
+      AND to_regprocedure('public.platform_billing_history(uuid)') IS NOT NULL
+      AND to_regclass('public.billing_history') IS NOT NULL"
+same_as_ref "migration 72"
 
 # ---------- zimmer business admin (migration 72) ----------
 expect "before the rollback: the business-admin grant, the owner-only key, the team function for signed-in staff" \
@@ -2280,6 +2336,12 @@ up "$M69"
 up "$M70"
 up "$M71"
 up "$M72"
+up "$M73"
+up "$M74"
+expect "billing is back: the closed schema, owner-only reads, the history guard" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'billing'::regnamespace AND relkind = 'r' AND relrowsecurity) = 4
+      AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'billing_history_guard')
+      AND has_function_privilege('authenticated', 'public.my_billing_summary()', 'EXECUTE')"
 expect "the duplicates are back: 2 tables closed to the browser, the merge for signed-in users, the AI list for the server only" \
   "SELECT to_regclass('public.product_merges') IS NOT NULL
       AND to_regclass('public.product_duplicate_dismissals') IS NOT NULL
