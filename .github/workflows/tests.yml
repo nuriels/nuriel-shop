@@ -87,6 +87,9 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: install Chromium for Playwright
         run: npx playwright install --with-deps chromium
+      # the signing tests read the signed PDF with pdftotext (poppler-utils), which is not on every runner image
+      - name: install pdftotext (reading the signed PDFs in the signing tests)
+        run: command -v pdftotext || (sudo apt-get update && sudo apt-get install -y poppler-utils)
       - name: start local Supabase (all migrations + test seed)
         run: bun run e2e:up
       - name: build the app against the local Supabase
