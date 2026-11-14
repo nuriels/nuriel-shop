@@ -510,6 +510,47 @@ SELECT tests.check('190 history: the existing flows still work — a pending cha
              AND (SELECT payment_status = 'paid' AND reference = 'r2' FROM public.billing_history WHERE id = 'b1890000-0000-0000-0000-0000000bb002')$$,
          :'h_paid', :'h_unpaid', :'h_del_due', :'h_label', :'h_label2'));
 
+-- ============================================================
+-- 14. A payment copied later from the old history (legacy_import, a separate approved step): it counts in
+--     "total paid" only — not against new charges, so the owner never sees a credit that does not exist
+-- ============================================================
+SELECT (pg_temp.call(:E_SITE, :E_OWNER, 'SELECT public.my_billing_summary()')) AS e_before_legacy \gset
+INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount, vat_rate, vat_amount, net_amount,
+                            occurred_on, method, description, source, legacy_ref)
+VALUES (:E_SITE, 'x', 'ecommerce', 'payment', 'subscription', 450, 0, 0, 450, current_date - 400, 'other',
+        'תשלום מההיסטוריה הקודמת', 'legacy_import', 'b1890000-0000-0000-0000-0000000bb001');
+SELECT tests.check('billing legacy copy: total paid +450; the subscription due / paid / balance and the total balance unchanged',
+  format($$SELECT (a -> 'total' ->> 'paid')::numeric = (b -> 'total' ->> 'paid')::numeric + 450
+             AND (a ->> 'legacy_paid')::numeric = 450
+             AND a -> 'subscription_money' = b -> 'subscription_money'
+             AND (a -> 'total' ->> 'balance')::numeric = (b -> 'total' ->> 'balance')::numeric
+             AND EXISTS (SELECT 1 FROM jsonb_array_elements(a -> 'entries') e WHERE e ->> 'source' = 'legacy_import'
+                           AND e ->> 'confirmation' = 'manual')
+           FROM (SELECT pg_temp.call(%L, %L, 'SELECT public.my_billing_summary()') AS a, %L::jsonb AS b) x$$,
+         :E_SITE, :E_OWNER, :'e_before_legacy'));
+SELECT tests.check('billing legacy copy: the same old row cannot be copied twice (legacy_ref is unique)',
+  $$SELECT pg_temp.db_err($q$INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount, vat_rate,
+             vat_amount, net_amount, occurred_on, source, legacy_ref)
+             VALUES ('b1890000-0000-0000-0000-00000000aaa1', 'x', 'ecommerce', 'payment', 'subscription', 450, 0, 0, 450,
+                     current_date, 'legacy_import', 'b1890000-0000-0000-0000-0000000bb001')$q$) LIKE '%duplicate key%'$$);
+
+-- ============================================================
+-- 15. Request / cancel in a loop: at most 10 requests a day per business
+-- ============================================================
+DO $$
+BEGIN
+  FOR i IN 1..8 LOOP
+    PERFORM pg_temp.call('b1890000-0000-0000-0000-00000000aaa2', 'b1890000-0000-0000-0000-0000000000e3',
+      $q$SELECT public.my_billing_cancel_request((public.my_billing_request_upgrade('basic') ->> 'id')::uuid)$q$);
+  END LOOP;
+END $$;
+SELECT tests.check('billing requests: after 10 in one day (request + cancel loop) the next one is refused',
+  format($$SELECT (SELECT count(*) FROM billing.upgrade_requests WHERE tenant_id = %1$L) < 10
+             AND pg_temp.call(%1$L, %2$L, $q$SELECT public.my_billing_cancel_request((public.my_billing_request_upgrade('basic') ->> 'id')::uuid)$q$) IS NOT NULL
+             AND pg_temp.call(%1$L, %2$L, $q$SELECT public.my_billing_cancel_request((public.my_billing_request_upgrade('basic') ->> 'id')::uuid)$q$) IS NOT NULL
+             AND pg_temp.err(%1$L, %2$L, $q$SELECT public.my_billing_request_upgrade('basic')$q$) LIKE '%%יותר מדי בקשות%%'$$,
+         :E2_SITE, :E2_OWNER));
+
 -- ---------- cleanup: the global flags as found (later files check that they are off) ----------
 SELECT pg_temp.plat($$SELECT to_jsonb(ARRAY[
        public.platform_set_flag('hospitality_backend_enabled', false),

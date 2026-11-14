@@ -219,7 +219,8 @@ test("permission matrix: every management function × every kind of account", as
     expected["settingsSaveOwnerField"]![who] = may(owners);
     expected["team"]![who] = may(owners);
     expected["activity"]![who] = may(owners);
-    expected["entitlements"]![who] = may(staff);
+    // migration 190: the full plan / subscription — the owner only (billing.manage); managers get the short form
+    expected["entitlements"]![who] = may(owners);
     // properties and units (2c.2): owner and managers alike
     expected["catalogView"]![who] = may(staff);
     expected["catalogCreateProperty"]![who] = may(staff);

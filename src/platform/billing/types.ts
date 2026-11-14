@@ -134,6 +134,8 @@ export type BillingSummary = {
   setup: MoneyLine;
   subscription_money: MoneyLine;
   other: MoneyLine;
+  /** תשלומים שהועתקו מההיסטוריה הישנה (אם יועתקו, באישור) — בתוך total.paid, לא מול חיובים */
+  legacy_paid: number;
   total: MoneyLine;
   renewal: {
     kind: "trial" | "period" | "none";

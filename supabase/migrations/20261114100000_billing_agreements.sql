@@ -473,17 +473,20 @@ BEGIN
   a := billing.current_agreement(_tenant);
   _plan_list := billing.plan_info(_engine, COALESCE(a.plan_code, _state ->> 'plan'));
 
-  -- סכומים: שורה שבוטלה לא נספרת, ושורות הביטול עצמן לא נספרות
+  -- סכומים: שורה שבוטלה לא נספרת, ושורות הביטול עצמן לא נספרות. שורות שיועתקו בעתיד מההיסטוריה הישנה
+  -- (legacy_import, רק באישור) נספרות ב"סה"כ שולם" בלבד — לא מול חיובים חדשים (אין להן חיוב תואם, ולא
+  -- ממציאים חיוב), כדי שלא תופיע ללקוח "זכות" שלא קיימת
   SELECT
-    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'charge' AND l.category = 'subscription'), 0)
-      - COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'credit' AND l.category = 'subscription'), 0) AS sub_due,
-    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'payment' AND l.category = 'subscription'), 0) AS sub_paid,
-    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'charge' AND l.category = 'setup'), 0)
-      - COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'credit' AND l.category = 'setup'), 0) AS setup_extra,
-    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'payment' AND l.category = 'setup'), 0) AS setup_paid,
-    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'charge' AND l.category = 'other'), 0)
-      - COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'credit' AND l.category = 'other'), 0) AS other_due,
-    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'payment' AND l.category = 'other'), 0) AS other_paid,
+    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'charge' AND l.category = 'subscription' AND l.source <> 'legacy_import'), 0)
+      - COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'credit' AND l.category = 'subscription' AND l.source <> 'legacy_import'), 0) AS sub_due,
+    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'payment' AND l.category = 'subscription' AND l.source <> 'legacy_import'), 0) AS sub_paid,
+    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'charge' AND l.category = 'setup' AND l.source <> 'legacy_import'), 0)
+      - COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'credit' AND l.category = 'setup' AND l.source <> 'legacy_import'), 0) AS setup_extra,
+    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'payment' AND l.category = 'setup' AND l.source <> 'legacy_import'), 0) AS setup_paid,
+    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'charge' AND l.category = 'other' AND l.source <> 'legacy_import'), 0)
+      - COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'credit' AND l.category = 'other' AND l.source <> 'legacy_import'), 0) AS other_due,
+    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'payment' AND l.category = 'other' AND l.source <> 'legacy_import'), 0) AS other_paid,
+    COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'payment' AND l.source = 'legacy_import'), 0) AS legacy_paid,
     COALESCE(sum(l.amount) FILTER (WHERE l.kind = 'payment'), 0) AS total_paid
     INTO _totals
     FROM billing.ledger l
@@ -516,8 +519,9 @@ BEGIN
     'setup', jsonb_build_object('due', _setup_due, 'paid', _totals.setup_paid, 'balance', _setup_due - _totals.setup_paid),
     'subscription_money', jsonb_build_object('due', _sub_due, 'paid', _totals.sub_paid, 'balance', _sub_due - _totals.sub_paid),
     'other', jsonb_build_object('due', _other_due, 'paid', _totals.other_paid, 'balance', _other_due - _totals.other_paid),
+    'legacy_paid', _totals.legacy_paid,
     'total', jsonb_build_object('due', _setup_due + _sub_due + _other_due, 'paid', _totals.total_paid,
-                                'balance', _setup_due + _sub_due + _other_due - _totals.total_paid),
+                                'balance', _setup_due + _sub_due + _other_due - (_totals.total_paid - _totals.legacy_paid)),
     'renewal', _renewal,
     'entries', COALESCE((
       SELECT jsonb_agg(jsonb_build_object(
@@ -813,6 +817,11 @@ BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('billing-request:' || _t::text, 189));
   IF EXISTS (SELECT 1 FROM billing.upgrade_requests x WHERE x.tenant_id = _t AND x.status = 'pending') THEN
     RAISE EXCEPTION 'כבר יש בקשה שממתינה לטיפול' USING ERRCODE = 'unique_violation';
+  END IF;
+  -- שליחה וביטול בלולאה: עד 10 בקשות ביממה לעסק
+  IF (SELECT count(*) FROM billing.upgrade_requests x
+       WHERE x.tenant_id = _t AND x.created_at > now() - interval '1 day') >= 10 THEN
+    RAISE EXCEPTION 'נשלחו יותר מדי בקשות היום — נסו שוב מחר או פנו לתמיכה' USING ERRCODE = 'check_violation';
   END IF;
   INSERT INTO billing.upgrade_requests (tenant_id, tenant_label, engine, current_plan, requested_plan, requested_cycle,
                                         list_price_monthly, customer_note, requested_by, requested_by_email)

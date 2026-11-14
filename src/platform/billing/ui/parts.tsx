@@ -209,6 +209,7 @@ export function EntriesList(props: {
             {e.vat > 0 ? ` · מתוכו מע״מ ${formatMoney(e.vat)} (${e.vat_rate}%)` : ""}
             {e.method ? ` · ${METHOD_LABELS[e.method]}` : ""}
             {e.kind === "payment" ? ` · ${confirmationLabel(e.confirmation)}` : ""}
+            {e.source === "legacy_import" ? " · מההיסטוריה הקודמת" : ""}
             {e.reversed ? " · בוטל" : ""}
           </div>
           {props.internal && (e.reference || e.internal_note || e.recorded_by_email) ? (
