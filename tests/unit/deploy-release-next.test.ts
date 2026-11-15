@@ -18,7 +18,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const SCRIPT = join(process.cwd(), "deploy/release-next.sh");
-const NEW = ["20261112100000_store_owner_guard_unblock", "20261113100000_hosp_business_admin"];
+const NEW = [
+  "20261114100000_billing_agreements",
+  "20261114110000_billing_owner_access",
+  "20261115090000_vat_settings",
+  "20261115100000_site_tag_manager",
+];
 
 const FAKE_DOCKER = String.raw`#!/usr/bin/env bash
 # fake docker: just enough of the CLI for deploy/release-next.sh, state in $STATE
@@ -54,16 +59,23 @@ case "$cmd" in
       pg_restore) cat > /dev/null ;;
       psql)
         sql=""; while (($#)); do [[ "$1" == -tAc || "$1" == -qc || "$1" == -c ]] && { sql="$2"; break; }; shift; done
-        if [[ -z "$sql" ]]; then # a migration file on stdin
+        if [[ -z "$sql" ]]; then # a migration file (or a smoke script) on stdin
           body=$(cat)
+          if [[ "$body" == "-- smoke"* ]]; then
+            echo "$body" | head -n 1 >> "$S/smoke_run"
+            if [[ -f "$S/smoke_fail" ]] || [[ -f "$S/smoke_fail_after_migrations" && -f "$S/migrated" ]]; then echo f; else echo t; fi
+            exit 0
+          fi
           if [[ -f "$S/fail_migration" ]] && grep -q "$(cat "$S/fail_migration")" <<<"$body"; then echo "ERROR: boom" >&2; exit 3; fi
-          echo "$body" | head -n 1 >> "$S/migrations_run"; exit 0
+          echo "$body" | head -n 1 >> "$S/migrations_run"; touch "$S/migrated"; exit 0
         fi
         case "$sql" in
           *"count(*) FROM public._migrations_applied"*) grep -c . "$S/ledger" || true ;;
           *"SELECT filename FROM public._migrations_applied"*) cat "$S/ledger" ;;
           *"INSERT INTO public._migrations_applied"*) sed -E "s/.*VALUES \('([^']+)'\).*/\1/" <<<"$sql" >> "$S/ledger" ;;
           *"SELECT slug FROM public.tenants"*) printf 'kobi\nnofi-dorit\n' ;;
+          *"deploy.smoke@invalid.test"*|*"billing.agreements) + (SELECT count(*) FROM billing.ledger"*) echo 0 ;;
+          *"SELECT md5(concat_ws"*) [[ -f "$S/data_changed" && -f "$S/migrated" ]] && echo changed || echo same ;;
           *) [[ -f "$S/check_fail" ]] && echo f || echo t ;;
         esac ;;
     esac ;;
@@ -172,14 +184,17 @@ describe("deploy/release-next.sh", () => {
     const r = t.run("--check");
     expect(r.code, r.out).toBe(0);
     expect(r.out).toContain("PREFLIGHT OK");
-    expect(r.out).toContain("applied: 2 = every migration of the target except 187 + 188");
+    expect(r.out).toContain(
+      "applied: 2 = every migration of the target except 189 + 190 + 191 + 192",
+    );
+    expect(r.out).toContain("order creation works now");
     expect(t.head()).toBe(t.A);
     expect(t.ledger()).toEqual(["001_a.sql", "002_b.sql"]);
     expect(t.backups()).toEqual([]);
     expect(t.calls()).not.toMatch(/compose|pg_dump|docker tag/);
   });
 
-  it("--deploy: backup, code, build, 187 then 188, restart, health — DEPLOY OK; no secret printed", () => {
+  it("--deploy: backup, code, build, 189 → 192, restart, health, smoke — DEPLOY OK; no secret printed", () => {
     const t = setup();
     const r = t.run("--deploy");
     expect(r.code, r.out).toBe(0);
@@ -203,6 +218,18 @@ describe("deploy/release-next.sh", () => {
     expect(r.out).toContain("kobi.example.test/: 200");
     expect(r.out).toContain("nofi-dorit.example.test/manage/login: 200");
     expect(r.out).not.toContain("re_super_secret_value");
+    expect(r.out).toContain("migrations 189 + 190 + 191 + 192 applied");
+    expect(r.out).toContain(
+      "existing store VAT settings, orders, old payment history and subscriptions: unchanged",
+    );
+    expect(r.out).toContain("order creation: a test order gets the store's dealer type");
+    expect(r.out).toContain("no test order kept");
+    expect(files).toContain("customer-data-checksum-before.txt");
+    // the order test runs before (current schema) and after (new schema), both rolled back
+    expect(readFileSync(join(t.state, "smoke_run"), "utf8").trim().split("\n")).toEqual([
+      "-- smoke: order before",
+      "-- smoke: order after",
+    ]);
     // order: dump → build → migrations → up
     const c = t.calls();
     expect(c.indexOf("pg_dump")).toBeLessThan(c.indexOf("compose build"));
@@ -251,19 +278,59 @@ describe("deploy/release-next.sh", () => {
     expect(t.calls()).not.toContain("compose up");
   });
 
-  it("migration 188 fails: 187 stays (compatible), nothing restarts, code back, DB rollback printed (not run)", () => {
+  it("migration 191 fails: 189 + 190 stay, nothing restarts, code back, DB rollback printed (not run)", () => {
     const t = setup();
-    writeFileSync(join(t.state, "fail_migration"), "up 20261113100000_hosp_business_admin");
+    writeFileSync(join(t.state, "fail_migration"), "up 20261115090000_vat_settings");
     const r = t.run("--deploy");
     expect(r.code).toBe(1);
     expect(r.out).toContain("phase: migrations");
-    expect(r.out).toContain("migration 188");
-    expect(t.ledger()).toEqual(["001_a.sql", "002_b.sql", `${NEW[0]}.sql`]);
+    expect(r.out).toContain("migration 191");
+    expect(t.ledger()).toEqual(["001_a.sql", "002_b.sql", `${NEW[0]}.sql`, `${NEW[1]}.sql`]);
     expect(t.running()).toBe("sha256:old");
     expect(t.latest()).toBe("sha256:old");
     expect(t.head()).toBe(t.A);
     expect(t.calls()).not.toContain("compose up");
     expect(r.out).toContain(`${NEW[0]}.down.sql`);
+    expect(r.out).toContain(`${NEW[1]}.down.sql`);
+    // newest first
+    expect(r.out.indexOf(`${NEW[1]}.down.sql`)).toBeLessThan(r.out.indexOf(`${NEW[0]}.down.sql`));
+  });
+
+  it("existing customer data changed during the migrations: stop, the site stays on the previous version", () => {
+    const t = setup();
+    writeFileSync(join(t.state, "data_changed"), "");
+    const r = t.run("--deploy");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("existing customer data changed");
+    expect(r.out).toContain("phase: migrations");
+    expect(t.running()).toBe("sha256:old");
+    expect(t.head()).toBe(t.A);
+    expect(t.calls()).not.toContain("compose up");
+  });
+
+  it("the order test fails after the restart: automatic app rollback", () => {
+    const t = setup();
+    // passes before the deploy, fails after it
+    writeFileSync(join(t.state, "smoke_run"), "");
+    const r1 = t.run("--check");
+    expect(r1.out).toContain("order creation works now");
+    // make the "after" run fail: the fake fails smoke scripts once the migrations ran
+    writeFileSync(join(t.state, "smoke_fail_after_migrations"), "");
+    const r = t.run("--deploy");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("a new order does not get the server's VAT snapshot");
+    expect(r.out).toContain("ROLLED BACK");
+    expect(t.running()).toBe("sha256:old");
+  });
+
+  it("when the order test cannot run on the store setup, it is skipped (not a failure)", () => {
+    const t = setup();
+    writeFileSync(join(t.state, "smoke_fail"), "");
+    const r = t.run("--deploy");
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toContain("the order test cannot run on this store setup");
+    expect(r.out).not.toContain("order creation: a test order");
+    expect(r.out).toContain("DEPLOY OK");
   });
 
   it("the new version fails the health check: automatic app rollback to the previous image and code", () => {
@@ -275,7 +342,7 @@ describe("deploy/release-next.sh", () => {
     expect(r.out).toContain("ROLLED BACK");
     expect(t.running()).toBe("sha256:old");
     expect(t.head()).toBe(t.A);
-    expect(t.ledger()).toHaveLength(4); // 187 + 188 stay — the previous version works with them
+    expect(t.ledger()).toHaveLength(6); // 189–192 stay (the DB is never rolled back automatically)
   });
 
   it("the new version never becomes healthy: automatic app rollback", () => {

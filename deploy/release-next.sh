@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # ===========================================================================================
-# פריסת release/next לייצור בפקודה אחת: בדיקות מקדימות → גיבוי → קוד + בנייה → מיגרציות 187 + 188 →
-# הפעלה מחדש → Health Check. כל שלב נעצר מעצמו בכישלון; כישלון אחרי ההפעלה מחזיר אוטומטית את האפליקציה
-# לגרסה הקודמת (image + קוד). המסד לא מוחזר אוטומטית: 187 ו-188 תואמות לגרסה הקודמת, ו-Rollback של המסד
-# נעשה רק באישור (הפקודות מודפסות).
+# פריסת release/next לייצור בפקודה אחת: בדיקות מקדימות → גיבוי → קוד + בנייה → המיגרציות החדשות (כאן:
+# 189–192, Billing & Agreements, מע"מ לפי סוג העוסק, Google Tag Manager) → הפעלה מחדש → Health Check →
+# בדיקות עשן במסד (קריאה בלבד, או טרנזקציה שתמיד מבוטלת). כל שלב נעצר מעצמו בכישלון; כישלון אחרי ההפעלה
+# מחזיר אוטומטית את האפליקציה לגרסה הקודמת (image + קוד). המסד לא מוחזר אוטומטית: ה-Rollback של המסד נעשה רק
+# באישור (הפקודות מודפסות; לכל מיגרציה יש Rollback עם הגנה שנבדק).
 #
 #   bash deploy/release-next.sh --check  <commit>   # בדיקות מקדימות בלבד — קריאה בלבד, לא משנה כלום
 #   bash deploy/release-next.sh --deploy <commit>   # הכול, עם עצירה אוטומטית
@@ -20,17 +21,34 @@ IMAGE="${IMAGE:-nuriel-shop-app-app}"
 PORT="${PORT:-3700}"
 BRANCH="${BRANCH:-release/next}"
 BACKUP_ROOT="${BACKUP_ROOT:-/root/backups/nuriel-shop}"
-EXPECTED_BEFORE="${EXPECTED_BEFORE:-186}"
+EXPECTED_BEFORE="${EXPECTED_BEFORE:-188}"
 MIN_FREE_GB="${MIN_FREE_GB:-3}"
 WAIT_STEPS="${WAIT_STEPS:-36}"
 WAIT_SECONDS="${WAIT_SECONDS:-5}"
-NEW_MIGRATIONS=(20261112100000_store_owner_guard_unblock 20261113100000_hosp_business_admin)
-MIGRATION_LABEL=(187 188)
-# what each migration must leave behind (one query each, must print exactly: t)
+NEW_MIGRATIONS=(20261114100000_billing_agreements 20261114110000_billing_owner_access 20261115090000_vat_settings 20261115100000_site_tag_manager)
+MIGRATION_LABEL=(189 190 191 192)
+LABELS="${MIGRATION_LABEL[*]}"
+LABELS="${LABELS// / + }"
+# what each migration must leave behind (one query each, must print exactly: t). Every new table starts empty:
+# nothing is copied, synced or changed for existing customers.
 MIGRATION_CHECK=(
-  "SELECT position('NEW.is_blocked IS DISTINCT FROM OLD.is_blocked' IN prosrc) > 0 FROM pg_proc WHERE oid = 'public.user_roles_owner_guard()'::regprocedure"
-  "SELECT 'ownership' = ANY (hospitality.permissions()) AND has_function_privilege('authenticated', 'hospitality.team_set_business_admin(uuid,boolean)', 'EXECUTE') AND NOT has_function_privilege('authenticated', 'hospitality._team_op_allows(uuid,uuid)', 'EXECUTE') AND NOT has_function_privilege('anon', 'hospitality.team_set_business_admin(uuid,boolean)', 'EXECUTE') AND (SELECT count(*) FROM hospitality.staff_grants WHERE permission = 'business.admin') = 0"
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'billing'::regnamespace AND relkind = 'r' AND relrowsecurity) = 4 AND NOT has_schema_privilege('authenticated', 'billing', 'USAGE') AND has_function_privilege('authenticated', 'public.my_billing_summary()', 'EXECUTE') AND NOT has_function_privilege('anon', 'public.my_billing_summary()', 'EXECUTE') AND billing.vat_profile() ->> 'business_type' = 'exempt' AND (SELECT count(*) FROM billing.agreements) = 0 AND (SELECT count(*) FROM billing.ledger) = 0"
+  "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'billing_history_guard') AND (SELECT qual LIKE '%staff_can(''billing.manage''%' FROM pg_policies WHERE tablename = 'tenant_subscriptions' AND policyname = 'store admin reads subscription')"
+  "SELECT public.vat_rate_on() = 18 AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'orders_vat_snapshot_guard') AND (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name IN ('vat_business_type', 'net_amount', 'vat_amount', 'gross_amount')) = 4 AND public.order_gross(100, false, 18) = 118 AND public.order_gross(118, true, 18) = 118"
+  "SELECT to_regclass('public.site_tracking') IS NOT NULL AND (SELECT count(*) FROM public.site_tracking) = 0 AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.site_tracking'::regclass) AND NOT has_table_privilege('anon', 'public.site_tracking', 'SELECT') AND has_function_privilege('anon', 'public.site_tag_manager()', 'EXECUTE') AND NOT has_function_privilege('anon', 'public.save_my_tag_manager(text,boolean)', 'EXECUTE')"
 )
+# the code of this release must be in the new image (strings of the server bundle)
+BUNDLE_MARKS=(save_my_tag_manager my_billing_summary)
+# customer data that no migration may touch: the store VAT settings, the orders' amounts and VAT, the old
+# "record payment" history — checksums before the migrations must equal the checksums after
+GUARD_SUM="SELECT md5(concat_ws('|',
+  (SELECT string_agg(concat_ws(',', s.tenant_id, s.business_type, s.vat_rate, s.prices_include_vat), ';' ORDER BY s.tenant_id) FROM public.site_settings s),
+  (SELECT string_agg(concat_ws(',', o.id, o.total, o.vat_rate, o.prices_include_vat, o.status), ';' ORDER BY o.id) FROM public.orders o),
+  (SELECT string_agg(concat_ws(',', h.id, h.amount, h.payment_status), ';' ORDER BY h.id) FROM public.billing_history h),
+  (SELECT string_agg(concat_ws(',', t.tenant_id, t.plan_type, t.status), ';' ORDER BY t.tenant_id) FROM public.tenant_subscriptions t)))"
+# order creation, never kept: a guest pickup order in the main store inside a transaction that is rolled back
+SMOKE_ORDER_INSERT="INSERT INTO public.orders (tenant_id, status, kind, order_number, customer_name, customer_tax_id, customer_phone, customer_email, shipping_kind)
+  SELECT id, 'pending', 'order', 'SMOKE', 'deploy smoke', '123456782', '0500000000', 'deploy.smoke@invalid.test', 'pickup' FROM public.tenants WHERE is_default"
 
 MODE="${1:-}"
 TARGET="${2:-}"
@@ -45,6 +63,12 @@ APPLIED_NOW=()
 say() { printf '%s\n' "$*" | tee -a "$LOG"; }
 ok() { say "  ✓ $*"; }
 psql_q() { docker exec "$DB" psql -U postgres -d postgres -X -v ON_ERROR_STOP=1 -tAc "$1"; }
+# smoke_sql "<sql>" → 0 when the script prints exactly: t (run from stdin, so BEGIN … ROLLBACK works)
+smoke_sql() {
+  local out
+  out=$(printf '%s\n' "$1" | docker exec -i "$DB" psql -U postgres -d postgres -X -q -tA -v ON_ERROR_STOP=1 2>>"$LOG") || return 1
+  [[ "$(printf '%s' "$out" | tr -d '[:space:]')" == t ]]
+}
 
 usage() {
   echo "usage: bash deploy/release-next.sh --check|--deploy <commit>" >&2
@@ -177,7 +201,7 @@ git ls-tree --name-only "$TARGET_SHA" supabase/migrations/ | sed 's#.*/##' | gre
 printf '%s.sql\n' "${NEW_MIGRATIONS[@]}" | LC_ALL=C sort >"$TMPD/new"
 LC_ALL=C comm -23 "$TMPD/target" "$TMPD/new" >"$TMPD/expected"
 if ! cmp -s "$TMPD/applied" "$TMPD/expected"; then
-  say "  ✗ the applied list differs from the target's migrations (other than 187 + 188):"
+  say "  ✗ the applied list differs from the target's migrations (other than $LABELS):"
   LC_ALL=C comm -3 "$TMPD/applied" "$TMPD/expected" | head -n 10 | sed 's/^/      /' | tee -a "$LOG"
   false
 fi
@@ -185,12 +209,22 @@ for f in "${NEW_MIGRATIONS[@]}"; do
   { git cat-file -e "$TARGET_SHA:supabase/migrations/$f.sql" && git cat-file -e "$TARGET_SHA:supabase/rollbacks/$f.down.sql"; } 2>/dev/null ||
     { say "  ✗ $f (migration or rollback) is missing in the target"; false; }
 done
-ok "applied: $n = every migration of the target except 187 + 188; both new files and their rollbacks are in the target"
+ok "applied: $n = every migration of the target except $LABELS; the new files and their rollbacks are in the target"
 for d in "$APP_DIR" "$(dirname "$BACKUP_ROOT")"; do
   free=$(df -Pk "$d" | awk 'NR == 2 { print int($4 / 1048576) }')
   ((free >= MIN_FREE_GB)) || { say "  ✗ free disk at $d: ${free} GB (need $MIN_FREE_GB)"; false; }
 done
 ok "free disk ≥ ${MIN_FREE_GB} GB"
+SMOKE_ORDER=no
+if smoke_sql "-- smoke: order before
+BEGIN;
+WITH o AS ($SMOKE_ORDER_INSERT RETURNING id) SELECT (count(*) = 1)::text FROM o;
+ROLLBACK;"; then
+  SMOKE_ORDER=yes
+  ok "order creation works now (a test order in the main store, rolled back — nothing kept)"
+else
+  say "  · the order test cannot run on this store setup — it will be skipped after the deploy too"
+fi
 code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "http://127.0.0.1:$PORT/robots.txt") || true
 [[ "$code" == 200 ]] || { say "  ✗ the site does not answer now (robots.txt: $code)"; false; }
 ok "the site answers now (robots.txt: 200)"
@@ -216,7 +250,14 @@ ROLLBACK_TAG="before-release-next-$STAMP"
 docker tag "$IMAGE:latest" "$IMAGE:$ROLLBACK_TAG"
 ok "rollback image $IMAGE:$ROLLBACK_TAG; previous code ${PREV_SHA:0:7} recorded"
 for f in "${NEW_MIGRATIONS[@]}"; do git show "$TARGET_SHA:supabase/rollbacks/$f.down.sql" >"$B/$f.down.sql"; done
-ok "rollback files of 187 + 188 copied"
+ok "rollback files of $LABELS copied"
+GUARD_BEFORE=$(psql_q "$GUARD_SUM")
+printf '%s\n' "$GUARD_BEFORE" >"$B/customer-data-checksum-before.txt"
+ok "checksum of store VAT settings, orders, old payment history, subscriptions recorded"
+if git cat-file -e "$TARGET_SHA:scripts/billing/vat-precheck.sql" 2>/dev/null; then
+  git show "$TARGET_SHA:scripts/billing/vat-precheck.sql" | docker exec -i "$DB" psql -U postgres -d postgres -X -v ON_ERROR_STOP=1 >"$B/vat-precheck.txt" 2>&1
+  ok "VAT precheck (read only) saved: $B/vat-precheck.txt"
+fi
 
 # ------------------------------------------------------------------ 3. code + build (the site keeps running)
 PHASE=build
@@ -226,9 +267,11 @@ ok "code: $(git log --oneline -1)"
 docker compose build >"$B/build.log" 2>&1 || { tail -n 30 "$B/build.log" | tee -a "$LOG"; false; }
 NEW_ID=$(docker image inspect -f '{{.Id}}' "$IMAGE:latest")
 [[ "$NEW_ID" != "$RUNNING_ID" ]] || { say "  ✗ the build did not produce a new image"; false; }
-marks=$(docker run --rm --entrypoint sh "$IMAGE:latest" -c 'grep -rl team_set_business_admin /app/.output | wc -l')
-((marks > 0)) || { say "  ✗ the new image does not contain the business-admin code"; false; }
-ok "build ok (new image ${NEW_ID:0:19}; business admin in the bundle)"
+for mark in "${BUNDLE_MARKS[@]}"; do
+  marks=$(docker run --rm --entrypoint sh "$IMAGE:latest" -c "grep -rl $mark /app/.output | wc -l")
+  ((marks > 0)) || { say "  ✗ the new image does not contain $mark"; false; }
+done
+ok "build ok (new image ${NEW_ID:0:19}; this release's code in the bundle: ${BUNDLE_MARKS[*]})"
 
 # ------------------------------------------------------------------ 4. migrations (one transaction each)
 PHASE=migrations
@@ -250,6 +293,8 @@ done
 n=$(psql_q "SELECT count(*) FROM public._migrations_applied")
 [[ "$n" == "$((EXPECTED_BEFORE + ${#NEW_MIGRATIONS[@]}))" ]] || { say "  ✗ applied after: $n"; false; }
 ok "applied: $EXPECTED_BEFORE → $n"
+[[ "$(psql_q "$GUARD_SUM")" == "$GUARD_BEFORE" ]] || { say "  ✗ existing customer data changed during the migrations"; false; }
+ok "existing store VAT settings, orders, old payment history and subscriptions: unchanged"
 
 # ------------------------------------------------------------------ 5. restart
 PHASE=restart
@@ -262,9 +307,24 @@ ok "running the new image, healthy"
 PHASE=health
 say "== 6/6 health check"
 health_checks || { say "  ✗ a health check failed"; false; }
+if [[ "$SMOKE_ORDER" == yes ]]; then
+  smoke_sql "-- smoke: order after
+BEGIN;
+WITH o AS ($SMOKE_ORDER_INSERT RETURNING tenant_id, vat_business_type, vat_rate, prices_include_vat, total, net_amount, vat_amount, gross_amount)
+SELECT bool_and(vat_business_type = public.tenant_vat_profile(tenant_id) ->> 'business_type'
+                AND vat_rate = (public.tenant_vat_profile(tenant_id) ->> 'vat_rate')::numeric
+                AND gross_amount = public.order_gross(total, prices_include_vat, vat_rate)
+                AND net_amount + vat_amount = gross_amount)::text FROM o;
+ROLLBACK;" || { say "  ✗ a new order does not get the server's VAT snapshot"; false; }
+  ok "order creation: a test order gets the store's dealer type, the central rate and the right amounts (rolled back)"
+fi
+[[ "$(psql_q "SELECT count(*) FROM public.orders WHERE customer_email = 'deploy.smoke@invalid.test'")" == 0 ]] || { say "  ✗ a test order was kept"; false; }
+ok "no test order kept"
+[[ "$(psql_q "SELECT (SELECT count(*) FROM billing.agreements) + (SELECT count(*) FROM billing.ledger) + (SELECT count(*) FROM public.site_tracking)")" == 0 ]] || { say "  ✗ unexpected rows in the new tables"; false; }
+ok "billing and Tag Manager tables empty (nothing copied or synced)"
 errs=$(docker logs --since 3m "$APP" 2>&1 | grep -icE "fatal|unhandled" || true)
 ok "log: ${errs:-0} fatal / unhandled lines in the last 3 minutes"
 trap - ERR
 say ""
-say "DEPLOY OK — ${TARGET_SHA:0:7} runs; migrations 187 + 188 applied; backup and rollback image: $B, $IMAGE:$ROLLBACK_TAG"
+say "DEPLOY OK — ${TARGET_SHA:0:7} runs; migrations $LABELS applied; backup and rollback image: $B, $IMAGE:$ROLLBACK_TAG"
 say "App rollback (only if needed, with approval): docker tag $IMAGE:$ROLLBACK_TAG $IMAGE:latest && git -C $APP_DIR checkout -q -B ${PREV_BRANCH:-previous} $PREV_SHA && (cd $APP_DIR && docker compose up -d)"
