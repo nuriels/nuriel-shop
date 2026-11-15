@@ -162,7 +162,7 @@ export interface PublicSite {
    * Google SEO שלב 4: מדידה באתר — רק כשהמתג hospitality_analytics_enabled דולק לאתר ויש מזהה GA4
    * בגרסה המפורסמת. null / חסר — אין באתר שום דבר שדורש הסכמה (אין באנר, אין תגית).
    */
-  analytics?: { ga4: string } | null;
+  analytics?: { ga4: string | null; gtm?: string | null } | null;
 }
 
 export interface PublicRoomType {

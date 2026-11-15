@@ -66,6 +66,7 @@ import {
 import { COUPON_COLUMNS, couponLabel, type Coupon } from "@/lib/coupons";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { cn } from "@/lib/utils";
+import { TagManagerCard } from "@/platform/analytics/ui/TagManagerCard";
 
 const NO_COUPON = "__none__";
 
@@ -110,7 +111,9 @@ function CopyButton({ value, label }: { value: string; label: string }) {
  * שיווק ואינטגרציות (חלק 14): SEO של החנות (גוגל ושיתוף), פופ-אפ מבצעים
  * בכניסה, Facebook Pixel ו-Google Analytics, והחיבור לזאפ השוואת מחירים.
  */
-export function MarketingPanel() {
+export function MarketingPanel({
+  canManageTracking = false,
+}: { canManageTracking?: boolean } = {}) {
   const router = useRouter();
   const { settings } = useSiteSettings();
   // חלק 15: הפיד לזאפ נפתח רק עם התוסף "חיבור לזאפ" (גם בפרימיום)
@@ -527,6 +530,12 @@ export function MarketingPanel() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ---------- מיגרציה 192: Google Tag Manager — מזהה Container בלבד, בעל החנות בלבד ---------- */}
+      <TagManagerCard
+        canManage={canManageTracking}
+        directGa4={Boolean(saved?.google_analytics_id)}
+      />
 
       {/* ---------- אימות בעלות ב-Google Search Console (לכל חנות בנפרד) ---------- */}
       <Card>

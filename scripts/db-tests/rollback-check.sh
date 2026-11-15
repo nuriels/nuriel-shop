@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • site_tag_manager (76): הגנה (נעצר כשבעל עסק כלשהו שמר מזהה Google Tag Manager), rollback → הטבלה
+#     וחמש הפונקציות נעלמו; רישומי היומן נשארים; זהה בדיוק ל-75
 #   • vat_settings (75): הגנה (נעצר כשיש הזמנה עם צילום סוג העוסק / כשנקבע שיעור מרכזי נוסף), rollback →
 #     הטבלה, העמודות והפונקציות נעלמו, שני הטריגרים ו-portal_create_store_business מילה במילה; זהה בדיוק ל-74
 #   • billing_owner_access (74): בלי הגנה (רק הרשאות / פונקציות / טריגר), rollback → קריאת המנוי וההיסטוריה שוב
@@ -171,6 +173,7 @@ M72=20261113100000_hosp_business_admin
 M73=20261114100000_billing_agreements
 M74=20261114110000_billing_owner_access
 M75=20261115090000_vat_settings
+M76=20261115100000_site_tag_manager
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -213,6 +216,37 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- Google Tag Manager: one container ID per site, owner only (migration 76) ----------
+expect "before the rollback: the closed table (RLS, no API privileges), the ID-only check, the site read for guests" \
+  "SELECT to_regclass('public.site_tracking') IS NOT NULL
+      AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.site_tracking'::regclass)
+      AND NOT has_table_privilege('anon', 'public.site_tracking', 'SELECT')
+      AND NOT has_table_privilege('authenticated', 'public.site_tracking', 'SELECT')
+      AND has_function_privilege('anon', 'public.site_tag_manager()', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.save_my_tag_manager(text,boolean)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.site_tracking_can_edit()', 'EXECUTE')"
+echo "rollback guard: $M76 refuses while a site has a saved container ID"
+q "INSERT INTO public.site_tracking (tenant_id, gtm_container_id, gtm_enabled)
+   SELECT id, 'GTM-RB12345', false FROM public.tenants WHERE is_default" >/dev/null
+if down "$M76" 2>/dev/null; then
+  echo "  FAIL rollback ran although a site has a saved Tag Manager ID"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT to_regclass('public.site_tracking') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM public.site_tracking WHERE gtm_container_id = 'GTM-RB12345')"
+q "DELETE FROM public.site_tracking WHERE gtm_container_id = 'GTM-RB12345'" >/dev/null
+ref_upto "$M76"
+echo "rollback: $M76"
+down "$M76"
+expect "the table and the five functions are gone" \
+  "SELECT to_regclass('public.site_tracking') IS NULL
+      AND to_regprocedure('public.site_tag_manager()') IS NULL
+      AND to_regprocedure('public.my_tag_manager()') IS NULL
+      AND to_regprocedure('public.save_my_tag_manager(text,boolean)') IS NULL
+      AND to_regprocedure('public.site_tracking_can_edit()') IS NULL
+      AND to_regprocedure('public.site_tracking_allowed()') IS NULL"
+same_as_ref "migration 75"
 
 # ---------- VAT by dealer type: the central rate, the store setting, the order snapshot (migration 75) ----------
 expect "before the rollback: the central rate (18%), the confirmed flag, the order snapshot columns, the frozen-snapshot guard" \
@@ -2381,6 +2415,12 @@ up "$M72"
 up "$M73"
 up "$M74"
 up "$M75"
+up "$M76"
+expect "Tag Manager is back: the closed table, the guest read, the owner save" \
+  "SELECT to_regclass('public.site_tracking') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'public.site_tracking', 'SELECT')
+      AND has_function_privilege('anon', 'public.site_tag_manager()', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'public.save_my_tag_manager(text,boolean)', 'EXECUTE')"
 expect "billing is back: the closed schema, owner-only reads, the history guard" \
   "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'billing'::regnamespace AND relkind = 'r' AND relrowsecurity) = 4
       AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'billing_history_guard')

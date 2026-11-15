@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useLiftA11yButton } from "@/hooks/useLiftA11yButton";
 import { NO_MARKETING_PATHS, trackingHeadScripts, type StoreTracking } from "@/lib/marketing";
+import { gtmPageView, revokeGtm, startGtm } from "@/platform/analytics/gtm-client";
 
 /**
  * חלק 40: הסכמה לעוגיות מדידה ופרסום (Google Analytics / Meta Pixel).
@@ -13,7 +14,9 @@ import { NO_MARKETING_PATHS, trackingHeadScripts, type StoreTracking } from "@/l
  * (אותו גודל ואותו עיצוב — בלי "דפוסים אפלים"), והאתר עובד מלא גם בלי.
  * הבחירה נשמרת בדפדפן לכל חנות בנפרד (localStorage לפי הדומיין), ואפשר
  * לשנות אותה בכל עת: "הגדרות עוגיות" בתחתית האתר.
- * הבאנר מופיע רק בחנות שהגדירה Pixel או Analytics.
+ * הבאנר מופיע רק בחנות שהגדירה Pixel, Analytics או Google Tag Manager.
+ * מיגרציה 192: Google Tag Manager נטען כאן אחרי אותה הסכמה (מדידה ופרסום — בחנות זו הסכמה אחת), עם
+ * Consent Mode, Container אחד לכל דף, ואירוע צפייה אחד לכל עמוד (gtm-client).
  */
 
 const CONSENT_KEY = "tracking-consent:v1";
@@ -45,6 +48,8 @@ function injectTracking(tracking: StoreTracking): void {
   const w = window as TrackingWindow;
   if (w.__trackingInjected) return;
   w.__trackingInjected = true;
+  // Tag Manager קודם: ברירת המחדל של Consent Mode נכנסת ל-dataLayer לפני ה-config של GA4 הישיר
+  if (tracking.gtmId) startGtm(tracking.gtmId, { analytics: true, ads: true });
   for (const script of trackingHeadScripts(tracking)) {
     const el = document.createElement("script");
     if (script.src) el.src = script.src;
@@ -53,6 +58,16 @@ function injectTracking(tracking: StoreTracking): void {
     el.dataset["tracking"] = "1";
     document.head.appendChild(el);
   }
+}
+
+/** השירותים שבאנר ההסכמה מזכיר — רק מה שמוגדר בחנות */
+function trackingServices(tracking: StoreTracking | null): string {
+  const names: string[] = [];
+  if (tracking?.gaId) names.push("Google Analytics");
+  if (tracking?.gtmId) names.push("Google Tag Manager");
+  if (tracking?.pixelId) names.push("Meta (פייסבוק)");
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} ו-${names[names.length - 1]}`;
 }
 
 /** מחיקת עוגיות המעקב שכבר נשמרו (אחרי משיכת הסכמה) */
@@ -70,7 +85,7 @@ function clearTrackingCookies(): void {
 
 export function TrackingConsent({ tracking }: { tracking: StoreTracking | null }) {
   const path = useLocation().pathname;
-  const hasTracking = Boolean(tracking && (tracking.pixelId || tracking.gaId));
+  const hasTracking = Boolean(tracking && (tracking.pixelId || tracking.gaId || tracking.gtmId));
   const [choice, setChoice] = useState<Choice | null | undefined>(undefined);
   const [reopened, setReopened] = useState(false);
   const hasTrackingRef = useRef(hasTracking);
@@ -97,6 +112,12 @@ export function TrackingConsent({ tracking }: { tracking: StoreTracking | null }
       injectTracking(tracking);
     }
   }, [choice, tracking, hasTracking, path]);
+
+  // Google Tag Manager: צפייה אחת לכל עמוד (גם במעבר בלי טעינה מחדש); אותו עמוד ברצף — לא נשלח שוב
+  useEffect(() => {
+    if (choice !== "granted" || !tracking?.gtmId || NO_MARKETING_PATHS.test(path)) return;
+    gtmPageView(window.location.href, document.title);
+  }, [choice, tracking, path]);
 
   // PRV: קוד שנטען נשאר בעמוד עד טעינה מחדש, ו-GA4 מדווח לבד על מעברים בתוך האתר. לכן מעבר
   // מהחנות לאזור החשבון / הניהול (קישור, ניווט) — טעינה מלאה של העמוד, בלי המעקב.
@@ -131,21 +152,24 @@ export function TrackingConsent({ tracking }: { tracking: StoreTracking | null }
     setChoice(next);
     setReopened(false);
     if (next === "denied" && wasGranted) {
-      // קוד שכבר נטען לא "נפרק" — מוחקים את העוגיות וטוענים את העמוד מחדש בלעדיו
+      // קוד שכבר נטען לא "נפרק" — Consent Mode לחסום, מוחקים את העוגיות וטוענים את העמוד מחדש בלעדיו
+      revokeGtm();
       clearTrackingCookies();
       window.location.reload();
     }
   };
 
-  return <ConsentBanner current={choice} onDecide={decide} />;
+  return <ConsentBanner current={choice} onDecide={decide} services={trackingServices(tracking)} />;
 }
 
 function ConsentBanner({
   current,
   onDecide,
+  services,
 }: {
   current: Choice | null;
   onDecide: (choice: Choice) => void;
+  services: string;
 }) {
   // כפתור הנגישות עולה מעל הבאנר
   useLiftA11yButton("8.5rem", "(max-width: 100000px)");
@@ -159,8 +183,8 @@ function ConsentBanner({
         <p className="flex items-start gap-2 text-sm text-foreground">
           <Cookie className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
           <span>
-            נשמח להשתמש בעוגיות של Google Analytics ו-Meta (פייסבוק) כדי למדוד שימוש באתר ולהציג
-            פרסומות מותאמות. האתר עובד מלא גם בלי.{" "}
+            נשמח להשתמש בעוגיות של {services} כדי למדוד שימוש באתר ולהציג פרסומות מותאמות. האתר עובד
+            מלא גם בלי.{" "}
             <Link to="/privacy" className="text-primary underline">
               מדיניות הפרטיות
             </Link>

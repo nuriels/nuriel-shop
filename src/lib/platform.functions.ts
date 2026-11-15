@@ -266,7 +266,7 @@ export const PLATFORM_SITE_NAME = "מערכת ניהול אתר אינטרנט";
  *   פיצ'רים במסכים (האכיפה עצמה גם במסד). null בדומיין הפלטפורמה.
  * - seoTitle / seoDescription: כותרת ותיאור לגוגל ולשיתוף (חלק 14; ריק = שם העסק).
  * - seoKeywords: מילות מפתח של החנות (<meta name="keywords">; ריק = בלי התג).
- * - tracking: מזהי Facebook Pixel / Google Analytics — נכנסים ל-<head>.
+ * - tracking: מזהי Facebook Pixel / Google Analytics / Google Tag Manager — נטענים בדפדפן אחרי הסכמה.
  * - promo: פופ-אפ המבצעים בכניסה לאתר (null = כבוי).
  */
 export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => {
@@ -305,6 +305,9 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
   const isPortal = tenant.slug === PORTAL_STORE_SLUG;
   const pixelId = data?.facebook_pixel_id ?? null;
   const gaId = data?.google_analytics_id ?? null;
+  // מיגרציה 192: מזהה Google Tag Manager של החנות הזו (לפי ה-Host, בשרת) — רק כשבעל החנות הפעיל
+  const { siteTagManager } = await import("@/platform/analytics/gtm.server");
+  const gtmId = isPortal ? null : await siteTagManager();
   const promoText = data?.promo_popup_text?.trim() ?? "";
   // חלק 21: הכתובת הראשית של החנות (לכתובת הקנונית, og:url ו-JSON-LD), הלוגו
   // (לתמונת השיתוף) ואמצעי הקשר — לסכמת העסק של גוגל. site_settings ציבורי.
@@ -348,7 +351,7 @@ export const getSiteSeo = createServerFn({ method: "GET" }).handler(async () => 
     seoTitle: data?.seo_title?.trim() ?? "",
     seoDescription: data?.seo_description?.trim() ?? "",
     seoKeywords: data?.seo_keywords?.trim() ?? "",
-    tracking: pixelId || gaId ? { pixelId, gaId } : null,
+    tracking: pixelId || gaId || gtmId ? { pixelId, gaId, gtmId } : null,
     googleVerification: GOOGLE_META_FORMAT.test(data?.google_site_verification ?? "")
       ? (data?.google_site_verification ?? null)
       : null,

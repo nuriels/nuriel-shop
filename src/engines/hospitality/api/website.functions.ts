@@ -112,6 +112,9 @@ export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
       import("@/platform/tenancy/current-site.server"),
       import("../website/seo"),
     ]);
+    // מיגרציה 192: Google Tag Manager של האתר הזה (לפי ה-Host, בשרת) — המסד מחזיר רק כשהמדידה הופעלה לאתר
+    const { siteTagManager } = await import("@/platform/analytics/gtm.server");
+    const gtm = analyticsOn === true ? await siteTagManager() : null;
     const site = toPublicSite(raw, publicUrl, types, packages);
     const seo = siteSeo(site);
     // E5: הכתובת הקנונית — מרשומת האתר + הבחירה בגרסה המפורסמת
@@ -119,8 +122,9 @@ export const hospitalityPublicSite = createServerFn({ method: "GET" }).handler(
       ...site,
       documents,
       origin: canonicalOrigin(await currentSiteAddresses(), seo),
-      // מדידה רק כשהמתג דולק וגם יש מזהה GA4 בגרסה המפורסמת; אחרת אין באתר שום דבר שדורש הסכמה
-      analytics: analyticsOn === true && seo.ga4 ? { ga4: seo.ga4 } : null,
+      // מדידה רק כשהמתג דולק וגם יש מזהה GA4 בגרסה המפורסמת או Tag Manager מופעל; אחרת אין באתר שום
+      // דבר שדורש הסכמה
+      analytics: analyticsOn === true && (seo.ga4 || gtm) ? { ga4: seo.ga4 || null, gtm } : null,
     };
   },
 );

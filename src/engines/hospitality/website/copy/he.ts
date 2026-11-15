@@ -223,6 +223,13 @@ export const he = {
     necessaryText:
       'הכניסה לאזור "ההזמנות שלי", ההתקדמות בטופס ההזמנה, העדפות הנגישות והבחירה שלך כאן. בלעדיהם האתר לא עובד, ואין בהם מעקב.',
     analyticsTitle: "מדידה (Google Analytics)",
+    // מיגרציה 192: כשבאתר מופעל Google Tag Manager (לבד או עם GA4)
+    bannerTextTagManager:
+      "נשמח להשתמש בכלי המדידה של Google (Google Tag Manager) כדי להבין איך משתמשים באתר ולשפר אותו. זה קורה רק אם מאשרים — האתר עובד בדיוק אותו דבר גם בלי.",
+    analyticsTitleTagManager: "מדידה (Google Tag Manager)",
+    analyticsTitleBoth: "מדידה (Google Analytics ו-Tag Manager)",
+    analyticsTextTagManager:
+      "סטטיסטיקה על הביקורים באתר דרך Google Tag Manager — אילו עמודים נצפו ומאיזה סוג מכשיר. נשמרת אצל Google; אותות הפרסום של Google נשארים חסומים.",
     analyticsText:
       "סטטיסטיקה על הביקורים באתר — אילו עמודים נצפו, כמה זמן ומאיזה סוג מכשיר. נשמרת אצל Google; בלי פרסום ובלי מעקב בין אתרים.",
     on: "פעיל",

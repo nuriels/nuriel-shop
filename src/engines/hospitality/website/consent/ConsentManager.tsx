@@ -34,6 +34,7 @@ import {
 } from "./consent";
 import { CONTACT_EVENT, contactMethodOf } from "./events";
 import { armAnalytics, denyAnalytics, gaEvent, gaPageView, grantAnalytics } from "./ga";
+import { gtmPageView, revokeGtm, startGtm } from "@/platform/analytics/gtm-client";
 import { consentStore, useConsent, useConsentAnnouncement, useConsentPanel } from "./store";
 
 /** שומר בחירה: בדפדפן מיד, ובשרת ברקע (רשומה אנונימית — כישלון לא מפריע לגולש) */
@@ -49,8 +50,10 @@ function choose(previous: ConsentState | null, analytics: boolean, via: "banner"
 export function ConsentManager() {
   const { site, preview } = useSite();
   const consent = useConsent();
-  const available = !preview && Boolean(site.analytics?.ga4);
+  const available = !preview && Boolean(site.analytics?.ga4 || site.analytics?.gtm);
   const ga4 = site.analytics?.ga4 ?? null;
+  // מיגרציה 192: Tag Manager — אחרי אותה הסכמה (מדידה). אותות הפרסום של Consent Mode נשארים חסומים
+  const gtm = site.analytics?.gtm ?? null;
   const granted = analyticsGranted(consent, available);
   const wasGranted = useRef(false);
   const pathname = useLocation({ select: (l) => l.pathname });
@@ -58,20 +61,27 @@ export function ConsentManager() {
   // החלת הבחירה: אישור — טוענים / מעדכנים (ונשלח מה שנשמר לעמוד הזה); ביטול אחרי אישור — חוסמים ומוחקים
   // את ה-Cookies של המדידה; עוד אין החלטה — אירועי העמוד נשמרים בזיכרון בלבד; סירוב / בלי מדידה — כלום
   useEffect(() => {
-    if (granted && ga4) {
-      grantAnalytics(ga4);
+    if (granted && (ga4 || gtm)) {
+      if (ga4) grantAnalytics(ga4);
+      if (gtm && startGtm(gtm, { analytics: true, ads: false })) {
+        gtmPageView(window.location.href, document.title);
+      }
       wasGranted.current = true;
     } else if (wasGranted.current) {
       denyAnalytics();
+      revokeGtm();
       wasGranted.current = false;
     } else {
-      armAnalytics(!preview && available && consent === null);
+      armAnalytics(!preview && Boolean(ga4) && available && consent === null);
     }
-  }, [granted, ga4, available, consent, preview]);
+  }, [granted, ga4, gtm, available, consent, preview]);
 
   // צפייה בעמוד — בכל מעבר עמוד באתר (הכתובת בלי ה-# ובלי השאילתה)
   useEffect(() => {
-    if (!preview) gaPageView();
+    if (preview) return;
+    gaPageView();
+    // Tag Manager: פעם אחת לכל עמוד (לא נטען — לא נשלח; אותו עמוד ברצף — לא שוב)
+    gtmPageView(window.location.href, document.title);
   }, [pathname, preview]);
 
   // קליק על טלפון / וואטסאפ / אימייל — בכל מקום באתר (בלי המספר / הכתובת עצמם)
@@ -116,6 +126,7 @@ function ConsentAnnouncement() {
 
 function ConsentBanner() {
   const t = useCopy();
+  const { site } = useSite();
   const { pathname } = useLocation();
   const consent = useConsent();
   const textId = useId();
@@ -135,7 +146,7 @@ function ConsentBanner() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
         <p id={textId} className="flex-1 text-sm leading-relaxed">
           <Cookie className="me-1.5 inline size-4 align-[-2px]" aria-hidden="true" />
-          {t.consent.bannerText}
+          {site.analytics?.gtm ? t.consent.bannerTextTagManager : t.consent.bannerText}
         </p>
         <div className="flex flex-wrap gap-2">
           {/* אישור וסירוב באותו גודל ובאותו משקל — בלי לדחוף לבחירה אחת */}
@@ -177,7 +188,7 @@ function ConsentBanner() {
 
 function CookiePanel({ available }: { available: boolean }) {
   const t = useCopy();
-  const { theme, design } = useSite();
+  const { theme, design, site } = useSite();
   const open = useConsentPanel();
   const consent = useConsent();
   const [analytics, setAnalytics] = useState(false);
@@ -215,10 +226,16 @@ function CookiePanel({ available }: { available: boolean }) {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 id={`${toggleId}-title`} className="mb-1 text-base font-medium">
-                    {t.consent.analyticsTitle}
+                    {site.analytics?.gtm
+                      ? site.analytics.ga4
+                        ? t.consent.analyticsTitleBoth
+                        : t.consent.analyticsTitleTagManager
+                      : t.consent.analyticsTitle}
                   </h3>
                   <p id={`${toggleId}-text`} className="text-muted-foreground">
-                    {t.consent.analyticsText}
+                    {site.analytics?.gtm && !site.analytics.ga4
+                      ? t.consent.analyticsTextTagManager
+                      : t.consent.analyticsText}
                   </p>
                 </div>
                 <button

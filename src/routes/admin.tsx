@@ -495,7 +495,7 @@ function AdminPage() {
                 <PagesPanel />
               </TabsContent>
               <TabsContent value="marketing">
-                <MarketingPanel />
+                <MarketingPanel canManageTracking={staffCan(staffRole, "billing.manage")} />
               </TabsContent>
               <TabsContent value="email">
                 <EmailSettingsPanel />

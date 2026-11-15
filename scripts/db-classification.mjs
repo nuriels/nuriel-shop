@@ -45,7 +45,7 @@ const TABLES = {
     password_reset_requests password_reset_tokens staff_notifications contact_messages support_tickets
     support_messages marketing_consents marketing_consent_events notification_logs tenant_ssl
     tenant_billing_profile billing_history upgrade_requests tenant_grow_credentials
-    platform_product_roles platform_feature_flags tenant_feature_flags vat_rates`,
+    platform_product_roles platform_feature_flags tenant_feature_flags vat_rates site_tracking`,
   "platform-admin": `platform_addons platform_admin_handoffs platform_admins platform_agreement_acceptances
     platform_agreement_versions platform_audit_log platform_documents platform_email_log platform_plans
     platform_pricing_settings
@@ -66,6 +66,11 @@ const PLATFORM_FUNCTIONS = new RegExp(
       // VAT (migration 191): the central rate of the platform; each store's own dealer type is Ecommerce
       "vat_rate_on",
       "vat_rates_guard",
+      // Google Tag Manager (migration 192): one container ID per site, for both products
+      "site_tracking_.*",
+      "site_tag_manager",
+      "my_tag_manager",
+      "save_my_tag_manager",
       "portal_.*",
       "tenants_.*",
       "tenant_for_host",

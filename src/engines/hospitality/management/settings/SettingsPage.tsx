@@ -24,6 +24,8 @@ import {
   Skeleton,
 } from "@/platform/ui";
 import { hospitalitySettings, hospitalityUpdateSettings } from "../../api/settings.functions";
+import { TagManagerCard } from "@/platform/analytics/ui/TagManagerCard";
+import { useManagement } from "../shell/management-context";
 import type { SettingsKey, SettingsView } from "../../types/settings";
 import { SETTINGS_LABELS } from "../../validation/settings";
 import { manageKeys } from "../lib/query-keys";
@@ -57,6 +59,7 @@ const withCurrent = <T extends number | null>(list: T[], current: T) =>
   list.includes(current) ? list : [...list, current].sort((a, b) => (a ?? 0) - (b ?? 0));
 
 export function SettingsPage() {
+  const management = useManagement();
   const settings = useQuery({
     queryKey: manageKeys.settings,
     queryFn: () => hospitalitySettings(),
@@ -91,6 +94,13 @@ export function SettingsPage() {
       {/* מיגרציה 37: תשלום מאורחים — טופס נפרד (שמירה משלו, בעלי העסק בלבד) */}
       <div className="mx-auto mt-6 w-full max-w-3xl">
         <PaymentInstructionsCard />
+      </div>
+      {/* מיגרציה 192: Google Tag Manager — מזהה Container בלבד (הבעלים / מנהל/ת עסק) */}
+      <div className="mx-auto mt-6 w-full max-w-3xl">
+        <TagManagerCard
+          canManage={management.permissions["settings.owner"] === true}
+          measurementOnly
+        />
       </div>
     </>
   );

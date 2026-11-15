@@ -154,7 +154,12 @@ export const EMPTY_MARKETING: MarketingSettings = {
 };
 
 /** מה שה-root מעביר לדפדפן (מ-getSiteSeo) */
-export type StoreTracking = { pixelId: string | null; gaId: string | null };
+export type StoreTracking = {
+  pixelId: string | null;
+  gaId: string | null;
+  /** מיגרציה 192: Container של Google Tag Manager (נטען ב-TrackingConsent, לא כאן) */
+  gtmId?: string | null;
+};
 export type StorePromo = { text: string; coupon: string | null } | null;
 
 /**
