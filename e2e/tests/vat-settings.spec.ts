@@ -99,6 +99,7 @@ test("authorized, prices before VAT: '+ מע״מ' next to the price, a VAT line,
   const customer = await (await browser.newContext({ storageState: AUTH.customerA })).newPage();
   await customer.goto(A(`/product/${PRODUCTS.a2.id}`));
   await expect(customer.getByText("+ מע״מ").first()).toBeVisible({ timeout: 20_000 });
+  await customer.getByRole("button", { name: "הוספה לסל" }).first().click();
   await customer.goto(A("/checkout"));
   await expect(customer.getByText(PRODUCTS.a2.name).first()).toBeVisible({ timeout: 20_000 });
   const line = customer.locator("[data-vat-line]");

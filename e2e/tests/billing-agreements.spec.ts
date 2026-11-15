@@ -318,8 +318,11 @@ test("the owner's billing card fits a phone (no horizontal scroll) @mobile", asy
   const mine = page.getByTestId("my-billing");
   await expect(mine).toBeVisible({ timeout: 20_000 });
   await expect(mine.getByTestId("my-billing-agreed")).toContainText("₪6,000");
-  // Nuriel עוסק פטור (ברירת המחדל) — ההסכם ללא מע"מ, וכך מוצג לבעל העסק
-  await expect(mine.getByTestId("my-billing-vat")).toContainText("ללא מע״מ");
+  // המע"מ בהסכם לפי Nuriel כמוכרת: פטור (ברירת המחדל, בטלפון) — "ללא מע״מ"; מורשה (במחשב, beforeAll) — 18%
+  const seller = sql(`SELECT seller_business_type FROM billing.settings`);
+  await expect(mine.getByTestId("my-billing-vat")).toContainText(
+    seller === "exempt" ? "ללא מע״מ" : "18%",
+  );
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
