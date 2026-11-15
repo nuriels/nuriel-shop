@@ -18,6 +18,9 @@
 --        • "לפני מע"מ": הסכום ללקוח משתנה — הבסיס כפול 1.18 במקום כפול (1 + השיעור השמור)
 --   7. סיכום: כמה חנויות מושפעות, וסך ההפרש המשוער ב-90 יום
 --   הערה: עוסק פטור — כבר היום 0% (טריגר מ-20261019300000), ואחרי 191 נשאר 0%. אין לו שורות בסעיפים 6–7.
+--   8. (סבב 3) פיקדון מכלי משקה — כמה מע"מ נוסף על שורות הפיקדון ב-90 הימים האחרונים, בהזמנות "לפני
+--      מע"מ" (שם השרת מוסיף מע"מ גם על הפיקדון). מידע בלבד, לשאלה הפתוחה ב-docs/billing/deposit-vat-research.md.
+--      בהזמנות "כולל מע"מ" — המע"מ מחולץ מתוך הפיקדון (הסכום לא גדל); מוצג לצורך השוואה.
 -- ============================================================
 BEGIN READ ONLY;
 
@@ -93,5 +96,23 @@ SELECT count(*) AS "חנויות מורשות עם שיעור שונה מ-18%",
        count(*) FILTER (WHERE NOT s.prices_include_vat) AS "מתוכן לפני מע״מ"
   FROM public.site_settings s JOIN public.tenants t ON t.id = s.tenant_id
  WHERE t.site_type = 'ecommerce' AND s.business_type = 'authorized' AND s.vat_rate IS DISTINCT FROM 18;
+
+\echo '8. פיקדון מכלי משקה ב-90 הימים האחרונים: סך שורות הפיקדון, ומה נוסף עליהן (לפני מע"מ) או חולץ מהן (כולל מע"מ)'
+SELECT t.slug,
+       CASE WHEN o.prices_include_vat THEN 'כולל מע"מ' ELSE 'לפני מע"מ' END AS "מצב ההזמנה",
+       o.vat_rate AS "שיעור",
+       count(DISTINCT o.id) AS "הזמנות עם פיקדון",
+       round(sum(i.unit_price * i.quantity), 2) AS "סך שורות הפיקדון",
+       CASE WHEN NOT o.prices_include_vat
+            THEN round(sum(i.unit_price * i.quantity) * o.vat_rate / 100, 2) END AS "מע״מ שנוסף מעל הפיקדון",
+       CASE WHEN o.prices_include_vat
+            THEN round(sum(i.unit_price * i.quantity) * o.vat_rate / (100 + o.vat_rate), 2) END AS "מע״מ שבתוך הפיקדון"
+  FROM public.order_items i
+  JOIN public.orders o ON o.id = i.order_id
+  JOIN public.tenants t ON t.id = o.tenant_id
+ WHERE i.is_deposit AND o.kind = 'order' AND o.status <> 'cancelled'
+   AND o.created_at >= now() - interval '90 days' AND o.vat_rate > 0
+ GROUP BY t.slug, o.prices_include_vat, o.vat_rate
+ ORDER BY t.slug, 2;
 
 ROLLBACK;
