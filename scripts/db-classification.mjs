@@ -45,7 +45,7 @@ const TABLES = {
     password_reset_requests password_reset_tokens staff_notifications contact_messages support_tickets
     support_messages marketing_consents marketing_consent_events notification_logs tenant_ssl
     tenant_billing_profile billing_history upgrade_requests tenant_grow_credentials
-    platform_product_roles platform_feature_flags tenant_feature_flags`,
+    platform_product_roles platform_feature_flags tenant_feature_flags vat_rates`,
   "platform-admin": `platform_addons platform_admin_handoffs platform_admins platform_agreement_acceptances
     platform_agreement_versions platform_audit_log platform_documents platform_email_log platform_plans
     platform_pricing_settings
@@ -63,6 +63,9 @@ const PLATFORM_FUNCTIONS = new RegExp(
       // Billing & Agreements (migrations 189–190): the shared financial layer of both products
       "my_billing_.*",
       "billing_history_guard",
+      // VAT (migration 191): the central rate of the platform; each store's own dealer type is Ecommerce
+      "vat_rate_on",
+      "vat_rates_guard",
       "portal_.*",
       "tenants_.*",
       "tenant_for_host",

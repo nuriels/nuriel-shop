@@ -414,6 +414,15 @@ export function RecordPaymentDialog({
             {state ? ` כרגע: ${PLAN_LABELS[state.plan]} · ${remainingLabel(state)}.` : ""}
           </DialogDescription>
         </DialogHeader>
+        {/* Billing & Agreements: המנגנון הישן ממשיך לעבוד, אבל לא כותב ליומן החדש — ואין סנכרון אוטומטי */}
+        <p
+          className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs leading-5 text-amber-950"
+          role="note"
+          data-testid="legacy-payment-note"
+        >
+          שימו לב: התשלום נרשם בהיסטוריה הישנה בלבד. הוא לא יופיע ביומן החיובים החדש (תיק הלקוח ←
+          &quot;הסכם ותשלומים&quot;) ולא ייספר שם ב&quot;שולם&quot;. אין סנכרון אוטומטי בין השניים.
+        </p>
 
         <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">

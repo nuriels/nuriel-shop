@@ -120,7 +120,7 @@ SELECT tests.check('billing access: internal billing functions run for nobody; p
               FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
                AND (p.proname LIKE 'my\_billing\_%' OR p.proname LIKE 'platform\_billing\_%') AND p.proname <> 'platform_billing_history')
        AND (SELECT count(*) FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
-             AND (p.proname LIKE 'my\_billing\_%' OR (p.proname LIKE 'platform\_billing\_%' AND p.proname <> 'platform_billing_history'))) = 13$$);
+             AND (p.proname LIKE 'my\_billing\_%' OR (p.proname LIKE 'platform\_billing\_%' AND p.proname <> 'platform_billing_history'))) = 14$$);
 SELECT tests.check('billing access: a signed-in owner reading the ledger directly is refused',
   format($$SELECT pg_temp.err(%L, %L, 'SELECT to_jsonb(count(*)) FROM billing.ledger') LIKE '%%permission denied%%'$$,
          :E_SITE, :E_OWNER));
@@ -158,8 +158,51 @@ SELECT tests.check('billing owner: owners, managers and the business admin canno
                                format('SELECT public.platform_billing_renew(%%L, NULL)', %1$L),
                                'SELECT public.platform_billing_requests()',
                                'SELECT to_jsonb(public.platform_billing_pending_count())',
-                               'SELECT public.platform_billing_save_settings(0)']) AS sql$$,
+                               'SELECT public.platform_billing_legacy_overview()',
+                               $q$SELECT public.platform_billing_save_settings('{"seller_business_type":"authorized","seller_prices_include_vat":true}')$q$]) AS sql$$,
          :E_SITE, :E_OWNER, :E_MGR, :'hs', :H_OWNER, :H_BA));
+
+-- ============================================================
+-- 2b. VAT follows the seller (Nuriel): exempt by default — no VAT in any agreement or charge
+-- ============================================================
+SELECT tests.check('billing VAT exempt: by default Nuriel is an exempt dealer — rate 0, no "included", no override; the owner sees it too',
+  format($$SELECT c -> 'vat' ->> 'business_type' = 'exempt' AND (c -> 'vat' ->> 'rate')::numeric = 0
+             AND c -> 'vat' ->> 'default_mode' = 'exempt' AND (c -> 'vat' ->> 'allow_vat_rate_override')::boolean = false
+             AND o -> 'vat' ->> 'business_type' = 'exempt' AND NOT (o -> 'vat' ? 'allow_vat_rate_override')
+           FROM (SELECT pg_temp.plat(format('SELECT public.platform_billing_card(%%L)', %1$L)) AS c,
+                        pg_temp.call(%1$L, %2$L, 'SELECT public.my_billing_summary()') AS o) x$$, :E_SITE, :E_OWNER));
+SELECT tests.check('billing VAT exempt: an agreement "+VAT" / "includes VAT" or with a VAT rate is refused; no row was written',
+  format($$SELECT pg_temp.plat_err(format('SELECT public.platform_billing_quote(%%L, %%L)', %1$L, '{"plan":"premium","vat_mode":"excluded"}'))
+                  LIKE '%%עוסק פטור%%'
+             AND pg_temp.plat_err(format('SELECT public.platform_billing_quote(%%L, %%L)', %1$L, '{"plan":"premium","vat_mode":"included"}'))
+                  LIKE '%%עוסק פטור%%'
+             AND pg_temp.plat_err(format('SELECT public.platform_billing_quote(%%L, %%L)', %1$L, '{"plan":"premium","vat_rate":18}'))
+                  LIKE '%%עוסק פטור%%'
+             AND NOT EXISTS (SELECT 1 FROM billing.agreements) AND NOT EXISTS (SELECT 1 FROM billing.ledger)$$, :E_SITE));
+SELECT tests.check('billing VAT exempt: the price of an exempt agreement is final — 700 net = 700 total, VAT 0',
+  format($$SELECT (q ->> 'vat_rate')::numeric = 0 AND (q ->> 'new_cycle_price')::numeric = 700
+             AND billing.price_parts(700, 'exempt', 18) = '{"net": 700, "vat": 0, "gross": 700, "rate": 0, "mode": "exempt"}'::jsonb
+           FROM (SELECT pg_temp.plat(format('SELECT public.platform_billing_quote(%%L, %%L)', %L, '{"plan":"premium"}')) AS q) x$$,
+         :E_SITE));
+SELECT tests.check('billing VAT exempt: even the database owner cannot store an exempt row with VAT (agreement or ledger)',
+  format($$SELECT pg_temp.db_err(format($q$INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount,
+             vat_business_type, vat_rate, vat_amount, net_amount, occurred_on)
+             VALUES (%%L, 'x', 'ecommerce', 'charge', 'other', 118, 'exempt', 18, 18, 100, current_date)$q$, %1$L)) LIKE '%%check constraint%%'
+           AND pg_temp.db_err(format($q$INSERT INTO billing.agreements (tenant_id, tenant_label, engine, version, plan_code,
+             billing_cycle, vat_business_type, vat_mode, vat_rate, effective_on)
+             VALUES (%%L, 'x', 'ecommerce', 1, 'basic', 'monthly', 'exempt', 'excluded', 18, current_date)$q$, %1$L)) LIKE '%%check constraint%%'$$,
+         :E_SITE));
+SELECT tests.check('billing VAT settings: an authorized seller must say whether prices include VAT; a bad type is refused',
+  $$SELECT pg_temp.plat_err($q$SELECT public.platform_billing_save_settings('{"seller_business_type":"authorized"}')$q$) LIKE '%כוללים מע"מ%'
+       AND pg_temp.plat_err($q$SELECT public.platform_billing_save_settings('{"seller_business_type":"company"}')$q$) LIKE '%פטור או מורשה%'$$);
+-- from here on: Nuriel as an authorized dealer, prices before VAT (the checks below use VAT 18%)
+SELECT pg_temp.plat($q$SELECT public.platform_billing_save_settings('{"seller_business_type":"authorized","seller_prices_include_vat":false}')$q$) AS vat_auth \gset
+SELECT tests.check('billing VAT authorized: the central rate (18%), "+VAT" by default, no override; audited',
+  format($$SELECT %L::jsonb ->> 'business_type' = 'authorized' AND (%1$L::jsonb ->> 'rate')::numeric = 18
+             AND %1$L::jsonb ->> 'default_mode' = 'excluded' AND (%1$L::jsonb ->> 'allow_vat_rate_override')::boolean = false
+             AND EXISTS (SELECT 1 FROM public.platform_audit_log WHERE action = 'billing_settings_saved'
+                           AND details ->> 'seller_business_type' = 'authorized' AND details -> 'previous' ->> 'seller_business_type' = 'exempt')$$,
+         :'vat_auth'));
 
 -- ============================================================
 -- 3. Store E: full price (no special price), cross-engine plan refused, concurrency
@@ -380,8 +423,9 @@ SELECT tests.check('billing separation: the engine of every row = the site type 
        AND NOT EXISTS (SELECT 1 FROM billing.agreements a JOIN public.tenants t ON t.id = a.tenant_id WHERE t.site_type <> a.engine)
        AND billing.plan_info('ecommerce', 'pro') IS NULL AND billing.plan_info('hospitality', 'pro') IS NOT NULL$$);
 SELECT tests.check('billing separation: a row with the wrong engine is refused even for the database owner',
-  format($$SELECT pg_temp.db_err(format($q$INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount, vat_rate,
-             vat_amount, net_amount, occurred_on) VALUES (%%L, 'x', 'hospitality', 'charge', 'other', 1, 0, 0, 1, current_date)$q$, %L))
+  format($$SELECT pg_temp.db_err(format($q$INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount,
+             vat_business_type, vat_rate, vat_amount, net_amount, occurred_on)
+             VALUES (%%L, 'x', 'hospitality', 'charge', 'other', 1, 'exempt', 0, 0, 1, current_date)$q$, %L))
              LIKE '%%המנוע שלו שונה%%'$$, :E_SITE));
 
 -- ============================================================
@@ -418,23 +462,34 @@ SELECT tests.check('billing append-only: a decided request cannot change again, 
   $$SELECT pg_temp.db_err($q$UPDATE billing.upgrade_requests SET status = 'pending', decided_at = NULL WHERE status <> 'pending'$q$) LIKE '%כבר טופלה%'
        AND pg_temp.db_err('DELETE FROM billing.upgrade_requests') LIKE '%לא נמחקות%'$$);
 SELECT tests.check('billing provider: a "provider" (verified) payment cannot be recorded manually',
-  format($$SELECT pg_temp.db_err(format($q$INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount, vat_rate,
-             vat_amount, net_amount, occurred_on, confirmation, provider_ref, method)
-             VALUES (%%L, 'x', 'ecommerce', 'payment', 'other', 1, 0, 0, 1, current_date, 'provider', 'tx-1', 'credit_card')$q$, %L))
+  format($$SELECT pg_temp.db_err(format($q$INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount,
+             vat_business_type, vat_rate, vat_amount, net_amount, occurred_on, confirmation, provider_ref, method)
+             VALUES (%%L, 'x', 'ecommerce', 'payment', 'other', 1, 'exempt', 0, 0, 1, current_date, 'provider', 'tx-1', 'credit_card')$q$, %L))
              LIKE '%%לא נרשם ידנית%%'
            AND NOT EXISTS (SELECT 1 FROM billing.ledger WHERE confirmation = 'provider')$$, :E_SITE));
 
 -- ============================================================
 -- 12. VAT rate stored per row; the default changes only new agreements; audit; the old history untouched
 -- ============================================================
-SELECT pg_temp.plat('SELECT public.platform_billing_save_settings(17)') IS NOT NULL AS ok \gset
-SELECT tests.check('billing VAT: a new default rate changes no stored agreement or ledger row; it is offered to new agreements',
-  format($$SELECT NOT EXISTS (SELECT 1 FROM billing.ledger WHERE tenant_id IN (%1$L, %2$L) AND vat_rate <> 18)
-             AND NOT EXISTS (SELECT 1 FROM billing.agreements WHERE tenant_id IN (%1$L, %2$L) AND vat_rate <> 18)
-             AND (pg_temp.plat(format('SELECT public.platform_billing_card(%%L)', %3$L)) ->> 'default_vat_rate')::numeric = 17
-             AND (pg_temp.plat(format($q$SELECT public.platform_billing_quote(%%L, '{"plan":"basic"}')$q$, %3$L)) ->> 'vat_rate')::numeric = 17$$,
+SELECT pg_temp.plat($q$SELECT public.platform_billing_save_settings('{"seller_business_type":"authorized","seller_prices_include_vat":true}')$q$) IS NOT NULL AS ok \gset
+SELECT tests.check('billing VAT: a settings change rewrites no stored agreement or ledger row; new agreements get the new default',
+  format($$SELECT NOT EXISTS (SELECT 1 FROM billing.ledger WHERE tenant_id IN (%1$L, %2$L) AND (vat_rate <> 18 OR vat_business_type <> 'authorized'))
+             AND NOT EXISTS (SELECT 1 FROM billing.agreements WHERE tenant_id IN (%1$L, %2$L)
+                               AND (vat_rate <> 18 OR vat_business_type <> 'authorized' OR vat_mode NOT IN ('included', 'excluded')))
+             AND pg_temp.plat(format('SELECT public.platform_billing_card(%%L)', %3$L)) -> 'vat' ->> 'default_mode' = 'included'
+             AND (pg_temp.plat(format($q$SELECT public.platform_billing_quote(%%L, '{"plan":"basic"}')$q$, %3$L)) ->> 'vat_rate')::numeric = 18$$,
          :E_SITE, :'hs', :E2_SITE));
-SELECT pg_temp.plat('SELECT public.platform_billing_save_settings(18)') IS NOT NULL AS ok \gset
+SELECT tests.check('billing VAT override: another rate is refused unless the settings allow it (authorized only)',
+  format($$SELECT pg_temp.plat_err(format('SELECT public.platform_billing_quote(%%L, %%L)', %L, '{"plan":"basic","vat_rate":0}'))
+                  LIKE '%%נקבע מרכזית (18%%%%)%%'$$, :E2_SITE));
+SELECT pg_temp.plat($q$SELECT public.platform_billing_save_settings('{"seller_business_type":"authorized","seller_prices_include_vat":true,"allow_vat_rate_override":true}')$q$) IS NOT NULL AS ok \gset
+SELECT tests.check('billing VAT override: allowed by the settings — a 0% agreement (e.g. a service to a foreign resident)',
+  format($$SELECT (pg_temp.plat(format('SELECT public.platform_billing_quote(%%L, %%L)', %L, '{"plan":"basic","vat_rate":0}')) ->> 'vat_rate')::numeric = 0$$,
+         :E2_SITE));
+SELECT tests.check('billing VAT override: switching to exempt turns the override off',
+  $$SELECT (pg_temp.plat($q$SELECT public.platform_billing_save_settings('{"seller_business_type":"exempt","allow_vat_rate_override":true}')$q$)
+              ->> 'allow_vat_rate_override')::boolean = false$$);
+SELECT pg_temp.plat($q$SELECT public.platform_billing_save_settings('{"seller_business_type":"authorized","seller_prices_include_vat":false}')$q$) IS NOT NULL AS ok \gset
 SELECT tests.check('billing audit: every platform action is in the platform log (agreements, entries, renewals, reversal, plan, request, settings)',
   format($$SELECT (SELECT count(*) FROM public.platform_audit_log WHERE tenant_id = %1$L AND action = 'billing_agreement_saved') = 2
              AND (SELECT count(*) FROM public.platform_audit_log WHERE tenant_id = %1$L AND action = 'billing_renewed') = 2
@@ -514,7 +569,19 @@ SELECT tests.check('190 history: the existing flows still work — a pending cha
 -- 14. A payment copied later from the old history (legacy_import, a separate approved step): it counts in
 --     "total paid" only — not against new charges, so the owner never sees a credit that does not exist
 -- ============================================================
+SELECT tests.check('billing legacy gap: the old "record payment" rows not in the new ledger — shown to the platform admin only (read-only)',
+  format($$SELECT (c -> 'legacy_unmatched' ->> 'paid_count')::int = 2 AND (c -> 'legacy_unmatched' ->> 'paid_amount')::numeric = 550
+             AND (c -> 'legacy_unmatched' ->> 'due_count')::int = 0
+             AND jsonb_array_length(c -> 'legacy_unmatched' -> 'rows') = 2
+             AND NOT (o ? 'legacy_unmatched')
+             AND (SELECT (i ->> 'paid_amount')::numeric = 550 AND NOT (i ->> 'deleted')::boolean
+                    FROM jsonb_array_elements(v -> 'items') i WHERE i ->> 'tenant_id' = %1$L)
+             AND (v ->> 'businesses')::int >= 1
+           FROM (SELECT pg_temp.plat(format('SELECT public.platform_billing_card(%%L)', %1$L)) AS c,
+                        pg_temp.call(%1$L, %2$L, 'SELECT public.my_billing_summary()') AS o,
+                        pg_temp.plat('SELECT public.platform_billing_legacy_overview()') AS v) x$$, :E_SITE, :E_OWNER));
 SELECT (pg_temp.call(:E_SITE, :E_OWNER, 'SELECT public.my_billing_summary()')) AS e_before_legacy \gset
+-- an old row: the dealer type was not stored then (NULL), VAT 0 — nothing is guessed
 INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount, vat_rate, vat_amount, net_amount,
                             occurred_on, method, description, source, legacy_ref)
 VALUES (:E_SITE, 'x', 'ecommerce', 'payment', 'subscription', 450, 0, 0, 450, current_date - 400, 'other',
@@ -528,6 +595,10 @@ SELECT tests.check('billing legacy copy: total paid +450; the subscription due /
                            AND e ->> 'confirmation' = 'manual')
            FROM (SELECT pg_temp.call(%L, %L, 'SELECT public.my_billing_summary()') AS a, %L::jsonb AS b) x$$,
          :E_SITE, :E_OWNER, :'e_before_legacy'));
+SELECT tests.check('billing legacy gap: a copied row leaves the warning; the old row itself is untouched',
+  format($$SELECT (pg_temp.plat(format('SELECT public.platform_billing_card(%%L)', %L)) -> 'legacy_unmatched' ->> 'paid_amount')::numeric = 100
+             AND (SELECT amount = 450 AND payment_status = 'paid' FROM public.billing_history WHERE id = 'b1890000-0000-0000-0000-0000000bb001')$$,
+         :E_SITE));
 SELECT tests.check('billing legacy copy: the same old row cannot be copied twice (legacy_ref is unique)',
   $$SELECT pg_temp.db_err($q$INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount, vat_rate,
              vat_amount, net_amount, occurred_on, source, legacy_ref)
@@ -550,6 +621,35 @@ SELECT tests.check('billing requests: after 10 in one day (request + cancel loop
              AND pg_temp.call(%1$L, %2$L, $q$SELECT public.my_billing_cancel_request((public.my_billing_request_upgrade('basic') ->> 'id')::uuid)$q$) IS NOT NULL
              AND pg_temp.err(%1$L, %2$L, $q$SELECT public.my_billing_request_upgrade('basic')$q$) LIKE '%%יותר מדי בקשות%%'$$,
          :E2_SITE, :E2_OWNER));
+
+-- ============================================================
+-- 16. Nuriel back to exempt: new charges carry no VAT even on an agreement signed as authorized;
+--     the stored rows keep their snapshot; a reversal mirrors the original row
+-- ============================================================
+SELECT (SELECT count(*) FROM billing.ledger) AS rows_before_exempt,
+       (SELECT md5(string_agg(to_jsonb(l)::text, ',' ORDER BY entry_no)) FROM billing.ledger l) AS ledger_md5,
+       (SELECT md5(string_agg(to_jsonb(a)::text, ',' ORDER BY id)) FROM billing.agreements a) AS agreements_md5 \gset
+SELECT pg_temp.plat($q$SELECT public.platform_billing_save_settings('{"seller_business_type":"exempt"}')$q$) IS NOT NULL AS ok \gset
+SELECT tests.check('billing VAT exempt again: no stored agreement or ledger row changed',
+  format($$SELECT (SELECT md5(string_agg(to_jsonb(l)::text, ',' ORDER BY entry_no)) FROM billing.ledger l) = %L
+             AND (SELECT md5(string_agg(to_jsonb(a)::text, ',' ORDER BY id)) FROM billing.agreements a) = %L$$,
+         :'ledger_md5', :'agreements_md5'));
+SELECT pg_temp.plat_err(format('SELECT public.platform_billing_record_entry(%L, %L)', :E_SITE,
+         '{"kind":"charge","category":"other","amount":118,"vat_rate":18}')) AS exempt_rate_err \gset
+SELECT pg_temp.plat(format('SELECT public.platform_billing_record_entry(%L, %L)', :E_SITE,
+         '{"kind":"charge","category":"other","amount":118,"description":"ב-פטור"}')) IS NOT NULL AS ok \gset
+SELECT tests.check('billing VAT exempt again: a manual charge with a VAT rate is refused; without one it is stored with VAT 0',
+  format($$SELECT %L LIKE '%%עוסק פטור%%'
+             AND (SELECT vat_business_type = 'exempt' AND vat_rate = 0 AND vat_amount = 0 AND net_amount = 118
+                    FROM billing.ledger WHERE tenant_id = %L AND description = 'ב-פטור')$$, :'exempt_rate_err', :E_SITE));
+SELECT o.id AS auth_row FROM billing.ledger o
+ WHERE o.tenant_id = :'hs' AND o.vat_business_type = 'authorized' AND o.vat_rate = 18 AND o.kind = 'charge'
+   AND NOT EXISTS (SELECT 1 FROM billing.ledger x WHERE x.reverses_id = o.id)
+ ORDER BY o.entry_no LIMIT 1 \gset
+SELECT pg_temp.plat(format('SELECT public.platform_billing_reverse_entry(%L, %L)', :'auth_row', 'בדיקת ביטול')) IS NOT NULL AS ok \gset
+SELECT tests.check('billing VAT exempt again: reversing an authorized row mirrors it (18%, authorized) — history is not rewritten',
+  format($$SELECT r.vat_business_type = 'authorized' AND r.vat_rate = 18 AND r.vat_amount = o.vat_amount AND r.amount = o.amount
+           FROM billing.ledger o JOIN billing.ledger r ON r.reverses_id = o.id WHERE o.id = %L$$, :'auth_row'));
 
 -- ---------- cleanup: the global flags as found (later files check that they are off) ----------
 SELECT pg_temp.plat($$SELECT to_jsonb(ARRAY[

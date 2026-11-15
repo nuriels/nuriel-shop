@@ -2,7 +2,9 @@
 -- מיגרציה 189: שכבת החיוב המשותפת (Billing & Agreements) — חנויות (Ecommerce) וצימרים (Hospitality)
 --
 -- מה Nuriel גובה מכל עסק הוא נתון של הפלטפורמה, לא של המנוע. לכן סכמה נפרדת, billing, ברמת הפלטפורמה:
---   • billing.settings        — שיעור המע"מ ברירת המחדל להסכמים חדשים (18%)
+--   • billing.settings        — סוג העוסק של Nuriel כמוכרת (פטור / מורשה). המע"מ בחיוב נקבע לפי המוכר:
+--                               עוסק פטור — 0% תמיד, בלי אפשרות לגבות מע"מ; עוסק מורשה — השיעור המרכזי
+--                               (public.vat_rate_on, מיגרציה 191; עד שהיא קיימת — 18%)
 --   • billing.agreements      — ההסכם עם כל לקוח, בגרסאות: חבילה, מחיר מוסכם (חודשי / שנתי), מחזור,
 --                               דמי הקמה, התחייבות, תאריך תחילה, מע"מ (כולל / לא כולל + השיעור), תנאים
 --                               (גלויים לבעל העסק) והערה פנימית (Nuriel בלבד). כל שינוי = גרסה חדשה;
@@ -40,8 +42,13 @@ GRANT USAGE ON SCHEMA billing TO service_role;
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS billing.settings (
   id               boolean PRIMARY KEY DEFAULT true CHECK (id),
-  -- שיעור המע"מ שמוצע בהסכם חדש; כל הסכם וכל שורה ביומן שומרים את השיעור שלהם
-  default_vat_rate numeric(5,2) NOT NULL DEFAULT 18.00 CHECK (default_vat_rate BETWEEN 0 AND 100),
+  -- סוג העוסק של Nuriel כמוכרת. exempt: עוסק פטור — אין מע"מ בשום הסכם ובשום חיוב (נעול במסד).
+  -- authorized: עוסק מורשה — השיעור המרכזי, והאם המחירים כוללים מע"מ (ברירת המחדל להסכם חדש).
+  -- כל הסכם וכל שורה ביומן שומרים צילום של סוג העוסק, השיטה והשיעור שלהם.
+  seller_business_type      text NOT NULL DEFAULT 'exempt' CHECK (seller_business_type IN ('exempt', 'authorized')),
+  seller_prices_include_vat boolean NOT NULL DEFAULT false,
+  -- עוסק מורשה בלבד: האם מותר לקבוע בהסכם שיעור אחר מהמרכזי (למשל 0% לשירות לתושב חוץ)
+  allow_vat_rate_override   boolean NOT NULL DEFAULT false,
   updated_at       timestamptz NOT NULL DEFAULT now(),
   updated_by       uuid
 );
@@ -68,8 +75,11 @@ CREATE TABLE IF NOT EXISTS billing.agreements (
   setup_fee          numeric(12,2) NOT NULL DEFAULT 0 CHECK (setup_fee BETWEEN 0 AND 1000000),
   commitment_months  integer CHECK (commitment_months IS NULL OR commitment_months BETWEEN 1 AND 120),
   start_date         date,
-  -- included: המחירים כוללים מע"מ | excluded: המחירים לפני מע"מ, והמע"מ מתווסף ומוצג בנפרד
-  vat_mode           text NOT NULL CHECK (vat_mode IN ('included', 'excluded')),
+  -- צילום מצב המע"מ ברגע ההסכם. סוג העוסק של המוכר (Nuriel);
+  -- included: המחירים כוללים מע"מ | excluded: המחירים לפני מע"מ, והמע"מ מתווסף ומוצג בנפרד |
+  -- exempt: עוסק פטור — אין מע"מ (השיעור 0)
+  vat_business_type  text NOT NULL CHECK (vat_business_type IN ('exempt', 'authorized')),
+  vat_mode           text NOT NULL CHECK (vat_mode IN ('included', 'excluded', 'exempt')),
   vat_rate           numeric(5,2) NOT NULL CHECK (vat_rate BETWEEN 0 AND 100),
   -- תנאי ההסכם — גלויים לבעל העסק
   terms              text CHECK (terms IS NULL OR char_length(terms) <= 2000),
@@ -86,7 +96,10 @@ CREATE TABLE IF NOT EXISTS billing.agreements (
   superseded_at      timestamptz,
   superseded_by      uuid,
   UNIQUE (tenant_id, version),
-  CHECK ((superseded_at IS NULL) = (superseded_by IS NULL))
+  CHECK ((superseded_at IS NULL) = (superseded_by IS NULL)),
+  -- עוסק פטור לא גובה מע"מ; עוסק מורשה — כולל או לא כולל
+  CHECK ((vat_business_type = 'exempt') = (vat_mode = 'exempt')),
+  CHECK (vat_mode <> 'exempt' OR vat_rate = 0)
 );
 -- הסכם נוכחי אחד לכל עסק
 CREATE UNIQUE INDEX IF NOT EXISTS agreements_current_idx ON billing.agreements (tenant_id) WHERE superseded_at IS NULL;
@@ -136,8 +149,11 @@ CREATE TABLE IF NOT EXISTS billing.ledger (
   kind               text NOT NULL CHECK (kind IN ('charge', 'payment', 'credit', 'reversal')),
   -- subscription: מנוי | setup: דמי הקמה | other: אחר
   category           text NOT NULL CHECK (category IN ('subscription', 'setup', 'other')),
-  -- הסכום הכולל (כולל מע"מ, אם יש), והפירוק שלו — מחושב במסד בלבד
+  -- הסכום הכולל (כולל מע"מ, אם יש), והפירוק שלו — מחושב במסד בלבד. צילום מצב: סוג העוסק של המוכר
+  -- והשיעור ברגע הרישום — שינוי עתידי בשיעור לא משנה שורה קיימת
   amount             numeric(12,2) NOT NULL CHECK (amount > 0 AND amount <= 1000000),
+  -- NULL רק בהעתקה מההיסטוריה הישנה (legacy_import) — שם סוג העוסק לא נשמר, ולא מנחשים
+  vat_business_type  text CHECK (vat_business_type IN ('exempt', 'authorized')),
   vat_rate           numeric(5,2) NOT NULL CHECK (vat_rate BETWEEN 0 AND 100),
   vat_amount         numeric(12,2) NOT NULL CHECK (vat_amount >= 0),
   net_amount         numeric(12,2) NOT NULL CHECK (net_amount >= 0),
@@ -168,6 +184,8 @@ CREATE TABLE IF NOT EXISTS billing.ledger (
   created_at         timestamptz NOT NULL DEFAULT clock_timestamp(),
   CHECK ((kind = 'reversal') = (reverses_id IS NOT NULL)),
   CHECK (net_amount + vat_amount = amount),
+  CHECK (vat_business_type IS NOT NULL OR source = 'legacy_import'),
+  CHECK (vat_business_type IS DISTINCT FROM 'exempt' OR (vat_rate = 0 AND vat_amount = 0)),
   CHECK (period_end IS NULL OR period_start IS NULL OR period_end >= period_start),
   CHECK (confirmation <> 'provider' OR provider_ref IS NOT NULL),
   CHECK (method IS NULL OR kind IN ('payment', 'reversal'))
@@ -274,7 +292,8 @@ RETURNS date LANGUAGE sql STABLE SET search_path = '' AS $$
   SELECT (_ts AT TIME ZONE 'Asia/Jerusalem')::date;
 $$;
 
--- פירוק מחיר לפי מצב המע"מ: included — הסכום כולל מע"מ; excluded — הסכום לפני מע"מ, והמע"מ מתווסף
+-- פירוק מחיר לפי מצב המע"מ: included — הסכום כולל מע"מ; excluded — הסכום לפני מע"מ, והמע"מ מתווסף;
+-- exempt — עוסק פטור: אין מע"מ בכלל (השיעור 0, גם אם הועבר שיעור אחר)
 CREATE OR REPLACE FUNCTION billing.price_parts(_price numeric, _mode text, _rate numeric)
 RETURNS jsonb LANGUAGE plpgsql IMMUTABLE SET search_path = '' AS $$
 DECLARE
@@ -284,6 +303,9 @@ DECLARE
 BEGIN
   IF _price IS NULL THEN
     RETURN NULL;
+  END IF;
+  IF _mode = 'exempt' THEN
+    RETURN jsonb_build_object('net', _p, 'vat', 0, 'gross', _p, 'rate', 0, 'mode', 'exempt');
   END IF;
   IF _mode = 'excluded' THEN
     _vat := round(_p * _r / 100, 2);
@@ -298,6 +320,54 @@ CREATE OR REPLACE FUNCTION billing.gross_parts(_gross numeric, _rate numeric)
 RETURNS jsonb LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
   SELECT billing.price_parts(_gross, 'included', _rate);
 $$;
+
+-- מצב המע"מ של Nuriel כמוכרת, ליום מסוים. השיעור לעוסק מורשה — השיעור המרכזי של הפלטפורמה
+-- (public.vat_rate_on, מיגרציה 191). כשהיא לא קיימת (rollback שלה) — 18%. עוסק פטור — 0 תמיד.
+CREATE OR REPLACE FUNCTION billing.vat_profile(_on date DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  s billing.settings;
+  _central numeric := 18;
+BEGIN
+  SELECT * INTO s FROM billing.settings x WHERE x.id;
+  IF to_regprocedure('public.vat_rate_on(date)') IS NOT NULL THEN
+    EXECUTE 'SELECT public.vat_rate_on($1)' INTO _central USING _on;
+  END IF;
+  RETURN jsonb_build_object(
+    'business_type', COALESCE(s.seller_business_type, 'exempt'),
+    'prices_include_vat', CASE WHEN COALESCE(s.seller_business_type, 'exempt') = 'exempt' THEN true
+                               ELSE COALESCE(s.seller_prices_include_vat, false) END,
+    'default_mode', CASE WHEN COALESCE(s.seller_business_type, 'exempt') = 'exempt' THEN 'exempt'
+                         WHEN COALESCE(s.seller_prices_include_vat, false) THEN 'included' ELSE 'excluded' END,
+    'rate', CASE WHEN COALESCE(s.seller_business_type, 'exempt') = 'exempt' THEN 0 ELSE COALESCE(_central, 18) END,
+    'central_rate', COALESCE(_central, 18),
+    'allow_vat_rate_override', COALESCE(s.seller_business_type, 'exempt') = 'authorized'
+                               AND COALESCE(s.allow_vat_rate_override, false));
+END $$;
+
+-- שיעור מע"מ לרישום חדש: עוסק פטור — 0, ושיעור אחר נדחה; עוסק מורשה — השיעור שהועבר רק כשמותר
+-- (allow_vat_rate_override), אחרת ברירת המחדל (_default — שיעור ההסכם, או המרכזי)
+CREATE OR REPLACE FUNCTION billing.vat_rate_for(_profile jsonb, _requested numeric, _default numeric)
+RETURNS numeric LANGUAGE plpgsql IMMUTABLE SET search_path = '' AS $$
+BEGIN
+  IF _profile ->> 'business_type' = 'exempt' THEN
+    IF COALESCE(_requested, 0) <> 0 THEN
+      RAISE EXCEPTION 'Nuriel מוגדרת כעוסק פטור — לא ניתן לגבות מע"מ' USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN 0;
+  END IF;
+  IF _requested IS NOT NULL AND _requested IS DISTINCT FROM COALESCE(_default, (_profile ->> 'rate')::numeric) THEN
+    IF NOT COALESCE((_profile ->> 'allow_vat_rate_override')::boolean, false) THEN
+      RAISE EXCEPTION '%', format('שיעור המע"מ נקבע מרכזית (%s%%) — שיעור אחר לא מותר בהגדרות', _profile ->> 'rate')
+        USING ERRCODE = 'check_violation';
+    END IF;
+    IF _requested NOT BETWEEN 0 AND 100 THEN
+      RAISE EXCEPTION 'שיעור מע"מ: 0 עד 100' USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN round(_requested, 2);
+  END IF;
+  RETURN COALESCE(_default, (_profile ->> 'rate')::numeric);
+END $$;
 
 CREATE OR REPLACE FUNCTION billing.engine_of(_tenant uuid)
 RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
@@ -421,6 +491,7 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
     'commitment_months', a.commitment_months, 'start_date', a.start_date,
     'commitment_ends_on', CASE WHEN a.start_date IS NULL OR a.commitment_months IS NULL THEN NULL
                                ELSE (a.start_date + make_interval(months => a.commitment_months))::date END,
+    'vat_business_type', a.vat_business_type,
     'vat_mode', a.vat_mode, 'vat_rate', a.vat_rate, 'terms', a.terms, 'effective_on', a.effective_on,
     'reason', a.reason, 'created_at', a.created_at)
     || CASE WHEN _internal THEN jsonb_build_object(
@@ -449,6 +520,29 @@ $$;
 -- ------------------------------------------------------------
 -- 7. הסיכום — פונקציה אחת לפאנל ולאזור הלקוח (אותם מספרים בדיוק)
 -- ------------------------------------------------------------
+-- המנגנון הישן ("תעד תשלום", public.billing_history) ממשיך לעבוד כמו שהוא. קריאה בלבד: שורות כסף שלו
+-- (תשלום / תוסף, סכום גדול מאפס) שעוד לא הועתקו ליומן החדש (אין שורה עם legacy_ref שלהן). הן לא נספרות
+-- ב"סה״כ שולם" של היומן החדש — מנהל הפלטפורמה רואה אזהרה. אין סנכרון ואין העתקה כאן.
+CREATE OR REPLACE FUNCTION billing.legacy_gap(_tenant uuid)
+RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  WITH g AS (
+    SELECT h.* FROM public.billing_history h
+     WHERE h.tenant_id = _tenant AND h.kind IN ('payment', 'addon') AND h.amount > 0
+       AND NOT EXISTS (SELECT 1 FROM billing.ledger l WHERE l.legacy_ref = h.id))
+  SELECT jsonb_build_object(
+    'paid_count', count(*) FILTER (WHERE g.payment_status = 'paid'),
+    'paid_amount', COALESCE(sum(g.amount) FILTER (WHERE g.payment_status = 'paid'), 0),
+    'due_count', count(*) FILTER (WHERE g.payment_status = 'due'),
+    'due_amount', COALESCE(sum(g.amount) FILTER (WHERE g.payment_status = 'due'), 0),
+    'last_on', max(billing.local_date(COALESCE(g.paid_at, g.created_at))),
+    'rows', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+               'id', x.id, 'kind', x.kind, 'addon_name', x.addon_name, 'amount', x.amount,
+               'status', x.payment_status, 'on', billing.local_date(COALESCE(x.paid_at, x.created_at)),
+               'method', x.payment_method, 'plan', x.plan_type) ORDER BY COALESCE(x.paid_at, x.created_at) DESC)
+             FROM (SELECT * FROM g ORDER BY COALESCE(g.paid_at, g.created_at) DESC LIMIT 20) x), '[]'::jsonb))
+  FROM g;
+$$;
+
 CREATE OR REPLACE FUNCTION billing.summary(_tenant uuid, _internal boolean)
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -547,8 +641,9 @@ BEGIN
     || CASE WHEN _internal THEN jsonb_build_object(
          'history', COALESCE((SELECT jsonb_agg(billing.agreement_json(h, true) ORDER BY h.version DESC)
                                 FROM billing.agreements h WHERE h.tenant_id = _tenant), '[]'::jsonb),
-         'default_vat_rate', (SELECT s.default_vat_rate FROM billing.settings s WHERE s.id))
-       ELSE '{}'::jsonb END;
+         'vat', billing.vat_profile(NULL),
+         'legacy_unmatched', billing.legacy_gap(_tenant))
+       ELSE jsonb_build_object('vat', billing.vat_profile(NULL) - 'allow_vat_rate_override' - 'central_rate') END;
 END $$;
 
 -- ------------------------------------------------------------
@@ -622,6 +717,7 @@ DECLARE
   _engine text := billing.engine_of(_tenant);
   _plan jsonb;
   _d text;
+  _vat jsonb;
 BEGIN
   IF _engine IS NULL THEN
     RAISE EXCEPTION 'העסק לא נמצא' USING ERRCODE = 'no_data_found';
@@ -656,14 +752,21 @@ BEGIN
   END IF;
   _d := NULLIF(btrim(COALESCE(_input ->> 'start_date', '')), '');
   a.start_date := CASE WHEN _d IS NULL THEN NULL ELSE _d::date END;
-  a.vat_mode := COALESCE(NULLIF(_input ->> 'vat_mode', ''), 'excluded');
-  IF a.vat_mode NOT IN ('included', 'excluded') THEN
-    RAISE EXCEPTION 'מע"מ: כולל או לא כולל' USING ERRCODE = 'check_violation';
+  -- המע"מ נקבע לפי Nuriel כמוכרת (billing.settings) והשיעור המרכזי — לא לפי הלקוח ולא לפי הדפדפן
+  _vat := billing.vat_profile(billing.today());
+  a.vat_business_type := _vat ->> 'business_type';
+  IF a.vat_business_type = 'exempt' THEN
+    IF NULLIF(_input ->> 'vat_mode', '') IS NOT NULL AND _input ->> 'vat_mode' <> 'exempt' THEN
+      RAISE EXCEPTION 'Nuriel מוגדרת כעוסק פטור — לא ניתן לגבות מע"מ בהסכם' USING ERRCODE = 'check_violation';
+    END IF;
+    a.vat_mode := 'exempt';
+  ELSE
+    a.vat_mode := COALESCE(NULLIF(_input ->> 'vat_mode', ''), _vat ->> 'default_mode');
+    IF a.vat_mode NOT IN ('included', 'excluded') THEN
+      RAISE EXCEPTION 'מע"מ: כולל או לא כולל' USING ERRCODE = 'check_violation';
+    END IF;
   END IF;
-  a.vat_rate := COALESCE(billing.num(_input, 'vat_rate'), (SELECT s.default_vat_rate FROM billing.settings s WHERE s.id));
-  IF a.vat_rate NOT BETWEEN 0 AND 100 THEN
-    RAISE EXCEPTION 'שיעור מע"מ: 0 עד 100' USING ERRCODE = 'check_violation';
-  END IF;
+  a.vat_rate := billing.vat_rate_for(_vat, billing.num(_input, 'vat_rate'), NULL);
   a.terms := billing.txt(_input, 'terms', 2000);
   a.internal_note := billing.txt(_input, 'internal_note', 2000);
   a.effective_on := billing.today();
@@ -736,17 +839,28 @@ DECLARE
   l billing.ledger;
   _parts jsonb;
   _a billing.agreements := billing.current_agreement(_tenant);
+  -- צילום מצב: סוג העוסק של המוכר ביום הרישום (שורת ביטול — של השורה המקורית)
+  _type text := COALESCE(NULLIF(_extra ->> 'vat_business_type', ''),
+                         billing.vat_profile(COALESCE(_occurred_on, billing.today())) ->> 'business_type');
 BEGIN
   IF _amount IS NULL OR round(_amount, 2) <= 0 OR _amount > 1000000 THEN
     RAISE EXCEPTION 'סכום לא תקין (חייב להיות גדול מאפס)' USING ERRCODE = 'check_violation';
   END IF;
+  IF _vat_rate IS NULL OR _vat_rate NOT BETWEEN 0 AND 100 THEN
+    RAISE EXCEPTION 'שיעור מע"מ: 0 עד 100' USING ERRCODE = 'check_violation';
+  END IF;
+  IF _type = 'exempt' AND _vat_rate <> 0 THEN
+    RAISE EXCEPTION 'עוסק פטור לא גובה מע"מ' USING ERRCODE = 'check_violation';
+  END IF;
   _parts := billing.gross_parts(round(_amount, 2), _vat_rate);
-  INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount, vat_rate, vat_amount, net_amount,
+  INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount, vat_business_type,
+                              vat_rate, vat_amount, net_amount,
                               occurred_on, period_start, period_end, method, description, reference, internal_note,
                               confirmation, source, agreement_id, upgrade_request_id, reverses_id,
                               recorded_by, recorded_by_email)
   VALUES (_tenant, COALESCE(billing.tenant_label(_tenant), _tenant::text), billing.engine_of(_tenant),
-          _kind, _category, (_parts ->> 'gross')::numeric, _vat_rate, (_parts ->> 'vat')::numeric, (_parts ->> 'net')::numeric,
+          _kind, _category, (_parts ->> 'gross')::numeric, _type,
+          _vat_rate, (_parts ->> 'vat')::numeric, (_parts ->> 'net')::numeric,
           COALESCE(_occurred_on, billing.today()),
           NULLIF(_extra ->> 'period_start', '')::date, NULLIF(_extra ->> 'period_end', '')::date,
           NULLIF(_extra ->> 'method', ''), billing.txt(_extra, 'description', 200), billing.txt(_extra, 'reference', 120),
@@ -965,15 +1079,15 @@ BEGIN
     RAISE EXCEPTION 'בחרו אמצעי תשלום' USING ERRCODE = 'check_violation';
   END IF;
   _a := billing.current_agreement(_tenant);
-  _rate := COALESCE(billing.num(_input, 'vat_rate'), _a.vat_rate, (SELECT s.default_vat_rate FROM billing.settings s WHERE s.id));
-  IF _rate NOT BETWEEN 0 AND 100 THEN
-    RAISE EXCEPTION 'שיעור מע"מ: 0 עד 100' USING ERRCODE = 'check_violation';
-  END IF;
   BEGIN
     _date := COALESCE(NULLIF(_input ->> 'occurred_on', '')::date, billing.today());
   EXCEPTION WHEN OTHERS THEN
     RAISE EXCEPTION 'תאריך לא תקין' USING ERRCODE = 'check_violation';
   END;
+  -- השיעור נקבע במסד: עוסק פטור — 0; עוסק מורשה — שיעור ההסכם (אם ההסכם של עוסק מורשה), אחרת
+  -- השיעור המרכזי ביום הרישום. שיעור אחר — רק כשההגדרות מתירות
+  _rate := billing.vat_rate_for(billing.vat_profile(_date), billing.num(_input, 'vat_rate'),
+                                CASE WHEN _a.vat_business_type = 'authorized' THEN _a.vat_rate END);
   IF _date > billing.today() + 1 AND _kind = 'payment' THEN
     RAISE EXCEPTION 'תאריך תשלום עתידי' USING ERRCODE = 'check_violation';
   END IF;
@@ -1010,7 +1124,7 @@ BEGIN
     RAISE EXCEPTION 'הרישום כבר בוטל' USING ERRCODE = 'unique_violation';
   END IF;
   l := billing.add_entry(o.tenant_id, 'reversal', o.category, o.amount, o.vat_rate, billing.today(), o.source,
-         jsonb_build_object('reverses_id', o.id, 'method', o.method,
+         jsonb_build_object('reverses_id', o.id, 'method', o.method, 'vat_business_type', o.vat_business_type,
            'description', format('ביטול רישום #%s', o.entry_no),
            'internal_note', left(btrim(_reason), 500)));
   PERFORM billing.audit(o.tenant_id, 'billing_entry_reversed', jsonb_build_object(
@@ -1035,6 +1149,9 @@ DECLARE
   _pay billing.ledger;
   _method text := NULLIF(_input ->> 'method', '');
   _paid boolean := COALESCE((_input ->> 'record_payment')::boolean, false);
+  _vat jsonb;
+  _mode text;
+  _rate numeric;
   t public.tenants;
 BEGIN
   PERFORM billing.require_platform_admin();
@@ -1083,16 +1200,29 @@ BEGIN
           updated_by = EXCLUDED.updated_by;
   END IF;
 
-  _price := billing.price_parts(billing.cycle_price(a), a.vat_mode, a.vat_rate);
+  -- המע"מ של החיוב: Nuriel עוסק פטור היום — אין מע"מ, גם אם ההסכם נחתם כשהייתה עוסק מורשה. עוסק מורשה —
+  -- לפי צילום ההסכם; הסכם שנחתם בפטור — ברירת המחדל של היום והשיעור המרכזי
+  _vat := billing.vat_profile(billing.today());
+  IF _vat ->> 'business_type' = 'exempt' THEN
+    _mode := 'exempt';
+    _rate := 0;
+  ELSIF a.vat_business_type = 'authorized' THEN
+    _mode := a.vat_mode;
+    _rate := a.vat_rate;
+  ELSE
+    _mode := _vat ->> 'default_mode';
+    _rate := (_vat ->> 'rate')::numeric;
+  END IF;
+  _price := billing.price_parts(billing.cycle_price(a), _mode, _rate);
   IF (_price ->> 'gross')::numeric > 0 THEN
-    _charge := billing.add_entry(_tenant, 'charge', 'subscription', (_price ->> 'gross')::numeric, a.vat_rate,
+    _charge := billing.add_entry(_tenant, 'charge', 'subscription', (_price ->> 'gross')::numeric, _rate,
       billing.today(), 'renewal', jsonb_build_object(
         'period_start', billing.local_date(_from), 'period_end', billing.local_date(_to),
         'description', format('מנוי %s, %s – %s', billing.plan_name(_engine, a.plan_code),
                               to_char(billing.local_date(_from), 'DD/MM/YYYY'), to_char(billing.local_date(_to), 'DD/MM/YYYY'))));
     IF _paid THEN
       _pay := billing.add_entry(_tenant, 'payment', 'subscription',
-        COALESCE(billing.num(_input, 'amount'), (_price ->> 'gross')::numeric), a.vat_rate,
+        COALESCE(billing.num(_input, 'amount'), (_price ->> 'gross')::numeric), _rate,
         COALESCE(NULLIF(_input ->> 'paid_on', '')::date, billing.today()), 'renewal', jsonb_build_object(
           'method', _method, 'reference', _input ->> 'reference',
           'period_start', billing.local_date(_from), 'period_end', billing.local_date(_to),
@@ -1140,6 +1270,30 @@ BEGIN
   RETURN billing.request_json(r, true);
 END $$;
 
+-- כל העסקים שיש להם שורות כסף במנגנון הישן שלא מופיעות ביומן החדש (קריאה בלבד — לאזהרה בפאנל)
+CREATE OR REPLACE FUNCTION public.platform_billing_legacy_overview()
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _rows jsonb;
+BEGIN
+  PERFORM billing.require_platform_admin();
+  SELECT COALESCE(jsonb_agg(x ORDER BY (x ->> 'paid_amount')::numeric DESC), '[]'::jsonb) INTO _rows
+    FROM (SELECT jsonb_build_object('tenant_id', h.tenant_id,
+                   'label', COALESCE(billing.tenant_label(h.tenant_id), max(h.store_label), h.tenant_id::text),
+                   'deleted', billing.engine_of(h.tenant_id) IS NULL) || billing.legacy_gap(h.tenant_id) - 'rows' AS x
+            FROM public.billing_history h
+           WHERE h.kind IN ('payment', 'addon') AND h.amount > 0
+             AND NOT EXISTS (SELECT 1 FROM billing.ledger l WHERE l.legacy_ref = h.id)
+           GROUP BY h.tenant_id) t;
+  RETURN jsonb_build_object(
+    'businesses', jsonb_array_length(_rows),
+    'paid_count', COALESCE((SELECT sum((r ->> 'paid_count')::int) FROM jsonb_array_elements(_rows) r), 0),
+    'paid_amount', COALESCE((SELECT sum((r ->> 'paid_amount')::numeric) FROM jsonb_array_elements(_rows) r), 0),
+    'due_count', COALESCE((SELECT sum((r ->> 'due_count')::int) FROM jsonb_array_elements(_rows) r), 0),
+    'due_amount', COALESCE((SELECT sum((r ->> 'due_amount')::numeric) FROM jsonb_array_elements(_rows) r), 0),
+    'items', _rows);
+END $$;
+
 CREATE OR REPLACE FUNCTION public.platform_billing_pending_count()
 RETURNS integer LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
@@ -1147,21 +1301,37 @@ BEGIN
   RETURN (SELECT count(*)::integer FROM billing.upgrade_requests r WHERE r.status = 'pending');
 END $$;
 
-CREATE OR REPLACE FUNCTION public.platform_billing_save_settings(_default_vat_rate numeric)
+-- סוג העוסק של Nuriel כמוכרת. משפיע רק על הסכמים וחיובים חדשים — כל הסכם וכל שורה ביומן שומרים את
+-- הצילום שלהם, ושום דבר קיים לא משתנה. השיעור עצמו מרכזי (מיגרציה 191), לא כאן.
+CREATE OR REPLACE FUNCTION public.platform_billing_save_settings(_input jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
-  _before numeric;
+  _before billing.settings;
+  _type text := COALESCE(_input ->> 'seller_business_type', '');
+  _incl boolean;
+  _override boolean;
 BEGIN
   PERFORM billing.require_platform_admin();
-  IF _default_vat_rate IS NULL OR _default_vat_rate NOT BETWEEN 0 AND 100 THEN
-    RAISE EXCEPTION 'שיעור מע"מ: 0 עד 100' USING ERRCODE = 'check_violation';
+  IF _type NOT IN ('exempt', 'authorized') THEN
+    RAISE EXCEPTION 'סוג העוסק: פטור או מורשה' USING ERRCODE = 'check_violation';
   END IF;
-  SELECT s.default_vat_rate INTO _before FROM billing.settings s WHERE s.id FOR UPDATE;
-  UPDATE billing.settings SET default_vat_rate = round(_default_vat_rate, 2), updated_at = now(), updated_by = auth.uid()
+  IF _type = 'authorized' AND jsonb_typeof(_input -> 'seller_prices_include_vat') IS DISTINCT FROM 'boolean' THEN
+    RAISE EXCEPTION 'עוסק מורשה: יש לבחור אם המחירים כוללים מע"מ' USING ERRCODE = 'check_violation';
+  END IF;
+  -- עוסק פטור: אין מע"מ, ולכן גם אין "כולל" ואין שיעור אחר
+  _incl := CASE WHEN _type = 'exempt' THEN false ELSE (_input ->> 'seller_prices_include_vat')::boolean END;
+  _override := _type = 'authorized' AND COALESCE((_input ->> 'allow_vat_rate_override')::boolean, false);
+  SELECT * INTO _before FROM billing.settings s WHERE s.id FOR UPDATE;
+  UPDATE billing.settings
+     SET seller_business_type = _type, seller_prices_include_vat = _incl, allow_vat_rate_override = _override,
+         updated_at = now(), updated_by = auth.uid()
    WHERE id;
-  PERFORM billing.audit(NULL, 'billing_settings_saved',
-    jsonb_build_object('default_vat_rate', round(_default_vat_rate, 2), 'previous', _before));
-  RETURN jsonb_build_object('default_vat_rate', round(_default_vat_rate, 2));
+  PERFORM billing.audit(NULL, 'billing_settings_saved', jsonb_build_object(
+    'seller_business_type', _type, 'seller_prices_include_vat', _incl, 'allow_vat_rate_override', _override,
+    'previous', jsonb_build_object('seller_business_type', _before.seller_business_type,
+      'seller_prices_include_vat', _before.seller_prices_include_vat,
+      'allow_vat_rate_override', _before.allow_vat_rate_override)));
+  RETURN billing.vat_profile(NULL);
 END $$;
 
 -- ------------------------------------------------------------
@@ -1181,7 +1351,8 @@ BEGIN
                                  'platform_billing_card', 'platform_billing_quote', 'platform_billing_save_agreement',
                                  'platform_billing_record_entry', 'platform_billing_reverse_entry', 'platform_billing_renew',
                                  'platform_billing_requests', 'platform_billing_reject_request',
-                                 'platform_billing_pending_count', 'platform_billing_save_settings') LOOP
+                                 'platform_billing_pending_count', 'platform_billing_save_settings',
+                                 'platform_billing_legacy_overview') LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon', _f.sig);
     EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated, service_role', _f.sig);
   END LOOP;

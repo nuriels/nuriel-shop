@@ -36,14 +36,84 @@ export const BUSINESS_TYPE_OPTIONS: { value: StoreBusinessType; label: string; h
   {
     value: "authorized",
     label: "עוסק מורשה / חברה",
-    hint: "המע״מ מחושב ומוצג לפי ההגדרות למטה.",
+    hint: "מע״מ בשיעור המרכזי (18% היום). בוחרים אם המחירים באתר כוללים מע״מ.",
   },
   {
     value: "exempt",
     label: "עוסק פטור / זעיר",
-    hint: "לא גובים מע״מ: המע״מ ננעל על 0% באתר, בקופה ובמסמכי ה-PDF.",
+    hint: "לא גובים מע״מ: 0% נעול באתר, בקופה ובמסמכים, ושום הגדרה לא מוסיפה מע״מ.",
   },
 ];
+
+/** מצב המע"מ של החנות כפי שהשרת קובע אותו (store_vat_profile, מיגרציה 191) */
+export type StoreVatProfile = {
+  businessType: StoreBusinessType;
+  /** עוסק פטור: תמיד true (המחיר הוא הסופי) */
+  pricesIncludeVat: boolean;
+  /** השיעור המרכזי לעוסק מורשה, 0 לעוסק פטור */
+  vatRate: number;
+  /** בעל העסק בחר / אישר את ההגדרה (חנות קיימת לפני 191 — false) */
+  confirmed: boolean;
+};
+
+/** קורא את תשובת store_vat_profile; ערך לא תקין → null (ואז נשארים עם ההגדרות שנקראו) */
+export function parseVatProfile(raw: unknown): StoreVatProfile | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const v = raw as Record<string, unknown>;
+  const type = v["business_type"];
+  const rate = Number(v["vat_rate"]);
+  if ((type !== "exempt" && type !== "authorized") || !Number.isFinite(rate) || rate < 0)
+    return null;
+  return {
+    businessType: type,
+    pricesIncludeVat: type === "exempt" ? true : v["prices_include_vat"] !== false,
+    vatRate: type === "exempt" ? 0 : rate,
+    confirmed: v["confirmed"] === true,
+  };
+}
+
+/**
+ * ההודעה ללקוח על המחירים — מראש (בעגלה ובקופה), כדי שלא יופתע בתשלום:
+ * פטור — "לא מתווסף מע״מ"; כולל — "המחירים כוללים מע״מ"; לפני מע״מ — "יתווסף בסיכום".
+ */
+export function vatPriceNotice(profile: {
+  businessType: StoreBusinessType | null | undefined;
+  pricesIncludeVat: boolean;
+  vatRate: number;
+}): string {
+  if (profile.businessType === "exempt" || !(profile.vatRate > 0)) {
+    return profile.businessType === "exempt"
+      ? "עוסק פטור — לא מתווסף מע״מ למחירים"
+      : "לא מתווסף מע״מ למחירים";
+  }
+  if (profile.pricesIncludeVat) return "המחירים באתר כוללים מע״מ";
+  return `המחירים באתר אינם כוללים מע״מ — מע״מ ${profile.vatRate}% יתווסף בסיכום ההזמנה`;
+}
+
+/** הזמנה שנשמרה: הפירוק שהמסד חישב (מיגרציה 191), או — בהזמנה בלי העמודות — אותו חישוב מהערכים השמורים */
+export type StoredOrderVat = {
+  total: number | string | null;
+  vat_rate: number | string | null;
+  prices_include_vat: boolean | null;
+  net_amount?: number | string | null;
+  vat_amount?: number | string | null;
+  gross_amount?: number | string | null;
+};
+
+export function orderVatBreakdown(order: StoredOrderVat): VatBreakdown {
+  const rate = Number(order.vat_rate ?? DEFAULT_VAT_RATE);
+  const included = order.prices_include_vat ?? true;
+  const fromDb = [order.net_amount, order.vat_amount, order.gross_amount].map((v) =>
+    v === null || v === undefined || v === "" ? NaN : Number(v),
+  );
+  if (fromDb.every((v) => Number.isFinite(v))) {
+    const [net, vat, gross] = fromDb as [number, number, number];
+    if (!(rate > 0))
+      return { net: gross, vat: 0, gross, showBreakdown: false, vatRate: 0, exempt: true };
+    return { net, vat, gross, showBreakdown: !included, vatRate: rate };
+  }
+  return calculateVat(Number(order.total ?? 0), { pricesIncludeVat: included, vatRate: rate });
+}
 
 const round2 = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 

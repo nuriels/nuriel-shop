@@ -134,11 +134,14 @@ function Summary({
           <Stat
             label="מע״מ"
             value={
+              // מה שנקבע בהסכם (צילום); בלי הסכם — לפי Nuriel כמוכרת היום
               a
-                ? a.vat_rate > 0
-                  ? `${VAT_MODE_LABELS[a.vat_mode]} · ${a.vat_rate}%`
-                  : "ללא מע״מ"
-                : "—"
+                ? a.vat_mode === "exempt" || a.vat_rate === 0
+                  ? VAT_MODE_LABELS.exempt
+                  : `${VAT_MODE_LABELS[a.vat_mode]} · ${a.vat_rate}%`
+                : data.vat.business_type === "exempt"
+                  ? VAT_MODE_LABELS.exempt
+                  : `${VAT_MODE_LABELS[data.vat.default_mode]} · ${data.vat.rate}%`
             }
             testId="my-billing-vat"
           />

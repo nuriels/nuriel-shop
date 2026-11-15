@@ -2,7 +2,7 @@
 -- Rollback של 20261114100000_billing_agreements.sql (מיגרציה 189 — שכבת החיוב: הסכמים, יומן כספי, בקשות)
 -- הגנה: נעצר כשיש הסכם, שורה ביומן או בקשה — אלה רשומות כספיות של לקוחות, ו-rollback היה מוחק אותן.
 -- נעצר גם אם מיגרציה 190 עוד קיימת (קודם rollback שלה — הסדר ההפוך).
--- בלי נתונים: הסכמה billing וכל מה שבה, ו-13 הפונקציות הציבוריות (my_billing_* / platform_billing_*,
+-- בלי נתונים: הסכמה billing וכל מה שבה, ו-14 הפונקציות הציבוריות (my_billing_* / platform_billing_*,
 -- חוץ מ-platform_billing_history הישנה), נמחקים. רשומות יומן הפלטפורמה (billing_*) נשארות.
 -- לפני ה-rollback: האפליקציה חוזרת לגרסה בלי "חיוב והסכמים".
 -- ============================================================
@@ -34,7 +34,8 @@ DROP FUNCTION IF EXISTS public.platform_billing_renew(uuid, date, jsonb);
 DROP FUNCTION IF EXISTS public.platform_billing_requests(text);
 DROP FUNCTION IF EXISTS public.platform_billing_reject_request(uuid, text);
 DROP FUNCTION IF EXISTS public.platform_billing_pending_count();
-DROP FUNCTION IF EXISTS public.platform_billing_save_settings(numeric);
+DROP FUNCTION IF EXISTS public.platform_billing_save_settings(jsonb);
+DROP FUNCTION IF EXISTS public.platform_billing_legacy_overview();
 
 DROP SCHEMA IF EXISTS billing CASCADE;
 

@@ -64,6 +64,10 @@ async function pickSelect(page: Page, id: string, value: string) {
 
 test.beforeAll(async ({ request, browser }, testInfo) => {
   if (testInfo.project.name === "mobile") return;
+  // מיגרציה 191: המע"מ בהסכם לפי Nuriel כמוכרת (ברירת המחדל: עוסק פטור — ללא מע"מ). כאן בודקים את
+  // מסלול העוסק המורשה (מע"מ 18%, כולל / לא כולל), עם שדה השיעור פתוח; מוחזר לפטור בסוף
+  sql(`UPDATE billing.settings SET seller_business_type = 'authorized', seller_prices_include_vat = false,
+              allow_vat_rate_override = true`);
   for (const u of [MANAGER_B, OWNER_H, MANAGER_H]) await ensureUser(request, u);
   // a store manager (not the owner) in store B
   sql(`INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_approved, display_name)
@@ -97,6 +101,8 @@ test.afterAll(() => {
   // the site goes; its billing rows stay (financial records are never deleted with a business)
   if (siteH) asPlatform(`SELECT public.platform_delete_tenant('${siteH}', '${SLUG_H}')`);
   sql(`UPDATE public.platform_feature_flags SET enabled = false WHERE key LIKE 'hospitality%'`);
+  sql(`UPDATE billing.settings SET seller_business_type = 'exempt', seller_prices_include_vat = false,
+              allow_vat_rate_override = false`);
 });
 
 test("store: the platform admin sets a special-price agreement and records a partial setup payment; the owner sees it, a manager does not", async ({
@@ -306,12 +312,14 @@ test("the owner's billing card fits a phone (no horizontal scroll) @mobile", asy
     sql(`SELECT COALESCE((SELECT version FROM billing.agreements WHERE tenant_id = '${STORE_B.id}'
                                     AND superseded_at IS NULL), 0)`);
   asPlatform(`SELECT public.platform_billing_save_agreement('${STORE_B.id}',
-    '{"plan":"premium","billing_cycle":"yearly","agreed_yearly":6000,"vat_mode":"included","vat_rate":18,"setup_fee":1000}', ${v})`);
+    '{"plan":"premium","billing_cycle":"yearly","agreed_yearly":6000,"setup_fee":1000}', ${v})`);
   await login(page, storeUrl(STORE_B.slug), USERS.ownerB);
   await page.goto(storeUrl(STORE_B.slug, "/admin?tab=billing"));
   const mine = page.getByTestId("my-billing");
   await expect(mine).toBeVisible({ timeout: 20_000 });
   await expect(mine.getByTestId("my-billing-agreed")).toContainText("₪6,000");
+  // Nuriel עוסק פטור (ברירת המחדל) — ההסכם ללא מע"מ, וכך מוצג לבעל העסק
+  await expect(mine.getByTestId("my-billing-vat")).toContainText("ללא מע״מ");
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
   );

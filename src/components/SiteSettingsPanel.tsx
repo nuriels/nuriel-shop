@@ -20,7 +20,7 @@ import { SabbathModeCard } from "@/components/SabbathModeCard";
 import { ShabbatScheduleCard } from "@/components/ShabbatScheduleCard";
 import { LabelSizeCard } from "@/components/delivery/LabelSizeCard";
 import { useLegalIdentity } from "@/hooks/useLegalIdentity";
-import { BUSINESS_TYPE_OPTIONS, DEFAULT_VAT_RATE } from "@/lib/vat";
+import { VatSettingsCard } from "@/components/settings/VatSettingsCard";
 import { cn } from "@/lib/utils";
 
 const NOT_IN_FORM = new Set<keyof SiteSettings>(SITE_FORM_EXCLUDED_KEYS);
@@ -40,7 +40,14 @@ function sameSettings(a: SiteSettings, b: SiteSettings): boolean {
  * ניהול תוכן האתר ופרטי העסק (משפיע על עמודי אודות/תנאים/פרטיות). המיתוג (כותרת,
  * לוגו, צבע) והבאנרים מנוהלים ב"עיצוב מסך הבית" — כאן רק הפניה לשם.
  */
-export function SiteSettingsPanel({ onOpenHomeDesign }: { onOpenHomeDesign?: () => void }) {
+export function SiteSettingsPanel({
+  onOpenHomeDesign,
+  canManageVat = false,
+}: {
+  onOpenHomeDesign?: () => void;
+  /** בעל החנות (או מנהל-על): שינוי סוג העוסק ומע"מ */
+  canManageVat?: boolean;
+}) {
   const { settings } = useSiteSettings();
   const router = useRouter();
   const [form, setForm] = useState<SiteSettings | null>(settings);
@@ -57,7 +64,6 @@ export function SiteSettingsPanel({ onOpenHomeDesign }: { onOpenHomeDesign?: () 
   if (!form) return <p className="text-sm text-muted-foreground">טוען הגדרות...</p>;
 
   const dirty = settings !== null && !sameSettings(form, settings);
-  const exempt = form.business_type === "exempt";
 
   const patch = (next: Partial<SiteSettings>) =>
     setForm((current) => (current ? { ...current, ...next } : current));
@@ -324,112 +330,14 @@ export function SiteSettingsPanel({ onOpenHomeDesign }: { onOpenHomeDesign?: () 
         </CardContent>
       </Card>
 
-      <Card className="shadow-card">
-        <CardHeader>
-          <CardTitle className="text-base">מע״מ ותצוגת מחירים</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* חלק 23: סוג העוסק — פטור נועל את המע"מ על 0% (גם במסד) */}
-          <fieldset className="space-y-2" data-business-type>
-            <legend className="text-sm font-medium">סוג העוסק</legend>
-            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="סוג העוסק">
-              {BUSINESS_TYPE_OPTIONS.map((option) => {
-                const selected = (exempt ? "exempt" : "authorized") === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() =>
-                      patch({
-                        business_type: option.value,
-                        // מה שהמסד יקבע בשמירה — כדי שהטופס יציג את זה כבר עכשיו
-                        vat_rate:
-                          option.value === "exempt"
-                            ? 0
-                            : form.business_type === "exempt" && Number(form.vat_rate) === 0
-                              ? DEFAULT_VAT_RATE
-                              : form.vat_rate,
-                      })
-                    }
-                    className={cn(
-                      "rounded-lg border p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      selected
-                        ? "border-primary bg-primary/5 ring-1 ring-primary"
-                        : "border-border hover:bg-secondary/60",
-                    )}
-                  >
-                    <span className="block text-sm font-semibold text-foreground">
-                      {option.label}
-                    </span>
-                    <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
-                      {option.hint}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            {billingSaysExempt && form.business_type !== "exempt" && (
-              <p
-                className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs leading-5 text-amber-950"
-                role="note"
-              >
-                בפרטי החיוב שלך מוגדר &quot;עוסק פטור&quot;. אם זה נכון גם לחנות — בחרו כאן
-                &quot;עוסק פטור / זעיר&quot;, כדי שלא ייגבה מע״מ מהלקוחות.
-              </p>
-            )}
-          </fieldset>
-
-          {exempt ? (
-            <p
-              className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm leading-6 text-foreground"
-              data-vat-locked
-            >
-              <strong>עוסק פטור — המע״מ נעול על 0%.</strong> המחירים בקטלוג הם המחיר הסופי ללקוח:
-              בלי &quot;+ מע״מ&quot; ליד המחיר, בלי שורת מע״מ בסל ובקופה, ובמסמכי ההזמנה יופיע
-              &quot;עוסק פטור — ללא מע״מ&quot;.
-            </p>
-          ) : null}
-
-          <label
-            className={cn(
-              "flex items-start justify-between gap-3 rounded-lg border border-border p-3",
-              exempt && "hidden",
-            )}
-          >
-            <span className="space-y-1">
-              <span className="block text-sm font-medium">המחירים שמוזנים בקטלוג כוללים מע״מ</span>
-              <span className="block text-xs text-muted-foreground">
-                {form.prices_include_vat
-                  ? "מוצג ללקוח סה״כ סופי אחד, בלי תוספת."
-                  : `ליד כל מחיר בקטלוג יופיע "+ מע״מ", ובעגלה ובמסמכים יתווסף אוטומטית מע״מ ${form.vat_rate}% מעל סכום המוצרים.`}
-              </span>
-            </span>
-            <Switch
-              checked={form.prices_include_vat}
-              onCheckedChange={(v) => patch({ prices_include_vat: v })}
-              aria-label="המחירים כוללים מע״מ"
-            />
-          </label>
-
-          <div className={cn("space-y-2 sm:max-w-48", exempt && "hidden")}>
-            <Label htmlFor="s-vat">שיעור מע״מ (%)</Label>
-            <Input
-              id="s-vat"
-              type="number"
-              min={0}
-              max={100}
-              step="0.5"
-              dir="ltr"
-              className="numeric"
-              value={form.vat_rate}
-              onChange={(e) => patch({ vat_rate: Number(e.target.value) })}
-            />
-            <p className="text-xs text-muted-foreground">שיעור המע״מ בישראל נכון להיום: 18%.</p>
-          </div>
-        </CardContent>
-      </Card>
+      {/* מיגרציה 191: סוג העוסק ומע"מ — כרטיס עם שמירה משלו (בעל העסק בלבד), לא חלק מהטופס */}
+      {settings && (
+        <VatSettingsCard
+          settings={settings}
+          canManage={canManageVat}
+          billingSaysExempt={billingSaysExempt}
+        />
+      )}
 
       <Card className="shadow-card">
         <CardHeader>

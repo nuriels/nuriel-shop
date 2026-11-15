@@ -2,11 +2,13 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • vat_settings (75): הגנה (נעצר כשיש הזמנה עם צילום סוג העוסק / כשנקבע שיעור מרכזי נוסף), rollback →
+#     הטבלה, העמודות והפונקציות נעלמו, שני הטריגרים ו-portal_create_store_business מילה במילה; זהה בדיוק ל-74
 #   • billing_owner_access (74): בלי הגנה (רק הרשאות / פונקציות / טריגר), rollback → קריאת המנוי וההיסטוריה שוב
 #     לכל מנהל, store_billing / my_entitlements / admin_set_subscription מילה במילה, בלי שומר ההיסטוריה;
 #     הסכמה זהה בדיוק ל-73
 #   • billing_agreements (73): הגנה (נעצר כשיש הסכם / רישום ביומן / בקשה, או כש-74 עוד קיימת), rollback →
-#     הסכמה billing ו-13 הפונקציות נעלמו; הסכמה זהה בדיוק ל-72
+#     הסכמה billing ו-14 הפונקציות נעלמו; הסכמה זהה בדיוק ל-72
 #   • hosp_business_admin (72): בלי הגנה (מינויי מנהל/ת עסק נמחקים — הרשאות בלבד), rollback → כל
 #     הפונקציות בגרסה הקודמת מילה במילה, שתי פונקציות העזר והפונקציה החדשה נמחקות; הסכמה זהה בדיוק ל-71
 #   • store_owner_guard_unblock (71): בלי הגנה (רק פונקציה), rollback → user_roles_owner_guard של מיגרציה
@@ -168,6 +170,7 @@ M71=20261112100000_store_owner_guard_unblock
 M72=20261113100000_hosp_business_admin
 M73=20261114100000_billing_agreements
 M74=20261114110000_billing_owner_access
+M75=20261115090000_vat_settings
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -211,6 +214,45 @@ same_as_ref() {
   fi
 }
 
+# ---------- VAT by dealer type: the central rate, the store setting, the order snapshot (migration 75) ----------
+expect "before the rollback: the central rate (18%), the confirmed flag, the order snapshot columns, the frozen-snapshot guard" \
+  "SELECT public.vat_rate_on() = 18
+      AND (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders'
+             AND column_name IN ('vat_business_type', 'net_amount', 'vat_amount', 'gross_amount')) = 4
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'site_settings'
+                    AND column_name = 'vat_settings_confirmed_at')
+      AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'orders_vat_snapshot_guard')"
+echo "rollback guard: $M75 refuses while an order holds a dealer-type snapshot"
+q "SET session_replication_role = replica;
+   INSERT INTO public.orders (tenant_id, status, kind, total, vat_rate, prices_include_vat, vat_business_type, order_number,
+                              order_source, customer_name, customer_phone)
+   SELECT id, 'pending', 'order', 10, 18, true, 'authorized', 'SH269999999', 'pos', 'rb', '0500000000'
+     FROM public.tenants WHERE is_default" >/dev/null
+if down "$M75" 2>/dev/null; then
+  echo "  FAIL rollback ran although an order holds a VAT snapshot"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT to_regclass('public.vat_rates') IS NOT NULL AND EXISTS (SELECT 1 FROM public.orders WHERE order_number = 'SH269999999')"
+q "SET session_replication_role = replica; DELETE FROM public.orders WHERE order_number = 'SH269999999'" >/dev/null
+echo "rollback guard: $M75 refuses while a scheduled central rate exists"
+q "INSERT INTO public.vat_rates (rate, effective_from) VALUES (19, current_date + 400)" >/dev/null
+if down "$M75" 2>/dev/null; then
+  echo "  FAIL rollback ran although a central rate was scheduled"; exit 1
+fi
+q "DELETE FROM public.vat_rates WHERE effective_from = current_date + 400" >/dev/null
+ref_upto "$M75"
+echo "rollback: $M75"
+down "$M75"
+expect "the rate table, the columns, the functions are gone; the two trigger functions and portal_create_store_business as before" \
+  "SELECT to_regclass('public.vat_rates') IS NULL AND to_regprocedure('public.vat_rate_on(date)') IS NULL
+      AND to_regprocedure('public.store_save_vat_settings(text,boolean)') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders'
+                        AND column_name IN ('vat_business_type', 'net_amount', 'vat_amount', 'gross_amount'))
+      AND (SELECT prosrc NOT LIKE '%vat_settings_confirmed_at%' FROM pg_proc
+            WHERE oid = 'public.portal_create_store_business(text,text,text,jsonb)'::regprocedure)
+      AND (billing.vat_profile(NULL) ->> 'central_rate')::numeric = 18"
+same_as_ref "migration 74"
+
 # ---------- financial data: owner only, the old history append-only (migration 74) ----------
 expect "before the rollback: owner-only reads, the history guard, the owner-only zimmer subscription" \
   "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'billing_history_guard')
@@ -233,11 +275,11 @@ expect "every manager reads again, no history guard, store_billing without owner
 same_as_ref "migration 73"
 
 # ---------- billing & agreements: the shared financial layer (migration 73) ----------
-expect "before the rollback: the billing schema closed to the API (4 tables, RLS), 13 functions for signed-in users only" \
+expect "before the rollback: the billing schema closed to the API (4 tables, RLS), 14 functions for signed-in users only" \
   "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'billing'::regnamespace AND relkind = 'r' AND relrowsecurity) = 4
       AND NOT has_schema_privilege('authenticated', 'billing', 'USAGE')
       AND (SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace
-             AND (proname LIKE 'my\_billing\_%' OR proname LIKE 'platform\_billing\_%') AND proname <> 'platform_billing_history') = 13
+             AND (proname LIKE 'my\_billing\_%' OR proname LIKE 'platform\_billing\_%') AND proname <> 'platform_billing_history') = 14
       AND has_function_privilege('authenticated', 'public.my_billing_summary()', 'EXECUTE')
       AND NOT has_function_privilege('anon', 'public.my_billing_summary()', 'EXECUTE')"
 echo "rollback guard: $M73 refuses while a financial record exists"
@@ -253,7 +295,7 @@ q "SET session_replication_role = replica; DELETE FROM billing.upgrade_requests"
 ref_upto "$M73"
 echo "rollback: $M73"
 down "$M73"
-expect "the billing schema and the 13 functions are gone; the old billing_history is untouched" \
+expect "the billing schema and the 14 functions are gone; the old billing_history is untouched" \
   "SELECT to_regnamespace('billing') IS NULL AND to_regprocedure('public.my_billing_summary()') IS NULL
       AND to_regprocedure('public.platform_billing_card(uuid)') IS NULL
       AND to_regprocedure('public.platform_billing_history(uuid)') IS NOT NULL
@@ -2338,6 +2380,7 @@ up "$M71"
 up "$M72"
 up "$M73"
 up "$M74"
+up "$M75"
 expect "billing is back: the closed schema, owner-only reads, the history guard" \
   "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'billing'::regnamespace AND relkind = 'r' AND relrowsecurity) = 4
       AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'billing_history_guard')

@@ -178,6 +178,36 @@ export function BillingAdminCard(props: { tenantId: string; onChanged?: () => vo
             ההסכם עם "להחליף גם את החבילה הפעילה", או בחידוש הבא.
           </p>
         ) : null}
+        {card.legacy_unmatched.paid_count + card.legacy_unmatched.due_count > 0 ? (
+          <div
+            className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"
+            role="status"
+            data-testid="billing-legacy-warning"
+          >
+            <p className="font-semibold">
+              יש רישומים במנגנון הישן ("תעד תשלום") שלא מופיעים ביומן החדש
+            </p>
+            <p>
+              {card.legacy_unmatched.paid_count > 0
+                ? `${card.legacy_unmatched.paid_count} תשלומים ששולמו, ${formatMoney(card.legacy_unmatched.paid_amount)}`
+                : ""}
+              {card.legacy_unmatched.paid_count > 0 && card.legacy_unmatched.due_count > 0
+                ? " · "
+                : ""}
+              {card.legacy_unmatched.due_count > 0
+                ? `${card.legacy_unmatched.due_count} חיובים ממתינים, ${formatMoney(card.legacy_unmatched.due_amount)}`
+                : ""}
+              {card.legacy_unmatched.last_on
+                ? ` · האחרון ב-${formatDate(card.legacy_unmatched.last_on)}`
+                : ""}
+              .
+            </p>
+            <p>
+              הסכומים האלה <strong>לא נספרים</strong> כאן ב"שולם" וביתרה. הם מופיעים בלשונית "מנוי"
+              בתיק הלקוח. אין סנכרון אוטומטי: העברה ליומן החדש — רק אחרי בדיקה ואישור.
+            </p>
+          </div>
+        ) : null}
         {!a ? (
           <p
             className="rounded-md border bg-muted/40 p-3 text-sm"
@@ -208,7 +238,15 @@ export function BillingAdminCard(props: { tenantId: string; onChanged?: () => vo
           <Stat label="מחזור חיוב" value={a ? CYCLE_LABELS[a.billing_cycle] : "—"} />
           <Stat
             label="מע״מ"
-            value={a ? `${VAT_MODE_LABELS[a.vat_mode]} · ${a.vat_rate}%` : "—"}
+            value={
+              a
+                ? a.vat_mode === "exempt"
+                  ? VAT_MODE_LABELS.exempt
+                  : `${VAT_MODE_LABELS[a.vat_mode]} · ${a.vat_rate}%`
+                : card.vat.business_type === "exempt"
+                  ? VAT_MODE_LABELS.exempt
+                  : `${VAT_MODE_LABELS[card.vat.default_mode]} · ${card.vat.rate}%`
+            }
             testId="billing-card-vat"
           />
           <Stat label="תחילת הסכם" value={formatDate(a?.start_date)} />
@@ -447,8 +485,24 @@ function AgreementSheet(props: {
   );
   const [commitment, setCommitment] = useState(numText(a?.commitment_months));
   const [start, setStart] = useState(a?.start_date ?? "");
-  const [vatMode, setVatMode] = useState<VatMode>(a?.vat_mode ?? "excluded");
-  const [vatRate, setVatRate] = useState(numText(a?.vat_rate ?? card.default_vat_rate));
+  // המע"מ לפי Nuriel כמוכרת (card.vat): פטור — אין בחירה בכלל; מורשה — כולל / לא כולל, והשיעור המרכזי
+  const sellerExempt = card.vat.business_type === "exempt";
+  const [vatMode, setVatMode] = useState<VatMode>(
+    sellerExempt
+      ? "exempt"
+      : a && a.vat_mode !== "exempt"
+        ? a.vat_mode
+        : card.vat.default_mode === "included"
+          ? "included"
+          : "excluded",
+  );
+  const [vatRate, setVatRate] = useState(
+    numText(
+      !sellerExempt && a && a.vat_business_type === "authorized"
+        ? a.vat_rate
+        : card.vat.central_rate,
+    ),
+  );
   const [terms, setTerms] = useState(a?.terms ?? "");
   const [note, setNote] = useState(a?.internal_note ?? "");
   const [requestMessage, setRequestMessage] = useState("");
@@ -469,12 +523,27 @@ function AgreementSheet(props: {
       setup_fee: setup,
       commitment_months: commitment,
       start_date: start,
-      vat_mode: vatMode,
-      vat_rate: vatRate,
+      vat_mode: sellerExempt ? null : vatMode,
+      // השיעור נשלח רק כשמותר לשנות אותו; אחרת השרת קובע (המרכזי)
+      vat_rate: !sellerExempt && card.vat.allow_vat_rate_override ? vatRate : "",
       terms,
       internal_note: note,
     }),
-    [plan, cycle, monthly, yearly, setup, commitment, start, vatMode, vatRate, terms, note],
+    [
+      plan,
+      cycle,
+      monthly,
+      yearly,
+      setup,
+      commitment,
+      start,
+      vatMode,
+      vatRate,
+      terms,
+      note,
+      sellerExempt,
+      card.vat.allow_vat_rate_override,
+    ],
   );
   // שינוי בטופס — ההצעה הקודמת כבר לא מתאימה
   useEffect(() => {
@@ -563,18 +632,28 @@ function AgreementSheet(props: {
             ]}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="ag-vat-mode">מע״מ</Label>
-          <NativeSelect
-            id="ag-vat-mode"
-            value={vatMode}
-            onChange={(v) => setVatMode(v === "included" ? "included" : "excluded")}
-            options={[
-              { value: "excluded", label: VAT_MODE_LABELS.excluded },
-              { value: "included", label: VAT_MODE_LABELS.included },
-            ]}
-          />
-        </div>
+        {sellerExempt ? (
+          <p
+            className="rounded-md border border-border bg-muted/40 p-2 text-sm leading-6 sm:col-span-1"
+            data-testid="billing-vat-exempt"
+          >
+            <strong>ללא מע״מ.</strong> Nuriel מוגדרת כעוסק פטור — אי אפשר לגבות מע״מ בהסכם. כך יוצג
+            גם ללקוח.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ag-vat-mode">מע״מ</Label>
+            <NativeSelect
+              id="ag-vat-mode"
+              value={vatMode}
+              onChange={(v) => setVatMode(v === "included" ? "included" : "excluded")}
+              options={[
+                { value: "excluded", label: VAT_MODE_LABELS.excluded },
+                { value: "included", label: VAT_MODE_LABELS.included },
+              ]}
+            />
+          </div>
+        )}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="ag-monthly">מחיר מוסכם לחודש (₪)</Label>
           <Input
@@ -607,16 +686,27 @@ function AgreementSheet(props: {
             onChange={(e) => setSetup(e.target.value)}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="ag-vat-rate">שיעור מע״מ (%)</Label>
-          <Input
-            id="ag-vat-rate"
-            inputMode="decimal"
-            dir="ltr"
-            value={vatRate}
-            onChange={(e) => setVatRate(e.target.value)}
-          />
-        </div>
+        {!sellerExempt &&
+          (card.vat.allow_vat_rate_override ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ag-vat-rate">שיעור מע״מ (%)</Label>
+              <Input
+                id="ag-vat-rate"
+                inputMode="decimal"
+                dir="ltr"
+                value={vatRate}
+                onChange={(e) => setVatRate(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                השיעור המרכזי: {card.vat.central_rate}%. שיעור אחר — רק במקרה מיוחד (למשל 0% לשירות
+                לתושב חוץ).
+              </p>
+            </div>
+          ) : (
+            <p className="self-end text-sm text-muted-foreground">
+              שיעור מע״מ: <span className="numeric">{card.vat.central_rate}%</span> (מרכזי)
+            </p>
+          ))}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="ag-start">תאריך תחילת ההסכם</Label>
           <Input
@@ -745,9 +835,10 @@ function EntrySheet(props: {
   const [description, setDescription] = useState("");
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
-  const [vatRate, setVatRate] = useState(
-    String(props.card.agreement?.vat_rate ?? props.card.default_vat_rate),
-  );
+  const vat = props.card.vat;
+  const agreementRate =
+    props.card.agreement?.vat_business_type === "authorized" ? props.card.agreement.vat_rate : null;
+  const [vatRate, setVatRate] = useState(String(agreementRate ?? vat.central_rate));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -768,7 +859,9 @@ function EntrySheet(props: {
               description,
               reference,
               internal_note: note,
-              vat_rate: vatRate,
+              // השיעור נקבע במסד; נשלח רק כשמותר לשנות אותו (עוסק מורשה + הגדרה)
+              vat_rate:
+                vat.business_type === "authorized" && vat.allow_vat_rate_override ? vatRate : "",
             },
           },
         }),
@@ -833,16 +926,24 @@ function EntrySheet(props: {
             onChange={(e) => setAmount(e.target.value)}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="en-vat">שיעור מע״מ בסכום (%)</Label>
-          <Input
-            id="en-vat"
-            inputMode="decimal"
-            dir="ltr"
-            value={vatRate}
-            onChange={(e) => setVatRate(e.target.value)}
-          />
-        </div>
+        {vat.business_type === "authorized" && vat.allow_vat_rate_override ? (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="en-vat">שיעור מע״מ בסכום (%)</Label>
+            <Input
+              id="en-vat"
+              inputMode="decimal"
+              dir="ltr"
+              value={vatRate}
+              onChange={(e) => setVatRate(e.target.value)}
+            />
+          </div>
+        ) : (
+          <p className="self-end text-sm text-muted-foreground" data-testid="billing-entry-vat">
+            {vat.business_type === "exempt"
+              ? "ללא מע״מ (Nuriel — עוסק פטור)"
+              : `מע״מ בסכום: ${agreementRate ?? vat.central_rate}% ${agreementRate !== null ? "(לפי ההסכם)" : "(מרכזי)"}`}
+          </p>
+        )}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="en-date">{kind === "payment" ? "תאריך התשלום" : "תאריך"}</Label>
           <Input

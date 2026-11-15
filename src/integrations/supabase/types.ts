@@ -2077,6 +2077,11 @@ export type Database = {
           total: number;
           updated_at: string;
           vat_rate: number;
+          /** מיגרציה 191: צילום סוג העוסק (NULL בהזמנה ישנה) והפירוק שהמסד חישב */
+          vat_business_type: "exempt" | "authorized" | null;
+          net_amount: number;
+          vat_amount: number;
+          gross_amount: number;
           customer_name: string | null;
           customer_tax_id: string | null;
           customer_phone: string | null;
@@ -2745,6 +2750,8 @@ export type Database = {
           terms_content: string;
           updated_at: string;
           vat_rate: number;
+          vat_settings_confirmed_at: string | null;
+          vat_settings_confirmed_by: string | null;
           business_type: "exempt" | "authorized";
           label_width_mm: number;
           barcode_label_width_mm: number;
@@ -3128,6 +3135,13 @@ export type Database = {
       order_amount_due: {
         Args: { _total: number; _prices_include_vat: boolean; _vat_rate: number };
         Returns: number;
+      };
+      /** מיגרציה 191: מצב המע"מ של החנות הנוכחית (גם לאורחים) */
+      store_vat_profile: { Args: Record<PropertyKey, never>; Returns: Json };
+      /** מיגרציה 191: בעל העסק בלבד — סוג העוסק ו"כולל מע"מ" */
+      store_save_vat_settings: {
+        Args: { _business_type: string; _prices_include_vat: boolean | null };
+        Returns: Json;
       };
       billing_profile_json: { Args: { _tenant: string }; Returns: Json };
       normalize_phone: { Args: { _phone: string }; Returns: string | null };

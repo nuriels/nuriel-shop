@@ -79,7 +79,8 @@ export function CheckoutSummary({
   const { settings } = useSiteSettings();
   const count = cartCount(items);
   const depositTotal = cartDepositTotal(items);
-  const grandTotal = vat.gross + depositTotal;
+  // הפיקדון כבר בתוך vat (כמו במסד) — הסה"כ לתשלום הוא הסכום שהשרת יחייב
+  const grandTotal = vat.gross;
 
   return (
     <Card className="overflow-hidden shadow-card lg:sticky lg:top-[calc(var(--site-header-h,0px)+1rem)]">
@@ -214,30 +215,11 @@ export function CheckoutSummary({
 
           {priced ? (
             <dl className="space-y-1.5 border-t border-border pt-3 text-sm">
-              {/* מחירים לפני מע"מ: ההנחה קודם — הסכום והמע"מ שאחריה כבר אחרי ההנחה */}
-              {vat.showBreakdown && discount && discount.amount > 0 && (
-                <DiscountLine discount={discount} />
-              )}
-              {vat.showBreakdown ? (
-                <>
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <dt>סה״כ לפני מע״מ</dt>
-                    <dd className="numeric">{formatIls(vat.net)}</dd>
-                  </div>
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <dt>מע״מ {vat.vatRate}%</dt>
-                    <dd className="numeric">{formatIls(vat.vat)}</dd>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <dt>סה״כ מוצרים</dt>
-                    <dd className="numeric">{formatIls(cartTotal(items))}</dd>
-                  </div>
-                  {discount && discount.amount > 0 && <DiscountLine discount={discount} />}
-                </>
-              )}
+              <div className="flex items-center justify-between text-muted-foreground">
+                <dt>סה״כ מוצרים</dt>
+                <dd className="numeric">{formatIls(cartTotal(items))}</dd>
+              </div>
+              {discount && discount.amount > 0 && <DiscountLine discount={discount} />}
               {delivery && delivery.kind !== "digital" && (
                 <div
                   className={cn(
@@ -281,6 +263,22 @@ export function CheckoutSummary({
                   <dd className="font-semibold">חינם</dd>
                 </div>
               )}
+              {/* מחירים לפני מע"מ: אחרי כל השורות — הסכום לפני מע"מ, המע"מ, ואז הסה"כ (בלי מע"מ כפול) */}
+              {vat.showBreakdown && (
+                <>
+                  <div className="flex items-center justify-between border-t border-border pt-2 text-muted-foreground">
+                    <dt>סה״כ לפני מע״מ</dt>
+                    <dd className="numeric">{formatIls(vat.net)}</dd>
+                  </div>
+                  <div
+                    className="flex items-center justify-between text-muted-foreground"
+                    data-vat-line
+                  >
+                    <dt>מע״מ {vat.vatRate}%</dt>
+                    <dd className="numeric">{formatIls(vat.vat)}</dd>
+                  </div>
+                </>
+              )}
               <div className="flex items-center justify-between border-t border-border pt-2 text-base">
                 <dt className="font-bold">סה״כ לתשלום</dt>
                 <dd className="numeric flex items-center gap-2 text-xl font-bold text-accent">
@@ -293,11 +291,11 @@ export function CheckoutSummary({
                   {formatIls(grandTotal)}
                 </dd>
               </div>
-              {!vat.showBreakdown && (
-                <p className="text-xs text-muted-foreground" data-vat-caption>
-                  {vatTotalCaption(vat, settings?.business_type)}
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground" data-vat-caption>
+                {vat.showBreakdown
+                  ? `המע״מ חושב בשרת בשיעור ${vat.vatRate}% ויופיע במסמך ההזמנה`
+                  : vatTotalCaption(vat, settings?.business_type)}
+              </p>
             </dl>
           ) : (
             <p className="rounded-lg bg-secondary/60 p-3 text-xs leading-5 text-muted-foreground">

@@ -10,7 +10,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { escapeHtml, type EmailAttachment } from "@/lib/email.server";
 import { loadOrderDocument } from "@/lib/documents.server";
-import { calculateVat, type VatBreakdown } from "@/lib/vat";
+import { orderVatBreakdown, type VatBreakdown } from "@/lib/vat";
 import { formatUnitIls } from "@/lib/catalog";
 import { billingOf, deliveryOf, type OrderBilling, type OrderDelivery } from "@/lib/order-details";
 import { hasShippingLine, orderShippingLabel, shippingWasFree } from "@/lib/shipping";
@@ -143,11 +143,19 @@ export async function prepareOrderEmail(orderId: string): Promise<PreparedOrderE
     order.order_items.reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0) +
     shippingAmount -
     discount;
+  // הפירוק שהמסד חישב (מיגרציה 191) — אותו סכום כמו במסמך ובתשלום; הזמנה בלי הפירוק — מהערכים השמורים
   const vat = isQuote
     ? null
-    : calculateVat(itemsTotal, {
-        pricesIncludeVat: order.prices_include_vat ?? true,
-        vatRate: Number(order.vat_rate ?? 18),
+    : orderVatBreakdown({
+        total:
+          order.gross_amount !== undefined && order.gross_amount !== null
+            ? order.total
+            : itemsTotal,
+        vat_rate: order.vat_rate ?? 18,
+        prices_include_vat: order.prices_include_vat,
+        net_amount: order.net_amount ?? null,
+        vat_amount: order.vat_amount ?? null,
+        gross_amount: order.gross_amount ?? null,
       });
 
   const money = formatMoney;

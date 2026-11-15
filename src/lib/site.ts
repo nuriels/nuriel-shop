@@ -3,7 +3,7 @@ import { compressLogoImage, compressProductImage, compressSideBannerImage } from
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { normalizeBrandColor } from "@/lib/brand-theme";
 import { DEFAULT_SENDER_LOCAL_PART } from "@/lib/email-sender";
-import type { StoreBusinessType } from "@/lib/vat";
+import { parseVatProfile, type StoreBusinessType } from "@/lib/vat";
 import type { Json } from "@/integrations/supabase/types";
 
 export const BRANDING_BUCKET = "branding";
@@ -42,6 +42,11 @@ export type SiteSettings = {
    * (גם במסד); "authorized" (עוסק מורשה / חברה): המע"מ כרגיל
    */
   business_type: StoreBusinessType;
+  /**
+   * מיגרציה 191: בעל העסק בחר / אישר את סוג העוסק והגדרת המע"מ. חנות שנפתחה לפני כן — false,
+   * ומוצגת לבעל העסק בקשה לאשר. סוג העוסק, "כולל מע"מ" והשיעור נשמרים רק דרך store_save_vat_settings.
+   */
+  vat_settings_confirmed: boolean;
   /** true = האתר חסום ללקוחות ולאורחים; מנהלים ממשיכים לעבוד כרגיל */
   maintenance_mode: boolean;
   maintenance_message: string;
@@ -162,6 +167,12 @@ export const SITE_FORM_EXCLUDED_KEYS = [
   "holidays",
   "shabbat_message",
   "shabbat_image_url",
+  // מיגרציה 191: סוג העוסק ו"כולל מע"מ" — רק מכרטיס "מע״מ וסוג עוסק" (בעל העסק, store_save_vat_settings);
+  // השיעור נגזר במסד (פטור 0, מורשה — השיעור המרכזי) ולא נשלח בכלל
+  "business_type",
+  "prices_include_vat",
+  "vat_rate",
+  "vat_settings_confirmed",
 ] as const satisfies readonly (keyof SiteSettings)[];
 
 /** מידות ברירת המחדל של מדבקת משלוח (כמו במסד) */
@@ -200,20 +211,25 @@ const SITE_SETTINGS_COLUMNS =
   "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link, minimum_order_amount, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url, banner_interval_seconds, announcement_enabled, announcement_items, announcement_mode, announcement_interval_seconds, announcement_style" as const;
 
 export async function loadSiteSettings(): Promise<SiteSettings> {
-  const { data } = await supabase
-    .from("site_settings")
-    .select(SITE_SETTINGS_COLUMNS)
-    .eq("id", true)
-    .maybeSingle();
+  // מצב המע"מ — מה שהשרת יחשב בפועל (מיגרציה 191: השיעור המרכזי, פטור → 0). מסד בלי הפונקציה → מהשורה
+  const [{ data }, vatResult] = await Promise.all([
+    supabase.from("site_settings").select(SITE_SETTINGS_COLUMNS).eq("id", true).maybeSingle(),
+    supabase.rpc("store_vat_profile"),
+  ]);
+  const vat = vatResult.error ? null : parseVatProfile(vatResult.data);
   if (data) {
-    const row = data as SiteSettings;
+    const row = data as Omit<SiteSettings, "vat_settings_confirmed">;
     // NUMERIC מגיע לפעמים כמחרוזת — מנרמלים למספר
     return {
       ...row,
       label_width_mm: Number(row.label_width_mm) || DEFAULT_LABEL_SIZE.width,
       label_height_mm: Number(row.label_height_mm) || DEFAULT_LABEL_SIZE.height,
       // חלק 23: ערך חסר (מסד לפני המיגרציה) = עוסק מורשה, כמו ברירת המחדל במסד
-      business_type: row.business_type === "exempt" ? "exempt" : "authorized",
+      business_type:
+        vat?.businessType ?? (row.business_type === "exempt" ? "exempt" : "authorized"),
+      prices_include_vat: vat ? vat.pricesIncludeVat : row.prices_include_vat,
+      vat_rate: vat ? vat.vatRate : Number(row.vat_rate),
+      vat_settings_confirmed: vat?.confirmed ?? false,
       // חלק 35: מסד לפני המיגרציה — ברירות המחדל (כבוי, 16:00–20:30, בלי מינימום)
       minimum_order_amount:
         row.minimum_order_amount === null || row.minimum_order_amount === undefined
@@ -252,6 +268,7 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
     prices_include_vat: true,
     vat_rate: 18,
     business_type: "authorized",
+    vat_settings_confirmed: false,
     maintenance_mode: false,
     maintenance_message: "",
     email_signature: "",
@@ -381,8 +398,9 @@ export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
   // מתג הדרגים לא נשמר מטופס ההגדרות — משנים אותו רק במסד, בכוונה.
   // העמודים המשפטיים — רק מלשונית "עמודים משפטיים" (saveLegalTexts, חלק 16א),
   // כדי ששמירת הגדרות האתר לא תדרוס נוסח שנשמר שם בינתיים.
-  const editable: Partial<SiteSettings> = { ...settings };
-  for (const key of SITE_FORM_EXCLUDED_KEYS) delete editable[key];
+  const all: Partial<SiteSettings> = { ...settings };
+  for (const key of SITE_FORM_EXCLUDED_KEYS) delete all[key];
+  const editable = all as Omit<Partial<SiteSettings>, (typeof SITE_FORM_EXCLUDED_KEYS)[number]>;
   // המיתוג (כותרת, לוגו, צבע) — רק מ"עיצוב מסך הבית" (saveBranding)
   const { error } = await supabase
     .from("site_settings")

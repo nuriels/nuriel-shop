@@ -479,7 +479,10 @@ function AdminPage() {
               </TabsContent>
               <TabsContent value="site" className="space-y-6">
                 {/* המיתוג והבאנר הצדדי עברו ל"עיצוב מסך הבית" — כאן רק הפניה */}
-                <SiteSettingsPanel onOpenHomeDesign={() => goTab("home")} />
+                <SiteSettingsPanel
+                  onOpenHomeDesign={() => goTab("home")}
+                  canManageVat={staffCan(staffRole, "billing.manage")}
+                />
                 {/* חלק 30: דומיין אישי (המנגנון המלא — לשונית "דומיין פרטי") */}
                 <CustomDomainSettingsCard onOpenDomainTab={() => goTab("domain")} />
                 {/* חלק 17ב: אמצעי התשלום בקופה — טלפוני מול נציג / ביט */}

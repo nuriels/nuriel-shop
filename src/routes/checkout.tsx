@@ -455,11 +455,13 @@ function CheckoutPage() {
           couponEligibleSubtotal(coupon, cart),
         )
       : 0;
-  const vat = calculateVat(cartTotal(cart) + shippingAmount - discount, {
+  // כמו במסד (order_gross — הסכום שנגבה): הפיקדון הוא שורה בהזמנה, ולכן במחירים לפני מע"מ המע"מ
+  // מחושב על כל הסכום — מוצרים + פיקדון + משלוח − הנחה. מה שמוצג כאן = מה שהשרת יחייב
+  const vat = calculateVat(cartTotal(cart) + cartDepositTotal(cart) + shippingAmount - discount, {
     pricesIncludeVat: settings?.prices_include_vat ?? true,
     vatRate: Number(settings?.vat_rate ?? DEFAULT_VAT_RATE),
   });
-  const grandTotal = vat.gross + cartDepositTotal(cart);
+  const grandTotal = vat.gross;
   const promotions = useMemo(
     () =>
       kind === "order"

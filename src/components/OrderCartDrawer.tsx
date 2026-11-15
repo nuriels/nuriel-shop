@@ -37,7 +37,7 @@ import {
   depositPerUnit,
   type CartItem,
 } from "@/lib/orders";
-import { calculateVat, DEFAULT_VAT_RATE, vatTotalCaption } from "@/lib/vat";
+import { calculateVat, DEFAULT_VAT_RATE, vatPriceNotice } from "@/lib/vat";
 import { FirstOrderOfferCard } from "@/components/checkout/FirstOrderOfferCard";
 import { useFirstOrderApproval, useFirstOrderOffer } from "@/hooks/useFirstOrderOffer";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
@@ -125,12 +125,13 @@ export function OrderCartDrawer({
   const nextHint = priced && items.length > 0 ? promotions.hints[0] : undefined;
 
   const count = cartCount(items);
-  const vat = calculateVat(cartTotal(items), {
+  const depositTotal = cartDepositTotal(items);
+  // כמו במסד: הפיקדון בתוך הסכום שעליו מחושב המע"מ (במחירים לפני מע"מ)
+  const vat = calculateVat(cartTotal(items) + depositTotal, {
     pricesIncludeVat: settings?.prices_include_vat ?? true,
     vatRate: Number(settings?.vat_rate ?? DEFAULT_VAT_RATE),
   });
-  const depositTotal = cartDepositTotal(items);
-  const grandTotal = vat.gross + depositTotal;
+  const grandTotal = vat.gross;
 
   // חלק 35: שבת / חג — הסל נשאר, הקופה נעולה; מינימום להזמנה
   const { closed: restClosed } = useRestState();
@@ -316,23 +317,26 @@ export function OrderCartDrawer({
           )}
           {priced && items.length > 0 && (
             <div className="space-y-1.5 text-sm">
+              {depositTotal > 0 && (
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>פיקדון</span>
+                  <span className="numeric">{formatIls(depositTotal)}</span>
+                </div>
+              )}
               {vat.showBreakdown && (
                 <>
                   <div className="flex items-center justify-between text-muted-foreground">
                     <span>סה״כ לפני מע״מ</span>
                     <span className="numeric">{formatIls(vat.net)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-muted-foreground">
+                  <div
+                    className="flex items-center justify-between text-muted-foreground"
+                    data-vat-line
+                  >
                     <span>מע״מ {vat.vatRate}%</span>
                     <span className="numeric">{formatIls(vat.vat)}</span>
                   </div>
                 </>
-              )}
-              {depositTotal > 0 && (
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <span>פיקדון</span>
-                  <span className="numeric">{formatIls(depositTotal)}</span>
-                </div>
               )}
               <div className="flex items-center justify-between border-t border-border pt-2 text-base">
                 <span className="font-medium">סה״כ לתשלום</span>
@@ -340,13 +344,13 @@ export function OrderCartDrawer({
                   {formatIls(grandTotal)}
                 </span>
               </div>
-              {!vat.showBreakdown && (
-                <p className="text-xs text-muted-foreground">
-                  {vat.exempt
-                    ? vatTotalCaption(vat, settings?.business_type)
-                    : "המחירים כוללים מע״מ"}
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground" data-vat-notice>
+                {vatPriceNotice({
+                  businessType: settings?.business_type,
+                  pricesIncludeVat: settings?.prices_include_vat ?? true,
+                  vatRate: vat.vatRate,
+                })}
+              </p>
               {cartNeedsShipping(items) && (
                 <p className="text-xs text-muted-foreground">
                   דמי משלוח (אם יש) — לפי השיטה שתבחרו בקופה

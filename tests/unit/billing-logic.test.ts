@@ -91,6 +91,18 @@ describe("billing input", () => {
     expect(parseAgreementInput({ ...base, setup_fee: "" }).setup_fee).toBe(0);
   });
 
+  it("an agreement: VAT left empty = decided by the server (the seller's dealer type, the central rate)", () => {
+    const a = parseAgreementInput({
+      plan: "premium",
+      billing_cycle: "monthly",
+      vat_mode: "",
+      vat_rate: "",
+    });
+    expect(a.vat_mode).toBeNull();
+    expect(a.vat_rate).toBeNull();
+    expect(parseAgreementInput({ ...base, vat_mode: "exempt" }).vat_mode).toBe("exempt");
+  });
+
   it("an agreement: refuses a bad plan code, cycle, VAT, commitment, date or a negative price", () => {
     const bad: Record<string, unknown>[] = [
       { ...base, plan: "Premium!" },
@@ -98,7 +110,6 @@ describe("billing input", () => {
       { ...base, billing_cycle: "weekly" },
       { ...base, vat_mode: "maybe" },
       { ...base, vat_rate: "120" },
-      { ...base, vat_rate: "" },
       { ...base, commitment_months: "0" },
       { ...base, commitment_months: "2.5" },
       { ...base, start_date: "14/11/2026" },

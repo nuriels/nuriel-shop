@@ -66,6 +66,9 @@ SELECT tests.check('portal business: settings filled — name, tax id, type, VAT
        AND s.support_phone = '0501234567' AND s.business_phone = '0501234567'
        AND s.business_address = 'הרצל 1, תל אביב' AND s.business_email = 'portal.biz@test.local'
      FROM public.site_settings s JOIN public.tenants t ON t.id = s.tenant_id WHERE t.slug = 'pb-authorized'$$);
+SELECT tests.check('portal business: the dealer type was chosen at opening — the VAT setting is marked as confirmed (migration 191)',
+  $$SELECT s.vat_settings_confirmed_at IS NOT NULL
+     FROM public.site_settings s JOIN public.tenants t ON t.id = s.tenant_id WHERE t.slug = 'pb-authorized'$$);
 SELECT tests.check('portal business: tenant tax id + owner admin role',
   $$SELECT t.tax_id = '034567891' AND t.name = 'הקפה של דנה' AND EXISTS (
        SELECT 1 FROM public.user_roles ur WHERE ur.tenant_id = t.id AND ur.role = 'admin'

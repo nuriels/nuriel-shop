@@ -16,6 +16,7 @@ import {
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { AddonRequestsPanel } from "@/components/platform/AddonRequestsPanel";
 import { BillingRequestsPanel } from "@/platform/billing/ui/BillingRequestsPanel";
+import { BillingVatPanel } from "@/platform/billing/ui/BillingVatPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,6 +40,7 @@ function UpgradesPage() {
       {() => (
         <div className="space-y-8">
           <BillingRequestsPanel />
+          <BillingVatPanel />
           <AddonRequestsPanel />
           <UpgradeRequestsPanel />
         </div>

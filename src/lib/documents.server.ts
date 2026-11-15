@@ -10,7 +10,7 @@ import {
   type DocumentData,
   type DocumentItem,
 } from "@/lib/pdf/document.server";
-import { calculateVat, DEFAULT_VAT_RATE } from "@/lib/vat";
+import { DEFAULT_VAT_RATE, orderVatBreakdown } from "@/lib/vat";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/orders";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { serialLineText } from "@/lib/serials";
@@ -49,6 +49,10 @@ type OrderRecord = OrderContactFields &
     note: string | null;
     vat_rate: number | null;
     prices_include_vat: boolean | null;
+    /** מיגרציה 191: הפירוק שהמסד חישב מצילום המע"מ של ההזמנה */
+    net_amount?: number | null;
+    vat_amount?: number | null;
+    gross_amount?: number | null;
     created_at: string;
     order_items: {
       quantity: number;
@@ -109,7 +113,7 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
   const { data: orderData, error } = await supabaseAdmin
     .from("orders")
     .select(
-      `id, order_number, customer_id, agent_id, status, kind, total, note, vat_rate, prices_include_vat, created_at, ${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ${ORDER_COUPON_COLUMNS}, order_items (quantity, unit_price, product_name, product_sku, product_barcode, is_digital, serial_number, warranty_until)`,
+      `id, order_number, customer_id, agent_id, status, kind, total, note, vat_rate, prices_include_vat, net_amount, vat_amount, gross_amount, created_at, ${ORDER_CONTACT_COLUMNS}, ${ORDER_SHIPPING_COLUMNS}, ${ORDER_COUPON_COLUMNS}, order_items (quantity, unit_price, product_name, product_sku, product_barcode, is_digital, serial_number, warranty_until)`,
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -223,13 +227,20 @@ export async function loadOrderDocument(orderId: string): Promise<LoadedOrderDoc
     agentNumber,
     agentName,
     items,
+    // מצב המע"מ מצולם לתוך ההזמנה בעת יצירתה, והפירוק מחושב במסד (מיגרציה 191) — מסמך שיופק מחדש
+    // בעוד שנה ישקף בדיוק את מה שהוצג ונגבה באותו יום. הזמנה בלי הפירוק — אותו חישוב מהערכים השמורים
     vat: isQuote
       ? null
-      : calculateVat(itemsTotal, {
-          // מצב המע"מ מצולם לתוך ההזמנה בעת יצירתה, כדי שמסמך שיופק
-          // מחדש בעוד שנה ישקף את מה שהוצג ללקוח באותו יום.
-          pricesIncludeVat: order.prices_include_vat ?? true,
-          vatRate: Number(order.vat_rate ?? settings?.vat_rate ?? DEFAULT_VAT_RATE),
+      : orderVatBreakdown({
+          total:
+            order.gross_amount !== undefined && order.gross_amount !== null
+              ? order.total
+              : itemsTotal,
+          vat_rate: order.vat_rate ?? settings?.vat_rate ?? DEFAULT_VAT_RATE,
+          prices_include_vat: order.prices_include_vat,
+          net_amount: order.net_amount ?? null,
+          vat_amount: order.vat_amount ?? null,
+          gross_amount: order.gross_amount ?? null,
         }),
     note: order.note,
     b2b: settings?.price_tiers_enabled === true,

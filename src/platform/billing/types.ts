@@ -3,7 +3,9 @@
 
 export type Engine = "ecommerce" | "hospitality";
 export type BillingCycle = "monthly" | "yearly";
-export type VatMode = "included" | "excluded";
+/** exempt: Nuriel כעוסק פטור — אין מע"מ (השיעור 0) */
+export type VatMode = "included" | "excluded" | "exempt";
+export type SellerBusinessType = "exempt" | "authorized";
 export type EntryKind = "charge" | "payment" | "credit" | "reversal";
 export type EntryCategory = "subscription" | "setup" | "other";
 export type PaymentMethod = "bank_transfer" | "bit" | "credit_card" | "cash" | "check" | "other";
@@ -48,6 +50,8 @@ export type Agreement = {
   commitment_months: number | null;
   start_date: string | null;
   commitment_ends_on: string | null;
+  /** צילום ברגע ההסכם: סוג העוסק של Nuriel כמוכרת */
+  vat_business_type: SellerBusinessType;
   vat_mode: VatMode;
   vat_rate: number;
   terms: string | null;
@@ -148,12 +152,72 @@ export type BillingSummary = {
   entries: LedgerEntry[];
   requests: UpgradeRequest[];
   plans: CatalogPlan[];
+  /** מצב המע"מ של Nuriel כמוכרת היום (המע"מ בחיוב נקבע לפי המוכר, לא לפי הלקוח) */
+  vat: SellerVatProfile;
 };
 
-/** כרטיס הלקוח של מנהל הפלטפורמה: הסיכום + היסטוריית ההסכמים ושיעור המע"מ ברירת המחדל */
+/** המע"מ של Nuriel כמוכרת (billing.vat_profile): פטור — 0 נעול; מורשה — השיעור המרכזי */
+export type SellerVatProfile = {
+  business_type: SellerBusinessType;
+  prices_include_vat: boolean;
+  default_mode: VatMode;
+  rate: number;
+  // מנהל הפלטפורמה בלבד
+  central_rate?: number;
+  allow_vat_rate_override?: boolean;
+};
+
+/** "תעד תשלום" הישן (billing_history): שורות כסף שלא מופיעות ביומן החדש — קריאה בלבד */
+export type LegacyGap = {
+  paid_count: number;
+  paid_amount: number;
+  due_count: number;
+  due_amount: number;
+  last_on: string | null;
+  rows: {
+    id: string;
+    kind: "payment" | "addon";
+    addon_name: string | null;
+    amount: number;
+    status: "paid" | "due";
+    on: string;
+    method: string | null;
+    plan: string | null;
+  }[];
+};
+
+/** כל העסקים עם שורות ישנות שלא ביומן החדש (platform_billing_legacy_overview) */
+export type LegacyOverview = {
+  businesses: number;
+  paid_count: number;
+  paid_amount: number;
+  due_count: number;
+  due_amount: number;
+  items: (Omit<LegacyGap, "rows"> & { tenant_id: string; label: string; deleted: boolean })[];
+};
+
+/** כרטיס הלקוח של מנהל הפלטפורמה: הסיכום + היסטוריית ההסכמים, ומה שעוד רשום רק במנגנון הישן */
 export type BillingCard = BillingSummary & {
   history: Agreement[];
-  default_vat_rate: number;
+  vat: Required<SellerVatProfile>;
+  legacy_unmatched: LegacyGap;
+};
+
+/** השיעור המרכזי (platform_vat_rates, מיגרציה 191) */
+export type VatRatesView = {
+  today: string;
+  /** סוג העוסק של Nuriel כמוכרת (null אם שכבת החיוב לא קיימת) */
+  seller: Required<SellerVatProfile> | null;
+  current: number;
+  rates: {
+    id: number;
+    rate: number;
+    effective_from: string;
+    note: string;
+    created_by_email: string | null;
+    created_at: string;
+    scheduled: boolean;
+  }[];
 };
 
 export type ChangeQuote = {
@@ -186,8 +250,10 @@ export type AgreementInput = {
   setup_fee: number;
   commitment_months: number | null;
   start_date: string | null;
-  vat_mode: VatMode;
-  vat_rate: number;
+  /** null = לפי המוכר (פטור → ללא מע"מ; מורשה → ברירת המחדל). השרת מכריע */
+  vat_mode: VatMode | null;
+  /** null = השיעור המרכזי. שיעור אחר — רק כשההגדרות מתירות (המסד בודק) */
+  vat_rate: number | null;
   terms: string | null;
   internal_note: string | null;
 };

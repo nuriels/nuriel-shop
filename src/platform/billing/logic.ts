@@ -28,6 +28,7 @@ export const CYCLE_LABELS: Record<BillingCycle, string> = { monthly: "חודשי
 export const VAT_MODE_LABELS: Record<VatMode, string> = {
   included: "המחיר כולל מע״מ",
   excluded: "המחיר לפני מע״מ (המע״מ מתווסף)",
+  exempt: "ללא מע״מ (עוסק פטור)",
 };
 export const KIND_LABELS: Record<EntryKind, string> = {
   charge: "חיוב",
@@ -87,6 +88,7 @@ export function priceLine(parts: PriceParts | null | undefined): string {
   if (!parts) return "—";
   if (parts.mode === "list") return `${formatMoney(parts.gross)} (לפי המחירון)`;
   const rate = parts.rate ?? 0;
+  if (parts.mode === "exempt") return `${formatMoney(parts.gross)} (ללא מע״מ — עוסק פטור)`;
   if (parts.mode === "included") {
     return rate > 0
       ? `${formatMoney(parts.gross)} כולל מע״מ ${rate}%`
@@ -169,11 +171,13 @@ export function parseAgreementInput(
     r["billing_cycle"] !== "yearly"
   )
     throw new BillingInputError("מחזור חיוב: חודשי או שנתי");
-  const vatMode = r["vat_mode"] === "included" ? "included" : "excluded";
-  if (r["vat_mode"] !== undefined && r["vat_mode"] !== "included" && r["vat_mode"] !== "excluded")
-    throw new BillingInputError("מע״מ: כולל או לא כולל");
+  // מע"מ: ריק = לפי המוכר (השרת מכריע — עוסק פטור תמיד ללא מע"מ, ושיעור אחר רק כשמותר)
+  const rawMode =
+    r["vat_mode"] === undefined || r["vat_mode"] === null ? "" : String(r["vat_mode"]);
+  if (rawMode !== "" && rawMode !== "included" && rawMode !== "excluded" && rawMode !== "exempt")
+    throw new BillingInputError("מע״מ: כולל, לא כולל, או ללא מע״מ");
+  const vatMode: VatMode | null = rawMode === "" ? null : (rawMode as VatMode);
   const vatRate = parseVatRate(r["vat_rate"]);
-  if (vatRate === null) throw new BillingInputError("שיעור מע״מ: 0 עד 100");
   let commitment: number | null = null;
   if (
     r["commitment_months"] !== null &&

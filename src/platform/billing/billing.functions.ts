@@ -20,8 +20,12 @@ import type {
   BillingCard,
   BillingSummary,
   ChangeQuote,
+  LegacyOverview,
   SaveAgreementResult,
+  SellerBusinessType,
+  SellerVatProfile,
   UpgradeRequest,
+  VatRatesView,
 } from "./types";
 
 const server = () => import("./billing.server");
@@ -216,13 +220,70 @@ export const platformBillingRejectRequest = createServerFn({ method: "POST" })
   );
 
 export const platformBillingSaveSettings = createServerFn({ method: "POST" })
-  .inputValidator((input: { defaultVatRate: number | string }) => {
-    const rate = parseVatRate(input?.defaultVatRate);
-    if (rate === null) throw new BillingInputError("שיעור מע״מ: 0 עד 100");
-    return { rate };
-  })
-  .handler(async ({ data }): Promise<{ default_vat_rate: number }> =>
-    (await server()).platformRpc<{ default_vat_rate: number }>("platform_billing_save_settings", {
-      _default_vat_rate: data.rate,
+  .inputValidator(
+    (input: {
+      sellerBusinessType: SellerBusinessType;
+      sellerPricesIncludeVat?: boolean | null;
+      allowVatRateOverride?: boolean;
+    }) => {
+      const type = input?.sellerBusinessType;
+      if (type !== "exempt" && type !== "authorized") {
+        throw new BillingInputError("סוג העוסק: פטור או מורשה");
+      }
+      if (type === "authorized" && typeof input.sellerPricesIncludeVat !== "boolean") {
+        throw new BillingInputError("עוסק מורשה: יש לבחור אם המחירים כוללים מע״מ");
+      }
+      return {
+        type,
+        include: type === "authorized" ? input.sellerPricesIncludeVat === true : false,
+        override: type === "authorized" && input.allowVatRateOverride === true,
+      };
+    },
+  )
+  .handler(async ({ data }): Promise<SellerVatProfile> =>
+    (await server()).platformRpc<SellerVatProfile>("platform_billing_save_settings", {
+      _input: {
+        seller_business_type: data.type,
+        seller_prices_include_vat: data.include,
+        allow_vat_rate_override: data.override,
+      },
     }),
+  );
+
+/** "תעד תשלום" הישן: כל העסקים עם שורות כסף שלא ביומן החדש (קריאה בלבד) */
+export const platformBillingLegacyOverview = createServerFn({ method: "POST" }).handler(
+  async (): Promise<LegacyOverview> =>
+    (await server()).platformRpc<LegacyOverview>("platform_billing_legacy_overview", {}),
+);
+
+/** השיעור המרכזי — הצגה, קביעה מראש לתאריך עתידי, ביטול שיעור שעוד לא חל */
+export const platformVatRates = createServerFn({ method: "POST" }).handler(
+  async (): Promise<VatRatesView> =>
+    (await server()).platformRpc<VatRatesView>("platform_vat_rates", {}),
+);
+
+export const platformVatRateSchedule = createServerFn({ method: "POST" })
+  .inputValidator((input: { rate: number | string; effectiveFrom: string; note?: string }) => {
+    const rate = parseVatRate(input?.rate);
+    if (rate === null || rate >= 100) throw new BillingInputError("שיעור מע״מ: 0 עד 99.99");
+    const from = String(input?.effectiveFrom ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) throw new BillingInputError("תאריך תחילה לא תקין");
+    return { rate, from, note: String(input?.note ?? "").slice(0, 300) };
+  })
+  .handler(async ({ data }): Promise<VatRatesView> =>
+    (await server()).platformRpc<VatRatesView>("platform_vat_rate_schedule", {
+      _rate: data.rate,
+      _effective_from: data.from,
+      _note: data.note,
+    }),
+  );
+
+export const platformVatRateCancel = createServerFn({ method: "POST" })
+  .inputValidator((input: { id: number }) => {
+    const id = Number(input?.id);
+    if (!Number.isInteger(id) || id <= 0) throw new BillingInputError("שיעור לא תקין");
+    return { id };
+  })
+  .handler(async ({ data }): Promise<VatRatesView> =>
+    (await server()).platformRpc<VatRatesView>("platform_vat_rate_cancel", { _id: data.id }),
   );
