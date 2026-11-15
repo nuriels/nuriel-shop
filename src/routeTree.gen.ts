@@ -17,6 +17,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminHandoffRouteImport } from './routes/admin-handoff'
 import { Route as AgentRouteImport } from './routes/agent'
 import { Route as AgreementRouteImport } from './routes/agreement'
+import { Route as BpSiteRouteImport } from './routes/bp-site'
 import { Route as CancelOrderRouteImport } from './routes/cancel-order'
 import { Route as CancellationsRouteImport } from './routes/cancellations'
 import { Route as CheckoutRouteImport } from './routes/checkout'
@@ -33,6 +34,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SitemapRouteImport } from './routes/sitemap'
 import { Route as StayRouteImport } from './routes/stay'
+import { Route as StudioRouteImport } from './routes/studio'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as WarehouseRouteImport } from './routes/warehouse'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin_.analytics'
@@ -41,6 +43,8 @@ import { Route as AdminDashboardRouteImport } from './routes/admin_.dashboard'
 import { Route as AdminOrdersRouteImport } from './routes/admin_.orders'
 import { Route as AdminPagesRouteImport } from './routes/admin_.pages'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
+import { Route as BpSiteIndexRouteImport } from './routes/bp-site.index'
+import { Route as BpSiteSplatRouteImport } from './routes/bp-site.$'
 import { Route as CartCodeRouteImport } from './routes/cart.$code'
 import { Route as CourierTokenRouteImport } from './routes/courier.$token'
 import { Route as ManageIndexRouteImport } from './routes/manage.index'
@@ -73,6 +77,7 @@ import { Route as PlatformHospitalityRouteImport } from './routes/platform_.hosp
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
 import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
 import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrades'
+import { Route as PlatformWebsitesRouteImport } from './routes/platform_.websites'
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
 import { Route as PwaIconRouteImport } from './routes/pwa.$icon'
 import { Route as StayIndexRouteImport } from './routes/stay.index'
@@ -83,6 +88,10 @@ import { Route as StayBookingReceivedRouteImport } from './routes/stay.booking-r
 import { Route as StayContractRouteImport } from './routes/stay.contract'
 import { Route as StayMyBookingRouteImport } from './routes/stay.my-booking'
 import { Route as StayPrivacyRouteImport } from './routes/stay.privacy'
+import { Route as StudioIndexRouteImport } from './routes/studio.index'
+import { Route as StudioEditorRouteImport } from './routes/studio.editor'
+import { Route as StudioVersionsRouteImport } from './routes/studio.versions'
+import { Route as StudioPreviewRouteImport } from './routes/studio_.preview'
 import { Route as UnsubscribeTokenRouteImport } from './routes/unsubscribe.$token'
 import { Route as AdminInventoryLabelsRouteImport } from './routes/admin_.inventory_.labels'
 import { Route as AdminInventorySerialsRouteImport } from './routes/admin_.inventory_.serials'
@@ -154,6 +163,11 @@ const AgentRoute = AgentRouteImport.update({
 const AgreementRoute = AgreementRouteImport.update({
   id: '/agreement',
   path: '/agreement',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BpSiteRoute = BpSiteRouteImport.update({
+  id: '/bp-site',
+  path: '/bp-site',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CancelOrderRoute = CancelOrderRouteImport.update({
@@ -236,6 +250,11 @@ const StayRoute = StayRouteImport.update({
   path: '/stay',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StudioRoute = StudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -275,6 +294,16 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
   id: '/admin_/settings',
   path: '/admin/settings',
   getParentRoute: () => rootRouteImport,
+} as any)
+const BpSiteIndexRoute = BpSiteIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => BpSiteRoute,
+} as any)
+const BpSiteSplatRoute = BpSiteSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => BpSiteRoute,
 } as any)
 const CartCodeRoute = CartCodeRouteImport.update({
   id: '/cart/$code',
@@ -436,6 +465,11 @@ const PlatformUpgradesRoute = PlatformUpgradesRouteImport.update({
   path: '/platform/upgrades',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlatformWebsitesRoute = PlatformWebsitesRouteImport.update({
+  id: '/platform_/websites',
+  path: '/platform/websites',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProductProductIdRoute = ProductProductIdRouteImport.update({
   id: '/product/$productId',
   path: '/product/$productId',
@@ -485,6 +519,26 @@ const StayPrivacyRoute = StayPrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
   getParentRoute: () => StayRoute,
+} as any)
+const StudioIndexRoute = StudioIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StudioRoute,
+} as any)
+const StudioEditorRoute = StudioEditorRouteImport.update({
+  id: '/editor',
+  path: '/editor',
+  getParentRoute: () => StudioRoute,
+} as any)
+const StudioVersionsRoute = StudioVersionsRouteImport.update({
+  id: '/versions',
+  path: '/versions',
+  getParentRoute: () => StudioRoute,
+} as any)
+const StudioPreviewRoute = StudioPreviewRouteImport.update({
+  id: '/studio_/preview',
+  path: '/studio/preview',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const UnsubscribeTokenRoute = UnsubscribeTokenRouteImport.update({
   id: '/unsubscribe/$token',
@@ -660,6 +714,7 @@ export interface FileRoutesByFullPath {
   '/admin-handoff': typeof AdminHandoffRoute
   '/agent': typeof AgentRoute
   '/agreement': typeof AgreementRoute
+  '/bp-site': typeof BpSiteRouteWithChildren
   '/cancel-order': typeof CancelOrderRoute
   '/cancellations': typeof CancellationsRoute
   '/checkout': typeof CheckoutRoute
@@ -676,6 +731,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap': typeof SitemapRoute
   '/stay': typeof StayRouteWithChildren
+  '/studio': typeof StudioRouteWithChildren
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
@@ -684,6 +740,7 @@ export interface FileRoutesByFullPath {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pages': typeof AdminPagesRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/bp-site/$': typeof BpSiteSplatRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
@@ -715,6 +772,7 @@ export interface FileRoutesByFullPath {
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
   '/platform/upgrades': typeof PlatformUpgradesRoute
+  '/platform/websites': typeof PlatformWebsitesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/stay/accessibility': typeof StayAccessibilityRoute
@@ -724,9 +782,14 @@ export interface FileRoutesByFullPath {
   '/stay/contract': typeof StayContractRoute
   '/stay/my-booking': typeof StayMyBookingRoute
   '/stay/privacy': typeof StayPrivacyRoute
+  '/studio/editor': typeof StudioEditorRoute
+  '/studio/versions': typeof StudioVersionsRoute
+  '/studio/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
+  '/bp-site/': typeof BpSiteIndexRoute
   '/manage/': typeof ManageIndexRoute
   '/stay/': typeof StayIndexRoute
+  '/studio/': typeof StudioIndexRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/inventory/serials': typeof AdminInventorySerialsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -790,6 +853,7 @@ export interface FileRoutesByTo {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pages': typeof AdminPagesRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/bp-site/$': typeof BpSiteSplatRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
@@ -821,6 +885,7 @@ export interface FileRoutesByTo {
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/support': typeof PlatformSupportRoute
   '/platform/upgrades': typeof PlatformUpgradesRoute
+  '/platform/websites': typeof PlatformWebsitesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/stay/accessibility': typeof StayAccessibilityRoute
@@ -830,9 +895,14 @@ export interface FileRoutesByTo {
   '/stay/contract': typeof StayContractRoute
   '/stay/my-booking': typeof StayMyBookingRoute
   '/stay/privacy': typeof StayPrivacyRoute
+  '/studio/editor': typeof StudioEditorRoute
+  '/studio/versions': typeof StudioVersionsRoute
+  '/studio/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
+  '/bp-site': typeof BpSiteIndexRoute
   '/manage': typeof ManageIndexRoute
   '/stay': typeof StayIndexRoute
+  '/studio': typeof StudioIndexRoute
   '/admin/inventory/labels': typeof AdminInventoryLabelsRoute
   '/admin/inventory/serials': typeof AdminInventorySerialsRoute
   '/admin/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -875,6 +945,7 @@ export interface FileRoutesById {
   '/admin-handoff': typeof AdminHandoffRoute
   '/agent': typeof AgentRoute
   '/agreement': typeof AgreementRoute
+  '/bp-site': typeof BpSiteRouteWithChildren
   '/cancel-order': typeof CancelOrderRoute
   '/cancellations': typeof CancellationsRoute
   '/checkout': typeof CheckoutRoute
@@ -891,6 +962,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap': typeof SitemapRoute
   '/stay': typeof StayRouteWithChildren
+  '/studio': typeof StudioRouteWithChildren
   '/terms': typeof TermsRoute
   '/warehouse': typeof WarehouseRoute
   '/admin_/analytics': typeof AdminAnalyticsRoute
@@ -899,6 +971,7 @@ export interface FileRoutesById {
   '/admin_/orders': typeof AdminOrdersRoute
   '/admin_/pages': typeof AdminPagesRoute
   '/admin_/settings': typeof AdminSettingsRoute
+  '/bp-site/$': typeof BpSiteSplatRoute
   '/cart/$code': typeof CartCodeRoute
   '/courier/$token': typeof CourierTokenRoute
   '/manage/bookings': typeof ManageBookingsRoute
@@ -930,6 +1003,7 @@ export interface FileRoutesById {
   '/platform_/plans': typeof PlatformPlansRoute
   '/platform_/support': typeof PlatformSupportRoute
   '/platform_/upgrades': typeof PlatformUpgradesRoute
+  '/platform_/websites': typeof PlatformWebsitesRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/pwa/$icon': typeof PwaIconRoute
   '/stay/accessibility': typeof StayAccessibilityRoute
@@ -939,9 +1013,14 @@ export interface FileRoutesById {
   '/stay/contract': typeof StayContractRoute
   '/stay/my-booking': typeof StayMyBookingRoute
   '/stay/privacy': typeof StayPrivacyRoute
+  '/studio/editor': typeof StudioEditorRoute
+  '/studio/versions': typeof StudioVersionsRoute
+  '/studio_/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
+  '/bp-site/': typeof BpSiteIndexRoute
   '/manage/': typeof ManageIndexRoute
   '/stay/': typeof StayIndexRoute
+  '/studio/': typeof StudioIndexRoute
   '/admin_/inventory_/labels': typeof AdminInventoryLabelsRoute
   '/admin_/inventory_/serials': typeof AdminInventorySerialsRoute
   '/admin_/marketing/abandoned-carts': typeof AdminMarketingAbandonedCartsRoute
@@ -985,6 +1064,7 @@ export interface FileRouteTypes {
     | '/admin-handoff'
     | '/agent'
     | '/agreement'
+    | '/bp-site'
     | '/cancel-order'
     | '/cancellations'
     | '/checkout'
@@ -1001,6 +1081,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sitemap'
     | '/stay'
+    | '/studio'
     | '/terms'
     | '/warehouse'
     | '/admin/analytics'
@@ -1009,6 +1090,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/pages'
     | '/admin/settings'
+    | '/bp-site/$'
     | '/cart/$code'
     | '/courier/$token'
     | '/manage/bookings'
@@ -1040,6 +1122,7 @@ export interface FileRouteTypes {
     | '/platform/plans'
     | '/platform/support'
     | '/platform/upgrades'
+    | '/platform/websites'
     | '/product/$productId'
     | '/pwa/$icon'
     | '/stay/accessibility'
@@ -1049,9 +1132,14 @@ export interface FileRouteTypes {
     | '/stay/contract'
     | '/stay/my-booking'
     | '/stay/privacy'
+    | '/studio/editor'
+    | '/studio/versions'
+    | '/studio/preview'
     | '/unsubscribe/$token'
+    | '/bp-site/'
     | '/manage/'
     | '/stay/'
+    | '/studio/'
     | '/admin/inventory/labels'
     | '/admin/inventory/serials'
     | '/admin/marketing/abandoned-carts'
@@ -1115,6 +1203,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/pages'
     | '/admin/settings'
+    | '/bp-site/$'
     | '/cart/$code'
     | '/courier/$token'
     | '/manage/bookings'
@@ -1146,6 +1235,7 @@ export interface FileRouteTypes {
     | '/platform/plans'
     | '/platform/support'
     | '/platform/upgrades'
+    | '/platform/websites'
     | '/product/$productId'
     | '/pwa/$icon'
     | '/stay/accessibility'
@@ -1155,9 +1245,14 @@ export interface FileRouteTypes {
     | '/stay/contract'
     | '/stay/my-booking'
     | '/stay/privacy'
+    | '/studio/editor'
+    | '/studio/versions'
+    | '/studio/preview'
     | '/unsubscribe/$token'
+    | '/bp-site'
     | '/manage'
     | '/stay'
+    | '/studio'
     | '/admin/inventory/labels'
     | '/admin/inventory/serials'
     | '/admin/marketing/abandoned-carts'
@@ -1199,6 +1294,7 @@ export interface FileRouteTypes {
     | '/admin-handoff'
     | '/agent'
     | '/agreement'
+    | '/bp-site'
     | '/cancel-order'
     | '/cancellations'
     | '/checkout'
@@ -1215,6 +1311,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sitemap'
     | '/stay'
+    | '/studio'
     | '/terms'
     | '/warehouse'
     | '/admin_/analytics'
@@ -1223,6 +1320,7 @@ export interface FileRouteTypes {
     | '/admin_/orders'
     | '/admin_/pages'
     | '/admin_/settings'
+    | '/bp-site/$'
     | '/cart/$code'
     | '/courier/$token'
     | '/manage/bookings'
@@ -1254,6 +1352,7 @@ export interface FileRouteTypes {
     | '/platform_/plans'
     | '/platform_/support'
     | '/platform_/upgrades'
+    | '/platform_/websites'
     | '/product/$productId'
     | '/pwa/$icon'
     | '/stay/accessibility'
@@ -1263,9 +1362,14 @@ export interface FileRouteTypes {
     | '/stay/contract'
     | '/stay/my-booking'
     | '/stay/privacy'
+    | '/studio/editor'
+    | '/studio/versions'
+    | '/studio_/preview'
     | '/unsubscribe/$token'
+    | '/bp-site/'
     | '/manage/'
     | '/stay/'
+    | '/studio/'
     | '/admin_/inventory_/labels'
     | '/admin_/inventory_/serials'
     | '/admin_/marketing/abandoned-carts'
@@ -1308,6 +1412,7 @@ export interface RootRouteChildren {
   AdminHandoffRoute: typeof AdminHandoffRoute
   AgentRoute: typeof AgentRoute
   AgreementRoute: typeof AgreementRoute
+  BpSiteRoute: typeof BpSiteRouteWithChildren
   CancelOrderRoute: typeof CancelOrderRoute
   CancellationsRoute: typeof CancellationsRoute
   CheckoutRoute: typeof CheckoutRoute
@@ -1324,6 +1429,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SitemapRoute: typeof SitemapRoute
   StayRoute: typeof StayRouteWithChildren
+  StudioRoute: typeof StudioRouteWithChildren
   TermsRoute: typeof TermsRoute
   WarehouseRoute: typeof WarehouseRoute
   AdminAnalyticsRoute: typeof AdminAnalyticsRoute
@@ -1343,8 +1449,10 @@ export interface RootRouteChildren {
   PlatformPlansRoute: typeof PlatformPlansRoute
   PlatformSupportRoute: typeof PlatformSupportRoute
   PlatformUpgradesRoute: typeof PlatformUpgradesRoute
+  PlatformWebsitesRoute: typeof PlatformWebsitesRoute
   ProductProductIdRoute: typeof ProductProductIdRoute
   PwaIconRoute: typeof PwaIconRoute
+  StudioPreviewRoute: typeof StudioPreviewRoute
   UnsubscribeTokenRoute: typeof UnsubscribeTokenRoute
   AdminInventoryLabelsRoute: typeof AdminInventoryLabelsRoute
   AdminInventorySerialsRoute: typeof AdminInventorySerialsRoute
@@ -1422,6 +1530,13 @@ declare module '@tanstack/react-router' {
       path: '/agreement'
       fullPath: '/agreement'
       preLoaderRoute: typeof AgreementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bp-site': {
+      id: '/bp-site'
+      path: '/bp-site'
+      fullPath: '/bp-site'
+      preLoaderRoute: typeof BpSiteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cancel-order': {
@@ -1536,6 +1651,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StayRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/studio': {
+      id: '/studio'
+      path: '/studio'
+      fullPath: '/studio'
+      preLoaderRoute: typeof StudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -1591,6 +1713,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/settings'
       preLoaderRoute: typeof AdminSettingsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/bp-site/': {
+      id: '/bp-site/'
+      path: '/'
+      fullPath: '/bp-site/'
+      preLoaderRoute: typeof BpSiteIndexRouteImport
+      parentRoute: typeof BpSiteRoute
+    }
+    '/bp-site/$': {
+      id: '/bp-site/$'
+      path: '/$'
+      fullPath: '/bp-site/$'
+      preLoaderRoute: typeof BpSiteSplatRouteImport
+      parentRoute: typeof BpSiteRoute
     }
     '/cart/$code': {
       id: '/cart/$code'
@@ -1816,6 +1952,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformUpgradesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/platform_/websites': {
+      id: '/platform_/websites'
+      path: '/platform/websites'
+      fullPath: '/platform/websites'
+      preLoaderRoute: typeof PlatformWebsitesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/product/$productId': {
       id: '/product/$productId'
       path: '/product/$productId'
@@ -1885,6 +2028,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/stay/privacy'
       preLoaderRoute: typeof StayPrivacyRouteImport
       parentRoute: typeof StayRoute
+    }
+    '/studio/': {
+      id: '/studio/'
+      path: '/'
+      fullPath: '/studio/'
+      preLoaderRoute: typeof StudioIndexRouteImport
+      parentRoute: typeof StudioRoute
+    }
+    '/studio/editor': {
+      id: '/studio/editor'
+      path: '/editor'
+      fullPath: '/studio/editor'
+      preLoaderRoute: typeof StudioEditorRouteImport
+      parentRoute: typeof StudioRoute
+    }
+    '/studio/versions': {
+      id: '/studio/versions'
+      path: '/versions'
+      fullPath: '/studio/versions'
+      preLoaderRoute: typeof StudioVersionsRouteImport
+      parentRoute: typeof StudioRoute
+    }
+    '/studio_/preview': {
+      id: '/studio_/preview'
+      path: '/studio/preview'
+      fullPath: '/studio/preview'
+      preLoaderRoute: typeof StudioPreviewRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/unsubscribe/$token': {
       id: '/unsubscribe/$token'
@@ -2113,6 +2284,19 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface BpSiteRouteChildren {
+  BpSiteSplatRoute: typeof BpSiteSplatRoute
+  BpSiteIndexRoute: typeof BpSiteIndexRoute
+}
+
+const BpSiteRouteChildren: BpSiteRouteChildren = {
+  BpSiteSplatRoute: BpSiteSplatRoute,
+  BpSiteIndexRoute: BpSiteIndexRoute,
+}
+
+const BpSiteRouteWithChildren =
+  BpSiteRoute._addFileChildren(BpSiteRouteChildren)
+
 interface ManageRouteChildren {
   ManageBookingsRoute: typeof ManageBookingsRoute
   ManageCalendarRoute: typeof ManageCalendarRoute
@@ -2214,6 +2398,21 @@ const StayRouteChildren: StayRouteChildren = {
 
 const StayRouteWithChildren = StayRoute._addFileChildren(StayRouteChildren)
 
+interface StudioRouteChildren {
+  StudioEditorRoute: typeof StudioEditorRoute
+  StudioVersionsRoute: typeof StudioVersionsRoute
+  StudioIndexRoute: typeof StudioIndexRoute
+}
+
+const StudioRouteChildren: StudioRouteChildren = {
+  StudioEditorRoute: StudioEditorRoute,
+  StudioVersionsRoute: StudioVersionsRoute,
+  StudioIndexRoute: StudioIndexRoute,
+}
+
+const StudioRouteWithChildren =
+  StudioRoute._addFileChildren(StudioRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
@@ -2223,6 +2422,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminHandoffRoute: AdminHandoffRoute,
   AgentRoute: AgentRoute,
   AgreementRoute: AgreementRoute,
+  BpSiteRoute: BpSiteRouteWithChildren,
   CancelOrderRoute: CancelOrderRoute,
   CancellationsRoute: CancellationsRoute,
   CheckoutRoute: CheckoutRoute,
@@ -2239,6 +2439,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SitemapRoute: SitemapRoute,
   StayRoute: StayRouteWithChildren,
+  StudioRoute: StudioRouteWithChildren,
   TermsRoute: TermsRoute,
   WarehouseRoute: WarehouseRoute,
   AdminAnalyticsRoute: AdminAnalyticsRoute,
@@ -2258,8 +2459,10 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformPlansRoute: PlatformPlansRoute,
   PlatformSupportRoute: PlatformSupportRoute,
   PlatformUpgradesRoute: PlatformUpgradesRoute,
+  PlatformWebsitesRoute: PlatformWebsitesRoute,
   ProductProductIdRoute: ProductProductIdRoute,
   PwaIconRoute: PwaIconRoute,
+  StudioPreviewRoute: StudioPreviewRoute,
   UnsubscribeTokenRoute: UnsubscribeTokenRoute,
   AdminInventoryLabelsRoute: AdminInventoryLabelsRoute,
   AdminInventorySerialsRoute: AdminInventorySerialsRoute,

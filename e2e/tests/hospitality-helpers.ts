@@ -88,6 +88,23 @@ export async function callServerFn(
       });
 }
 
+/** כניסה דרך ה-handoff הקיים לכל מנוע (Nuriel Websites: נוחתים ב-/studio) */
+export async function enterViaHandoffTo(
+  page: Page,
+  siteUrl: string,
+  siteId: string,
+  email: string,
+  landing: RegExp,
+) {
+  const code = randomBytes(32).toString("base64url");
+  const userId = sql(`SELECT id FROM auth.users WHERE email = '${email}'`);
+  sql(`INSERT INTO public.platform_admin_handoffs (token_hash, user_id, tenant_id, expires_at, kind)
+       VALUES ('${createHash("sha256").update(code).digest("hex")}', '${userId}', '${siteId}',
+               now() + interval '2 minutes', 'store_owner')`);
+  await page.goto(`${siteUrl}/admin-handoff#code=${code}&from=portal`);
+  await expect(page).toHaveURL(landing, { timeout: 20_000 });
+}
+
 /** כניסה לאזור הניהול דרך ה-handoff הקיים (קוד חד-פעמי, כמו "כניסה לעסק" מהשער) */
 export async function enterViaHandoff(page: Page, siteUrl: string, siteId: string, email: string) {
   const code = randomBytes(32).toString("base64url");

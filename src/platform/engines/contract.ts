@@ -1,9 +1,9 @@
 // חוזה המנועים של הפלטפורמה (Hospitality Stage 1f, plan B1).
 // הפלטפורמה מכירה רק את החוזה הזה — אף פעם לא מנוע מסוים. המנועים (Ecommerce,
-// Hospitality) מממשים אותו, ושורש ההרכבה (src/app/engines.ts) רושם אותם.
+// Hospitality, ומ-Nuriel Websites גם business_profile) מממשים אותו, ושורש ההרכבה (src/app/engines.ts) רושם אותם.
 
 /** סוגי האתרים (tenants.site_type) — כל אתר שייך למנוע אחד בדיוק */
-export const SITE_TYPES = ["ecommerce", "hospitality"] as const;
+export const SITE_TYPES = ["ecommerce", "hospitality", "business_profile"] as const;
 export type SiteType = (typeof SITE_TYPES)[number];
 
 /** הבעלים של פונקציית שרת: מנוע, או הפלטפורמה המשותפת */

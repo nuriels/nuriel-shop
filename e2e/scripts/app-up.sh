@@ -25,6 +25,8 @@ export SITEMAP_TTL_MS=0 PORT=3100 NODE_ENV=production
 # מנוע Hospitality: מתג הסביבה פתוח רק בבדיקות (בפרודקשן לא מוגדר = כבוי);
 # האתרים עדיין סגורים עד שהבדיקה מדליקה את הדגלים שלהם
 export HOSPITALITY_ENGINE=on
+# Nuriel Websites: אותו דבר למנוע אתרי העסקים (בפרודקשן לא מוגדר = כבוי)
+export BUSINESS_PROFILE_ENGINE=on
 # ייבוא תמונות מקישור (Ecommerce 18, Hospitality 2e): בבדיקות בלבד מותר השם localhost — לשרת
 # התמונות המקומי של הבדיקה. כתובות IP פנימיות (127.0.0.1, 10.x, 169.254.x…) עדיין חסומות
 export IMPORT_IMAGE_ALLOW_HOSTS=localhost

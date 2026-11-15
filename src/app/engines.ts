@@ -1,13 +1,19 @@
-// שורש ההרכבה (plan B1): המקום היחיד שמכיר את שני המנועים. רישום וחיבור בלבד —
+// שורש ההרכבה (plan B1): המקום היחיד שמכיר את המנועים (Ecommerce, Hospitality, ומ-Nuriel Websites גם
+// business_profile). רישום וחיבור בלבד —
 // בלי לוגיקה עסקית (נבדק בבדיקת הארכיטקטורה). נטען גם בדפדפן (src/start.ts),
 // ולכן קוד שרת נטען רק בתוך פונקציות.
 import { ecommerceEngine } from "@/engines/ecommerce/engine";
 import { hospitalityEngine } from "@/engines/hospitality/engine";
+import { businessProfileEngine } from "@/engines/business-profile/engine";
 import { gateEdgeRequest } from "@/platform/engines/edge";
 import { createEngineGuard } from "@/platform/engines/engine-guard";
 import { createEngineRegistry } from "@/platform/engines/registry";
 
-export const engineRegistry = createEngineRegistry([ecommerceEngine, hospitalityEngine]);
+export const engineRegistry = createEngineRegistry([
+  ecommerceEngine,
+  hospitalityEngine,
+  businessProfileEngine,
+]);
 
 /** פונקציות השרת של המנועים שעדיין אין להן ממשק — נכללות בבנייה דרך כאן */
 export * as hospitalityServerFunctions from "@/engines/hospitality/server";

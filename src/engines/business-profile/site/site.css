@@ -1,0 +1,759 @@
+/* Nuriel Websites — האתר הציבורי של עסק. נטען רק בעמודי האתר ובתצוגה המקדימה (לא בחנויות ובצימרים).
+   הצבעים מהמסמך (--bp-*), שתי תבניות: .bps-elegant, .bps-portfolio. מאפיינים לוגיים (inline / block)
+   כדי שאותו קוד יעבוד גם משמאל לימין (אנגלית). ניגודיות AA, מוקד מקלדת גלוי, בלי אנימציה למי שביקש. */
+
+.bps {
+  --bp-max: 72rem;
+  --bp-gutter: clamp(1.25rem, 4vw, 2.5rem);
+  --bp-section: clamp(4rem, 9vw, 7.5rem);
+  --bp-font-body: "Assistant", "Heebo", system-ui, sans-serif;
+  --bp-font-display: "Frank Ruhl Libre", "David Libre", Georgia, serif;
+  --bp-line: color-mix(in srgb, var(--bp-text) 14%, transparent);
+  background: var(--bp-bg);
+  color: var(--bp-text);
+  font-family: var(--bp-font-body);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  min-height: 100vh;
+  /* מסכים קטנים — לפי רוחב האתר עצמו (container), כך שגם תצוגה מקדימה צרה (נייד) נראית כמו בטלפון */
+  container: bps / inline-size;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.bps *,
+.bps *::before,
+.bps *::after {
+  box-sizing: border-box;
+}
+.bps img {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+}
+.bps :where(a) {
+  /* :where — בלי משקל, כדי שצבעי הכפתורים (bps-btn-*) תמיד גוברים */
+  color: inherit;
+}
+.bps :focus-visible {
+  outline: 3px solid var(--bp-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.bps-sr {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.bps-wrap {
+  max-inline-size: var(--bp-max);
+  margin-inline: auto;
+  padding-inline: var(--bp-gutter);
+}
+.bps-narrow {
+  max-inline-size: 46rem;
+}
+
+/* ---------- טיפוגרפיה ---------- */
+.bps-h1,
+.bps-h2,
+.bps-h3 {
+  font-family: var(--bp-font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0;
+  text-wrap: balance;
+}
+.bps-h1 {
+  font-size: clamp(2.5rem, 6.2vw, 4.75rem);
+  line-height: 1.08;
+}
+.bps-h2 {
+  font-size: clamp(1.9rem, 3.6vw, 2.9rem);
+  line-height: 1.15;
+}
+.bps-h3 {
+  font-size: 1.35rem;
+  line-height: 1.3;
+}
+.bps-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 1.1rem;
+  color: var(--bp-accent);
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.bps-index {
+  font-family: var(--bp-font-display);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.bps-index::after {
+  content: "";
+  display: inline-block;
+  inline-size: 2.25rem;
+  block-size: 1px;
+  margin-inline-start: 0.75rem;
+  vertical-align: middle;
+  background: currentColor;
+  opacity: 0.6;
+}
+.bps-lead {
+  margin: 1.25rem 0 0;
+  max-inline-size: 40rem;
+  color: var(--bp-muted);
+  font-size: 1.15rem;
+}
+.bps-head {
+  margin-block-end: clamp(2rem, 4vw, 3.25rem);
+}
+.bps-prose p {
+  margin: 0 0 1.15em;
+  max-inline-size: 38rem;
+}
+.bps-prose p:first-child {
+  font-size: 1.2rem;
+  color: var(--bp-text);
+}
+
+/* ---------- כפתורים ---------- */
+.bps-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block-start: 2.25rem;
+}
+.bps-actions:empty {
+  display: none;
+}
+.bps-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 3rem;
+  padding-inline: 1.6rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 1rem;
+  text-decoration: none;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+.bps-btn-primary {
+  background: var(--bp-accent);
+  color: var(--bp-accent-text);
+}
+.bps-btn-primary:hover {
+  background: color-mix(in srgb, var(--bp-accent) 86%, black);
+}
+.bps-btn-ghost {
+  border: 1px solid color-mix(in srgb, var(--bp-text) 35%, transparent);
+  color: var(--bp-text);
+  background: transparent;
+  cursor: pointer;
+}
+.bps-btn-ghost:hover {
+  border-color: var(--bp-text);
+}
+
+/* ---------- כותרת עליונה ---------- */
+.bps-top {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--bp-bg) 90%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-block-end: 1px solid var(--bp-line);
+}
+.bps-top-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  min-block-size: 4.25rem;
+}
+.bps-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  font-family: var(--bp-font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+.bps-logo {
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  object-fit: contain;
+  border-radius: 50%;
+}
+.bps-nav ul {
+  display: flex;
+  gap: clamp(1rem, 2.4vw, 2rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bps-nav a {
+  text-decoration: none;
+  font-size: 0.98rem;
+  color: var(--bp-muted);
+  padding-block: 0.4rem;
+  border-block-end: 1px solid transparent;
+}
+.bps-nav a:hover {
+  color: var(--bp-text);
+  border-block-end-color: var(--bp-accent);
+}
+
+/* ---------- פתיח ---------- */
+.bps-hero {
+  padding-block: clamp(3.5rem, 9vw, 8rem) clamp(3rem, 7vw, 6rem);
+}
+.bps-hero-inner {
+  max-inline-size: var(--bp-max);
+  margin-inline: auto;
+  padding-inline: var(--bp-gutter);
+  display: grid;
+  gap: clamp(2rem, 5vw, 4.5rem);
+  align-items: center;
+}
+.bps-hero-split .bps-hero-inner {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+}
+.bps-hero-centered .bps-hero-text {
+  text-align: center;
+  max-inline-size: 52rem;
+  margin-inline: auto;
+}
+.bps-hero-centered .bps-actions,
+.bps-hero-centered .bps-eyebrow {
+  justify-content: center;
+}
+.bps-hero-sub {
+  margin: 1.5rem 0 0;
+  font-size: clamp(1.15rem, 2vw, 1.4rem);
+  color: var(--bp-muted);
+  max-inline-size: 36rem;
+}
+.bps-hero-centered .bps-hero-sub {
+  margin-inline: auto;
+}
+.bps-hero-media img {
+  inline-size: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: var(--bp-radius);
+}
+
+/* ---------- מקטעים ---------- */
+.bps-section {
+  padding-block: var(--bp-section);
+}
+.bps-section + .bps-section {
+  border-block-start: 1px solid var(--bp-line);
+}
+.bps-about-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: clamp(2rem, 6vw, 5rem);
+  align-items: start;
+}
+.bps-about-solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+.bps-about-media img {
+  inline-size: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: var(--bp-radius);
+}
+.bps-about-media {
+  margin: 0;
+}
+.bps-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2.5rem;
+  margin: 2.5rem 0 0;
+}
+.bps-stats div {
+  display: flex;
+  flex-direction: column-reverse;
+}
+.bps-stats dd {
+  margin: 0;
+  font-family: var(--bp-font-display);
+  font-size: 2.4rem;
+  line-height: 1;
+  color: var(--bp-accent);
+}
+.bps-stats dt {
+  margin-block-start: 0.5rem;
+  color: var(--bp-muted);
+  font-size: 0.95rem;
+}
+
+/* שירותים — רשימה ממוספרת, לא "כרטיסים" */
+.bps-service-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 clamp(2rem, 5vw, 4.5rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bps-service {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  gap: 1rem;
+  padding-block: 1.75rem;
+  border-block-start: 1px solid var(--bp-line);
+}
+.bps-service-num {
+  font-family: var(--bp-font-display);
+  font-size: 1.05rem;
+  color: var(--bp-accent);
+  padding-block-start: 0.2rem;
+}
+.bps-service p {
+  margin: 0.6rem 0 0;
+  color: var(--bp-muted);
+}
+
+/* תיק עבודות */
+.bps-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-end: 2.25rem;
+}
+.bps-filter button {
+  min-block-size: 2.6rem;
+  padding-inline: 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--bp-line);
+  background: transparent;
+  color: var(--bp-text);
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.bps-filter button[aria-pressed="true"] {
+  background: var(--bp-text);
+  border-color: var(--bp-text);
+  color: var(--bp-bg);
+}
+.bps-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+.bps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11.5rem), 1fr));
+  gap: clamp(1rem, 2.4vw, 1.75rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bps-work-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: zoom-in;
+}
+.bps-work-media {
+  display: block;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: calc(var(--bp-radius) * 0.6);
+  background: var(--bp-soft);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.08),
+    0 12px 28px -18px rgb(0 0 0 / 0.35);
+}
+.bps-work-media img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+.bps-work-btn:hover .bps-work-media img {
+  transform: scale(1.03);
+}
+.bps-work-title {
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+.bps-cover-placeholder {
+  display: flex;
+  align-items: flex-end;
+  block-size: 100%;
+  padding: 1rem;
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--bp-accent) 16%, var(--bp-soft)),
+      var(--bp-soft) 70%
+    ),
+    var(--bp-soft);
+  border-inline-start: 6px solid color-mix(in srgb, var(--bp-accent) 55%, var(--bp-soft));
+  font-family: var(--bp-font-display);
+  font-size: 1.05rem;
+  line-height: 1.3;
+  color: var(--bp-text);
+}
+.bps-lightbox {
+  max-inline-size: min(92vw, 34rem);
+  padding: 0;
+  border: 0;
+  border-radius: var(--bp-radius);
+  background: var(--bp-surface);
+  color: var(--bp-text);
+}
+.bps-lightbox::backdrop {
+  background: rgb(20 16 14 / 0.72);
+}
+.bps-lightbox-body {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+.bps-lightbox-body img,
+.bps-lightbox-body .bps-cover-placeholder {
+  inline-size: 100%;
+  max-block-size: 70vh;
+  object-fit: contain;
+  aspect-ratio: 2 / 3;
+}
+.bps-lightbox-title {
+  margin: 0;
+  font-family: var(--bp-font-display);
+  font-size: 1.3rem;
+}
+
+/* המלצות — ציטוטים */
+.bps-quotes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: clamp(1.25rem, 3vw, 2rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bps-quote {
+  margin: 0;
+  block-size: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  border-radius: var(--bp-radius);
+  background: var(--bp-surface);
+  border: 1px solid var(--bp-line);
+}
+.bps-quote blockquote {
+  margin: 0;
+  font-family: var(--bp-font-display);
+  font-size: 1.2rem;
+  line-height: 1.6;
+}
+.bps-quote blockquote p {
+  margin: 0;
+}
+.bps-quote blockquote p::before {
+  content: "”";
+  display: block;
+  font-size: 3rem;
+  line-height: 0.6;
+  color: var(--bp-accent);
+  margin-block-end: 0.75rem;
+}
+.bps-quote figcaption {
+  display: flex;
+  flex-direction: column;
+}
+.bps-quote-author {
+  font-weight: 600;
+}
+.bps-quote-role {
+  color: var(--bp-muted);
+  font-size: 0.92rem;
+}
+.bps-quote-pending {
+  display: block;
+  padding: 1.5rem;
+  border: 1px dashed var(--bp-line);
+  border-radius: calc(var(--bp-radius) * 0.6);
+  color: var(--bp-muted);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+/* קריאה לפעולה */
+.bps-cta {
+  background: var(--bp-text);
+  color: var(--bp-bg);
+  padding-block: clamp(3.5rem, 7vw, 5.5rem);
+}
+.bps-cta-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+}
+.bps-cta p {
+  margin: 0.75rem 0 0;
+  opacity: 0.85;
+  max-inline-size: 34rem;
+}
+.bps-cta .bps-actions {
+  margin: 0;
+}
+.bps-cta .bps-btn-primary {
+  background: var(--bp-bg);
+  color: var(--bp-text);
+}
+.bps-cta .bps-btn-primary:hover {
+  background: color-mix(in srgb, var(--bp-bg) 85%, black);
+}
+.bps-cta .bps-btn-ghost {
+  color: var(--bp-bg);
+  border-color: color-mix(in srgb, var(--bp-bg) 45%, transparent);
+}
+.bps-cta :focus-visible {
+  outline-color: var(--bp-bg);
+}
+
+/* יצירת קשר */
+.bps-contact-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(2rem, 6vw, 5rem);
+}
+.bps-channels {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bps-channels a {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding-block: 1.3rem;
+  border-block-end: 1px solid var(--bp-line);
+  text-decoration: none;
+}
+.bps-channels li:first-child a {
+  border-block-start: 1px solid var(--bp-line);
+}
+.bps-channel-label {
+  color: var(--bp-muted);
+}
+.bps-channel-value {
+  font-family: var(--bp-font-display);
+  font-size: 1.35rem;
+}
+.bps-channels a:hover .bps-channel-value {
+  color: var(--bp-accent);
+}
+.bps-details {
+  margin: 2rem 0 0;
+  display: grid;
+  gap: 1rem;
+}
+.bps-details dt {
+  color: var(--bp-muted);
+  font-size: 0.92rem;
+}
+.bps-details dd {
+  margin: 0;
+}
+
+/* פוטר */
+.bps-footer {
+  border-block-start: 1px solid var(--bp-line);
+  padding-block: 3rem 1.5rem;
+  font-size: 0.95rem;
+}
+.bps-footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+.bps-footer-name {
+  margin: 0;
+  font-family: var(--bp-font-display);
+  font-size: 1.3rem;
+}
+.bps-footer-tag {
+  margin: 0.4rem 0 0;
+  color: var(--bp-muted);
+  max-inline-size: 30rem;
+}
+.bps-social {
+  display: flex;
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bps-footer-legal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-block-start: 2.5rem;
+  padding-block-start: 1.25rem;
+  border-block-start: 1px solid var(--bp-line);
+  color: var(--bp-muted);
+  font-size: 0.85rem;
+}
+.bps-footer-legal p {
+  margin: 0;
+}
+.bps-footer-legal a {
+  text-decoration: none;
+}
+.bps-footer-legal a:hover {
+  text-decoration: underline;
+}
+
+/* כפתור WhatsApp צף — בצד הסיום (משמאל בעברית) */
+.bps-wa {
+  position: fixed;
+  inset-block-end: 1.25rem;
+  inset-inline-end: 1.25rem;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  inline-size: 3.5rem;
+  block-size: 3.5rem;
+  border-radius: 50%;
+  background: #128c4a;
+  color: #fff;
+  box-shadow: 0 10px 24px -8px rgb(0 0 0 / 0.45);
+}
+.bps-wa:hover {
+  background: #0e7a40;
+}
+
+/* ---------- Elegant: עריכה ספרותית ---------- */
+.bps-elegant .bps-hero-split .bps-hero-media img {
+  border-radius: 999px 999px var(--bp-radius) var(--bp-radius);
+}
+.bps-elegant .bps-hero {
+  background:
+    radial-gradient(
+      60rem 30rem at 85% -10%,
+      color-mix(in srgb, var(--bp-soft) 85%, transparent),
+      transparent 70%
+    ),
+    var(--bp-bg);
+}
+.bps-elegant .bps-testimonials {
+  background: var(--bp-soft);
+}
+.bps-elegant .bps-testimonials + .bps-section {
+  border-block-start: 0;
+}
+
+/* ---------- Portfolio: העבודות במרכז ---------- */
+.bps-portfolio-t,
+.bps.bps-portfolio {
+  --bp-font-display: "Rubik", "Heebo", system-ui, sans-serif;
+  --bp-font-body: "Heebo", system-ui, sans-serif;
+}
+.bps.bps-portfolio .bps-h1,
+.bps.bps-portfolio .bps-h2 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.bps.bps-portfolio .bps-index {
+  display: none;
+}
+.bps.bps-portfolio .bps-hero-cover .bps-hero-inner {
+  grid-template-columns: minmax(0, 1fr);
+}
+.bps.bps-portfolio .bps-hero-cover .bps-hero-media img {
+  aspect-ratio: 21 / 9;
+}
+.bps.bps-portfolio .bps-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+}
+.bps.bps-portfolio .bps-work-media {
+  border-radius: 4px;
+  box-shadow: none;
+}
+.bps.bps-portfolio .bps-quote {
+  background: transparent;
+  border: 0;
+  border-inline-start: 3px solid var(--bp-accent);
+  border-radius: 0;
+  padding-block: 0.5rem;
+}
+
+/* תצוגה בתוך מסך אחר (בדיקת הפרסום בפאנל): בלי כותרת דביקה ובלי כפתור צף מחוץ למסגרת */
+.bps-embedded {
+  position: relative;
+  min-height: 0;
+}
+.bps-embedded .bps-top {
+  position: relative;
+}
+.bps-embedded .bps-wa {
+  position: absolute;
+}
+
+/* ---------- מסכים קטנים ---------- */
+@container bps (max-width: 860px) {
+  .bps-hero-split .bps-hero-inner,
+  .bps-about-grid,
+  .bps-contact-grid,
+  .bps-service-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bps-hero-media {
+    order: -1;
+  }
+  .bps-hero-media img {
+    aspect-ratio: 4 / 3;
+  }
+  .bps-elegant .bps-hero-split .bps-hero-media img {
+    border-radius: var(--bp-radius);
+  }
+  .bps-nav {
+    display: none;
+  }
+  .bps-main,
+  .bps-footer {
+    font-size: 1rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bps *,
+  .bps *::before,
+  .bps *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

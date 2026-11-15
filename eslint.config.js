@@ -70,8 +70,19 @@ const HOSPITALITY_ROUTES = [
   "src/routes/stay.tsx",
   "src/routes/stay.*.tsx",
 ];
-// ה-root של הנתבים: כמו קובץ כניסה — מגיע למנועים רק דרך שורש ההרכבה
+// מתאמי הנתיבים של מנוע אתרי העסקים (Nuriel Websites): האתר הציבורי (/bp-site — הכתובות בשורש ממופות
+// אליו רק באתר עסק), ממשק הניהול (/studio) ו"אתרי אינטרנט" בפאנל הפלטפורמה
+const BUSINESS_PROFILE_ROUTES = [
+  "src/routes/bp-site.tsx",
+  "src/routes/bp-site.*.tsx",
+  "src/routes/studio.tsx",
+  "src/routes/studio.*.tsx",
+  "src/routes/studio_.*.tsx",
+  "src/routes/platform_.websites.tsx",
+];
+// ה-root של הנתבים ו-router.tsx: כמו קובץ כניסה — מגיעים למנועים רק דרך שורש ההרכבה
 const ROOT_ROUTE = "src/routes/__root.tsx";
+const ROUTER_ENTRY = "src/router.tsx";
 const PLATFORM_FORBIDDEN = [
   "@/engines",
   "@/engines/**",
@@ -143,37 +154,56 @@ export default tseslint.config(
     "/^@\\/(?!platform(\\/|$)|engines\\/hospitality(\\/|$))|ecommerce\\/|(^|\\/)app\\/|^\\.\\.\\/\\.\\.\\/\\.\\.\\//",
   ),
   boundary(
+    ["src/engines/business-profile/**/*.{ts,tsx}", ...BUSINESS_PROFILE_ROUTES],
+    [],
+    {
+      regex:
+        "^@/(?!platform(/|$)|engines/business-profile(/|$))|(^|/)ecommerce(/|$)|(^|/)hospitality(/|$)|(^|/)app(/|$)|^\\.\\./\\.\\./\\.\\./",
+    },
+    "The Nuriel Websites engine may import only its own code and the platform (src/platform).",
+    "/^@\\/(?!platform(\\/|$)|engines\\/business-profile(\\/|$))|ecommerce\\/|hospitality\\/|(^|\\/)app\\/|^\\.\\.\\/\\.\\.\\/\\.\\.\\//",
+  ),
+  boundary(
     ["src/**/*.{ts,tsx}"],
     [
       "src/platform/**",
       "src/engines/hospitality/**",
+      "src/engines/business-profile/**",
       "src/app/**",
       "src/start.ts",
       "src/server.ts",
       ROOT_ROUTE,
+      ROUTER_ENTRY,
       ...HOSPITALITY_ROUTES,
+      ...BUSINESS_PROFILE_ROUTES,
     ],
     [
       "@/engines/hospitality",
       "@/engines/hospitality/**",
       "**/engines/hospitality/**",
+      "@/engines/business-profile",
+      "@/engines/business-profile/**",
+      "**/engines/business-profile/**",
       "@/app",
       "@/app/**",
     ],
-    "Ecommerce code must not import the Hospitality engine or the composition root.",
-    "/engines\\/hospitality|^@\\/app(\\/|$)/",
+    "Ecommerce code must not import the Hospitality or Nuriel Websites engines or the composition root.",
+    "/engines\\/(hospitality|business-profile)|^@\\/app(\\/|$)/",
   ),
   boundary(
-    ["src/start.ts", "src/server.ts", ROOT_ROUTE],
+    ["src/start.ts", "src/server.ts", ROOT_ROUTE, ROUTER_ENTRY],
     [],
     [
       "@/engines/hospitality",
       "@/engines/hospitality/**",
       "**/engines/hospitality/**",
+      "@/engines/business-profile",
+      "@/engines/business-profile/**",
+      "**/engines/business-profile/**",
       "./engines/**",
     ],
     "Entry files reach the engines only through the composition root (src/app/engines.ts).",
-    "/engines\\/hospitality|^\\.\\/engines\\//",
+    "/engines\\/(hospitality|business-profile)|^\\.\\/engines\\//",
   ),
   eslintPluginPrettier,
 );

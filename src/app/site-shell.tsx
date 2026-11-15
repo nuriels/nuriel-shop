@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import type { SiteType } from "@/platform/engines/contract";
 import { HospitalitySiteRoot } from "@/engines/hospitality/management/shell/SiteRoot";
+import { BusinessSiteRoot } from "@/engines/business-profile/site/SiteRoot";
 
 export function EngineSiteShell({
   siteType,
@@ -11,9 +12,7 @@ export function EngineSiteShell({
   siteType: SiteType;
   children: ReactNode;
 }) {
-  return siteType === "hospitality" ? (
-    <HospitalitySiteRoot>{children}</HospitalitySiteRoot>
-  ) : (
-    children
-  );
+  if (siteType === "hospitality") return <HospitalitySiteRoot>{children}</HospitalitySiteRoot>;
+  if (siteType === "business_profile") return <BusinessSiteRoot>{children}</BusinessSiteRoot>;
+  return children;
 }

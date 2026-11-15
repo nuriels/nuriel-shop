@@ -33,6 +33,17 @@ export async function siteTypeOf(
   return type;
 }
 
+/**
+ * סוג האתר מהמטמון, בלי פנייה למסד (null — עוד לא נבדק). לנתב (src/app/site-router.ts): שער האתר
+ * (gateSiteRequest) כבר קרא ל-siteTypeOf באותה בקשה. סוג אתר לא משתנה לעולם (tenants_site_type_immutable),
+ * ולכן גם ערך שתוקף המטמון שלו עבר נכון; רק ערך של "תקלה" (שמור 5 שניות) לא מוחזר.
+ */
+export function cachedSiteType(tenantId: string): SiteType | null {
+  const hit = cache.get(tenantId);
+  if (!hit) return null;
+  return hit.expires > Date.now() || hit.type !== "ecommerce" ? hit.type : null;
+}
+
 /** לבדיקות בלבד */
 export function clearSiteTypeCache(): void {
   cache.clear();

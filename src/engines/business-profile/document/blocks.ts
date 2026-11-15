@@ -1,0 +1,162 @@
+// רישום המקטעים (blocks): לכל סוג — שם, גרסה, סכמת התוכן (Zod, סובלנית: ערך לא תקין → ברירת המחדל),
+// ערכי התחלה והמרה מגרסה ישנה. סוג מקטע חדש = רשומה חדשה כאן + רכיב תצוגה בתבניות; בלי מיגרציה במסד.
+// מקטע מסוג לא מוכר נזרק בנירמול (לא מוצג ולא שובר את האתר).
+import { z } from "zod";
+import { imageRef, localized, safeLink, type LocalizedText } from "./schema";
+
+const he = (text: string): LocalizedText => ({ he: text });
+const button = z
+  .object({ label: localized(60), href: safeLink })
+  .catch({ label: { he: "" }, href: "" });
+const paragraphs = (max: number, each: number) =>
+  z
+    .array(localized(each))
+    .max(max)
+    .catch([])
+    .transform((list) => list.filter((p) => p.he.trim() !== "" || (p.en ?? "").trim() !== ""));
+
+export const BLOCK_DEFINITIONS = {
+  hero: {
+    label: he("פתיח (Hero)"),
+    version: 1,
+    schema: z.object({
+      eyebrow: localized(80),
+      title: localized(140),
+      subtitle: localized(300),
+      image: imageRef,
+      primary: button,
+      secondary: button,
+      layout: z.enum(["split", "centered", "cover"]).catch("split"),
+    }),
+    defaults: () => ({
+      eyebrow: he(""),
+      title: he("שם העסק"),
+      subtitle: he("משפט קצר שמסביר מה העסק עושה ולמי"),
+      image: { media: null, alt: he("") },
+      primary: { label: he("לשיחת היכרות"), href: "#contact" },
+      secondary: { label: he(""), href: "" },
+      layout: "split" as const,
+    }),
+  },
+  about: {
+    label: he("אודות"),
+    version: 1,
+    schema: z.object({
+      eyebrow: localized(80),
+      title: localized(140),
+      paragraphs: paragraphs(14, 1500),
+      image: imageRef,
+      highlights: z
+        .array(z.object({ value: localized(20), label: localized(80) }))
+        .max(4)
+        .catch([]),
+    }),
+    defaults: () => ({
+      eyebrow: he(""),
+      title: he("קצת עליי"),
+      paragraphs: [he("כמה מילים על העסק, הניסיון והגישה.")],
+      image: { media: null, alt: he("") },
+      highlights: [] as { value: LocalizedText; label: LocalizedText }[],
+    }),
+  },
+  services: {
+    label: he("שירותים"),
+    version: 1,
+    schema: z.object({ eyebrow: localized(80), title: localized(140), intro: localized(500) }),
+    defaults: () => ({ eyebrow: he(""), title: he("השירותים"), intro: he("") }),
+  },
+  portfolio: {
+    label: he("תיק עבודות"),
+    version: 1,
+    schema: z.object({
+      eyebrow: localized(80),
+      title: localized(140),
+      intro: localized(500),
+      filter: z.boolean().catch(true),
+      showTitles: z.boolean().catch(true),
+    }),
+    defaults: () => ({
+      eyebrow: he(""),
+      title: he("תיק עבודות"),
+      intro: he(""),
+      filter: true,
+      showTitles: true,
+    }),
+  },
+  testimonials: {
+    label: he("המלצות"),
+    version: 1,
+    schema: z.object({ eyebrow: localized(80), title: localized(140), intro: localized(500) }),
+    defaults: () => ({ eyebrow: he(""), title: he("מה אומרים עליי"), intro: he("") }),
+  },
+  cta: {
+    label: he("קריאה לפעולה"),
+    version: 1,
+    schema: z.object({
+      title: localized(140),
+      text: localized(400),
+      button: button,
+      whatsapp: z.boolean().catch(true),
+    }),
+    defaults: () => ({
+      title: he("רוצים לדבר?"),
+      text: he(""),
+      button: { label: he("לשיחת היכרות"), href: "#contact" },
+      whatsapp: true,
+    }),
+  },
+  contact: {
+    label: he("יצירת קשר"),
+    version: 1,
+    schema: z.object({
+      eyebrow: localized(80),
+      title: localized(140),
+      intro: localized(500),
+      showWhatsapp: z.boolean().catch(true),
+      showPhone: z.boolean().catch(true),
+      showEmail: z.boolean().catch(true),
+      /** טופס פנייה (תיבת הפניות של הפלטפורמה) — מחובר בשלב הטפסים (Stage 4) */
+      form: z.boolean().catch(false),
+    }),
+    defaults: () => ({
+      eyebrow: he(""),
+      title: he("יצירת קשר"),
+      intro: he(""),
+      showWhatsapp: true,
+      showPhone: true,
+      showEmail: true,
+      form: false,
+    }),
+  },
+  text: {
+    label: he("טקסט"),
+    version: 1,
+    schema: z.object({ title: localized(140), paragraphs: paragraphs(20, 2000) }),
+    defaults: () => ({ title: he(""), paragraphs: [he("")] }),
+  },
+} as const;
+
+export type BlockType = keyof typeof BLOCK_DEFINITIONS;
+export const BLOCK_TYPES = Object.keys(BLOCK_DEFINITIONS) as BlockType[];
+export type BlockProps<T extends BlockType> = ReturnType<(typeof BLOCK_DEFINITIONS)[T]["defaults"]>;
+
+export function isBlockType(value: unknown): value is BlockType {
+  return typeof value === "string" && Object.hasOwn(BLOCK_DEFINITIONS, value);
+}
+
+/**
+ * התוכן של מקטע לפי הסוג שלו: שדה לא תקין → ברירת המחדל של השדה; שדה חסר → ברירת המחדל. לא זורק.
+ * (גרסה 1 היא הראשונה — כשתהיה גרסה 2, ההמרה מגרסה ישנה תיכנס כאן לפני הבדיקה.)
+ */
+export function normalizeBlockProps<T extends BlockType>(type: T, props: unknown): BlockProps<T> {
+  const def = BLOCK_DEFINITIONS[type];
+  const defaults = def.defaults() as Record<string, unknown>;
+  const input = props && typeof props === "object" ? (props as Record<string, unknown>) : {};
+  const shape = (def.schema as z.ZodObject<z.ZodRawShape>).shape;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(shape)) {
+    const parsed = shape[key]!.safeParse(key in input ? input[key] : defaults[key]);
+    out[key] = parsed.success ? parsed.data : defaults[key];
+  }
+  return out as BlockProps<T>;
+}

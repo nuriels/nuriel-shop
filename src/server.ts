@@ -10,6 +10,7 @@ import {
   SUSPENDED_ALLOWED_PATHS,
   SUSPENDED_PAGE,
 } from "./lib/blocked-pages";
+import { cachedSiteType } from "./platform/tenancy/site-type.server";
 import {
   isPlatformRequest,
   isUnknownStoreHost,
@@ -23,6 +24,12 @@ import {
 // SSR: לקוח ה-Supabase המשותף (client.ts) שולח את החנות של הבקשה הנוכחית
 (globalThis as typeof globalThis & { __requestTenantId?: () => string | null }).__requestTenantId =
   () => maybeCurrentTenant()?.id ?? null;
+// Nuriel Websites: סוג האתר של הבקשה — לנתב (מיפוי הכתובות רק באתר עסק; src/app/site-router.ts)
+(globalThis as typeof globalThis & { __requestSiteType?: () => string | null }).__requestSiteType =
+  () => {
+    const id = maybeCurrentTenant()?.id;
+    return id ? cachedSiteType(id) : null;
+  };
 
 // קבצים סטטיים (assets, favicon...) לא צריכים זיהוי חנות — כך גם ה-healthcheck
 // לא תלוי במסד. חוץ מ-robots.txt / sitemap.xml (חלק 14): הם נוצרים לכל חנות

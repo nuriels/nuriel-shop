@@ -5,6 +5,8 @@ import type { SiteType } from "@/platform/engines/contract";
 import { hospitalitySiteHead } from "@/engines/hospitality/api/site.functions";
 import { hospitalityHeadLinks, hospitalityHeadMeta } from "@/engines/hospitality/management/head";
 import type { SiteHead } from "@/engines/hospitality/types/site";
+import { businessSiteHead } from "@/engines/business-profile/api/site.functions";
+import { businessHeadLinks, businessHeadMeta } from "@/engines/business-profile/site/head";
 
 export type EngineSite = { siteType: SiteType } & SiteHead;
 
@@ -26,14 +28,20 @@ export async function engineSiteData<StoreData>(
       engineSite: { siteType, name: head.name, logoId: head.logoId ?? null },
     } as EngineSiteData<StoreData>;
   }
+  if (siteType === "business_profile") {
+    const head = await businessSiteHead().catch(() => ({ name: null }));
+    return { engineSite: { siteType, name: head.name, logoId: null } } as EngineSiteData<StoreData>;
+  }
   return { engineSite: { siteType, name: null } } as EngineSiteData<StoreData>;
 }
 
 export function engineSiteMeta(site: EngineSite) {
+  if (site.siteType === "business_profile") return businessHeadMeta({ name: site.name });
   return hospitalityHeadMeta({ name: site.name });
 }
 
 /** A1: האייקונים של אתר המנוע (לשונית, מסך הבית, מניפסט) — מהלוגו של העסק; בלי לוגו — האייקון הכללי */
 export function engineSiteLinks(site: EngineSite) {
+  if (site.siteType === "business_profile") return businessHeadLinks();
   return hospitalityHeadLinks({ name: site.name, logoId: site.logoId ?? null });
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { BedDouble, Gem, LifeBuoy, Lock, Sparkles, Store, UserPlus } from "lucide-react";
+import { BedDouble, Gem, Globe, LifeBuoy, Lock, Sparkles, Store, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthState } from "@/hooks/useAuthState";
 import { FORBIDDEN_PAGE } from "@/lib/blocked-pages";
@@ -89,6 +89,10 @@ export function PlatformShell({
                 >
                   אתרי אירוח (Hospitality)
                 </NavLink>
+                {/* Nuriel Websites: מסך של מנוע אתרי העסקים — רק קישור (הקוד שלו לא מיובא לכאן) */}
+                <NavLink to="/platform/websites" active={false} icon={<Globe className="size-4" />}>
+                  אתרי אינטרנט (Websites)
+                </NavLink>
               </nav>
             )}
           </div>
@@ -150,7 +154,8 @@ function NavLink({
     | "/platform/plans"
     | "/platform/upgrades"
     | "/platform/ai"
-    | "/platform/hospitality";
+    | "/platform/hospitality"
+    | "/platform/websites";
   active: boolean;
   icon: ReactNode;
   badge?: number;

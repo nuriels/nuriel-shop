@@ -6,6 +6,7 @@ import { ESLint } from "eslint";
 import { describe, expect, it } from "vitest";
 import { ecommerceEngine } from "@/engines/ecommerce/engine";
 import { hospitalityEngine } from "@/engines/hospitality/engine";
+import { businessProfileEngine } from "@/engines/business-profile/engine";
 import { createEngineRegistry } from "@/platform/engines/registry";
 import { LEGACY_SHARED_SERVER_FN_FILES } from "@/platform/engines/shared-functions";
 
@@ -23,7 +24,14 @@ function walk(dir: string): string[] {
 const FILES = walk(join(ROOT, "src"));
 const SOURCE = new Map(FILES.map((f) => [f, readFileSync(join(ROOT, f), "utf8")]));
 
-type Layer = "app" | "platform" | "hospitality" | "ecommerce-engine" | "entry" | "ecommerce";
+type Layer =
+  | "app"
+  | "platform"
+  | "hospitality"
+  | "business_profile"
+  | "ecommerce-engine"
+  | "entry"
+  | "ecommerce";
 
 /**
  * מתאמי הנתיבים של Hospitality (src/routes/manage*.tsx, ו"ניהול Hospitality" בפאנל הפלטפורמה —
@@ -31,8 +39,14 @@ type Layer = "app" | "platform" | "hospitality" | "ecommerce-engine" | "entry" |
  */
 const HOSPITALITY_ROUTE =
   /^src\/routes\/(manage(_?\.[^/]+)?|stay(\.[^/]+)?|platform_\.hospitality)\.tsx?$/;
-/** קבצי כניסה: מגיעים למנועים רק דרך שורש ההרכבה (ה-root של הנתבים — מ-Stage 2a) */
-const ENTRY_FILES = ["src/start.ts", "src/server.ts", "src/routes/__root.tsx"];
+/**
+ * מתאמי הנתיבים של מנוע אתרי העסקים (Nuriel Websites): האתר הציבורי (/bp-site — הכתובות בשורש ממופות
+ * אליו רק באתר עסק), ממשק הניהול (/studio) ו"אתרי אינטרנט" בפאנל הפלטפורמה
+ */
+const BUSINESS_PROFILE_ROUTE =
+  /^src\/routes\/(bp-site(\.[^/]+)?|studio(_?\.[^/]+)?|platform_\.websites)\.tsx?$/;
+/** קבצי כניסה: מגיעים למנועים רק דרך שורש ההרכבה (ה-root של הנתבים — מ-Stage 2a; router.tsx — מ-Websites) */
+const ENTRY_FILES = ["src/start.ts", "src/server.ts", "src/routes/__root.tsx", "src/router.tsx"];
 /** עץ הנתיבים שנוצר אוטומטית — מייבא כל קובץ נתיב, גם את מתאמי Hospitality */
 const ROUTE_TREE = "src/routeTree.gen.ts";
 
@@ -41,6 +55,8 @@ function layerOf(rel: string): Layer {
   if (rel.startsWith("src/platform/")) return "platform";
   if (rel.startsWith("src/engines/hospitality/") || HOSPITALITY_ROUTE.test(rel))
     return "hospitality";
+  if (rel.startsWith("src/engines/business-profile/") || BUSINESS_PROFILE_ROUTE.test(rel))
+    return "business_profile";
   if (rel.startsWith("src/engines/ecommerce/")) return "ecommerce-engine";
   if (ENTRY_FILES.includes(rel.replace(/\.ts$/, ".tsx")) || ENTRY_FILES.includes(rel))
     return "entry";
@@ -122,13 +138,25 @@ function violation(from: string, target: string): string | null {
       return toLayer === "platform" || adapterAllows(from, target) ? null : bad;
     case "hospitality":
       return toLayer === "hospitality" || toLayer === "platform" ? null : bad;
+    case "business_profile":
+      return toLayer === "business_profile" || toLayer === "platform" ? null : bad;
     case "ecommerce":
     case "ecommerce-engine":
-      // החריג היחיד: עץ הנתיבים שנוצר מייבא את מתאמי הנתיבים של Hospitality (ורק אותם)
-      if (from === ROUTE_TREE && HOSPITALITY_ROUTE.test(`${target}.tsx`)) return null;
-      return toLayer === "hospitality" || toLayer === "app" ? bad : null;
+      // החריג היחיד: עץ הנתיבים שנוצר מייבא את מתאמי הנתיבים של המנועים (ורק אותם)
+      if (
+        from === ROUTE_TREE &&
+        (HOSPITALITY_ROUTE.test(`${target}.tsx`) || BUSINESS_PROFILE_ROUTE.test(`${target}.tsx`))
+      )
+        return null;
+      return toLayer === "hospitality" || toLayer === "business_profile" || toLayer === "app"
+        ? bad
+        : null;
     case "entry":
-      return toLayer === "hospitality" || toLayer === "ecommerce-engine" ? bad : null;
+      return toLayer === "hospitality" ||
+        toLayer === "business_profile" ||
+        toLayer === "ecommerce-engine"
+        ? bad
+        : null;
     case "app":
       return null;
   }
@@ -146,6 +174,7 @@ describe("architecture: dependency boundaries", () => {
     expect(FILES.length).toBeGreaterThan(200);
     expect(FILES.filter((f) => layerOf(f) === "platform").length).toBeGreaterThan(5);
     expect(FILES.filter((f) => layerOf(f) === "hospitality").length).toBeGreaterThan(5);
+    expect(FILES.filter((f) => layerOf(f) === "business_profile").length).toBeGreaterThan(5);
   });
 
   it("the import scanner sees static, type, re-export, dynamic and relative imports", () => {
@@ -173,6 +202,10 @@ describe("architecture: dependency boundaries", () => {
     expect(violationsFor(["hospitality"])).toEqual([]);
   });
 
+  it("the Nuriel Websites engine imports only its own code and the platform", () => {
+    expect(violationsFor(["business_profile"])).toEqual([]);
+  });
+
   it("Ecommerce code (existing code and its engine descriptor) never imports Hospitality or the composition root", () => {
     expect(violationsFor(["ecommerce", "ecommerce-engine"])).toEqual([]);
   });
@@ -182,6 +215,7 @@ describe("architecture: dependency boundaries", () => {
     expect(importsOf("src/start.ts")).toContain("src/app/engines");
     expect(importsOf("src/server.ts")).toContain("src/app/engines");
     expect(importsOf("src/routes/__root.tsx")).toContain("src/app/site-shell");
+    expect(importsOf("src/router.tsx")).toContain("src/app/site-router");
   });
 
   it("only the composition root knows both engines", () => {
@@ -193,6 +227,13 @@ describe("architecture: dependency boundaries", () => {
     expect(importers("src/engines/hospitality/")).toEqual([
       "src/app/engines.ts",
       "src/app/site-head.ts",
+      "src/app/site-routes.ts",
+      "src/app/site-shell.tsx",
+    ]);
+    expect(importers("src/engines/business-profile/")).toEqual([
+      "src/app/engines.ts",
+      "src/app/site-head.ts",
+      "src/app/site-router.ts",
       "src/app/site-routes.ts",
       "src/app/site-shell.tsx",
     ]);
@@ -267,6 +308,37 @@ describe("architecture: dependency boundaries", () => {
     }
   });
 
+  it("Nuriel Websites route adapters are thin: engine screens and route helpers only", () => {
+    const adapters = FILES.filter((f) => BUSINESS_PROFILE_ROUTE.test(f));
+    expect(adapters).toEqual([
+      "src/routes/bp-site.$.tsx",
+      "src/routes/bp-site.index.tsx",
+      "src/routes/bp-site.tsx",
+      "src/routes/platform_.websites.tsx",
+      "src/routes/studio.editor.tsx",
+      "src/routes/studio.index.tsx",
+      "src/routes/studio.tsx",
+      "src/routes/studio.versions.tsx",
+      "src/routes/studio_.preview.tsx",
+    ]);
+    for (const f of adapters) {
+      const code = stripComments(SOURCE.get(f)!);
+      expect(importsOf(f).length, f).toBeLessThanOrEqual(3);
+      for (const t of importsOf(f)) expect(t, f).toMatch(/^src\/engines\/business-profile\//);
+      expect(code, f).not.toMatch(/createServerFn|useQuery|fetch\(|supabase|process\.env/);
+      expect(code.split("\n").filter((l) => l.trim()).length, f).toBeLessThan(25);
+    }
+  });
+
+  it("Ecommerce code reaches the Nuriel Websites route adapters only through the generated route tree", () => {
+    const importers = FILES.filter(
+      (f) =>
+        layerOf(f) !== "business_profile" &&
+        importsOf(f).some((t) => BUSINESS_PROFILE_ROUTE.test(`${t}.tsx`)),
+    );
+    expect(importers).toEqual([ROUTE_TREE]);
+  });
+
   it("Ecommerce code reaches the Hospitality route adapters only through the generated route tree", () => {
     const importers = FILES.filter(
       (f) =>
@@ -289,16 +361,21 @@ describe("architecture: dependency boundaries", () => {
       );
       expect(code.split("\n").filter((l) => l.trim()).length, f).toBeLessThan(40);
       for (const t of importsOf(f)) {
-        expect(["platform", "hospitality", "ecommerce-engine"], `${f} → ${t}`).toContain(
-          layerOf(`${t}.ts`),
-        );
+        expect(
+          ["platform", "hospitality", "business_profile", "ecommerce-engine"],
+          `${f} → ${t}`,
+        ).toContain(layerOf(`${t}.ts`));
       }
     }
   });
 });
 
 describe("architecture: server-function ownership", () => {
-  const registry = createEngineRegistry([ecommerceEngine, hospitalityEngine]);
+  const registry = createEngineRegistry([
+    ecommerceEngine,
+    hospitalityEngine,
+    businessProfileEngine,
+  ]);
   const serverFnFiles = FILES.filter((f) => /createServerFn\s*\(/.test(SOURCE.get(f)!));
 
   it("finds the server-function files", () => {
@@ -309,6 +386,8 @@ describe("architecture: server-function ownership", () => {
     for (const f of serverFnFiles) {
       const owner = registry.ownerOf(f);
       if (f.startsWith("src/engines/hospitality/")) expect(owner, f).toBe("hospitality");
+      else if (f.startsWith("src/engines/business-profile/"))
+        expect(owner, f).toBe("business_profile");
       else if (f.startsWith("src/platform/") || LEGACY_SHARED_SERVER_FN_FILES.includes(f))
         expect(owner, f).toBe("platform");
       else expect(owner, f).toBe("ecommerce");
@@ -321,6 +400,19 @@ describe("architecture: server-function ownership", () => {
     // api/ = נקראות מהדפדפן (מחוץ ל-server/, import protection); server/ = בלי ממשק עדיין
     for (const f of hosp)
       expect(f).toMatch(/^src\/engines\/hospitality\/(server|api)\/[\w-]+\.functions\.ts$/);
+  });
+
+  it("Nuriel Websites server functions live only in src/engines/business-profile/api (3 files)", () => {
+    const bp = serverFnFiles.filter((f) => registry.ownerOf(f) === "business_profile");
+    expect(bp).toEqual([
+      "src/engines/business-profile/api/platform-admin.functions.ts",
+      "src/engines/business-profile/api/site.functions.ts",
+      "src/engines/business-profile/api/studio.functions.ts",
+    ]);
+    // רק קובץ "אתרי אינטרנט" בפאנל רץ בכתובת הפאנל (בלי אתר)
+    expect(bp.filter((f) => registry.isPlatformAdminFn(f))).toEqual([
+      "src/engines/business-profile/api/platform-admin.functions.ts",
+    ]);
   });
 
   it("the shared (platform) list names existing files that define server functions", () => {
@@ -382,6 +474,22 @@ describe("architecture: ESLint enforces the same boundaries", () => {
       'import { hospitalityEngine } from "@/engines/hospitality/engine";\n',
     ],
     ["src/server.ts", 'import { hospitalityEngine } from "./engines/hospitality/engine";\n'],
+    // Nuriel Websites: the engine reaches only itself and the platform; nobody else reaches it directly
+    ["src/engines/business-profile/site/x.tsx", 'import { useCart } from "@/hooks/useCart";\n'],
+    [
+      "src/engines/business-profile/x.ts",
+      'import { hospitalityEngine } from "@/engines/hospitality/engine";\n',
+    ],
+    ["src/engines/business-profile/x.ts", 'import { engineRegistry } from "@/app/engines";\n'],
+    [
+      "src/lib/x.ts",
+      'import { businessProfileEngine } from "@/engines/business-profile/engine";\n',
+    ],
+    [
+      "src/router.tsx",
+      'import { businessProfileRewrite } from "@/engines/business-profile/edge/rewrite";\n',
+    ],
+    ["src/routes/studio.tsx", 'import { AdminNav } from "@/components/AdminNav";\n'],
     // Stage 2a: adapters wrap only their listed modules; route adapters are Hospitality code;
     // the root route is an entry file
     ["src/platform/ui/index.ts", 'export { useCart } from "@/hooks/useCart";\n'],

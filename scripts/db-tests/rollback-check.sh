@@ -2,6 +2,8 @@
 # ============================================================
 # בדיקת Rollback (מקומית בלבד): מסד חדש (rollback_test) עם כל המיגרציות.
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
+#   • bp_engine (77): הגנה (נעצר כשקיים אתר עסק / נתונים בסכמה business_profile), rollback → הסכמה, 17
+#     הפונקציות, שני הדגלים ותפקיד המוצר נעלמו, וה-CHECK של סוג האתר חוזר לשני סוגים; זהה בדיוק ל-76
 #   • site_tag_manager (76): הגנה (נעצר כשבעל עסק כלשהו שמר מזהה Google Tag Manager), rollback → הטבלה
 #     וחמש הפונקציות נעלמו; רישומי היומן נשארים; זהה בדיוק ל-75
 #   • vat_settings (75): הגנה (נעצר כשיש הזמנה עם צילום סוג העוסק / כשנקבע שיעור מרכזי נוסף), rollback →
@@ -174,6 +176,7 @@ M73=20261114100000_billing_agreements
 M74=20261114110000_billing_owner_access
 M75=20261115090000_vat_settings
 M76=20261115100000_site_tag_manager
+M77=20261116090000_bp_engine
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -216,6 +219,39 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- Nuriel Websites: the business_profile engine (migration 77) ----------
+expect "before the rollback: the closed schema (4 tables, RLS, no API privileges), the third site type, the product role, the two flags off" \
+  "SELECT (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'business_profile' AND c.relkind = 'r' AND c.relrowsecurity) = 4
+      AND NOT has_schema_privilege('authenticated', 'business_profile', 'USAGE')
+      AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.bp_draft_save(jsonb,integer)', 'EXECUTE')
+      AND EXISTS (SELECT 1 FROM public.platform_product_roles WHERE product = 'business_profile' AND role = 'admin')
+      AND (SELECT count(*) FROM public.platform_feature_flags
+            WHERE key IN ('business_profile_enabled', 'business_profile_public') AND NOT enabled) = 2"
+echo "rollback guard: $M77 refuses while a business site exists"
+q "INSERT INTO public.tenants (slug, name, site_type) VALUES ('rb-business', 'עסק לבדיקה', 'business_profile')" >/dev/null
+if down "$M77" 2>/dev/null; then
+  echo "  FAIL rollback ran although a business site exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT to_regnamespace('business_profile') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM public.tenants WHERE slug = 'rb-business' AND site_type = 'business_profile')"
+q "DELETE FROM public.site_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-business');
+   DELETE FROM public.email_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-business');
+   DELETE FROM public.tenants WHERE slug = 'rb-business'" >/dev/null
+ref_upto "$M77"
+echo "rollback: $M77"
+down "$M77"
+expect "the business functions are gone and the site type is two products again" \
+  "SELECT to_regnamespace('business_profile') IS NULL
+      AND to_regprocedure('public.bp_public_site()') IS NULL
+      AND to_regprocedure('public.platform_bp_open_site(text,text,text,jsonb)') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key LIKE 'business_profile%')
+      AND NOT EXISTS (SELECT 1 FROM public.platform_product_roles WHERE product = 'business_profile')
+      AND pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'tenants_site_type_check')) NOT LIKE '%business_profile%'"
+same_as_ref "migration 76"
 
 # ---------- Google Tag Manager: one container ID per site, owner only (migration 76) ----------
 expect "before the rollback: the closed table (RLS, no API privileges), the ID-only check, the site read for guests" \
@@ -2416,6 +2452,12 @@ up "$M73"
 up "$M74"
 up "$M75"
 up "$M76"
+up "$M77"
+expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
+  "SELECT to_regnamespace('business_profile') IS NOT NULL
+      AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.bp_draft_save(jsonb,integer)', 'EXECUTE')
+      AND pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'tenants_site_type_check')) LIKE '%business_profile%'"
 expect "Tag Manager is back: the closed table, the guest read, the owner save" \
   "SELECT to_regclass('public.site_tracking') IS NOT NULL
       AND NOT has_table_privilege('authenticated', 'public.site_tracking', 'SELECT')
