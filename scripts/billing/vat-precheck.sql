@@ -12,6 +12,12 @@
 --   3. חנויות "פטור" ששמור אצלן "המחירים לא כוללים מע"מ" — אין לזה השפעה על סכום (0%), רק על התצוגה
 --   4. ההזמנות לפי שיעור ו"כולל מע"מ" — מה שנשמר בהן היום (לא משתנה)
 --   5. ההזמנות שהשיעור שלהן שונה מהגדרת החנות היום (היסטוריה — נשמרת כמו שהיא)
+--   6. (סבב 3) ההשפעה האפשרית על הזמנות חדשות, לכל חנות "מורשה" עם שיעור שמור שונה מ-18%: לפי ההזמנות של
+--      90 הימים האחרונים (לא מבוטלות, לא הצעות מחיר) — "אם אותן הזמנות היו נכנסות שוב אחרי 191":
+--        • "כולל מע"מ": הלקוח משלם אותו דבר; חלק המע"מ בתוך המחיר משתנה (וההכנסה נטו של החנות בהתאם)
+--        • "לפני מע"מ": הסכום ללקוח משתנה — הבסיס כפול 1.18 במקום כפול (1 + השיעור השמור)
+--   7. סיכום: כמה חנויות מושפעות, וסך ההפרש המשוער ב-90 יום
+--   הערה: עוסק פטור — כבר היום 0% (טריגר מ-20261019300000), ואחרי 191 נשאר 0%. אין לו שורות בסעיפים 6–7.
 -- ============================================================
 BEGIN READ ONLY;
 
@@ -48,5 +54,44 @@ SELECT t.slug, o.vat_rate AS order_rate,
  WHERE o.vat_rate IS DISTINCT FROM CASE WHEN s.business_type = 'exempt' THEN 0 ELSE s.vat_rate END
  GROUP BY t.slug, o.vat_rate, s.business_type, s.vat_rate
  ORDER BY t.slug;
+
+\echo '6. השפעה אפשרית על הזמנות חדשות — עוסק מורשה עם שיעור שונה מ-18% (לפי 90 הימים האחרונים)'
+WITH affected AS (
+  SELECT t.id, t.slug, s.vat_rate AS stored_rate, s.prices_include_vat
+    FROM public.site_settings s JOIN public.tenants t ON t.id = s.tenant_id
+   WHERE t.site_type = 'ecommerce' AND s.business_type = 'authorized' AND s.vat_rate IS DISTINCT FROM 18
+), recent AS (
+  SELECT a.slug, a.stored_rate, a.prices_include_vat,
+         count(o.id) AS orders_90d, COALESCE(sum(o.total), 0) AS base_90d
+    FROM affected a
+    LEFT JOIN public.orders o ON o.tenant_id = a.id AND o.kind = 'order' AND o.status <> 'cancelled'
+                              AND o.created_at >= now() - interval '90 days'
+   GROUP BY a.slug, a.stored_rate, a.prices_include_vat
+)
+SELECT slug,
+       stored_rate AS "שיעור שמור",
+       CASE WHEN prices_include_vat THEN 'כולל מע"מ' ELSE 'לפני מע"מ' END AS "מצב",
+       orders_90d AS "הזמנות 90 יום",
+       round(base_90d, 2) AS "סכום ההזמנות (total)",
+       -- כולל מע"מ: הלקוח משלם אותו דבר — רק חלק המע"מ שבתוך הסכום
+       CASE WHEN prices_include_vat THEN round(base_90d * stored_rate / (100 + stored_rate), 2) END AS "מע״מ בפנים היום",
+       CASE WHEN prices_include_vat THEN round(base_90d * 18 / 118, 2) END AS "מע״מ בפנים ב-18%",
+       -- לפני מע"מ: הסכום ללקוח
+       CASE WHEN NOT prices_include_vat THEN round(base_90d * (1 + stored_rate / 100), 2) END AS "ללקוח היום",
+       CASE WHEN NOT prices_include_vat THEN round(base_90d * 1.18, 2) END AS "ללקוח ב-18%",
+       CASE WHEN prices_include_vat
+            THEN round(base_90d * 18 / 118, 2) - round(base_90d * stored_rate / (100 + stored_rate), 2)
+            ELSE round(base_90d * 1.18, 2) - round(base_90d * (1 + stored_rate / 100), 2) END AS "הפרש",
+       CASE WHEN prices_include_vat THEN 'המחיר ללקוח לא משתנה; ההכנסה נטו של החנות משתנה בהפרש'
+            ELSE 'הלקוח ישלם את ההפרש (חיובי = יותר)' END AS "משמעות"
+  FROM recent
+ ORDER BY slug;
+
+\echo '7. סיכום'
+SELECT count(*) AS "חנויות מורשות עם שיעור שונה מ-18%",
+       count(*) FILTER (WHERE s.prices_include_vat) AS "מתוכן כולל מע״מ",
+       count(*) FILTER (WHERE NOT s.prices_include_vat) AS "מתוכן לפני מע״מ"
+  FROM public.site_settings s JOIN public.tenants t ON t.id = s.tenant_id
+ WHERE t.site_type = 'ecommerce' AND s.business_type = 'authorized' AND s.vat_rate IS DISTINCT FROM 18;
 
 ROLLBACK;
