@@ -97,6 +97,9 @@ test("Efrat's draft on a computer: her texts, services and titled works; nothing
   await page.getByRole("tab", { name: "עיצוב" }).click();
   await page.getByRole("radio", { name: /תיק עבודות/ }).check();
   await expect(page.getByText("כל הצבעים עוברים את בדיקת הניגודיות (AA).")).toBeVisible();
+  const frame = page.frameLocator('iframe[title="תצוגה מקדימה של האתר"]');
+  await expect(frame.locator('[data-template="portfolio"]')).toBeVisible();
+  await frame.locator("#portfolio").scrollIntoViewIfNeeded();
   await page.screenshot({
     path: testInfo.outputPath("efrat-editor-portfolio.jpg"),
     type: "jpeg",
