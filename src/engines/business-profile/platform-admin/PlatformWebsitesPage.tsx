@@ -375,7 +375,13 @@ function ReviewSheet({ site, onClose }: { site: PlatformSiteRow | null; onClose:
               style={{ maxWidth: width === "mobile" ? 390 : "100%" }}
             >
               {page && (
-                <SiteView doc={q.data.document} media={{}} page={page} mode="preview" embedded />
+                <SiteView
+                  doc={q.data.document}
+                  media={q.data.media}
+                  page={page}
+                  mode="preview"
+                  embedded
+                />
               )}
             </div>
             <div className="flex flex-wrap items-end gap-3 border-t pt-4">

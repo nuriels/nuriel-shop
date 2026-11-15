@@ -402,9 +402,10 @@ describe("architecture: server-function ownership", () => {
       expect(f).toMatch(/^src\/engines\/hospitality\/(server|api)\/[\w-]+\.functions\.ts$/);
   });
 
-  it("Nuriel Websites server functions live only in src/engines/business-profile/api (3 files)", () => {
+  it("Nuriel Websites server functions live only in src/engines/business-profile/api (4 files)", () => {
     const bp = serverFnFiles.filter((f) => registry.ownerOf(f) === "business_profile");
     expect(bp).toEqual([
+      "src/engines/business-profile/api/media.functions.ts",
       "src/engines/business-profile/api/platform-admin.functions.ts",
       "src/engines/business-profile/api/site.functions.ts",
       "src/engines/business-profile/api/studio.functions.ts",

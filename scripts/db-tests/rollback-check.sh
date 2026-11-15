@@ -177,6 +177,7 @@ M74=20261114110000_billing_owner_access
 M75=20261115090000_vat_settings
 M76=20261115100000_site_tag_manager
 M77=20261116090000_bp_engine
+M78=20261116100000_bp_media
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -219,6 +220,42 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- Nuriel Websites: the media library (migration 78) ----------
+expect "before the rollback: the closed media table (RLS, no API privileges), the quota column, the public read of published images only" \
+  "SELECT to_regclass('business_profile.media') IS NOT NULL
+      AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'business_profile.media'::regclass)
+      AND NOT has_table_privilege('authenticated', 'business_profile.media', 'SELECT')
+      AND EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'business_profile' AND table_name = 'sites' AND column_name = 'media_quota_bytes')
+      AND has_function_privilege('anon', 'public.bp_media_public()', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.bp_media_add(uuid,text,jsonb,integer,integer,bigint,jsonb,text)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.platform_bp_review_media(uuid)', 'EXECUTE')"
+echo "rollback guard: $M78 refuses while an image exists in the library"
+q "INSERT INTO public.tenants (slug, name, site_type) VALUES ('rb-media', 'עסק לבדיקת מדיה', 'business_profile')" >/dev/null
+q "INSERT INTO business_profile.media (id, tenant_id, storage_path, size_bytes)
+   SELECT '11111111-1111-4111-8111-111111111111', id, id::text || '/11111111-1111-4111-8111-111111111111.webp', 1000
+     FROM public.tenants WHERE slug = 'rb-media'" >/dev/null
+if down "$M78" 2>/dev/null; then
+  echo "  FAIL rollback ran although an image exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT EXISTS (SELECT 1 FROM business_profile.media WHERE id = '11111111-1111-4111-8111-111111111111')"
+q "DELETE FROM business_profile.media WHERE id = '11111111-1111-4111-8111-111111111111';
+   DELETE FROM public.site_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-media');
+   DELETE FROM public.email_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-media');
+   DELETE FROM public.tenants WHERE slug = 'rb-media'" >/dev/null
+ref_upto "$M78"
+echo "rollback: $M78"
+down "$M78"
+expect "the media library is gone, the engine itself stays" \
+  "SELECT to_regclass('business_profile.media') IS NULL
+      AND to_regprocedure('public.bp_media_public()') IS NULL
+      AND to_regprocedure('public.platform_bp_review_media(uuid)') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = 'business_profile' AND table_name = 'sites' AND column_name = 'media_quota_bytes')
+      AND to_regprocedure('public.bp_public_site()') IS NOT NULL"
+same_as_ref "migration 77"
 
 # ---------- Nuriel Websites: the business_profile engine (migration 77) ----------
 expect "before the rollback: the closed schema (4 tables, RLS, no API privileges), the third site type, the product role, the two flags off" \
@@ -2453,11 +2490,17 @@ up "$M74"
 up "$M75"
 up "$M76"
 up "$M77"
+up "$M78"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')
       AND NOT has_function_privilege('anon', 'public.bp_draft_save(jsonb,integer)', 'EXECUTE')
       AND pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'tenants_site_type_check')) LIKE '%business_profile%'"
+expect "the media library is back: the closed table, the public read of published images, the editor functions" \
+  "SELECT to_regclass('business_profile.media') IS NOT NULL
+      AND has_function_privilege('anon', 'public.bp_media_public()', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'public.bp_media_list()', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.bp_media_list()', 'EXECUTE')"
 expect "Tag Manager is back: the closed table, the guest read, the owner save" \
   "SELECT to_regclass('public.site_tracking') IS NOT NULL
       AND NOT has_table_privilege('authenticated', 'public.site_tracking', 'SELECT')

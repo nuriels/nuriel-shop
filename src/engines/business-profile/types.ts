@@ -1,8 +1,35 @@
 // הטיפוסים שעוברים בין השרת לממשק (בלי קוד שרת)
 import type { SiteDocument } from "./document/schema";
 
-/** כתובות התמונות של המסמך: מזהה מדיה → כתובת + מידות (Stage 2 — ספריית המדיה) */
-export type MediaMap = Record<string, { url: string; width: number | null; height: number | null }>;
+/** כתובות התמונות של המסמך: מזהה מדיה → כתובת (WebP 1600), srcset (480 / 960 / 1600), AVIF, מידות */
+export type MediaMap = Record<
+  string,
+  {
+    url: string;
+    width: number | null;
+    height: number | null;
+    srcset: string | null;
+    avif: string | null;
+  }
+>;
+
+export interface MediaItem {
+  id: string;
+  url: string;
+  thumb: string;
+  width: number | null;
+  height: number | null;
+  size_bytes: number;
+  alt: { he: string; en?: string | undefined };
+  original_name: string | null;
+  created_at: string;
+}
+
+export interface MediaLibrary {
+  items: MediaItem[];
+  used_bytes: number;
+  quota_bytes: number;
+}
 
 export interface PublicSiteData {
   name: string;

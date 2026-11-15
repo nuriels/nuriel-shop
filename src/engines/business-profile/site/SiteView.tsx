@@ -93,15 +93,39 @@ function SiteHeader({ page }: { page: Page }) {
           <span className="bps-brand-name">{name}</span>
         </a>
         {nav.length > 0 && (
-          <nav aria-label="ניווט ראשי" className="bps-nav">
-            <ul>
-              {nav.map((b) => (
-                <li key={b.id}>
-                  <a href={`#${b.id}`}>{t((b.props as { title: { he: string } }).title)}</a>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <>
+            <nav aria-label="ניווט ראשי" className="bps-nav">
+              <ul>
+                {nav.map((b) => (
+                  <li key={b.id}>
+                    <a href={`#${b.id}`}>{t((b.props as { title: { he: string } }).title)}</a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+            {/* במסך צר: תפריט נפתח (details — עובד גם בלי JavaScript); בחירה בקישור סוגרת אותו.
+                ה-nav עוטף את ה-details, כך שבכל רוחב יש ניווט ראשי גלוי אחד בלבד */}
+            <nav aria-label="ניווט ראשי" className="bps-menu">
+              <details>
+                <summary>
+                  <span aria-hidden="true" className="bps-menu-icon" />
+                  תפריט
+                </summary>
+                <ul className="bps-menu-panel">
+                  {nav.map((b) => (
+                    <li key={b.id}>
+                      <a
+                        href={`#${b.id}`}
+                        onClick={(e) => e.currentTarget.closest("details")?.removeAttribute("open")}
+                      >
+                        {t((b.props as { title: { he: string } }).title)}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </nav>
+          </>
         )}
       </div>
     </header>
@@ -158,6 +182,8 @@ function SiteFooter() {
           </a>
         </p>
       </div>
+      {/* הכפתור הצף (מיקום קבוע) — בתוך הפוטר, כך שכל התוכן בתוך אזורי הדף (נגישות) */}
+      <FloatingWhatsapp />
     </footer>
   );
 }
@@ -231,7 +257,6 @@ export function SiteView({
             })}
         </main>
         <SiteFooter />
-        <FloatingWhatsapp />
       </div>
     </SiteViewProvider>
   );

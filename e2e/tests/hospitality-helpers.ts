@@ -95,12 +95,13 @@ export async function enterViaHandoffTo(
   siteId: string,
   email: string,
   landing: RegExp,
+  kind: "store_owner" | "platform_admin" = "store_owner",
 ) {
   const code = randomBytes(32).toString("base64url");
   const userId = sql(`SELECT id FROM auth.users WHERE email = '${email}'`);
   sql(`INSERT INTO public.platform_admin_handoffs (token_hash, user_id, tenant_id, expires_at, kind)
        VALUES ('${createHash("sha256").update(code).digest("hex")}', '${userId}', '${siteId}',
-               now() + interval '2 minutes', 'store_owner')`);
+               now() + interval '2 minutes', '${kind}')`);
   await page.goto(`${siteUrl}/admin-handoff#code=${code}&from=portal`);
   await expect(page).toHaveURL(landing, { timeout: 20_000 });
 }

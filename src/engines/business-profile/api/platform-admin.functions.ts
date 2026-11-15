@@ -153,11 +153,19 @@ export const websitesPlatformReview = createServerFn({ method: "GET" })
       requested_at: string;
     } | null>("platform_bp_review", { _tenant: data.tenantId });
     if (!raw) return null;
+    // רק התמונות של הצילום שנשלח (לא כל הספרייה של האתר)
+    const { toMediaMap } = await import("../data/media.server");
+    const media = toMediaMap(
+      await platformRpc<Parameters<typeof toMediaMap>[0]>("platform_bp_review_media", {
+        _tenant: data.tenantId,
+      }),
+    );
     return {
       id: raw.id,
       revision: raw.revision,
       note: raw.note,
       requestedAt: raw.requested_at,
+      media,
       document: normalizeDocument(raw.document),
     };
   });

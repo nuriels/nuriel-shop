@@ -1,6 +1,7 @@
 // הגרסה המפורסמת של אתר (לגולשים): רק מה שהמסד מחזיר ב-bp_public_site — גרסה שאושרה, דגלים דולקים,
 // אתר פעיל. המסמך מנורמל לפני ההצגה.
 import { normalizeDocument } from "../document/normalize";
+import { toMediaMap } from "./media.server";
 import type { PublicSiteData } from "../types";
 import { siteRpc } from "./rpc.server";
 
@@ -13,15 +14,20 @@ interface RawPublic {
 }
 
 export async function loadPublicSite(siteId?: string): Promise<PublicSiteData | null> {
-  const raw = await siteRpc<RawPublic | null>("bp_public_site", {}, siteId ? { siteId } : {});
+  const opts = siteId ? { siteId } : {};
+  const raw = await siteRpc<RawPublic | null>("bp_public_site", {}, opts);
   if (!raw) return null;
   const document = normalizeDocument(raw.document);
+  // רק התמונות של הגרסה המפורסמת (המסד מחזיר רק אותן)
+  const media = toMediaMap(
+    await siteRpc<Parameters<typeof toMediaMap>[0]>("bp_media_public", {}, opts).catch(() => []),
+  );
   return {
     name: raw.name,
     version: raw.version,
     publishedAt: raw.published_at,
     document,
-    media: {},
+    media,
     origin: null,
   };
 }

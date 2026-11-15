@@ -94,7 +94,7 @@ export function StudioLayout() {
     <Ctx.Provider value={{ context, refresh: () => q.refetch() }}>
       <div className="min-h-screen bg-muted/30" dir="rtl">
         <header className="border-b bg-background">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div className="flex items-center gap-3">
               <span className="text-lg font-bold">{context.site.name}</span>
               <StatusBadge state={context.state} />
@@ -113,7 +113,7 @@ export function StudioLayout() {
             </nav>
           </div>
         </header>
-        <main id="main-content" className="mx-auto max-w-6xl px-4 py-8">
+        <main id="main-content" className="mx-auto max-w-7xl px-4 py-8">
           <Outlet />
         </main>
       </div>

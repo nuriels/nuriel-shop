@@ -24,9 +24,10 @@ export function SiteImage({
   const item = image.media ? media[image.media] : undefined;
   if (!item) return mode === "preview" && fallback ? <>{fallback}</> : null;
   const alt = t(image.alt);
-  return (
+  const img = (
     <img
       src={item.url}
+      srcSet={item.srcset ?? undefined}
       alt={alt}
       className={className}
       width={item.width ?? undefined}
@@ -37,6 +38,15 @@ export function SiteImage({
       // תמונה בלי alt היא קישוט (קוראי מסך מדלגים)
       {...(alt ? {} : { role: "presentation" })}
     />
+  );
+  // AVIF (קטן יותר) לדפדפנים שתומכים; WebP לכל השאר
+  return item.avif ? (
+    <picture>
+      <source type="image/avif" srcSet={item.avif} />
+      {img}
+    </picture>
+  ) : (
+    img
   );
 }
 

@@ -133,11 +133,11 @@ export function ServicesBlock({ block, index }: Props<"services">) {
 }
 
 // ---------- Portfolio ----------
-function CoverPlaceholder({ item }: { item: PortfolioItem }) {
-  const t = useT();
+/** בתצוגה המקדימה בלבד (באתר החי עבודה בלי תמונה לא מוצגת): מקום שמור לתמונה — השם כבר מופיע מתחת */
+function CoverPlaceholder() {
   return (
     <span className="bps-cover-placeholder" aria-hidden="true">
-      <span>{t(item.title)}</span>
+      <span>ממתין לתמונה</span>
     </span>
   );
 }
@@ -203,7 +203,7 @@ export function PortfolioBlock({ block, index }: Props<"portfolio">) {
                   <SiteImage
                     image={item.image}
                     sizes="(min-width: 960px) 22vw, 45vw"
-                    fallback={<CoverPlaceholder item={item} />}
+                    fallback={<CoverPlaceholder />}
                   />
                 </span>
                 {p.showTitles && t(item.title) && (
@@ -226,7 +226,7 @@ export function PortfolioBlock({ block, index }: Props<"portfolio">) {
       >
         {open && (
           <div className="bps-lightbox-body">
-            <SiteImage image={open.image} eager fallback={<CoverPlaceholder item={open} />} />
+            <SiteImage image={open.image} eager fallback={<CoverPlaceholder />} />
             {t(open.title) && <p className="bps-lightbox-title">{t(open.title)}</p>}
             {t(open.text) && <p>{t(open.text)}</p>}
             <button

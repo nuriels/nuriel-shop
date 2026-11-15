@@ -82,8 +82,9 @@ SELECT tests.check('bp: the business_profile schema and its tables are closed to
        AND NOT has_schema_privilege('authenticated', 'business_profile', 'USAGE')
        AND (SELECT bool_and(c.relrowsecurity) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
              WHERE n.nspname = 'business_profile' AND c.relkind = 'r')
+       -- (4 tables in migration 193; later migrations add more — every one of them with RLS, checked above)
        AND (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-             WHERE n.nspname = 'business_profile' AND c.relkind = 'r') = 4
+             WHERE n.nspname = 'business_profile' AND c.relkind = 'r') >= 4
        AND NOT has_table_privilege('authenticated', 'business_profile.site_versions', 'SELECT')
        AND NOT has_table_privilege('anon', 'business_profile.sites', 'SELECT')$$);
 SELECT tests.check('bp: guests may only call the public read and the site name; everything else needs a login',
