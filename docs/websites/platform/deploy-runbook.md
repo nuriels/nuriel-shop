@@ -5,7 +5,7 @@
 > האתר נשאר בטיוטה עם `noindex` ועם `robots.txt` סגור, ולא נחשף לגוגל.
 > אחרי סעיף 4 עוצרים ומחכים לאישור לפני פרסום.
 
-**הקומיט לפריסה:** `<COMMIT>`. הוא מופיע גם בדוח. הענף הוא `websites/engine`, והוא כולל את `release/next` שרץ היום בייצור (`773ad14`).
+**הקומיט לפריסה:** `bd07313`. הוא מופיע גם בדוח. הענף הוא `websites/engine`, והוא כולל את `release/next` שרץ היום בייצור (`773ad14`).
 
 ## 1. מה נפרס
 
@@ -34,7 +34,7 @@
 **W1 — בדיקה מקדימה (קריאה בלבד, לא משנה כלום)**
 
 ```bash
-cd /root/nuriel-shop-git && git fetch -q origin +refs/heads/websites/engine:refs/remotes/origin/websites/engine && bash <(git show <COMMIT>:deploy/release-websites.sh) --check <COMMIT>
+cd /root/nuriel-shop-git && git fetch -q origin +refs/heads/websites/engine:refs/remotes/origin/websites/engine && bash <(git show bd07313:deploy/release-websites.sh) --check bd07313
 ```
 
 מה נבדק:
@@ -51,7 +51,7 @@ cd /root/nuriel-shop-git && git fetch -q origin +refs/heads/websites/engine:refs
 **W2 — פריסה (כולל גיבוי)**
 
 ```bash
-cd /root/nuriel-shop-git && bash <(git show <COMMIT>:deploy/release-websites.sh) --deploy <COMMIT>
+cd /root/nuriel-shop-git && bash <(git show bd07313:deploy/release-websites.sh) --deploy bd07313
 ```
 
 הסדר בתוך הפקודה:
