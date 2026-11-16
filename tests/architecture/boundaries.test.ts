@@ -327,6 +327,7 @@ describe("architecture: dependency boundaries", () => {
       "src/routes/studio.settings.tsx",
       "src/routes/studio.tsx",
       "src/routes/studio.versions.tsx",
+      "src/routes/studio_.invite.tsx",
       "src/routes/studio_.preview.tsx",
     ]);
     for (const f of adapters) {
@@ -410,13 +411,15 @@ describe("architecture: server-function ownership", () => {
       expect(f).toMatch(/^src\/engines\/hospitality\/(server|api)\/[\w-]+\.functions\.ts$/);
   });
 
-  it("Nuriel Websites server functions live only in src/engines/business-profile/api (6 files)", () => {
+  it("Nuriel Websites server functions live only in src/engines/business-profile/api (7 files)", () => {
     const bp = serverFnFiles.filter((f) => registry.ownerOf(f) === "business_profile");
     expect(bp).toEqual([
       // פניות מלקוחות (מיגרציה 196): שליחת הטופס באתר + "פניות מלקוחות" בממשק הניהול
       "src/engines/business-profile/api/address.functions.ts",
       "src/engines/business-profile/api/inquiries.functions.ts",
       "src/engines/business-profile/api/media.functions.ts",
+      // הזמנת בעלת האתר (מיגרציה 198): בדיקת הקישור, פתיחת החשבון, אימות המייל
+      "src/engines/business-profile/api/owner-invite.functions.ts",
       "src/engines/business-profile/api/platform-admin.functions.ts",
       "src/engines/business-profile/api/site.functions.ts",
       "src/engines/business-profile/api/studio.functions.ts",

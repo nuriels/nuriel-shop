@@ -181,6 +181,7 @@ M78=20261116100000_bp_media
 M79=20261116110000_bp_site_fonts
 M80=20261116120000_bp_inquiries
 M81=20261117090000_bp_site_address
+M82=20261117100000_bp_owner_invites
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -223,6 +224,38 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- Nuriel Websites: inviting the site owner by a one-time link (migration 82) ----------
+expect "before the rollback: the closed invite table (hash only), check / redeem for the server only, create / revoke for signed-in users (platform admin in the function)" \
+  "SELECT to_regclass('business_profile.owner_invites') IS NOT NULL
+      AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'business_profile.owner_invites'::regclass)
+      AND NOT has_table_privilege('authenticated', 'business_profile.owner_invites', 'SELECT')
+      AND has_function_privilege('service_role', 'public.bp_invite_redeem(text,uuid,uuid,text,text)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.bp_invite_redeem(text,uuid,uuid,text,text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.bp_invite_check(text,uuid,text)', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'public.platform_bp_invite_create(uuid,text,integer)', 'EXECUTE')"
+echo "rollback guard: $M82 refuses while any invite exists (it documents how an owner was set)"
+q "INSERT INTO public.tenants (slug, name, site_type) VALUES ('rb-invite', 'עסק לבדיקת הזמנה', 'business_profile')" >/dev/null
+q "INSERT INTO business_profile.owner_invites (tenant_id, token_hash, expires_at)
+   SELECT id, repeat('a', 64), now() + interval '1 hour' FROM public.tenants WHERE slug = 'rb-invite'" >/dev/null
+if down "$M82" 2>/dev/null; then
+  echo "  FAIL rollback ran although an invite exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT EXISTS (SELECT 1 FROM business_profile.owner_invites WHERE token_hash = repeat('a', 64))"
+q "DELETE FROM business_profile.owner_invites;
+   DELETE FROM public.site_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-invite');
+   DELETE FROM public.email_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-invite');
+   DELETE FROM public.tenants WHERE slug = 'rb-invite'" >/dev/null
+ref_upto "$M82"
+echo "rollback: $M82"
+down "$M82"
+expect "the invite table and its functions are gone" \
+  "SELECT to_regclass('business_profile.owner_invites') IS NULL
+      AND to_regprocedure('public.bp_invite_redeem(text,uuid,uuid,text,text)') IS NULL
+      AND to_regprocedure('public.platform_bp_invite_create(uuid,text,integer)') IS NULL
+      AND to_regprocedure('public.bp_owner_email_status()') IS NULL"
+same_as_ref "migration 81"
 
 # ---------- Nuriel Websites: the site address + the site file (migration 81) ----------
 expect "before the rollback: the redirect table (closed), the address functions for signed-in owners, the check result for the server only, draft saves logged" \
@@ -2620,6 +2653,7 @@ up "$M78"
 up "$M79"
 up "$M80"
 up "$M81"
+up "$M82"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')
@@ -2631,6 +2665,11 @@ expect "the site address is back: the redirect table (closed), the address funct
       AND has_function_privilege('authenticated', 'public.bp_address_state()', 'EXECUTE')
       AND pg_get_functiondef('public.bp_draft_save(jsonb,integer)'::regprocedure) LIKE '%draft.saved%'
       AND pg_get_functiondef('public.ssl_agent_targets()'::regprocedure) LIKE '%alias%'"
+expect "the owner invites are back: the closed table, redeem for the server only" \
+  "SELECT to_regclass('business_profile.owner_invites') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'business_profile.owner_invites', 'SELECT')
+      AND has_function_privilege('service_role', 'public.bp_invite_redeem(text,uuid,uuid,text,text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.bp_invite_redeem(text,uuid,uuid,text,text)', 'EXECUTE')"
 expect "the inquiries are back: the closed tables, saving for the server only, the inbox for signed-in owners" \
   "SELECT to_regclass('business_profile.inquiries') IS NOT NULL
       AND NOT has_table_privilege('authenticated', 'business_profile.inquiries', 'SELECT')

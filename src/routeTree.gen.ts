@@ -93,6 +93,7 @@ import { Route as StudioEditorRouteImport } from './routes/studio.editor'
 import { Route as StudioInboxRouteImport } from './routes/studio.inbox'
 import { Route as StudioSettingsRouteImport } from './routes/studio.settings'
 import { Route as StudioVersionsRouteImport } from './routes/studio.versions'
+import { Route as StudioInviteRouteImport } from './routes/studio_.invite'
 import { Route as StudioPreviewRouteImport } from './routes/studio_.preview'
 import { Route as UnsubscribeTokenRouteImport } from './routes/unsubscribe.$token'
 import { Route as AdminInventoryLabelsRouteImport } from './routes/admin_.inventory_.labels'
@@ -548,6 +549,11 @@ const StudioVersionsRoute = StudioVersionsRouteImport.update({
   path: '/versions',
   getParentRoute: () => StudioRoute,
 } as any)
+const StudioInviteRoute = StudioInviteRouteImport.update({
+  id: '/studio_/invite',
+  path: '/studio/invite',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StudioPreviewRoute = StudioPreviewRouteImport.update({
   id: '/studio_/preview',
   path: '/studio/preview',
@@ -805,6 +811,7 @@ export interface FileRoutesByFullPath {
   '/studio/inbox': typeof StudioInboxRoute
   '/studio/settings': typeof StudioSettingsRoute
   '/studio/versions': typeof StudioVersionsRoute
+  '/studio/invite': typeof StudioInviteRoute
   '/studio/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/bp-site/': typeof BpSiteIndexRoute
@@ -921,6 +928,7 @@ export interface FileRoutesByTo {
   '/studio/inbox': typeof StudioInboxRoute
   '/studio/settings': typeof StudioSettingsRoute
   '/studio/versions': typeof StudioVersionsRoute
+  '/studio/invite': typeof StudioInviteRoute
   '/studio/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/bp-site': typeof BpSiteIndexRoute
@@ -1042,6 +1050,7 @@ export interface FileRoutesById {
   '/studio/inbox': typeof StudioInboxRoute
   '/studio/settings': typeof StudioSettingsRoute
   '/studio/versions': typeof StudioVersionsRoute
+  '/studio_/invite': typeof StudioInviteRoute
   '/studio_/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/bp-site/': typeof BpSiteIndexRoute
@@ -1164,6 +1173,7 @@ export interface FileRouteTypes {
     | '/studio/inbox'
     | '/studio/settings'
     | '/studio/versions'
+    | '/studio/invite'
     | '/studio/preview'
     | '/unsubscribe/$token'
     | '/bp-site/'
@@ -1280,6 +1290,7 @@ export interface FileRouteTypes {
     | '/studio/inbox'
     | '/studio/settings'
     | '/studio/versions'
+    | '/studio/invite'
     | '/studio/preview'
     | '/unsubscribe/$token'
     | '/bp-site'
@@ -1400,6 +1411,7 @@ export interface FileRouteTypes {
     | '/studio/inbox'
     | '/studio/settings'
     | '/studio/versions'
+    | '/studio_/invite'
     | '/studio_/preview'
     | '/unsubscribe/$token'
     | '/bp-site/'
@@ -1489,6 +1501,7 @@ export interface RootRouteChildren {
   PlatformWebsitesRoute: typeof PlatformWebsitesRoute
   ProductProductIdRoute: typeof ProductProductIdRoute
   PwaIconRoute: typeof PwaIconRoute
+  StudioInviteRoute: typeof StudioInviteRoute
   StudioPreviewRoute: typeof StudioPreviewRoute
   UnsubscribeTokenRoute: typeof UnsubscribeTokenRoute
   AdminInventoryLabelsRoute: typeof AdminInventoryLabelsRoute
@@ -2102,6 +2115,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioVersionsRouteImport
       parentRoute: typeof StudioRoute
     }
+    '/studio_/invite': {
+      id: '/studio_/invite'
+      path: '/studio/invite'
+      fullPath: '/studio/invite'
+      preLoaderRoute: typeof StudioInviteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/studio_/preview': {
       id: '/studio_/preview'
       path: '/studio/preview'
@@ -2525,6 +2545,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformWebsitesRoute: PlatformWebsitesRoute,
   ProductProductIdRoute: ProductProductIdRoute,
   PwaIconRoute: PwaIconRoute,
+  StudioInviteRoute: StudioInviteRoute,
   StudioPreviewRoute: StudioPreviewRoute,
   UnsubscribeTokenRoute: UnsubscribeTokenRoute,
   AdminInventoryLabelsRoute: AdminInventoryLabelsRoute,

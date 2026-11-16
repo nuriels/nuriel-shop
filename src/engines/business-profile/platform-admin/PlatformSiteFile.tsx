@@ -18,6 +18,7 @@ import {
   CardTitle,
 } from "@/platform/ui";
 import { websitesPlatformSiteFile } from "../api/platform-admin.functions";
+import { OwnerInviteCard } from "./OwnerInviteCard";
 import { formatDate, StatusBadge } from "../studio/status";
 import type { PlatformSiteFile as SiteFile } from "../types";
 import { ReviewSheet } from "./PlatformWebsitesPage";
@@ -38,6 +39,20 @@ const DOMAIN_STATUS: Record<string, string> = {
   verified: "אומת — ממתין ל-SSL",
   active: "פעיל עם SSL",
   error: "החיבור לא הושלם",
+};
+
+const INVITE_FAIL: Record<string, string> = {
+  unknown: "קישור לא מוכר",
+  malformed: "קישור לא תקין",
+  wrong_site: "קישור של אתר אחר",
+  expired: "פג תוקף",
+  revoked: "בוטל",
+  used: "כבר נוצל",
+  owner_exists: "לאתר כבר יש בעלים",
+  email_exists: "המייל כבר רשום",
+  account_has_roles: "חשבון קיים עם שיוך",
+  platform_admin_account: "חשבון מנהל פלטפורמה",
+  no_account: "אין חשבון",
 };
 
 /** תיאור קצר של פעולה ביומן (בלי תוכן אישי — כך היא נרשמת) */
@@ -90,7 +105,22 @@ export function auditLabel(action: string, d: Record<string, string>): string {
       return "שחזור גרסה לטיוטה";
     case "site.owner_set":
     case "bp_owner_set":
-      return "שיוך בעל העסק";
+      return d["via"] === "invite" ? "שיוך בעלת האתר (דרך הזמנה)" : "שיוך בעל העסק";
+    case "owner_invite.created":
+    case "bp_owner_invite_created":
+      return "יצירת קישור הזמנה לבעלת האתר";
+    case "owner_invite.revoked":
+    case "bp_owner_invite_revoked":
+      return d["reason"] === "replaced" ? "קישור ההזמנה הוחלף בחדש" : "ביטול קישור ההזמנה";
+    case "owner_invite.redeemed":
+    case "bp_owner_invite_redeemed":
+      return "פתיחת חשבון דרך קישור ההזמנה";
+    case "owner_invite.failed":
+    case "bp_owner_invite_failed":
+      return `ניסיון שימוש בקישור ההזמנה שנדחה (${INVITE_FAIL[d["reason"] ?? ""] ?? d["reason"] ?? ""})`;
+    case "owner.email_verified":
+    case "bp_owner_email_verified":
+      return "אימות כתובת המייל של בעלת האתר";
     case "site.public_set":
     case "bp_public_set":
       return d["enabled"] === "true" ? "האתר הוחזר לאוויר" : "האתר הוסתר";
@@ -236,6 +266,8 @@ function FileView({ file, onChanged }: { file: SiteFile; onChanged: () => void }
           )}
         </CardContent>
       </Card>
+
+      <OwnerInviteCard tenantId={file.id} />
 
       <Card>
         <CardHeader>

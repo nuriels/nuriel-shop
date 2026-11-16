@@ -1,12 +1,14 @@
 // ממשק הניהול של בעל העסק (/studio): ההקשר (האתר, ההרשאות, מצב הפרסום) נטען פעם אחת ומשותף לכל המסכים.
 // לא מחובר → כניסה מרכזית; מחובר בלי הרשאה באתר הזה → "אין הרשאה". הכול noindex (בנתיב).
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Outlet } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Button, Card, CardContent } from "@/platform/ui";
-import { signOutHere } from "@/platform/auth/browser-session";
+import { Button, Card, CardContent, Input, Label } from "@/platform/ui";
+import { applyServerSession, signOutHere } from "@/platform/auth/browser-session";
+import { loginWithIdentifier } from "@/platform/auth/login";
 import { studioCentralLogin, studioContext } from "../api/studio.functions";
+import { OwnerEmailBanner } from "./OwnerEmailBanner";
 import { studioInquiriesNewCount } from "../api/inquiries.functions";
 import type { StudioContext } from "../types";
 import { StatusBadge } from "./status";
@@ -35,18 +37,73 @@ function Centered({ children }: { children: ReactNode }) {
   );
 }
 
-function SignedOut() {
+function SignedOut({ onSignedIn }: { onSignedIn: () => void }) {
   const loginUrl = useServerFn(studioCentralLogin);
+  const passwordLogin = useServerFn(loginWithIdentifier);
   const login = useQuery({ queryKey: ["bp", "central-login"], queryFn: () => loginUrl() });
+  const id = useId();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      // כניסה עם הסיסמה של החשבון (מיגרציה 198 — בעלת אתר שנכנסה בהזמנה בחרה סיסמה). אותה פונקציה של כל
+      // המוצרים: הגבלת קצב, ורק חשבון שמשויך לאתר הזה (או מנהל פלטפורמה)
+      const tokens = await passwordLogin({ data: { identifier: email, password } });
+      await applyServerSession(tokens.accessToken, tokens.refreshToken);
+      onSignedIn();
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : "הכניסה נכשלה — נסו שוב");
+      setBusy(false);
+    }
+  }
   return (
     <Centered>
       <h1 className="text-xl font-bold">כניסה לניהול האתר</h1>
+      <form className="space-y-3 text-start" onSubmit={submit}>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${id}-email`}>אימייל</Label>
+          <Input
+            id={`${id}-email`}
+            type="email"
+            dir="ltr"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${id}-password`}>סיסמה</Label>
+          <Input
+            id={`${id}-password`}
+            type="password"
+            dir="ltr"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        {error && (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
+        <Button type="submit" className="w-full" disabled={busy || !email || !password}>
+          {busy ? "נכנסים…" : "כניסה"}
+        </Button>
+      </form>
       <p className="text-sm text-muted-foreground">
-        הכניסה היא דרך החשבון שלכם ב-Nuriel — אותה כניסה של החנויות ואתרי האירוח.
+        או דרך החשבון שלכם ב-Nuriel — אותה כניסה של החנויות ואתרי האירוח (גם עם קוד למייל).
       </p>
       {login.data?.url ? (
-        <Button asChild className="w-full">
-          <a href={login.data.url}>כניסה</a>
+        <Button asChild variant="outline" className="w-full">
+          <a href={login.data.url}>כניסה מרכזית ב-Nuriel</a>
         </Button>
       ) : (
         <p className="text-sm text-muted-foreground">טוען…</p>
@@ -78,7 +135,7 @@ export function StudioLayout() {
       </Centered>
     );
   }
-  if (q.data.state === "signed_out") return <SignedOut />;
+  if (q.data.state === "signed_out") return <SignedOut onSignedIn={() => void q.refetch()} />;
   if (q.data.state === "forbidden") {
     return (
       <Centered>
@@ -119,6 +176,7 @@ export function StudioLayout() {
           </div>
         </header>
         <main id="main-content" className="mx-auto max-w-7xl px-4 py-8">
+          <OwnerEmailBanner />
           <Outlet />
         </main>
       </div>

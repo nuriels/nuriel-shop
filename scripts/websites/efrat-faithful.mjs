@@ -242,3 +242,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const ids = process.argv[2] ? JSON.parse(readFileSync(process.argv[2], "utf8")) : {};
   process.stdout.write(`${JSON.stringify(buildFaithfulDocument(loadSource(), ids), null, 2)}\n`);
 }
+
+/**
+ * כל קובצי האתר: תמונות (90) וגופנים (10). "derived" — קבצים שהופקו אצלנו (אייקוני השירותים מה-SVG שבדף, ופריים
+ * העט מהאנימציה) ולכן נשמרים ב-Git (scripts/websites/efrat-derived); השאר — המקור מ-efratadir.com, כמו שהוא.
+ */
+export function assetFiles(src) {
+  const derived = [src.pen.file, ...src.services.items.map((s) => s.icon)];
+  const images = [
+    ...new Set([
+      ...Object.keys(src.images),
+      ...derived,
+      ...src.testimonials.items.map((t) => t.file),
+      ...src.portfolio.items.map((w) => w.file),
+    ]),
+  ];
+  const fonts = src.fonts.map((f) => f.file);
+  return { images, fonts, derived, all: [...images, ...fonts] };
+}

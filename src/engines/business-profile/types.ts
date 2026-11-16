@@ -201,3 +201,59 @@ export interface PlatformSiteFile {
   publicOrigin: string | null;
   slugOrigin: string | null;
 }
+
+// ---------- מיגרציה 198: הזמנת בעלת האתר ----------
+export type InviteStatus = "valid" | "invalid" | "expired" | "used" | "revoked" | "owner_exists";
+
+export interface OwnerInviteState {
+  has_owner: boolean;
+  owner_email: string | null;
+  owner_email_verified_at: string | null;
+  owner_via_invite: boolean;
+  open: {
+    id: string;
+    created_at: string;
+    expires_at: string;
+    expired: boolean;
+    created_by: string | null;
+  } | null;
+  history: {
+    id: string;
+    created_at: string;
+    expires_at: string;
+    status: InviteStatus;
+    revoked_at: string | null;
+    revoke_reason: "revoked" | "replaced" | null;
+    used_at: string | null;
+    used_email: string | null;
+    email_verified_at: string | null;
+  }[];
+  /** שירות המיילים מוגדר בשרת — בלעדיו אימות המייל מחכה */
+  emailConfigured: boolean;
+}
+
+export interface CreatedInvite {
+  /** מוצג פעם אחת בלבד — במסד נשמר רק ה-hash */
+  url: string;
+  expiresAt: string;
+}
+
+export interface InviteCheck {
+  status: InviteStatus;
+  siteName: string | null;
+  expiresAt: string | null;
+}
+
+export interface InviteRedeemed {
+  /** קוד הכניסה החד-פעמי לממשק הניהול (/admin-handoff) */
+  handoffCode: string;
+  email: string;
+  verification: "sent" | "not_configured" | "failed";
+}
+
+export interface OwnerEmailStatus {
+  needed: boolean;
+  email: string | null;
+  verifiedAt: string | null;
+  emailConfigured: boolean;
+}

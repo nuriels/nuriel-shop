@@ -10,6 +10,9 @@
 //   • הטיוטה: המקטעים, מספרי הפריטים (תיק עבודות במחשב / בנייד, המלצות, שירותים), הטקסטים המרכזיים, WhatsApp,
 //     טפסים והצהרת נגישות; ושאין בה כתובות לאתר הישן, ל-/tmp, ל-file: או ל-localhost;
 //   • כל מזהה מדיה שהטיוטה משתמשת בו קיים בספרייה.
+// בשרת (בלי psql בקונטיינר): ‎--print-sql מדפיס שאילתה אחת (קריאה בלבד) שמחזירה JSON; המארח מריץ אותה ב-docker exec
+// psql ושומר לקובץ, ו-‎--db-json <קובץ> בודק ממנו + את הכתובות הציבוריות (‎--supabase-url). בנוסף: כל קובץ בספרייה
+// צריך להיות בדיוק הקובץ שנבדק (הטביעה שבשם הקובץ = SHA-256 מהמניפסט), והאתר לא מפורסם.
 // שימוש (סביבת הבדיקה המקומית; קורא בלבד — לא משנה כלום):
 //   node scripts/websites/audit-efrat-media.mjs [--slug efrat-classic] [--out docs/websites/platform/media-audit.json]
 // בשרת אחר: DB_URL ו-SUPABASE_URL מהסביבה (קריאה בלבד).
@@ -39,22 +42,49 @@ const fileEnv = existsSync(envFile)
   : {};
 const DB_URL = process.env.DB_URL ?? fileEnv.DB_URL;
 const SUPABASE_URL = (
+  arg("supabase-url") ??
   process.env.SUPABASE_URL ??
   fileEnv.SUPABASE_URL ??
   "http://127.0.0.1:54321"
 ).replace(/\/$/, "");
-if (!DB_URL) throw new Error("DB_URL is not set (and e2e/.env.e2e is missing)");
-const sql = (q) =>
-  execFileSync("psql", [DB_URL, "-XqtA", "-v", "ON_ERROR_STOP=1", "-c", q], {
-    encoding: "utf8",
-  }).trim();
-const json = (q) => JSON.parse(sql(q) || "null");
+if (!/^[a-z0-9-]{3,63}$/.test(SLUG)) throw new Error("bad --slug");
+
+// מצב האתר במסד — שאילתה אחת, קריאה בלבד
+const SNAPSHOT_SQL = `SELECT jsonb_build_object(
+  'siteId', t.id, 'slug', t.slug, 'status', t.status,
+  'published', s.live_version_id IS NOT NULL,
+  'publicFlagPlatform', (SELECT f.enabled FROM public.platform_feature_flags f WHERE f.key = 'business_profile_public'),
+  'publicFlagSite', (SELECT f.enabled FROM public.tenant_feature_flags f WHERE f.tenant_id = t.id AND f.key = 'business_profile_public'),
+  'media', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', m.id, 'name', m.original_name, 'kind', m.kind,
+              'path', m.storage_path, 'bytes', m.size_bytes,
+              'in_storage', EXISTS (SELECT 1 FROM storage.objects o WHERE o.bucket_id = 'bp-media' AND o.name = m.storage_path))), '[]'::jsonb)
+            FROM business_profile.media m WHERE m.tenant_id = t.id),
+  'draft', (SELECT v.document FROM business_profile.site_versions v WHERE v.tenant_id = t.id AND v.state = 'draft'))
+FROM public.tenants t LEFT JOIN business_profile.sites s ON s.tenant_id = t.id
+WHERE t.slug = '${SLUG}';`;
+if (args.includes("--print-sql")) {
+  process.stdout.write(`${SNAPSHOT_SQL}\n`);
+  process.exit(0);
+}
+let snapshot;
+if (arg("db-json")) {
+  snapshot = JSON.parse(readFileSync(arg("db-json"), "utf8").trim() || "null");
+} else {
+  if (!DB_URL) throw new Error("DB_URL is not set (and e2e/.env.e2e is missing)");
+  snapshot = JSON.parse(
+    execFileSync("psql", [DB_URL, "-XqtA", "-v", "ON_ERROR_STOP=1", "-c", SNAPSHOT_SQL], {
+      encoding: "utf8",
+    }).trim() || "null",
+  );
+}
+if (!snapshot) throw new Error(`site ${SLUG} not found`);
+const manifest = JSON.parse(
+  readFileSync(join(ROOT, "scripts/websites/efrat-assets-manifest.json"), "utf8"),
+);
 
 const src = JSON.parse(
   readFileSync(join(ROOT, "docs/websites/faithful/efrat-source.json"), "utf8"),
 );
-const siteId = sql(`SELECT id FROM public.tenants WHERE slug = '${SLUG}'`);
-if (!siteId) throw new Error(`site ${SLUG} not found`);
 
 // ---------- the old site's inventory, by group ----------
 const groups = {
@@ -75,11 +105,7 @@ const allImages = [...new Set(Object.values(groups).flat())];
 const fonts = src.fonts.map((f) => f.file);
 
 // ---------- the new site: library, storage, public URLs ----------
-const media =
-  json(`SELECT coalesce(jsonb_agg(jsonb_build_object('id', m.id, 'name', m.original_name, 'kind', m.kind,
-                'path', m.storage_path, 'bytes', m.size_bytes,
-                'in_storage', EXISTS (SELECT 1 FROM storage.objects o WHERE o.bucket_id = 'bp-media' AND o.name = m.storage_path))), '[]')
-          FROM business_profile.media m WHERE m.tenant_id = '${siteId}'`) ?? [];
+const media = snapshot.media ?? [];
 const byFile = new Map(media.map((m) => [String(m.name).split("#")[0], m]));
 const publicUrl = (path) => `${SUPABASE_URL}/storage/v1/object/public/bp-media/${path}`;
 
@@ -114,9 +140,8 @@ const fontResults = [];
 for (const f of fonts) fontResults.push(await checkFile(f, "font"));
 
 // ---------- the draft document ----------
-const draft = json(
-  `SELECT document FROM business_profile.site_versions WHERE tenant_id = '${siteId}' AND state = 'draft'`,
-);
+const draft = snapshot.draft;
+if (!draft) throw new Error(`site ${SLUG} has no draft`);
 const text = JSON.stringify(draft);
 const home = draft.pages.find((p) => p.slug === "") ?? draft.pages[0];
 const blocks = home.blocks.filter((b) => !b.hidden).map((b) => b.type);
@@ -155,6 +180,14 @@ const keyTexts = [
   ...src.services.items.map((s) => s.title),
 ];
 const textsMissing = keyTexts.filter((t) => t && !text.includes(t));
+
+// כל קובץ בספרייה הוא בדיוק הקובץ שנבדק: הטביעה בשם הקובץ (file#sha256[0:10]) = המניפסט
+const hashProblems = [...allImages, ...fonts].filter((f) => {
+  const stamp = String(byFile.get(f)?.name ?? "").split("#")[1];
+  const want = manifest.files[f]?.sha256;
+  return !want || stamp !== want.slice(0, 10);
+});
+const notPublished = !snapshot.published && snapshot.publicFlagSite !== true;
 
 const summary = {
   site: SLUG,
@@ -198,6 +231,17 @@ const summary = {
   whatsapp: { old: src.business.whatsapp, new: draft.business?.whatsapp ?? null },
   accessibilityStatement: Boolean(draft.accessibility?.updatedOn),
   library: { files: media.length, inStorage: media.filter((m) => m.in_storage).length },
+  identicalToTested: {
+    files: allImages.length + fonts.length - hashProblems.length,
+    of: allImages.length + fonts.length,
+    problems: hashProblems,
+  },
+  publication: {
+    published: Boolean(snapshot.published),
+    publicFlagSite: snapshot.publicFlagSite ?? null,
+    publicFlagPlatform: snapshot.publicFlagPlatform ?? null,
+    notPublished,
+  },
   draftMediaIdsMissing: missingIds,
   externalUrlsInDraft: external,
   forbidden,
@@ -215,7 +259,9 @@ const pass =
   summary.testimonials.new === summary.testimonials.old &&
   summary.services.new === summary.services.old &&
   summary.portfolio.newDesktop === summary.portfolio.oldDesktop &&
-  summary.portfolio.newMobile === summary.portfolio.oldMobile;
+  summary.portfolio.newMobile === summary.portfolio.oldMobile &&
+  hashProblems.length === 0 &&
+  notPublished;
 console.log(
   JSON.stringify(
     {
@@ -229,6 +275,8 @@ console.log(
       whatsapp: summary.whatsapp,
       blocks: summary.sections,
       library: summary.library,
+      identicalToTested: `${summary.identicalToTested.files}/${summary.identicalToTested.of} (SHA-256 stamp = manifest)`,
+      publication: summary.publication,
       missingIds,
       forbidden,
       textsMissing,

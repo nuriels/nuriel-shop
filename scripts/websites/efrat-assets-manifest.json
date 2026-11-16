@@ -1,0 +1,506 @@
+{
+ "note": "קובצי האתר של אפרת שנבדקו בסביבת הבדיקה (90 תמונות + 10 גופנים)",
+ "count": 100,
+ "files": {
+  "1e0e3b00e89e97b2.jpg": {
+   "sha256": "dd9cf3880f3cdf67e9d39821fe9443ec7434e82d9e088b974f312ea933b8b4bb",
+   "bytes": 696330,
+   "source": "efratadir.com"
+  },
+  "a340e074ef1832c0.png": {
+   "sha256": "3ea959be7c47705574d84e32c5b5721dc57c8c8bff4e2d116e0648917a797df0",
+   "bytes": 63070,
+   "source": "efratadir.com"
+  },
+  "5a4b118affc33eda.png": {
+   "sha256": "a66f00e9ed4e582c16b27af030b81c2b2689b7b30fb8c774a9e98ce546be6961",
+   "bytes": 26469,
+   "source": "efratadir.com"
+  },
+  "17a81263b494b6a0.png": {
+   "sha256": "7bc65d786b255841461c64a56a1233ea07429d81aa2a4f8627bce2df4c148c2e",
+   "bytes": 48221,
+   "source": "efratadir.com"
+  },
+  "d7d152b12697a58d.png": {
+   "sha256": "154e962f46df8e0bc611d30ddd8d9107fc1839df9e1366ac5f880df94f4452d9",
+   "bytes": 25021,
+   "source": "efratadir.com"
+  },
+  "7aaa8e9124040d05.jpg": {
+   "sha256": "4c9102ccc8a9ed55c9df1bd4a4ae9a089beb3fbc4b192319075b45e00886d08f",
+   "bytes": 224534,
+   "source": "efratadir.com"
+  },
+  "92e3ed044d6e4fbd.jpg": {
+   "sha256": "1aa140b18bb2a000ef0523fbf80495db41f8e39a4c32e29b4afc77c7e032f423",
+   "bytes": 171186,
+   "source": "efratadir.com"
+  },
+  "pen.png": {
+   "sha256": "191c3c488c995ed044568477549b6b16e5a22c9d7ac211831c43d6bb9a67b512",
+   "bytes": 21279,
+   "source": "derived"
+  },
+  "icon-1.png": {
+   "sha256": "e0150623369cca4a59b304d8f59d1d133653f7b5031ba3ed7b5fbf631dc3cd41",
+   "bytes": 6861,
+   "source": "derived"
+  },
+  "icon-2.png": {
+   "sha256": "29935b4838a8cd52191cae83b0703a6e867342447355724c19f234ab7742cbe1",
+   "bytes": 3666,
+   "source": "derived"
+  },
+  "icon-3.png": {
+   "sha256": "332bdc9e35732b102c47b6e1656b46575f1727d36035710a13dafd6d00a18c49",
+   "bytes": 4726,
+   "source": "derived"
+  },
+  "icon-4.png": {
+   "sha256": "ee39c8e9b1295458c0a5ee16b113d030fd4f11ff2562c986b4db37d567c6d043",
+   "bytes": 5294,
+   "source": "derived"
+  },
+  "icon-5.png": {
+   "sha256": "76fddb44b075ec86f4121887565a5dc054b34be961106cff37080af78bc9def4",
+   "bytes": 4636,
+   "source": "derived"
+  },
+  "ae35ff4c68d3211c.png": {
+   "sha256": "a9b827e566600cbed2000219e5c632093c457e9d228c536379ec48404b316b21",
+   "bytes": 1095270,
+   "source": "efratadir.com"
+  },
+  "658bea6991285c01.png": {
+   "sha256": "7f69041a486e972f507ad1e35d4d745b19bcdc01125590a52b58e907d4395644",
+   "bytes": 1000157,
+   "source": "efratadir.com"
+  },
+  "e62368c4136d8ca7.png": {
+   "sha256": "64ba4dee2766e7af0984e00e0c78e836ea31882726e1f980be3465a7856ec571",
+   "bytes": 687440,
+   "source": "efratadir.com"
+  },
+  "c90cce3c0ecb6c70.png": {
+   "sha256": "4a4e03203f7dda7f874c0f15a351d50414ba0de8c61844d7b08753e36fcc776a",
+   "bytes": 871511,
+   "source": "efratadir.com"
+  },
+  "c879fe32ee6e99ff.png": {
+   "sha256": "424be267224d010a5031b3d7cf2a15624bcab2f93d939eaabd3533f88c997b1c",
+   "bytes": 702024,
+   "source": "efratadir.com"
+  },
+  "7f3d67f935794f03.png": {
+   "sha256": "b110a125cfd739876902a2b6ae36c2350586eec05257d66aa45a6defe9e50cb9",
+   "bytes": 536772,
+   "source": "efratadir.com"
+  },
+  "90ee3058433d9c25.png": {
+   "sha256": "35865c497a4b687e0ad40382985523d4df8039280e5726ba9c13bc8153a00973",
+   "bytes": 987131,
+   "source": "efratadir.com"
+  },
+  "00b1fa85f5a54869.png": {
+   "sha256": "c7a0fa1fbc1457d001a96857387557a832574a038af68c9b722a5742d8e150ed",
+   "bytes": 674635,
+   "source": "efratadir.com"
+  },
+  "156a6bfac2230865.png": {
+   "sha256": "4319106ffecd927f0104ed97d7acd894501851d28875a4feae5f0a0c783bdca0",
+   "bytes": 1121572,
+   "source": "efratadir.com"
+  },
+  "992e6f1876efd547.png": {
+   "sha256": "4087fc18573357dd5afde3a52cc4854ecd68c5155fb28a0193175069f02e4d07",
+   "bytes": 546278,
+   "source": "efratadir.com"
+  },
+  "ec928c21ced05d1f.png": {
+   "sha256": "0b76b08badde7937b33fc11ad6cf4bde4313f93344cb4c705b45c97660d46633",
+   "bytes": 121564,
+   "source": "efratadir.com"
+  },
+  "2cbd51a3d49fec8d.png": {
+   "sha256": "a737c9d56fb43dd2809509396c55af3e0ba002a86e9faf4ffb695e930e9129f3",
+   "bytes": 160515,
+   "source": "efratadir.com"
+  },
+  "90d091dd974ae05b.png": {
+   "sha256": "95925f35928d76a070ca69436eb24ca05fb6630354a07825a40f4544cdf966fc",
+   "bytes": 193922,
+   "source": "efratadir.com"
+  },
+  "9c3b5826e518f1f7.jpg": {
+   "sha256": "0e34317c4fcb0b7fa8b759b98edbad2f073b2fc0c74254d8373ca7ac612b0590",
+   "bytes": 148725,
+   "source": "efratadir.com"
+  },
+  "007df639530019b8.jpg": {
+   "sha256": "673a1ae17c4ecd6a2b310d9cd2ea44b4347d606e2f46751976cf50db9b008b76",
+   "bytes": 212915,
+   "source": "efratadir.com"
+  },
+  "94a173f35511325a.jpg": {
+   "sha256": "db170380a135f0e0b50e671f9a024f2a3633faa2c91c27fab502b5bce916dc59",
+   "bytes": 120551,
+   "source": "efratadir.com"
+  },
+  "994dd58fabd32b45.jpg": {
+   "sha256": "2b9440a90106ff85b4013618f807d5502479f055d78c09870e2aaaa323343b35",
+   "bytes": 280088,
+   "source": "efratadir.com"
+  },
+  "830b9f04a885ea7b.png": {
+   "sha256": "eb79638bcd4ad20ea20a93cdb91bae1763e18b144887b649c267cf46020b2616",
+   "bytes": 344375,
+   "source": "efratadir.com"
+  },
+  "4187e96450ff6877.png": {
+   "sha256": "3a75564868b10aa47d8a06f6cfdfd2f6198b134841f11836a92e6f02838dd611",
+   "bytes": 409315,
+   "source": "efratadir.com"
+  },
+  "3ccb85d6333e4684.png": {
+   "sha256": "2646c18a39ffc7b6c5be70be8072e44ee558dd07366ad360141ac2308529a80a",
+   "bytes": 684778,
+   "source": "efratadir.com"
+  },
+  "55a8a20c08440cd7.png": {
+   "sha256": "72116a6feff923fd5697763c7c2de3af77566eb4fae1fa3e4be06dd69b778320",
+   "bytes": 310535,
+   "source": "efratadir.com"
+  },
+  "c7f15c8823591770.jpg": {
+   "sha256": "7bf9e3510996683b3ab50debd6960a5d3bc278200c7345a02b673da2a6431e3e",
+   "bytes": 18250,
+   "source": "efratadir.com"
+  },
+  "bfdd9ad3c28ef246.png": {
+   "sha256": "64df393a941bf921d83e86dcbdd5cc468d9fd2117689d1b73795c4e9df6f7419",
+   "bytes": 468110,
+   "source": "efratadir.com"
+  },
+  "13659a1a5a80151f.png": {
+   "sha256": "4f701d7fea612a2ffb2707ed4f01c9786edae54c099439d5c56c2feca69eb188",
+   "bytes": 462422,
+   "source": "efratadir.com"
+  },
+  "186ecf4566a6d3a0.png": {
+   "sha256": "0729b689f9c8cf416bcb2e47760cb088ae2795e6af6e8c322c8a40406c90cfaf",
+   "bytes": 485277,
+   "source": "efratadir.com"
+  },
+  "bc662731ed571d7e.png": {
+   "sha256": "aca8de7702bcd0a63f3a5636ab9ab5618a012b66de8afe257afede6effdbadfa",
+   "bytes": 440671,
+   "source": "efratadir.com"
+  },
+  "7909a06fbe070294.jpg": {
+   "sha256": "7d0e75b9acbf672e478a054b0122ac6cf85cd4331d38e3f09e5d79ea6c0f911c",
+   "bytes": 100901,
+   "source": "efratadir.com"
+  },
+  "9e8a4de88d352c61.jpg": {
+   "sha256": "7dadfd07b3ce8683f5cefcef4117c9bfe79dd1e8cb9c926c0c194841900fe6ac",
+   "bytes": 102153,
+   "source": "efratadir.com"
+  },
+  "ef7b9e95acbd5e08.jpg": {
+   "sha256": "fe4765adeff561375fa907bbc01cee7659de014d1188ea1c96407fcfbe84cd72",
+   "bytes": 39703,
+   "source": "efratadir.com"
+  },
+  "82e3c6eec67c698b.jpg": {
+   "sha256": "4181451701d3bbdb70d277d16fbd01a2c6bd45837375a3d3d46f6b4d32bbdadc",
+   "bytes": 47792,
+   "source": "efratadir.com"
+  },
+  "4661a9fa474c7f41.jpg": {
+   "sha256": "366be34a9d408e7e04e2c17734912241ab987c22e360b25573eb3027e9ecf4c8",
+   "bytes": 71784,
+   "source": "efratadir.com"
+  },
+  "c3e4ab9f655923e7.jpg": {
+   "sha256": "5db26d67a890e382521a4707044ffb5ff4a481479854426f374ad75f2b2985c2",
+   "bytes": 49374,
+   "source": "efratadir.com"
+  },
+  "eaac4211aad280ba.jpg": {
+   "sha256": "b1460aa8542b321ac5b8d31dfbfcafa16cfc5f3c9d3a66f469ad9684bb6fb47b",
+   "bytes": 47440,
+   "source": "efratadir.com"
+  },
+  "07e52f8a04d088db.jpg": {
+   "sha256": "66575900d09bfe4188b6a9d4f31dae5346eae2e5de64271b1649944dcf473459",
+   "bytes": 111621,
+   "source": "efratadir.com"
+  },
+  "2fd77b184b9baeb9.jpg": {
+   "sha256": "2f2f7d19c3e338b38e24a8f0318f0e6d303ec33994eb052b42c5044cb4375634",
+   "bytes": 86976,
+   "source": "efratadir.com"
+  },
+  "264e9287be378193.jpg": {
+   "sha256": "224fa5da9e6bf70df85bf550565064d40539d2132f457c66bddd32ddab9fab12",
+   "bytes": 157403,
+   "source": "efratadir.com"
+  },
+  "c2f3e8af00e87ea1.png": {
+   "sha256": "b8e3dea193f0f823b617b27a396492d3a287262d1107cb48498f92a1ad7936a6",
+   "bytes": 559250,
+   "source": "efratadir.com"
+  },
+  "d9c3de7a3e9d4d8a.png": {
+   "sha256": "6a123ff07287f84049cbe06f8c2f6aeea693bd32a789ed5aaa08b66db42ff835",
+   "bytes": 328059,
+   "source": "efratadir.com"
+  },
+  "5c72c600bf342b64.png": {
+   "sha256": "6eebbe43c0a4500baba2841b5beb2b448b70ea3c8afa12cb93d27fbb3dbf6862",
+   "bytes": 729311,
+   "source": "efratadir.com"
+  },
+  "0c480031fdc8e7c8.png": {
+   "sha256": "2faeea53a799d973b15a8e8d35a1bc69d6dd3724016118b63c6995115c385425",
+   "bytes": 479678,
+   "source": "efratadir.com"
+  },
+  "88ab33eeea2a772c.png": {
+   "sha256": "bef85a5ce4cc1d6c8542e2d6609aff8e7d56e207b7244c0ea6da4e7cfeda0e97",
+   "bytes": 476012,
+   "source": "efratadir.com"
+  },
+  "bab6e2f92289cb74.png": {
+   "sha256": "e12a9cd88808a51e70b707e1d6713d28a367528ebf34b4ff8ea5d6dabe68cd57",
+   "bytes": 236759,
+   "source": "efratadir.com"
+  },
+  "40f811b2c65f84b0.png": {
+   "sha256": "3f9e5898d51eb3bc587a125e07b29b8c877acc22c482c771a91e0c8b0777cc3e",
+   "bytes": 706367,
+   "source": "efratadir.com"
+  },
+  "fa5b0a0e94d813ce.png": {
+   "sha256": "ccfaa0530771a5454630c7943d49b594b882f6a813e897e1a633bbaf9c2cb2c9",
+   "bytes": 235085,
+   "source": "efratadir.com"
+  },
+  "80b749c5231e6774.png": {
+   "sha256": "d81587a71c9476fc94ad8d9411a3f5fe75c4851afaaec912de1a7c36d514c794",
+   "bytes": 174758,
+   "source": "efratadir.com"
+  },
+  "403b71b2ed88fcda.png": {
+   "sha256": "aaad34674cfa098fe70957cc312af89ea261ccbc042a911811ae35136174b10a",
+   "bytes": 133169,
+   "source": "efratadir.com"
+  },
+  "da2f8731f2c1a1fe.png": {
+   "sha256": "3a2cc2c9e02eaf178ba442f9bb4a44f0ca58d96f7ec4e97402bcfc8535c7e053",
+   "bytes": 376726,
+   "source": "efratadir.com"
+  },
+  "3b405f3ea2d3aee4.png": {
+   "sha256": "e6d6b7e1c227f64dd3b6859e67de6064ede3fdc1b9e853685a7e5bf81171139f",
+   "bytes": 327941,
+   "source": "efratadir.com"
+  },
+  "481c790f3fcd3281.png": {
+   "sha256": "d151e3a27e5bb9b8c0bda40ade0e24364169e23856cd41564a7f860b7cb31edc",
+   "bytes": 364284,
+   "source": "efratadir.com"
+  },
+  "c5e6ecb9d7411ceb.png": {
+   "sha256": "1eb4654ce8f582412507bffbe23d193e482cb96da155740e4c70b3ce09b72dc1",
+   "bytes": 174514,
+   "source": "efratadir.com"
+  },
+  "0b9382f04a9930c7.png": {
+   "sha256": "2276852b8c7ec675e7df50868b30bd0a36bb0ec8c037e185fdf7f32db716e658",
+   "bytes": 376743,
+   "source": "efratadir.com"
+  },
+  "f40a6b311f3cda7a.png": {
+   "sha256": "bf33cc2d71f7ae3d3181cf94b10ab91d0209ce991fb6a8ec11ae1117b146af92",
+   "bytes": 335437,
+   "source": "efratadir.com"
+  },
+  "702003be40f0880d.png": {
+   "sha256": "e52975aa55b5b1f5361bbccef3691e89503cdebc437709a77a8f96910cf77d82",
+   "bytes": 326409,
+   "source": "efratadir.com"
+  },
+  "721e179a85598509.png": {
+   "sha256": "2b58d5801340dca591b7b090261b359eb3d310a3cea7aa2ed4775499fc4141e2",
+   "bytes": 738079,
+   "source": "efratadir.com"
+  },
+  "b00616c3e190e586.png": {
+   "sha256": "edbddcd3690add15b1ec65f4fb54d80e2635b4a8ba901db9926e34dc96b35414",
+   "bytes": 134257,
+   "source": "efratadir.com"
+  },
+  "62d945a1cfb9bb80.png": {
+   "sha256": "7c03fddeca593036ff6c78bdf0ffd7388072365c54076454b07a0e28b8eb97f2",
+   "bytes": 1168825,
+   "source": "efratadir.com"
+  },
+  "8ba4ae1cf5c2dc2c.jpg": {
+   "sha256": "1b601d32444428af8d7dc4b6ab41691f49ec02c529ed98187ed40052ca7ea812",
+   "bytes": 85251,
+   "source": "efratadir.com"
+  },
+  "7953264cf1f1c7e3.png": {
+   "sha256": "46c733001c48839c2bf953275f4c50cea90af81128396d7624283bab2e14393b",
+   "bytes": 1043671,
+   "source": "efratadir.com"
+  },
+  "b6d9ecabe5fead7e.png": {
+   "sha256": "582f75c85644ab2bda615375ba8172f0d1fbfd2218c804d0a26c4b1d65f2e9e9",
+   "bytes": 1181516,
+   "source": "efratadir.com"
+  },
+  "05ca713e43302c15.jpg": {
+   "sha256": "7b45dcdf8d63a50cd242b6b2dbeb3aed56a8d7bd3e99ab649daa02a73e928f78",
+   "bytes": 145353,
+   "source": "efratadir.com"
+  },
+  "c850b5477865bcb9.png": {
+   "sha256": "20834cd6089259fc90d9407b1e5dc36f4cb832e9667182f1c581de2c37cbe4ba",
+   "bytes": 344755,
+   "source": "efratadir.com"
+  },
+  "7847195c828b8011.png": {
+   "sha256": "cf954f1700e6a6bcc45d8eae0b6e53bf3b1926ea7483b9849a48d9f2e713c344",
+   "bytes": 1061001,
+   "source": "efratadir.com"
+  },
+  "e959a6070fee211d.png": {
+   "sha256": "e19256158e4267ebb468f02539cb0289467628bbcab7534b9637f9dd4221d137",
+   "bytes": 150742,
+   "source": "efratadir.com"
+  },
+  "a91d6be0c56454ae.png": {
+   "sha256": "ae7b3008a781f7ea6bedc3e78ee96b8ae056eb3c58ad6a18691d3e450e7219df",
+   "bytes": 387619,
+   "source": "efratadir.com"
+  },
+  "76aa7cab28bc3346.jpg": {
+   "sha256": "6e67930f8f959fb560ca30a244432f3053926c7ae77728cc33ffe5dcaf394d3b",
+   "bytes": 33720,
+   "source": "efratadir.com"
+  },
+  "5ed7612a4f42ca59.jpg": {
+   "sha256": "eb36c45e7f3b4c1c6d5bfa698db782a7274d180e903a04386962f0d02ae69ec0",
+   "bytes": 76515,
+   "source": "efratadir.com"
+  },
+  "7aced453271edbb9.png": {
+   "sha256": "4bc045f7217ae3fc74c0317b08f5d7b1db63f0a056145b3df5587d996beba736",
+   "bytes": 270459,
+   "source": "efratadir.com"
+  },
+  "84d05210e1614fc8.png": {
+   "sha256": "0294dca81809667a7e013ca0b3bd8011bc75626b9b557087cac4fd1eaa993b69",
+   "bytes": 485127,
+   "source": "efratadir.com"
+  },
+  "7303f01a1735aebf.png": {
+   "sha256": "4ab1c2465a61b48fba79b5fe79d4e70f06b926f8aca2598d6142e4e3ccae63d2",
+   "bytes": 29400,
+   "source": "efratadir.com"
+  },
+  "358499723c0431ca.png": {
+   "sha256": "52611a75adb8853e39a1133bb19398bef1396b0d6c2825a7afdb13428e85cccb",
+   "bytes": 458244,
+   "source": "efratadir.com"
+  },
+  "edcbb8611d5bf4af.jpg": {
+   "sha256": "213444d642aa5c086b0e55ea49a2fa9774a30a3ad425bb973b90b16b479fe75b",
+   "bytes": 156233,
+   "source": "efratadir.com"
+  },
+  "c110fcaa7e7a62d5.png": {
+   "sha256": "4d47abc885bb93b0c121bdf83e4624fd5b81bec1dc0eaa94c32501e85daca1e5",
+   "bytes": 435882,
+   "source": "efratadir.com"
+  },
+  "23dbcc56241b3fbb.png": {
+   "sha256": "194932b4da6cbf08746331cca25bed22885aad307d046dd87cf1e95e9a7c6772",
+   "bytes": 1489950,
+   "source": "efratadir.com"
+  },
+  "e74cd1697f5acb3e.png": {
+   "sha256": "8d9023ef0e4e94dafb60e9a4e7bafb9d01b17611fed2b085f7c8854b3f39ae63",
+   "bytes": 274951,
+   "source": "efratadir.com"
+  },
+  "02b7e618e5c9d08d.png": {
+   "sha256": "86d9e00f9c6a0caafcea91f7609be74e891361af5ce5b474e8383781396f76dd",
+   "bytes": 619179,
+   "source": "efratadir.com"
+  },
+  "b2181125efe172d6.png": {
+   "sha256": "a14906a5ec5fefe0c56373a51ea9afd79cbb6d370f03df908d393c3e3dcf59bd",
+   "bytes": 555166,
+   "source": "efratadir.com"
+  },
+  "77d8df9d825890a5.png": {
+   "sha256": "1339eba3fad79de84f3fddcacfe55de4201826e1fa7bb4e84a33211947f96ef6",
+   "bytes": 523656,
+   "source": "efratadir.com"
+  },
+  "roboto-kfo7cnqeu92fr1me7ksn66agldtyluama3kubgee.woff2": {
+   "sha256": "884933fb5789b478d2da68a4cb0bd5cc138d995f1fea9a957ba29cb3c00f1bf7",
+   "bytes": 26428,
+   "source": "efratadir.com"
+  },
+  "roboto-kfo7cnqeu92fr1me7ksn66agldtyluama3yuba.woff2": {
+   "sha256": "20b535fa80c8189e3b87d1803038389960203a886d502bc2ef1857affc2f38d2",
+   "bytes": 40128,
+   "source": "efratadir.com"
+  },
+  "assistant-2sdczgjynijsi6h75xkzamw5o7w.woff2": {
+   "sha256": "6113757a8b3d5c3285c5f79233d4f9ad5433cffffa1369aaeec775eb50f9697c",
+   "bytes": 7356,
+   "source": "efratadir.com"
+  },
+  "assistant-2sdczgjynijsi6h75xkzzmw5o7w.woff2": {
+   "sha256": "e2377466e48813aad7240dfff4a4a5ada3ad5cdfefec9e0aa37bb56f4d978839",
+   "bytes": 11136,
+   "source": "efratadir.com"
+  },
+  "assistant-2sdczgjynijsi6h75xkzagw5.woff2": {
+   "sha256": "477fe00d7468427dc867f508672c83e541efd62c2b97cec4b28262b7bcc7087f",
+   "bytes": 22040,
+   "source": "efratadir.com"
+  },
+  "heebo-ngs6v5_nc0k9p9h0tbfzsq.woff2": {
+   "sha256": "b67aaa0b436e0cd391ad20c609a856e4274833fd48d0b61b85e390848711e859",
+   "bytes": 12032,
+   "source": "efratadir.com"
+  },
+  "heebo-ngs6v5_nc0k9p9gktbfzsq.woff2": {
+   "sha256": "62046654e2ef82088ec2abdbbea6f768d80079dc65c9c00755df7d3542506973",
+   "bytes": 23796,
+   "source": "efratadir.com"
+  },
+  "heebo-ngs6v5_nc0k9p9gytbfzsq.woff2": {
+   "sha256": "7115ed1e8e2cb0f5987f5fbac1e6bd527e6116aeef6003040fc936f861392c1d",
+   "bytes": 14164,
+   "source": "efratadir.com"
+  },
+  "heebo-ngs6v5_nc0k9p9h4tbfzsq.woff2": {
+   "sha256": "d17fa28e12508ae58e3867bdb761355fded69b2384d87cb772675eea6aa7961c",
+   "bytes": 14784,
+   "source": "efratadir.com"
+  },
+  "heebo-ngs6v5_nc0k9p9h2tbe.woff2": {
+   "sha256": "0398bc9ec2f670d12183b4d81a68122e129719511813bfe121b2c437a269cb38",
+   "bytes": 30180,
+   "source": "efratadir.com"
+  }
+ }
+}

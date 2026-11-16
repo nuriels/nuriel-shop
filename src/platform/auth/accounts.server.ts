@@ -52,3 +52,39 @@ export async function setPasswordForSession(accessToken: string, password: strin
     );
   }
 }
+
+/**
+ * מיגרציה 198 — הזמנת בעלת אתר: חשבון חדש עם סיסמה שהמשתמשת בחרה. הסיסמה עוברת רק ל-GoTrue (לא נרשמת).
+ * email_confirm: הכרחי כדי שתוכל להתחבר בסיסמה (GoTrue חוסם כניסה לחשבון "לא מאושר") — זה לא אימות המייל: האימות
+ * האמיתי נרשם בנפרד (קוד שנשלח לתיבה), וההרשאות עד אז באות מההזמנה, לא מהמייל. לכן גם לא מסומן platform (SEC-H1)
+ * — שיוך לפי אימייל לא יגיע לחשבון הזה לפני שהמייל אומת.
+ */
+export async function createInvitedAccount(
+  email: string,
+  password: string,
+): Promise<{ userId: string } | { exists: true }> {
+  const { data, error } = await supabaseAdminUnscoped.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { signup_method: "site_owner_invite" },
+    app_metadata: { invited_owner: true },
+  });
+  if (error) {
+    if (/already|exists|registered/i.test(error.message)) return { exists: true };
+    throw new Error(
+      /weak|short|least|password/i.test(error.message)
+        ? "הסיסמה לא התקבלה — בחרו סיסמה ארוכה וחזקה יותר"
+        : "פתיחת החשבון נכשלה. נסו שוב.",
+    );
+  }
+  if (!data.user?.id) throw new Error("פתיחת החשבון נכשלה. נסו שוב.");
+  return { userId: data.user.id };
+}
+
+/** ביטול חשבון שנפתח רגע קודם כשההזמנה לא מומשה (קישור שנוצל בינתיים וכו') — לא משאירים חשבון יתום */
+export async function deleteNewAccount(userId: string): Promise<void> {
+  const { error } = await supabaseAdminUnscoped.auth.admin.deleteUser(userId);
+  if (error)
+    console.error("[accounts] could not delete an unused new account", userId, error.message);
+}

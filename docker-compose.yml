@@ -64,6 +64,9 @@ services:
       # --- Hospitality (מנוע האירוח) — docs/hospitality/install-guide.md §5 ---
       # המתג הכללי: רק "on" מפעיל. ריק = כבוי (ברירת המחדל)
       HOSPITALITY_ENGINE: ${HOSPITALITY_ENGINE:-}
+      # Nuriel Websites (אתרי עסקים): המנוע וממשק הניהול רצים רק כשזה on (deploy/release-websites.sh מגדיר).
+      # בנוסף נדרש דגל הפלטפורמה business_profile_enabled; אתר ציבורי — רק אחרי אישור פרסום.
+      BUSINESS_PROFILE_ENGINE: ${BUSINESS_PROFILE_ENGINE:-}
       # סוד! HMAC להגבלת הקצב ולאתגרי ה-CAPTCHA (openssl rand -hex 32). זהה בכל השרתים
       HOSPITALITY_SECRET: ${HOSPITALITY_SECRET:-}
       # קושי אתגר ה-CAPTCHA (לא חובה; 1000–2000000, ברירת מחדל 50000)

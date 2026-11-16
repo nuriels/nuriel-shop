@@ -6,7 +6,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { initialDocument } from "../document/defaults";
 import { normalizeDocument } from "../document/normalize";
 import type { TemplateKey } from "../document/schema";
-import type { PlatformSiteFile, PlatformSiteRow, SiteState } from "../types";
+import type {
+  CreatedInvite,
+  OwnerInviteState,
+  PlatformSiteFile,
+  PlatformSiteRow,
+  SiteState,
+} from "../types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
@@ -261,4 +267,62 @@ export const websitesPlatformSiteFile = createServerFn({ method: "GET" })
       publicOrigin,
       slugOrigin,
     } satisfies PlatformSiteFile;
+  });
+
+// ---------- מיגרציה 198: הזמנת בעלת האתר (קישור חד-פעמי) ----------
+export const websitesPlatformInviteState = createServerFn({ method: "GET" })
+  .inputValidator((input: { tenantId?: unknown }) => ({ tenantId: uuidOf(input?.tenantId) }))
+  .handler(async ({ data }): Promise<OwnerInviteState> => {
+    const [{ platformRpc }, { emailConfigured }] = await Promise.all([
+      import("../data/rpc.server"),
+      import("@/platform/email/send.server"),
+    ]);
+    const state = await platformRpc<Omit<OwnerInviteState, "emailConfigured">>(
+      "platform_bp_invite_state",
+      { _tenant: data.tenantId },
+    );
+    return { ...state, emailConfigured: emailConfigured() };
+  });
+
+/**
+ * קישור הזמנה חדש: 32 בתים אקראיים (base64url), במסד רק SHA-256. הקישור — בכתובת Nuriel של האתר (לא בדומיין
+ * אישי), והטוקן ב-fragment (#) — הדפדפן לא שולח אותו לשרת, ל-nginx או ב-Referer. מוחזר פעם אחת בלבד.
+ * הזמנה פתוחה קודמת מבוטלת במסד (ונרשמת).
+ */
+export const websitesPlatformInviteCreate = createServerFn({ method: "POST" })
+  .inputValidator((input: { tenantId?: unknown }) => ({ tenantId: uuidOf(input?.tenantId) }))
+  .handler(async ({ data }): Promise<CreatedInvite> => {
+    const [{ platformRpc }, { allowAction }, { requireSession }, { siteAddressesOf }, crypto] =
+      await Promise.all([
+        import("../data/rpc.server"),
+        import("@/platform/security/rate-limit.server"),
+        import("@/platform/auth/session.server"),
+        import("@/platform/tenancy/current-site.server"),
+        import("node:crypto"),
+      ]);
+    const session = await requireSession();
+    if (!allowAction(`bp-invite-create:${session.userId}`, 20, 60 * 60 * 1000))
+      throw new Error("נוצרו יותר מדי קישורים בשעה האחרונה — נסו שוב מאוחר יותר");
+    const token = crypto.randomBytes(32).toString("base64url");
+    const hash = crypto.createHash("sha256").update(token).digest("hex");
+    const r = await platformRpc<{ id: string; expires_at: string; slug: string }>(
+      "platform_bp_invite_create",
+      { _tenant: data.tenantId, _token_hash: hash, _hours: 72 },
+    );
+    const { slugOrigin } = await siteAddressesOf({
+      slug: r.slug,
+      custom_domain: null,
+      custom_domain_status: null,
+    });
+    if (!slugOrigin) throw new Error("כתובת האתר לא הוגדרה בשרת (TENANT_BASE_DOMAIN)");
+    return { url: `${slugOrigin}/studio/invite#t=${token}`, expiresAt: r.expires_at };
+  });
+
+export const websitesPlatformInviteRevoke = createServerFn({ method: "POST" })
+  .inputValidator((input: { tenantId?: unknown }) => ({ tenantId: uuidOf(input?.tenantId) }))
+  .handler(async ({ data }): Promise<{ revoked: number }> => {
+    const { platformRpc } = await import("../data/rpc.server");
+    return platformRpc<{ revoked: number }>("platform_bp_invite_revoke", {
+      _tenant: data.tenantId,
+    });
   });

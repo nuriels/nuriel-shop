@@ -14,7 +14,9 @@
 // דרישות: הקבצים בתיקייה (ברירת מחדל ‎.cache/efrat-faithful — node scripts/websites/fetch-efrat-assets.mjs),
 //         האתר כבר נפתח בפאנל הפלטפורמה בכתובת היעד.
 // שימוש:
-//   TARGET_ORIGIN=https://efrat.nuri1.fit ACCESS_TOKEN=... node scripts/websites/import-efrat-site.mjs [--dry-run]
+//   TARGET_ORIGIN=https://efrat.nuri1.fit EXPECT_SLUG=efrat EMAIL=<מנהל הפלטפורמה> SUPABASE_URL=… \
+//     SUPABASE_PUBLISHABLE_KEY=… node scripts/websites/import-efrat-site.mjs [--dry-run]
+//     (הסיסמה נשאלת במסוף ולא מוצגת; או ACCESS_TOKEN). לפני כל העלאה: 100 הקבצים זהים למניפסט (SHA-256).
 //   TARGET_ORIGIN=http://efrat-classic.shop.localhost:3100 SUPABASE_URL=... SUPABASE_PUBLISHABLE_KEY=... \
 //     EMAIL=platform@e2e.test PASSWORD=... node scripts/websites/import-efrat-site.mjs
 // ============================================================
@@ -23,7 +25,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildFaithfulDocument, loadSource } from "./efrat-faithful.mjs";
+import { assetFiles, buildFaithfulDocument, loadSource } from "./efrat-faithful.mjs";
+import { verifyAssets } from "./verify-efrat-assets.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const require = createRequire(join(ROOT, "package.json"));
@@ -35,10 +38,12 @@ const ASSETS = process.env.ASSETS_DIR ?? join(ROOT, ".cache/efrat-faithful");
 if (!/^https?:\/\/[a-z0-9.-]+(:\d+)?$/.test(ORIGIN))
   throw new Error("TARGET_ORIGIN=https://<site host> is required");
 if (!existsSync(ASSETS))
-  throw new Error(`assets folder missing: ${ASSETS} (run scripts/websites/fetch-efrat-assets.mjs)`);
+  throw new Error(
+    `assets folder missing: ${ASSETS} (run scripts/websites/fetch-efrat-originals.mjs)`,
+  );
 const HOST = new URL(ORIGIN).host.replace(/:\d+$/, "");
-// סביבת הבדיקה המקומית בלבד: *.localhost לא נפתר ב-Node — מתחברים ל-CONNECT_TO (127.0.0.1:3100) והאתר מזוהה
-// לפי x-forwarded-host, כמו מאחורי nginx
+// CONNECT_TO: מתחברים ישירות לאפליקציה (מקומית 127.0.0.1:3100; בשרת 127.0.0.1:3700 — deploy/websites-efrat.sh) והאתר
+// מזוהה לפי x-forwarded-host, כמו מאחורי nginx — בלי תלות ב-DNS או בתעודה של הכתובת החדשה
 const CONNECT = process.env.CONNECT_TO ? `http://${process.env.CONNECT_TO}` : ORIGIN;
 
 const MEDIA_FN = "src/engines/business-profile/api/media.functions.ts";
@@ -59,13 +64,46 @@ const stamped = (file) =>
     .digest("hex")
     .slice(0, 10)}`;
 
+/** סיסמה מהמסוף בלי להציג אותה (לא נשמרת, לא נרשמת) */
+function askHidden(question) {
+  return new Promise((resolve, reject) => {
+    const { stdin, stdout } = process;
+    if (!stdin.isTTY)
+      return reject(new Error("no terminal for the password — set PASSWORD or ACCESS_TOKEN"));
+    stdout.write(question);
+    stdin.setRawMode(true);
+    stdin.resume();
+    let value = "";
+    const onData = (buf) => {
+      for (const ch of buf.toString("utf8")) {
+        if (ch === "\r" || ch === "\n") {
+          stdin.setRawMode(false);
+          stdin.pause();
+          stdin.off("data", onData);
+          stdout.write("\n");
+          resolve(value);
+          return;
+        }
+        if (ch === "\u0003") {
+          stdin.setRawMode(false);
+          process.exit(130);
+        }
+        if (ch === "\u007f") value = value.slice(0, -1);
+        else value += ch;
+      }
+    };
+    stdin.on("data", onData);
+  });
+}
+
 async function token() {
   if (process.env.ACCESS_TOKEN) return process.env.ACCESS_TOKEN;
-  const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, EMAIL, PASSWORD } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || !EMAIL || !PASSWORD)
+  const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, EMAIL } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || !EMAIL)
     throw new Error(
-      "set ACCESS_TOKEN, or SUPABASE_URL + SUPABASE_PUBLISHABLE_KEY + EMAIL + PASSWORD",
+      "set ACCESS_TOKEN, or SUPABASE_URL + SUPABASE_PUBLISHABLE_KEY + EMAIL (the password is asked)",
     );
+  const PASSWORD = process.env.PASSWORD || (await askHidden(`password for ${EMAIL}: `));
   const r = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: { apikey: SUPABASE_PUBLISHABLE_KEY, "content-type": "application/json" },
@@ -133,19 +171,18 @@ async function upload(tok, fn, file, fields = {}) {
 }
 
 const source = loadSource();
-const images = [
-  ...new Set([
-    ...Object.keys(source.images),
-    source.pen.file,
-    ...source.services.items.map((s) => s.icon),
-    ...source.testimonials.items.map((t) => t.file),
-    ...source.portfolio.items.map((w) => w.file),
-  ]),
-];
+const { images } = assetFiles(source);
 const missingLocal = [...images, ...source.fonts.map((f) => f.file)].filter(
   (f) => !existsSync(join(ASSETS, f)),
 );
 if (missingLocal.length) throw new Error(`missing local files: ${missingLocal.join(", ")}`);
+// בדיוק הקבצים שנבדקו — אחרת לא מעלים כלום
+const verified = verifyAssets(ASSETS);
+if (verified.problems.length)
+  throw new Error(
+    `the files differ from the tested set (SHA-256): ${verified.problems.slice(0, 5).join("; ")}`,
+  );
+console.log(`files: ${verified.ok}/${verified.total} identical to the tested set (SHA-256)`);
 
 const tok = await token();
 const res = await call(tok, STUDIO_FN, "studioContext", undefined, "GET");
@@ -155,6 +192,10 @@ if (res?.state !== "ok")
   );
 const ctx = res.context;
 console.log(`site: ${ctx.site.name} (${ctx.site.slug}) on ${HOST} — state: ${ctx.state?.status}`);
+if (process.env.EXPECT_SLUG && ctx.site.slug !== process.env.EXPECT_SLUG)
+  throw new Error(
+    `this is not the expected site (${ctx.site.slug} ≠ ${process.env.EXPECT_SLUG}) — nothing changed`,
+  );
 
 const library = async () =>
   (await call(tok, MEDIA_FN, "studioMedia", undefined, "GET")).items ?? [];
