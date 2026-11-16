@@ -43,7 +43,7 @@ const TABLES = {
     product_duplicate_dismissals product_merges`,
   platform: `tenants user_roles site_settings email_settings tenant_email_secrets login_codes
     password_reset_requests password_reset_tokens staff_notifications contact_messages support_tickets
-    support_messages marketing_consents marketing_consent_events notification_logs tenant_ssl
+    support_messages marketing_consents marketing_consent_events notification_logs tenant_ssl tenant_host_redirects
     tenant_billing_profile billing_history upgrade_requests tenant_grow_credentials
     platform_product_roles platform_feature_flags tenant_feature_flags vat_rates site_tracking`,
   "platform-admin": `platform_addons platform_admin_handoffs platform_admins platform_agreement_acceptances
@@ -75,6 +75,8 @@ const PLATFORM_FUNCTIONS = new RegExp(
       "tenants_.*",
       "tenant_for_host",
       "tenant_slug_problem",
+      // Nuriel Websites (migration 197): a site's old subdomain / second form of its custom domain → 301
+      "tenant_redirect_for_host",
       "tenant_is_active",
       "tenant_member_id",
       "current_tenant_id",

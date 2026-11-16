@@ -1,0 +1,114 @@
+{
+  "site": "efrat-classic",
+  "checkedAt": "2026-11-16T12:15:34.266Z",
+  "sections": {
+    "old": 9,
+    "newBlocks": [
+      "hero",
+      "form",
+      "about",
+      "media",
+      "testimonials",
+      "services",
+      "portfolio",
+      "form",
+      "footer (מעטפת האתר)"
+    ],
+    "newCount": 9
+  },
+  "images": {
+    "oldTotal": 90,
+    "inLibrary": 90,
+    "loads": 90,
+    "problems": [],
+    "groups": {
+      "תמונת הרקע של הפתיח": {
+        "old": 1,
+        "ok": 1
+      },
+      "הלוגו": {
+        "old": 1,
+        "ok": 1
+      },
+      "רקע טופס הפתיחה": {
+        "old": 1,
+        "ok": 1
+      },
+      "אודות — כותרת-תמונה": {
+        "old": 1,
+        "ok": 1
+      },
+      "אודות — תמונות הקרוסלה": {
+        "old": 2,
+        "ok": 2
+      },
+      "רקע ההמלצות": {
+        "old": 1,
+        "ok": 1
+      },
+      "העט (פריים מהאנימציה)": {
+        "old": 1,
+        "ok": 1
+      },
+      "אייקוני השירותים": {
+        "old": 5,
+        "ok": 5
+      },
+      "המלצות (צילומי מסך)": {
+        "old": 13,
+        "ok": 13
+      },
+      "תיק עבודות (קבצים שונים)": {
+        "old": 64,
+        "ok": 64
+      }
+    }
+  },
+  "fonts": {
+    "files": 10,
+    "ok": 10,
+    "families": [
+      "Roboto",
+      "Assistant",
+      "Heebo"
+    ],
+    "problems": []
+  },
+  "portfolio": {
+    "oldDesktop": 61,
+    "oldMobile": 61,
+    "newDesktop": 61,
+    "newMobile": 61,
+    "distinctFiles": 64
+  },
+  "testimonials": {
+    "old": 13,
+    "new": 13
+  },
+  "services": {
+    "old": 5,
+    "new": 5
+  },
+  "forms": {
+    "old": 2,
+    "new": 2
+  },
+  "whatsapp": {
+    "old": "972524653108",
+    "new": "972524653108"
+  },
+  "accessibilityStatement": true,
+  "library": {
+    "files": 100,
+    "inStorage": 100
+  },
+  "draftMediaIdsMissing": [],
+  "externalUrlsInDraft": [],
+  "forbidden": {
+    "האתר הישן (efratadir.com)": false,
+    "/tmp": false,
+    "file:": false,
+    "localhost": false
+  },
+  "textsMissing": []
+}

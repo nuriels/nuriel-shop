@@ -111,3 +111,93 @@ export interface PlatformSiteRow {
   /** הכתובת בפלטפורמה (<slug>.<הדומיין>) */
   url: string | null;
 }
+
+/** כתובת האתר (מיגרציה 197): תת-הדומיין, כתובות ישנות שמפנות, והדומיין האישי — כפי שהמסד מחזיר */
+export interface AddressRow {
+  slug: string;
+  old_slugs: { name: string; expires_at: string | null }[];
+  changes_30d: number;
+  custom_domain: string | null;
+  custom_domain_status: "pending" | "verified" | "active" | "error" | null;
+  custom_domain_error: string | null;
+  custom_domain_verified_at: string | null;
+  custom_domain_checked_at: string | null;
+  custom_domain_ssl_expires_at: string | null;
+  alternate: string | null;
+  verify_token: string | null;
+  ownership_domain: string | null;
+  ownership_verified_at: string | null;
+  alternate_redirect: boolean;
+  last_check: {
+    txt: boolean;
+    dns: boolean;
+    alternate: string | null;
+    alternate_ok: boolean;
+    message: string;
+    at: string;
+  } | null;
+}
+
+/** רשומת DNS להצגה בהוראות (אצל רשם הדומיין) */
+export interface DnsRecordHint {
+  type: "TXT" | "CNAME" | "A";
+  /** השם המלא */
+  name: string;
+  /** מה כותבים בשדה "שם / Host" אצל הרשם */
+  host: string;
+  value: string;
+  purpose: string;
+}
+
+/** המצב של מסך "כתובת האתר" */
+export interface AddressState extends AddressRow {
+  baseDomain: string | null;
+  /** הכתובת הציבורית (הקנונית) של האתר */
+  publicOrigin: string | null;
+  /** הכתובת בפלטפורמה (תמיד קיימת; הניהול תמיד בה) */
+  slugOrigin: string | null;
+  /** הצורה השנייה של הדומיין (www / בלי www), אם רלוונטי */
+  alternateHost: string | null;
+  /** ההוראות לרשם הדומיין — רק כשיש דומיין אישי */
+  records: DnsRecordHint[];
+}
+
+export interface DomainCheckResult {
+  ok: boolean;
+  txtOk: boolean;
+  dnsOk: boolean;
+  alternateOk: boolean | null;
+  message: string;
+  state: AddressState;
+}
+
+/** תיק האתר בפאנל הפלטפורמה (platform_bp_site_file + הכתובות) */
+export interface PlatformSiteFile {
+  id: string;
+  slug: string;
+  name: string;
+  status: "active" | "suspended";
+  created_at: string;
+  owner_email: string | null;
+  owner: { email: string; since: string } | null;
+  address: AddressRow;
+  state: SiteState;
+  draft: {
+    template: string;
+    revision: number;
+    updated_at: string;
+    updated_by: string | null;
+  } | null;
+  media: { count: number; bytes: number };
+  audit: {
+    source: "site" | "platform";
+    action: string;
+    /** פרטי הפעולה כטקסט (בלי תוכן אישי — כך הם נרשמים) */
+    details: Record<string, string>;
+    at: string;
+    actor: string | null;
+    platform_admin: boolean;
+  }[];
+  publicOrigin: string | null;
+  slugOrigin: string | null;
+}

@@ -91,6 +91,7 @@ import { Route as StayPrivacyRouteImport } from './routes/stay.privacy'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as StudioEditorRouteImport } from './routes/studio.editor'
 import { Route as StudioInboxRouteImport } from './routes/studio.inbox'
+import { Route as StudioSettingsRouteImport } from './routes/studio.settings'
 import { Route as StudioVersionsRouteImport } from './routes/studio.versions'
 import { Route as StudioPreviewRouteImport } from './routes/studio_.preview'
 import { Route as UnsubscribeTokenRouteImport } from './routes/unsubscribe.$token'
@@ -120,6 +121,7 @@ import { Route as ManageSupportTicketIdRouteImport } from './routes/manage.suppo
 import { Route as ManageUnitsUnitIdRouteImport } from './routes/manage.units_.$unitId'
 import { Route as MarketingConfirmTokenRouteImport } from './routes/marketing.confirm.$token'
 import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
+import { Route as PlatformWebsitesTenantIdRouteImport } from './routes/platform_.websites_.$tenantId'
 import { Route as StayBrandAssetRouteImport } from './routes/stay.brand.$asset'
 import { Route as StayDocsDocSlugRouteImport } from './routes/stay.docs.$docSlug'
 import { Route as StayPackagesPackageSlugRouteImport } from './routes/stay.packages.$packageSlug'
@@ -536,6 +538,11 @@ const StudioInboxRoute = StudioInboxRouteImport.update({
   path: '/inbox',
   getParentRoute: () => StudioRoute,
 } as any)
+const StudioSettingsRoute = StudioSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => StudioRoute,
+} as any)
 const StudioVersionsRoute = StudioVersionsRouteImport.update({
   id: '/versions',
   path: '/versions',
@@ -685,6 +692,12 @@ const PlatformCustomersTenantIdRoute =
     path: '/platform/customers/$tenantId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const PlatformWebsitesTenantIdRoute =
+  PlatformWebsitesTenantIdRouteImport.update({
+    id: '/platform_/websites_/$tenantId',
+    path: '/platform/websites/$tenantId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const StayBrandAssetRoute = StayBrandAssetRouteImport.update({
   id: '/brand/$asset',
   path: '/brand/$asset',
@@ -790,6 +803,7 @@ export interface FileRoutesByFullPath {
   '/stay/privacy': typeof StayPrivacyRoute
   '/studio/editor': typeof StudioEditorRoute
   '/studio/inbox': typeof StudioInboxRoute
+  '/studio/settings': typeof StudioSettingsRoute
   '/studio/versions': typeof StudioVersionsRoute
   '/studio/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
@@ -823,6 +837,7 @@ export interface FileRoutesByFullPath {
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/platform/websites/$tenantId': typeof PlatformWebsitesTenantIdRoute
   '/stay/brand/$asset': typeof StayBrandAssetRoute
   '/stay/docs/$docSlug': typeof StayDocsDocSlugRoute
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
@@ -904,6 +919,7 @@ export interface FileRoutesByTo {
   '/stay/privacy': typeof StayPrivacyRoute
   '/studio/editor': typeof StudioEditorRoute
   '/studio/inbox': typeof StudioInboxRoute
+  '/studio/settings': typeof StudioSettingsRoute
   '/studio/versions': typeof StudioVersionsRoute
   '/studio/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
@@ -937,6 +953,7 @@ export interface FileRoutesByTo {
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/platform/websites/$tenantId': typeof PlatformWebsitesTenantIdRoute
   '/stay/brand/$asset': typeof StayBrandAssetRoute
   '/stay/docs/$docSlug': typeof StayDocsDocSlugRoute
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
@@ -1023,6 +1040,7 @@ export interface FileRoutesById {
   '/stay/privacy': typeof StayPrivacyRoute
   '/studio/editor': typeof StudioEditorRoute
   '/studio/inbox': typeof StudioInboxRoute
+  '/studio/settings': typeof StudioSettingsRoute
   '/studio/versions': typeof StudioVersionsRoute
   '/studio_/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
@@ -1056,6 +1074,7 @@ export interface FileRoutesById {
   '/manage/units_/$unitId': typeof ManageUnitsUnitIdRoute
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
   '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
+  '/platform_/websites_/$tenantId': typeof PlatformWebsitesTenantIdRoute
   '/stay/brand/$asset': typeof StayBrandAssetRoute
   '/stay/docs/$docSlug': typeof StayDocsDocSlugRoute
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
@@ -1143,6 +1162,7 @@ export interface FileRouteTypes {
     | '/stay/privacy'
     | '/studio/editor'
     | '/studio/inbox'
+    | '/studio/settings'
     | '/studio/versions'
     | '/studio/preview'
     | '/unsubscribe/$token'
@@ -1176,6 +1196,7 @@ export interface FileRouteTypes {
     | '/manage/units/$unitId'
     | '/marketing/confirm/$token'
     | '/platform/customers/$tenantId'
+    | '/platform/websites/$tenantId'
     | '/stay/brand/$asset'
     | '/stay/docs/$docSlug'
     | '/stay/packages/$packageSlug'
@@ -1257,6 +1278,7 @@ export interface FileRouteTypes {
     | '/stay/privacy'
     | '/studio/editor'
     | '/studio/inbox'
+    | '/studio/settings'
     | '/studio/versions'
     | '/studio/preview'
     | '/unsubscribe/$token'
@@ -1290,6 +1312,7 @@ export interface FileRouteTypes {
     | '/manage/units/$unitId'
     | '/marketing/confirm/$token'
     | '/platform/customers/$tenantId'
+    | '/platform/websites/$tenantId'
     | '/stay/brand/$asset'
     | '/stay/docs/$docSlug'
     | '/stay/packages/$packageSlug'
@@ -1375,6 +1398,7 @@ export interface FileRouteTypes {
     | '/stay/privacy'
     | '/studio/editor'
     | '/studio/inbox'
+    | '/studio/settings'
     | '/studio/versions'
     | '/studio_/preview'
     | '/unsubscribe/$token'
@@ -1408,6 +1432,7 @@ export interface FileRouteTypes {
     | '/manage/units_/$unitId'
     | '/marketing/confirm/$token'
     | '/platform_/customers/$tenantId'
+    | '/platform_/websites_/$tenantId'
     | '/stay/brand/$asset'
     | '/stay/docs/$docSlug'
     | '/stay/packages/$packageSlug'
@@ -1484,6 +1509,7 @@ export interface RootRouteChildren {
   CheckoutGrowOrderIdRoute: typeof CheckoutGrowOrderIdRoute
   MarketingConfirmTokenRoute: typeof MarketingConfirmTokenRoute
   PlatformCustomersTenantIdRoute: typeof PlatformCustomersTenantIdRoute
+  PlatformWebsitesTenantIdRoute: typeof PlatformWebsitesTenantIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -2062,6 +2088,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioInboxRouteImport
       parentRoute: typeof StudioRoute
     }
+    '/studio/settings': {
+      id: '/studio/settings'
+      path: '/settings'
+      fullPath: '/studio/settings'
+      preLoaderRoute: typeof StudioSettingsRouteImport
+      parentRoute: typeof StudioRoute
+    }
     '/studio/versions': {
       id: '/studio/versions'
       path: '/versions'
@@ -2265,6 +2298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformCustomersTenantIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/platform_/websites_/$tenantId': {
+      id: '/platform_/websites_/$tenantId'
+      path: '/platform/websites/$tenantId'
+      fullPath: '/platform/websites/$tenantId'
+      preLoaderRoute: typeof PlatformWebsitesTenantIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/stay/brand/$asset': {
       id: '/stay/brand/$asset'
       path: '/brand/$asset'
@@ -2420,6 +2460,7 @@ const StayRouteWithChildren = StayRoute._addFileChildren(StayRouteChildren)
 interface StudioRouteChildren {
   StudioEditorRoute: typeof StudioEditorRoute
   StudioInboxRoute: typeof StudioInboxRoute
+  StudioSettingsRoute: typeof StudioSettingsRoute
   StudioVersionsRoute: typeof StudioVersionsRoute
   StudioIndexRoute: typeof StudioIndexRoute
 }
@@ -2427,6 +2468,7 @@ interface StudioRouteChildren {
 const StudioRouteChildren: StudioRouteChildren = {
   StudioEditorRoute: StudioEditorRoute,
   StudioInboxRoute: StudioInboxRoute,
+  StudioSettingsRoute: StudioSettingsRoute,
   StudioVersionsRoute: StudioVersionsRoute,
   StudioIndexRoute: StudioIndexRoute,
 }
@@ -2503,6 +2545,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutGrowOrderIdRoute: CheckoutGrowOrderIdRoute,
   MarketingConfirmTokenRoute: MarketingConfirmTokenRoute,
   PlatformCustomersTenantIdRoute: PlatformCustomersTenantIdRoute,
+  PlatformWebsitesTenantIdRoute: PlatformWebsitesTenantIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

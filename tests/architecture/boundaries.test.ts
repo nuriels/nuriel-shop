@@ -44,7 +44,7 @@ const HOSPITALITY_ROUTE =
  * אליו רק באתר עסק), ממשק הניהול (/studio) ו"אתרי אינטרנט" בפאנל הפלטפורמה
  */
 const BUSINESS_PROFILE_ROUTE =
-  /^src\/routes\/(bp-site(\.[^/]+)?|studio(_?\.[^/]+)?|platform_\.websites)\.tsx?$/;
+  /^src\/routes\/(bp-site(\.[^/]+)?|studio(_?\.[^/]+)?|platform_\.websites(_\.\$tenantId)?)\.tsx?$/;
 /** קבצי כניסה: מגיעים למנועים רק דרך שורש ההרכבה (ה-root של הנתבים — מ-Stage 2a; router.tsx — מ-Websites) */
 const ENTRY_FILES = ["src/start.ts", "src/server.ts", "src/routes/__root.tsx", "src/router.tsx"];
 /** עץ הנתיבים שנוצר אוטומטית — מייבא כל קובץ נתיב, גם את מתאמי Hospitality */
@@ -113,6 +113,11 @@ const PLATFORM_ADAPTERS: [adapter: string, wraps: (target: string) => boolean][]
   // שלב א' 4: "היכנס לניהול" מכרטיס אתר אירוח בפאנל — אותו קוד כניסה חד-פעמי של רשימת החנויות
   ["src/platform/auth/admin-handoff.ts", (t) => t === "src/lib/handoff.functions"],
   ["src/platform/email/send.server.ts", (t) => t === "src/lib/email.server"],
+  // מיגרציה 197: דומיין אישי לאתרי עסקים — בדיקות ה-DNS והתקינות הקיימות של החנויות
+  [
+    "src/platform/tenancy/domains.server.ts",
+    (t) => t === "src/lib/custom-domain-dns.server" || t === "src/lib/custom-domain",
+  ],
   // מסמכי לקוחות (מיגרציה 64): ה-PDF החתום בעברית — הגופן והסידור מימין לשמאל הקיימים
   [
     "src/platform/pdf/hebrew.server.ts",
@@ -315,9 +320,11 @@ describe("architecture: dependency boundaries", () => {
       "src/routes/bp-site.index.tsx",
       "src/routes/bp-site.tsx",
       "src/routes/platform_.websites.tsx",
+      "src/routes/platform_.websites_.$tenantId.tsx",
       "src/routes/studio.editor.tsx",
       "src/routes/studio.inbox.tsx",
       "src/routes/studio.index.tsx",
+      "src/routes/studio.settings.tsx",
       "src/routes/studio.tsx",
       "src/routes/studio.versions.tsx",
       "src/routes/studio_.preview.tsx",
@@ -403,10 +410,11 @@ describe("architecture: server-function ownership", () => {
       expect(f).toMatch(/^src\/engines\/hospitality\/(server|api)\/[\w-]+\.functions\.ts$/);
   });
 
-  it("Nuriel Websites server functions live only in src/engines/business-profile/api (5 files)", () => {
+  it("Nuriel Websites server functions live only in src/engines/business-profile/api (6 files)", () => {
     const bp = serverFnFiles.filter((f) => registry.ownerOf(f) === "business_profile");
     expect(bp).toEqual([
       // פניות מלקוחות (מיגרציה 196): שליחת הטופס באתר + "פניות מלקוחות" בממשק הניהול
+      "src/engines/business-profile/api/address.functions.ts",
       "src/engines/business-profile/api/inquiries.functions.ts",
       "src/engines/business-profile/api/media.functions.ts",
       "src/engines/business-profile/api/platform-admin.functions.ts",

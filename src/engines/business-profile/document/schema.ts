@@ -322,8 +322,13 @@ export const PAGE_SLUG = /^(|[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)$/;
 export const RESERVED_SLUGS: readonly string[] = ["accessibility"];
 
 export const pageSeo = z
-  .object({ title: localized(70), description: localized(170) })
-  .catch({ title: { he: "" }, description: { he: "" } });
+  .object({
+    title: localized(70),
+    description: localized(170),
+    /** התמונה בשיתוף (וואטסאפ, פייסבוק) ובתוצאות חיפוש עשירות; ריק — תמונת הפתיח, ואז הלוגו */
+    image: imageRef,
+  })
+  .catch({ title: { he: "" }, description: { he: "" }, image: { media: null, alt: { he: "" } } });
 
 /** מקטע גולמי — התוכן (props) נבדק לפי סוג המקטע (blocks/registry.ts) */
 export const rawBlock = z.object({

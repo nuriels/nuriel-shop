@@ -111,6 +111,7 @@ export function businessPageHead(
           description: {
             he: `הצהרת הנגישות של ${name}: מה הונגש באתר, ליקויים ידועים ופרטי קשר לנגישות.`,
           },
+          image: home.seo.image,
         },
       });
     }

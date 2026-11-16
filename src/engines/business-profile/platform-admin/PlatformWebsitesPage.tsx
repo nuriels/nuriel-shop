@@ -4,6 +4,7 @@
 // הניהול של האתר. בלי חיובים, בלי דומיינים ובלי DNS. ההרשאה (מנהל הפלטפורמה) — במסד.
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { createAdminHandoff } from "@/platform/auth/admin-handoff";
@@ -243,6 +244,13 @@ function SiteRow({ site, onReview }: { site: PlatformSiteRow; onReview: () => vo
               בדיקת בקשת הפרסום
             </Button>
           )}
+          <Link
+            to="/platform/websites/$tenantId"
+            params={{ tenantId: site.id }}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+          >
+            תיק האתר
+          </Link>
           <Button size="sm" variant="outline" onClick={() => void enter()} disabled={entering}>
             כניסה לניהול האתר
           </Button>
@@ -299,7 +307,13 @@ function SiteRow({ site, onReview }: { site: PlatformSiteRow; onReview: () => vo
   );
 }
 
-function ReviewSheet({ site, onClose }: { site: PlatformSiteRow | null; onClose: () => void }) {
+export function ReviewSheet({
+  site,
+  onClose,
+}: {
+  site: Pick<PlatformSiteRow, "id" | "name"> | null;
+  onClose: () => void;
+}) {
   const qc = useQueryClient();
   const review = useServerFn(websitesPlatformReview);
   const approve = useServerFn(websitesPlatformApprove);

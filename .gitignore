@@ -47,3 +47,4 @@ e2e/preview/out/
 
 # קבצים מקומיים שהורדו לתצוגה מקדימה (למשל האתר הישן של אפרת) — לא ב-git
 .cache/
+e2e/.dns-fixtures.json

@@ -105,6 +105,9 @@ export function StudioLayout() {
               <StudioLink to="/studio/editor">עריכת האתר</StudioLink>
               <StudioLink to="/studio/versions">גרסאות</StudioLink>
               {context.permissions.includes("inquiries.manage") && <InboxLink />}
+              {context.permissions.includes("settings.owner") && (
+                <StudioLink to="/studio/settings">הגדרות האתר</StudioLink>
+              )}
               <Button
                 variant="ghost"
                 size="sm"

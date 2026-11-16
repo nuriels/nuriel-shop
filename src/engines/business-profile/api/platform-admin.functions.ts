@@ -6,7 +6,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { initialDocument } from "../document/defaults";
 import { normalizeDocument } from "../document/normalize";
 import type { TemplateKey } from "../document/schema";
-import type { PlatformSiteRow, SiteState } from "../types";
+import type { PlatformSiteFile, PlatformSiteRow, SiteState } from "../types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
@@ -226,4 +226,39 @@ export const websitesPlatformSetPublic = createServerFn({ method: "POST" })
     });
     invalidateSiteEnabled(data.tenantId);
     return state;
+  });
+
+/** תיק האתר (מיגרציה 197): כתובות, דומיין, מצב, תאריכים, הבעלים ויומן משולב (האתר + הפלטפורמה) */
+export const websitesPlatformSiteFile = createServerFn({ method: "GET" })
+  .inputValidator((input: { tenantId?: unknown }) => ({
+    tenantId: uuidOf(input?.tenantId, "מזהה אתר"),
+  }))
+  .handler(async ({ data }) => {
+    const [{ platformRpc }, { siteAddressesOf }] = await Promise.all([
+      import("../data/rpc.server"),
+      import("@/platform/tenancy/current-site.server"),
+    ]);
+    const file = await platformRpc<Omit<PlatformSiteFile, "publicOrigin" | "slugOrigin"> | null>(
+      "platform_bp_site_file",
+      { _tenant: data.tenantId },
+    );
+    if (!file) return null;
+    const { publicOrigin, slugOrigin } = await siteAddressesOf({
+      slug: file.slug,
+      custom_domain: file.address.custom_domain,
+      custom_domain_status: file.address.custom_domain_status,
+    });
+    const flat = (details: unknown): Record<string, string> =>
+      Object.fromEntries(
+        Object.entries((details ?? {}) as Record<string, unknown>).map(([k, v]) => [
+          k,
+          typeof v === "string" ? v : JSON.stringify(v),
+        ]),
+      );
+    return {
+      ...file,
+      audit: file.audit.map((e) => ({ ...e, details: flat(e.details) })),
+      publicOrigin,
+      slugOrigin,
+    } satisfies PlatformSiteFile;
   });

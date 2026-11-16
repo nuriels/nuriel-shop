@@ -14,6 +14,7 @@ import { PREVIEW_DOC, PREVIEW_READY } from "./DraftPreview";
 import { DRAFT_QUERY } from "./StudioOverview";
 import { previewMediaMap, MediaLibraryPanel, useMediaLibrary } from "./editor/media";
 import { AccessibilityPanel } from "./editor/AccessibilityPanel";
+import { SeoPanel } from "./editor/SeoPanel";
 import {
   BlocksPanel,
   BusinessPanel,
@@ -237,6 +238,7 @@ export function StudioEditor() {
               <TabsTrigger value="testimonials">המלצות</TabsTrigger>
               <TabsTrigger value="media">תמונות</TabsTrigger>
               <TabsTrigger value="accessibility">הצהרת נגישות</TabsTrigger>
+              <TabsTrigger value="seo">SEO וגוגל</TabsTrigger>
             </TabsList>
             <div className="mt-4 rounded-lg border bg-background p-4">
               <TabsContent value="blocks">
@@ -262,6 +264,9 @@ export function StudioEditor() {
               </TabsContent>
               <TabsContent value="accessibility">
                 <AccessibilityPanel doc={doc} setDoc={setDoc} />
+              </TabsContent>
+              <TabsContent value="seo">
+                <SeoPanel doc={doc} setDoc={setDoc} />
               </TabsContent>
             </div>
           </Tabs>

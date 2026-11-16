@@ -180,6 +180,7 @@ M77=20261116090000_bp_engine
 M78=20261116100000_bp_media
 M79=20261116110000_bp_site_fonts
 M80=20261116120000_bp_inquiries
+M81=20261117090000_bp_site_address
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -222,6 +223,42 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- Nuriel Websites: the site address + the site file (migration 81) ----------
+expect "before the rollback: the redirect table (closed), the address functions for signed-in owners, the check result for the server only, draft saves logged" \
+  "SELECT to_regclass('public.tenant_host_redirects') IS NOT NULL
+      AND to_regclass('business_profile.domain_settings') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'public.tenant_host_redirects', 'SELECT')
+      AND has_function_privilege('authenticated', 'public.bp_slug_change(text,text)', 'EXECUTE')
+      AND has_function_privilege('service_role', 'public.bp_custom_domain_record_check(uuid,text,boolean,boolean,text,boolean,text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.bp_custom_domain_record_check(uuid,text,boolean,boolean,text,boolean,text)', 'EXECUTE')
+      AND pg_get_functiondef('public.bp_draft_save(jsonb,integer)'::regprocedure) LIKE '%draft.saved%'
+      AND pg_get_functiondef('public.ssl_agent_targets()'::regprocedure) LIKE '%alias%'"
+echo "rollback guard: $M81 refuses while an address redirects (old subdomain / second form of a custom domain)"
+q "INSERT INTO public.tenants (slug, name, site_type) VALUES ('rb-addr', 'עסק לבדיקת כתובת', 'business_profile')" >/dev/null
+q "INSERT INTO public.tenant_host_redirects (tenant_id, kind, name)
+   SELECT id, 'old_slug', 'rb-addr-old' FROM public.tenants WHERE slug = 'rb-addr'" >/dev/null
+if down "$M81" 2>/dev/null; then
+  echo "  FAIL rollback ran although a redirect exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT EXISTS (SELECT 1 FROM public.tenant_host_redirects WHERE name = 'rb-addr-old')"
+q "DELETE FROM public.tenant_host_redirects;
+   DELETE FROM public.site_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-addr');
+   DELETE FROM public.email_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-addr');
+   DELETE FROM public.tenants WHERE slug = 'rb-addr'" >/dev/null
+ref_upto "$M81"
+echo "rollback: $M81"
+down "$M81"
+expect "the redirect table, the domain settings and the address functions are gone; the shared functions are as before" \
+  "SELECT to_regclass('public.tenant_host_redirects') IS NULL
+      AND to_regclass('business_profile.domain_settings') IS NULL
+      AND to_regprocedure('public.bp_slug_change(text,text)') IS NULL
+      AND to_regprocedure('public.platform_bp_site_file(uuid)') IS NULL
+      AND pg_get_functiondef('public.bp_draft_save(jsonb,integer)'::regprocedure) NOT LIKE '%draft.saved%'
+      AND pg_get_functiondef('public.ssl_agent_targets()'::regprocedure) NOT LIKE '%alias%'
+      AND pg_get_functiondef('public.tenant_slug_problem(text)'::regprocedure) NOT LIKE '%tenant_host_redirects%'"
+same_as_ref "migration 80"
 
 # ---------- Nuriel Websites: inquiries from customers (migration 80) ----------
 expect "before the rollback: the closed inquiry tables (RLS), saving for the server only, the inbox for signed-in owners, the new permission" \
@@ -2582,11 +2619,18 @@ up "$M77"
 up "$M78"
 up "$M79"
 up "$M80"
+up "$M81"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')
       AND NOT has_function_privilege('anon', 'public.bp_draft_save(jsonb,integer)', 'EXECUTE')
       AND pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'tenants_site_type_check')) LIKE '%business_profile%'"
+expect "the site address is back: the redirect table (closed), the address functions, draft saves logged, the agent gets old subdomains" \
+  "SELECT to_regclass('public.tenant_host_redirects') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'public.tenant_host_redirects', 'SELECT')
+      AND has_function_privilege('authenticated', 'public.bp_address_state()', 'EXECUTE')
+      AND pg_get_functiondef('public.bp_draft_save(jsonb,integer)'::regprocedure) LIKE '%draft.saved%'
+      AND pg_get_functiondef('public.ssl_agent_targets()'::regprocedure) LIKE '%alias%'"
 expect "the inquiries are back: the closed tables, saving for the server only, the inbox for signed-in owners" \
   "SELECT to_regclass('business_profile.inquiries') IS NOT NULL
       AND NOT has_table_privilege('authenticated', 'business_profile.inquiries', 'SELECT')

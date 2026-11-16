@@ -30,6 +30,10 @@ export BUSINESS_PROFILE_ENGINE=on
 # ייבוא תמונות מקישור (Ecommerce 18, Hospitality 2e): בבדיקות בלבד מותר השם localhost — לשרת
 # התמונות המקומי של הבדיקה. כתובות IP פנימיות (127.0.0.1, 10.x, 169.254.x…) עדיין חסומות
 export IMPORT_IMAGE_ALLOW_HOSTS=localhost
+# כתובת האתר (מיגרציה 197): תשובות DNS קבועות לבדיקות — רק לשמות בסיומת .test (הבדיקה כותבת את הקובץ),
+# וכתובת שרת מטווח התיעוד (TEST-NET-3) להוראות ה-DNS. דומיינים אמיתיים — תמיד DNS אמיתי
+export DNS_TEST_FIXTURES="$ROOT/e2e/.dns-fixtures.json"
+export SERVER_PUBLIC_IPS=203.0.113.10
 if [ "${E2E_SKIP_BUILD:-}" != "1" ]; then bun run build >/dev/null; fi
 node "$ROOT/e2e/scripts/mock-services.mjs" &
 exec node .output/server/index.mjs

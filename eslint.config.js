@@ -60,6 +60,7 @@ const PLATFORM_AUTH_ADAPTERS = [
   "src/platform/pdf/hebrew.server.ts",
   "src/platform/tenancy/portal.server.ts",
   "src/platform/auth/admin-handoff.ts",
+  "src/platform/tenancy/domains.server.ts",
 ];
 // מתאמי הנתיבים של Hospitality: קבצי src/routes שהמסגרת דורשת, ונחשבים קוד של המנוע
 const HOSPITALITY_ROUTES = [
@@ -79,6 +80,7 @@ const BUSINESS_PROFILE_ROUTES = [
   "src/routes/studio.*.tsx",
   "src/routes/studio_.*.tsx",
   "src/routes/platform_.websites.tsx",
+  "src/routes/platform_.websites_.*.tsx",
 ];
 // ה-root של הנתבים ו-router.tsx: כמו קובץ כניסה — מגיעים למנועים רק דרך שורש ההרכבה
 const ROOT_ROUTE = "src/routes/__root.tsx";
@@ -138,7 +140,7 @@ export default tseslint.config(
     [],
     {
       regex:
-        "^@/(?!lib/auth\\.functions$|lib/login-code\\.functions$|lib/rate-limit\\.server$|lib/email\\.server$|lib/pwa-icon-render\\.server$|lib/portal$|lib/handoff\\.functions$|lib/pdf/heebo-regular$|lib/pdf/heebo-bold$|lib/pdf/rtl$|server/services/image-fetch$)(engines|app|routes|components|hooks|lib|server)(/|$)|^\\.\\./\\.\\./",
+        "^@/(?!lib/auth\\.functions$|lib/login-code\\.functions$|lib/rate-limit\\.server$|lib/email\\.server$|lib/pwa-icon-render\\.server$|lib/portal$|lib/handoff\\.functions$|lib/custom-domain$|lib/custom-domain-dns\\.server$|lib/pdf/heebo-regular$|lib/pdf/heebo-bold$|lib/pdf/rtl$|server/services/image-fetch$)(engines|app|routes|components|hooks|lib|server)(/|$)|^\\.\\./\\.\\./",
     },
     PLATFORM_MESSAGE,
     "/^@\\/(engines|app|routes|components|hooks|lib|server)(\\/|$)|^\\.\\.\\/\\.\\.\\//",

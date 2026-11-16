@@ -14,3 +14,14 @@ export async function gateEdgeRequest(
   if (!engine) return new Response("Not found", { status: 404 });
   return engine.gate(site, request);
 }
+
+/** מה שהשער של המנוע קורא מהבקשה: הנתיב, השיטה, ה-query, והכתובת בלי פורט (כפי ש-nginx העביר אותה) */
+export function edgeRequestOf(request: Request): EdgeRequest {
+  const url = new URL(request.url);
+  const host = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? url.host)
+    .split(",")[0]!
+    .trim()
+    .toLowerCase()
+    .replace(/:\d+$/, "");
+  return { pathname: url.pathname, method: request.method, host, search: url.search };
+}

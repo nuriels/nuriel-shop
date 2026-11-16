@@ -5,7 +5,7 @@
 import { ecommerceEngine } from "@/engines/ecommerce/engine";
 import { hospitalityEngine } from "@/engines/hospitality/engine";
 import { businessProfileEngine } from "@/engines/business-profile/engine";
-import { gateEdgeRequest } from "@/platform/engines/edge";
+import { edgeRequestOf, gateEdgeRequest } from "@/platform/engines/edge";
 import { createEngineGuard } from "@/platform/engines/engine-guard";
 import { createEngineRegistry } from "@/platform/engines/registry";
 
@@ -35,6 +35,6 @@ export async function gateSiteRequest(
   return gateEdgeRequest(
     engineRegistry,
     { ...site, siteType: await siteTypeOf(site.id) },
-    { pathname: new URL(request.url).pathname, method: request.method },
+    edgeRequestOf(request),
   );
 }

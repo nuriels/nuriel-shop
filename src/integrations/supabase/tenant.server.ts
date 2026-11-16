@@ -81,6 +81,48 @@ export async function resolveTenant(host: string): Promise<Tenant | null> {
   return tenant;
 }
 
+const redirectCache = new Map<string, { target: string | null; expires: number }>();
+
+/**
+ * מיגרציה 197: כתובת שלא שייכת לאף אתר, אבל מפנה לאתר — תת-דומיין ישן אחרי שינוי כתובת (שנה), או הצורה
+ * השנייה של דומיין אישי (www / בלי www). מחזיר את הכתובת הנוכחית של האתר (בלי נתיב) או null.
+ * נקרא רק כשהכתובת לא זוהתה (src/server.ts), עם מטמון קצר.
+ */
+export async function hostRedirectTarget(host: string): Promise<string | null> {
+  const hit = redirectCache.get(host);
+  if (hit && hit.expires > Date.now()) return hit.target;
+  const { url, key } = serviceEnv();
+  const res = await fetch(`${url}/rest/v1/rpc/tenant_redirect_for_host`, {
+    method: "POST",
+    headers: serviceHeaders(key),
+    body: JSON.stringify({ _host: host }),
+  });
+  let target: string | null = null;
+  if (res.ok) {
+    const rows = (await res.json()) as { tenant_id: string; kind: string }[];
+    const row = rows[0];
+    const { baseDomain } = platformEnv();
+    const fromOldSlug = row?.kind === "old_slug";
+    if (row && (!fromOldSlug || (baseDomain !== null && host.endsWith(`.${baseDomain}`)))) {
+      const tenant = await loadTenantById(row.tenant_id);
+      if (tenant && row.kind === "custom_alternate") {
+        target =
+          tenant.custom_domain && tenant.custom_domain_verified
+            ? `https://${tenant.custom_domain}`
+            : null;
+      } else if (tenant) {
+        try {
+          target = originForTenant(tenant);
+        } catch {
+          target = null;
+        }
+      }
+    }
+  }
+  redirectCache.set(host, { target, expires: Date.now() + CACHE_TTL_MS });
+  return target;
+}
+
 /**
  * ניקוי המטמון של חנות (למשל אחרי רכישת תוסף — חלק 15), כדי שהפיצ'ר ייפתח
  * מיד בבקשה הבאה ולא רק אחרי 15 שניות
@@ -88,6 +130,11 @@ export async function resolveTenant(host: string): Promise<Tenant | null> {
 export function invalidateTenantCache(tenantId: string): void {
   for (const [host, entry] of cache) {
     if (entry.tenant?.id === tenantId) cache.delete(host);
+  }
+  // שינוי כתובת / דומיין (מיגרציה 197): גם ההפניות וכתובות שלא זוהו (הכתובת החדשה) נבדקות מחדש
+  redirectCache.clear();
+  for (const [host, entry] of cache) {
+    if (entry.tenant === null || entry.tenant.is_default) cache.delete(host);
   }
 }
 
@@ -137,6 +184,11 @@ export async function loadTenantById(id: string): Promise<Tenant | null> {
 
 export function runWithTenant<T>(host: string, tenant: Tenant | null, fn: () => T): T {
   return storage.run({ host, tenant }, fn);
+}
+
+/** הכתובת (host) של הבקשה הנוכחית — כפי שזוהתה בכניסה לשרת; null מחוץ לבקשה */
+export function currentRequestHost(): string | null {
+  return storage.getStore()?.host ?? null;
 }
 
 /** החנות של הבקשה הנוכחית, או null מחוץ לבקשה / כשלא זוהתה */

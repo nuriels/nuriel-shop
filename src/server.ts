@@ -17,6 +17,7 @@ import {
   maybeCurrentTenant,
   requestHost,
   resolveTenant,
+  hostRedirectTarget,
   runWithTenant,
   storeLockReason,
 } from "./integrations/supabase/tenant.server";
@@ -163,6 +164,18 @@ async function route(request: Request, env: unknown, ctx: unknown): Promise<Resp
     }
     const tenant = await resolveTenant(host);
     if (!tenant || isUnknownStoreHost(host, tenant)) {
+      // מיגרציה 197: תת-דומיין ישן של אתר (אחרי שינוי כתובת) / הצורה השנייה של דומיין אישי → 301 לכתובת הנוכחית
+      const target = await hostRedirectTarget(host).catch(() => null);
+      if (target) {
+        const { pathname: path, search } = new URL(request.url);
+        return new Response(null, {
+          status: 301,
+          headers: {
+            location: `${target}${path}${search}`,
+            "cache-control": "public, max-age=3600",
+          },
+        });
+      }
       return new Response(STORE_NOT_FOUND_HTML, {
         status: 404,
         headers: { "content-type": "text/html; charset=utf-8" },

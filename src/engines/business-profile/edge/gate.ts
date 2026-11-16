@@ -64,7 +64,52 @@ export function robotsTxt(open: boolean, origin: string | null): string {
   return `${lines.join("\n")}\n`;
 }
 
+/** הכתובות של האתר (מיגרציה 197): הכתובת של הבקשה, תת-הדומיין בפלטפורמה, הכתובת הקנונית, הדומיין האישי */
+export interface SiteHosts {
+  requestHost: string | null;
+  slugHost: string | null;
+  canonicalOrigin: string | null;
+  customDomain: string | null;
+}
+
+/**
+ * ההחלטה לפי הכתובת — טהור (נבדק ביחידה). null = ממשיכים.
+ *  • ממשק הניהול והכניסה אליו רק בתת-הדומיין של Nuriel: בדומיין האישי → 302 לאותו נתיב בתת-הדומיין
+ *    (קוד כניסה וחיבור לניהול לא נוחתים על דומיין שה-DNS שלו בידי בעל העסק — כמו SEC-H2);
+ *  • עמודי האתר, robots.txt ו-sitemap.xml בתת-הדומיין, כשיש דומיין אישי פעיל (עם SSL) → 301 לדומיין
+ *    הקנוני — אין שתי כתובות לאותו תוכן בגוגל.
+ */
+export function hostRedirect(
+  pathname: string,
+  search: string,
+  hosts: SiteHosts | null,
+): string | null {
+  if (!hosts?.requestHost || !hosts.slugHost) return null;
+  const { requestHost, slugHost, canonicalOrigin, customDomain } = hosts;
+  if (isStudioPath(pathname) || ADMIN_LANDING.test(pathname)) {
+    return requestHost !== slugHost && requestHost === customDomain
+      ? `https://${slugHost}${pathname}${search}`
+      : null;
+  }
+  if (requestHost !== slugHost || !canonicalOrigin) return null;
+  let canonicalHost: string;
+  try {
+    canonicalHost = new URL(canonicalOrigin).hostname;
+  } catch {
+    return null;
+  }
+  if (canonicalHost === slugHost) return null;
+  const isPage =
+    (isPublicPagePath(pathname) && !isInternalSitePath(pathname)) ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
+    pathname === "/accessibility";
+  return isPage ? `${canonicalOrigin.replace(/\/+$/, "")}${pathname}${search}` : null;
+}
+
 export interface GateOptions {
+  /** הכתובות של האתר (להפניות לפי כתובת); בלי — אין הפניות */
+  hosts?: () => Promise<SiteHosts | null>;
   /** המנוע וממשק הניהול פעילים לאתר (מתג הסביבה + business_profile_enabled) */
   studioOpen: () => Promise<boolean>;
   /** יש גרסה מפורסמת שאושרה והאתר פתוח לציבור */
@@ -82,6 +127,20 @@ export async function businessProfileGate(
 ): Promise<Response | null> {
   const { pathname } = request;
   if (pathname.startsWith("/_serverFn")) return null;
+
+  if (opts.hosts && request.host && (request.method === "GET" || request.method === "HEAD")) {
+    const target = hostRedirect(pathname, request.search ?? "", await opts.hosts());
+    if (target) {
+      const studio = isStudioPath(pathname) || ADMIN_LANDING.test(pathname);
+      return new Response(null, {
+        status: studio ? 302 : 301,
+        headers: {
+          location: target,
+          "cache-control": studio ? "no-store" : "public, max-age=3600",
+        },
+      });
+    }
+  }
 
   if (pathname === "/robots.txt") {
     const open = site.status === "active" && (await opts.siteOpen());

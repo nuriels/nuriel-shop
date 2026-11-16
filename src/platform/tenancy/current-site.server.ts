@@ -70,3 +70,56 @@ export async function invalidateSiteCache(siteId: string): Promise<void> {
   const { invalidateTenantCache } = await import("@/integrations/supabase/tenant.server");
   invalidateTenantCache(siteId);
 }
+
+/**
+ * מיגרציה 197 (כתובת האתר): הכתובות של האתר של הבקשה — הכתובת שאליה הגיעה הבקשה, תת-הדומיין בפלטפורמה
+ * (הניהול תמיד בו), הכתובת הקנונית (דומיין אישי פעיל עם SSL, אחרת תת-הדומיין) והדומיין האישי אם חובר.
+ * מרשומת האתר במסד; הכתובת של הבקשה — רק כדי להשוות אליה.
+ */
+export async function currentSiteHosts(): Promise<{
+  requestHost: string | null;
+  slugHost: string | null;
+  canonicalOrigin: string | null;
+  customDomain: string | null;
+} | null> {
+  const { maybeCurrentTenant, originForTenant, tenantBaseDomain, currentRequestHost } =
+    await import("@/integrations/supabase/tenant.server");
+  const tenant = maybeCurrentTenant();
+  if (!tenant) return null;
+  const base = tenantBaseDomain();
+  let canonicalOrigin: string | null = null;
+  try {
+    canonicalOrigin = originForTenant(tenant);
+  } catch {
+    canonicalOrigin = null;
+  }
+  return {
+    requestHost: currentRequestHost(),
+    slugHost: base ? `${tenant.slug}.${base}` : null,
+    canonicalOrigin,
+    customDomain: tenant.custom_domain,
+  };
+}
+
+/** הכתובות של אתר מהשורה שלו (לפאנל הפלטפורמה): הכתובת הציבורית (קנונית) והכתובת בפלטפורמה */
+export async function siteAddressesOf(site: {
+  slug: string;
+  custom_domain: string | null;
+  custom_domain_status: string | null;
+}): Promise<{ publicOrigin: string | null; slugOrigin: string | null; baseDomain: string | null }> {
+  const { originForTenant, slugOriginForTenant, tenantBaseDomain } =
+    await import("@/integrations/supabase/tenant.server");
+  const safe = (fn: () => string) => {
+    try {
+      return fn();
+    } catch {
+      return null;
+    }
+  };
+  const row = { ...site, domain: null, is_default: false };
+  return {
+    publicOrigin: safe(() => originForTenant(row)),
+    slugOrigin: safe(() => slugOriginForTenant(row)),
+    baseDomain: tenantBaseDomain(),
+  };
+}

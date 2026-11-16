@@ -51,6 +51,17 @@ function AdminHandoffPage() {
     const code = params.get("code") ?? "";
     const portal = params.get("from") === "portal";
     const switching = params.get("from") === "switch";
+    // מיגרציה 197: באתר עסק — לאן בממשק הניהול (מתיק האתר בפאנל: עריכה / תצוגה מקדימה). רשימה סגורה בלבד
+    const STUDIO_TARGETS: Record<string, string> = {
+      editor: "/studio/editor",
+      preview: "/studio/preview",
+      settings: "/studio/settings",
+      inbox: "/studio/inbox",
+    };
+    const then =
+      hostMode.siteType === "business_profile"
+        ? (STUDIO_TARGETS[params.get("then") ?? ""] ?? null)
+        : null;
     // הקוד יוצא מהכתובת מיד — לא נשאר בהיסטוריה ולא בשורת הכתובת
     window.history.replaceState(null, "", window.location.pathname);
     if (!code) {
@@ -74,12 +85,12 @@ function AdminHandoffPage() {
           refresh_token: cleanAscii(refreshToken, "refresh_token") ?? "",
         });
         if (sessionError) throw sessionError;
-        await router.navigate({ to: landing, replace: true });
+        await router.navigate({ to: then ?? landing, replace: true });
       } catch (thrown) {
         setError(thrown instanceof Error ? thrown.message : "הכניסה לניהול החנות נכשלה");
       }
     })();
-  }, [redeem, router]);
+  }, [redeem, router, hostMode.siteType]);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4">

@@ -24,6 +24,10 @@ export interface SiteRef {
 export interface EdgeRequest {
   pathname: string;
   method: string;
+  /** הכתובת (host) של הבקשה, בלי פורט — למנוע שמבחין בין כתובות של אותו אתר (מיגרציה 197) */
+  host?: string;
+  /** ה-query של הבקשה ("?x=1" או "") — להפניות ששומרות אותו */
+  search?: string;
 }
 
 export interface Engine {

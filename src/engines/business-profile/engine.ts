@@ -26,6 +26,8 @@ export const businessProfileEngine: Engine = {
       import("./access.server"),
     ]);
     return businessProfileGate(site, request, {
+      hosts: async () =>
+        (await import("@/platform/tenancy/current-site.server")).currentSiteHosts(),
       studioOpen: () => studioEnabled(site.id),
       siteOpen: () => siteEnabled(site.id),
       siteOrigin: async () => (await import("./data/seo.server")).canonicalSiteOrigin(),
