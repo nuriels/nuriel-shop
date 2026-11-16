@@ -8,6 +8,9 @@ const he = (text: string): LocalizedText => ({ he: text });
 const button = z
   .object({ label: localized(60), href: safeLink })
   .catch({ label: { he: "" }, href: "" });
+const image = imageRef;
+/** שקיפות שכבת הצבע על תמונת רקע (0–90); null = לפי התבנית */
+const overlay = z.number().int().min(0).max(90).nullable().catch(null);
 const paragraphs = (max: number, each: number) =>
   z
     .array(localized(each))
@@ -21,21 +24,34 @@ export const BLOCK_DEFINITIONS = {
     version: 1,
     schema: z.object({
       eyebrow: localized(80),
+      /** שורה קטנה בתחילת הכותרת הראשית (באותו H1) */
+      titleLead: localized(120),
       title: localized(140),
       subtitle: localized(300),
+      /** משפט מודגש אחרי משפט המשנה */
+      tagline: localized(200),
       image: imageRef,
+      /** הלוגו של העסק בתוך הפתיח (מעל הכותרת) */
+      showLogo: z.boolean().catch(false),
       primary: button,
+      primaryIcon: z.enum(["none", "whatsapp"]).catch("none"),
       secondary: button,
       layout: z.enum(["split", "centered", "cover"]).catch("split"),
+      overlay,
     }),
     defaults: () => ({
       eyebrow: he(""),
+      titleLead: he(""),
       title: he("שם העסק"),
       subtitle: he("משפט קצר שמסביר מה העסק עושה ולמי"),
+      tagline: he(""),
       image: { media: null, alt: he("") },
+      showLogo: false,
       primary: { label: he("לשיחת היכרות"), href: "#contact" },
+      primaryIcon: "none" as "none" | "whatsapp",
       secondary: { label: he(""), href: "" },
-      layout: "split" as const,
+      layout: "split" as "split" | "centered" | "cover",
+      overlay: null as number | null,
     }),
   },
   about: {
@@ -46,6 +62,10 @@ export const BLOCK_DEFINITIONS = {
       title: localized(140),
       paragraphs: paragraphs(14, 1500),
       image: imageRef,
+      /** כותרת כתמונה (למשל סרט עם שם): מוצגת במקום הכותרת הכתובה, שנשארת לקוראי מסך */
+      titleImage: imageRef,
+      /** קרוסלת תמונות (במקום התמונה הבודדת); לכל תמונה כפתור משלה, לא חובה */
+      slides: z.array(z.object({ image, button })).max(8).catch([]),
       highlights: z
         .array(z.object({ value: localized(20), label: localized(80) }))
         .max(4)
@@ -56,14 +76,30 @@ export const BLOCK_DEFINITIONS = {
       title: he("קצת עליי"),
       paragraphs: [he("כמה מילים על העסק, הניסיון והגישה.")],
       image: { media: null, alt: he("") },
+      titleImage: { media: null, alt: he("") },
+      slides: [] as {
+        image: { media: string | null; alt: LocalizedText };
+        button: { label: LocalizedText; href: string };
+      }[],
       highlights: [] as { value: LocalizedText; label: LocalizedText }[],
     }),
   },
   services: {
     label: he("שירותים"),
     version: 1,
-    schema: z.object({ eyebrow: localized(80), title: localized(140), intro: localized(500) }),
-    defaults: () => ({ eyebrow: he(""), title: he("השירותים"), intro: he("") }),
+    schema: z.object({
+      eyebrow: localized(80),
+      title: localized(140),
+      /** המשך הכותרת בצבע אחר (למשל "המומחיות" + "שלי") */
+      titleAccent: localized(60),
+      intro: localized(500),
+    }),
+    defaults: () => ({
+      eyebrow: he(""),
+      title: he("השירותים"),
+      titleAccent: he(""),
+      intro: he(""),
+    }),
   },
   portfolio: {
     label: he("תיק עבודות"),
@@ -71,23 +107,48 @@ export const BLOCK_DEFINITIONS = {
     schema: z.object({
       eyebrow: localized(80),
       title: localized(140),
+      titleAccent: localized(60),
       intro: localized(500),
       filter: z.boolean().catch(true),
+      /** כפתור "הכול" בסינון; בלי — הקטגוריה הראשונה פתוחה (כמו לשוניות) */
+      showAll: z.boolean().catch(true),
+      /** רשת אחידה, או Masonry (כל עבודה ביחס המקורי שלה) */
+      layout: z.enum(["grid", "masonry"]).catch("grid"),
       showTitles: z.boolean().catch(true),
     }),
     defaults: () => ({
       eyebrow: he(""),
       title: he("תיק עבודות"),
+      titleAccent: he(""),
       intro: he(""),
       filter: true,
+      showAll: true,
+      layout: "grid" as "grid" | "masonry",
       showTitles: true,
     }),
   },
   testimonials: {
     label: he("המלצות"),
     version: 1,
-    schema: z.object({ eyebrow: localized(80), title: localized(140), intro: localized(500) }),
-    defaults: () => ({ eyebrow: he(""), title: he("מה אומרים עליי"), intro: he("") }),
+    schema: z.object({
+      eyebrow: localized(80),
+      title: localized(140),
+      titleAccent: localized(60),
+      intro: localized(500),
+      /** כרטיסים, או גלילה רציפה (מתאימה להמלצות שהן תמונות) */
+      layout: z.enum(["cards", "marquee"]).catch("cards"),
+      button,
+      background: imageRef,
+    }),
+    defaults: () => ({
+      eyebrow: he(""),
+      title: he("מה אומרים עליי"),
+      titleAccent: he(""),
+      intro: he(""),
+      layout: "cards" as "cards" | "marquee",
+      button: { label: he(""), href: "" },
+      background: { media: null, alt: he("") },
+    }),
   },
   cta: {
     label: he("קריאה לפעולה"),
@@ -126,6 +187,65 @@ export const BLOCK_DEFINITIONS = {
       showPhone: true,
       showEmail: true,
       form: false,
+    }),
+  },
+  form: {
+    label: he("טופס פנייה"),
+    version: 1,
+    schema: z.object({
+      title: localized(160),
+      /** הכותרת לצד הטופס, או מעליו */
+      layout: z.enum(["beside", "stacked"]).catch("beside"),
+      /** רקע בהיר (עם תמונת רקע אופציונלית) או כהה */
+      tone: z.enum(["light", "dark"]).catch("light"),
+      background: imageRef,
+      fields: z
+        .object({
+          name: localized(60),
+          email: localized(60),
+          phone: localized(60),
+          message: localized(80),
+        })
+        .catch({
+          name: he("שם"),
+          email: he("אימייל"),
+          phone: he("טלפון"),
+          message: he("במה אוכל לעזור?"),
+        }),
+      submit: localized(60),
+    }),
+    defaults: () => ({
+      title: he("השאירו פרטים ונחזור אליכם"),
+      layout: "beside" as "beside" | "stacked",
+      tone: "light" as "light" | "dark",
+      background: { media: null, alt: he("") },
+      fields: {
+        name: he("שם"),
+        email: he("אימייל"),
+        phone: he("טלפון"),
+        message: he("במה אוכל לעזור?"),
+      },
+      submit: he("שליחה"),
+    }),
+  },
+  media: {
+    label: he("תמונה"),
+    version: 1,
+    schema: z.object({
+      image: imageRef,
+      align: z.enum(["start", "center", "end"]).catch("center"),
+      /** רוחב מרבי בפיקסלים */
+      width: z.number().int().min(40).max(1400).catch(320),
+      /** במסך צר: יישור ורוחב אחרים (same / 0 = כמו במסך רחב) */
+      alignNarrow: z.enum(["same", "start", "center", "end"]).catch("same"),
+      widthNarrow: z.number().int().min(0).max(1400).catch(0),
+    }),
+    defaults: () => ({
+      image: { media: null, alt: he("") },
+      align: "center" as "start" | "center" | "end",
+      width: 320,
+      alignNarrow: "same" as "same" | "start" | "center" | "end",
+      widthNarrow: 0,
     }),
   },
   text: {

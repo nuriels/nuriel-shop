@@ -13,8 +13,19 @@ export type MediaMap = Record<
   }
 >;
 
+export interface MediaFont {
+  family: string;
+  weight: string;
+  style: "normal" | "italic";
+  unicode_range: string;
+  license: string;
+}
+
 export interface MediaItem {
   id: string;
+  /** תמונה או גופן (WOFF2) */
+  kind: "image" | "font";
+  font: MediaFont | null;
   url: string;
   thumb: string;
   width: number | null;

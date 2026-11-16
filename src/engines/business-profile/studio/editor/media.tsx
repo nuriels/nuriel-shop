@@ -148,20 +148,46 @@ export function MediaLibraryPanel() {
       <p className="text-xs text-muted-foreground">
         JPG, PNG, WEBP או AVIF, עד 12MB. כל תמונה נשמרת בכמה גדלים, בלי פרטי מיקום ומכשיר.
       </p>
-      {q.data && q.data.items.length === 0 && <p className="text-sm">עוד אין תמונות.</p>}
+      {q.data && q.data.items.filter((i) => i.kind === "image").length === 0 && (
+        <p className="text-sm">עוד אין תמונות.</p>
+      )}
       <ul className="grid grid-cols-2 gap-3">
-        {q.data?.items.map((item) => (
-          <li key={item.id} className="space-y-2 rounded-md border p-2">
-            <img
-              src={item.thumb}
-              alt={item.alt.he || ""}
-              className="aspect-[4/3] w-full rounded object-cover"
-              loading="lazy"
-            />
-            <AltEditor item={item} />
-          </li>
-        ))}
+        {q.data?.items
+          .filter((i) => i.kind === "image")
+          .map((item) => (
+            <li key={item.id} className="space-y-2 rounded-md border p-2">
+              <img
+                src={item.thumb}
+                alt={item.alt.he || ""}
+                className="aspect-[4/3] w-full rounded object-cover"
+                loading="lazy"
+              />
+              <AltEditor item={item} />
+            </li>
+          ))}
       </ul>
+      {q.data && q.data.items.some((i) => i.kind === "font") && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">גופנים</h3>
+          <ul className="space-y-1 text-sm">
+            {q.data.items
+              .filter((i) => i.kind === "font")
+              .map((item) => (
+                <li
+                  key={item.id}
+                  className="flex items-center justify-between gap-2 rounded border px-2 py-1"
+                >
+                  <span dir="ltr">
+                    {item.font?.family} · {item.font?.weight}
+                    {item.font?.unicode_range ? ` · ${item.font.unicode_range.slice(0, 24)}…` : ""}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{mb(item.size_bytes)}</span>
+                </li>
+              ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">גופנים מעלים ומחברים בלשונית "עיצוב".</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -178,7 +204,9 @@ export function ImageField({
 }) {
   const q = useMediaLibrary();
   const [open, setOpen] = useState(false);
-  const current = value.media ? q.data?.items.find((i) => i.id === value.media) : undefined;
+  const current = value.media
+    ? q.data?.items.find((i) => i.id === value.media && i.kind === "image")
+    : undefined;
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium">{label}</p>
@@ -215,31 +243,33 @@ export function ImageField({
           <div className="space-y-4 p-4">
             <UploadButton />
             <ul className="grid grid-cols-3 gap-2">
-              {q.data?.items.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className="block w-full overflow-hidden rounded border-2 border-transparent focus-visible:border-primary aria-pressed:border-primary"
-                    aria-pressed={item.id === value.media}
-                    aria-label={
-                      item.alt.he
-                        ? `בחירת "${item.alt.he}"`
-                        : `בחירת ${item.original_name ?? "תמונה"}`
-                    }
-                    onClick={() => {
-                      onChange({ media: item.id, alt: item.alt.he ? item.alt : value.alt });
-                      setOpen(false);
-                    }}
-                  >
-                    <img
-                      src={item.thumb}
-                      alt=""
-                      className="aspect-square w-full object-cover"
-                      loading="lazy"
-                    />
-                  </button>
-                </li>
-              ))}
+              {q.data?.items
+                .filter((i) => i.kind === "image")
+                .map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className="block w-full overflow-hidden rounded border-2 border-transparent focus-visible:border-primary aria-pressed:border-primary"
+                      aria-pressed={item.id === value.media}
+                      aria-label={
+                        item.alt.he
+                          ? `בחירת "${item.alt.he}"`
+                          : `בחירת ${item.original_name ?? "תמונה"}`
+                      }
+                      onClick={() => {
+                        onChange({ media: item.id, alt: item.alt.he ? item.alt : value.alt });
+                        setOpen(false);
+                      }}
+                    >
+                      <img
+                        src={item.thumb}
+                        alt=""
+                        className="aspect-square w-full object-cover"
+                        loading="lazy"
+                      />
+                    </button>
+                  </li>
+                ))}
             </ul>
           </div>
         </SheetContent>

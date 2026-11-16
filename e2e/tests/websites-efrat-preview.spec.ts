@@ -95,7 +95,7 @@ test("Efrat's draft on a computer: her texts, services and titled works; nothing
   });
   // the same content in the second template (Portfolio) — only in the preview, nothing is saved
   await page.getByRole("tab", { name: "עיצוב" }).click();
-  await page.getByRole("radio", { name: /תיק עבודות/ }).check();
+  await page.getByRole("radio", { name: /^תיק עבודות/ }).check();
   await expect(page.getByText("כל הצבעים עוברים את בדיקת הניגודיות (AA).")).toBeVisible();
   const frame = page.frameLocator('iframe[title="תצוגה מקדימה של האתר"]');
   await expect(frame.locator('[data-template="portfolio"]')).toBeVisible();

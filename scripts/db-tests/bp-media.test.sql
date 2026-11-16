@@ -73,8 +73,8 @@ SELECT tests.check('bp media: the table is closed to the API (RLS); guests may o
        AND NOT has_function_privilege('anon', 'public.bp_media_list()', 'EXECUTE')
        AND NOT has_function_privilege('anon', 'public.bp_media_add(uuid,text,jsonb,integer,integer,bigint,jsonb,text)', 'EXECUTE')
        AND NOT has_function_privilege('authenticated', 'business_profile._media_ids(jsonb)', 'EXECUTE')$$);
-SELECT tests.check('bp media: the bucket is public for reading, WebP / AVIF only, up to 8MB',
-  $$SELECT public AND file_size_limit = 8388608 AND allowed_mime_types = ARRAY['image/webp', 'image/avif']
+SELECT tests.check('bp media: the bucket is public for reading, WebP / AVIF (+ WOFF2 site fonts, migration 195) only, up to 8MB',
+  $$SELECT public AND file_size_limit = 8388608 AND allowed_mime_types = ARRAY['image/webp', 'image/avif', 'font/woff2']
       FROM storage.buckets WHERE id = 'bp-media'$$);
 SELECT tests.check('bp media: the default quota is 200MB per site',
   format($$SELECT (SELECT media_quota_bytes FROM business_profile.sites WHERE tenant_id = %L) = 209715200$$, :'m1'));

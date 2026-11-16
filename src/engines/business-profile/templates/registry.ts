@@ -13,6 +13,16 @@ export interface TemplateDefinition {
   className: string;
   /** עיצוב הפתיח כשהמסמך לא קבע */
   heroLayout: "split" | "centered" | "cover";
+  /** צבעים נוספים שהתבנית משתמשת בהם (מעבר לערכת הצבעים הבסיסית) — עם שם וברירת מחדל; העורך מציג אותם */
+  tokens?: readonly TemplateToken[];
+  /** הגופנים של התבנית לכל תפקיד, כשהמסמך לא קבע */
+  fonts?: Partial<Record<"display" | "heading" | "body" | "ui", string>>;
+}
+
+export interface TemplateToken {
+  key: string;
+  label: string;
+  default: string;
 }
 
 export const TEMPLATES: Record<TemplateKey, TemplateDefinition> = {
@@ -38,6 +48,35 @@ export const TEMPLATES: Record<TemplateKey, TemplateDefinition> = {
     className: "bps-portfolio",
     heroLayout: "cover",
   },
+  classic: {
+    key: "classic",
+    label: { he: "קלאסית", en: "Classic" },
+    description: {
+      he: "דף נחיתה קלאסי: פתיח עם תמונת רקע, טופס, אודות עם קרוסלה, המלצות בגלילה, כרטיסי שירות עם אייקונים ותיק עבודות בלשוניות. מתאים גם לשחזור אתר קיים.",
+      en: "Classic landing page: photo hero, lead form, carousel, testimonial ticker, icon cards, tabbed portfolio.",
+    },
+    status: "available",
+    className: "bps-classic",
+    heroLayout: "cover",
+    fonts: { display: "Heebo", heading: "Assistant", body: "Assistant", ui: "Roboto" },
+    // ברירות המחדל עוברות ניגודיות AA; אתר שמשחזר עיצוב קיים קובע את הצבעים שלו במסמך
+    tokens: [
+      { key: "title", label: "כותרות המקטעים", default: "#542510" },
+      { key: "cardTitle", label: "כותרות הכרטיסים", default: "#9C5E44" },
+      { key: "tabBg", label: "לשוניות — רקע", default: "#AED1C1" },
+      { key: "tabText", label: "לשוניות — טקסט", default: "#3E4347" },
+      { key: "tabActive", label: "לשונית פעילה", default: "#9E5B3D" },
+      { key: "iconBg1", label: "עיגול אייקון 1", default: "#E9D0C7" },
+      { key: "iconBg2", label: "עיגול אייקון 2", default: "#D4DBB2" },
+      { key: "iconBg3", label: "עיגול אייקון 3", default: "#AED1C1" },
+      { key: "band", label: "רקע מקטע בהיר", default: "#EFEFEF" },
+      { key: "dark", label: "רקע מקטע כהה", default: "#3D2C23" },
+      { key: "softButton", label: "כפתור על רקע צבעוני", default: "#FEFBF3" },
+      { key: "inputBorder", label: "מסגרת שדות", default: "#69727D" },
+      { key: "footerBg", label: "פוטר — רקע", default: "#000000" },
+      { key: "footerText", label: "פוטר — טקסט", default: "#FFFFFF" },
+    ],
+  },
   professional: planned("professional", "מקצועית", "Professional"),
   creative: planned("creative", "יצירתית", "Creative"),
   minimal: planned("minimal", "מינימליסטית", "Minimal"),
@@ -62,3 +101,13 @@ export function templateOf(key: TemplateKey): TemplateDefinition {
 }
 
 export const AVAILABLE_TEMPLATES = Object.values(TEMPLATES).filter((t) => t.status === "available");
+
+/** ערך צבע נוסף של התבנית: מהמסמך אם נקבע, אחרת ברירת המחדל של התבנית */
+export function templateTokens(
+  template: TemplateDefinition,
+  values: Record<string, string>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const tk of template.tokens ?? []) out[tk.key] = values[tk.key] ?? tk.default;
+  return out;
+}

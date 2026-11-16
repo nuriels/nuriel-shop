@@ -139,7 +139,7 @@ test("colors are checked for contrast while editing (AA); the built-in palette p
     page.getByText(/ניגודיות נמוכה — טקסט משני על הרקע: [\d.]+:1 \(נדרש 4\.5:1\)/),
   ).toBeVisible();
   // the template palette brings the colors back
-  await page.getByRole("radio", { name: /Portfolio|תיק עבודות/ }).check();
+  await page.getByRole("radio", { name: /^(Portfolio|תיק עבודות)/ }).check();
   await expect(page.getByText("כל הצבעים עוברים את בדיקת הניגודיות (AA).")).toBeVisible();
 });
 

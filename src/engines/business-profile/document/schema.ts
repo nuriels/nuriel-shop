@@ -14,6 +14,7 @@ export const DEFAULT_LOCALE: Locale = "he";
 export const TEMPLATE_KEYS = [
   "elegant",
   "portfolio",
+  "classic",
   "professional",
   "creative",
   "minimal",
@@ -57,33 +58,71 @@ export const imageRef = z
   .catch({ media: null, alt: { he: "" } });
 export type ImageRef = z.infer<typeof imageRef>;
 
+const listOf = <T extends z.ZodTypeAny>(item: T, max: number) =>
+  z
+    .array(z.unknown())
+    .catch([])
+    .transform((arr) =>
+      arr
+        .map((x) => item.safeParse(x))
+        .filter((r): r is z.SafeParseSuccess<z.infer<T>> => r.success)
+        .map((r) => r.data)
+        .slice(0, max),
+    );
+
+// ---------- גופני האתר ----------
+// קובצי WOFF2 בספריית המדיה של האתר (למשל הגופנים של האתר הישן — מועתקים לפי הרישיון שלהם). השם, המשקל והטווח
+// נבדקים בדפוס קשיח, כי הם נכנסים ל-CSS (@font-face): אין דרך להכניס תו שסוגר את הכלל.
+export const FONT_FAMILY = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,47}$/;
+export const FONT_WEIGHT = /^[1-9]00( [1-9]00)?$/;
+export const UNICODE_RANGE =
+  /^(|U\+[0-9A-Fa-f?]{1,6}(-[0-9A-Fa-f]{1,6})?(, ?U\+[0-9A-Fa-f?]{1,6}(-[0-9A-Fa-f]{1,6})?){0,250})$/;
+export const MAX_SITE_FONTS = 30;
+export const siteFont = z.object({
+  family: z.string().regex(FONT_FAMILY),
+  weight: z.string().regex(FONT_WEIGHT).catch("400"),
+  style: z.enum(["normal", "italic"]).catch("normal"),
+  unicodeRange: z.string().max(4000).regex(UNICODE_RANGE).catch(""),
+  file: z.object({ media: z.string().uuid() }),
+});
+export type SiteFont = z.infer<typeof siteFont>;
+/** גופן לתפקיד (תצוגה / כותרות / טקסט / שדות): שם משפחה של גופן אתר או גופן מובנה; ריק = ברירת המחדל של התבנית */
+const fontRole = z
+  .string()
+  .trim()
+  .max(48)
+  .refine((v) => v === "" || FONT_FAMILY.test(v))
+  .catch("");
+export const FONT_ROLES = ["display", "heading", "body", "ui"] as const;
+export type FontRole = (typeof FONT_ROLES)[number];
+
 // ---------- ערכת העיצוב ----------
 export const RADII = ["sharp", "soft", "round"] as const;
-export const theme = z
-  .object({
-    palette: z
-      .object({
-        background: color("#faf7f2"),
-        surface: color("#ffffff"),
-        text: color("#2b2420"),
-        muted: color("#6b5f57"),
-        accent: color("#7a4e3f"),
-        accentText: color("#ffffff"),
-        soft: color("#efe6dc"),
-      })
-      .catch({
-        background: "#faf7f2",
-        surface: "#ffffff",
-        text: "#2b2420",
-        muted: "#6b5f57",
-        accent: "#7a4e3f",
-        accentText: "#ffffff",
-        soft: "#efe6dc",
-      }),
-    radius: z.enum(RADII).catch("soft"),
-  })
-  .catch({
-    palette: {
+/** צבעים נוספים שתבנית מגדירה (למשל "קלאסית": צבע כותרות, לשוניות, עיגולי אייקונים) — רק #rrggbb */
+export const TOKEN_KEY = /^[a-z][a-zA-Z0-9]{1,30}$/;
+const tokens = z
+  .record(z.unknown())
+  .catch({})
+  .transform(
+    (rec) =>
+      Object.fromEntries(
+        Object.entries(rec)
+          .filter(([k, v]) => TOKEN_KEY.test(k) && typeof v === "string" && HEX.test(v))
+          .slice(0, 40),
+      ) as Record<string, string>,
+  );
+const themeObject = z.object({
+  palette: z
+    .object({
+      background: color("#faf7f2"),
+      surface: color("#ffffff"),
+      text: color("#2b2420"),
+      muted: color("#6b5f57"),
+      accent: color("#7a4e3f"),
+      accentText: color("#ffffff"),
+      soft: color("#efe6dc"),
+    })
+    .catch({
       background: "#faf7f2",
       surface: "#ffffff",
       text: "#2b2420",
@@ -91,9 +130,23 @@ export const theme = z
       accent: "#7a4e3f",
       accentText: "#ffffff",
       soft: "#efe6dc",
-    },
-    radius: "soft",
-  });
+    }),
+  radius: z.enum(RADII).catch("soft"),
+  tokens,
+  fonts: listOf(siteFont, MAX_SITE_FONTS),
+  typography: z
+    .object({ display: fontRole, heading: fontRole, body: fontRole, ui: fontRole })
+    .catch({ display: "", heading: "", body: "", ui: "" }),
+  /** חלקי האתר: כותרת עליונה (פס / בלי), פוטר (מלא / רצועה), כפתור WhatsApp צף */
+  chrome: z
+    .object({
+      header: z.enum(["bar", "none"]).catch("bar"),
+      footer: z.enum(["full", "strip"]).catch("full"),
+      floatingWhatsapp: z.boolean().catch(true),
+    })
+    .catch({ header: "bar", footer: "full", floatingWhatsapp: true }),
+});
+export const theme = themeObject.catch(() => themeObject.parse({}));
 export type Theme = z.infer<typeof theme>;
 
 // ---------- פרטי העסק ----------
@@ -146,18 +199,6 @@ export const MAX_TESTIMONIALS = 60;
 export const MAX_PORTFOLIO_ITEMS = 200;
 export const MAX_PORTFOLIO_CATEGORIES = 20;
 
-const listOf = <T extends z.ZodTypeAny>(item: T, max: number) =>
-  z
-    .array(z.unknown())
-    .catch([])
-    .transform((arr) =>
-      arr
-        .map((x) => item.safeParse(x))
-        .filter((r): r is z.SafeParseSuccess<z.infer<T>> => r.success)
-        .map((r) => r.data)
-        .slice(0, max),
-    );
-
 export const service = z.object({
   id: idSchema,
   title: localized(120),
@@ -167,6 +208,12 @@ export const service = z.object({
     .regex(/^[a-z-]{2,30}$/)
     .nullable()
     .catch(null),
+  /** אייקון כתמונה מספריית המדיה, וצבע העיגול שמאחוריו (ריק = לפי התבנית) */
+  iconImage: imageRef,
+  iconBg: z
+    .string()
+    .refine((v) => v === "" || HEX.test(v))
+    .catch(""),
   hidden: z.boolean().catch(false),
 });
 export type Service = z.infer<typeof service>;
@@ -189,6 +236,8 @@ export const portfolioItem = z.object({
   text: localized(600),
   categories: z.array(idSchema).max(5).catch([]),
   image: imageRef,
+  /** איפה מוצג: בכל מכשיר, רק במחשב או רק בנייד (כמו "הסתרה לפי מכשיר" באתרים קיימים) */
+  devices: z.enum(["all", "desktop", "mobile"]).catch("all"),
   hidden: z.boolean().catch(false),
 });
 export type PortfolioCategory = z.infer<typeof portfolioCategory>;

@@ -1,7 +1,8 @@
 // ספריית המדיה בממשק הניהול (מיגרציה 194): רשימה, העלאה, טקסט חלופי ומחיקה. הקבצים נבדקים ומקודדים מחדש
 // בשרת (data/media.server.ts) ונשמרים בדלי עם הטוקן של המשתמש; הרשומות — רק דרך פונקציות המסד.
 import { createServerFn } from "@tanstack/react-start";
-import type { MediaLibrary } from "../types";
+import { FONT_FAMILY, FONT_WEIGHT, UNICODE_RANGE } from "../document/schema";
+import type { MediaFont, MediaLibrary } from "../types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuidOf = (v: unknown) => {
@@ -20,6 +21,8 @@ const altOf = (v: unknown) => {
 type RawLibrary = {
   items: {
     id: string;
+    kind?: "image" | "font";
+    font?: MediaFont | null;
     storage_path: string;
     variants: Record<string, string>;
     width: number | null;
@@ -44,6 +47,8 @@ async function library(): Promise<MediaLibrary> {
     quota_bytes: Number(raw.quota_bytes),
     items: raw.items.map((m) => ({
       id: m.id,
+      kind: m.kind === "font" ? ("font" as const) : ("image" as const),
+      font: m.kind === "font" ? (m.font ?? null) : null,
       url: publicUrl(m.storage_path)!,
       thumb: publicUrl(m.variants["480"] ?? m.storage_path)!,
       width: m.width,
@@ -116,6 +121,88 @@ export const studioUploadMedia = createServerFn({ method: "POST" })
       throw error;
     }
     return library();
+  });
+
+/** גופן אתר (WOFF2): נבדקת החתימה והגודל, והפרטים (משפחה, משקל, סגנון, טווח) בדפוסים קשיחים — הם נכנסים ל-CSS.
+ * הקובץ נשמר כמו שהוא (הדפדפן מאמת גופנים בעצמו). רק למי שרשאי לערוך את האתר (המסד בודק שוב). */
+export const FONT_MAX_BYTES = 2 * 1024 * 1024;
+export const studioUploadFont = createServerFn({ method: "POST" })
+  .inputValidator((data: FormData) => {
+    if (!(data instanceof FormData)) throw new Error("בקשה לא תקינה");
+    const file = data.get("file");
+    if (!(file instanceof File) || file.size === 0) throw new Error("לא נבחר קובץ");
+    if (file.size > FONT_MAX_BYTES) throw new Error("קובץ הגופן גדול מדי — עד 2MB");
+    const str = (k: string) => (typeof data.get(k) === "string" ? String(data.get(k)).trim() : "");
+    const family = str("family");
+    const weight = str("weight") || "400";
+    const style = str("style") || "normal";
+    const unicodeRange = str("unicodeRange");
+    const license = str("license").slice(0, 120);
+    if (!FONT_FAMILY.test(family))
+      throw new Error("שם הגופן לא תקין (אותיות לטיניות, ספרות, רווח, מקף)");
+    if (!FONT_WEIGHT.test(weight))
+      throw new Error("משקל לא תקין (למשל 400, או 200 800 לגופן משתנה)");
+    if (style !== "normal" && style !== "italic") throw new Error("סגנון לא תקין");
+    if (unicodeRange.length > 4000 || !UNICODE_RANGE.test(unicodeRange))
+      throw new Error("טווח התווים לא תקין (למשל U+0590-05FF)");
+    return {
+      file,
+      family,
+      weight,
+      style,
+      unicodeRange,
+      license,
+      name: String(file.name ?? "").slice(0, 200),
+    };
+  })
+  .handler(async ({ data }): Promise<{ library: MediaLibrary; id: string }> => {
+    const [
+      { requireSession },
+      { allowAction },
+      { businessSiteId, studioRpc },
+      media,
+      { randomUUID },
+    ] = await Promise.all([
+      import("@/platform/auth/session.server"),
+      import("@/platform/security/rate-limit.server"),
+      import("../data/rpc.server"),
+      import("../data/media.server"),
+      import("node:crypto"),
+    ]);
+    const session = await requireSession();
+    if (!allowAction(`bp-media-upload:${session.userId}`, 120, 10 * 60 * 1000)) {
+      throw new Error("יותר מדי העלאות בזמן קצר. נסו שוב בעוד כמה דקות.");
+    }
+    const bytes = Buffer.from(await data.file.arrayBuffer());
+    if (bytes.subarray(0, 4).toString("latin1") !== "wOF2") {
+      throw new Error("הקובץ אינו גופן WOFF2");
+    }
+    const siteId = await businessSiteId();
+    const id = randomUUID();
+    const path = `${siteId}/${id}.woff2`;
+    await studioRpc("bp_media_check_quota", { _bytes: bytes.length });
+    await media.storeFiles(siteId, session.accessToken, [
+      { path, bytes, contentType: "font/woff2" },
+    ]);
+    try {
+      await studioRpc("bp_media_add_font", {
+        _id: id,
+        _storage_path: path,
+        _size_bytes: bytes.length,
+        _font: {
+          family: data.family,
+          weight: data.weight,
+          style: data.style,
+          unicode_range: data.unicodeRange,
+          license: data.license,
+        },
+        _original_name: data.name || null,
+      });
+    } catch (error) {
+      await media.removeFiles(siteId, session.accessToken, [path]);
+      throw error;
+    }
+    return { library: await library(), id };
   });
 
 export const studioSetMediaAlt = createServerFn({ method: "POST" })

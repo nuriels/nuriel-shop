@@ -97,9 +97,9 @@ SELECT tests.check('bp: guests may only call the public read and the site name; 
        AND NOT has_function_privilege('anon', 'public.platform_bp_approve_publish(uuid,uuid)', 'EXECUTE')
        AND NOT has_function_privilege('authenticated', 'business_profile.studio_site(text)', 'EXECUTE')
        AND NOT has_function_privilege('authenticated', 'business_profile._publish(uuid,text,jsonb,integer,text,uuid,uuid)', 'EXECUTE')$$);
-SELECT tests.check('bp: two templates are available (Elegant, Portfolio) and four are planned — six in all',
-  $$SELECT (SELECT string_agg(key, ',' ORDER BY sort) FROM business_profile.templates WHERE status = 'available') = 'elegant,portfolio'
-       AND (SELECT count(*) FROM business_profile.templates) = 6$$);
+SELECT tests.check('bp: three templates are available (Elegant, Portfolio, Classic — migration 195) and four are planned — seven in all',
+  $$SELECT (SELECT string_agg(key, ',' ORDER BY sort) FROM business_profile.templates WHERE status = 'available') = 'elegant,portfolio,classic'
+       AND (SELECT count(*) FROM business_profile.templates) = 7$$);
 SELECT tests.check('bp: a store owner, a plain account and a guest cannot open a business site',
   format($$SELECT pg_temp.user_err(NULL, %L, $q$SELECT public.platform_bp_open_site('web-x', 'אתר')$q$) LIKE '%%מנהל הפלטפורמה%%'
              AND pg_temp.user_err(NULL, %L, $q$SELECT public.platform_bp_open_site('web-x', 'אתר')$q$) LIKE '%%מנהל הפלטפורמה%%'
@@ -150,9 +150,9 @@ SELECT tests.check('bp: with the platform flag off, the studio is closed even fo
 SELECT pg_temp.as_user(NULL, :PLATFORM, $$SELECT to_jsonb(public.platform_set_flag('business_profile_enabled', true))$$) IS NOT NULL AS ok \gset
 SELECT pg_temp.as_user(:'w1', :W_OWNER1, 'SELECT public.bp_studio_context()') AS ctx1 \gset
 SELECT pg_temp.as_user(:'w1', :W_OWNER1, 'SELECT public.bp_draft_get()') AS draft1 \gset
-SELECT tests.check('bp: the owner sees their own site, status draft, all permissions and the six templates',
+SELECT tests.check('bp: the owner sees their own site, status draft, all permissions and the seven templates',
   format($$SELECT %1$L::jsonb -> 'site' ->> 'slug' = 'web-one' AND %1$L::jsonb -> 'state' ->> 'status' = 'draft'
-             AND %1$L::jsonb -> 'permissions' ? 'site.publish' AND jsonb_array_length(%1$L::jsonb -> 'templates') = 6
+             AND %1$L::jsonb -> 'permissions' ? 'site.publish' AND jsonb_array_length(%1$L::jsonb -> 'templates') = 7
              AND %2$L::jsonb ->> 'revision' = '1' AND %2$L::jsonb -> 'document' -> 'pages' -> 0 -> 'title' ->> 'he' = 'ראשון'$$,
          :'ctx1', :'draft1'));
 SELECT pg_temp.as_user(:'w1', :W_OWNER1, format('SELECT public.bp_draft_save(%L, 1)', pg_temp.doc('ראשון v2'))) AS save1 \gset

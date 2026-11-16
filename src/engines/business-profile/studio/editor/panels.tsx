@@ -1,5 +1,8 @@
 // לוחות העורך: פרטי העסק, עיצוב, מקטעי דף הבית, ושלושת האוספים (שירותים, תיק עבודות, המלצות)
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
 import { Badge, Button, Label } from "@/platform/ui";
 import { BLOCK_DEFINITIONS, BLOCK_TYPES, type BlockType } from "../../document/blocks";
@@ -14,7 +17,15 @@ import type {
   TemplateKey,
   Testimonial,
 } from "../../document/schema";
-import { MAX_PORTFOLIO_ITEMS, MAX_SERVICES, MAX_TESTIMONIALS, RADII } from "../../document/schema";
+import {
+  FONT_ROLES,
+  MAX_PORTFOLIO_ITEMS,
+  MAX_SERVICES,
+  MAX_TESTIMONIALS,
+  RADII,
+  type FontRole,
+} from "../../document/schema";
+import { studioUploadFont } from "../../api/media.functions";
 import { TEMPLATES } from "../../templates/registry";
 import { TEMPLATE_PALETTES } from "../../templates/palettes";
 import { contrastRatio, paletteProblems } from "./contrast";
@@ -28,8 +39,16 @@ import {
   setBlockHidden,
   setBlockProp,
 } from "./doc-ops";
-import { ParagraphsField, PlainField, RowActions, Section, TextField, ToggleField } from "./fields";
-import { ImageField } from "./media";
+import {
+  ParagraphsField,
+  PlainField,
+  RowActions,
+  Section,
+  SelectField,
+  TextField,
+  ToggleField,
+} from "./fields";
+import { ImageField, MEDIA_QUERY } from "./media";
 
 export type SetDoc = (change: (doc: SiteDocument) => SiteDocument) => void;
 type PanelProps = { doc: SiteDocument; setDoc: SetDoc };
@@ -143,7 +162,7 @@ export function DesignPanel({ doc, setDoc }: PanelProps) {
       theme: {
         ...d.theme,
         palette:
-          key === "portfolio" || key === "elegant"
+          key === "portfolio" || key === "elegant" || key === "classic"
             ? { ...TEMPLATE_PALETTES[key] }
             : d.theme.palette,
       },
@@ -212,6 +231,9 @@ export function DesignPanel({ doc, setDoc }: PanelProps) {
           {contrastRatio(doc.theme.palette.text, doc.theme.palette.background)}:1
         </p>
       </fieldset>
+      <TokensFields doc={doc} setDoc={setDoc} />
+      <TypographyFields doc={doc} setDoc={setDoc} />
+      <ChromeFields doc={doc} setDoc={setDoc} />
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">פינות</legend>
         <div className="flex gap-2">
@@ -232,6 +254,231 @@ export function DesignPanel({ doc, setDoc }: PanelProps) {
         </div>
       </fieldset>
     </Section>
+  );
+}
+
+// ---------- צבעים נוספים של התבנית ----------
+function TokensFields({ doc, setDoc }: PanelProps) {
+  const template = TEMPLATES[doc.template];
+  if (!template.tokens?.length) return null;
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">צבעים נוספים של התבנית</legend>
+      {template.tokens.map((tk) => (
+        <ColorField
+          key={tk.key}
+          label={tk.label}
+          value={(doc.theme.tokens[tk.key] ?? tk.default).toLowerCase()}
+          onChange={(v) =>
+            setDoc((d) => ({
+              ...d,
+              theme: { ...d.theme, tokens: { ...d.theme.tokens, [tk.key]: v } },
+            }))
+          }
+        />
+      ))}
+    </fieldset>
+  );
+}
+
+// ---------- גופנים ----------
+const BUILTIN_FONTS = ["Assistant", "Rubik"];
+const ROLE_LABELS: Record<FontRole, string> = {
+  display: "כותרת ראשית ותצוגה",
+  heading: "כותרות המקטעים",
+  body: "טקסט",
+  ui: "שדות טופס ופוטר",
+};
+
+function TypographyFields({ doc, setDoc }: PanelProps) {
+  const qc = useQueryClient();
+  const upload = useServerFn(studioUploadFont);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [family, setFamily] = useState("");
+  const [weight, setWeight] = useState("400");
+  const [style, setStyle] = useState("normal");
+  const [range, setRange] = useState("");
+  const [license, setLicense] = useState("");
+  const template = TEMPLATES[doc.template];
+  const families = [...new Set([...doc.theme.fonts.map((f) => f.family), ...BUILTIN_FONTS])];
+  const m = useMutation({
+    mutationFn: async () => {
+      const file = fileRef.current?.files?.[0];
+      if (!file) throw new Error("בחרו קובץ WOFF2");
+      const fd = new FormData();
+      fd.set("file", file);
+      fd.set("family", family.trim());
+      fd.set("weight", weight.trim());
+      fd.set("style", style);
+      fd.set("unicodeRange", range.trim());
+      fd.set("license", license.trim());
+      return upload({ data: fd });
+    },
+    onSuccess: (r) => {
+      qc.setQueryData(MEDIA_QUERY, r.library);
+      setDoc((d) => ({
+        ...d,
+        theme: {
+          ...d.theme,
+          fonts: [
+            ...d.theme.fonts,
+            {
+              family: family.trim(),
+              weight: weight.trim(),
+              style: style as "normal" | "italic",
+              unicodeRange: range.trim(),
+              file: { media: r.id },
+            },
+          ],
+        },
+      }));
+      if (fileRef.current) fileRef.current.value = "";
+      setRange("");
+      toast.success("הגופן נשמר בספרייה ונוסף לאתר");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "ההעלאה נכשלה"),
+  });
+  const fileId = useId();
+  return (
+    <fieldset className="space-y-3">
+      <legend className="text-sm font-medium">גופנים</legend>
+      {FONT_ROLES.map((role) => (
+        <SelectField
+          key={role}
+          label={ROLE_LABELS[role]}
+          value={doc.theme.typography[role]}
+          options={[
+            [
+              "",
+              `ברירת המחדל של התבנית${template.fonts?.[role] ? ` (${template.fonts[role]})` : ""}`,
+            ],
+            ...families.map((f) => [f, f] as [string, string]),
+          ]}
+          onChange={(v) =>
+            setDoc((d) => ({
+              ...d,
+              theme: { ...d.theme, typography: { ...d.theme.typography, [role]: v } },
+            }))
+          }
+        />
+      ))}
+      {doc.theme.fonts.length > 0 && (
+        <ul className="space-y-1 text-sm">
+          {doc.theme.fonts.map((f, i) => (
+            <li
+              key={`${f.file.media}-${i}`}
+              className="flex items-center justify-between gap-2 rounded border px-2 py-1"
+            >
+              <span dir="ltr">
+                {f.family} · {f.weight}
+                {f.style === "italic" ? " · italic" : ""}
+                {f.unicodeRange ? ` · ${f.unicodeRange.slice(0, 20)}…` : ""}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  setDoc((d) => ({
+                    ...d,
+                    theme: { ...d.theme, fonts: d.theme.fonts.filter((_, j) => j !== i) },
+                  }))
+                }
+              >
+                הסרה מהאתר
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="space-y-2 rounded-md bg-muted/40 p-3">
+        <p className="text-sm font-medium">הוספת גופן (WOFF2, עד 2MB)</p>
+        <p className="text-xs text-muted-foreground">
+          רק גופן שמותר להשתמש בו באתר (למשל Google Fonts ברישיון OFL, או גופן שנרכש עם רישיון רשת).
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor={fileId}>קובץ</Label>
+          <input
+            id={fileId}
+            ref={fileRef}
+            type="file"
+            accept=".woff2,font/woff2"
+            className="block w-full text-sm"
+          />
+        </div>
+        <PlainField
+          label="שם המשפחה (כמו שיופיע ב-CSS)"
+          value={family}
+          max={48}
+          onChange={setFamily}
+        />
+        <PlainField
+          label="משקל (400, או טווח לגופן משתנה: 200 800)"
+          value={weight}
+          max={7}
+          onChange={setWeight}
+        />
+        <SelectField
+          label="סגנון"
+          value={style}
+          options={[
+            ["normal", "רגיל"],
+            ["italic", "נטוי"],
+          ]}
+          onChange={setStyle}
+        />
+        <PlainField
+          label="טווח תווים (לא חובה, למשל U+0590-05FF)"
+          value={range}
+          max={2000}
+          onChange={setRange}
+        />
+        <PlainField
+          label="רישיון (לא חובה, למשל OFL 1.1)"
+          value={license}
+          max={120}
+          onChange={setLicense}
+        />
+        <Button type="button" variant="outline" disabled={m.isPending} onClick={() => m.mutate()}>
+          {m.isPending ? "מעלה…" : "העלאת הגופן"}
+        </Button>
+      </div>
+    </fieldset>
+  );
+}
+
+// ---------- חלקי האתר ----------
+function ChromeFields({ doc, setDoc }: PanelProps) {
+  const c = doc.theme.chrome;
+  const set = (patch: Partial<typeof c>) =>
+    setDoc((d) => ({ ...d, theme: { ...d.theme, chrome: { ...d.theme.chrome, ...patch } } }));
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">חלקי האתר</legend>
+      <SelectField
+        label="כותרת עליונה"
+        value={c.header}
+        options={[
+          ["bar", "פס עם שם העסק וניווט"],
+          ["none", "בלי כותרת עליונה"],
+        ]}
+        onChange={(v) => set({ header: v as "bar" | "none" })}
+      />
+      <SelectField
+        label="פוטר"
+        value={c.footer}
+        options={[
+          ["full", "מלא (שם, משפט, רשתות)"],
+          ["strip", "רצועה אחת"],
+        ]}
+        onChange={(v) => set({ footer: v as "full" | "strip" })}
+      />
+      <ToggleField
+        label="כפתור WhatsApp צף"
+        checked={c.floatingWhatsapp}
+        onChange={(v) => set({ floatingWhatsapp: v })}
+      />
+    </fieldset>
   );
 }
 
@@ -277,19 +524,48 @@ function BlockForm({ block, setDoc }: { block: Block; setDoc: SetDoc }) {
       </div>
     );
   };
+  const choice = (key: string, label: string, options: [string, string][]) => (
+    <SelectField
+      key={key}
+      label={label}
+      value={String(p[key] ?? options[0]![0])}
+      options={options}
+      onChange={(v) => set(key, v)}
+    />
+  );
+  const image = (key: string, label: string) => (
+    <ImageField
+      key={key}
+      label={label}
+      value={(p[key] as unknown as ImageRef) ?? { media: null, alt: { he: "" } }}
+      onChange={(v) => set(key, v)}
+    />
+  );
   switch (block.type as BlockType) {
     case "hero":
       return (
         <>
           {text("eyebrow", "שורה מעל הכותרת", 80)}
+          {text("titleLead", "שורת פתיחה קטנה בכותרת (לא חובה)", 120)}
           {text("title", "כותרת ראשית (H1)", 140)}
           {text("subtitle", "משפט משנה", 300, true)}
-          <ImageField
-            label="תמונת הפתיח"
-            value={p["image"] as unknown as ImageRef}
-            onChange={(v) => set("image", v)}
+          {text("tagline", "משפט מודגש אחרי משפט המשנה (לא חובה)", 200)}
+          {image("image", "תמונת הפתיח")}
+          {choice("layout", "פריסה", [
+            ["split", "טקסט ותמונה זה לצד זה"],
+            ["cover", "תמונת רקע מלאה"],
+            ["centered", "ממורכז, בלי תמונה"],
+          ])}
+          <ToggleField
+            label="הלוגו בתוך הפתיח"
+            checked={p["showLogo"] === true}
+            onChange={(v) => set("showLogo", v)}
           />
           {button("primary", "כפתור ראשי")}
+          {choice("primaryIcon", "אייקון בכפתור הראשי", [
+            ["none", "בלי"],
+            ["whatsapp", "WhatsApp"],
+          ])}
           {button("secondary", "כפתור משני")}
         </>
       );
@@ -305,10 +581,11 @@ function BlockForm({ block, setDoc }: { block: Block; setDoc: SetDoc }) {
             maxCount={14}
             onChange={(v) => set("paragraphs", v)}
           />
-          <ImageField
-            label="תמונה"
-            value={p["image"] as unknown as ImageRef}
-            onChange={(v) => set("image", v)}
+          {image("image", "תמונה (כשאין קרוסלה)")}
+          {image("titleImage", "כותרת כתמונה (לא חובה — הכותרת הכתובה נשארת לקוראי מסך)")}
+          <SlidesField
+            value={(p["slides"] as unknown as AboutSlide[]) ?? []}
+            onChange={(v) => set("slides", v)}
           />
         </>
       );
@@ -319,6 +596,7 @@ function BlockForm({ block, setDoc }: { block: Block; setDoc: SetDoc }) {
         <>
           {text("eyebrow", "שורה מעל הכותרת", 80)}
           {text("title", "כותרת", 140)}
+          {text("titleAccent", "המשך הכותרת בצבע ההדגשה (לא חובה)", 60)}
           {text("intro", "פתיח קצר", 500, true)}
           {block.type === "portfolio" && (
             <>
@@ -328,10 +606,29 @@ function BlockForm({ block, setDoc }: { block: Block; setDoc: SetDoc }) {
                 onChange={(v) => set("filter", v)}
               />
               <ToggleField
+                label='כפתור "הכול" בסינון'
+                checked={p["showAll"] !== false}
+                onChange={(v) => set("showAll", v)}
+              />
+              {choice("layout", "פריסת העבודות", [
+                ["grid", "רשת אחידה"],
+                ["masonry", "Masonry — כל עבודה ביחס המקורי"],
+              ])}
+              <ToggleField
                 label="שמות מתחת לעבודות"
                 checked={p["showTitles"] !== false}
                 onChange={(v) => set("showTitles", v)}
               />
+            </>
+          )}
+          {block.type === "testimonials" && (
+            <>
+              {choice("layout", "תצוגה", [
+                ["cards", "כרטיסים"],
+                ["marquee", "גלילה רציפה"],
+              ])}
+              {image("background", "תמונת רקע למקטע (לא חובה)")}
+              {button("button", "כפתור מתחת להמלצות (לא חובה)")}
             </>
           )}
           <p className="text-xs text-muted-foreground">
@@ -382,6 +679,58 @@ function BlockForm({ block, setDoc }: { block: Block; setDoc: SetDoc }) {
           <p className="text-xs text-muted-foreground">
             טופס פנייה (לתיבת הפניות של Nuriel) — יתווסף בשלב הטפסים.
           </p>
+        </>
+      );
+    case "form": {
+      const fields = (p["fields"] ?? {}) as unknown as Record<string, LocalizedText>;
+      const field = (k: string, label: string) => (
+        <TextField
+          key={k}
+          label={label}
+          value={fields[k]}
+          max={k === "message" ? 80 : 60}
+          onChange={(v) => set("fields", { ...fields, [k]: v })}
+        />
+      );
+      return (
+        <>
+          {text("title", "כותרת", 160)}
+          {choice("layout", "פריסה", [
+            ["beside", "הכותרת לצד הטופס"],
+            ["stacked", "הכותרת מעל הטופס"],
+          ])}
+          {choice("tone", "רקע", [
+            ["light", "בהיר"],
+            ["dark", "כהה"],
+          ])}
+          {image("background", "תמונת רקע (לא חובה)")}
+          {field("name", "שדה שם — טקסט מנחה")}
+          {field("email", "שדה אימייל — טקסט מנחה")}
+          {field("phone", "שדה טלפון — טקסט מנחה")}
+          {field("message", "שדה ההודעה — טקסט מנחה")}
+          {text("submit", "כפתור השליחה", 60)}
+          <p className="text-xs text-muted-foreground">
+            השליחה תחובר לתיבת הפניות בשלב הטפסים. עד אז, באתר החי מוצג במקומו כפתור WhatsApp.
+          </p>
+        </>
+      );
+    }
+    case "media":
+      return (
+        <>
+          {image("image", "תמונה")}
+          {choice("align", "יישור", [
+            ["start", "לימין"],
+            ["center", "למרכז"],
+            ["end", "לשמאל"],
+          ])}
+          <PlainField
+            label="רוחב מרבי (פיקסלים)"
+            type="number"
+            value={String(p["width"] ?? 320)}
+            max={4}
+            onChange={(v) => set("width", Math.max(40, Math.min(1400, Number(v) || 320)))}
+          />
         </>
       );
     case "text":
@@ -581,6 +930,8 @@ export function ServicesPanel({ doc, setDoc }: PanelProps) {
           title: { he: "" },
           text: { he: "" },
           icon: null,
+          iconImage: { media: null, alt: { he: "" } },
+          iconBg: "",
           hidden: false,
         })}
         render={(s, update) => (
@@ -597,6 +948,16 @@ export function ServicesPanel({ doc, setDoc }: PanelProps) {
               max={1200}
               multiline
               onChange={(v) => update({ ...s, text: v })}
+            />
+            <ImageField
+              label="אייקון (תמונה, לא חובה)"
+              value={s.iconImage}
+              onChange={(v) => update({ ...s, iconImage: v })}
+            />
+            <ColorField
+              label="צבע העיגול של האייקון"
+              value={s.iconBg || "#ffffff"}
+              onChange={(v) => update({ ...s, iconBg: v })}
             />
           </>
         )}
@@ -676,6 +1037,7 @@ export function PortfolioPanel({ doc, setDoc }: PanelProps) {
           text: { he: "" },
           categories: [],
           image: { media: null, alt: { he: "" } },
+          devices: "all",
           hidden: false,
         })}
         render={(w, update) => (
@@ -697,6 +1059,16 @@ export function PortfolioPanel({ doc, setDoc }: PanelProps) {
               label="תמונה"
               value={w.image}
               onChange={(v) => update({ ...w, image: v })}
+            />
+            <SelectField
+              label="איפה מוצגת"
+              value={w.devices}
+              options={[
+                ["all", "בכל מכשיר"],
+                ["desktop", "רק במחשב"],
+                ["mobile", "רק בנייד"],
+              ]}
+              onChange={(v) => update({ ...w, devices: v as PortfolioItem["devices"] })}
             />
             <fieldset className="space-y-1">
               <legend className="text-sm font-medium">קטגוריות</legend>
@@ -779,5 +1151,76 @@ export function TestimonialsPanel({ doc, setDoc }: PanelProps) {
         )}
       />
     </Section>
+  );
+}
+
+// ---------- קרוסלת האודות ----------
+type AboutSlide = { image: ImageRef; button: { label: LocalizedText; href: string } };
+
+function SlidesField({
+  value,
+  onChange,
+}: {
+  value: AboutSlide[];
+  onChange: (v: AboutSlide[]) => void;
+}) {
+  return (
+    <fieldset className="space-y-3">
+      <legend className="text-sm font-medium">קרוסלת תמונות (לא חובה)</legend>
+      {value.map((sl, i) => (
+        <div key={i} className="space-y-2 rounded-md border p-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm">תמונה {i + 1}</span>
+            <RowActions
+              label={`תמונה ${i + 1}`}
+              index={i}
+              count={value.length}
+              onMove={(d) => onChange(moveItem(value, i, d))}
+              onRemove={() => onChange(value.filter((_, j) => j !== i))}
+            />
+          </div>
+          <ImageField
+            label={`תמונה ${i + 1}`}
+            value={sl.image}
+            onChange={(v) => onChange(value.map((x, j) => (j === i ? { ...x, image: v } : x)))}
+          />
+          <TextField
+            label="כפתור מתחת לתמונה — טקסט"
+            value={sl.button.label}
+            max={60}
+            onChange={(l) =>
+              onChange(
+                value.map((x, j) => (j === i ? { ...x, button: { ...x.button, label: l } } : x)),
+              )
+            }
+          />
+          <PlainField
+            label="כפתור מתחת לתמונה — קישור"
+            value={sl.button.href}
+            max={500}
+            onChange={(h) =>
+              onChange(
+                value.map((x, j) => (j === i ? { ...x, button: { ...x.button, href: h } } : x)),
+              )
+            }
+          />
+        </div>
+      ))}
+      {value.length < 8 && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            onChange([
+              ...value,
+              { image: { media: null, alt: { he: "" } }, button: { label: { he: "" }, href: "" } },
+            ])
+          }
+        >
+          הוספת תמונה לקרוסלה
+        </Button>
+      )}
+    </fieldset>
   );
 }

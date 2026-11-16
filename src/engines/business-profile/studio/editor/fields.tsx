@@ -253,3 +253,43 @@ export function Section({
     </section>
   );
 }
+
+/** בחירה מרשימה קצרה (select מקורי — נגיש ועובד בנייד) */
+export function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+  hint,
+}: {
+  label: string;
+  value: string;
+  options: [string, string][];
+  onChange: (v: string) => void;
+  hint?: string;
+}) {
+  const id = useId();
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <select
+        id={id}
+        className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+        value={value}
+        aria-describedby={hint ? `${id}-hint` : undefined}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map(([v, l]) => (
+          <option key={v} value={v}>
+            {l}
+          </option>
+        ))}
+      </select>
+      {hint && (
+        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}

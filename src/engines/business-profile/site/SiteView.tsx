@@ -4,13 +4,15 @@
 import type { CSSProperties } from "react";
 import { isBlockType } from "../document/blocks";
 import type { Block, Locale, Page, SiteDocument } from "../document/schema";
-import { templateOf } from "../templates/registry";
+import { templateOf, templateTokens, type TemplateDefinition } from "../templates/registry";
 import type { MediaMap } from "../types";
 import {
   AboutBlock,
   ContactBlock,
   CtaBlock,
+  FormBlock,
   HeroBlock,
+  MediaBlock,
   PortfolioBlock,
   ServicesBlock,
   TestimonialsBlock,
@@ -25,13 +27,17 @@ import {
   NURIEL_CREDIT_REL,
   NURIEL_CREDIT_URL,
 } from "./credit";
-import { SiteImage } from "./parts";
+import { SiteImage, WhatsappIcon } from "./parts";
+import { fontFaceCss } from "./fonts";
 
 const RADIUS = { sharp: "2px", soft: "10px", round: "22px" } as const;
 
-function cssVars(doc: SiteDocument): CSSProperties {
+/** שם משפחה (נבדק בדפוס קשיח במסמך) → ערך font-family עם גיבוי */
+const fontStack = (family: string, fallback: string) => `"${family}", ${fallback}`;
+
+function cssVars(doc: SiteDocument, template: TemplateDefinition): CSSProperties {
   const p = doc.theme.palette;
-  return {
+  const vars: Record<string, string> = {
     "--bp-bg": p.background,
     "--bp-surface": p.surface,
     "--bp-text": p.text,
@@ -40,7 +46,29 @@ function cssVars(doc: SiteDocument): CSSProperties {
     "--bp-accent-text": p.accentText,
     "--bp-soft": p.soft,
     "--bp-radius": RADIUS[doc.theme.radius],
-  } as CSSProperties;
+  };
+  // צבעים נוספים של התבנית (--bp-t-<key>)
+  for (const [k, v] of Object.entries(templateTokens(template, doc.theme.tokens)))
+    vars[`--bp-t-${k}`] = v;
+  // גופנים לפי תפקיד: מהמסמך, אחרת של התבנית; אחרת — ברירות המחדל של site.css
+  const ty = doc.theme.typography;
+  const role = (r: "display" | "heading" | "body" | "ui") => ty[r] || template.fonts?.[r] || "";
+  const fallbacks = {
+    display: "system-ui, sans-serif",
+    heading: "system-ui, sans-serif",
+    body: "system-ui, sans-serif",
+    ui: "sans-serif",
+  };
+  for (const r of ["display", "heading", "body", "ui"] as const) {
+    const f = role(r);
+    if (f) vars[`--bp-font-${r}`] = fontStack(f, fallbacks[r]);
+  }
+  return vars as CSSProperties;
+}
+
+/** @font-face לגופני האתר שבמסמך (site/fonts.ts) — הכתובות מספריית המדיה */
+function fontFaces(doc: SiteDocument, media: MediaMap): string {
+  return fontFaceCss(doc.theme.fonts, (id) => media[id]?.url);
 }
 
 /** המקטעים שמופיעים בניווט (אלה שיש להם כותרת), לפי הסדר בעמוד */
@@ -75,7 +103,31 @@ function BlockView({
       return <ContactBlock block={b} index={index} />;
     case "text":
       return <TextBlock block={b} index={index} />;
+    case "form":
+      return <FormBlock block={b} index={index} />;
+    case "media":
+      return <MediaBlock block={b} index={index} />;
   }
+}
+
+function FooterStrip({ floating }: { floating: boolean }) {
+  return (
+    <footer className="bps-footer-strip">
+      <p>
+        <a
+          href={NURIEL_CREDIT_URL}
+          target="_blank"
+          rel={NURIEL_CREDIT_REL}
+          aria-label={BP_CREDIT_LABEL}
+        >
+          {BP_CREDIT_BEFORE}
+          <bdi>{BP_PRODUCT}</bdi>
+          {BP_CREDIT_AFTER}
+        </a>
+      </p>
+      {floating && <FloatingWhatsapp />}
+    </footer>
+  );
 }
 
 function SiteHeader({ page }: { page: Page }) {
@@ -132,7 +184,7 @@ function SiteHeader({ page }: { page: Page }) {
   );
 }
 
-function SiteFooter() {
+function SiteFooter({ floating }: { floating: boolean }) {
   const { doc } = useSiteView();
   const t = useT();
   const name = t(doc.business.name);
@@ -183,7 +235,7 @@ function SiteFooter() {
         </p>
       </div>
       {/* הכפתור הצף (מיקום קבוע) — בתוך הפוטר, כך שכל התוכן בתוך אזורי הדף (נגישות) */}
-      <FloatingWhatsapp />
+      {floating && <FloatingWhatsapp />}
     </footer>
   );
 }
@@ -201,12 +253,7 @@ function FloatingWhatsapp() {
       rel="noopener noreferrer"
       aria-label="שליחת הודעה ב-WhatsApp (נפתח בחלון חדש)"
     >
-      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
-        <path
-          fill="currentColor"
-          d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.3-.4.8-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.6 1.1 2.8c.1.2 1.8 2.8 4.4 3.9 1.6.7 2.3.8 3.1.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3Z"
-        />
-      </svg>
+      <WhatsappIcon />
     </a>
   );
 }
@@ -229,17 +276,21 @@ export function SiteView({
 }) {
   const lang = locale ?? doc.defaultLocale;
   const template = templateOf(doc.template);
+  const chrome = doc.theme.chrome;
+  const faces = fontFaces(doc, media);
   let sectionIndex = 0;
   return (
     <SiteViewProvider value={{ doc, media, locale: lang, mode }}>
       <div
         className={`bps ${template.className}${embedded ? " bps-embedded" : ""}`}
-        style={cssVars(doc)}
+        style={cssVars(doc, template)}
         lang={lang}
         dir={lang === "he" ? "rtl" : "ltr"}
         data-template={template.key}
       >
-        <SiteHeader page={page} />
+        {/* גופני האתר (מספריית המדיה שלו) */}
+        {faces && <style>{faces}</style>}
+        {chrome.header === "bar" && <SiteHeader page={page} />}
         <main id="main-content" className="bps-main">
           {page.blocks
             .filter((b) => !b.hidden)
@@ -256,7 +307,11 @@ export function SiteView({
               );
             })}
         </main>
-        <SiteFooter />
+        {chrome.footer === "strip" ? (
+          <FooterStrip floating={chrome.floatingWhatsapp} />
+        ) : (
+          <SiteFooter floating={chrome.floatingWhatsapp} />
+        )}
       </div>
     </SiteViewProvider>
   );

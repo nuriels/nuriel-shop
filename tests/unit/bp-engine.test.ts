@@ -416,9 +416,9 @@ describe("bp: the site document", () => {
 });
 
 describe("bp: templates, contact links and the sitemap", () => {
-  it("Elegant and Portfolio are available; the four others are registered as planned and fall back", () => {
-    expect(AVAILABLE_TEMPLATES.map((t) => t.key)).toEqual(["elegant", "portfolio"]);
-    expect(Object.keys(TEMPLATES)).toHaveLength(6);
+  it("Elegant, Portfolio and Classic are available; the others are registered as planned and fall back", () => {
+    expect(AVAILABLE_TEMPLATES.map((t) => t.key)).toEqual(["elegant", "portfolio", "classic"]);
+    expect(Object.keys(TEMPLATES)).toHaveLength(7);
     expect(templateOf("luxury").key).toBe("elegant");
     expect(templateOf("portfolio").className).toBe("bps-portfolio");
   });

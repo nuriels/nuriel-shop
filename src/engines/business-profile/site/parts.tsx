@@ -58,20 +58,41 @@ export function SectionHead({
   id,
   eyebrow,
   title,
+  accent,
   intro,
   index,
+  titleImage,
 }: {
   id: string;
   eyebrow?: LocalizedText;
   title: LocalizedText;
+  /** המשך הכותרת בצבע ההדגשה ("המומחיות" + "שלי") */
+  accent?: LocalizedText;
   intro?: LocalizedText;
   index?: number;
+  /** כותרת כתמונה: התמונה מוצגת, והכותרת הכתובה נשארת לקוראי מסך ולמנועי חיפוש */
+  titleImage?: ImageRef;
 }) {
   const t = useT();
+  const { media } = useSiteView();
   const kicker = t(eyebrow);
   const heading = t(title);
+  const tail = t(accent);
   const lead = t(intro);
   if (!heading && !kicker) return null;
+  if (titleImage && hasImage(titleImage, media)) {
+    return (
+      <header className="bps-head bps-head-image">
+        <h2 id={`${id}-title`} className="bps-sr">
+          {heading}
+        </h2>
+        <SiteImage
+          image={{ media: titleImage.media, alt: { he: "" } }}
+          className="bps-title-image"
+        />
+      </header>
+    );
+  }
   return (
     <header className="bps-head">
       {(kicker || index !== undefined) && (
@@ -85,6 +106,12 @@ export function SectionHead({
       {heading && (
         <h2 id={`${id}-title`} className="bps-h2">
           {heading}
+          {tail && (
+            <>
+              {" "}
+              <span className="bps-h2-accent">{tail}</span>
+            </>
+          )}
         </h2>
       )}
       {lead && <p className="bps-lead">{lead}</p>}
@@ -97,10 +124,12 @@ export function LinkButton({
   href,
   label,
   variant = "primary",
+  icon,
 }: {
   href: string;
   label: LocalizedText;
-  variant?: "primary" | "ghost";
+  variant?: "primary" | "ghost" | "outline" | "soft";
+  icon?: "whatsapp" | "none";
 }) {
   const t = useT();
   const text = t(label);
@@ -112,8 +141,26 @@ export function LinkButton({
       href={href}
       {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
     >
+      {icon === "whatsapp" && <WhatsappIcon size={16} />}
       {text}
       {external && <span className="bps-sr"> (נפתח בחלון חדש)</span>}
     </a>
   );
+}
+
+export function WhatsappIcon({ size = 26 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false">
+      <path
+        fill="currentColor"
+        d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.3-.4.8-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.6 1.1 2.8c.1.2 1.8 2.8 4.4 3.9 1.6.7 2.3.8 3.1.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3Z"
+      />
+    </svg>
+  );
+}
+
+/** כתובת תמונה לרקע (CSS) — רק מכתובת שנבדקה */
+const CSS_URL = /^(https?:\/\/[^\s"'()\\<>]+|\/[^\s"'()\\<>]+)$/;
+export function cssImage(url: string | undefined): string | undefined {
+  return url && CSS_URL.test(url) ? `url("${url}")` : undefined;
 }

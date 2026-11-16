@@ -178,6 +178,7 @@ M75=20261115090000_vat_settings
 M76=20261115100000_site_tag_manager
 M77=20261116090000_bp_engine
 M78=20261116100000_bp_media
+M79=20261116110000_bp_site_fonts
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -220,6 +221,50 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- Nuriel Websites: site fonts + the "Classic" template (migration 79) ----------
+expect "before the rollback: the Classic template, the font column and checks, the font registration for editors only, WOFF2 in the bucket" \
+  "SELECT EXISTS (SELECT 1 FROM business_profile.templates WHERE key = 'classic' AND status = 'available')
+      AND EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'business_profile' AND table_name = 'media' AND column_name = 'font')
+      AND has_function_privilege('authenticated', 'public.bp_media_add_font(uuid,text,bigint,jsonb,text)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.bp_media_add_font(uuid,text,bigint,jsonb,text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'business_profile._font_meta_ok(jsonb)', 'EXECUTE')
+      AND (SELECT allowed_mime_types FROM storage.buckets WHERE id = 'bp-media') = ARRAY['image/webp', 'image/avif', 'font/woff2']"
+echo "rollback guard: $M79 refuses while a font exists in a library, or a version uses the Classic template"
+q "INSERT INTO public.tenants (slug, name, site_type) VALUES ('rb-fonts', 'עסק לבדיקת גופנים', 'business_profile')" >/dev/null
+q "INSERT INTO business_profile.media (id, tenant_id, kind, storage_path, variants, size_bytes, font)
+   SELECT '22222222-2222-4222-8222-222222222222', id, 'font', id::text || '/22222222-2222-4222-8222-222222222222.woff2', '{}', 1000,
+          '{\"family\": \"Heebo\", \"weight\": \"100 900\", \"style\": \"normal\", \"unicode_range\": \"\", \"license\": \"OFL\"}'
+     FROM public.tenants WHERE slug = 'rb-fonts'" >/dev/null
+if down "$M79" 2>/dev/null; then
+  echo "  FAIL rollback ran although a font exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT EXISTS (SELECT 1 FROM business_profile.media WHERE id = '22222222-2222-4222-8222-222222222222')
+      AND EXISTS (SELECT 1 FROM business_profile.templates WHERE key = 'classic')"
+q "DELETE FROM business_profile.media WHERE id = '22222222-2222-4222-8222-222222222222'" >/dev/null
+q "INSERT INTO business_profile.site_versions (tenant_id, state, template, document)
+   SELECT id, 'draft', 'classic', '{\"schema\": 1, \"template\": \"classic\"}' FROM public.tenants WHERE slug = 'rb-fonts'" >/dev/null
+if down "$M79" 2>/dev/null; then
+  echo "  FAIL rollback ran although a version uses the Classic template"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT EXISTS (SELECT 1 FROM business_profile.templates WHERE key = 'classic')"
+q "DELETE FROM business_profile.site_versions WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-fonts');
+   DELETE FROM public.site_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-fonts');
+   DELETE FROM public.email_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-fonts');
+   DELETE FROM public.tenants WHERE slug = 'rb-fonts'" >/dev/null
+ref_upto "$M79"
+echo "rollback: $M79"
+down "$M79"
+expect "fonts and the Classic template are gone; the image library is exactly as in migration 78" \
+  "SELECT NOT EXISTS (SELECT 1 FROM business_profile.templates WHERE key = 'classic')
+      AND to_regprocedure('public.bp_media_add_font(uuid,text,bigint,jsonb,text)') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = 'business_profile' AND table_name = 'media' AND column_name = 'font')
+      AND (SELECT allowed_mime_types FROM storage.buckets WHERE id = 'bp-media') = ARRAY['image/webp', 'image/avif']"
+same_as_ref "migration 78"
 
 # ---------- Nuriel Websites: the media library (migration 78) ----------
 expect "before the rollback: the closed media table (RLS, no API privileges), the quota column, the public read of published images only" \
@@ -2491,6 +2536,7 @@ up "$M75"
 up "$M76"
 up "$M77"
 up "$M78"
+up "$M79"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')

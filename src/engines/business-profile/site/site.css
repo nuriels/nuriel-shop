@@ -57,10 +57,14 @@
 }
 
 /* ---------- טיפוגרפיה ---------- */
+/* כל כותרת באתר (גם כותרת נסתרת לקוראי מסך) בגופן של האתר — לא בגופן הכללי של האפליקציה (בלי ספציפיות) */
+:where(.bps) :where(h1, h2, h3, h4) {
+  font-family: var(--bp-font-heading, var(--bp-font-display));
+}
 .bps-h1,
 .bps-h2,
 .bps-h3 {
-  font-family: var(--bp-font-display);
+  font-family: var(--bp-font-heading, var(--bp-font-display));
   font-weight: 500;
   letter-spacing: -0.01em;
   margin: 0;
@@ -844,7 +848,905 @@
     line-height: 1.45;
   }
 }
+/* ---------- כלליים: הצגה לפי רוחב, Masonry / שורות מוצדקות, קרוסלה, גלילה רציפה, טופס, תמונה ---------- */
+.bps-justified,
+.bps-only-narrow {
+  display: none;
+}
+.bps-masonry {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.bps-masonry-col {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 10px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bps-masonry .bps-work-media {
+  aspect-ratio: auto;
+}
+.bps-masonry .bps-work-media img {
+  inline-size: 100%;
+  block-size: auto;
+  aspect-ratio: auto;
+  object-fit: contain;
+}
+.bps-justified {
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bps-justified > .bps-work {
+  min-inline-size: 0;
+}
+.bps-justified .bps-work-btn,
+.bps-justified .bps-work-media,
+.bps-justified .bps-work-media picture {
+  display: block;
+}
+.bps-justified .bps-work-media {
+  aspect-ratio: var(--bp-ratio, 2 / 3);
+}
+.bps-justified .bps-work-media img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+.bps-justified-end {
+  flex-grow: 100;
+  list-style: none;
+}
+.bps-carousel {
+  position: relative;
+}
+.bps-carousel-stage {
+  position: relative;
+  display: grid;
+}
+.bps-carousel-slide {
+  grid-area: 1 / 1;
+  margin: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.5s ease;
+}
+.bps-carousel-slide.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+.bps-carousel-slide img {
+  inline-size: 100%;
+  block-size: auto;
+  aspect-ratio: auto;
+  object-fit: fill;
+}
+.bps-carousel-nav {
+  position: absolute;
+  inset-block-start: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  margin-block-start: -1.25rem;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  text-shadow: 0 0 6px rgb(0 0 0 / 0.5);
+}
+.bps-carousel-prev {
+  inset-inline-start: 0.25rem;
+}
+.bps-carousel-next {
+  inset-inline-end: 0.25rem;
+}
+.bps-carousel-action {
+  display: flex;
+  justify-content: center;
+  margin-block-start: 2.5rem;
+}
+.bps-marquee {
+  overflow: hidden;
+}
+.bps-marquee-track {
+  display: flex;
+  inline-size: max-content;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  animation: bps-marquee var(--bp-marquee-duration, 90s) linear infinite;
+}
+.bps-marquee:hover .bps-marquee-track,
+.bps-marquee:focus-within .bps-marquee-track {
+  animation-play-state: paused;
+}
+.bps-marquee-track > li {
+  flex: 0 0 auto;
+  inline-size: var(--bp-marquee-item, 646px);
+}
+.bps-marquee-track img {
+  inline-size: 100%;
+  block-size: auto;
+}
+.bps[dir="ltr"] .bps-marquee-track {
+  animation-name: bps-marquee-ltr;
+}
+@keyframes bps-marquee-ltr {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes bps-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(50%);
+  }
+}
+.bps-section-action {
+  display: flex;
+  justify-content: center;
+  margin-block-start: 3rem;
+}
+.bps-form-band {
+  padding-block: 40px;
+  background-image: var(--bp-section-image, none);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+.bps-form-dark {
+  background-color: #1f1a17;
+  color: #fff;
+}
+.bps-form-inner {
+  display: grid;
+  gap: 1.5rem;
+  justify-items: center;
+}
+.bps-form-beside .bps-form-inner {
+  grid-template-columns: auto minmax(0, 471px);
+  justify-content: center;
+  align-items: center;
+  gap: 44px;
+}
+/* הודעת הסטטוס של הטופס (אזור חי): נשארת בדף כדי שקורא מסך יקריא אותה, ולא תופסת מקום כשהיא ריקה */
+.bps-form-note:empty {
+  position: absolute;
+}
+.bps-form {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  inline-size: 100%;
+  max-inline-size: 471px;
+}
+.bps-form-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.bps-form input {
+  block-size: 40px;
+  inline-size: 100%;
+  padding: 8px 16px;
+  border: 1px solid var(--bp-t-inputBorder, #69727d);
+  border-radius: 35px;
+  background: #fff;
+  color: #000;
+  font-family: var(--bp-font-ui, sans-serif);
+  font-size: 15px;
+}
+.bps-form-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 40px;
+  padding-inline: 24px;
+  border: 0;
+  border-radius: 45px;
+  background: var(--bp-accent);
+  color: var(--bp-accent-text);
+  font-family: var(--bp-font-body);
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+.bps-form-submit:hover {
+  color: #fff;
+}
+.bps-form-note {
+  margin: 0;
+  min-block-size: 1.2em;
+  font-size: 0.85rem;
+}
+.bps-media-block {
+  display: flex;
+  padding: 10px;
+}
+.bps-media-block figure {
+  inline-size: 100%;
+  max-inline-size: var(--bp-media-w, 320px);
+  margin: 0;
+}
+.bps-media-start {
+  justify-content: flex-start;
+}
+.bps-media-center {
+  justify-content: center;
+}
+.bps-media-end {
+  justify-content: flex-end;
+}
+.bps-footer-strip {
+  position: relative;
+  padding-block: 4px;
+  background: var(--bp-t-footerBg, #000);
+  color: var(--bp-t-footerText, #fff);
+  text-align: center;
+}
+.bps-footer-strip p {
+  margin: 0;
+  font-family: var(--bp-font-ui, sans-serif);
+  font-size: 16px;
+  line-height: 17px;
+}
+.bps-footer-strip a {
+  text-decoration: none;
+}
+.bps-hero-wave {
+  display: none;
+}
+.bps-head-image {
+  margin: 0;
+}
+.bps-title-image {
+  inline-size: 100%;
+}
+.bps-h2-accent {
+  color: var(--bp-soft);
+}
+@container bps (max-width: 767px) {
+  .bps-masonry,
+  .bps-only-wide {
+    display: none;
+  }
+  .bps-justified {
+    display: flex;
+  }
+  .bps-justified > .bps-only-narrow {
+    display: block;
+  }
+  .bps-form-beside .bps-form-inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bps-form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bps-media-block figure {
+    max-inline-size: var(--bp-media-w-narrow, 320px);
+  }
+  .bps-media-narrow-start {
+    justify-content: flex-start;
+  }
+  .bps-media-narrow-center {
+    justify-content: center;
+  }
+  .bps-media-narrow-end {
+    justify-content: flex-end;
+  }
+  .bps-marquee-track > li {
+    inline-size: var(--bp-marquee-item-narrow, 350px);
+  }
+}
+
+/* ============================================================
+   Classic — דף נחיתה קלאסי (המבנה הנפוץ של אתרי Elementor). המידות והצבעים — לפי ערכי ברירת מחדל
+   שאתר משנה דרך ערכת הצבעים, הצבעים הנוספים של התבנית (--bp-t-*) והגופנים שלו.
+   ============================================================ */
+.bps.bps-classic {
+  --bp-max: 1140px;
+  --bp-gutter: 0px;
+  --bp-font-display: "Heebo", system-ui, sans-serif;
+  --bp-font-heading: "Assistant", system-ui, sans-serif;
+  --bp-font-body: "Assistant", system-ui, sans-serif;
+  --bp-font-ui: "Roboto", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.bps.bps-classic .bps-wrap {
+  max-inline-size: calc(var(--bp-max) + 20px);
+  padding-inline: 10px;
+}
+.bps.bps-classic .bps-section {
+  padding-block: 30px 50px;
+}
+.bps.bps-classic .bps-section + .bps-section {
+  border: 0;
+}
+.bps.bps-classic .bps-head {
+  margin-block-end: 20px;
+  text-align: center;
+}
+.bps.bps-classic .bps-eyebrow,
+.bps.bps-classic .bps-index {
+  display: none;
+}
+.bps.bps-classic :is(.bps-h1, .bps-h2, .bps-h3) {
+  text-wrap: wrap;
+}
+.bps.bps-classic .bps-h2 {
+  font-family: var(--bp-font-heading);
+  font-size: 49px;
+  line-height: 1.5;
+  font-weight: 800;
+  letter-spacing: normal;
+  color: var(--bp-t-title, var(--bp-text));
+}
+.bps.bps-classic .bps-btn {
+  min-block-size: 0;
+  padding: 12px 24px;
+  border-radius: 3px;
+  font-family: var(--bp-font-body);
+  font-size: 25px;
+  font-weight: 500;
+  line-height: 1;
+}
+.bps.bps-classic .bps-btn-primary {
+  border: 1px solid var(--bp-text);
+  background: var(--bp-accent);
+  color: var(--bp-accent-text);
+}
+.bps.bps-classic .bps-btn-soft {
+  border: 1px solid var(--bp-text);
+  background: var(--bp-t-softButton, #fff);
+  color: var(--bp-text);
+}
+
+/* פתיח: תמונת רקע מלאה, שכבה כהה באלכסון, טקסט מיושר להתחלה, גל בתחתית */
+.bps.bps-classic .bps-hero-cover {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-block-size: 774px;
+  padding-block: 80px 100px;
+  overflow: hidden;
+  isolation: isolate;
+}
+.bps.bps-classic .bps-hero-cover .bps-hero-media {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+}
+.bps.bps-classic .bps-hero-cover .bps-hero-media img,
+.bps.bps-classic .bps-hero-cover .bps-hero-media picture {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  aspect-ratio: auto;
+  object-fit: cover;
+  border-radius: 0;
+}
+.bps.bps-classic .bps-hero-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(145deg, rgb(0 0 0 / 0.01) 0%, #030202 89%);
+  opacity: var(--bp-overlay, 0.75);
+}
+.bps.bps-classic .bps-hero-cover .bps-hero-inner {
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 1308px;
+  padding: 0 20px;
+}
+.bps.bps-classic .bps-hero-text {
+  max-inline-size: 614px;
+  color: #fff;
+  text-align: start;
+}
+.bps.bps-classic .bps-hero-logo {
+  inline-size: 160px;
+  block-size: 160px;
+  margin-block-end: 20px;
+  clip-path: circle(36% at 50% 50%);
+  object-fit: cover;
+}
+.bps.bps-classic .bps-h1 {
+  font-family: var(--bp-font-display);
+  font-weight: 900;
+  letter-spacing: normal;
+  color: #fff;
+}
+.bps.bps-classic .bps-h1-lead,
+.bps.bps-classic .bps-h1-main {
+  display: block;
+}
+.bps.bps-classic .bps-h1-lead {
+  font-size: 35px;
+  line-height: 1.1;
+  margin-block-end: 20px;
+}
+.bps.bps-classic .bps-h1-main {
+  font-size: 45px;
+  line-height: 1.1;
+}
+.bps.bps-classic .bps-hero-sub {
+  max-inline-size: none;
+  margin: 19px 0 0;
+  font-size: 20px;
+  line-height: 30px;
+  font-weight: 500;
+  color: #fff;
+}
+.bps.bps-classic .bps-hero-tagline {
+  margin: 35px 0 0;
+  font-size: 22px;
+  line-height: 22px;
+  font-weight: 800;
+}
+.bps.bps-classic .bps-hero .bps-actions {
+  margin-block-start: 20px;
+}
+.bps.bps-classic .bps-hero .bps-btn-primary {
+  gap: 0.5rem;
+  border: 1px solid #fff;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+.bps.bps-classic .bps-hero-wave {
+  display: block;
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: -1px;
+  inline-size: 100%;
+  block-size: 53px;
+  fill: var(--bp-t-band, #efefef);
+}
+
+/* טופס: מקטע בהיר (עם תמונת רקע) או כהה */
+.bps.bps-classic .bps-form-band {
+  background-color: var(--bp-t-band, #efefef);
+}
+.bps.bps-classic .bps-form-light .bps-form-title {
+  max-inline-size: 288px;
+  font-family: var(--bp-font-display);
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--bp-text);
+  text-align: start;
+}
+.bps.bps-classic .bps-form-dark {
+  background-color: var(--bp-t-dark, #3d2c23);
+  padding-block: 30px 50px;
+}
+.bps.bps-classic .bps-form-dark .bps-form-inner {
+  gap: 20px;
+}
+.bps.bps-classic .bps-form textarea {
+  block-size: 40px;
+  min-block-size: 40px;
+  border-radius: 35px;
+  resize: none;
+}
+.bps.bps-classic .bps-form-dark .bps-form-title {
+  max-inline-size: 514px;
+  font-size: 49px;
+  line-height: 1;
+  color: #fff;
+  text-align: center;
+}
+
+/* אודות: שתי עמודות על משטח בהיר; כותרת כתמונה; טקסט מיושר לשני הצדדים; קרוסלה עם צל */
+.bps.bps-classic .bps-about {
+  padding-block: 10px;
+}
+.bps.bps-classic .bps-about-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  align-items: stretch;
+}
+.bps.bps-classic .bps-about-text,
+.bps.bps-classic .bps-about-media {
+  padding: 10px;
+  background: var(--bp-surface);
+}
+.bps.bps-classic .bps-about-media {
+  padding-block-start: 225px;
+}
+/* כמו באתר המקורי: הסרט יוצא מעבר למשטח לכיוון תחילת השורה */
+.bps.bps-classic .bps-head-image {
+  display: flex;
+  justify-content: flex-start;
+  margin-block: -11px 2px;
+  margin-inline: -109px 0;
+}
+.bps.bps-classic .bps-title-image {
+  inline-size: 459px;
+  max-inline-size: 100%;
+}
+.bps.bps-classic .bps-about {
+  overflow-x: clip;
+}
+.bps.bps-classic .bps-about .bps-prose p {
+  max-inline-size: none;
+  margin: 0 0 17px;
+  font-size: 20px;
+  line-height: 27px;
+  text-align: justify;
+  color: var(--bp-text);
+}
+.bps.bps-classic .bps-carousel {
+  padding-inline: 10px;
+}
+.bps.bps-classic .bps-carousel-action {
+  margin-block-start: 50px;
+}
+.bps.bps-classic .bps-carousel-slide img {
+  border-radius: 8px;
+  box-shadow: 0 0 14px 4px rgb(0 0 0 / 0.5);
+}
+
+/* המלצות: רקע צבעוני עם תמונה, גלילה רציפה של כרטיסים */
+.bps.bps-classic .bps-testimonials {
+  padding: 30px 50px 40px;
+  background-color: var(--bp-soft);
+  background-image: var(--bp-section-image, none);
+  background-position: center;
+  background-size: cover;
+}
+.bps.bps-classic .bps-testimonials .bps-wrap {
+  max-inline-size: 1300px;
+}
+.bps.bps-classic .bps-testimonials .bps-h2 {
+  font-size: 43px;
+}
+.bps.bps-classic .bps-testimonials .bps-head {
+  margin-block-end: 14px;
+}
+.bps.bps-classic .bps-testimonials .bps-section-action {
+  margin-block-start: 53px;
+}
+.bps.bps-classic .bps-testimonials .bps-quote {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.bps.bps-classic .bps-marquee-track img {
+  aspect-ratio: 646 / 383;
+  object-fit: cover;
+  border-radius: 16px;
+}
+
+/* שירותים: כרטיסים עם מסגרת, אייקון בעיגול צבעוני, 3 בשורה (האחרונים ממורכזים) */
+.bps.bps-classic .bps-services {
+  padding-block: 10px 20px;
+}
+.bps.bps-classic .bps-services .bps-head {
+  margin-block-end: 43px;
+}
+.bps.bps-classic .bps-portfolio .bps-head {
+  margin-block-end: 34px;
+}
+/* כמו באתר המקורי: רווח לבן אחרי רצועת ההמלצות; שורת הכרטיסים רחבה מעט מהתוכן (3 × 370 + רווחים) */
+.bps.bps-classic .bps-testimonials + .bps-services {
+  margin-block-start: 80px;
+}
+.bps.bps-classic .bps-services .bps-wrap {
+  max-inline-size: calc(1150px + 20px);
+}
+.bps.bps-classic .bps-service-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 40px 20px;
+}
+.bps.bps-classic .bps-service {
+  display: block;
+  flex: 0 1 370px;
+  padding: 20px;
+  border: 2px solid var(--bp-soft);
+  border-radius: 8px;
+}
+.bps.bps-classic .bps-service-num {
+  display: none;
+}
+/* כמו במקור: הכרטיסים שאחרי השורה הראשונה רחבים מעט יותר (ולכן גם שבירת השורות בטקסט שלהם) */
+.bps.bps-classic .bps-service:nth-child(n + 4) {
+  flex-basis: 376px;
+  padding-block: 10px;
+}
+.bps.bps-classic .bps-service-icon {
+  display: grid;
+  place-items: center;
+  inline-size: 100px;
+  block-size: 100px;
+  padding: 25px;
+  border-radius: 50%;
+  background: var(--bp-t-iconBg1, var(--bp-soft));
+}
+.bps.bps-classic .bps-service:nth-child(3n + 2) .bps-service-icon {
+  background-color: var(--bp-t-iconBg2, var(--bp-soft));
+}
+.bps.bps-classic .bps-service:nth-child(3n) .bps-service-icon {
+  background-color: var(--bp-t-iconBg3, var(--bp-soft));
+}
+.bps.bps-classic .bps-service-icon img {
+  inline-size: 50px;
+  block-size: 50px;
+  object-fit: contain;
+}
+.bps.bps-classic .bps-service .bps-h3 {
+  margin: 21px 0 16px;
+  font-family: var(--bp-font-body);
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 400;
+  color: var(--bp-t-cardTitle, var(--bp-text));
+}
+.bps.bps-classic .bps-service p {
+  margin: 0;
+  font-size: 20px;
+  line-height: 30px;
+  color: var(--bp-muted);
+  text-align: justify;
+}
+
+/* תיק עבודות: לשוניות (פעילה — לבנה עם מסגרת), Masonry בן 4 עמודות, שכבה כהה בריחוף */
+.bps.bps-classic .bps-filter {
+  justify-content: center;
+  gap: 10px;
+  margin-block-end: 20px;
+}
+.bps.bps-classic .bps-filter button {
+  min-block-size: 0;
+  padding: 15px 35px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: var(--bp-t-tabBg, var(--bp-soft));
+  color: var(--bp-t-tabText, var(--bp-text));
+  font-family: var(--bp-font-body);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+.bps.bps-classic .bps-filter button[aria-pressed="true"],
+.bps.bps-classic .bps-filter button:hover {
+  border-color: var(--bp-t-tabActive, var(--bp-text));
+  background: #fdfeff;
+  color: var(--bp-t-tabActive, var(--bp-text));
+}
+.bps.bps-classic .bps-count {
+  display: none;
+}
+.bps.bps-classic .bps-masonry {
+  padding-inline: 10px;
+}
+.bps.bps-classic .bps-work-btn {
+  position: relative;
+  display: block;
+  inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.bps.bps-classic .bps-work-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.5);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.bps.bps-classic .bps-work-btn:hover::after,
+.bps.bps-classic .bps-work-btn:focus-visible::after {
+  opacity: 1;
+}
+.bps.bps-classic .bps-work-media {
+  display: block;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+/* תמונה/אנימציה בין מקטעים (למשל העט) */
+.bps.bps-classic .bps-media-block {
+  padding: 13px 10px 14px;
+}
+
+@container bps (max-width: 767px) {
+  .bps.bps-classic .bps-hero-cover {
+    align-items: flex-start;
+    min-block-size: 726px;
+    padding: 83px 22px 68px;
+  }
+  .bps.bps-classic .bps-hero-cover .bps-hero-inner {
+    padding: 0;
+  }
+  .bps.bps-classic .bps-hero-text {
+    max-inline-size: none;
+    padding-inline: 20px;
+    text-align: center;
+  }
+  .bps.bps-classic .bps-hero-logo {
+    inline-size: 148px;
+    block-size: 148px;
+    margin-inline: auto;
+  }
+  .bps.bps-classic .bps-h1-main {
+    font-size: 30px;
+  }
+  .bps.bps-classic .bps-hero-sub {
+    font-size: 22px;
+    line-height: 33px;
+  }
+  .bps.bps-classic .bps-hero .bps-actions {
+    justify-content: center;
+  }
+  .bps.bps-classic .bps-hero .bps-btn-primary {
+    font-size: 20px;
+  }
+  .bps.bps-classic .bps-form-light .bps-form-title {
+    max-inline-size: none;
+    text-align: center;
+  }
+  .bps.bps-classic .bps-form-dark .bps-form-title {
+    font-size: 28px;
+    line-height: 1.4;
+  }
+  .bps.bps-classic .bps-form-band {
+    padding-inline: 10px;
+  }
+  .bps.bps-classic .bps-form-dark {
+    padding: 30px;
+  }
+  .bps.bps-classic .bps-form {
+    max-inline-size: 272px;
+  }
+  .bps.bps-classic .bps-form-submit {
+    font-size: 20px;
+  }
+  .bps.bps-classic .bps-about {
+    padding: 20px;
+  }
+  .bps.bps-classic .bps-about .bps-wrap,
+  .bps.bps-classic .bps-portfolio .bps-wrap {
+    padding-inline: 0;
+  }
+  .bps.bps-classic .bps-about-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bps.bps-classic .bps-about-media {
+    padding-block: 20px;
+  }
+  .bps.bps-classic .bps-about .bps-prose p {
+    margin-block-end: 12px;
+  }
+  .bps.bps-classic .bps-carousel-action {
+    margin-block-start: 20px;
+  }
+  .bps.bps-classic .bps-about .bps-prose p {
+    line-height: 26px;
+  }
+  .bps.bps-classic .bps-title-image {
+    inline-size: 294px;
+  }
+  .bps.bps-classic .bps-head-image {
+    margin-block: 1px 21px;
+    margin-inline: -65px 0;
+  }
+  .bps.bps-classic .bps-btn {
+    font-size: 22px;
+  }
+  .bps.bps-classic .bps-h2 {
+    font-size: 35px;
+    line-height: 0.9;
+  }
+  .bps.bps-classic .bps-services .bps-h2 {
+    font-size: 50px;
+  }
+  .bps.bps-classic .bps-testimonials {
+    padding: 50px 20px;
+  }
+  .bps.bps-classic .bps-testimonials .bps-h2 {
+    font-size: 35px;
+    line-height: 31.5px;
+  }
+  .bps.bps-classic .bps-testimonials .bps-head {
+    margin-block-end: 44px;
+  }
+  .bps.bps-classic .bps-testimonials .bps-section-action {
+    margin-block-start: 38px;
+  }
+  .bps.bps-classic .bps-marquee-track img {
+    aspect-ratio: 350 / 210;
+  }
+  .bps.bps-classic .bps-services {
+    padding: 10px;
+  }
+  .bps.bps-classic .bps-services .bps-head {
+    margin-block-end: 44px;
+  }
+  .bps.bps-classic .bps-service-list {
+    gap: 20px;
+  }
+  /* כמו במקור: השירותים בקבוצות של 3 (שורה במחשב) — רווח מעט גדול יותר בין הקבוצות */
+  .bps.bps-classic .bps-service:nth-child(3n + 4) {
+    margin-block-start: 21px;
+  }
+  .bps.bps-classic .bps-service:nth-child(3n + 5) {
+    margin-block-start: 20px;
+  }
+  .bps.bps-classic .bps-service:nth-child(n + 4) {
+    flex-basis: calc(100% + 20px);
+    margin-inline: -10px;
+  }
+  .bps.bps-classic .bps-service {
+    flex-basis: 100%;
+    text-align: center;
+  }
+  .bps.bps-classic .bps-service-icon {
+    margin-inline: auto;
+  }
+  .bps.bps-classic .bps-service .bps-h3 {
+    font-size: 29px;
+  }
+  .bps.bps-classic .bps-service p {
+    text-align: center;
+  }
+  .bps.bps-classic .bps-portfolio {
+    padding: 20px;
+  }
+  .bps.bps-classic .bps-filter {
+    gap: 0;
+  }
+  .bps.bps-classic .bps-filter button,
+  .bps.bps-classic .bps-filter button:hover,
+  .bps.bps-classic .bps-filter button[aria-pressed="true"] {
+    padding: 7px 14px;
+    border: 0;
+    background: transparent;
+    color: #1a1a1a;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 30px;
+  }
+  .bps.bps-classic .bps-filter button:not(:last-child) {
+    margin-inline-end: 10px;
+  }
+  .bps.bps-classic .bps-filter button[aria-pressed="true"] {
+    color: var(--bp-t-tabText, var(--bp-text));
+  }
+  .bps.bps-classic .bps-footer-strip p {
+    font-size: 15px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .bps .bps-marquee {
+    overflow-x: auto;
+  }
   .bps *,
   .bps *::before,
   .bps *::after {

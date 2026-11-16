@@ -1,7 +1,7 @@
 // ערכות הצבעים ההתחלתיות של התבניות (בעל העסק משנה בעורך; הניגודיות נבדקת — AA)
 import type { Theme } from "../document/schema";
 
-export const TEMPLATE_PALETTES: Record<"elegant" | "portfolio", Theme["palette"]> = {
+export const TEMPLATE_PALETTES: Record<"elegant" | "portfolio" | "classic", Theme["palette"]> = {
   // Elegant: נייר חם, דיו חום-עמוק, הדגשה בטרקוטה עמומה
   elegant: {
     background: "#faf6f0",
@@ -21,5 +21,15 @@ export const TEMPLATE_PALETTES: Record<"elegant" | "portfolio", Theme["palette"]
     accent: "#27466b",
     accentText: "#ffffff",
     soft: "#e7e4de",
+  },
+  // Classic: רקע לבן-ורדרד, טקסט חום, כפתורי מנטה, ורוד-פודרה (ברירת מחדל שעוברת AA)
+  classic: {
+    background: "#fffcfc",
+    surface: "#f8f8f8",
+    text: "#684d4b",
+    muted: "#5a5a5a",
+    accent: "#3f6e5c",
+    accentText: "#ffffff",
+    soft: "#e9d0c7",
   },
 };
