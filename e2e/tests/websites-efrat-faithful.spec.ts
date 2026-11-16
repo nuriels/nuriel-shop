@@ -241,10 +241,17 @@ test("Efrat's old site, rebuilt: same sections, texts, fonts, colors and picture
     "portfolio",
     "contact",
   ]);
-  // no header, no menu, no floating WhatsApp — like the old page; the footer is the one-line strip
+  // no header, no menu — like the old page; the footer is the one-line strip (credit + the accessibility
+  // statement link). The floating WhatsApp button is an approved addition: her number, the requested message.
   await expect(page.locator(".bps-top")).toHaveCount(0);
-  await expect(page.locator(".bps-wa")).toHaveCount(0);
+  await expect(page.locator(".bps-wa")).toHaveAttribute(
+    "href",
+    `https://wa.me/972524653108?text=${encodeURIComponent("שלום, הגעתי דרך האתר ואשמח לקבל פרטים נוספים")}`,
+  );
   await expect(page.locator(".bps-footer-strip")).toContainText("Nuriel");
+  await expect(
+    page.locator(".bps-footer-strip").getByRole("link", { name: "הצהרת נגישות" }),
+  ).toBeVisible();
 
   // the hero: her logo, the two-line H1 (one heading), the services line, the WhatsApp button
   const h1 = page.getByRole("heading", { level: 1 });
