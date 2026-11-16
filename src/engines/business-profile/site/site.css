@@ -56,6 +56,13 @@
   max-inline-size: 46rem;
 }
 
+/* הלוגו בתוך הפתיח (אם האתר בחר בו): גודל בסיס לכל התבניות; תבנית יכולה לשנות */
+.bps-hero-logo {
+  inline-size: 7.5rem;
+  block-size: auto;
+  margin-block-end: 1.5rem;
+}
+
 /* ---------- טיפוגרפיה ---------- */
 /* כל כותרת באתר (גם כותרת נסתרת לקוראי מסך) בגופן של האתר — לא בגופן הכללי של האפליקציה (בלי ספציפיות) */
 :where(.bps) :where(h1, h2, h3, h4) {
@@ -1268,7 +1275,10 @@
   object-fit: cover;
 }
 .bps.bps-classic .bps-h1 {
+  min-block-size: 0;
   font-family: var(--bp-font-display);
+  font-size: 45px;
+  line-height: 1.1;
   font-weight: 900;
   letter-spacing: normal;
   color: #fff;
@@ -1281,10 +1291,6 @@
   font-size: 35px;
   line-height: 1.1;
   margin-block-end: 20px;
-}
-.bps.bps-classic .bps-h1-main {
-  font-size: 45px;
-  line-height: 1.1;
 }
 .bps.bps-classic .bps-hero-sub {
   max-inline-size: none;
@@ -1594,7 +1600,7 @@
     block-size: 148px;
     margin-inline: auto;
   }
-  .bps.bps-classic .bps-h1-main {
+  .bps.bps-classic .bps-h1 {
     font-size: 30px;
   }
   .bps.bps-classic .bps-hero-sub {

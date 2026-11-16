@@ -436,6 +436,50 @@ test("Efrat's old site, rebuilt: same sections, texts, fonts, colors and picture
       quality: 85,
       animations: "disabled",
     });
+    // the whole page in this template: the preview frame (and the editor panel around it) is stretched to its
+    // content for this screenshot only, then put back as it was
+    const preview = page.locator('iframe[title="תצוגה מקדימה של האתר"]');
+    const fullHeight = await preview.evaluate((f: HTMLIFrameElement) => {
+      const d = f.contentDocument!;
+      for (const img of d.images) img.loading = "eager";
+      for (let el: HTMLElement | null = f; el && el !== document.body; el = el.parentElement) {
+        el.dataset["shotStyle"] = el.getAttribute("style") ?? "";
+        if (el !== f) {
+          el.style.setProperty("height", "auto", "important");
+          el.style.setProperty("max-height", "none", "important");
+          el.style.setProperty("overflow", "visible", "important");
+        }
+      }
+      f.style.setProperty("height", `${d.documentElement.scrollHeight}px`, "important");
+      return d.documentElement.scrollHeight;
+    });
+    // (the window grows too, so the whole stretched frame is painted)
+    await page.setViewportSize({ width: 1440, height: Math.min(fullHeight + 400, 12000) });
+    await frame
+      .locator("body")
+      .evaluate(() =>
+        Promise.race([
+          Promise.all(
+            [...document.images]
+              .filter((img) => img.getClientRects().length > 0 && !img.complete)
+              .map((img) => new Promise((r) => img.addEventListener("load", r, { once: true }))),
+          ),
+          new Promise((r) => setTimeout(r, 8000)),
+        ]),
+      );
+    await preview.screenshot({
+      path: testInfo.outputPath(`faithful-template-${key}-full.jpg`),
+      type: "jpeg",
+      quality: 72,
+      animations: "disabled",
+    });
+    await page.evaluate(() => {
+      for (const el of document.querySelectorAll<HTMLElement>("[data-shot-style]")) {
+        el.setAttribute("style", el.dataset["shotStyle"] ?? "");
+        delete el.dataset["shotStyle"];
+      }
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
   }
 
   // still a draft: not published, the address is "under construction"; the draft was not changed by the preview

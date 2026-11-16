@@ -64,12 +64,15 @@ export function HeroBlock({
           )}
           {t(p.eyebrow) && <p className="bps-eyebrow">{t(p.eyebrow)}</p>}
           <h1 id={`${block.id}-title`} className="bps-h1">
-            {lead && (
+            {/* שורת פתיחה קטנה (אם יש) והכותרת — באותו H1; בלי שורת פתיחה: הכותרת לבדה, בלי עטיפה */}
+            {lead ? (
               <>
                 <span className="bps-h1-lead">{lead}</span>{" "}
+                <span className="bps-h1-main">{title}</span>
               </>
+            ) : (
+              title
             )}
-            <span className="bps-h1-main">{title}</span>
           </h1>
           {t(p.subtitle) && <p className="bps-hero-sub">{t(p.subtitle)}</p>}
           {t(p.tagline) && <p className="bps-hero-tagline">{t(p.tagline)}</p>}
