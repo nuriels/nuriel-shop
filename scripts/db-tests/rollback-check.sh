@@ -179,6 +179,7 @@ M76=20261115100000_site_tag_manager
 M77=20261116090000_bp_engine
 M78=20261116100000_bp_media
 M79=20261116110000_bp_site_fonts
+M80=20261116120000_bp_inquiries
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -221,6 +222,49 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- Nuriel Websites: inquiries from customers (migration 80) ----------
+expect "before the rollback: the closed inquiry tables (RLS), saving for the server only, the inbox for signed-in owners, the new permission" \
+  "SELECT to_regclass('business_profile.inquiries') IS NOT NULL
+      AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'business_profile.inquiries'::regclass)
+      AND NOT has_table_privilege('authenticated', 'business_profile.inquiries', 'SELECT')
+      AND has_function_privilege('service_role', 'public.bp_inquiry_submit(uuid,text,text,text,text,text,text,text,text,boolean)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.bp_inquiry_submit(uuid,text,text,text,text,text,text,text,text,boolean)', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'public.bp_inquiries_list(text,boolean,integer)', 'EXECUTE')
+      AND pg_get_functiondef('business_profile.permissions()'::regprocedure) LIKE '%inquiries.manage%'"
+echo "rollback guard: $M80 refuses while an inquiry or saved notification settings exist"
+q "INSERT INTO public.tenants (slug, name, site_type) VALUES ('rb-inq', 'עסק לבדיקת פניות', 'business_profile')" >/dev/null
+q "INSERT INTO business_profile.inquiries (id, tenant_id, client_key, full_name, phone)
+   SELECT '33333333-3333-4333-8333-333333333333', id, gen_random_uuid(), 'לקוחה', '0501234567'
+     FROM public.tenants WHERE slug = 'rb-inq'" >/dev/null
+if down "$M80" 2>/dev/null; then
+  echo "  FAIL rollback ran although an inquiry exists"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT EXISTS (SELECT 1 FROM business_profile.inquiries WHERE id = '33333333-3333-4333-8333-333333333333')"
+q "DELETE FROM business_profile.inquiries WHERE id = '33333333-3333-4333-8333-333333333333'" >/dev/null
+q "INSERT INTO business_profile.inquiry_settings (tenant_id, notify_email)
+   SELECT id, 'owner@example.com' FROM public.tenants WHERE slug = 'rb-inq'" >/dev/null
+if down "$M80" 2>/dev/null; then
+  echo "  FAIL rollback ran although notification settings exist"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT EXISTS (SELECT 1 FROM business_profile.inquiry_settings)"
+q "DELETE FROM business_profile.inquiry_settings;
+   DELETE FROM public.site_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-inq');
+   DELETE FROM public.email_settings WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rb-inq');
+   DELETE FROM public.tenants WHERE slug = 'rb-inq'" >/dev/null
+ref_upto "$M80"
+echo "rollback: $M80"
+down "$M80"
+expect "the inquiry tables and functions are gone; the owner's permissions are as in migration 77" \
+  "SELECT to_regclass('business_profile.inquiries') IS NULL
+      AND to_regclass('business_profile.inquiry_notes') IS NULL
+      AND to_regclass('business_profile.inquiry_settings') IS NULL
+      AND to_regprocedure('public.bp_inquiry_submit(uuid,text,text,text,text,text,text,text,text,boolean)') IS NULL
+      AND to_regprocedure('public.bp_inquiries_list(text,boolean,integer)') IS NULL
+      AND pg_get_functiondef('business_profile.permissions()'::regprocedure) NOT LIKE '%inquiries.manage%'"
+same_as_ref "migration 79"
 
 # ---------- Nuriel Websites: site fonts + the "Classic" template (migration 79) ----------
 expect "before the rollback: the Classic template, the font column and checks, the font registration for editors only, WOFF2 in the bucket" \
@@ -2537,11 +2581,18 @@ up "$M76"
 up "$M77"
 up "$M78"
 up "$M79"
+up "$M80"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')
       AND NOT has_function_privilege('anon', 'public.bp_draft_save(jsonb,integer)', 'EXECUTE')
       AND pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'tenants_site_type_check')) LIKE '%business_profile%'"
+expect "the inquiries are back: the closed tables, saving for the server only, the inbox for signed-in owners" \
+  "SELECT to_regclass('business_profile.inquiries') IS NOT NULL
+      AND NOT has_table_privilege('authenticated', 'business_profile.inquiries', 'SELECT')
+      AND has_function_privilege('service_role', 'public.bp_inquiry_submit(uuid,text,text,text,text,text,text,text,text,boolean)', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'public.bp_inquiry_get(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.bp_inquiry_get(uuid)', 'EXECUTE')"
 expect "the media library is back: the closed table, the public read of published images, the editor functions" \
   "SELECT to_regclass('business_profile.media') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_media_public()', 'EXECUTE')

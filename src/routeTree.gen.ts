@@ -90,6 +90,7 @@ import { Route as StayMyBookingRouteImport } from './routes/stay.my-booking'
 import { Route as StayPrivacyRouteImport } from './routes/stay.privacy'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as StudioEditorRouteImport } from './routes/studio.editor'
+import { Route as StudioInboxRouteImport } from './routes/studio.inbox'
 import { Route as StudioVersionsRouteImport } from './routes/studio.versions'
 import { Route as StudioPreviewRouteImport } from './routes/studio_.preview'
 import { Route as UnsubscribeTokenRouteImport } from './routes/unsubscribe.$token'
@@ -530,6 +531,11 @@ const StudioEditorRoute = StudioEditorRouteImport.update({
   path: '/editor',
   getParentRoute: () => StudioRoute,
 } as any)
+const StudioInboxRoute = StudioInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => StudioRoute,
+} as any)
 const StudioVersionsRoute = StudioVersionsRouteImport.update({
   id: '/versions',
   path: '/versions',
@@ -783,6 +789,7 @@ export interface FileRoutesByFullPath {
   '/stay/my-booking': typeof StayMyBookingRoute
   '/stay/privacy': typeof StayPrivacyRoute
   '/studio/editor': typeof StudioEditorRoute
+  '/studio/inbox': typeof StudioInboxRoute
   '/studio/versions': typeof StudioVersionsRoute
   '/studio/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
@@ -896,6 +903,7 @@ export interface FileRoutesByTo {
   '/stay/my-booking': typeof StayMyBookingRoute
   '/stay/privacy': typeof StayPrivacyRoute
   '/studio/editor': typeof StudioEditorRoute
+  '/studio/inbox': typeof StudioInboxRoute
   '/studio/versions': typeof StudioVersionsRoute
   '/studio/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
@@ -1014,6 +1022,7 @@ export interface FileRoutesById {
   '/stay/my-booking': typeof StayMyBookingRoute
   '/stay/privacy': typeof StayPrivacyRoute
   '/studio/editor': typeof StudioEditorRoute
+  '/studio/inbox': typeof StudioInboxRoute
   '/studio/versions': typeof StudioVersionsRoute
   '/studio_/preview': typeof StudioPreviewRoute
   '/unsubscribe/$token': typeof UnsubscribeTokenRoute
@@ -1133,6 +1142,7 @@ export interface FileRouteTypes {
     | '/stay/my-booking'
     | '/stay/privacy'
     | '/studio/editor'
+    | '/studio/inbox'
     | '/studio/versions'
     | '/studio/preview'
     | '/unsubscribe/$token'
@@ -1246,6 +1256,7 @@ export interface FileRouteTypes {
     | '/stay/my-booking'
     | '/stay/privacy'
     | '/studio/editor'
+    | '/studio/inbox'
     | '/studio/versions'
     | '/studio/preview'
     | '/unsubscribe/$token'
@@ -1363,6 +1374,7 @@ export interface FileRouteTypes {
     | '/stay/my-booking'
     | '/stay/privacy'
     | '/studio/editor'
+    | '/studio/inbox'
     | '/studio/versions'
     | '/studio_/preview'
     | '/unsubscribe/$token'
@@ -2043,6 +2055,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioEditorRouteImport
       parentRoute: typeof StudioRoute
     }
+    '/studio/inbox': {
+      id: '/studio/inbox'
+      path: '/inbox'
+      fullPath: '/studio/inbox'
+      preLoaderRoute: typeof StudioInboxRouteImport
+      parentRoute: typeof StudioRoute
+    }
     '/studio/versions': {
       id: '/studio/versions'
       path: '/versions'
@@ -2400,12 +2419,14 @@ const StayRouteWithChildren = StayRoute._addFileChildren(StayRouteChildren)
 
 interface StudioRouteChildren {
   StudioEditorRoute: typeof StudioEditorRoute
+  StudioInboxRoute: typeof StudioInboxRoute
   StudioVersionsRoute: typeof StudioVersionsRoute
   StudioIndexRoute: typeof StudioIndexRoute
 }
 
 const StudioRouteChildren: StudioRouteChildren = {
   StudioEditorRoute: StudioEditorRoute,
+  StudioInboxRoute: StudioInboxRoute,
   StudioVersionsRoute: StudioVersionsRoute,
   StudioIndexRoute: StudioIndexRoute,
 }

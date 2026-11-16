@@ -1081,6 +1081,87 @@
   min-block-size: 1.2em;
   font-size: 0.85rem;
 }
+/* פניות מלקוחות (מיגרציה 196): שדה + הודעת השגיאה שלו (מופיעה רק כשיש שגיאה — הטופס לא זז בלעדיה) */
+.bps-field {
+  display: grid;
+  gap: 4px;
+  min-inline-size: 0;
+}
+.bps-field-error {
+  font-family: var(--bp-font-ui, sans-serif);
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 600;
+  color: #a3120b;
+}
+.bps-form-dark .bps-field-error,
+.bps-form-dark .bps-form-note {
+  color: #ffd2cc;
+}
+.bps-form input[aria-invalid="true"] {
+  border-color: #a3120b;
+  box-shadow: 0 0 0 1px #a3120b;
+}
+.bps-form-dark .bps-form input[aria-invalid="true"] {
+  border-color: #ffd2cc;
+  box-shadow: 0 0 0 2px #ffd2cc;
+}
+.bps-form-submit:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+/* מלכודת לבוטים — מחוץ למסך, לא נגיש ולא נראה */
+.bps-trap {
+  position: absolute;
+  inset-inline-start: -10000px;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+}
+/* האישור אחרי השליחה — במקום הטופס */
+.bps-form-done {
+  justify-items: center;
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--bp-surface, #fff) 92%, transparent);
+  color: var(--bp-text, #222);
+  text-align: center;
+  font-family: var(--bp-font-body, sans-serif);
+}
+.bps-form-done p {
+  margin: 0;
+}
+.bps-form-done-title {
+  margin: 0;
+  font-family: var(--bp-font-heading, var(--bp-font-display, sans-serif));
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+.bps-form-done-title:focus {
+  outline: none;
+}
+.bps-form-done-title:focus-visible {
+  outline: 3px solid var(--bp-accent);
+  outline-offset: 4px;
+}
+.bps-form-done-ref {
+  font-size: 0.95rem;
+}
+.bps-form-done-test {
+  font-size: 0.85rem;
+  color: #7a4b00;
+}
+.bps-form-again {
+  margin-block-start: 6px;
+  padding: 6px 16px;
+  border: 1px solid currentColor;
+  border-radius: 45px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
 .bps-media-block {
   display: flex;
   padding: 10px;

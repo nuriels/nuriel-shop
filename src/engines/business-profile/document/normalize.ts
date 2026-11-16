@@ -2,6 +2,7 @@
 // רץ בכל קריאה (האתר הציבורי, ממשק הניהול) ולפני כל שמירה (השרת שומר רק את התוצאה).
 import { isBlockType, normalizeBlockProps } from "./blocks";
 import {
+  accessibilityStatement,
   business as businessSchema,
   collections as collectionsSchema,
   DEFAULT_LOCALE,
@@ -12,6 +13,7 @@ import {
   MAX_PAGES,
   PAGE_SLUG,
   pageSeo,
+  RESERVED_SLUGS,
   rawBlock,
   TEMPLATE_KEYS,
   theme as themeSchema,
@@ -61,7 +63,8 @@ function normalizePages(input: unknown): Page[] {
     const id =
       typeof p["id"] === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(p["id"]) ? p["id"] : null;
     const slug = typeof p["slug"] === "string" && PAGE_SLUG.test(p["slug"]) ? p["slug"] : null;
-    if (!id || slug === null || ids.has(id) || slugs.has(slug)) continue;
+    if (!id || slug === null || RESERVED_SLUGS.includes(slug) || ids.has(id) || slugs.has(slug))
+      continue;
     ids.add(id);
     slugs.add(slug);
     pages.push({
@@ -99,6 +102,7 @@ export function normalizeDocument(input: unknown): SiteDocument {
     business: businessSchema.parse(d["business"]),
     collections: collectionsSchema.parse(d["collections"]),
     pages: normalizePages(d["pages"]),
+    accessibility: accessibilityStatement.parse(d["accessibility"]),
   };
 }
 

@@ -2,6 +2,7 @@
 // ערכי התחלה והמרה מגרסה ישנה. סוג מקטע חדש = רשומה חדשה כאן + רכיב תצוגה בתבניות; בלי מיגרציה במסד.
 // מקטע מסוג לא מוכר נזרק בנירמול (לא מוצג ולא שובר את האתר).
 import { z } from "zod";
+import { INQUIRY_KINDS } from "../inquiries/logic";
 import { imageRef, localized, safeLink, type LocalizedText } from "./schema";
 
 const he = (text: string): LocalizedText => ({ he: text });
@@ -176,7 +177,7 @@ export const BLOCK_DEFINITIONS = {
       showWhatsapp: z.boolean().catch(true),
       showPhone: z.boolean().catch(true),
       showEmail: z.boolean().catch(true),
-      /** טופס פנייה (תיבת הפניות של הפלטפורמה) — מחובר בשלב הטפסים (Stage 4) */
+      /** טופס פנייה — נשמר ב"פניות מלקוחות" בממשק הניהול (מיגרציה 196) */
       form: z.boolean().catch(false),
     }),
     defaults: () => ({
@@ -213,8 +214,11 @@ export const BLOCK_DEFINITIONS = {
           message: he("במה אוכל לעזור?"),
         }),
       submit: localized(60),
+      /** סוג הפנייה ב"פניות מלקוחות" (מיגרציה 196) — כדי לדעת מאיזה טופס הגיעה */
+      kind: z.enum(INQUIRY_KINDS).catch("contact"),
     }),
     defaults: () => ({
+      kind: "contact" as (typeof INQUIRY_KINDS)[number],
       title: he("השאירו פרטים ונחזור אליכם"),
       layout: "beside" as "beside" | "stacked",
       tone: "light" as "light" | "dark",

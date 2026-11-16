@@ -7,6 +7,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Button, Card, CardContent } from "@/platform/ui";
 import { signOutHere } from "@/platform/auth/browser-session";
 import { studioCentralLogin, studioContext } from "../api/studio.functions";
+import { studioInquiriesNewCount } from "../api/inquiries.functions";
 import type { StudioContext } from "../types";
 import { StatusBadge } from "./status";
 
@@ -103,6 +104,7 @@ export function StudioLayout() {
               <StudioLink to="/studio">סקירה ופרסום</StudioLink>
               <StudioLink to="/studio/editor">עריכת האתר</StudioLink>
               <StudioLink to="/studio/versions">גרסאות</StudioLink>
+              {context.permissions.includes("inquiries.manage") && <InboxLink />}
               <Button
                 variant="ghost"
                 size="sm"
@@ -129,6 +131,31 @@ function StudioLink({ to, children }: { to: string; children: ReactNode }) {
       className="rounded-md px-3 py-2 text-muted-foreground hover:bg-muted hover:text-foreground data-[status=active]:bg-muted data-[status=active]:font-semibold data-[status=active]:text-foreground"
     >
       {children}
+    </Link>
+  );
+}
+
+/** "פניות מלקוחות" + מספר הפניות החדשות (מתעדכן כל דקה) */
+function InboxLink() {
+  const load = useServerFn(studioInquiriesNewCount);
+  const q = useQuery({
+    queryKey: ["bp", "inquiries", "new-count"],
+    queryFn: () => load(),
+    refetchInterval: 60_000,
+  });
+  const n = q.data?.count ?? 0;
+  return (
+    <Link
+      to="/studio/inbox"
+      className="flex items-center gap-1.5 rounded-md px-3 py-2 text-muted-foreground hover:bg-muted hover:text-foreground data-[status=active]:bg-muted data-[status=active]:font-semibold data-[status=active]:text-foreground"
+    >
+      פניות מלקוחות
+      {n > 0 && (
+        <span className="min-w-5 rounded-full bg-primary px-1.5 text-center text-xs font-semibold text-primary-foreground tabular-nums">
+          {n}
+          <span className="sr-only"> חדשות</span>
+        </span>
+      )}
     </Link>
   );
 }

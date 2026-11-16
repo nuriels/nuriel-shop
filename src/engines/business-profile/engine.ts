@@ -7,6 +7,12 @@ export const businessProfileEngine: Engine = {
   key: "business_profile",
   label: "Nuriel Websites",
   ownsServerFn: (filename) => filename.startsWith(BP_SOURCE_PREFIX),
+  // פניות מלקוחות (מיגרציה 196): ניסיון חוזר להתראות במייל ומחיקה לפי מדיניות השמירה — רק בשרת,
+  // ורק כשמתג המנוע דולק (נבדק בתוך התהליך)
+  startWorkers() {
+    if (typeof window !== "undefined") return;
+    void import("./inquiries/worker.server").then((m) => m.startInquiryWorker());
+  },
   // "אתרי אינטרנט" בפאנל הפלטפורמה — רק הקובץ הזה, ורק בכתובת הפאנל
   platformAdminServerFn: (filename) =>
     filename === `${BP_SOURCE_PREFIX}api/platform-admin.functions.ts`,

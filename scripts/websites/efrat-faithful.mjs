@@ -15,6 +15,12 @@ export const loadSource = () => JSON.parse(readFileSync(SOURCE_URL, "utf8"));
 
 const he = (text) => ({ he: String(text ?? "").trim() });
 
+/**
+ * כפתור WhatsApp הצף (תוספת שאושרה — לא היה באתר הישן): המספר מפרטי העסק, וההודעה המוכנה שנוריאל ביקש.
+ * הכפתורים של האתר הישן (פתיח, קרוסלה, המלצות) שומרים את הקישור המקורי שלהם, עם ההודעה המקורית.
+ */
+export const FLOATING_WHATSAPP_MESSAGE = "שלום, הגעתי דרך האתר ואשמח לקבל פרטים נוספים";
+
 /** @param {any} src @param {Record<string, string>} ids שם קובץ → מזהה מדיה */
 export function buildFaithfulDocument(src, ids = {}) {
   const media = (file) => (file && ids[file]) || null;
@@ -93,14 +99,14 @@ export function buildFaithfulDocument(src, ids = {}) {
       tokens: src.tokens,
       fonts,
       typography: src.typography,
-      chrome: { header: "none", footer: "strip", floatingWhatsapp: false },
+      chrome: { header: "none", footer: "strip", floatingWhatsapp: true },
     },
     business: {
       name: he(src.business.name),
       tagline: he(""),
       phone: "",
       whatsapp: src.business.whatsapp,
-      whatsappMessage: he(src.business.whatsappMessage),
+      whatsappMessage: he(FLOATING_WHATSAPP_MESSAGE),
       email: "",
       address: he(""),
       hours: he(""),
@@ -139,6 +145,7 @@ export function buildFaithfulDocument(src, ids = {}) {
             background: img(src.leadForm.background, ""),
             fields,
             submit: he(src.leadForm.submit),
+            kind: "consultation",
           }),
           block("about", "about", {
             eyebrow: he(""),
@@ -194,6 +201,7 @@ export function buildFaithfulDocument(src, ids = {}) {
             background: { media: null, alt: he("") },
             fields,
             submit: he(src.ctaForm.submit),
+            kind: "contact",
           }),
         ],
       },

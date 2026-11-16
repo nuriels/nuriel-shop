@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { USERS } from "../fixtures/data.mjs";
-// @ts-expect-error -- a plain ESM script (scripts/websites), no type declarations
 import { buildFaithfulDocument, loadSource } from "../../scripts/websites/efrat-faithful.mjs";
 import { hostGet, hostOf, PORT } from "./helpers";
 import {

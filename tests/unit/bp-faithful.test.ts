@@ -9,7 +9,6 @@ import { justifyRows } from "@/engines/business-profile/site/layout";
 import { TEMPLATE_PALETTES } from "@/engines/business-profile/templates/palettes";
 import { TEMPLATES, templateTokens } from "@/engines/business-profile/templates/registry";
 import { paletteProblems } from "@/engines/business-profile/studio/editor/contrast";
-// @ts-expect-error -- a plain ESM script, no type declarations
 import { buildFaithfulDocument, loadSource } from "../../scripts/websites/efrat-faithful.mjs";
 
 const MEDIA = "6f1f1f1f-1f1f-4f1f-8f1f-1f1f1f1f1f1f";
@@ -87,8 +86,8 @@ describe("Classic template: tokens, typography, site parts", () => {
     expect(TEMPLATES.classic.status).toBe("available");
     expect(paletteProblems(TEMPLATE_PALETTES.classic)).toEqual([]);
     const tokens = templateTokens(TEMPLATES.classic, { title: "#542510", bogus: "#000000" });
-    expect(tokens.title).toBe("#542510");
-    expect(tokens.tabBg).toBe("#AED1C1");
+    expect(tokens["title"]).toBe("#542510");
+    expect(tokens["tabBg"]).toBe("#AED1C1");
     expect("bogus" in tokens).toBe(false);
   });
 
@@ -274,7 +273,19 @@ describe("Efrat's faithful draft (built from the scanned source)", () => {
       "portfolio:portfolio",
       "contact:form",
     ]);
-    expect(doc.theme.chrome).toEqual({ header: "none", footer: "strip", floatingWhatsapp: false });
+    // כפתור WhatsApp צף (תוספת שאושרה): המספר מפרטי העסק, ההודעה המוכנה — לא ההודעה של כפתורי האתר הישן
+    expect(doc.theme.chrome).toEqual({ header: "none", footer: "strip", floatingWhatsapp: true });
+    expect(doc.business.whatsapp).toBe("972524653108");
+    expect(doc.business.whatsappMessage.he).toBe("שלום, הגעתי דרך האתר ואשמח לקבל פרטים נוספים");
+    // שני הטפסים נשמרים ב"פניות מלקוחות" עם סוג פנייה
+    const kinds = doc.pages[0]!.blocks.filter((b) => b.type === "form").map((b) => [
+      b.id,
+      (b.props as { kind: string }).kind,
+    ]);
+    expect(kinds).toEqual([
+      ["form", "consultation"],
+      ["contact", "contact"],
+    ]);
     expect(doc.theme.typography).toEqual({
       display: "Heebo",
       heading: "Assistant",

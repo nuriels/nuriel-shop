@@ -193,6 +193,62 @@ export const business = z
   });
 export type Business = z.infer<typeof business>;
 
+// ---------- הצהרת נגישות (תקנה 35ה לתקנות הנגישות לשירות) ----------
+// הפרטים שבעל העסק ממלא; הנוסח הקבוע (ההתאמות שבוצעו באתר) — בקוד התצוגה (site/AccessibilityStatement).
+// אין שדה "האתר עומד בתקן": ההצהרה אומרת רק מה נבדק ומי בדק (החלטה: בלי הצהרת עמידה לפני בדיקה מקצועית).
+export const DATE_YMD = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const ymd = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || DATE_YMD.test(v))
+  .catch("");
+export const AUDIT_STATUSES = ["not_audited", "internal", "expert"] as const;
+export const accessibilityStatement = z
+  .object({
+    /** תאריך העדכון האחרון של ההצהרה (YYYY-MM-DD) */
+    updatedOn: ymd,
+    contactName: localized(120),
+    contactPhone: optional(PHONE, 20),
+    contactEmail: optional(EMAIL, 254),
+    /** מה נבדק: לא נבדק על ידי מורשה נגישות / בדיקה פנימית / נבדק על ידי מורשה נגישות */
+    auditStatus: z.enum(AUDIT_STATUSES).catch("not_audited"),
+    auditBy: localized(160),
+    auditOn: ymd,
+    /** התאמות נוספות (מעבר לרשימה הקבועה של המערכת) */
+    measures: localized(2000),
+    /** ליקויים ידועים ומה עושים לגביהם */
+    limitations: localized(3000),
+    /** דרכים חלופיות לקבלת השירות */
+    alternatives: localized(1000),
+    /** הסדרי הנגישות במקום מתן השירות (אם יש מקום פיזי) */
+    premises: localized(2000),
+    /** רכז/ת נגישות — חובה רק לעסק עם 25 עובדים ומעלה */
+    coordinatorRequired: z.boolean().catch(false),
+    coordinatorName: localized(120),
+    coordinatorPhone: optional(PHONE, 20),
+    coordinatorEmail: optional(EMAIL, 254),
+  })
+  .catch({
+    updatedOn: "",
+    contactName: { he: "" },
+    contactPhone: "",
+    contactEmail: "",
+    auditStatus: "not_audited",
+    auditBy: { he: "" },
+    auditOn: "",
+    measures: { he: "" },
+    limitations: { he: "" },
+    alternatives: { he: "" },
+    premises: { he: "" },
+    coordinatorRequired: false,
+    coordinatorName: { he: "" },
+    coordinatorPhone: "",
+    coordinatorEmail: "",
+  });
+export type AccessibilityStatement = z.infer<typeof accessibilityStatement>;
+/** הכתובת של ההצהרה בכל אתר עסק (שמורה — לא שם של עמוד) */
+export const ACCESSIBILITY_SLUG = "accessibility";
+
 // ---------- אוספים ----------
 export const MAX_SERVICES = 30;
 export const MAX_TESTIMONIALS = 60;
@@ -262,6 +318,8 @@ export const MAX_PAGES = 12;
 export const MAX_BLOCKS_PER_PAGE = 30;
 /** שם העמוד בכתובת: "" = דף הבית */
 export const PAGE_SLUG = /^(|[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)$/;
+/** כתובות שמורות לעמודים של המערכת (הצהרת הנגישות) — עמוד לא יכול לקבל אותן */
+export const RESERVED_SLUGS: readonly string[] = ["accessibility"];
 
 export const pageSeo = z
   .object({ title: localized(70), description: localized(170) })
@@ -306,4 +364,5 @@ export interface SiteDocument {
   business: Business;
   collections: Collections;
   pages: Page[];
+  accessibility: AccessibilityStatement;
 }

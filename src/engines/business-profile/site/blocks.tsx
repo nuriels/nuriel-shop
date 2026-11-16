@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { BlockProps } from "../document/blocks";
 import type { Block, PortfolioItem } from "../document/schema";
 import { telHref, useSiteView, useT, whatsappHref } from "./context";
+import { InquiryForm } from "./InquiryForm";
 import { justifyRows } from "./layout";
 import { cssImage, hasImage, LinkButton, SectionHead, SiteImage, WhatsappIcon } from "./parts";
 
@@ -558,21 +559,18 @@ export function TestimonialsBlock({ block, index }: Props<"testimonials">) {
 }
 
 // ---------- Form ----------
-/** טופס פנייה. החיבור לתיבת הפניות של הפלטפורמה — בשלב הטפסים; עד אז: בתצוגה המקדימה הטופס מוצג במלואו והשליחה
- * מסבירה שהיא עוד לא פעילה, ובאתר החי מוצג קישור WhatsApp במקום שדות שלא שולחים לשום מקום */
+/** טופס פנייה — נשמר ב"פניות מלקוחות" (מיגרציה 196), בעל העסק מקבל מייל. בתצוגה המקדימה: פניית בדיקה */
 export function FormBlock({ block }: Props<"form">) {
-  const { doc, media, mode } = useSiteView();
+  const { media, mode } = useSiteView();
   const t = useT();
   const p = block.props;
-  const [notice, setNotice] = useState(false);
   const bg = p.background.media ? cssImage(media[p.background.media]?.url) : undefined;
-  const wa = whatsappHref(doc.business.whatsapp, t(doc.business.whatsappMessage));
-  const fid = (name: string) => `${block.id}-${name}`;
   return (
     <section
       id={block.id}
       className={`bps-form-band bps-form-${p.tone} bps-form-${p.layout}`}
-      aria-labelledby={`${block.id}-title`}
+      aria-labelledby={t(p.title) ? `${block.id}-title` : undefined}
+      aria-label={t(p.title) ? undefined : "טופס פנייה"}
       style={bg ? ({ "--bp-section-image": bg } as CSSProperties) : undefined}
     >
       <div className="bps-wrap bps-form-inner">
@@ -581,78 +579,19 @@ export function FormBlock({ block }: Props<"form">) {
             {t(p.title)}
           </h2>
         )}
-        {mode === "preview" ? (
-          <form
-            className="bps-form"
-            noValidate
-            onSubmit={(e) => {
-              e.preventDefault();
-              setNotice(true);
-            }}
-          >
-            <div className="bps-form-row">
-              <label className="bps-sr" htmlFor={fid("name")}>
-                {t(p.fields.name) || "שם"}
-              </label>
-              <input
-                id={fid("name")}
-                name="name"
-                type="text"
-                required
-                autoComplete="name"
-                placeholder={t(p.fields.name)}
-              />
-              <label className="bps-sr" htmlFor={fid("email")}>
-                {t(p.fields.email) || "אימייל"}
-              </label>
-              <input
-                id={fid("email")}
-                name="email"
-                type="email"
-                required
-                autoComplete="email"
-                placeholder={t(p.fields.email)}
-              />
-              <label className="bps-sr" htmlFor={fid("phone")}>
-                {t(p.fields.phone) || "טלפון"}
-              </label>
-              <input
-                id={fid("phone")}
-                name="phone"
-                type="tel"
-                autoComplete="tel"
-                placeholder={t(p.fields.phone)}
-              />
-            </div>
-            <label className="bps-sr" htmlFor={fid("message")}>
-              {t(p.fields.message) || "הודעה"}
-            </label>
-            <input
-              id={fid("message")}
-              name="message"
-              type="text"
-              placeholder={t(p.fields.message)}
-            />
-            <button type="submit" className="bps-form-submit">
-              {t(p.submit) || "שליחה"}
-            </button>
-            <p className="bps-form-note" role="status">
-              {notice ? "תצוגה מקדימה: השליחה תחובר לתיבת הפניות של האתר בשלב הטפסים." : ""}
-            </p>
-          </form>
-        ) : (
-          wa && (
-            <a
-              className="bps-form-submit bps-form-fallback"
-              href={wa}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {t(p.submit) || "WhatsApp"}
-              <span className="bps-sr"> (נפתח בחלון חדש)</span>
-            </a>
-          )
-        )}
+        <InquiryForm
+          id={block.id}
+          kind={p.kind}
+          formTitle={t(p.title)}
+          preview={mode === "preview"}
+          labels={{
+            name: t(p.fields.name),
+            email: t(p.fields.email),
+            phone: t(p.fields.phone),
+            message: t(p.fields.message),
+            submit: t(p.submit),
+          }}
+        />
       </div>
     </section>
   );
@@ -719,7 +658,7 @@ export function CtaBlock({ block }: Props<"cta">) {
 
 // ---------- Contact ----------
 export function ContactBlock({ block, index }: Props<"contact">) {
-  const { doc } = useSiteView();
+  const { doc, mode } = useSiteView();
   const t = useT();
   const p = block.props;
   const b = doc.business;
@@ -775,6 +714,21 @@ export function ContactBlock({ block, index }: Props<"contact">) {
                 </li>
               ))}
             </ul>
+          )}
+          {p.form && (
+            <InquiryForm
+              id={`${block.id}-form`}
+              kind="contact"
+              formTitle={t(p.title)}
+              preview={mode === "preview"}
+              labels={{
+                name: "שם",
+                email: "אימייל",
+                phone: "טלפון",
+                message: "הודעה",
+                submit: "שליחה",
+              }}
+            />
           )}
           {(t(b.address) || t(b.hours)) && (
             <dl className="bps-details">

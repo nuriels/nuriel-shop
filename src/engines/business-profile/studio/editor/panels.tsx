@@ -676,9 +676,11 @@ function BlockForm({ block, setDoc }: { block: Block; setDoc: SetDoc }) {
             checked={p["showEmail"] !== false}
             onChange={(v) => set("showEmail", v)}
           />
-          <p className="text-xs text-muted-foreground">
-            טופס פנייה (לתיבת הפניות של Nuriel) — יתווסף בשלב הטפסים.
-          </p>
+          <ToggleField
+            label="טופס פנייה (נשמר ב״פניות מלקוחות״)"
+            checked={p["form"] === true}
+            onChange={(v) => set("form", v)}
+          />
         </>
       );
     case "form": {
@@ -709,8 +711,14 @@ function BlockForm({ block, setDoc }: { block: Block; setDoc: SetDoc }) {
           {field("phone", "שדה טלפון — טקסט מנחה")}
           {field("message", "שדה ההודעה — טקסט מנחה")}
           {text("submit", "כפתור השליחה", 60)}
+          {choice("kind", "סוג הפנייה (ב״פניות מלקוחות״)", [
+            ["contact", "יצירת קשר"],
+            ["consultation", "שיחת ייעוץ"],
+            ["quote", "הצעת מחיר"],
+            ["other", "אחר"],
+          ])}
           <p className="text-xs text-muted-foreground">
-            השליחה תחובר לתיבת הפניות בשלב הטפסים. עד אז, באתר החי מוצג במקומו כפתור WhatsApp.
+            כל פנייה נשמרת ב״פניות מלקוחות״ ונשלחת אליכם במייל. בתצוגה המקדימה — נשמרת כפניית בדיקה.
           </p>
         </>
       );
