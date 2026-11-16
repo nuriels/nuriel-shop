@@ -9,7 +9,7 @@
 //   • אידמפוטנטי: קובץ שכבר בספרייה (אותו שם + אותו תוכן) לא מועלה שוב; הרצה חוזרת = אותה טיוטה;
 //   • --dry-run: רק מציג מה היה מועלה / נשמר;
 //   • ההרשאה: חיבור של מנהל הפלטפורמה (או בעל האתר) — ACCESS_TOKEN, או EMAIL + PASSWORD מול ה-Supabase של
-//     הסביבה. לא נשמר שום טוקן לקובץ.
+//     הסביבה, או ‎--server-session לחשבון בלי סיסמה (בשרת בלבד, ראו למטה). לא נשמר שום טוקן לקובץ.
 //
 // דרישות: הקבצים בתיקייה (ברירת מחדל ‎.cache/efrat-faithful — node scripts/websites/fetch-efrat-assets.mjs),
 //         האתר כבר נפתח בפאנל הפלטפורמה בכתובת היעד.
@@ -96,8 +96,55 @@ function askHidden(question) {
   });
 }
 
+// --server-session: לחשבון בלי סיסמה (כניסה בקוד במייל) — בשרת בלבד, עם מפתח השירות מ-‎.env: בדיוק המנגנון של
+// כניסת הקוד במייל באפליקציה (sessionForEmail: generate_link → verify token_hash). לא נשלח מייל, לא נוצרת סיסמה;
+// בסוף החיבור הזה בלבד מנותק (scope=local) — חיבורים אחרים של החשבון (הדפדפן) לא נפגעים.
+const SERVER_SESSION = process.argv.includes("--server-session");
+let signOut = async () => {};
+async function serverSession() {
+  const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SERVICE_ROLE_KEY, EMAIL } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || !SUPABASE_SERVICE_ROLE_KEY || !EMAIL)
+    throw new Error(
+      "--server-session needs SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SERVICE_ROLE_KEY and EMAIL",
+    );
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const link = await fetch(`${base}/auth/v1/admin/generate_link`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ type: "magiclink", email: EMAIL }),
+  });
+  if (!link.ok) throw new Error(`server session: generate_link failed (HTTP ${link.status})`);
+  const l = await link.json();
+  const tokenHash = l.hashed_token ?? l.properties?.hashed_token;
+  if (!tokenHash) throw new Error("server session: no token in the answer");
+  const v = await fetch(`${base}/auth/v1/verify`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, "content-type": "application/json" },
+    body: JSON.stringify({ type: "magiclink", token_hash: tokenHash }),
+  });
+  if (!v.ok) throw new Error(`server session: verify failed (HTTP ${v.status})`);
+  const session = await v.json();
+  if (!session.access_token) throw new Error("server session: no session");
+  signOut = async () => {
+    await fetch(`${base}/auth/v1/logout?scope=local`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        authorization: `Bearer ${session.access_token}`,
+      },
+    }).catch(() => {});
+  };
+  console.log(`signed in as ${EMAIL} (server session, no email sent)`);
+  return session.access_token;
+}
+
 async function token() {
   if (process.env.ACCESS_TOKEN) return process.env.ACCESS_TOKEN;
+  if (SERVER_SESSION) return serverSession();
   const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, EMAIL } = process.env;
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || !EMAIL)
     throw new Error(
@@ -207,6 +254,7 @@ console.log(
 );
 if (DRY) {
   console.log("dry run — nothing uploaded or saved");
+  await signOut();
   process.exit(0);
 }
 let n = 0;
@@ -236,3 +284,4 @@ const saved = await call(tok, STUDIO_FN, "studioSaveDraft", {
 console.log(
   `draft saved (revision ${saved.revision}) — ${images.length} images + ${source.fonts.length} fonts in the library. Not published.`,
 );
+await signOut();

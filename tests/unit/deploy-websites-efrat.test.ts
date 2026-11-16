@@ -163,6 +163,38 @@ describe("deploy/websites-efrat.sh", () => {
     expect(t.calls()).not.toContain("docker run");
   });
 
+  it("import --server-session: only for a platform admin, needs the service key, never prints it", () => {
+    const t = setup();
+    mkdirSync(join(t.app, ".cache/websites-tools/node_modules/seroval"), { recursive: true });
+    writeFileSync(join(t.state, "site_id"), "11111111-2222-3333-4444-555555555555\n");
+    writeFileSync(join(t.state, "admins"), "0\n");
+    let r = t.run(["import", "--server-session"], { ADMIN_EMAIL: "someone@else.test" });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("not a platform admin");
+    writeFileSync(join(t.state, "admins"), "1\n");
+    writeFileSync(
+      join(t.app, ".env"),
+      "TENANT_BASE_DOMAIN=nuri1.fit\nSUPABASE_URL=https://db.example.test\n",
+    );
+    r = t.run(["import", "--server-session"], { ADMIN_EMAIL: "admin@nuriel.test" });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("no SUPABASE_SERVICE_ROLE_KEY");
+    writeFileSync(
+      join(t.app, ".env"),
+      "TENANT_BASE_DOMAIN=nuri1.fit\nSUPABASE_URL=https://db.example.test\nSUPABASE_SERVICE_ROLE_KEY=super-secret-value\n",
+    );
+    r = t.run(["import", "--server-session", "--dry-run"], { ADMIN_EMAIL: "admin@nuriel.test" });
+    expect(r.out).toContain("dry run only");
+    expect(r.out).not.toContain("super-secret-value");
+    const run =
+      t
+        .calls()
+        .split("\n")
+        .find((l) => l.startsWith("docker run")) ?? "";
+    expect(run).toContain("-e SUPABASE_SERVICE_ROLE_KEY ");
+    expect(run).not.toContain("super-secret-value");
+  });
+
   it("checks: an unpublished preview passes; no secret from .env is printed", () => {
     const t = setup();
     writeFileSync(join(t.state, "site_id"), "11111111-2222-3333-4444-555555555555\n");

@@ -12,6 +12,8 @@
 # לא מפרסם, לא משנה DNS / nginx / דומיין, לא שולח הזמנה ולא מיילים, לא נוגע באתרים אחרים.
 # הסקריפטים של Node רצים ב-node:22-slim (ה-image שעליו האפליקציה בנויה) — אין צורך ב-Node על השרת.
 # ADMIN_EMAIL — האימייל של מנהל הפלטפורמה (חובה ל-open-site כשיש יותר ממנהל אחד, ול-import).
+# import ‎--server-session — לחשבון בלי סיסמה (כניסה בקוד במייל): החיבור נוצר בשרת כמו בכניסת הקוד באפליקציה,
+# בלי מייל ובלי סיסמה, ומנותק בסוף.
 # ===========================================================================================
 set -Eeuo pipefail
 
@@ -128,10 +130,20 @@ COMMIT;" | docker exec -i "$DB" psql -U postgres -d postgres -X -q -tA -v ON_ERR
     NODE_ENV_ARGS=(-e "TARGET_ORIGIN=https://$HOST" -e "CONNECT_TO=127.0.0.1:$PORT" -e "EXPECT_SLUG=$SLUG"
       -e "SUPABASE_URL=$(env_value SUPABASE_URL)" -e "SUPABASE_PUBLISHABLE_KEY=$(env_value SUPABASE_PUBLISHABLE_KEY)"
       -e "EMAIL=$ADMIN_EMAIL" -e PASSWORD -e ASSETS_DIR=.cache/efrat-faithful)
+    if [[ " ${*:2} " == *" --server-session "* ]]; then
+      # an account without a password (email-code sign-in): a session made on the server, like the app's own
+      # email-code login — only for a platform admin; the service key goes by environment (not argv), never printed
+      [[ "$(psql_q "SELECT count(*) FROM public.platform_admins a JOIN auth.users u ON u.id = a.user_id WHERE lower(u.email) = lower('${ADMIN_EMAIL//\'/}')")" == 1 ]] ||
+        fail "ADMIN_EMAIL is not a platform admin"
+      SUPABASE_SERVICE_ROLE_KEY=$(env_value SUPABASE_SERVICE_ROLE_KEY)
+      [[ -n "$SUPABASE_SERVICE_ROLE_KEY" ]] || fail ".env has no SUPABASE_SERVICE_ROLE_KEY"
+      export SUPABASE_SERVICE_ROLE_KEY
+      NODE_ENV_ARGS+=(-e SUPABASE_SERVICE_ROLE_KEY)
+    fi
     node_run scripts/websites/import-efrat-site.mjs "${@:2}"
     if [[ " ${*:2} " == *" --dry-run "* ]]; then
       ok "dry run only — nothing uploaded or saved"
-      say "NEXT: ADMIN_EMAIL=$ADMIN_EMAIL bash deploy/websites-efrat.sh import"
+      say "NEXT: the same command without --dry-run"
       exit 0
     fi
     id=$(site_id)
