@@ -21,6 +21,16 @@ const he = (text) => ({ he: String(text ?? "").trim() });
  */
 export const FLOATING_WHATSAPP_MESSAGE = "שלום, הגעתי דרך האתר ואשמח לקבל פרטים נוספים";
 
+/**
+ * הצהרת הנגישות (טיוטה — לבדיקה של אפרת ושל מורשה נגישות לפני פרסום). הליקויים הידועים — מבדיקת
+ * הנגישות של 16.11 (docs/websites/faithful/accessibility-audit.md): מה שנשאר פתוח עד אישור העיצוב.
+ */
+export const ACCESSIBILITY_LIMITATIONS = [
+  "חלק מצבעי האתר המקורי (כפתורים בצבע בהיר עם טקסט לבן, טקסט אפור בהיר) לא מגיעים ליחס הניגודיות שהתקן דורש. הצבעים נשמרו כמו באתר הקודם עד להחלטה על התאמה, ואפשר להגדיל את הניגודיות בדפדפן או בהגדרות המכשיר.",
+  "בטפסים, שמות השדות מוצגים כטקסט בתוך השדה ונעלמים בזמן ההקלדה. לקוראי מסך לכל שדה יש תווית מלאה. אנחנו בודקים דרך להציג את שמות השדות גם בזמן ההקלדה.",
+  "ההמלצות מוצגות כצילומי מסך של הודעות. לכל המלצה יש תיאור קצר, והטקסט המלא של ההמלצות יתווסף בהמשך.",
+].join("\n\n");
+
 /** @param {any} src @param {Record<string, string>} ids שם קובץ → מזהה מדיה */
 export function buildFaithfulDocument(src, ids = {}) {
   const media = (file) => (file && ids[file]) || null;
@@ -114,6 +124,25 @@ export function buildFaithfulDocument(src, ids = {}) {
       logo: img(src.hero.logo, `הלוגו של ${src.business.name}`),
     },
     collections: { services, testimonials, portfolio: { categories, items: works } },
+    accessibility: {
+      updatedOn: "2026-11-16",
+      contactName: he(src.business.name),
+      contactPhone: "",
+      contactEmail: "",
+      auditStatus: "not_audited",
+      auditBy: he(""),
+      auditOn: "",
+      measures: he(""),
+      limitations: he(ACCESSIBILITY_LIMITATIONS),
+      alternatives: he(
+        "מי שמתקשה להשתמש באתר מוזמן/ת לפנות ב-WhatsApp, ונשמח לתת את כל המידע והשירות גם בהודעות או בשיחת טלפון.",
+      ),
+      premises: he(""),
+      coordinatorRequired: false,
+      coordinatorName: he(""),
+      coordinatorPhone: "",
+      coordinatorEmail: "",
+    },
     pages: [
       {
         id: "home",

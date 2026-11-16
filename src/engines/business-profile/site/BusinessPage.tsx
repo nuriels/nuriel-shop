@@ -1,6 +1,7 @@
 // עמוד באתר העסק (מהגרסה המפורסמת) + הכותרות שלו — לשימוש מתאמי הנתיבים (src/routes/bp-site.*)
 import { notFound } from "@tanstack/react-router";
 import { pageBySlug } from "../document/normalize";
+import { ACCESSIBILITY_SLUG } from "../document/schema";
 import type { PublicSiteData } from "../types";
 import {
   BP_CREDIT_AFTER,
@@ -14,6 +15,12 @@ import { pageHead } from "./page-head";
 import { SiteView } from "./SiteView";
 
 export function BusinessPage({ site, slug }: { site: PublicSiteData; slug: string }) {
+  // הצהרת הנגישות — בכל אתר עסק, באותה מסגרת (כותרת, פוטר) של האתר
+  if (slug === ACCESSIBILITY_SLUG) {
+    const home = pageBySlug(site.document, "");
+    if (!home) return <BusinessNotFound />;
+    return <SiteView doc={site.document} media={site.media} page={home} special="accessibility" />;
+  }
   const page = pageBySlug(site.document, slug);
   if (!page) return <BusinessNotFound />;
   return <SiteView doc={site.document} media={site.media} page={page} />;
@@ -21,8 +28,9 @@ export function BusinessPage({ site, slug }: { site: PublicSiteData; slug: strin
 
 /** עמוד שלא קיים בגרסה המפורסמת → 404 (נזרק ב-loader, כך שגם ה-SSR מחזיר 404) */
 export function requirePage(site: PublicSiteData | undefined, slug: string): null {
-  if (!site || !/^[a-z0-9-]{1,63}$/.test(slug) || !pageBySlug(site.document, slug))
-    throw notFound();
+  if (!site || !/^[a-z0-9-]{1,63}$/.test(slug)) throw notFound();
+  if (slug === ACCESSIBILITY_SLUG) return null;
+  if (!pageBySlug(site.document, slug)) throw notFound();
   return null;
 }
 
@@ -89,6 +97,24 @@ export function businessPageHead(
 ) {
   const site = matches.find((m) => m.routeId === "/bp-site")?.loaderData as
     PublicSiteData | undefined;
+  if (site && slug === ACCESSIBILITY_SLUG) {
+    const home = pageBySlug(site.document, "");
+    if (home) {
+      const name = site.document.business.name.he.trim() || site.name;
+      // עמוד "מדומה" לכותרות בלבד: הכותרת, התיאור והכתובת הקנונית של ההצהרה
+      return pageHead(site, {
+        ...home,
+        slug: ACCESSIBILITY_SLUG,
+        title: { he: "הצהרת נגישות" },
+        seo: {
+          title: { he: `הצהרת נגישות | ${name}` },
+          description: {
+            he: `הצהרת הנגישות של ${name}: מה הונגש באתר, ליקויים ידועים ופרטי קשר לנגישות.`,
+          },
+        },
+      });
+    }
+  }
   const page = site ? pageBySlug(site.document, slug) : null;
   return site && page
     ? pageHead(site, page)

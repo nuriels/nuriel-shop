@@ -1,7 +1,7 @@
 // האתר של העסק — אותו רכיב לאתר החי (הגרסה המפורסמת) ולתצוגה המקדימה בממשק הניהול (הטיוטה).
 // מבנה: כותרת עליונה (שם העסק / לוגו + ניווט לעוגנים), המקטעים של העמוד, פוטר (פרטים, ©, קרדיט),
 // וכפתור WhatsApp צף. RTL מלא; הכיוון והשפה לפי שפת התצוגה (מוכן לאנגלית).
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { isBlockType } from "../document/blocks";
 import type { Block, Locale, Page, SiteDocument } from "../document/schema";
 import { templateOf, templateTokens, type TemplateDefinition } from "../templates/registry";
@@ -28,6 +28,7 @@ import {
   NURIEL_CREDIT_URL,
 } from "./credit";
 import { SiteImage, WhatsappIcon } from "./parts";
+import { AccessibilityStatement } from "./AccessibilityStatement";
 import { fontFaceCss } from "./fonts";
 
 const RADIUS = { sharp: "2px", soft: "10px", round: "22px" } as const;
@@ -110,10 +111,18 @@ function BlockView({
   }
 }
 
+/** הקישור להצהרת הנגישות — באתר החי /accessibility; בתצוגה המקדימה — ההצהרה מהטיוטה */
+function statementHref(mode: "live" | "preview"): string {
+  return mode === "preview" ? "/studio/preview?page=accessibility" : "/accessibility";
+}
+
 function FooterStrip({ floating }: { floating: boolean }) {
+  const { mode } = useSiteView();
   return (
     <footer className="bps-footer-strip">
       <p>
+        <a href={statementHref(mode)}>הצהרת נגישות</a>
+        <span aria-hidden="true"> · </span>
         <a
           href={NURIEL_CREDIT_URL}
           target="_blank"
@@ -185,7 +194,7 @@ function SiteHeader({ page }: { page: Page }) {
 }
 
 function SiteFooter({ floating }: { floating: boolean }) {
-  const { doc } = useSiteView();
+  const { doc, mode } = useSiteView();
   const t = useT();
   const name = t(doc.business.name);
   const year = new Date().getFullYear();
@@ -220,6 +229,8 @@ function SiteFooter({ floating }: { floating: boolean }) {
       <div className="bps-wrap bps-footer-legal">
         <p>
           © {year} {name}
+          <span aria-hidden="true"> · </span>
+          <a href={statementHref(mode)}>הצהרת נגישות</a>
         </p>
         <p>
           <a
@@ -240,14 +251,64 @@ function SiteFooter({ floating }: { floating: boolean }) {
   );
 }
 
+/** מה שהכפתור הצף לא מסתיר: כפתורי שליחה, קישורי הפוטר וכפתורי העצירה */
+const KEEP_CLEAR =
+  ".bps-form-submit, .bps-form-again, .bps-footer-strip a, .bps-footer a, .bps-motion-toggle, .bps-carousel-nav";
+
 function FloatingWhatsapp() {
   const { doc } = useSiteView();
   const t = useT();
   const href = whatsappHref(doc.business.whatsapp, t(doc.business.whatsappMessage));
+  const ref = useRef<HTMLAnchorElement>(null);
+  const [typing, setTyping] = useState(false);
+  const [covering, setCovering] = useState(false);
+  useEffect(() => {
+    if (!href) return;
+    const isField = (el: EventTarget | null) =>
+      el instanceof HTMLElement && el.matches("input, textarea, select");
+    // מקלדת פתוחה בנייד (מקלידים בטופס) — הכפתור יורד מהדרך
+    const onIn = (e: FocusEvent) => setTyping(isField(e.target));
+    const onOut = () => setTyping(false);
+    let frame = 0;
+    const check = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const me = ref.current?.getBoundingClientRect();
+        if (!me) return;
+        const pad = 8;
+        const hit = [...document.querySelectorAll<HTMLElement>(KEEP_CLEAR)].some((el) => {
+          if (el === ref.current) return false;
+          const r = el.getBoundingClientRect();
+          return (
+            r.width > 0 &&
+            r.left < me.right + pad &&
+            r.right > me.left - pad &&
+            r.top < me.bottom + pad &&
+            r.bottom > me.top - pad
+          );
+        });
+        setCovering(hit);
+      });
+    };
+    document.addEventListener("focusin", onIn);
+    document.addEventListener("focusout", onOut);
+    window.addEventListener("scroll", check, { passive: true });
+    window.addEventListener("resize", check);
+    check();
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("focusin", onIn);
+      document.removeEventListener("focusout", onOut);
+      window.removeEventListener("scroll", check);
+      window.removeEventListener("resize", check);
+    };
+  }, [href]);
   if (!href) return null;
   return (
     <a
+      ref={ref}
       className="bps-wa"
+      data-hidden={typing || covering ? "true" : undefined}
       href={href}
       target="_blank"
       rel="noopener noreferrer"
@@ -265,6 +326,7 @@ export function SiteView({
   mode = "live",
   locale,
   embedded = false,
+  special,
 }: {
   doc: SiteDocument;
   media: MediaMap;
@@ -273,6 +335,8 @@ export function SiteView({
   locale?: Locale;
   /** בתוך מסך אחר (פאנל הפלטפורמה): בלי מיקום קבוע */
   embedded?: boolean;
+  /** עמוד של המערכת במקום המקטעים של העמוד (הצהרת הנגישות) */
+  special?: "accessibility";
 }) {
   const lang = locale ?? doc.defaultLocale;
   const template = templateOf(doc.template);
@@ -291,21 +355,26 @@ export function SiteView({
         {/* גופני האתר (מספריית המדיה שלו) */}
         {faces && <style>{faces}</style>}
         {chrome.header === "bar" && <SiteHeader page={page} />}
-        <main id="main-content" className="bps-main">
-          {page.blocks
-            .filter((b) => !b.hidden)
-            .map((b) => {
-              const numbered = b.type !== "hero" && b.type !== "cta";
-              if (numbered) sectionIndex += 1;
-              return (
-                <BlockView
-                  key={b.id}
-                  block={b}
-                  index={sectionIndex}
-                  heroLayout={template.heroLayout}
-                />
-              );
-            })}
+        {/* "דלג לתוכן הראשי" — במעטפת של כל עמוד (src/routes/__root.tsx), מגיע לכאן */}
+        <main id="main-content" className="bps-main" tabIndex={-1}>
+          {special === "accessibility" ? (
+            <AccessibilityStatement />
+          ) : (
+            page.blocks
+              .filter((b) => !b.hidden)
+              .map((b) => {
+                const numbered = b.type !== "hero" && b.type !== "cta";
+                if (numbered) sectionIndex += 1;
+                return (
+                  <BlockView
+                    key={b.id}
+                    block={b}
+                    index={sectionIndex}
+                    heroLayout={template.heroLayout}
+                  />
+                );
+              })
+          )}
         </main>
         {chrome.footer === "strip" ? (
           <FooterStrip floating={chrome.floatingWhatsapp} />

@@ -69,5 +69,13 @@ export function DraftPreview() {
   const page = pageBySlug(doc, "");
   if (!page) return null;
   const media = live?.media ?? previewMediaMap(library.data);
-  return <SiteView doc={doc} media={media} page={page} mode="preview" />;
+  // ?page=accessibility — הצהרת הנגישות מהטיוטה (הקישור בפוטר של התצוגה המקדימה)
+  const statement =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("page") === "accessibility";
+  return statement ? (
+    <SiteView doc={doc} media={media} page={page} mode="preview" special="accessibility" />
+  ) : (
+    <SiteView doc={doc} media={media} page={page} mode="preview" />
+  );
 }

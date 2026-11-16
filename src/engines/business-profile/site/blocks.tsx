@@ -5,6 +5,7 @@ import type { BlockProps } from "../document/blocks";
 import type { Block, PortfolioItem } from "../document/schema";
 import { telHref, useSiteView, useT, whatsappHref } from "./context";
 import { InquiryForm } from "./InquiryForm";
+import { Lightbox } from "./Lightbox";
 import { justifyRows } from "./layout";
 import { cssImage, hasImage, LinkButton, SectionHead, SiteImage, WhatsappIcon } from "./parts";
 
@@ -106,13 +107,23 @@ function Carousel({ slides, label }: { slides: BlockProps<"about">["slides"]; la
   const usable = slides.filter((sl) => hasImage(sl.image, media));
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  // עצירה קבועה בלחיצה (WCAG 2.2.2) — בנוסף לעצירה בריחוף ובמיקוד
+  const [stopped, setStopped] = useState(false);
+  const [reduced, setReduced] = useState(false);
+  const [manual, setManual] = useState(false);
   const count = usable.length;
   useEffect(() => {
-    if (count < 2 || paused) return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    setReduced(!!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+  }, []);
+  useEffect(() => {
+    if (count < 2 || paused || stopped || reduced) return;
     const timer = window.setInterval(() => setIndex((i) => (i + 1) % count), 5000);
     return () => window.clearInterval(timer);
-  }, [count, paused]);
+  }, [count, paused, stopped, reduced]);
+  const step = (d: number) => {
+    setManual(true);
+    setIndex((i) => (i + d + count) % count);
+  };
   if (!count) return null;
   const current = usable[index % count]!;
   return (
@@ -144,7 +155,7 @@ function Carousel({ slides, label }: { slides: BlockProps<"about">["slides"]; la
               type="button"
               className="bps-carousel-nav bps-carousel-prev"
               aria-label="התמונה הקודמת"
-              onClick={() => setIndex((i) => (i - 1 + count) % count)}
+              onClick={() => step(-1)}
             >
               <span aria-hidden="true">›</span>
             </button>
@@ -152,13 +163,28 @@ function Carousel({ slides, label }: { slides: BlockProps<"about">["slides"]; la
               type="button"
               className="bps-carousel-nav bps-carousel-next"
               aria-label="התמונה הבאה"
-              onClick={() => setIndex((i) => (i + 1) % count)}
+              onClick={() => step(1)}
             >
               <span aria-hidden="true">‹</span>
             </button>
+            {!reduced && (
+              <button
+                type="button"
+                className="bps-motion-toggle bps-carousel-toggle"
+                aria-pressed={stopped}
+                aria-label="עצירת ההחלפה האוטומטית של התמונות"
+                onClick={() => setStopped((v) => !v)}
+              >
+                <span aria-hidden="true">{stopped ? "▶" : "❚❚"}</span>
+              </button>
+            )}
           </>
         )}
       </div>
+      {/* מוקרא רק כשהגולש מחליף תמונה בעצמו (לא בכל החלפה אוטומטית) */}
+      <p className="bps-sr" aria-live="polite">
+        {manual ? `תמונה ${(index % count) + 1} מתוך ${count}` : ""}
+      </p>
       {t(current.button.label) && (
         <div className="bps-carousel-action">
           <LinkButton href={current.button.href} label={current.button.label} variant="primary" />
@@ -327,28 +353,28 @@ export function PortfolioBlock({ block, index }: Props<"portfolio">) {
   const used = categories.filter((c) => items.some((i) => i.categories.includes(c.id)));
   const firstTab = p.showAll || !used.length ? "all" : used[0]!.id;
   const [active, setActive] = useState<string>(firstTab);
-  const [open, setOpen] = useState<PortfolioItem | null>(null);
+  // התצוגה המוגדלת: הרשימה שנראית עכשיו (מחשב / נייד) והמיקום בה
+  const [box, setBox] = useState<{ list: PortfolioItem[]; index: number } | null>(null);
   const [justifiedRef, justifiedWidth] = useWidth<HTMLUListElement>();
-  const dialog = useRef<HTMLDialogElement>(null);
   const current = !p.showAll && active === "all" && used.length ? used[0]!.id : active;
   const shown = useMemo(
     () => (current === "all" ? items : items.filter((i) => i.categories.includes(current))),
     [items, current],
   );
   if (!items.length) return null;
-  const show = (item: PortfolioItem) => {
-    setOpen(item);
-    dialog.current?.showModal();
-  };
+  const wideList = shown.filter((i) => i.devices !== "mobile");
+  const narrowList = shown.filter((i) => i.devices !== "desktop");
+  const show = (item: PortfolioItem, list: PortfolioItem[]) =>
+    setBox({ list, index: Math.max(0, list.indexOf(item)) });
   const device = (item: PortfolioItem) =>
     item.devices === "desktop"
       ? " bps-only-wide"
       : item.devices === "mobile"
         ? " bps-only-narrow"
         : "";
-  const work = (item: PortfolioItem, extra = "", style?: CSSProperties) => (
+  const work = (item: PortfolioItem, list: PortfolioItem[], extra = "", style?: CSSProperties) => (
     <li key={item.id} className={`bps-work${device(item)}${extra}`} style={style}>
-      <button type="button" className="bps-work-btn" onClick={() => show(item)}>
+      <button type="button" className="bps-work-btn" onClick={() => show(item, list)}>
         <span className="bps-work-media">
           <SiteImage
             image={item.image}
@@ -412,7 +438,7 @@ export function PortfolioBlock({ block, index }: Props<"portfolio">) {
                 media,
               ).map((col, ci) => (
                 <ul key={ci} className="bps-masonry-col">
-                  {col.map((item) => work(item))}
+                  {col.map((item) => work(item, wideList))}
                 </ul>
               ))}
             </div>
@@ -430,6 +456,7 @@ export function PortfolioBlock({ block, index }: Props<"portfolio">) {
                   const box = boxes?.[i];
                   return work(
                     item,
+                    narrowList,
                     "",
                     box
                       ? ({
@@ -451,34 +478,22 @@ export function PortfolioBlock({ block, index }: Props<"portfolio">) {
           </>
         ) : (
           <ul className="bps-grid" aria-live="polite">
-            {shown.map((item) => work(item))}
+            {shown.map((item) => work(item, shown))}
           </ul>
         )}
       </div>
-      <dialog
-        ref={dialog}
-        className="bps-lightbox"
-        aria-label={open ? t(open.title) || "תצוגה מוגדלת" : "תצוגה מוגדלת"}
-        onClose={() => setOpen(null)}
-        onClick={(e) => {
-          if (e.target === dialog.current) dialog.current?.close();
-        }}
-      >
-        {open && (
-          <div className="bps-lightbox-body">
-            <SiteImage image={open.image} eager fallback={<CoverPlaceholder />} />
-            {t(open.title) && <p className="bps-lightbox-title">{t(open.title)}</p>}
-            {t(open.text) && <p>{t(open.text)}</p>}
-            <button
-              type="button"
-              className="bps-btn bps-btn-ghost"
-              onClick={() => dialog.current?.close()}
-            >
-              סגירה
-            </button>
-          </div>
-        )}
-      </dialog>
+      <Lightbox
+        label="תיק עבודות — תצוגה מוגדלת"
+        items={(box?.list ?? []).map((i) => ({
+          image: i.image,
+          title: t(i.title),
+          text: t(i.text),
+        }))}
+        index={box ? box.index : null}
+        onIndex={(index) => setBox((b) => (b ? { ...b, index } : b))}
+        onClose={() => setBox(null)}
+        fallback={<CoverPlaceholder />}
+      />
     </section>
   );
 }
@@ -488,11 +503,16 @@ export function TestimonialsBlock({ block, index }: Props<"testimonials">) {
   const { doc, media, mode } = useSiteView();
   const t = useT();
   const p = block.props;
+  const [open, setOpen] = useState<number | null>(null);
+  // עצירה קבועה של הרצועה הנעה בלחיצה (WCAG 2.2.2) — בנוסף לעצירה בריחוף ובמיקוד
+  const [stopped, setStopped] = useState(false);
   const items = doc.collections.testimonials.filter(
     (x) => !x.hidden && (t(x.quote) || hasImage(x.image, media) || mode === "preview"),
   );
   if (!items.length) return null;
   const bg = p.background.media ? cssImage(media[p.background.media]?.url) : undefined;
+  // המלצות שהן תמונה (צילום מסך) נפתחות בתצוגה מוגדלת — כמו באתר הישן
+  const pictures = items.filter((x) => !t(x.quote) && hasImage(x.image, media));
   const card = (x: (typeof items)[number], key: string, hidden = false) => (
     <li key={key} aria-hidden={hidden || undefined}>
       <figure className="bps-quote">
@@ -500,6 +520,16 @@ export function TestimonialsBlock({ block, index }: Props<"testimonials">) {
           <blockquote>
             <p>{t(x.quote)}</p>
           </blockquote>
+        ) : hasImage(x.image, media) ? (
+          <button
+            type="button"
+            className="bps-quote-open"
+            tabIndex={hidden ? -1 : undefined}
+            onClick={() => setOpen(pictures.indexOf(x))}
+          >
+            <SiteImage image={hidden ? { media: x.image.media, alt: { he: "" } } : x.image} />
+            {!hidden && <span className="bps-sr">פתיחה בגודל מלא</span>}
+          </button>
         ) : (
           <SiteImage
             image={hidden ? { media: x.image.media, alt: { he: "" } } : x.image}
@@ -533,17 +563,29 @@ export function TestimonialsBlock({ block, index }: Props<"testimonials">) {
         />
         {p.layout === "marquee" ? (
           // גלילה רציפה: הרשימה פעמיים (העותק השני מוסתר מקוראי מסך), עוצרת בריחוף ובמיקוד, בלי תנועה למי שביקש
-          <div
-            className="bps-marquee"
-            tabIndex={0}
-            role="region"
-            // שם שונה משם המקטע (שני אזורים באותו שם מבלבלים את הניווט בקורא מסך)
-            aria-label={t(p.title) ? `רצועת ההמלצות — ${t(p.title)}` : "רצועת ההמלצות"}
-          >
-            <ul className="bps-marquee-track">
-              {items.map((x) => card(x, x.id))}
-              {items.map((x) => card(x, `${x.id}-copy`, true))}
-            </ul>
+          <div className="bps-marquee-wrap">
+            <div
+              className={`bps-marquee${stopped ? " is-stopped" : ""}`}
+              role="region"
+              // שם שונה משם המקטע (שני אזורים באותו שם מבלבלים את הניווט בקורא מסך)
+              aria-label={t(p.title) ? `רצועת ההמלצות — ${t(p.title)}` : "רצועת ההמלצות"}
+              // המהירות של האתר הישן: כרטיס אחד בכל 7 שניות
+              style={{ "--bp-marquee-duration": `${items.length * 7}s` } as CSSProperties}
+            >
+              <ul className="bps-marquee-track">
+                {items.map((x) => card(x, x.id))}
+                {items.map((x) => card(x, `${x.id}-copy`, true))}
+              </ul>
+            </div>
+            <button
+              type="button"
+              className="bps-motion-toggle bps-marquee-toggle"
+              aria-pressed={stopped}
+              aria-label="עצירת התנועה של רצועת ההמלצות"
+              onClick={() => setStopped((v) => !v)}
+            >
+              <span aria-hidden="true">{stopped ? "▶" : "❚❚"}</span>
+            </button>
           </div>
         ) : (
           <ul className="bps-quotes">{items.map((x) => card(x, x.id))}</ul>
@@ -554,6 +596,13 @@ export function TestimonialsBlock({ block, index }: Props<"testimonials">) {
           </div>
         )}
       </div>
+      <Lightbox
+        label="המלצות — תצוגה מוגדלת"
+        items={pictures.map((x) => ({ image: x.image, title: t(x.author) }))}
+        index={open}
+        onIndex={setOpen}
+        onClose={() => setOpen(null)}
+      />
     </section>
   );
 }

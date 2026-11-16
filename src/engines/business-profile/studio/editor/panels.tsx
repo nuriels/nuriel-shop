@@ -51,7 +51,7 @@ import {
 import { ImageField, MEDIA_QUERY } from "./media";
 
 export type SetDoc = (change: (doc: SiteDocument) => SiteDocument) => void;
-type PanelProps = { doc: SiteDocument; setDoc: SetDoc };
+export type PanelProps = { doc: SiteDocument; setDoc: SetDoc };
 
 // ---------- פרטי העסק ----------
 export function BusinessPanel({ doc, setDoc }: PanelProps) {

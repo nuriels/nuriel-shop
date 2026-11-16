@@ -1,6 +1,7 @@
 // שרת מדומה לשירותים חיצוניים בבדיקות E2E — אף בקשה לא יוצאת החוצה:
 //   • Resend (RESEND_API_URL): POST /emails → נשמר, לא נשלח
-//       נמען עם "+reject" → 422 (הספק דחה); נמען עם "+bounce" → יתקבל, ואז last_event = bounced
+//       נמען עם "+reject" → 422 (הספק דחה); נמען עם "+bounce" → יתקבל, ואז last_event = bounced;
+//       נמען עם "+down" → 503 (שירות המיילים לא זמין — לבדיקת "שרת המייל נפל")
 //   • Resend: GET /emails/:id → { last_event } (delivered, או bounced לפי הנמען) — לבדיקת
 //     הסטטוס האמיתי ("התקבל לשליחה" → "נמסר" רק אחרי אישור מסירה)
 //   • Grow (GROW_SANDBOX_URL): כל בקשה → 503 (אין סליקה בבדיקות; תשלום = mock)
@@ -148,6 +149,12 @@ createServer((req, res) => {
     }
     if (req.url?.startsWith("/emails")) {
       const to = recipientsOf(body);
+      if (to.some((a) => a.includes("+down"))) {
+        return json(res, 503, {
+          name: "service_unavailable",
+          message: "Service unavailable (e2e mock)",
+        });
+      }
       if (to.some((a) => a.includes("+reject"))) {
         return json(res, 422, {
           name: "validation_error",

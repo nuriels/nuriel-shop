@@ -28,8 +28,12 @@ export type SubmitInquiryResult =
 
 const GENERIC_ERROR = "השליחה לא הצליחה. נסו שוב בעוד רגע, או פנו אלינו בוואטסאפ או בטלפון.";
 const RATE_ERROR = "נשלחו כמה פניות ברצף. נסו שוב בעוד כמה דקות.";
-/** פחות מזה מפתיחת הטופס ועד השליחה — כנראה לא אדם (מלכודת זמן; לא חוסם, רק לא שומר) */
-const MIN_FILL_MS = 1500;
+/**
+ * פחות מזה מפתיחת הטופס ועד השליחה — כנראה לא אדם. לא "בולעים" את הפנייה בשקט (מילוי אוטומטי של הדפדפן
+ * יכול להיות מהיר): הגולש מקבל בקשה לשלוח שוב, ופנייה אמיתית לא הולכת לאיבוד.
+ */
+const MIN_FILL_MS = 800;
+const TOO_FAST = "הטופס נשלח מהר מדי. נסו לשלוח שוב.";
 
 /** קוד אקראי במבנה של מספר פנייה — לבוט שנלכד במלכודת (שלא יידע שנחסם) */
 function decoyReference(): string {
@@ -53,10 +57,10 @@ export const submitInquiry = createServerFn({ method: "POST" })
     preview: input?.["preview"] === true,
   }))
   .handler(async ({ data }): Promise<SubmitInquiryResult> => {
-    // מלכודת: שדה שגולש לא רואה מולא, או שהטופס נשלח מהר מדי — "התקבל", בלי לשמור
-    if (data.website.trim() || (data.startedAt > 0 && Date.now() - data.startedAt < MIN_FILL_MS)) {
-      return { ok: true, reference: decoyReference(), test: false };
-    }
+    // מלכודת: שדה שגולש לא רואה (ולא מגיע אליו) מולא — בוט. "התקבל", בלי לשמור, כדי שלא יידע שנחסם
+    if (data.website.trim()) return { ok: true, reference: decoyReference(), test: false };
+    if (data.startedAt > 0 && Date.now() - data.startedAt < MIN_FILL_MS)
+      return { ok: false, error: TOO_FAST };
     const checked = validateInquiry(data);
     if (!checked.ok) return { ok: false, errors: checked.errors };
 

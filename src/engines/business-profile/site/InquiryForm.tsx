@@ -197,7 +197,7 @@ export function InquiryForm({ id, kind, formTitle, labels, preview }: InquiryFor
         </div>
         <div className="bps-field">
           <label className="bps-sr" htmlFor={fid("email")}>
-            {labels.email || "אימייל"} (טלפון או אימייל)
+            {labels.email || "אימייל"}
           </label>
           <input
             id={fid("email")}
@@ -208,7 +208,7 @@ export function InquiryForm({ id, kind, formTitle, labels, preview }: InquiryFor
             maxLength={254}
             dir="ltr"
             aria-invalid={errors.email ? "true" : undefined}
-            aria-describedby={describedBy("email")}
+            aria-describedby={describedBy("email", fid("hint"))}
             placeholder={labels.email}
             value={values.email}
             onChange={(e) => onChange("email", e.target.value)}
@@ -217,7 +217,7 @@ export function InquiryForm({ id, kind, formTitle, labels, preview }: InquiryFor
         </div>
         <div className="bps-field">
           <label className="bps-sr" htmlFor={fid("phone")}>
-            {labels.phone || "טלפון"} (טלפון או אימייל)
+            {labels.phone || "טלפון"}
           </label>
           <input
             id={fid("phone")}
@@ -228,7 +228,7 @@ export function InquiryForm({ id, kind, formTitle, labels, preview }: InquiryFor
             maxLength={30}
             dir="ltr"
             aria-invalid={errors.phone ? "true" : undefined}
-            aria-describedby={describedBy("phone")}
+            aria-describedby={describedBy("phone", fid("hint"))}
             placeholder={labels.phone}
             value={values.phone}
             onChange={(e) => onChange("phone", e.target.value)}

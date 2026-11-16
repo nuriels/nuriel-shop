@@ -270,13 +270,20 @@ function InquiryPanel({ id, onClose }: { id: string; onClose: () => void }) {
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: INBOX_QUERY });
   };
+  // המצב מתעדכן מיד במסך (ואם השמירה נכשלה — חוזר למצב הקודם)
+  const [shownStatus, setShownStatus] = useState<InquiryStatus | null>(null);
   const statusM = useMutation({
     mutationFn: (status: InquiryStatus) => setStatus({ data: { id, status } }),
+    onMutate: (status) => setShownStatus(status),
     onSuccess: async (r) => {
       toast.success(`המצב עודכן: ${STATUS_LABELS[r.status]}`);
       await refresh();
+      setShownStatus(null);
     },
-    onError: (e) => toast.error(errorText(e, "העדכון נכשל")),
+    onError: (e) => {
+      setShownStatus(null);
+      toast.error(errorText(e, "העדכון נכשל"));
+    },
   });
   const noteM = useMutation({
     mutationFn: () => addNote({ data: { id, body: note } }),
@@ -405,8 +412,7 @@ function InquiryPanel({ id, onClose }: { id: string; onClose: () => void }) {
                   name={`status-${d.id}`}
                   value={s}
                   className="size-4"
-                  checked={d.status === s}
-                  disabled={statusM.isPending}
+                  checked={(shownStatus ?? d.status) === s}
                   onChange={() => statusM.mutate(s)}
                 />
                 {STATUS_LABELS[s]}

@@ -29,7 +29,8 @@ export async function sitemapResponse(siteId: string): Promise<Response | null> 
   if (!site || !origin) return null;
   const xml = sitemapXml(
     origin,
-    site.document.pages.map((p) => p.slug),
+    // העמודים + הצהרת הנגישות (בכל אתר עסק)
+    [...site.document.pages.map((p) => p.slug), "accessibility"],
     site.publishedAt,
   );
   return new Response(xml, {
