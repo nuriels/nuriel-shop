@@ -5,7 +5,8 @@
 --   • only GTM-XXXXXXX is stored (uppercased); scripts, other tags, too short / long IDs are refused —
 --     in the function and by the CHECK, even for the database owner
 --   • store: the owner only (not a manager, a customer or a guest, not the owner of another store);
---     zimmer: the owner or the business admin (settings.owner), not a regular manager
+--     zimmer: the owner or the platform admin (migration 199: ownership) — not the business admin, not a
+--     regular manager
 --   • the site reads only its own enabled ID (by the request's site), also as a guest
 --   • every change is in the platform log
 -- ============================================================
@@ -142,11 +143,13 @@ SELECT tests.check('gtm: the owner of store A cannot change store B (another bus
   format($$SELECT pg_temp.user_err(%L, %L, $q$SELECT public.save_my_tag_manager('GTM-EVIL01', true)$q$) LIKE '%%רק בעל העסק%%'
              AND pg_temp.served(%1$L) = 'GTM-BBB777'$$, :SB, :OA));
 SELECT pg_temp.as_user(:'hs', :H_OWNER, $$SELECT public.save_my_tag_manager('GTM-HHH111', true)$$) AS saved_h \gset
-SELECT pg_temp.as_user(:'hs', :H_BA, $$SELECT public.save_my_tag_manager('GTM-HHH222', true)$$) AS saved_h2 \gset
-SELECT tests.check('gtm: zimmer — the owner and the business admin may; a regular manager may not',
+SELECT pg_temp.as_user(:'hs', :PLATFORM, $$SELECT public.save_my_tag_manager('GTM-HHH222', true)$$) AS saved_h2 \gset
+SELECT tests.check('gtm: zimmer — the owner and the platform admin may; the business admin and a regular manager may not',
   format($$SELECT %L::jsonb ->> 'container_id' = 'GTM-HHH111' AND %L::jsonb ->> 'container_id' = 'GTM-HHH222'
-             AND pg_temp.user_err(%L, %L, $q$SELECT public.save_my_tag_manager('GTM-EVIL01', true)$q$) LIKE '%%רק בעל העסק%%'$$,
-         :'saved_h', :'saved_h2', :'hs', :H_MGR));
+             AND pg_temp.user_err(%L, %L, $q$SELECT public.save_my_tag_manager('GTM-EVIL01', true)$q$) LIKE '%%רק בעל העסק%%'
+             AND pg_temp.user_err(%3$L, %5$L, $q$SELECT public.save_my_tag_manager('GTM-EVIL01', true)$q$) LIKE '%%רק בעל העסק%%'
+             AND pg_temp.user_err(%3$L, %5$L, 'SELECT public.my_tag_manager()') LIKE '%%רק בעל העסק%%'$$,
+         :'saved_h', :'saved_h2', :'hs', :H_MGR, :H_BA));
 SELECT tests.check('gtm: zimmer — not served while measurement is off for the site on the platform (like GA4); the owner is told',
   format($$SELECT pg_temp.served(%L) IS NULL
              AND NOT (pg_temp.as_user(%1$L, %2$L, 'SELECT public.my_tag_manager()') ->> 'loads_on_site')::boolean$$, :'hs', :H_OWNER));

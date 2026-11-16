@@ -24,7 +24,7 @@ import {
   Skeleton,
 } from "@/platform/ui";
 import { hospitalitySettings, hospitalityUpdateSettings } from "../../api/settings.functions";
-import { TagManagerCard } from "@/platform/analytics/ui/TagManagerCard";
+import { TrackingSection } from "@/platform/analytics/ui/TrackingSection";
 import { useManagement } from "../shell/management-context";
 import type { SettingsKey, SettingsView } from "../../types/settings";
 import { SETTINGS_LABELS } from "../../validation/settings";
@@ -95,10 +95,11 @@ export function SettingsPage() {
       <div className="mx-auto mt-6 w-full max-w-3xl">
         <PaymentInstructionsCard />
       </div>
-      {/* מיגרציה 192: Google Tag Manager — מזהה Container בלבד (הבעלים / מנהל/ת עסק) */}
-      <div className="mx-auto mt-6 w-full max-w-3xl">
-        <TagManagerCard
-          canManage={management.permissions["settings.owner"] === true}
+      {/* מיגרציות 192 + 199: "קידום, Analytics ומעקב" — מזהה GA4 ומזהה Tag Manager (בעל העסק / מנהל הפלטפורמה) */}
+      <div className="mx-auto mt-10 w-full max-w-3xl">
+        <TrackingSection
+          id="settings-tracking"
+          canManage={management.permissions["ownership"] === true}
           measurementOnly
         />
       </div>

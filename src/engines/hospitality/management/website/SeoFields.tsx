@@ -7,7 +7,7 @@ import { useId, useState } from "react";
 import { cn } from "@/platform/ui";
 import type { PublicSite } from "../../types/website";
 import { siteCopy } from "../../website/copy";
-import { GA4_ID, SEO_LIMITS, type SiteDesign, type SiteSeo } from "../../website/design/schema";
+import { SEO_LIMITS, type SiteDesign, type SiteSeo } from "../../website/design/schema";
 import { heroImage, mediaById } from "../../website/lib/media";
 import {
   canonicalOrigin,
@@ -23,14 +23,11 @@ export function SeoPanel({
   design,
   site,
   addresses,
-  analyticsEnabled = false,
   onChange,
 }: {
   design: SiteDesign;
   site: PublicSite;
   addresses: SiteAddresses;
-  /** Google SEO שלב 4: המדידה זמינה לאתר (המתג) — רק אז מוצג השדה של GA4 */
-  analyticsEnabled?: boolean;
   onChange: (d: SiteDesign) => void;
 }) {
   const seo: SiteSeo = design.seo ?? {};
@@ -107,75 +104,29 @@ export function SeoPanel({
 
       <GoogleVerification value={seo.google} onChange={(v) => set({ google: v })} />
 
-      {analyticsEnabled && <GoogleAnalytics value={seo.ga4} onChange={(v) => set({ ga4: v })} />}
+      <TrackingPointer />
     </div>
   );
 }
 
 /**
- * Google SEO שלב 4: מזהה המדידה של GA4 — רק כשהמדידה זמינה לאתר. נטען באתר רק אחרי שהגולש אישר
- * Cookies של מדידה (הבאנר מופיע מעצמו כשיש מזהה בגרסה המפורסמת)
+ * מיגרציה 199: מזהה GA4 ומזהה Google Tag Manager נשמרים בהגדרות העסק ("קידום, Analytics ומעקב"), לא
+ * בטיוטת האתר — כאן רק הפניה לשם
  */
-function GoogleAnalytics({
-  value,
-  onChange,
-}: {
-  value: string | undefined;
-  onChange: (v: string | undefined) => void;
-}) {
-  const id = useId();
-  const [text, setText] = useState<string | null>(null);
-  const shown = text ?? value ?? "";
-  const clean = shown.trim().toUpperCase();
-  const valid = GA4_ID.test(clean);
-  const invalid = clean !== "" && !valid;
+function TrackingPointer() {
   return (
-    <section aria-labelledby={`${id}-title`} className="flex flex-col gap-2">
-      <h3 id={`${id}-title`} className="text-sm font-bold">
-        Google Analytics 4
-      </h3>
+    <section className="flex flex-col gap-1 rounded-md border border-border bg-muted/30 p-3">
+      <h3 className="text-sm font-bold">Google Analytics ו-Tag Manager</h3>
       <p className="text-xs text-muted-foreground">
-        מזהה המדידה (Measurement ID) מ-Google Analytics — מתחיל ב-G-. המדידה נטענת באתר רק אחרי
-        שהגולש מאשר Cookies של מדידה; עד אז — באנר הסכמה, ושום קוד של Google לא נטען.
+        מזהה המדידה של Google Analytics 4 ומזהה Google Tag Manager נשמרים בהגדרות העסק.
       </p>
-      <label htmlFor={id} className="mt-1 text-sm font-medium">
-        מזהה המדידה
-      </label>
-      <input
-        id={id}
-        dir="ltr"
-        value={shown}
-        maxLength={20}
-        spellCheck={false}
-        autoComplete="off"
-        placeholder="G-XXXXXXXXXX"
-        onChange={(e) => {
-          setText(e.target.value);
-          const v = e.target.value.trim().toUpperCase();
-          if (v === "") onChange(undefined);
-          else if (GA4_ID.test(v)) onChange(v);
-        }}
-        onBlur={() => {
-          if (valid) setText(null);
-        }}
-        aria-invalid={invalid ? true : undefined}
-        aria-describedby={`${id}-state`}
-        className={cn(
-          "min-h-11 w-full rounded-md border border-input bg-background px-3 text-start font-mono text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none",
-          invalid && "border-destructive",
-        )}
-        data-testid="seo-ga4"
-      />
-      <p
-        id={`${id}-state`}
-        className={cn("text-xs", invalid ? "text-destructive" : "text-muted-foreground")}
+      <a
+        href="/manage/settings#tracking"
+        className="text-sm font-medium text-primary underline underline-offset-4"
+        data-testid="seo-tracking-link"
       >
-        {invalid
-          ? "המזהה לא תקין — G- ואחריו אותיות וספרות, כמו שמופיע ב-Google Analytics"
-          : valid
-            ? "נשמר; ייכנס לאתר בפרסום"
-            : "ריק — אין מדידה באתר"}
-      </p>
+        להגדרות העסק ← קידום, Analytics ומעקב
+      </a>
     </section>
   );
 }

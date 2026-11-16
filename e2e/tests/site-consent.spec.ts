@@ -11,13 +11,13 @@ import {
 } from "./hospitality-helpers";
 
 // Google SEO שלב 4 — הסכמה ל-Cookies באתר האירוח (מיגרציה 20261110210000), מקצה לקצה:
-//   • היום (המתג כבוי — גם כשיש מזהה GA4 בגרסה המפורסמת): אין באנר, אין שום בקשה ל-Google, אין Cookie;
+//   • היום (המתג כבוי — גם כשיש מזהה GA4 בהגדרות העסק): אין באנר, אין שום בקשה ל-Google, אין Cookie;
 //     "הגדרות Cookies" בפוטר מסביר שיש רק שמירה הכרחית;
 //   • המתג דולק + מזהה GA4: באנר; לפני בחירה — שום בקשה ל-Google; סירוב — נרשם ולא נטען כלום;
 //     הגדרות → מדידה פעילה → GA4 נטען עם Consent Mode (פרסום חסום) ו-Cookies רק על הכתובת של האתר;
 //     ביטול → נרשם, ה-Cookies של המדידה נמחקים ובטעינה הבאה לא נטען כלום; אישור מהבאנר — נטען;
 //   • נגישות (axe) של הבאנר והחלון; בטלפון — הבאנר מעל שורת הפעולות, בלי גלילה לצדדים;
-//   • עורך האתר: השדה של GA4 רק כשהמתג דולק; מזהה תקין נשמר בטיוטה;
+//   • עורך האתר: בלי שדה GA4 — קישור ל"קידום, Analytics ומעקב" בהגדרות העסק (מיגרציה 199);
 //   • בלי שום שינוי בחנויות.
 // הבקשות ל-Google לא יוצאות לרשת — הבדיקה עונה עליהן וסופרת אותן.
 
@@ -59,13 +59,10 @@ function setAnalytics(on: boolean) {
        ON CONFLICT (tenant_id, key) DO UPDATE SET enabled = ${on}`);
 }
 
-/** גרסה מפורסמת חדשה עם מזהה GA4 (כמו "פרסום" בעורך) */
+/** מזהה GA4 בהגדרות העסק (מיגרציה 199 — כמו "שמירת Google Analytics" במסך ההגדרות) */
 function publishWithGa4(id: string) {
-  sql(`INSERT INTO hospitality.site_versions (tenant_id, kind, version, theme, document, revision)
-       VALUES ('${siteId}', 'published',
-               COALESCE((SELECT max(version) FROM hospitality.site_versions
-                          WHERE tenant_id = '${siteId}' AND kind = 'published'), 0) + 1,
-               'luxury', '{"seo": {"ga4": "${id}"}}'::jsonb, 1)`);
+  sql(`INSERT INTO public.site_tracking (tenant_id, ga4_measurement_id) VALUES ('${siteId}', '${id}')
+       ON CONFLICT (tenant_id) DO UPDATE SET ga4_measurement_id = '${id}'`);
 }
 
 /** הרשומות האנונימיות של האתר: "פעולה:מדידה", לפי הסדר */
@@ -126,7 +123,9 @@ test.beforeAll(async ({ request }, testInfo) => {
        VALUES ('${siteId}', 'נופי ההסכמה', 'consent-p', 'active') RETURNING id`);
   sql(`INSERT INTO hospitality.units (tenant_id, property_id, kind, name, slug, capacity, base_occupancy, base_price)
        VALUES ('${siteId}', '${propertyId}', 'unit', 'צימר האלה', 'consent-u', 2, 2, 600)`);
-  // יש מזהה GA4 בגרסה המפורסמת כבר מההתחלה — המתג (כבוי) הוא מה שקובע
+  // גרסה מפורסמת, ומזהה GA4 בהגדרות העסק כבר מההתחלה — המתג (כבוי) הוא מה שקובע
+  sql(`INSERT INTO hospitality.site_versions (tenant_id, kind, version, theme, document, revision)
+       VALUES ('${siteId}', 'published', 1, 'luxury', '{"seo": {}}'::jsonb, 1)`);
   publishWithGa4(GA4);
   setAnalytics(false);
   await expect
@@ -349,36 +348,23 @@ test("@mobile phone: the banner sits above the action bar, nothing sideways, acc
   await expectAccessible(page, "consent banner on the phone");
 });
 
-test("the website editor shows the GA4 field only while the switch is on; a valid id goes into the draft", async ({
+test("the website editor no longer keeps a GA4 field — it points to the business settings", async ({
   page,
 }) => {
   test.skip(test.info().project.name === "mobile", "desktop flow");
-  setAnalytics(false);
+  setAnalytics(true);
   await loadSession(page, owner!, "/manage/website?tab=seo");
   const pick = page.getByRole("button", { name: /יוקרה/ });
   if (await pick.isVisible().catch(() => false)) await pick.click();
   await page.getByRole("tab", { name: "גוגל ושיתוף" }).click();
   await expect(page.getByText("Google Search Console", { exact: true })).toBeVisible();
   await expect(page.getByTestId("seo-ga4")).toHaveCount(0);
-
-  setAnalytics(true);
-  await page.reload();
-  await page.getByRole("tab", { name: "גוגל ושיתוף" }).click();
-  const field = page.getByTestId("seo-ga4");
-  await expect(field).toBeVisible();
-  await field.fill("UA-12345-1");
-  await expect(field).toHaveAttribute("aria-invalid", "true");
-  await expect(page.getByText("המזהה לא תקין")).toBeVisible();
-  await field.fill("g-e2eui1234");
-  await expect(page.getByText("נשמר; ייכנס לאתר בפרסום")).toBeVisible();
-  await expect
-    .poll(
-      () =>
-        sql(`SELECT document -> 'seo' ->> 'ga4' FROM hospitality.site_versions
-              WHERE tenant_id = '${siteId}' AND kind = 'draft'`),
-      { timeout: 15_000 },
-    )
-    .toBe("G-E2EUI1234");
+  const link = page.getByTestId("seo-tracking-link");
+  await expect(link).toHaveAttribute("href", "/manage/settings#tracking");
+  await link.click();
+  await expect(page.getByTestId("tracking-section")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("ga4-measurement-id")).toHaveValue(GA4);
+  setAnalytics(false);
 });
 
 test("the stores are not touched: no consent banner or cookie there, store data unchanged", async ({

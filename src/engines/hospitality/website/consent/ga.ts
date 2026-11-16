@@ -72,15 +72,27 @@ export function grantAnalytics(measurementId: string): void {
     allow_google_signals: false,
     allow_ad_personalization_signals: false,
   });
-  const script = document.createElement("script");
-  script.async = true;
-  script.src = `${GTAG_SRC}?id=${encodeURIComponent(measurementId)}`;
-  script.dataset["hospConsent"] = "analytics";
-  document.head.appendChild(script);
+  // GA4 נטען פעם אחת בלבד בדף: גם כשמוגדר גם Google Tag Manager, ו-gtag.js של אותו מזהה כבר בדף (למשל
+  // מתוך ה-Container) — לא מוסיפים סקריפט שני. הפקודות שלמעלה נכנסות ל-dataLayer המשותף ונקראות ממנו
+  if (!gtagScriptInPage(measurementId)) {
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = `${GTAG_SRC}?id=${encodeURIComponent(measurementId)}`;
+    script.dataset["hospConsent"] = "analytics";
+    document.head.appendChild(script);
+  }
   loaded = measurementId;
   consented = true;
   closed = false;
   flush(gtag);
+}
+
+/** כבר יש בדף gtag.js של המזהה הזה (שלנו, או שנטען מתוך Google Tag Manager) */
+export function gtagScriptInPage(measurementId: string): boolean {
+  const prefix = `${GTAG_SRC}?id=${encodeURIComponent(measurementId)}`;
+  return Array.from(document.querySelectorAll<HTMLScriptElement>("script[src]")).some(
+    (el) => el.src === prefix || el.src.startsWith(`${prefix}&`),
+  );
 }
 
 /** שליחת מה שנשמר — רק של העמוד הנוכחי */

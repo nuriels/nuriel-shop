@@ -23,7 +23,7 @@ function messageOf(error: unknown): string {
 }
 
 export function TagManagerCard(props: {
-  /** בעל העסק (חנות) / הבעלים או מנהל/ת עסק (צימר) — אחרים רואים הסבר בלבד */
+  /** בעל העסק או מנהל הפלטפורמה (מיגרציה 199; בחנות — בעל החנות) — אחרים רואים הסבר בלבד */
   canManage: boolean;
   /** באתר מוגדר גם Google Analytics ישיר — אזהרת ספירה כפולה */
   directGa4?: boolean;
@@ -168,8 +168,9 @@ export function TagManagerCard(props: {
                 role="note"
                 data-testid="gtm-duplicate-warning"
               >
-                באתר מוגדר גם Google Analytics ישיר. אם ב-Container יש תג GA4 לאותו נכס, כל צפייה
-                תיספר פעמיים — השאירו רק אחד מהשניים.
+                באתר מוגדר גם Google Analytics ישיר — האתר טוען אותו פעם אחת ושולח אליו את הצפיות
+                בעצמו. אל תוסיפו ב-Container תג GA4 (Google tag) לאותו נכס, אחרת כל צפייה תיספר
+                פעמיים.
               </p>
             ) : null}
             {saved && !saved.loads_on_site ? (

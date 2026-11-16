@@ -116,6 +116,8 @@ beforeEach(() => {
       return s;
     },
     head: { appendChild: () => undefined },
+    // מיגרציה 199: לפני הוספת gtag.js בודקים אם הוא כבר בדף — כאן אף פעם לא
+    querySelectorAll: () => [],
   });
 });
 

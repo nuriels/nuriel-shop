@@ -3,7 +3,7 @@
 import { sessionFromRequest } from "../auth/session.server";
 import { apiClient } from "../supabase/api-client.server";
 import { currentSite } from "../tenancy/current-site.server";
-import { isGtmId, type MyTagManager } from "./gtm";
+import { isGa4Id, isGtmId, type MyTagManager } from "./gtm";
 
 export class TagManagerError extends Error {
   constructor(message: string) {
@@ -27,6 +27,22 @@ export async function siteTagManager(): Promise<string | null> {
     );
     if (error) return null;
     return isGtmId(data) ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * מיגרציה 199: מזהה ה-GA4 של האתר של הבקשה — לטעינה באתר (גם לאורחים). המסד מחזיר רק כשהמדידה מותרת
+ * לאתר (בצימר: המתג). אין אתר / המסד לא ענה (למשל לפני מיגרציה 199) — null, והאתר עובד כרגיל בלי GA4.
+ */
+export async function siteGa4(): Promise<string | null> {
+  try {
+    const site = await currentSite();
+    if (!site) return null;
+    const { data, error } = await apiClient({ schema: "public", siteId: site.id }).rpc("site_ga4");
+    if (error) return null;
+    return isGa4Id(data) ? data : null;
   } catch {
     return null;
   }
@@ -67,4 +83,9 @@ export function saveMyTagManager(
     _container_id: containerId,
     _enabled: enabled,
   });
+}
+
+/** מיגרציה 199: שמירת מזהה GA4 (null = מחיקה). ההגדרות של Tag Manager לא משתנות */
+export function saveMyGa4(measurementId: string | null): Promise<MyTagManager> {
+  return ownerRpc<MyTagManager>("save_my_ga4", { _measurement_id: measurementId });
 }

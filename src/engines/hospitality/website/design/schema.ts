@@ -2,6 +2,7 @@
 // ותוכן. נתוני העסק (יחידות, מחירים, זמינות, תמונות היחידות) לא נשמרים כאן — המקטעים מפנים
 // אליהם. normalizeDesign לא זורק אף פעם: כל ערך לא תקין נזרק / מקוצר, כך שמסמך פגום (או שנשלח
 // ישירות למסד) לא שובר את האתר ולא מכניס CSS / HTML. נבדק ביחידה.
+import { GA4_ID_FORMAT } from "@/platform/analytics/gtm";
 
 export const THEME_IDS = ["luxury", "nature", "modern", "romantic"] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
@@ -104,8 +105,8 @@ export interface SiteSeo {
   /** אימות Google Search Console — רק הקוד (ה-content של התגית) */
   google?: string;
   /**
-   * Google SEO שלב 4: מזהה המדידה של Google Analytics 4 (G-…). נכנס לאתר רק כשהמדידה זמינה (המתג
-   * hospitality_analytics_enabled), ונטען בדפדפן רק אחרי שהגולש אישר Cookies של מדידה
+   * ישן (Google SEO שלב 4): מזהה GA4 שנשמר בעורך האתר. מיגרציה 199 העתיקה אותו להגדרות העסק
+   * (public.site_tracking), ומשם בלבד האתר קורא אותו. נשאר כאן רק כדי שמסמכים ישנים ייקראו כמו שהם
    */
   ga4?: string;
   /** הכתובת הקנונית: ריק — הדומיין של העסק (אם יש), "subdomain" — הכתובת בפלטפורמה */
@@ -115,8 +116,8 @@ export interface SiteSeo {
 export const SEO_LIMITS = { title: 70, description: 200 } as const;
 /** קוד האימות של Google Search Console (בפועל ~43 תווים: אותיות, ספרות, _ ו--) */
 export const GOOGLE_TOKEN = /^[A-Za-z0-9_-]{10,100}$/;
-/** מזהה מדידה של Google Analytics 4 ("Measurement ID") — G- ואחריו אותיות גדולות וספרות */
-export const GA4_ID = /^G-[A-Z0-9]{4,16}$/;
+/** מזהה מדידה של Google Analytics 4 — התבנית המשותפת (src/platform/analytics/gtm.ts) */
+export const GA4_ID = GA4_ID_FORMAT;
 
 export interface SiteDesign {
   v: 1;

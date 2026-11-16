@@ -4,6 +4,8 @@
 # המיגרציות של Hospitality נבדקות בסדר הפוך (האחרונה קודם):
 #   • bp_engine (77): הגנה (נעצר כשקיים אתר עסק / נתונים בסכמה business_profile), rollback → הסכמה, 17
 #     הפונקציות, שני הדגלים ותפקיד המוצר נעלמו, וה-CHECK של סוג האתר חוזר לשני סוגים; זהה בדיוק ל-76
+#   • site_tracking_ga4 (83): הגנה (נעצר כשלאתר שמור מזהה GA4), rollback → העמודה ושתי הפונקציות נעלמו, כלל
+#     העריכה בצימר חוזר ל-settings.owner; זהה בדיוק ל-82; בהחלה מחדש — העתקת מזהה מהעורך, בלי לדרוס מזהה שמור
 #   • site_tag_manager (76): הגנה (נעצר כשבעל עסק כלשהו שמר מזהה Google Tag Manager), rollback → הטבלה
 #     וחמש הפונקציות נעלמו; רישומי היומן נשארים; זהה בדיוק ל-75
 #   • vat_settings (75): הגנה (נעצר כשיש הזמנה עם צילום סוג העוסק / כשנקבע שיעור מרכזי נוסף), rollback →
@@ -182,6 +184,7 @@ M79=20261116110000_bp_site_fonts
 M80=20261116120000_bp_inquiries
 M81=20261117090000_bp_site_address
 M82=20261117100000_bp_owner_invites
+M83=20261118100000_site_tracking_ga4
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -224,6 +227,32 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- GA4 in the business settings, next to Tag Manager (migration 83) ----------
+expect "before the rollback: the GA4 column (format CHECK), the guest read, saving for signed-in users, zimmer edits by ownership" \
+  "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+                   AND table_name = 'site_tracking' AND column_name = 'ga4_measurement_id')
+      AND has_function_privilege('anon', 'public.site_ga4()', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.save_my_ga4(text)', 'EXECUTE')
+      AND pg_get_functiondef('public.site_tracking_can_edit()'::regprocedure) LIKE '%ownership%'"
+echo "rollback guard: $M83 refuses while a site has a saved GA4 ID"
+q "INSERT INTO public.site_tracking (tenant_id, ga4_measurement_id) SELECT id, 'G-RBGUARD12' FROM public.tenants WHERE is_default" >/dev/null
+if down "$M83" 2>/dev/null; then
+  echo "  FAIL rollback ran although a GA4 ID is saved"; exit 1
+fi
+expect "nothing was removed (transaction rolled back)" \
+  "SELECT EXISTS (SELECT 1 FROM public.site_tracking WHERE ga4_measurement_id = 'G-RBGUARD12')"
+q "DELETE FROM public.site_tracking" >/dev/null
+ref_upto "$M83"
+echo "rollback: $M83"
+down "$M83"
+expect "the GA4 column and its two functions are gone; the zimmer edit rule is back to settings.owner" \
+  "SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+                       AND table_name = 'site_tracking' AND column_name = 'ga4_measurement_id')
+      AND to_regprocedure('public.site_ga4()') IS NULL
+      AND to_regprocedure('public.save_my_ga4(text)') IS NULL
+      AND pg_get_functiondef('public.site_tracking_can_edit()'::regprocedure) LIKE '%settings.owner%'"
+same_as_ref "migration 82"
 
 # ---------- Nuriel Websites: inviting the site owner by a one-time link (migration 82) ----------
 expect "before the rollback: the closed invite table (hash only), check / redeem for the server only, create / revoke for signed-in users (platform admin in the function)" \
@@ -2654,6 +2683,25 @@ up "$M79"
 up "$M80"
 up "$M81"
 up "$M82"
+# migration 83 copies a GA4 ID already published in the website editor (document.seo.ga4) — once, never over
+# an ID saved in the settings. Re-applying it here (it is idempotent) shows both.
+up "$M83"
+q "INSERT INTO public.tenants (slug, name, site_type) VALUES ('rb-ga4-copy', 'צימר העתקה', 'hospitality'), ('rb-ga4-keep', 'צימר שמור', 'hospitality')" >/dev/null
+q "INSERT INTO hospitality.site_versions (tenant_id, kind, version, theme, document, revision)
+   SELECT id, 'published', 1, 'luxury', '{\"seo\": {\"ga4\": \"g-old11111\"}}'::jsonb, 1 FROM public.tenants WHERE slug IN ('rb-ga4-copy', 'rb-ga4-keep')" >/dev/null
+q "INSERT INTO hospitality.site_versions (tenant_id, kind, version, theme, document, revision)
+   SELECT id, 'published', 2, 'luxury', '{\"seo\": {\"ga4\": \"G-NEW22222\"}}'::jsonb, 1 FROM public.tenants WHERE slug = 'rb-ga4-copy'" >/dev/null
+q "INSERT INTO public.site_tracking (tenant_id, ga4_measurement_id) SELECT id, 'G-SAVED3333' FROM public.tenants WHERE slug = 'rb-ga4-keep'" >/dev/null
+"${PSQL[@]}" -f "$MIGRATIONS/$M83.sql" >/dev/null  # re-applied on purpose (idempotent)
+expect "migration 83: the newest published GA4 ID is copied; an ID already saved in the settings is kept" \
+  "SELECT (SELECT ga4_measurement_id FROM public.site_tracking s JOIN public.tenants t ON t.id = s.tenant_id WHERE t.slug = 'rb-ga4-copy') = 'G-NEW22222'
+      AND (SELECT ga4_measurement_id FROM public.site_tracking s JOIN public.tenants t ON t.id = s.tenant_id WHERE t.slug = 'rb-ga4-keep') = 'G-SAVED3333'"
+q "DELETE FROM public.site_tracking;
+   DELETE FROM hospitality.site_versions WHERE tenant_id IN (SELECT id FROM public.tenants WHERE slug LIKE 'rb-ga4-%');
+   DELETE FROM public.site_settings WHERE tenant_id IN (SELECT id FROM public.tenants WHERE slug LIKE 'rb-ga4-%');
+   DELETE FROM public.email_settings WHERE tenant_id IN (SELECT id FROM public.tenants WHERE slug LIKE 'rb-ga4-%');
+   DELETE FROM public.tenants WHERE slug LIKE 'rb-ga4-%'" >/dev/null
+expect "the copy test left nothing behind" "SELECT NOT EXISTS (SELECT 1 FROM public.tenants WHERE slug LIKE 'rb-ga4-%')"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')

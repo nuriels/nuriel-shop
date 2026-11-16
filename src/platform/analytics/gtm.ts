@@ -10,10 +10,18 @@ export const GTM_SCRIPT_ORIGIN = "https://www.googletagmanager.com";
 /** שם האירוע שהאתר דוחף ל-dataLayer בכל צפייה בעמוד (כולל מעבר עמוד בלי טעינה מחדש) */
 export const GTM_PAGE_VIEW_EVENT = "nuriel_page_view";
 
+/**
+ * מזהה מדידה של Google Analytics 4 ("Measurement ID"): G- ואחריו 4 עד 16 אותיות גדולות באנגלית / ספרות
+ * (בדיוק כמו ה-CHECK במסד, מיגרציה 199). המקור היחיד לתבנית — גם עורך האתר של הצימרים משתמש בו
+ */
+export const GA4_ID_FORMAT = /^G-[A-Z0-9]{4,16}$/;
+
 /** ההגדרה השמורה של האתר (למסך של בעל העסק) */
 export type MyTagManager = {
   container_id: string | null;
   enabled: boolean;
+  /** מיגרציה 199: מזהה GA4 של האתר (או null). אתר בלי המיגרציה — undefined */
+  ga4_id?: string | null;
   updated_at: string | null;
   /** המזהה השמור נטען באתר (צימר: רק כשהמדידה הופעלה לאתר בפלטפורמה) */
   loads_on_site: boolean;
@@ -39,6 +47,24 @@ export function normalizeGtmId(raw: unknown): string | null {
   if (!GTM_ID_FORMAT.test(value)) {
     throw new GtmInputError(
       "מזהה Google Tag Manager לא תקין — בתבנית GTM-XXXXXXX (אותיות באנגלית וספרות)",
+    );
+  }
+  return value;
+}
+
+export function isGa4Id(value: unknown): value is string {
+  return typeof value === "string" && GA4_ID_FORMAT.test(value);
+}
+
+/** קלט מהמסך: רווחים ואותיות קטנות — מתוקנים; ריק — null (מחיקה); כל דבר אחר — שגיאה */
+export function normalizeGa4Id(raw: unknown): string | null {
+  const value = String(raw ?? "")
+    .trim()
+    .toUpperCase();
+  if (value === "") return null;
+  if (!GA4_ID_FORMAT.test(value)) {
+    throw new GtmInputError(
+      "מזהה Google Analytics 4 לא תקין — בתבנית G-XXXXXXXXXX (אותיות באנגלית וספרות)",
     );
   }
   return value;
