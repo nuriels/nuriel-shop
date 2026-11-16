@@ -329,7 +329,7 @@ test("Efrat's old site, rebuilt: same sections, texts, fonts, colors and picture
   await expect(visibleWorks()).toHaveCount(2);
   await tabs.first().click();
 
-  // the forms are shown; in the preview, sending only explains that forms connect later (nothing is sent)
+  // both forms are shown (sending them is covered in websites-inquiries.spec.ts)
   await expect(page.locator(".bps-form")).toHaveCount(2);
 
   // accessibility: everything but the original colors (kept on purpose — see the report)
@@ -382,6 +382,13 @@ test("Efrat's old site, rebuilt: same sections, texts, fonts, colors and picture
   expect(
     await mobile.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
   ).toBeLessThanOrEqual(1);
+  // with "reduce motion" the testimonials strip stands still — the hidden screen-reader text inside its
+  // pictures must still be clipped with the strip (it once widened the page sideways)
+  await mobile.emulateMedia({ reducedMotion: "reduce" });
+  expect(
+    await mobile.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+  ).toBeLessThanOrEqual(1);
+  await mobile.emulateMedia({ reducedMotion: null });
   const phoneAxe = await new AxeBuilder({ page: mobile })
     .disableRules(["color-contrast"])
     .analyze();

@@ -938,7 +938,7 @@
 .bps-wa:hover {
   background: #0e7a40;
 }
-/* מוסתר כשמקלידים בטופס, או כשכפתור שליחה / קישור בפוטר נמצא מתחתיו */
+/* מוסתר כשמקלידים בטופס, או כששדה / כפתור שליחה / קישור בפוטר / טקסט של כותרת נמצא מתחתיו */
 .bps-wa[data-hidden="true"] {
   opacity: 0;
   visibility: hidden;
@@ -1167,6 +1167,8 @@
   margin-block-start: 2.5rem;
 }
 .bps-marquee {
+  /* the containing block for the screen-reader text inside the pictures, so it is clipped with the strip */
+  position: relative;
   overflow: hidden;
 }
 .bps-marquee-track {
@@ -1313,13 +1315,17 @@
   cursor: progress;
   opacity: 0.75;
 }
-/* מלכודת לבוטים — מחוץ למסך, לא נגיש ולא נראה */
+/* מלכודת לבוטים — לא נראית ולא נגישה (כמו bps-sr, בלי לצאת מגבולות העמוד: מיקום מחוץ למסך ב-RTL מרחיב
+   את רוחב התוכן שהדפדפן מחשב, למשל בצילום עמוד מלא) */
 .bps-trap {
   position: absolute;
-  inset-inline-start: -10000px;
   inline-size: 1px;
   block-size: 1px;
   overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
 }
 /* האישור אחרי השליחה — במקום הטופס */
 .bps-form-done {

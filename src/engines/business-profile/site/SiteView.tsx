@@ -251,9 +251,11 @@ function SiteFooter({ floating }: { floating: boolean }) {
   );
 }
 
-/** מה שהכפתור הצף לא מסתיר: כפתורי שליחה, קישורי הפוטר וכפתורי העצירה */
+/** מה שהכפתור הצף לא מסתיר: שדות הטופס וכפתורי השליחה, קישורי הפוטר וכפתורי העצירה */
 const KEEP_CLEAR =
-  ".bps-form-submit, .bps-form-again, .bps-footer-strip a, .bps-footer a, .bps-motion-toggle, .bps-carousel-nav";
+  ".bps-field input, .bps-field textarea, .bps-field select, .bps-form-submit, .bps-form-again, .bps-footer-strip a, .bps-footer a, .bps-motion-toggle, .bps-carousel-nav";
+/** כותרות: נמדד הטקסט עצמו (שורה-שורה), לא כל רוחב הכותרת — כדי שהכפתור לא ייעלם בלי צורך */
+const TEXT_CLEAR = "main h1, main h2";
 
 function FloatingWhatsapp() {
   const { doc } = useSiteView();
@@ -276,17 +278,22 @@ function FloatingWhatsapp() {
         const me = ref.current?.getBoundingClientRect();
         if (!me) return;
         const pad = 8;
-        const hit = [...document.querySelectorAll<HTMLElement>(KEEP_CLEAR)].some((el) => {
-          if (el === ref.current) return false;
-          const r = el.getBoundingClientRect();
-          return (
-            r.width > 0 &&
-            r.left < me.right + pad &&
-            r.right > me.left - pad &&
-            r.top < me.bottom + pad &&
-            r.bottom > me.top - pad
-          );
-        });
+        const near = (r: DOMRect) =>
+          r.width > 0 &&
+          r.left < me.right + pad &&
+          r.right > me.left - pad &&
+          r.top < me.bottom + pad &&
+          r.bottom > me.top - pad;
+        const range = document.createRange();
+        const hit =
+          [...document.querySelectorAll<HTMLElement>(KEEP_CLEAR)].some(
+            (el) => el !== ref.current && near(el.getBoundingClientRect()),
+          ) ||
+          [...document.querySelectorAll<HTMLElement>(TEXT_CLEAR)].some((el) => {
+            if (!near(el.getBoundingClientRect())) return false;
+            range.selectNodeContents(el);
+            return [...range.getClientRects()].some(near);
+          });
         setCovering(hit);
       });
     };

@@ -289,6 +289,8 @@ test("1–4: a valid submission on the live site → confirmation, saved on its 
   expect(mail.html).not.toMatch(/code=|token=|#t=/);
 
   // 3. the owner's inbox ("פניות מלקוחות")
+  // its own address: the handoff redeem limit is per IP (20 / 15 min) and the full run shares 127.0.0.1
+  await page.setExtraHTTPHeaders({ "x-real-ip": nextIp() });
   await enterViaHandoffTo(page, url(A), ids["a"]!, OWNER_A.email, /\/studio/);
   await page.goto(url(A, `/studio/inbox?id=${id}`));
   const panel = page.locator("section[aria-labelledby='inbox-detail-title']");
@@ -439,6 +441,8 @@ test("5: the e-mail service is down → the inquiry is saved and shown, the fail
            FROM business_profile.inquiries WHERE tenant_id = '${ids["a"]}' AND full_name = 'בזמן תקלה'`),
   ).toBe("1|true|true");
 
+  // its own address: the handoff redeem limit is per IP (20 / 15 min) and the full run shares 127.0.0.1
+  await page.setExtraHTTPHeaders({ "x-real-ip": nextIp() });
   await enterViaHandoffTo(page, url(A), ids["a"]!, OWNER_A.email, /\/studio/);
   await page.goto(url(A, "/studio/inbox"));
   const card = page.getByRole("button", { name: /בזמן תקלה/ });
@@ -463,6 +467,8 @@ test("5: the e-mail service is down → the inquiry is saved and shown, the fail
 test("7: status and internal note — saved, in the history, in the audit log (without the content)", async ({
   page,
 }) => {
+  // its own address: the handoff redeem limit is per IP (20 / 15 min) and the full run shares 127.0.0.1
+  await page.setExtraHTTPHeaders({ "x-real-ip": nextIp() });
   await enterViaHandoffTo(page, url(A), ids["a"]!, OWNER_A.email, /\/studio/);
   await page.goto(url(A, "/studio/inbox"));
   await expect(page.getByRole("link", { name: /פניות מלקוחות/ })).toContainText(/\d/); // the new-count badge
@@ -577,6 +583,8 @@ test("8: two businesses are separated — B's owner cannot list, read or change 
 test("preview: before publishing, the owner's form submission is saved as a test inquiry (and marked so)", async ({
   page,
 }) => {
+  // its own address: the handoff redeem limit is per IP (20 / 15 min) and the full run shares 127.0.0.1
+  await page.setExtraHTTPHeaders({ "x-real-ip": nextIp() });
   await enterViaHandoffTo(page, url(B), ids["b"]!, OWNER_B.email, /\/studio/);
   await page.goto(url(B, "/studio/preview"));
   await fillForm(page, "lead", { name: "פנייה מהתצוגה", phone: "0549998877" });
@@ -616,20 +624,32 @@ test("9: floating WhatsApp — the number and message from the site details, acc
   await expect(wa).toHaveAttribute("data-hidden", "true");
   await page.locator("#lead").getByLabel(/שם/).blur();
   await expect(wa).not.toHaveAttribute("data-hidden", "true");
-  // whenever a submit button is under it, it hides; otherwise it never sits on one
-  for (const y of [0, 300, 600, 900, 1200, 1600, 2000, 99999]) {
+  // whenever a form field, a submit button, a footer link or a heading's text is under it, it hides;
+  // otherwise it never sits on one (every 150px down the whole page)
+  const height = await page.evaluate(() => document.documentElement.scrollHeight);
+  for (let y = 0; y <= height; y += 150) {
     await page.evaluate((top) => window.scrollTo(0, top), y);
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(80);
     const covered = await page.evaluate(() => {
       const me = document.querySelector(".bps-wa")!.getBoundingClientRect();
       const hidden = document.querySelector(".bps-wa")!.getAttribute("data-hidden") === "true";
+      const over = (r: DOMRect) =>
+        r.width > 0 &&
+        r.left < me.right &&
+        r.right > me.left &&
+        r.top < me.bottom &&
+        r.bottom > me.top;
+      const range = document.createRange();
       const hit = [
-        ...document.querySelectorAll(".bps-form-submit, .bps-footer a:not(.bps-wa)"),
-      ].some((el) => {
-        const r = el.getBoundingClientRect();
-        return r.left < me.right && r.right > me.left && r.top < me.bottom && r.bottom > me.top;
+        ...document.querySelectorAll(
+          ".bps-field input, .bps-field textarea, .bps-form-submit, .bps-footer a:not(.bps-wa)",
+        ),
+      ].some((el) => over(el.getBoundingClientRect()));
+      const heading = [...document.querySelectorAll("main h1, main h2")].some((el) => {
+        range.selectNodeContents(el);
+        return [...range.getClientRects()].some(over);
       });
-      return hit && !hidden;
+      return (hit || heading) && !hidden;
     });
     expect(covered, `scrolled to ${y}`).toBe(false);
   }
@@ -669,6 +689,8 @@ test("11: the accessibility statement — footer link on every page, contact det
   expect(sitemap).toContain(`/accessibility</loc>`);
 
   // the studio: the statement tab, edited and published like any change
+  // its own address: the handoff redeem limit is per IP (20 / 15 min) and the full run shares 127.0.0.1
+  await page.setExtraHTTPHeaders({ "x-real-ip": nextIp() });
   await enterViaHandoffTo(page, url(A), ids["a"]!, OWNER_A.email, /\/studio/);
   await page.goto(url(A, "/studio/editor"));
   await page.getByRole("tab", { name: "הצהרת נגישות" }).click();
@@ -749,6 +771,8 @@ test("10: accessibility — axe on the site, the statement and the inbox; skip l
   expect(order).toEqual(["lead-name", "lead-email", "lead-phone", "lead-message", "submit"]);
 
   // the inbox itself
+  // its own address: the handoff redeem limit is per IP (20 / 15 min) and the full run shares 127.0.0.1
+  await page.setExtraHTTPHeaders({ "x-real-ip": nextIp() });
   await enterViaHandoffTo(page, url(A), ids["a"]!, OWNER_A.email, /\/studio/);
   await page.goto(url(A, "/studio/inbox"));
   await page.getByRole("button", { name: /דנה לוי/ }).click();
@@ -768,6 +792,8 @@ test("10: accessibility — axe on the site, the statement and the inbox; skip l
 test("retention and deletion: the owner deletes one inquiry and all test inquiries; logged without content", async ({
   page,
 }) => {
+  // its own address: the handoff redeem limit is per IP (20 / 15 min) and the full run shares 127.0.0.1
+  await page.setExtraHTTPHeaders({ "x-real-ip": nextIp() });
   await enterViaHandoffTo(page, url(B), ids["b"]!, OWNER_B.email, /\/studio/);
   await page.goto(url(B, "/studio/inbox"));
   await page.getByRole("button", { name: /פנייה מהתצוגה/ }).click();
