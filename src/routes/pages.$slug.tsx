@@ -25,10 +25,12 @@ import { breadcrumbJsonLd, jsonLdText } from "@/lib/structured-data";
 export const Route = createFileRoute("/pages/$slug")({
   // נבנה בשרת (SEO): העמוד שפורסם — כותרת ותוכן — כבר ב-HTML (טיוטה — רק למנהל, בדפדפן, כמו קודם)
   ssr: true,
-  loader: async ({ params }) => {
+  loader: async ({ params, context }) => {
     const [page, seed] = await Promise.all([
       getStorePageSeo({ data: { slug: params.slug } }),
-      isServerRender() ? getStorefrontSeed({ data: {} }) : Promise.resolve(null),
+      isServerRender() && context.hostMode.siteType === "ecommerce"
+        ? getStorefrontSeed({ data: {} })
+        : Promise.resolve(null),
     ]);
     return { page, seed };
   },

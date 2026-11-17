@@ -94,13 +94,13 @@ export const Route = createFileRoute("/")({
   ssr: true,
   // פעם אחת לטעינת עמוד — מעבר בין קטגוריות לא טוען שוב (התגיות לפי ?category=).
   // חלק 31: גם קטגוריות האב — לפירורי לחם היררכיים בעמודי הקטגוריה
-  loader: async () => {
+  loader: async ({ context }) => {
     const [site, categoryParents] = await Promise.all([getSiteSeo(), getCategoryParents()]);
     // דף הנחיתה: המחירים וימי הניסיון מהמסד (רק בשער; בחנויות — בלי קריאה נוספת)
     const landing = site.isPortal ? await getPortalLanding().catch(() => null) : null;
     // הקטלוג כפי שאורח רואה אותו — רק בטעינה הראשונה (בשרת), רק בחנות (לא בשער)
     const seed =
-      !site.isPortal && isServerRender()
+      !site.isPortal && isServerRender() && context.hostMode.siteType === "ecommerce"
         ? await getStorefrontSeed({ data: { catalog: true, banners: true } })
         : null;
     return { ...site, categoryParents, landing, seed };

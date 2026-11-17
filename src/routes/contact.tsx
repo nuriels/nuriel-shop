@@ -42,7 +42,10 @@ export const Route = createFileRoute("/contact")({
   // נבנה בשרת (SEO): ההגדרות הציבוריות (טקסטים, פרטי העסק) והקטגוריות — מה שאורח רואה — כבר ב-HTML.
   // רק בטעינה הראשונה; בניווט בתוך האתר הדפדפן טוען בעצמו, כמו קודם
   ssr: true,
-  loader: () => (isServerRender() ? getStorefrontSeed({ data: {} }) : null),
+  loader: ({ context }) =>
+    isServerRender() && context.hostMode.siteType === "ecommerce"
+      ? getStorefrontSeed({ data: {} })
+      : null,
   head: () => ({ meta: [{ title: "צור קשר" }] }),
   component: SeededContactPage,
 });

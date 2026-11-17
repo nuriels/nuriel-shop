@@ -88,11 +88,11 @@ type ProductRouteData = ProductSeo & { seed: StorefrontSeed | null };
 
 export const Route = createFileRoute("/product/$productId")({
   ssr: true,
-  loader: async ({ params }): Promise<ProductRouteData | null> => {
+  loader: async ({ params, context }): Promise<ProductRouteData | null> => {
     const [seo, seed] = await Promise.all([
       getProductSeo({ data: { id: params.productId } }),
-      // רק בטעינה הראשונה (בשרת); בניווט בתוך האתר — הדפדפן טוען בעצמו, כמו קודם
-      isServerRender()
+      // רק בטעינה הראשונה (בשרת), רק בחנות; בניווט בתוך האתר — הדפדפן טוען בעצמו, כמו קודם
+      isServerRender() && context.hostMode.siteType === "ecommerce"
         ? getStorefrontSeed({ data: { productId: params.productId } })
         : Promise.resolve(null),
     ]);
