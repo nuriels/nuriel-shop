@@ -2,6 +2,30 @@
 --   DELETE FROM public._migrations_applied WHERE filename = '20261019590000_first_order_coupon.sql';
 -- קופון שסומן "הזמנה ראשונה" יהפוך לקופון רגיל (בלי המגבלה). שאר כללי הקופונים נשארים.
 BEGIN;
+
+-- הגנת נתונים (ביקורת R-3): ה-rollback לא מוחק נתוני לקוחות בשקט. אם יש שורות — נעצר; ייצאו / גבו והחליטו
+DO $$
+DECLARE
+  _n bigint;
+  _t text;
+  _w text;
+  _what text;
+BEGIN
+  FOR _t, _w, _what IN VALUES
+      ('public.coupons', 'first_order_mode <> ''none''', 'קופוני "הזמנה ראשונה" שהוגדרו')
+  LOOP
+    IF to_regclass(_t) IS NOT NULL THEN
+      BEGIN
+        EXECUTE format('SELECT count(*) FROM %s WHERE %s', _t, _w) INTO _n;
+      EXCEPTION WHEN undefined_column THEN
+        _n := 0; -- העמודה כבר הוסרה (rollback חלקי קודם)
+      END;
+      IF _n > 0 THEN
+        RAISE EXCEPTION 'יש % שורות: % — ייצאו אותן והחליטו לפני ה-rollback (לא מבוצע)', _n, _what;
+      END IF;
+    END IF;
+  END LOOP;
+END $$;
 DROP FUNCTION IF EXISTS public.first_order_offer(uuid, text, boolean);
 CREATE OR REPLACE FUNCTION public.coupon_customer_problem(
   c public.coupons, _customer uuid, _email text, _is_guest boolean

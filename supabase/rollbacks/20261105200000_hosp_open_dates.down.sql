@@ -10,6 +10,30 @@
 BEGIN;
 SET LOCAL client_min_messages = warning;
 
+-- הגנת נתונים (ביקורת R-3): ה-rollback לא מוחק נתוני לקוחות בשקט. אם יש שורות — נעצר; ייצאו / גבו והחליטו
+DO $$
+DECLARE
+  _n bigint;
+  _t text;
+  _w text;
+  _what text;
+BEGIN
+  FOR _t, _w, _what IN VALUES
+      ('hospitality.units', 'open_until IS NOT NULL', 'תאריכים פתוחים להזמנה שבעלי המתחמים פתחו')
+  LOOP
+    IF to_regclass(_t) IS NOT NULL THEN
+      BEGIN
+        EXECUTE format('SELECT count(*) FROM %s WHERE %s', _t, _w) INTO _n;
+      EXCEPTION WHEN undefined_column THEN
+        _n := 0; -- העמודה כבר הוסרה (rollback חלקי קודם)
+      END;
+      IF _n > 0 THEN
+        RAISE EXCEPTION 'יש % שורות: % — ייצאו אותן והחליטו לפני ה-rollback (לא מבוצע)', _n, _what;
+      END IF;
+    END IF;
+  END LOOP;
+END $$;
+
 CREATE OR REPLACE FUNCTION hospitality._quote(_tenant_id uuid, _unit_id uuid, _check_in date, _check_out date,
                                               _adults integer, _children integer, _promo_code text,
                                               _guest_mode boolean, _policy_id uuid DEFAULT NULL,

@@ -65,6 +65,8 @@ jobs:
         run: bash scripts/db-tests/run.sh
       - name: migration rollback check
         run: bash scripts/db-tests/rollback-check.sh
+      - name: rollback data guards — a rollback stops when customer data exists (R-3)
+        run: bash scripts/db-tests/rollback-guards.sh
       - name: booking concurrency (parallel sessions)
         run: bash scripts/db-tests/hospitality/concurrency/run.sh
       - name: license downloads concurrency (parallel sessions)

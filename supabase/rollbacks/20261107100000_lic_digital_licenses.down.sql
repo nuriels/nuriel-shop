@@ -6,6 +6,33 @@
 -- ============================================================
 BEGIN;
 
+-- הגנת נתונים (ביקורת R-3): ה-rollback לא מוחק נתוני לקוחות בשקט. אם יש שורות — נעצר; ייצאו / גבו והחליטו
+DO $$
+DECLARE
+  _n bigint;
+  _t text;
+  _w text;
+  _what text;
+BEGIN
+  FOR _t, _w, _what IN VALUES
+      ('public.license_files', 'true', 'קבצי רישיון'),
+      ('public.license_deliveries', 'true', 'משלוחי רישיון ללקוחות'),
+      ('public.license_download_links', 'true', 'קישורי הורדה'),
+      ('public.license_audit', 'true', 'יומן ביקורת הרישיונות')
+  LOOP
+    IF to_regclass(_t) IS NOT NULL THEN
+      BEGIN
+        EXECUTE format('SELECT count(*) FROM %s WHERE %s', _t, _w) INTO _n;
+      EXCEPTION WHEN undefined_column THEN
+        _n := 0; -- העמודה כבר הוסרה (rollback חלקי קודם)
+      END;
+      IF _n > 0 THEN
+        RAISE EXCEPTION 'יש % שורות: % — ייצאו אותן והחליטו לפני ה-rollback (לא מבוצע)', _n, _what;
+      END IF;
+    END IF;
+  END LOOP;
+END $$;
+
 DROP TABLE IF EXISTS public.license_audit;
 DROP TABLE IF EXISTS public.license_download_links;
 DROP TABLE IF EXISTS public.license_deliveries;

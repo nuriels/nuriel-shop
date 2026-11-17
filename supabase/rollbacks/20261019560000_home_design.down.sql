@@ -12,6 +12,31 @@
 -- ============================================================
 BEGIN;
 
+-- הגנת נתונים (ביקורת R-3): ה-rollback לא מוחק נתוני לקוחות בשקט. אם יש שורות — נעצר; ייצאו / גבו והחליטו
+DO $$
+DECLARE
+  _n bigint;
+  _t text;
+  _w text;
+  _what text;
+BEGIN
+  FOR _t, _w, _what IN VALUES
+      ('public.home_banner_slides', 'desktop_poster_url IS NOT NULL OR mobile_poster_url IS NOT NULL', 'תמונות פוסטר של באנרי מסך הבית'),
+      ('public.site_settings', 'banner_interval_seconds <> 5', 'זמן החלפת באנרים שהוגדר')
+  LOOP
+    IF to_regclass(_t) IS NOT NULL THEN
+      BEGIN
+        EXECUTE format('SELECT count(*) FROM %s WHERE %s', _t, _w) INTO _n;
+      EXCEPTION WHEN undefined_column THEN
+        _n := 0; -- העמודה כבר הוסרה (rollback חלקי קודם)
+      END;
+      IF _n > 0 THEN
+        RAISE EXCEPTION 'יש % שורות: % — ייצאו אותן והחליטו לפני ה-rollback (לא מבוצע)', _n, _what;
+      END IF;
+    END IF;
+  END LOOP;
+END $$;
+
 UPDATE public.home_banner_slides
    SET show_desktop = false, show_mobile = false
  WHERE is_active = false;

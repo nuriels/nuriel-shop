@@ -115,6 +115,11 @@ health_checks() { # robots 200 + every site host answers below 500
   local code base platform h fails=0
   code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "http://127.0.0.1:$PORT/robots.txt") || true
   if [[ "$code" == 200 ]]; then ok "local robots.txt: 200"; else say "  ✗ local robots.txt: $code"; fails=1; fi
+  # R-4: חיות (בלי מסד) ומוכנות (המסד). גרסה ישנה (חזרה לאחור) עונה 404 לשתיהן — לא כשל
+  code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "http://127.0.0.1:$PORT/healthz") || true
+  if [[ "$code" == 200 ]]; then ok "local /healthz: 200"; elif [[ "$code" == 404 ]]; then ok "local /healthz: 404 (a version from before R-4)"; else say "  ✗ local /healthz: $code"; fails=1; fi
+  code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "http://127.0.0.1:$PORT/readyz") || true
+  if [[ "$code" == 200 ]]; then ok "local /readyz (database): 200"; elif [[ "$code" == 404 ]]; then ok "local /readyz: 404 (a version from before R-4)"; else say "  ✗ local /readyz (database): $code"; fails=1; fi
   base=$(sed -n 's/^TENANT_BASE_DOMAIN=//p' "$APP_DIR/.env" 2>/dev/null | tail -n 1 | tr -d '"'"'"' \r')
   platform=$(sed -n 's/^PLATFORM_ADMIN_HOST=//p' "$APP_DIR/.env" 2>/dev/null | tail -n 1 | tr -d '"'"'"' \r')
   local hosts=()

@@ -3,6 +3,7 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { withSecurityHeaders } from "./lib/security-headers";
+import { handleHealthRequest } from "./server/health.server";
 import {
   EXPIRED_PAGE,
   FORBIDDEN_PAGE,
@@ -32,8 +33,8 @@ import {
     return id ? cachedSiteType(id) : null;
   };
 
-// קבצים סטטיים (assets, favicon...) לא צריכים זיהוי חנות — כך גם ה-healthcheck
-// לא תלוי במסד. חוץ מ-robots.txt / sitemap.xml (חלק 14): הם נוצרים לכל חנות
+// קבצים סטטיים (assets, favicon...) לא צריכים זיהוי חנות. (ה-healthcheck של Docker הוא /healthz —
+// נענה לפני זיהוי החנות, ראו src/server/health.server.ts; robots.txt לא סטטי: הוא תלוי במסד.) חוץ מ-robots.txt / sitemap.xml (חלק 14): הם נוצרים לכל חנות
 // מהמסד (src/lib/feeds.server.ts). חלק 38: /zap.xml הוסר — עמודי ה-HTML לזאפ
 // (/zap, /zap/cat/{id}) נוצרים ב-src/lib/zap-pages.server.ts.
 const STATIC_PATH = /^\/assets\/|\.[a-z0-9]{2,5}$/i;
@@ -142,6 +143,9 @@ export default {
 
 async function route(request: Request, env: unknown, ctx: unknown): Promise<Response> {
   try {
+    // R-4: /healthz (חיות, בלי I/O) ו-/readyz (מוכנות: המסד) — לפני זיהוי החנות, בכל דומיין
+    const health = await handleHealthRequest(request);
+    if (health) return health;
     const host = requestHost(request);
     const pathname = new URL(request.url).pathname;
     // חלק 38: פיד ה-XML לזאפ הוסר — הסורקים עוברים לעמודי ה-HTML (/zap)

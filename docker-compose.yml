@@ -83,7 +83,8 @@ services:
       # "off" מכבה את מתזמן התראות החידוש של תוסף ה-AI בתהליך הזה (למשל בשרת שני). ריק = פועל
       AI_RENEWAL_JOB: ${AI_RENEWAL_JOB:-}
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/robots.txt').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      # R-4: /healthz (חיות, בלי מסד). הגיבוי ל-/robots.txt — רק לתמונה ישנה בחזרה לאחור (ראו Dockerfile)
+      test: ["CMD", "node", "-e", "const u='http://127.0.0.1:3000',ok=p=>fetch(u+p).then(r=>r.ok).catch(()=>false);ok('/healthz').then(a=>a||ok('/robots.txt')).then(a=>process.exit(a?0:1))"]
       interval: 30s
       timeout: 5s
       retries: 3

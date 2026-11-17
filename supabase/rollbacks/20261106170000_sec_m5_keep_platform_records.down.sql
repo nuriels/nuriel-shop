@@ -6,6 +6,31 @@
 -- ============================================================
 BEGIN;
 
+-- הגנת נתונים (ביקורת R-3): ה-rollback לא מוחק נתוני לקוחות בשקט. אם יש שורות — נעצר; ייצאו / גבו והחליטו
+DO $$
+DECLARE
+  _n bigint;
+  _t text;
+  _w text;
+  _what text;
+BEGIN
+  FOR _t, _w, _what IN VALUES
+      ('public.billing_history', 'NOT EXISTS (SELECT 1 FROM public.tenants t WHERE t.id = billing_history.tenant_id)', 'רשומות חיוב של חנויות שנמחקו (נשמרות בכוונה)'),
+      ('public.platform_audit_log', 'tenant_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.tenants t WHERE t.id = platform_audit_log.tenant_id)', 'רשומות ביומן הפלטפורמה של חנויות שנמחקו (נשמרות בכוונה)')
+  LOOP
+    IF to_regclass(_t) IS NOT NULL THEN
+      BEGIN
+        EXECUTE format('SELECT count(*) FROM %s WHERE %s', _t, _w) INTO _n;
+      EXCEPTION WHEN undefined_column THEN
+        _n := 0; -- העמודה כבר הוסרה (rollback חלקי קודם)
+      END;
+      IF _n > 0 THEN
+        RAISE EXCEPTION 'יש % שורות: % — ייצאו אותן והחליטו לפני ה-rollback (לא מבוצע)', _n, _what;
+      END IF;
+    END IF;
+  END LOOP;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.platform_delete_tenant(_tenant uuid, _confirm_slug text)
  RETURNS jsonb
  LANGUAGE plpgsql

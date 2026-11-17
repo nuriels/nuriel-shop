@@ -7,6 +7,31 @@
 BEGIN;
 SET LOCAL client_min_messages = warning;
 
+-- הגנת נתונים (ביקורת R-3): ה-rollback לא מוחק נתוני לקוחות בשקט. אם יש שורות — נעצר; ייצאו / גבו והחליטו
+DO $$
+DECLARE
+  _n bigint;
+  _t text;
+  _w text;
+  _what text;
+BEGIN
+  FOR _t, _w, _what IN VALUES
+      ('public.marketing_consents', 'confirmed_at IS NOT NULL OR consent_method IS NOT NULL OR consent_ip_hash IS NOT NULL', 'הוכחות הסכמה לדיוור (אישור בשני שלבים, שיטה, גיבוב IP) — ראיה חוקית'),
+      ('public.marketing_consent_events', 'kind IS NOT NULL OR method IS NOT NULL OR ip_hash IS NOT NULL', 'אירועי הסכמה ביומן ההסכמות — ראיה חוקית')
+  LOOP
+    IF to_regclass(_t) IS NOT NULL THEN
+      BEGIN
+        EXECUTE format('SELECT count(*) FROM %s WHERE %s', _t, _w) INTO _n;
+      EXCEPTION WHEN undefined_column THEN
+        _n := 0; -- העמודה כבר הוסרה (rollback חלקי קודם)
+      END;
+      IF _n > 0 THEN
+        RAISE EXCEPTION 'יש % שורות: % — ייצאו אותן והחליטו לפני ה-rollback (לא מבוצע)', _n, _what;
+      END IF;
+    END IF;
+  END LOOP;
+END $$;
+
 DROP FUNCTION IF EXISTS public.marketing_release_confirm(text, text);
 DROP FUNCTION IF EXISTS public.marketing_confirm(text, text, text);
 DROP FUNCTION IF EXISTS public.marketing_set_consent(text, boolean, text, text, uuid, text, text, text, text, jsonb);

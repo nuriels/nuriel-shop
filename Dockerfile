@@ -48,9 +48,11 @@ COPY --from=build --chown=node:node /app/.output ./.output
 USER node
 EXPOSE 3000
 
-# קובץ סטטי — לא תלוי ב-SSR או ב-Supabase, כך ש-Coolify לא יוריד את
-# האפליקציה רק כי ה-DB איטי לרגע.
+# R-4: /healthz עונה מהתהליך עצמו — בלי מסד, בלי זיהוי חנות — כך ש-Coolify / Docker לא מורידים את האפליקציה
+# רק כי ה-DB איטי או נפל לרגע. מוכנות המסד נבדקת ב-/readyz (לניטור ולסקריפט הפריסה, לא להפעלה מחדש).
+# הגיבוי ל-/robots.txt קיים רק כדי שתמונה מלפני השינוי (חזרה לאחור) תמשיך להיחשב תקינה; בגרסה החדשה
+# /healthz עונה מיד ולא מגיעים אליו.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/robots.txt').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "const u='http://127.0.0.1:'+(process.env.PORT||3000),ok=p=>fetch(u+p).then(r=>r.ok).catch(()=>false);ok('/healthz').then(a=>a||ok('/robots.txt')).then(a=>process.exit(a?0:1))"
 
 CMD ["node", ".output/server/index.mjs"]

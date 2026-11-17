@@ -61,6 +61,22 @@ export function requestHost(request: Request): string {
   return (raw.split(",")[0] ?? "").trim().toLowerCase().replace(/:\d+$/, "");
 }
 
+/**
+ * /readyz (src/server/health.server.ts): האם המסד עונה. אותה קריאה שמזהה חנות לפי דומיין (tenant_for_host),
+ * עם דומיין שלא קיים — כך נבדקת בדיוק התלות שהאפליקציה צריכה. בלי מטמון (המטמון ב-health.server.ts).
+ * זורק בכל כשל (חיבור, זמן קצוב, תשובה שאינה 2xx); אין בגוף השגיאה מידע שיוצא החוצה.
+ */
+export async function pingDatabase(timeoutMs: number): Promise<void> {
+  const { url, key } = serviceEnv();
+  const res = await fetch(`${url}/rest/v1/rpc/tenant_for_host`, {
+    method: "POST",
+    headers: serviceHeaders(key),
+    body: JSON.stringify({ _host: "readyz.invalid" }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) throw new Error(`database not ready (HTTP ${res.status})`);
+}
+
 /** דומיין ← חנות (public.tenant_for_host), עם מטמון קצר בזיכרון */
 export async function resolveTenant(host: string): Promise<Tenant | null> {
   const hit = cache.get(host);

@@ -2,6 +2,31 @@
 -- Drops the room-type functions, units.category_id and unit_categories. Bookings are untouched
 -- (they always hold a physical room); rooms simply lose their type.
 BEGIN;
+
+-- הגנת נתונים (ביקורת R-3): ה-rollback לא מוחק נתוני לקוחות בשקט. אם יש שורות — נעצר; ייצאו / גבו והחליטו
+DO $$
+DECLARE
+  _n bigint;
+  _t text;
+  _w text;
+  _what text;
+BEGIN
+  FOR _t, _w, _what IN VALUES
+      ('hospitality.unit_categories', 'true', 'סוגי חדרים'),
+      ('hospitality.units', 'category_id IS NOT NULL', 'יחידות ששויכו לסוג חדר')
+  LOOP
+    IF to_regclass(_t) IS NOT NULL THEN
+      BEGIN
+        EXECUTE format('SELECT count(*) FROM %s WHERE %s', _t, _w) INTO _n;
+      EXCEPTION WHEN undefined_column THEN
+        _n := 0; -- העמודה כבר הוסרה (rollback חלקי קודם)
+      END;
+      IF _n > 0 THEN
+        RAISE EXCEPTION 'יש % שורות: % — ייצאו אותן והחליטו לפני ה-rollback (לא מבוצע)', _n, _what;
+      END IF;
+    END IF;
+  END LOOP;
+END $$;
 DROP FUNCTION IF EXISTS hospitality.request_booking_type(uuid, date, date, text, text, text, text, boolean, text,
   integer, integer, text, text, boolean, text, uuid);
 DROP FUNCTION IF EXISTS hospitality.quote_type(uuid, date, date, integer, integer, text, uuid);
