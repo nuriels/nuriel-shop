@@ -1,0 +1,58 @@
+[
+ {
+  "label": "B-rewrite",
+  "db": "perf_scratch_b",
+  "workload": "cust_orders",
+  "clients": 8,
+  "secs": 30,
+  "tx": 1671,
+  "tps": 55.48126,
+  "p50_ms": 140.835,
+  "p95_ms": 194.724,
+  "max_ms": 249.414,
+  "failed": 0,
+  "stderr": ""
+ },
+ {
+  "label": "B-rewrite",
+  "db": "perf_scratch_b",
+  "workload": "cust_orders",
+  "clients": 16,
+  "secs": 30,
+  "tx": 1702,
+  "tps": 56.452301,
+  "p50_ms": 278.246,
+  "p95_ms": 367.925,
+  "max_ms": 481.878,
+  "failed": 0,
+  "stderr": ""
+ },
+ {
+  "label": "B-rewrite",
+  "db": "perf_scratch_b",
+  "workload": "cust_orders_flt",
+  "clients": 8,
+  "secs": 30,
+  "tx": 2435,
+  "tps": 81.074364,
+  "p50_ms": 94.653,
+  "p95_ms": 141.048,
+  "max_ms": 191.909,
+  "failed": 0,
+  "stderr": ""
+ },
+ {
+  "label": "B-rewrite",
+  "db": "perf_scratch_b",
+  "workload": "cust_orders_flt",
+  "clients": 16,
+  "secs": 30,
+  "tx": 2673,
+  "tps": 88.790335,
+  "p50_ms": 176.555,
+  "p95_ms": 243.692,
+  "max_ms": 368.101,
+  "failed": 0,
+  "stderr": ""
+ }
+]
