@@ -47,7 +47,7 @@
 | Migration + Rollback (`rollback-check.sh`) | ✓ **289 שלבים ירוקים**, exit 0; הסכמה אחרי rollback וה-re-apply של כל המיגרציות זהה למקור (2,102 משפטי CREATE) |
 | הגנות נתונים ב-rollback (`rollback-guards.sh`) | ✓ **31/31** |
 | Concurrency (חיבורי psql נפרדים) | ✓ הזמנות + קופונים + מלאי **20/20** · מכסות AI **24/24** · הורדות רישיון **8/8** · הזמנות Hospitality **49/49** |
-| E2E (Playwright, desktop + mobile, Supabase מקומי עם כל 200 המיגרציות, אפליקציה שנבנתה מחדש) | _{{E2E}}_ |
+| E2E (Playwright, desktop + mobile, Supabase מקומי עם כל 200 המיגרציות, אפליקציה שנבנתה מחדש) | ✓ **377 עברו · 14 דולגו · 0 נכשלו** (22.7 דק') — אותם מספרים כמו בסבב הראשון |
 | בידוד Tenants / הרשאות | ב-SQL: `tenant-isolation-coverage`, `staff-roles`, `hospitality-security` (בכל 3 המעברים); ב-E2E: `isolation`, `tenant-routing`, `auth-regression`, `contracts-security`; ביחידה: `tenant-host`, `tenant-origin`, `ai-security`, `hospitality-security`; **בנוסף** בדיקת הבידוד של שכתוב ה-RLS (13 פרסונות × 82 פעולות; 0 LEAK) |
 | בדיקות אבטחה | `security-headers.test.ts`, `ai-security.test.ts`, `hospitality-security.test.ts`, בדיקות ה-SQL שלמעלה, סריקת סודות (קודם: אין) |
 | CI רשמי (GitHub, `workflow_dispatch` על הענף) | _{{CI}}_ |
