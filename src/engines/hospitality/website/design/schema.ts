@@ -3,6 +3,7 @@
 // אליהם. normalizeDesign לא זורק אף פעם: כל ערך לא תקין נזרק / מקוצר, כך שמסמך פגום (או שנשלח
 // ישירות למסד) לא שובר את האתר ולא מכניס CSS / HTML. נבדק ביחידה.
 import { GA4_ID_FORMAT } from "@/platform/analytics/gtm";
+import { normalizeKeywords, type SeoKeyword } from "../seo-keywords";
 
 export const THEME_IDS = ["luxury", "nature", "modern", "romantic"] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
@@ -111,6 +112,11 @@ export interface SiteSeo {
   ga4?: string;
   /** הכתובת הקנונית: ריק — הדומיין של העסק (אם יש), "subdomain" — הכתובת בפלטפורמה */
   canonical?: "subdomain";
+  /**
+   * ביטויי חיפוש בעברית — רשימת עבודה של העסק (seo-keywords.ts). לא מוצגים באתר ולא נכנסים לתגיות
+   * (אין meta keywords); מוסרים מנתוני האתר שנשלחים לדפדפן. משמשים רק לבדיקת ההתאמה בעורך
+   */
+  keywords?: SeoKeyword[];
 }
 
 export const SEO_LIMITS = { title: 70, description: 200 } as const;
@@ -346,6 +352,8 @@ export function normalizeSeo(raw: unknown): SiteSeo | undefined {
   if (typeof r["ga4"] === "string" && GA4_ID.test(r["ga4"].trim().toUpperCase()))
     out.ga4 = r["ga4"].trim().toUpperCase();
   if (r["canonical"] === "subdomain") out.canonical = "subdomain";
+  const keywords = normalizeKeywords(r["keywords"]);
+  if (keywords) out.keywords = keywords;
   return Object.keys(out).length ? out : undefined;
 }
 

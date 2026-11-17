@@ -114,7 +114,9 @@ export function siteHomeHead(site: PublicSite | undefined): PageHead {
   const image = mediaById(site, seo.image)?.url ?? hero;
   const logo = mediaById(site, logoId)?.url ?? null;
   const url = absolute(site, SITE_PATH);
-  const prices = site.units.map((u) => u.base_price);
+  // רק מחירים אמיתיים: יחידה בלי מחיר בסיס (0 — "המחיר לפי התאריכים", כמו אזור אירועים) לא נכנסת,
+  // אחרת הנתונים המובנים הציגו "0–4000"
+  const prices = site.units.map((u) => u.base_price).filter((n) => Number.isFinite(n) && n > 0);
   const address = postalAddress(site.business.address, p?.address);
   const ld = {
     "@context": "https://schema.org",
@@ -151,9 +153,19 @@ export function siteHomeMeta(site: PublicSite | undefined) {
   return siteHomeHead(site).meta;
 }
 
+/**
+ * כותרת ברירת המחדל של עמוד יחידה: "שם היחידה | שם העסק" — ובלי לחזור על שם העסק כשהוא כבר בשם
+ * היחידה ("כל המתחם — נופי דורית חוויה בכפר" ולא "… | נופי דורית חוויה בכפר" פעמיים)
+ */
+export function unitDefaultTitle(unitName: string, businessName: string): string {
+  const name = unitName.trim();
+  const biz = businessName.trim();
+  return biz && !name.includes(biz) ? `${name} | ${biz}` : name;
+}
+
 /** עמוד יחידה / סוג חדר; path — הכתובת הקנונית (חדר ששייך לסוג → עמוד הסוג) */
 export function siteUnitHead(site: PublicSite, unit: PublicUnit, path: string): PageHead {
-  const title = unit.seo_title?.trim() || `${unit.name} | ${site.business.name}`;
+  const title = unit.seo_title?.trim() || unitDefaultTitle(unit.name, site.business.name);
   const description =
     unit.seo_description?.trim() ||
     (unit.description ? firstSentence(unit.description) : describe(site));

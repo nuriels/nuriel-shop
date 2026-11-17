@@ -15,6 +15,8 @@ import {
   seoDefaults,
   type SiteAddresses,
 } from "../../website/seo";
+import { SeoKeywordsPanel } from "./SeoKeywordsPanel";
+import { SeoProposalsPanel } from "./SeoProposalsPanel";
 import { ImagePicker } from "./SectionFields";
 
 const RECOMMENDED = { title: 60, description: 155 } as const;
@@ -24,11 +26,16 @@ export function SeoPanel({
   site,
   addresses,
   onChange,
+  flush,
+  onDraftChanged,
 }: {
   design: SiteDesign;
   site: PublicSite;
   addresses: SiteAddresses;
   onChange: (d: SiteDesign) => void;
+  /** הצעות SEO: שמירת הטיוטה לפני אישור, וטעינה מחדש אחריו */
+  flush?: () => Promise<void>;
+  onDraftChanged?: () => void;
 }) {
   const seo: SiteSeo = design.seo ?? {};
   const set = (patch: Partial<Record<keyof SiteSeo, string | undefined>>) => {
@@ -55,6 +62,13 @@ export function SeoPanel({
       <p className="text-xs text-muted-foreground">
         איך האתר נראה בגוגל ובשיתוף בוואטסאפ / פייסבוק. נשמר בטיוטה ונכנס לאתר בפרסום.
       </p>
+
+      <SeoProposalsPanel
+        site={site}
+        design={design}
+        flush={flush}
+        onDraftChanged={onDraftChanged}
+      />
 
       <section aria-labelledby="seo-google-title" className="flex flex-col gap-3">
         <h3 id="seo-google-title" className="text-sm font-bold">
@@ -86,6 +100,8 @@ export function SeoPanel({
           onChange={(v) => set({ description: v })}
         />
       </section>
+
+      <SeoKeywordsPanel design={design} site={site} onChange={onChange} />
 
       <section aria-labelledby="seo-share-title" className="flex flex-col gap-3">
         <h3 id="seo-share-title" className="text-sm font-bold">
