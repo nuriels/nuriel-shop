@@ -34,6 +34,12 @@ export const sendOrderEmails = createServerFn({ method: "POST" })
       context.userId === order.created_by_staff_id;
     if (!isOwner && caller.role !== "admin") throw new Error("אין הרשאה");
 
+    // אחרי ההרשאה: שליחה חוזרת ללא גבול הציפה את הצוות באותו מייל הזמנה
+    const { orderEmailsAllowed } = await import("@/lib/order-email-limit.server");
+    if (!orderEmailsAllowed(data.orderId, context.userId)) {
+      throw new Error("יותר מדי ניסיונות. נסו שוב בעוד כמה דקות.");
+    }
+
     return sendOrderEmailsInternal(data.orderId, context.userId);
   });
 
