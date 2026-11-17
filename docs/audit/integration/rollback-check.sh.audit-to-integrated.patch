@@ -1,0 +1,48 @@
+--- a/scripts/db-tests/rollback-check.sh
++++ b/scripts/db-tests/rollback-check.sh
+@@ -186,6 +186,8 @@
+ M82=20261117100000_bp_owner_invites
+ M83=20261118100000_site_tracking_ga4
+ M84=20261118110000_order_guard
++# הצעות SEO (Hospitality) — נבדקת בפירוט ב-seo-proposals-rollback.sh; כאן רק השרשרת: ראשונה ב-rollback, אחרונה בהחלה
++M85=20261118200000_hosp_seo_proposals
+ MIGRATIONS="$ROOT/supabase/migrations"
+ 
+ q() { "${PSQL[@]}" -tAc "$1"; }
+@@ -229,6 +231,15 @@
+   fi
+ }
+ 
++# ---------- SEO proposals (Hospitality) — the newest migration, rolled back first ----------
++expect "before the rollback: the two closed SEO tables and the decide function" \
++  "SELECT to_regclass('hospitality.seo_proposals') IS NOT NULL AND to_regclass('hospitality.seo_runs') IS NOT NULL
++      AND to_regprocedure('hospitality.seo_proposal_decide(uuid,text,text)') IS NOT NULL"
++ref_upto "$M85"
++echo "rollback: $M85"
++down "$M85"
++same_as_ref "migration 84"
++
+ # ---------- order guard: coupon grants + the order rate guard (migration 84) ----------
+ expect "before the rollback: the closed grants table (RLS, no API access), the rate-guard trigger, check_coupon records grants (VOLATILE), orders_apply_coupon requires one" \
+   "SELECT to_regclass('public.coupon_grants') IS NOT NULL
+@@ -2739,6 +2750,9 @@
+    DELETE FROM public.email_settings WHERE tenant_id IN (SELECT id FROM public.tenants WHERE slug LIKE 'rb-ga4-%');
+    DELETE FROM public.tenants WHERE slug LIKE 'rb-ga4-%'" >/dev/null
+ expect "the copy test left nothing behind" "SELECT NOT EXISTS (SELECT 1 FROM public.tenants WHERE slug LIKE 'rb-ga4-%')"
++up "$M85"
++expect "SEO proposals back: both tables and the functions" \
++  "SELECT to_regclass('hospitality.seo_proposals') IS NOT NULL AND to_regprocedure('hospitality.seo_proposals_add(uuid,uuid,jsonb,boolean)') IS NOT NULL"
+ expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
+   "SELECT to_regnamespace('business_profile') IS NOT NULL
+       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')
+@@ -2855,8 +2869,8 @@
+   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
+ expect "Ecommerce roles registered again" \
+   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
+-expect "Hospitality schema back: 53 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions, the transfer proofs and the guest-area codes and sessions, the packages, the 5 site-document tables, the consent records, the 3 event tables and the 3 contract tables), RLS on all, role admin, 8 flags off (incl. management, analytics and contracts)" \
+-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 53
++expect "Hospitality schema back: 55 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions, the transfer proofs and the guest-area codes and sessions, the packages, the 5 site-document tables, the consent records, the 3 event tables, the 3 contract tables and the 2 SEO proposal tables), RLS on all, role admin, 8 flags off (incl. management, analytics and contracts)" \
++  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 55
+       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
+       AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 8"
+ expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"
