@@ -5,6 +5,7 @@
 > ### ⚠️ תיקון גרסה 2 — קרא קודם
 > - **גרסה 1 של הדוח כללה שני ענפים בלבד. הענף השלישי, `claude/store-ssr-seo` (תיקון ה-SSR של החנות), לא נכלל בעץ שנבדק ולא הוזכר בדוח.** זו הייתה השמטה שלי: בדיקת הקצוות שלי הביאה (`git fetch`) רק שלושה ענפים בשמם (ביקורת, SEO, `main`) ולא סרקה את שאר הענפים ב-origin; הענף הזה הופיע שם בינתיים ונתגלה רק כשבעל המערכת שאל עליו.
 > - **גרסה 2 תיקנה את זה:** סרקתי **את כל** ענפי ה-origin (סעיף 1.2); בניתי עץ שילוב של **שלושת** הענפים; הרצתי מחדש typecheck, lint, unit, build, **E2E מלא**, ו-**CI רשמי של GitHub** על הצירוף; בניתי **Docker image** והרצתי אותו. תוצאות: סעיף 3. **גרסה 1 (שני ענפים) מבוטלת — אל תסתמך עליה.**
+> - **הגרסה הסופית שנבדקת (נכון לרגע הכתיבה):** ביקורת `4ec4d52` · SEO `42c2ccd` · SSR **`ed85789`** — כולם יחד ב-commit `c97a2c1` של ענף הבדיקה (קוד זהה בייט-לבייט, ללא `docs/`, לעץ `d6cd1cf` שנבדק מקומית וב-CI ריצה 191 — אומת). CI ריצה 192 על `c97a2c1` — סעיף 3.3.
 > - **12 בדיקות ה-SEO שדווחו בגרסה 1 אינן בדיקות ה-SSR.** אלו בדיקות `e2e/tests/seo-proposals.spec.ts` של **הצעות ה-SEO ב-Hospitality** (11 בדיקות; 12 הרצות עם גרסת ה-mobile). בדיקות ה-SSR של החנות הן `e2e/tests/storefront-ssr.spec.ts` (6 בדיקות; 7 הרצות), ורצו לראשונה בגרסה 2.
 
 > ### מצב
@@ -25,6 +26,7 @@
 | **CI רשמי על הצירוף** | ✅ **ריצה 191 על `d6cd1cf`: 4/4 jobs ירוקים בניסיון הראשון** (E2E: 392 עברו, 0 נכשלו, 18 דולגו) |
 | Docker | ✅ image נבנה מהצירוף (388MB) ורץ; `/healthz` 200, `/readyz` 503 עם מסד מת ו-200 עם מסד חי; HTML של חנות עם H1, מוצרים ומחירים |
 | מיגרציות | **2 חדשות:** #200 `20261118110000_order_guard`, #201 `20261118200000_hosp_seo_proposals`. **ה-SSR: אפס** |
+| **אין דריסה של נתונים קיימים** (חתימת בעל העסק, תנאי נופי דורית, מסמך מדיניות חתום) | ✅ **הוכח מקומית** על מסד במצב ייצור (199 מיגרציות) עם נתונים: אחרי #200 ו-#201 וגם אחרי שני ה-rollback — **כל השורות זהות בייט-לבייט**; אף טבלה/עמודה/פונקציה של Hospitality לא השתנתה (סעיף 4.4). קוד החתימות/החוזים/המסמכים — ללא שינוי לעומת הייצור |
 | אימות 777 האובייקטים מול השרת | ⛔ **לא בוצע — אין לי גישה לשרת.** פקודה אחת לקריאה בלבד שבעל המערכת מריץ (סעיף 4.3). **תנאי חובה לפריסה** |
 | המלצה | מיזוג: אפשר, באישור. **פריסה: לא לפני** אימות 777 בייצור, אישור בעל המערכת, וקריאת נפח הקטלוג לפי חנות (סעיף 10, סיכון 1) |
 
@@ -40,7 +42,7 @@
 | --- | --- | --- | --- |
 | שם | `audit/platform-review-2026-11` | `claude/ecstatic-euler-z7wmrg` | `claude/store-ssr-seo` |
 | קצה ב-origin היום | **`7af068f`** | **`42c2ccd`** | **`ed85789`** |
-| קצה שנבדק בצירוף | `7af068f` | `42c2ccd` | **`8117412`** (`ed85789` מוסיף מסמך בלבד — אומת: אפס קבצי קוד שונו אחרי `1849878`) |
+| קצה שנבדק בצירוף | `7af068f` (ריצה 191) → **`4ec4d52`** (ריצה 192; מסמכים בלבד) | `42c2ccd` | `8117412` (ריצה 191 + מקומית) → **`ed85789`** (ריצה 192). ההפרש בין השניים: **שני קבצי מסמך בלבד**; אפס קבצי קוד שונו אחרי `1849878` |
 | Commit אחרון **של קוד** | `ff0518b` (אחריו: מסמכים וסקריפטי קריאה-בלבד) | `f56bd32` (אחריו מסמכים) | **`1849878`** (אחריו מסמכים) |
 | Commits מעל הבסיס | 27 (25 + 2 של מסמכי הדוח הזה) | 12 | 8 |
 | מיגרציות | #200 | #201 | אין |
@@ -66,7 +68,8 @@
 | `claude/store-ssr-seo` | 8 | **נכלל** (חדש בגרסה 2) |
 | `hospitality/tracking-settings` (`bd7771f`) | 1 | כלול כבר ב-`audit` (commit מסמך) |
 | `ecommerce/store-identity` (`888731a`) | 2 | **לא נכלל — בכוונה** (החלטה מוקדמת: מיזוג הענף מתנגש; cherry-pick של `888731a` בלבד נבדק ללא התנגשות, ממתין להחלטת בעל המערכת). **אם הוא נדרש בפריסה — צריך לשלב ולבדוק מחדש** |
-| 20 ענפים נוספים (`main`, `hospitality/*`, `billing/agreements`, `release/next`, `websites/engine`, `ecommerce/*` האחרים, `maintenance/email-auth-security`, `claude/dazzling-goldberg-ndjxc4`, `claude/funny-edison-ww9exu`, `claude/multi-tenant-part2`) | 0 | כבר בייצור (אב-קדמון של `eccd001`) — אין מה למזג |
+| ענפי חתימות / מסמכים: `hospitality/signing-mobile`, `hospitality/documents`, `billing/agreements` | 0 | **כבר בייצור** (אב-קדמון של `eccd001`) — **אין בהם שינוי שטרם הגיע לייצור**, ולכן אין מה לשלב. (הענף היחיד שמוסיף משהו הקשור לחתימות הוא ענף הביקורת, ורק כמסמך — `OWNER-SIGNATURE-CHECK.md`) |
+| 15 ענפים נוספים (`main`, `hospitality/stage-0`, `stage-1`, `stage-2`, `release`, `seo`, `release/next`, `websites/engine`, `ecommerce/product-duplicates`, `store-release`, `import-sync`, `maintenance/email-auth-security`, `claude/dazzling-goldberg-ndjxc4`, `claude/funny-edison-ww9exu`, `claude/multi-tenant-part2`) | 0 | כבר בייצור (אב-קדמון של `eccd001`) — אין מה למזג |
 
 > ⚠️ הסריקה נכונה **לרגע הכתיבה**. ענף חדש יכול להופיע — שער 0 (סעיף 8.0) סורק מחדש.
 
@@ -206,6 +209,27 @@ git fetch origin audit/platform-review-2026-11 && git show origin/audit/platform
 ```
 
 **תקין:** הסעיף `2. MISSING or DIFFERENT` **ללא שורות**; `1.` מציג `applied_total = 199` ו-`the_nine_recorded_of_9 = 9`; ב-`3. summary` לכל מיגרציה `identical = total`: 8→56, 21→71, 23→29, 33→74, 61→135, 64→60, 67→92, 68→123, 73→137 (סה"כ 777). **כל תוצאה אחרת = עצירה מוחלטת ודיווח.** לא לתקן "בדרך".
+
+### 4.4 אין דריסה של נתונים קיימים — חתימת בעל העסק, תנאי נופי דורית, מסמכים
+
+**א. סריקה סטטית של שלושת הענפים מול קוד הייצור (`eccd001`):**
+- **מיגרציות:** רק שתיים חדשות. **#200** נוגעת ב-`coupon_grants` (חדשה), `check_coupon`, `orders_apply_coupon` והטריגר `orders_a_rate_guard` על `orders`. **#201** — שתי טבלאות חדשות בסכמת `hospitality` ופונקציות חדשות. **אף אחת לא מזכירה** `business_terms`, `representative_signature`, חוזים, מסמכי לקוח, מסמכי אתר או הסכמה (חיפוש טקסט בקבצים ובקבצי ה-rollback שלהן).
+- **קוד חתימות/חוזים:** `src/engines/hospitality/contracts/**` ו-`management/client-documents/**` — **ללא שינוי** לעומת הייצור. (בענף ה-SEO נוסף רק קובץ `api/seo-proposals.functions.ts`.)
+- **קבצים שהשם שלהם מזכיר PDF/תנאים:** `src/lib/pdf/document.server.ts` (ביקורת B-6 — פורמט תאריך בשעון ישראל ב-PDF של **הזמנות Ecommerce**; את ה-PDF של חוזי Hospitality הוא לא מפיק); `src/routes/terms.tsx` (ה-SSR — **תקנון החנות** ב-Ecommerce, קריאה בלבד); `src/engines/hospitality/website/design/schema.ts` (ה-SEO — שדה ביטויי חיפוש). אף אחד אינו כותב ל-`business_terms` או לחתימה.
+- 22 קבצי rollback ישנים שונו ע"י הביקורת (הגנות נתונים, R-3) — **הם לא רצים בפריסה**, ורק מוסיפים עצירה לפני מחיקת נתונים.
+
+**ב. הוכחה על נתונים — `scripts/audit/data-survival-check.sh` (מקומי, על מסד scratch בלבד; אפס נגיעה בייצור):**
+מסד במצב הייצור (199 מיגרציות) + נתוני דמה: **חתימת בעל עסק** (2 מסלולים ב-`business_terms.representative_signature`, גרסה 4), תנאי העסק, **מסמך מדיניות חתום #1002** עם חתימה ו-PDF, מסמך אתר מפורסם (`site_terms` גרסה 2). הבדיקה מחשבת טביעת אצבע (ספירה + md5 של כל השורות) ל-12 טבלאות — `business_terms`, `client_contracts`, `client_contract_log`, `contract_templates`, `site_documents`, `site_document_versions`, `consent_records`, `booking_document_acceptances`, `site_settings`, `tenants`, `orders`, `coupons` — לפני ואחרי. (מוזרעות בדמה: `business_terms`, `client_contracts`, `site_documents`, `site_settings`, `tenants`; השאר ריקות במסד הדמה — לגביהן נבדק שלא נוצרו שורות.)
+
+| שלב | תוצאה |
+| --- | --- |
+| אחרי **#200 ואז #201** | ✅ כל 12 הטביעות **זהות** (החתימה: 2 מסלולים; תנאים: גרסה 4; מדיניות #1002 חתומה; תנאי האתר v2) |
+| הגדרות טבלאות | ✅ אף טבלה/עמודה קיימת לא השתנתה (חדשות בלבד: `hospitality.seo_runs`, `hospitality.seo_proposals`, `public.coupon_grants`) |
+| גופי פונקציות | ✅ מתוך 1,105 פונקציות בסכמות המוצר, **שתיים בלבד** הוגדרו מחדש: `public.check_coupon` ו-`public.orders_apply_coupon` (#200). **אפס** פונקציות ב-`hospitality` / `business_profile` / `billing` — בפרט `business_terms_save`, `contract_for_pdf` והחתימה לא שונו |
+| אחרי **rollback של #201 ואז #200** | ✅ הנתונים, הגדרות הטבלאות וגופי הפונקציות **זהים למצב הייצור** |
+
+**הבדיקה עצמה נבדקה (מוטציות):** מיגרציה #201 "מקולקלת" שמאפסת את חתימת בעל העסק, מוסיפה עמודה ל-`site_documents` ומגדירה מחדש פונקציה ב-`hospitality` — **נכשלה בכל שלוש** (שינוי נתונים, שינוי עמודות, שינוי פונקציה, ושוב אחרי rollback). על המיגרציות האמיתיות — `PASS`.
+**גבולות:** הבדיקה מוכיחה שהמיגרציות לא נוגעות בנתונים; היא לא מחליפה את אימות 777 בייצור (סעיף 4.3) ולא בודקת נתוני ייצור אמיתיים. אחרי הפריסה, בבדיקת העשן: PDF חוזה של נופי דורית עם חתימת בעל העסק (8.5).
 
 ---
 
@@ -400,6 +424,7 @@ wc -l /tmp/prod-migrations.txt /tmp/repo-migrations-199.txt && comm -3 /tmp/prod
 
 - [`integration/rollback-check.sh.audit-to-integrated.patch`](integration/rollback-check.sh.audit-to-integrated.patch) — פתרון ההתנגשות.
 - `scripts/audit/prod-migration-fingerprint.sql` + `scripts/audit/gen-migration-fingerprint.py` — אימות 777 (קריאה בלבד).
+- `scripts/audit/data-survival-check.sh` — הוכחת "אין דריסה של נתונים" (מקומי, מסד scratch).
 - CI: [ריצה 191 (צירוף שלושה ענפים)](https://github.com/nuriels/nuriel-shop/actions/runs/44129176407) · [ריצה 190 (SSR)](https://github.com/nuriels/nuriel-shop/actions/runs/44120615416).
 - [`PRE-MERGE-READINESS.md`](PRE-MERGE-READINESS.md) · [`MAIN-MERGE-PLAN.md`](MAIN-MERGE-PLAN.md) · [`ROLLBACK-GUARDS.md`](ROLLBACK-GUARDS.md) · [`HEALTHCHECK.md`](HEALTHCHECK.md) · [`GROW-VERIFICATION.md`](GROW-VERIFICATION.md) · [`OWNER-SIGNATURE-CHECK.md`](OWNER-SIGNATURE-CHECK.md).
 - בענף ה-SEO: `docs/audit/seo-ai-implementation-report.md` · `docs/audit/seo-diagnosis-nuriel-shop-app2.md`. בענף ה-SSR: `docs/audit/storefront-ssr-report.md` · `docs/audit/HANDOFF-store-ssr-2026-11-17.md` · `docs/audit/ssr-html/`.
