@@ -185,6 +185,7 @@ M80=20261116120000_bp_inquiries
 M81=20261117090000_bp_site_address
 M82=20261117100000_bp_owner_invites
 M83=20261118100000_site_tracking_ga4
+M84=20261118110000_order_guard
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -227,6 +228,41 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- order guard: coupon grants + the order rate guard (migration 84) ----------
+expect "before the rollback: the closed grants table (RLS, no API access), the rate-guard trigger, check_coupon records grants (VOLATILE), orders_apply_coupon requires one" \
+  "SELECT to_regclass('public.coupon_grants') IS NOT NULL
+      AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.coupon_grants'::regclass)
+      AND NOT has_table_privilege('authenticated', 'public.coupon_grants', 'SELECT')
+      AND NOT has_table_privilege('anon', 'public.coupon_grants', 'SELECT')
+      AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'orders_a_rate_guard' AND NOT tgisinternal)
+      AND (SELECT provolatile = 'v' FROM pg_proc WHERE oid = 'public.check_coupon(text,numeric,uuid,text,boolean)'::regprocedure)
+      AND pg_get_functiondef('public.orders_apply_coupon()'::regprocedure) LIKE '%coupon_grants%'"
+echo "customer data survives the rollback: a coupon, an order that used it, and a (transient) grant"
+q "INSERT INTO public.coupons (tenant_id, code, discount_type, discount_value)
+   SELECT id, 'RBGUARD', 'percent', 10 FROM public.tenants WHERE is_default" >/dev/null
+q "INSERT INTO public.orders (tenant_id, customer_id, status, kind, total, coupon_code, customer_name, customer_tax_id,
+     customer_phone, customer_email, billing_city, billing_address, billing_zip)
+   SELECT id, NULL, 'pending', 'order', 0, 'RBGUARD', 'אורח', '123456782', '0501234567', 'rb.guard@test.local', 'ת\"א', 'הרצל 1', '6100001'
+     FROM public.tenants WHERE is_default" >/dev/null
+q "INSERT INTO public.coupon_grants (tenant_id, user_id, code, expires_at)
+   SELECT id, gen_random_uuid(), 'RBGUARD', now() + interval '1 hour' FROM public.tenants WHERE is_default" >/dev/null
+expect "the order carries the coupon before the rollback" \
+  "SELECT EXISTS (SELECT 1 FROM public.orders WHERE customer_email = 'rb.guard@test.local' AND coupon_code = 'RBGUARD' AND coupon_id IS NOT NULL)"
+ref_upto "$M84"
+echo "rollback: $M84"
+down "$M84"
+expect "the grants table and the rate guard are gone; check_coupon is STABLE again; orders_apply_coupon needs no grant" \
+  "SELECT to_regclass('public.coupon_grants') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'orders_a_rate_guard')
+      AND to_regprocedure('public.orders_rate_guard()') IS NULL
+      AND (SELECT provolatile = 's' FROM pg_proc WHERE oid = 'public.check_coupon(text,numeric,uuid,text,boolean)'::regprocedure)
+      AND pg_get_functiondef('public.orders_apply_coupon()'::regprocedure) NOT LIKE '%coupon_grants%'"
+expect "NO customer data was lost: the order, its coupon snapshot and the coupon are all still there" \
+  "SELECT EXISTS (SELECT 1 FROM public.orders WHERE customer_email = 'rb.guard@test.local' AND coupon_code = 'RBGUARD' AND coupon_id IS NOT NULL)
+      AND EXISTS (SELECT 1 FROM public.coupons WHERE code = 'RBGUARD')"
+same_as_ref "migration 83"
+q "DELETE FROM public.orders WHERE customer_email = 'rb.guard@test.local'; DELETE FROM public.coupons WHERE code = 'RBGUARD'" >/dev/null
 
 # ---------- GA4 in the business settings, next to Tag Manager (migration 83) ----------
 expect "before the rollback: the GA4 column (format CHECK), the guest read, saving for signed-in users, zimmer edits by ownership" \
@@ -2686,6 +2722,7 @@ up "$M82"
 # migration 83 copies a GA4 ID already published in the website editor (document.seo.ga4) — once, never over
 # an ID saved in the settings. Re-applying it here (it is idempotent) shows both.
 up "$M83"
+up "$M84"
 q "INSERT INTO public.tenants (slug, name, site_type) VALUES ('rb-ga4-copy', 'צימר העתקה', 'hospitality'), ('rb-ga4-keep', 'צימר שמור', 'hospitality')" >/dev/null
 q "INSERT INTO hospitality.site_versions (tenant_id, kind, version, theme, document, revision)
    SELECT id, 'published', 1, 'luxury', '{\"seo\": {\"ga4\": \"g-old11111\"}}'::jsonb, 1 FROM public.tenants WHERE slug IN ('rb-ga4-copy', 'rb-ga4-keep')" >/dev/null

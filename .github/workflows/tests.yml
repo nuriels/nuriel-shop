@@ -71,6 +71,8 @@ jobs:
         run: bash scripts/db-tests/licenses-concurrency.sh
       - name: NURIEL AI quota and renewal notices concurrency (parallel sessions)
         run: bash scripts/db-tests/ai-concurrency.sh
+      - name: order guard concurrency — rate guard, single-use coupon, coupon grant, stock holds (parallel sessions)
+        run: bash scripts/db-tests/order-guard-concurrency.sh
 
   e2e:
     name: E2E regression (Playwright + local Supabase)

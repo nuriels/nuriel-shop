@@ -31,7 +31,7 @@ const q = (sql) =>
 
 // ---------- tables ----------
 const TABLES = {
-  ecommerce: `abandoned_carts cancellation_requests cart_promotions categories coupon_email_sends coupons
+  ecommerce: `abandoned_carts cancellation_requests cart_promotions categories coupon_email_sends coupon_grants coupons
     customer_carts customer_emails customer_invites customer_profiles global_products grow_payment_processes
     home_banner_slides location_transfer_lines location_transfers order_courier_links order_delivery_events
     order_items order_number_counters orders pages pending_products picking_events price_tier_backup
