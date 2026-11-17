@@ -27,6 +27,10 @@
 | Hospitality preview                                                            | ✅                                                                                                                                                                                                                              |
 | E2E                                                                            | **383 עברו**, 17 דולגו (לפי עיצוב), 1 flaky שעבר בניסיון חוזר (`manage-details` — לא קשור), **1 נכשל: `websites-efrat-preview`** (תקוע ב-`/admin-handoff` — ה-flake המוכר, מתועד ב-audit; לא שונה). **כל 12 בדיקות ה-SEO עברו** |
 
+**ניסיון חוזר (Re-run failed jobs, פעם אחת, בלי שינוי בקוד):** E2E — **385 עברו, 0 נכשלו, 0 flaky**, 18 דולגו (לפי
+עיצוב). **ריצה 188 כולה ירוקה** (attempt 2, `conclusion: success`). כלומר הכישלון של efrat היה ה-flake המוכר, לא
+השינויים בענף.
+
 **מה תוקן בדרך:**
 
 - ריצה 186: ההכנה של בדיקת ה-SEO הכניסה תמונה עם `property_id` ו-`unit_id` יחד (`media_owner_check`) → `962ae69` (בדיקה בלבד).
