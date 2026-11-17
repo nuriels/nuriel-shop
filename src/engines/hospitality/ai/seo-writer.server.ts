@@ -73,8 +73,16 @@ import {
 import { SafeError } from "@/platform/ai/safe-error";
 import * as store from "@/platform/ai/store.server";
 
-/** כל בקשה (גם של מי שאינו מנהל) — למשתמש בדקה, לפני השאילתות במסד */
+/** בקשת הפקה (הצעות בסיסיות / AI / ניסוח אחר) — למשתמש בדקה, לפני השאילתות במסד */
 export const SEO_GATE_PER_MINUTE = 10;
+/**
+ * פתיחת הלשונית והרשימה (קריאה בלבד + ההפקה הראשונית, שקורית פעם אחת לעסק) — למשתמש בדקה, כמו מצב העוזר.
+ * נפרד מהפקה: כל אישור מרענן את הרשימה ואת העורך, ובמכסה של 10 בדקה הרשימה הייתה נעלמת אחרי כמה אישורים.
+ */
+export const SEO_VIEW_PER_MINUTE = 60;
+
+const GENERATE_GATE = { bucket: "ai:seo-gate", perMinute: SEO_GATE_PER_MINUTE } as const;
+const VIEW_GATE = { bucket: "ai:seo-view", perMinute: SEO_VIEW_PER_MINUTE } as const;
 
 export const SEO_UNAVAILABLE_MESSAGE =
   "שיפור הניסוח ותיאורי התמונות עם AI זמינים בשירות NURIEL AI. ההצעות הבסיסיות זמינות לכם בחינם.";
@@ -230,11 +238,11 @@ async function loadForCaller(): Promise<Loaded> {
 type Ready =
   { ok: true; caller: AiCaller; loaded: Loaded } | { ok: false; result: SeoGenerateResult };
 
-async function ready(deps: SeoDeps): Promise<Ready> {
-  const caller = await resolveCaller("hospitality", {
-    bucket: "ai:seo-gate",
-    perMinute: SEO_GATE_PER_MINUTE,
-  });
+async function ready(
+  deps: SeoDeps,
+  gate: typeof GENERATE_GATE | typeof VIEW_GATE = GENERATE_GATE,
+): Promise<Ready> {
+  const caller = await resolveCaller("hospitality", gate);
   if (caller === "limited")
     return { ok: false, result: { status: "limited", message: LIMITED_MESSAGE } };
   if (!caller) throw new SafeError(FORBIDDEN_MESSAGE);
@@ -500,7 +508,7 @@ function denialFor(ev: Evaluation): string {
 
 /** הרשימה + האם NURIEL AI זמין לעסק (בלי מכסה ובלי קריאה לדגם) */
 export async function handleSeoView(deps: SeoDeps = {}): Promise<SeoProposalsView> {
-  const r = await ready(deps);
+  const r = await ready(deps, VIEW_GATE);
   if (!r.ok) throw new SafeError(LIMITED_MESSAGE);
   const { available, message } = await aiAvailability(r.caller);
   return { ...r.loaded.view, ai: { available, message } };
@@ -514,7 +522,8 @@ export async function handleSeoAutoStart(deps: SeoDeps = {}): Promise<{
   template: SeoGenerateResult;
   ai: SeoGenerateResult;
 }> {
-  const r = await ready(deps);
+  // חלק מפתיחת הלשונית: אחרי הפעם הראשונה רק "already" (בלי הפקה); קריאות לדגם — במכסות הקיימות
+  const r = await ready(deps, VIEW_GATE);
   if (!r.ok) return { template: r.result, ai: r.result };
   const rpc = deps.rpc ?? serverRpc;
   const { caller, loaded } = r;
