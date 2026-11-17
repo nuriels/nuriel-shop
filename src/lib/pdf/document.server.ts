@@ -96,11 +96,25 @@ function formatMoney(value: number): string {
   return `${sign}₪${Math.abs(value).toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatDate(iso: string): string {
-  const date = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+const IL_PARTS = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Jerusalem",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** dd.mm.yyyy hh:mm בשעון ישראל — לא לפי אזור הזמן של השרת (בקונטיינר אין TZ = UTC) */
+export function formatDocumentDate(iso: string): string {
+  const parts = Object.fromEntries(
+    IL_PARTS.formatToParts(new Date(iso)).map((p) => [p.type, p.value]),
+  );
+  return `${parts["day"]}.${parts["month"]}.${parts["year"]} ${parts["hour"]}:${parts["minute"]}`;
 }
+
+const formatDate = formatDocumentDate;
 
 /** זיהוי פורמט תמונה לפי החתימה בתחילת ה-data URL (jsPDF תומך ב-PNG/JPEG) */
 function imageFormat(dataUrl: string): "PNG" | "JPEG" | null {

@@ -76,6 +76,7 @@ export async function sendPasswordResetLinkInternal(
   const origin = await resolveSiteOrigin();
   const link = `${origin}/reset-password?token=${encodeURIComponent(token)}`;
   const expiresLabel = expiresAt.toLocaleString("he-IL", {
+    timeZone: "Asia/Jerusalem",
     dateStyle: "short",
     timeStyle: "short",
   });
