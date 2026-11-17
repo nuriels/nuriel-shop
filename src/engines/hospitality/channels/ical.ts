@@ -41,7 +41,8 @@ const addDay = (iso: string) => {
  */
 export function parseIcs(text: string): IcsEvent[] {
   const out: IcsEvent[] = [];
-  let cur: { uid?: string; from?: string | null; to?: string | null } | null = null;
+  let cur: { uid?: string; from?: string | null; to?: string | null; cancelled?: boolean } | null =
+    null;
   for (const line of unfold(text)) {
     const upper = line.toUpperCase();
     if (upper === "BEGIN:VEVENT") {
@@ -49,7 +50,8 @@ export function parseIcs(text: string): IcsEvent[] {
       continue;
     }
     if (upper === "END:VEVENT") {
-      if (cur?.uid && cur.from) {
+      // הזמנה שבוטלה אצל הערוץ (STATUS:CANCELLED) — התאריכים פנויים, לא חסימה
+      if (cur?.uid && cur.from && !cur.cancelled) {
         const to = cur.to && cur.to > cur.from ? cur.to : cur.to ? null : addDay(cur.from);
         if (to) out.push({ uid: cur.uid, from: cur.from, to });
       }
@@ -65,12 +67,20 @@ export function parseIcs(text: string): IcsEvent[] {
     if (name === "UID") cur.uid = value.slice(0, 300);
     else if (name === "DTSTART") cur.from = icsDate(value);
     else if (name === "DTEND") cur.to = icsDate(value);
+    else if (name === "STATUS") cur.cancelled = value.toUpperCase() === "CANCELLED";
   }
   return out;
 }
 
 /** נראה כמו יומן iCal (ולא דף HTML / שגיאה) */
 export const looksLikeIcs = (text: string) => /BEGIN:VCALENDAR/i.test(text.slice(0, 2000));
+
+/**
+ * יומן שלם: מתחיל ב-BEGIN:VCALENDAR ומסתיים ב-END:VCALENDAR. הסנכרון משחרר כל חסימה שחסרה ברשימה החדשה,
+ * ולכן קובץ שנחתך באמצע ההורדה (או הוחזר חלקי) לא יכול להתקבל — הוא היה משחרר תאריכים שעדיין תפוסים.
+ */
+export const looksCompleteIcs = (text: string) =>
+  looksLikeIcs(text) && /(^|\n)END:VCALENDAR\s*$/i.test(text.replace(/\r\n?/g, "\n").trimEnd());
 
 const escapeText = (s: string) =>
   s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");

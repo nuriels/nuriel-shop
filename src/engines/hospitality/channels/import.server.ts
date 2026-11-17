@@ -4,7 +4,7 @@
 // נרשמת כהתנגשות. נקרא רק מפונקציות שרת ומה-worker (דרך createServerOnlyFn) — לא מהבאנדל של הדפדפן.
 import { serviceHeaders, supabaseUrl } from "@/platform/supabase/env.server";
 import { HOSPITALITY_SCHEMA } from "../config";
-import { looksLikeIcs, parseIcs, type IcsEvent } from "./ical";
+import { looksCompleteIcs, looksLikeIcs, parseIcs, type IcsEvent } from "./ical";
 
 const MAX_PER_TICK = 10;
 const TICK_BUDGET_MS = 60_000;
@@ -53,6 +53,9 @@ export async function fetchCalendar(url: string): Promise<IcsEvent[]> {
   }
   const text = bytes.toString("utf8");
   if (!looksLikeIcs(text)) throw new CalendarFetchError("הקישור לא מוביל לקובץ יומן (iCal)");
+  // קובץ חלקי לא מתקבל: הסנכרון משחרר חסימות שחסרות ברשימה, וחתוך = תאריכים תפוסים היו משתחררים
+  if (!looksCompleteIcs(text))
+    throw new CalendarFetchError("היומן הורד חלקית (חסר סוף הקובץ) — לא עודכן. ננסה שוב בסבב הבא");
   return parseIcs(text);
 }
 
