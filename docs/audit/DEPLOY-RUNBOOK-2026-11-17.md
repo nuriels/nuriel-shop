@@ -207,7 +207,7 @@ docker logs --since 5m nuriel-shop-app 2>&1 | grep -c '\[storefront-seed\]'; doc
 for u in https://nuriel-shop.nuri1.fit https://nuri1.nuri1.fit https://nofi-dorit.nuri1.fit https://nuriel-app2.nuri1.fit; do curl -s -L -o /dev/null -w "$u -> %{http_code} (%{time_total}s)\n" "$u/"; done
 ```
 
-**תקין:** `200` לכולם. (אם `nuri1` מוגש בכתובת אחרת — מחליפים; `≥500` בכל אחד — עוצרים.)
+**תקין:** `200` לכולם. (אם `nuri1` מוגש בכתובת אחרת — מחליפים; `≥500` בכל אחד — עוצרים.) החנויות הנוספות בפלטפורמה (`tami-gn-adn`, `nva-dhn`, `tzatzoim-lshitzo`, ואתר ה-Websites `efrat`) — לפתוח בדפדפן ולוודא שהעמוד הראשי עולה.
 
 ### SM2 — SSR של החנות (🔍) — מה גוגל מקבל בלי JavaScript
 
@@ -239,7 +239,7 @@ UA='Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'; P
 
 ### SM3 — קופה עם קופון של לקוח מחובר (✋ ידני; אין לה בדיקת E2E)
 
-> זו הבדיקה היחידה שאין לה כיסוי אוטומטי, והיא נוגעת בלב השינוי של מיגרציה #200. **מומלץ בחנות ובחשבון לקוח שבעל המערכת בוחר לבדיקות.**
+> זו הבדיקה היחידה שאין לה כיסוי אוטומטי, והיא נוגעת בלב השינוי של מיגרציה #200. **בייצור יש היום הזמנה אחת בלבד בכל הפלטפורמה (`tami-gn-adn`, 11.11)** — כלומר הנתיב כמעט לא נוסה אצל לקוחות אמיתיים, ולכן כדאי להשלים אותה. **מומלץ בחנות ובחשבון לקוח שבעל המערכת בוחר לבדיקות.**
 >
 > 1. התחברות כלקוח, הוספת מוצר לעגלה, **החלת קוד קופון תקף** בקופה → ההנחה מופיעה בסיכום.
 > 2. **(קריאה בלבד)** ה"אישור" שהשרת הנפיק נרשם: `docker exec nuriel-shop-db psql -U postgres -d postgres -tAc "SELECT count(*), max(created_at) FROM public.coupon_grants WHERE expires_at > now()"` → ≥ 1 ו-`created_at` של הרגע.
