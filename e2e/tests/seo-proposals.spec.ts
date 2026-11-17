@@ -131,9 +131,10 @@ test.beforeAll(async ({ request }) => {
   ids.paid = paid.id;
   ids.paidUnit = paid.u1;
   ids.paidMedia =
+    // תמונה של יחידה: unit_id בלבד (media_owner_check — property_id ריק)
     sql(`INSERT INTO hospitality.media (tenant_id, owner_kind, property_id, unit_id, kind, storage_path, variants,
                          width, height, size_bytes, sort_order)
-       VALUES ('${paid.id}', 'unit', '${paid.propertyId}', '${paid.u1}', 'image', '${paid.id}/e2e-alt.webp', '{}'::jsonb,
+       VALUES ('${paid.id}', 'unit', NULL, '${paid.u1}', 'image', '${paid.id}/e2e-alt.webp', '{}'::jsonb,
                1600, 1067, 1000, 0) RETURNING id`);
   // NURIEL AI: הפלטפורמה פעילה עם מפתח (מוצפן, כמו שמסך מנהל העל שומר) — וחבילה רק לעסק PAID
   sql(`UPDATE public.ai_settings SET mode = 'on', model = 'claude-haiku-5-5', api_key_encrypted = '${encryptApiKey(FAKE_KEY)}',
