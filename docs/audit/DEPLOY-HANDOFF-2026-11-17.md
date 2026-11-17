@@ -24,6 +24,8 @@
 | שילוב שלושתם | ✅ מתמזג; **התנגשות אמיתית אחת** — `scripts/db-tests/rollback-check.sh` (ביקורת ↔ SEO; קובץ בדיקה, לא קוד מוצר). ה-SSR לא מתנגש עם אף אחד. הפתרון: patch שנבדק |
 | בדיקות מקומיות על הצירוף | ✅ typecheck (שני tsconfig) · lint 0 שגיאות · unit **99 קבצים / 1,402** · build · **E2E 396 עברו, 0 נכשלו, 14 דולגו בכוונה** |
 | **CI רשמי על הצירוף** | ✅ **ריצה 191 על `d6cd1cf`: 4/4 jobs ירוקים בניסיון הראשון** (E2E: 392 עברו, 0 נכשלו, 18 דולגו). ✅ **ריצה 192 על `c97a2c1` (הקצוות הנוכחיים: ביקורת `4ec4d52` + SEO `42c2ccd` + SSR `ed85789`): 4/4 jobs ירוקים בניסיון הראשון** (E2E: 391 עברו, 0 נכשלו, 18 דולגו, **1 flaky** — `websites-efrat-preview`, ה-flake המוכר: נכשל בניסיון הראשון ועבר ב-retry האוטומטי) |
+| **סוללה מלאה מקומית על עץ השחרור (RC `a54973f`: ביקורת `2737ccc` + SEO `42c2ccd` + SSR `ed85789`, נבנה לפי הנוהל שבסעיף 7.2; הקוד זהה ל-`c97a2c1` שנבדק ב-CI)** | ✅ **כולה ירוקה:** typecheck ×2 · lint 0 שגיאות (43 אזהרות) · unit **99 קבצים / 1,402** · SQL ×3 **3,490/3,490** · `seo-proposals-rollback` ✓ · `rollback-check` מלא **292 שלבים (2,125 CREATE הושוו)** · rollback guards **31/31** · concurrency **49 / 8 / 24 / 20** · כלה **11/11** · **E2E מלא 396 עברו, 0 נכשלו, 14 דולגו בכוונה (25.2 דק')** · Docker image נבנה ורץ (`/healthz` 200, `/readyz` 503/200 לפי מצב המסד, H1+מחירים+canonical בבית/אודות/תקנון, `healthy`) |
+| Runbook פריסה מלא (גיבוי, Docker image, מיגרציות, Rollback, בדיקות עשן) | ✅ [`DEPLOY-RUNBOOK-2026-11-17.md`](DEPLOY-RUNBOOK-2026-11-17.md) — כל פקודות ה-SQL וה-Rollback הורצו מקומית על עותק סכמת הייצור; כל בלוקי ה-bash עוברים `bash -n`. **לא הורץ בשרת** |
 | Docker | ✅ image נבנה מהצירוף (388MB) ורץ; `/healthz` 200, `/readyz` 503 עם מסד מת ו-200 עם מסד חי; HTML של חנות עם H1, מוצרים ומחירים |
 | מיגרציות | **2 חדשות:** #200 `20261118110000_order_guard`, #201 `20261118200000_hosp_seo_proposals`. **ה-SSR: אפס** |
 | **אין דריסה של נתונים קיימים** (חתימת בעל העסק, תנאי נופי דורית, מסמך מדיניות חתום) | ✅ **הוכח מקומית** על מסד במצב ייצור (199 מיגרציות) עם נתונים: אחרי #200 ו-#201 וגם אחרי שני ה-rollback — **כל השורות זהות בייט-לבייט**; אף טבלה/עמודה/פונקציה של Hospitality לא השתנתה (סעיף 4.4). קוד החתימות/החוזים/המסמכים — ללא שינוי לעומת הייצור |
@@ -445,9 +447,59 @@ wc -l /tmp/prod-migrations.txt /tmp/repo-migrations-199.txt && comm -3 /tmp/prod
 | 7 | **CI ירוק על ענף השחרור** (או הוכחה שהקוד זהה ל-`d6cd1cf`/`c97a2c1` — ריצות 191 ו-192 ירוקות) | הקלוד המתאם | נבדק על הצירוף; לחזור עליו אם נוצר commit שחרור חדש |
 | 8 | **Grow:** לא להפעיל בעסקים נוספים (S-2 לא אומת מול הספק) | — | פתוח, לא חוסם |
 | 9 | בדיקות עשן אחרי הפריסה (8.5): קופה של לקוח מחובר עם קופון (אין E2E), SSR בחנות, נופי דורית + PDF חוזה עם חתימה | בעל המערכת | אחרי הפריסה |
-| 10 | החלטות שאינן חוסמות: שכתוב RLS (P3 — לפי נפח הזמנות), הכנסת `ecommerce/store-identity`, מחיקת ענף הבדיקה `integration/ci-audit-seo-ssr-2026-11-17`, ה-flake של `websites-efrat-preview` | בעל המערכת | פתוח |
+| 10 | החלטות שאינן חוסמות: שכתוב RLS (P3 — סעיף 14), `ecommerce/store-identity` (סעיף 13 — **המלצה: לא בפריסה הזו**), מחיקת ענף הבדיקה `integration/ci-audit-seo-ssr-2026-11-17`, ה-flake של `websites-efrat-preview` | בעל המערכת | פתוח |
 
 **מה שכבר הוכח ולא נדרש שוב:** סדר המיגרציות (#200 → #201) ואי-דריסת נתונים (חתימת בעל העסק, תנאי נופי דורית, מסמך מדיניות חתום — סעיף 4.4); E2E מלא על שלושת הענפים (396/0 מקומית; CI 191 ו-192 ירוקים); Docker נבנה ורץ; rollback לכל המיגרציות.
+
+---
+
+## 13. `ecommerce/store-identity` — שני הקומיטים, מה הם משנים והאם נחוצים
+
+**הענף:** `origin/ecommerce/store-identity` @ `888731a`, **מבוסס על `main` הישן (`4f7daa3`) מ-31.10** — לפני כל עבודת Hospitality/Websites/הביקורת. שני קומיטים:
+
+| קומיט | מה | נחוץ? |
+| --- | --- | --- |
+| `fc6fb68` — "Tests: Ecommerce test infrastructure (from hospitality/stage-2, no app change)" | **תשתית בדיקות** ל-`main` הישן: `.github/workflows/tests.yml`, `e2e/*` (config, fixtures, seed), `docs/testing.md`, צילומי בסיס, תוספת ל-`bun.lock`. הועתקה מ-`hospitality/stage-2` בלי שינוי באפליקציה | **לא.** הכול קיים בעץ שלנו בצורה מתקדמת הרבה יותר; לקחת אותו היה מתנגש ב-`tests.yml` / `e2e/` ומחזיר אחורה את תשתית הבדיקות |
+| `888731a` — "StoreIdentity: one source for every store's name (SEO, Schema, titles, feeds)" | **42 קבצים, +659/−86, בלי מיגרציה ובלי שינוי נתונים.** קובץ חדש `src/lib/store-identity.ts` (`storeNames`): שם החנות = `business_name` ← `site_title` ← "החנות שלי"; ברירת המחדל הישנה של העמודה `site_title` ("סוכנות המשקאות", ממיגרציית `b2b_beverage_platform`) **לעולם לא נחשבת שם**; `alternateName` ב-Schema; Product Schema בלי `brand` מומצא. מחווט ב-~35 קבצים: כותרות עמודים ו-Open Graph, WebSite/Organization, מוצר (title + seller), פירורי לחם, H1 של הבית, עמודי תוכן, `llms.txt`, זאפ, **שם השולח וחתימת המיילים**, מסמכים, **הסכמים**, טקסטי הסכמה לדיוור, תוויות, תשלומים, פוטר ותצוגות מקדימות בניהול. כולל בדיקות יחידה ו-E2E (3 חנויות, כל אחת רואה רק את השם שלה) | **לא נחוץ לפריסה הזו** (פירוט למטה) |
+
+**מצב הייצור היום** (`eccd001`): `seo.functions.ts` כבר גוזר שם כך: `business_name` ← `site_title` ← `DEFAULT_STORE_NAME`. כלומר אין "דליפת שם של חנות אחרת". ההבדל היחיד שה-`888731a` סוגר: **אם לחנות יש `site_title` שנשאר בברירת המחדל הישנה "סוכנות המשקאות" ו-`business_name` ריק — השם הציבורי שלה (title / Schema / מיילים) הוא "סוכנות המשקאות"**. בסכמת הייצור המקומית זה בדיוק המצב של חנות `kobi` (המקור). **האם זה קורה בחנויות האמיתיות? תלוי בפלט של שאילתת השמות (בסוף סעיף 14).**
+
+**למה לא בפריסה הזו:**
+1. **אין תלות:** אף אחד משלושת הענפים לא דורש אותו; אין בו מיגרציה.
+2. **מתנגש עם ה-SSR:** ניסיתי להחיל את `888731a` על העץ המשולב (worktree זמני, לא נדחף) — **conflict ב-7 קבצים:** `about.tsx`, `cancellations.tsx`, `contact.tsx`, `index.tsx`, `privacy.tsx`, `sitemap.tsx`, `terms.tsx` (ה-SSR שינה את אותם routes). פתרון = עבודת מיזוג ידנית בלב ה-SSR + הרצה מחדש של כל ה-E2E (כולל `seo-identity`) — סיכון שלא כדאי להוסיף לפריסה אחת גדולה.
+3. **שינוי רוחבי:** נוגע גם בשולח המיילים, בהסכמים ובמסמכים — אזורים רגישים, שזקוקים לבדיקה נפרדת.
+
+**המלצה:** לא לכלול. אם בעל המערכת רוצה את התיקון: **אחרי** הפריסה, כשינוי נפרד שנכתב מחדש מעל ה-SSR (בעלות הקלוד של ענף ה-SSR/store-identity), עם CI ובדיקה מלאה. **ואם שאילתת השמות מראה שחנות אמיתית מציגה "סוכנות המשקאות" — פתרון מיידי בלי פריסה: להגדיר לה "שם העסק הרשמי" (`business_name`) בהגדרות האתר.**
+
+---
+
+## 14. נפח הזמנות לפי חנות — הערכת סיכון ה-RLS (P3)
+
+**ממצא קודם (נמדד):** מסך "ההזמנות שלי" של לקוח: **2.9 שנ' ב-20,000 הזמנות לחנות, 15.2 שנ' ב-150,000**; מגיע ל-8 שנ' ב-~55–80 אלף הזמנות (מכונה של 4 ליבות; מוקדם יותר תחת עומס). רשימות מנהל/סוכן — בטוחות (חסומות ב-`max-rows`). **לא שיניתי שום מדיניות RLS.**
+
+**השאילתה (קריאה בלבד) — ממתינה לפלט של בעל המערכת:**
+
+```bash
+docker exec -i -e PGOPTIONS='-c default_transaction_read_only=on' nuriel-shop-db psql -U postgres -d postgres -X -q -c "SELECT t.slug, count(*) AS orders, min(o.created_at)::date AS first_order, max(o.created_at)::date AS last_order FROM public.orders o JOIN public.tenants t ON t.id = o.tenant_id GROUP BY t.slug ORDER BY 2 DESC LIMIT 5;"
+```
+
+**איך מפרשים:**
+
+| הזמנות בחנות הגדולה | פירוש | פעולה |
+| --- | --- | --- |
+| < ~20,000 | המסך מהיר (≤ ~3 שנ'). **אין דחיפות** | לא נדרש כלום; לחזור על השאילתה מדי פעם |
+| ~20,000–50,000 | מסך "ההזמנות שלי" מתחיל להאט | לתכנן מיגרציה 201-בעתיד (שכתוב 22 מדיניות, `interim/rls-performance.md` §7) |
+| > ~50,000 | קרוב ל-8 שנ' — חוויית לקוח פגועה | לממש לפני/מיד אחרי הפריסה |
+
+(שקילות הבידוד של השכתוב המוצע הוכחה על 8 טבלאות ב-scratch: 13 פרסונות × 82 פעולות, 0 LEAK; לא מחוברת ל-CI.) **ממצא לגבי הצורך בשכתוב ייקבע לפי הפלט.**
+
+**שאילתת שמות החנויות (לסעיף 13; קריאה בלבד — שמות עסקיים בלבד):**
+
+```bash
+docker exec -i -e PGOPTIONS='-c default_transaction_read_only=on' nuriel-shop-db psql -U postgres -d postgres -X -q -c "SELECT t.slug, s.business_name, s.site_title FROM public.site_settings s JOIN public.tenants t ON t.id = s.tenant_id ORDER BY t.slug;"
+```
+
+**אם `site_title = סוכנות המשקאות` וגם `business_name` ריק בחנות אמיתית** — זו החנות שהתיקון של `store-identity` היה משנה; הפתרון לפריסה הזו הוא להגדיר לה שם עסק בהגדרות.
 
 ---
 
@@ -455,6 +507,7 @@ wc -l /tmp/prod-migrations.txt /tmp/repo-migrations-199.txt && comm -3 /tmp/prod
 
 - [`integration/rollback-check.sh.audit-to-integrated.patch`](integration/rollback-check.sh.audit-to-integrated.patch) — פתרון ההתנגשות.
 - `scripts/audit/prod-migration-fingerprint.sql` + `scripts/audit/gen-migration-fingerprint.py` — אימות 777 (קריאה בלבד).
+- [`DEPLOY-RUNBOOK-2026-11-17.md`](DEPLOY-RUNBOOK-2026-11-17.md) — **runbook הפריסה המלא** (גיבוי, Docker image, מיגרציות, Rollback, בדיקות עשן).
 - [`SSR-LARGE-STORES.md`](SSR-LARGE-STORES.md) — ה-SSR מול חנויות גדולות: מדידות, ניתוח ותוכנית מדורגת.
 - `scripts/audit/data-survival-check.sh` — הוכחת "אין דריסה של נתונים" (מקומי, מסד scratch).
 - CI: [ריצה 191 (צירוף שלושה ענפים)](https://github.com/nuriels/nuriel-shop/actions/runs/44129176407) · [ריצה 190 (SSR)](https://github.com/nuriels/nuriel-shop/actions/runs/44120615416).
