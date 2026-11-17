@@ -7,12 +7,12 @@
 | פריט                                               | ערך                                                                                                                          |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `origin/main`                                      | `4f7daa3dd` (30.10.2026)                                                                                                     |
-| ענף הביקורת                                        | `audit/platform-review-2026-11` @ `241ed8c` (9 קומיטי תיקון + 3 קומיטי תיעוד מעל `hospitality/tracking-settings`)                                                     |
+| ענף הביקורת                                        | `audit/platform-review-2026-11` — שלב 1 (9 קומיטי תיקון) + שלב 2 (סגירת סיכונים: מיגרציה 200, rollback guards, healthz) + מסמכים; HEAD העדכני ב-`PRE-MERGE-READINESS.md` |
 | יחס ל-`main`                                       | `main` **הוא אב קדמון** של הענף (0 קומיטים ש-`main` מקדים) ← מיזוג **fast-forward, בלי התנגשויות**                           |
-| גודל הפער                                          | 303 קומיטים · 1367 קבצים · +260,835 / −1,594 שורות                                                                           |
-| מיגרציות                                           | `main` 116 → ענף 199 (83 חדשות, כולן עם rollback; בדיקת `tests/architecture/migrations.test.ts`)                             |
-| קומיטי התיקון מעל `hospitality/tracking-settings` | 9 (`3876b82`, `0f35ed9`, `15d2fa6`, `87f583e`, `5e4368e`, `f03232f`, `0647ba5`, `2fd08b6`, `d9cdb61`) — **אפס מיגרציות**, אפס שינוי מסד |
-| מה רץ בייצור                                       | `eccd001` (ענף `hospitality/tracking-settings`), מיגרציות עד 199 — כלומר ענף הביקורת הוא ייצור + 8 קומיטי קוד בלבד           |
+| גודל הפער                                          | **311 קומיטים** · 1,382 קבצים · +262,131 / −1,600 (בלי קבצי הביניים של מדידת ה-RLS); 0 קבצים נמחקו |
+| מיגרציות                                           | `main` 116 → ענף **200** (84 חדשות, כולן עם rollback; בדיקת `tests/architecture/migrations.test.ts`) |
+| קומיטי התיקון מעל `hospitality/tracking-settings` | שלב 1: 9 קומיטים (`3876b82` … `d9cdb61`) — **אפס מיגרציות**. שלב 2: `c0615dd` (**מיגרציה 200**), `4206cee`, `4e2aca2` + מסמכים |
+| מה רץ בייצור                                       | `eccd001` (ענף `hospitality/tracking-settings`), מיגרציות עד 199 — כלומר ענף הביקורת = ייצור + 8 קומיטי קוד של שלב 1 + שלב 2 (**כולל מיגרציה 200**) |
 
 ### ענפים פעילים — מה כלול ומה לא
 
@@ -35,7 +35,7 @@
 | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | CI ירוק על הענף (typecheck, lint, unit, SQL, rollback, E2E, build) | ראו `FULL-PLATFORM-AUDIT.md` §תוצאות; **ה-CI הרשמי ירוץ על הדחיפה** — להמתין לו                                                                                                                                                                      |
 | אין סודות/dumps/artifacts ב-Git                                    | נבדק: סריקת תבניות סודות על כל הקבצים במעקב — רק מחרוזות מדומות בבדיקות; אין `.env`/dump/מפתח במעקב. קבצים גדולים (>1MB): 6 קובצי `marketing/banner-3d/out/*` (~23MB) ו-`public/brand/*.png` — **מוצע להוציא את `marketing/**/out` מ-Git** (לא נעשה) |
-| הענף לא מכיל מיגרציות חדשות                                        | ✓ — אפשר למזג בלי תיאום עם המסד                                                                                                                                                                                                                      |
+| הענף מכיל מיגרציה חדשה אחת מעבר לייצור (200) | המיזוג עצמו לא נוגע במסד; **הפריסה כוללת צעד DB אחד** — `PRE-MERGE-READINESS.md` §8 |
 
 ## 3. הסדר המוצע (כל שלב באישור)
 
@@ -48,22 +48,13 @@
 4. **`ecommerce/store-identity`:** ענף חדש מ-`main`, `git cherry-pick 888731a`, ריצת unit + E2E של Ecommerce, ואז PR נפרד.
 5. **ניקוי ענפים (רק אחרי שתאשר רשימה מפורשת):** מועמדים למחיקה כי כלולים לגמרי ב-`main` החדש: `websites/engine`, `release/next`, `billing/agreements`, `hospitality/release`, `maintenance/email-auth-security`, `hospitality/signing-mobile`, `ecommerce/store-release`, `hospitality/documents`, `ecommerce/import-sync`, `ecommerce/product-duplicates`, `hospitality/seo`, `hospitality/stage-2`, `hospitality/stage-0`, `hospitality/stage-1`. **לא נמחק כלום בביקורת.**
 
-## 4. פריסת הקוד לשרת (נפרד מהמיזוג; ללא מיגרציה)
+## 4. פריסת הקוד לשרת (נפרד מהמיזוג)
 
-הענף שונה מהייצור רק בקוד אפליקציה ובשני קבצי הגדרה: `docker-compose.yml` ו-`.env.example` (העברת 5 משתנים בערך ריק — **ללא שינוי התנהגות עד שמגדירים אותם**). אין מיגרציה, ולכן אין צעד DB ואין rollback של DB.
-
-פקודות (אותו סדר שמוכר מהפריסות הקודמות, אחת אחת, ובאישור מפורש):
-
-1. גיבוי image: `docker tag nuriel-shop-app-app:latest nuriel-shop-app-app:before-audit` ורישום ה-commit הנוכחי.
-2. `git fetch` + `git checkout` של ה-SHA של הענף (fast-forward מ-`eccd001`).
-3. `docker compose build`, ואז `docker compose up -d`; בדיקת `healthy` ו-200 לשלושת האתרים.
-4. אחרי הפריסה — לבדוק בבדיקת עשן: טופס פניות באתר עסק, ייצוא PDF הזמנה (תאריך), ו-webhook (לא לשלוח אמיתי).
-
-**חזרה לאחור:** `docker tag nuriel-shop-app-app:before-audit nuriel-shop-app-app:latest && docker compose up -d` (הקוד הקודם עובד עם אותו מסד).
+**עודכן בשלב 2:** הענף שונה מהייצור בקוד אפליקציה, בקבצי הגדרה (`docker-compose.yml`, `.env.example`, `Dockerfile`, `deploy/release-next.sh`) **וב-מיגרציה אחת (200, `order_guard`)**. לכן הפריסה כוללת צעד DB: גיבוי → מיגרציה 200 בלבד → build + `up -d` → בדיקות `/healthz` / `/readyz` → בדיקת עשן של קופה עם קופון. **הפקודות המלאות, בדיקות האימות ותוכנית החזרה לאחור (אפליקציה ו-DB) — ב-[`PRE-MERGE-READINESS.md` §8–9](PRE-MERGE-READINESS.md).** לא בוצע דבר מזה.
 
 ## 5. מה _לא_ נכנס (נשאר פתוח)
 
-ראו `FULL-PLATFORM-AUDIT.md` §פתוח. בקצרה: `place_order` ישיר בלי הגבלת קצב (S-1), אישור תשלום Grow מול Grow (S-2), `/healthz` בלי I/O, הגנת rollback על 9 טבלאות, RLS לכל שורה (P3), באנדל הכניסה (P1), פיצול קבצי "פלטפורמה" משותפים (A1).
+ראו `PRE-MERGE-READINESS.md` §4. בקצרה: אימות Grow מול הספק (S-2); RLS לכל שורה (P3 — נמדד, השכתוב המוכח ממתין להחלטה); `get_catalog()` ללקוח מחובר; באנדל הכניסה (P1); עמוד מוצר שמוריד את כל הקטלוג (P2); פיצול קבצי "פלטפורמה" משותפים (A1); `ecommerce/store-identity`. **נסגרו בשלב 2:** `place_order` (S-1), healthcheck (C1), הגנת rollback (B8).
 
 ## 6. סיכונים ופרשנות
 
