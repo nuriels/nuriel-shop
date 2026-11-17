@@ -1,0 +1,75 @@
+-- c7_feed_one_service: storefront_feed_products() filtered to 1 id as service_role (what seo.functions.ts really uses)
+-- role=service_role persona=service
+-- db=perf_scratch label=A-orig
+
+===== REP 0  (psql wall 532 ms)
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=504.717..504.718 rows=1 loops=1)
+   Buffers: shared hit=56118
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=504.671..504.672 rows=1 loops=1)
+         Buffers: shared hit=56118
+         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=504.668..504.669 rows=1 loops=1)
+               Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
+               Rows Removed by Filter: 436
+               Buffers: shared hit=56118
+ Planning:
+   Buffers: shared hit=25
+ Planning Time: 0.217 ms
+ Execution Time: 505.059 ms
+(12 rows)
+
+
+===== REP 1  (psql wall 656 ms)
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=613.376..613.377 rows=1 loops=1)
+   Buffers: shared hit=56118
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=613.336..613.337 rows=1 loops=1)
+         Buffers: shared hit=56118
+         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=613.333..613.334 rows=1 loops=1)
+               Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
+               Rows Removed by Filter: 436
+               Buffers: shared hit=56118
+ Planning:
+   Buffers: shared hit=25
+ Planning Time: 0.244 ms
+ Execution Time: 613.604 ms
+(12 rows)
+
+
+===== REP 2  (psql wall 664 ms)
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=629.828..629.829 rows=1 loops=1)
+   Buffers: shared hit=56118
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=629.800..629.801 rows=1 loops=1)
+         Buffers: shared hit=56118
+         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=629.798..629.798 rows=1 loops=1)
+               Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
+               Rows Removed by Filter: 436
+               Buffers: shared hit=56118
+ Planning:
+   Buffers: shared hit=25
+ Planning Time: 0.304 ms
+ Execution Time: 630.090 ms
+(12 rows)
+
+
+===== REP 3  (psql wall 683 ms)
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=648.535..648.536 rows=1 loops=1)
+   Buffers: shared hit=56118
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=648.497..648.498 rows=1 loops=1)
+         Buffers: shared hit=56118
+         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=648.495..648.495 rows=1 loops=1)
+               Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
+               Rows Removed by Filter: 436
+               Buffers: shared hit=56118
+ Planning:
+   Buffers: shared hit=25
+ Planning Time: 0.233 ms
+ Execution Time: 648.881 ms
+(12 rows)
+

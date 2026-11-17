@@ -1,0 +1,6 @@
+RESULT|420|1347529
+current_tenant_id|22565|378.7|378.7
+is_super_admin|22562|1791.5|1006.0
+is_admin|22562|1944.0|152.5
+can_view_order|22562|2050.4|106.4
+is_platform_admin|22562|408.7|408.7

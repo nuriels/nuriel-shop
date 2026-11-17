@@ -1,0 +1,44 @@
+         t         | main_tenant | total 
+-------------------+-------------+-------
+ customer_profiles |          50 |    90
+ user_roles        |          52 |   100
+ bp.inquiry_notes  |         500 |   700
+ global_products   |        3000 |  4200
+ bp.inquiries      |        2000 |  2800
+ orders            |       20000 | 28000
+ order_items       |       60197 | 84145
+(7 rows)
+
+              tenant_id               | orders 
+--------------------------------------+--------
+ 71000000-0000-0000-0000-000000000001 |  20000
+ 71000000-0000-0000-0000-000000000002 |   2000
+ 71000000-0000-0000-0000-000000000003 |   2000
+ 71000000-0000-0000-0000-000000000004 |   2000
+ 71000000-0000-0000-0000-000000000005 |   2000
+(5 rows)
+
+      relname      | total_with_indexes |  heap   
+-------------------+--------------------+---------
+ customer_profiles | 104 kB             | 16 kB
+ global_products   | 6864 kB            | 5728 kB
+ order_items       | 19 MB              | 13 MB
+ orders            | 23 MB              | 10 MB
+ user_roles        | 200 kB             | 32 kB
+(5 rows)
+
+                          ?column?                          
+------------------------------------------------------------
+ main-tenant orders per customer: avg 380.0, customer A=420
+(1 row)
+
+              ?column?               
+-------------------------------------
+ items per order (main tenant): 3.01
+(1 row)
+
+       ?column?        
+-----------------------
+ agent T1 orders: 3735
+(1 row)
+

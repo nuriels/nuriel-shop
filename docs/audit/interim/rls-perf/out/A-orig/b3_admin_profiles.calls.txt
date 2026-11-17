@@ -1,0 +1,4 @@
+RESULT|50|4098
+current_tenant_id|101|2.7|2.7
+is_super_admin|50|3.5|2.0
+is_admin|50|3.6|0.1

@@ -1,0 +1,83 @@
+-- c4_catalog_page_anon: get_catalog() page 0 as the app pages it (order+range 0-999) as anon
+-- role=anon persona=anon
+-- db=perf_scratch_b label=A-rewrite
+
+===== REP 0  (psql wall 293 ms)
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=263.435..263.438 rows=1 loops=1)
+   Buffers: shared hit=18722, temp read=400 written=400
+   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=249.717..249.918 rows=1000 loops=1)
+         Buffers: shared hit=18722, temp read=400 written=400
+         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=249.714..249.806 rows=1000 loops=1)
+               Sort Key: get_catalog.is_out_of_stock, get_catalog.created_at DESC, get_catalog.id
+               Sort Method: top-N heapsort  Memory: 3200kB
+               Buffers: shared hit=18722, temp read=400 written=400
+               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=241.667..242.585 rows=2910 loops=1)
+                     Buffers: shared hit=18711, temp read=400 written=400
+ Planning:
+   Buffers: shared hit=52
+ Planning Time: 0.281 ms
+ Execution Time: 264.920 ms
+(14 rows)
+
+
+===== REP 1  (psql wall 266 ms)
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=224.698..224.700 rows=1 loops=1)
+   Buffers: shared hit=18722, temp read=400 written=400
+   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=215.143..215.310 rows=1000 loops=1)
+         Buffers: shared hit=18722, temp read=400 written=400
+         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=215.141..215.209 rows=1000 loops=1)
+               Sort Key: get_catalog.is_out_of_stock, get_catalog.created_at DESC, get_catalog.id
+               Sort Method: top-N heapsort  Memory: 3200kB
+               Buffers: shared hit=18722, temp read=400 written=400
+               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=209.391..210.016 rows=2910 loops=1)
+                     Buffers: shared hit=18711, temp read=400 written=400
+ Planning:
+   Buffers: shared hit=52
+ Planning Time: 0.315 ms
+ Execution Time: 225.379 ms
+(14 rows)
+
+
+===== REP 2  (psql wall 329 ms)
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=295.891..295.894 rows=1 loops=1)
+   Buffers: shared hit=18722, temp read=400 written=400
+   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=280.930..281.148 rows=1000 loops=1)
+         Buffers: shared hit=18722, temp read=400 written=400
+         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=280.928..281.030 rows=1000 loops=1)
+               Sort Key: get_catalog.is_out_of_stock, get_catalog.created_at DESC, get_catalog.id
+               Sort Method: top-N heapsort  Memory: 3200kB
+               Buffers: shared hit=18722, temp read=400 written=400
+               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=272.994..273.975 rows=2910 loops=1)
+                     Buffers: shared hit=18711, temp read=400 written=400
+ Planning:
+   Buffers: shared hit=52
+ Planning Time: 0.265 ms
+ Execution Time: 297.165 ms
+(14 rows)
+
+
+===== REP 3  (psql wall 255 ms)
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=225.297..225.299 rows=1 loops=1)
+   Buffers: shared hit=18722, temp read=400 written=400
+   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=214.978..215.159 rows=1000 loops=1)
+         Buffers: shared hit=18722, temp read=400 written=400
+         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=214.976..215.064 rows=1000 loops=1)
+               Sort Key: get_catalog.is_out_of_stock, get_catalog.created_at DESC, get_catalog.id
+               Sort Method: top-N heapsort  Memory: 3200kB
+               Buffers: shared hit=18722, temp read=400 written=400
+               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=208.808..209.661 rows=2910 loops=1)
+                     Buffers: shared hit=18711, temp read=400 written=400
+ Planning:
+   Buffers: shared hit=52
+ Planning Time: 0.304 ms
+ Execution Time: 226.228 ms
+(14 rows)
+

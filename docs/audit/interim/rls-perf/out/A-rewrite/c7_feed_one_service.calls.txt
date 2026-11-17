@@ -1,0 +1,9 @@
+RESULT|1|1182
+tenant_active_addons|5820|322.7|322.7
+tenant_subscription_state|2910|613.3|115.1
+plan_features|2910|79.9|79.9
+tenant_is_active|2910|13.5|13.5
+tenant_features|2910|498.2|95.6
+tenant_subscription_active|2910|624.9|11.6
+current_tenant_id|2|1.6|1.6
+storefront_feed_products|1|676.2|36.2

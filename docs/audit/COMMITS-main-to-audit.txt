@@ -1,0 +1,306 @@
+4e8fb94 2026-10-30 Stage 0: test baseline and regression safety net (no app changes)
+fb7c7ca 2026-10-30 Add hospitality-expert skill as local reference (hospitality/stage-1 only)
+e2d2293 2026-10-30 Remove hospitality-expert skill from the repository (kept locally)
+2a8717d 2026-10-30 Hospitality Stage 1: consolidated plan (documentation only)
+5828a79 2026-10-30 Hospitality Stage 1 plan: independent engines, schema comparison, guard benchmark (docs only)
+01ae6da 2026-10-30 Hospitality Stage 1 plan: dedicated schema verified on local Supabase (docs only)
+449043b 2026-10-30 Hospitality plan: full product roadmap, data model review, booking flow (docs only)
+f2c745b 2026-10-30 Hospitality plan: round-3 decisions (approval window, request cap, outbox, cancellation requests, guest accounts) — docs only
+76950e6 2026-10-30 Hospitality plan: owner-defined cancellation and deposit policies (docs only)
+0a066df 2026-10-30 Hospitality plan: simplified business opening (auto address, address change, welcome + checklist) and cancellation decisions D12-D14 (docs only)
+f6e1405 2026-10-30 Hospitality plan: typo (docs only)
+fbb1a9e 2026-10-30 Hospitality plan: reuse of existing Google/email-code login and email API, installation runbook outline (docs only)
+4b5d980 2026-10-30 Hospitality plan: round-4 verification requirements (OAuth, guest separation, Ecommerce regression) — docs only
+9beaefa 2026-10-30 Hospitality Stage 1a: platform product type and feature flags (migration 1)
+7c04def 2026-10-30 Security analysis: OAuth return addresses, implicit flow and PKCE (docs only, no auth change)
+98e0c95 2026-10-30 Hospitality Stage 1b: Ecommerce engine guard (migration 2)
+f5918c3 2026-10-30 Hospitality Stage 1c: hospitality schema, roles, permissions and RLS (migration 3)
+a4e0d2f 2026-10-30 Hospitality Stage 1d: booking engine (migration 4)
+d9770ff 2026-10-30 Hospitality Stage 1e: plans, subscriptions, unit limit, admin statistics (migration 5)
+5dfe894 2026-10-31 Hospitality: release booking coupon usage before confirmation (migration 6)
+1775d7c 2026-10-31 Hospitality Stage 1f: engine layer, registry, dispatcher and architecture boundaries
+0f59e85 2026-10-31 Hospitality Stage 2 plan: owner management system (proposal, no code)
+3e246f2 2026-10-31 Hospitality Stage 2a: management foundation (access, shell, login, seats, migration 7)
+37be396 2026-10-31 Hospitality Stage 2b plan (settings and team) and tracked go-live requirements
+d119a02 2026-10-31 Hospitality Stage 2b.1: settings and team database (migration 8)
+24973aa 2026-10-31 Hospitality Stage 2b.2: business settings screen
+9d95676 2026-10-31 Hospitality Stage 2b.3: team management screen
+6b279f4 2026-10-31 Hospitality Stage 2b.4: regression, integration tests and docs
+7dd3242 2026-10-31 Hospitality R-1: page head and root data without Ecommerce data
+415d0c7 2026-10-31 Hospitality Stage 2c plan (properties and units) and Staging recommendation
+0efc471 2026-10-31 Hospitality Stage 2c.1: properties and units database layer (migration 10)
+897ee4f 2026-10-31 Staging: read-only infrastructure check and super-admin Hospitality plan
+425c7cc 2026-10-31 Hospitality Stage 2c.2: properties and units screens
+45c98d7 2026-10-31 Hospitality 2c.2: stabilise E2E (axe after toasts, fresh sites on retry)
+238995e 2026-10-31 Hospitality P0: local preview kit (3 demo sites, recorded walkthrough)
+a6ef525 2026-10-31 Hospitality plans: round-7 decisions after the requirements audit (docs only)
+e2de74d 2026-11-01 Hospitality 2c.3: unit and property pages, whole property, order, activation, archive / delete
+77c6f66 2026-11-01 Hospitality 2c.4: dashboard units card and setup-checklist link
+782b0a4 2026-11-01 Hospitality 2d: unit and property details (migration 11)
+62b1b2a 2026-11-01 Hospitality 2e: photos and galleries (migration 12)
+b8126f7 2026-11-01 Hospitality 2f: prices, rate rules and cancellation policies (migration 13)
+9ed400b 2026-11-01 Hospitality E2E: fix the CI failures of runs #37 / #38
+aff2a28 2026-11-01 Hospitality 3a: calendar board and availability (migration 14)
+6f61e58 2026-11-01 Hospitality: security / privacy / compliance plan, full demo zimmer business, preview chapters 2d-3a
+f34ea73 2026-11-01 Hospitality 2f: price preview — the night's date no longer runs into the price
+7f160eb 2026-11-01 Hospitality 3a: the board no longer moves between the two clicks of a block; preview chapter 13 fixed
+55dde94 2026-11-01 Hospitality P1: open a hospitality business from the platform panel ("ניהול Hospitality")
+460e206 2026-11-01 Hospitality 2h + 2i: bookings — list, booking page, decisions, manual booking, changes, cancellations
+fdfeea2 2026-11-01 Hospitality 3b: calendar day view and actions from the board
+6dd37f7 2026-11-01 Hospitality 2j: guests and privacy
+5d3c257 2026-11-01 Hospitality 2k: emails actually leave, emails screen, full dashboard
+d282cd5 2026-11-01 Hospitality 4a: the business's public website (Luxury theme)
+29a9113 2026-11-01 Hospitality 4b: booking requests from the public site
+34cc108 2026-11-01 Hospitality 4c: website switches in the platform panel, "my site" link
+f8bdf01 2026-11-01 Hospitality 5a + 5b: site editor and four themes
+5f0918e 2026-11-01 Hospitality RT: hotel room types
+dcc948b 2026-11-01 Hospitality: payments ledger and iCal channel sync (infrastructure)
+20087c1 2026-11-01 Hospitality D1: security before opening to the public
+7e6f567 2026-11-01 Hospitality D2: site editor — logo, fonts, inline editing, theme at creation
+d982b60 2026-11-01 Hospitality D3: channel conflicts — owner email, occupancy source on the board
+c2c02e4 2026-11-01 Hospitality D4: phone payments on the payments ledger (no online clearing)
+72fe23d 2026-11-01 Hospitality D5: installation & update guide, phase D summary
+3266e8b 2026-11-01 Hospitality: pre-install review — install guide and launch checklist
+c0f64a6 2026-11-01 Hospitality install guide: imgproxy in the stack services, backup password
+902802b 2026-11-01 Hospitality: pass HOSPITALITY_* to the app container (fix A)
+db189e6 2026-11-01 Hospitality install guide: guard the cold-copy and restore blocks
+e774436 2026-11-01 Portal: business details when opening a store (E1)
+25dd2c4 2026-11-01 Hospitality: plans with prices, setup fee, details and enforced limits (E3)
+2e53763 2026-11-01 Portal: choose online store or zimmer site; zimmer requests (E2)
+242954f 2026-11-01 Hospitality stage F: UX and premium design plan (docs only)
+ca5c712 2026-11-01 Hospitality F1: fixed Nuriel credit on every hospitality page
+2504227 2026-11-01 Hospitality F2a: self-hosted fonts, Deep Lagoon & Champagne tokens, UI kit
+af09f4b 2026-11-01 Hospitality F3: owner dashboard + finance permission (migration 32)
+99bb1f4 2026-11-01 Hospitality F2b: management shell (grouped nav, top bar, quick search, mobile)
+6b9b704 2026-11-01 Hospitality F4/F5: management screens polish + a distinct signature per site theme
+a907361 2026-11-01 Tests: bring three CI checks in line with E1–E3 and D3 (no product change)
+5e5b1c9 2026-11-01 Hospitality F: morning report (docs only)
+2d0b5f0 2026-11-01 Hospitality F2b: accessibility fixes found by CI (E2E run 73)
+d498a3c 2026-11-01 Hospitality F: deploy doc — pin the F update to 2d0b5f0 (includes the accessibility fixes)
+88b0d77 2026-11-02 Hospitality E4: support system for hospitality businesses (migration 33)
+472ae5a 2026-11-02 Hospitality E5: sitemap, robots.txt and Google / sharing settings per site
+4aa580d 2026-11-02 Hospitality Calendar Pro: units view, free-units row, conflict marks, quick month jump
+561634c 2026-11-02 Hospitality units: photo cards with price, availability and site status; price on the unit page
+7cefc13 2026-11-02 Hospitality F7: reports and export (migration 34) — one source of truth with the dashboard
+9db23ff 2026-11-02 E2E: the axe check waits for loading placeholders and the card fade-in
+9168810 2026-11-02 Hospitality onboarding: setup guide with milestones and resume (migration 35)
+5af0011 2026-11-02 E2E: manage.spec.ts uses the shared axe check (waits for the card fade-in)
+c0cd315 2026-11-02 Hospitality design pass: activity in plain Hebrew for every action, a proper "did not load" screen
+f0c5bb9 2026-11-02 Hospitality security pass: PDF check, authorize before rate counters, safe file names, support privacy
+1635ecb 2026-11-02 Hospitality G (Morning Sprint): deploy order, server commands and release summary (docs only)
+0a0c83a 2026-11-02 Hospitality migration 36: the shared rate counter does not burn quotas on refused attempts
+ce6af88 2026-11-02 Hospitality migration 37: payment instructions for guests (bank transfer, Bit, phone, custom)
+d6c8566 2026-11-02 Hospitality booking form: a fast guest is not refused by the anti-bot check
+976b5e7 2026-11-02 Hospitality migration 38: the owner's unit photos appear on the public site
+157e435 2026-11-02 Hospitality new-business path: fixes from the 12-step walkthrough
+9541000 2026-11-02 E2E: a guest books through the public site; the owner approves and records the payment
+b67f7ff 2026-11-02 Hospitality commercial readiness: the trial, what happens after it, the plans, and support from every screen
+f9a4f19 2026-11-02 Hospitality G: deploy order and summary for migrations 33–38 (docs only)
+910dd2f 2026-11-02 Hospitality migration 39: a personal link in the "booking confirmed" email
+f6bc626 2026-11-02 Hospitality plan card: the real billing process — a payment link after the trial, billing outside the system
+715eede 2026-11-02 Hospitality G: deploy order with migration 39, pinned to f6bc626 (docs only)
+21fab45 2026-11-02 Hospitality F deploy doc: G now covers migrations 33–39 (docs only)
+1654793 2026-11-02 Hospitality deploy docs: E1–E3, F and G are on the server (docs only)
+365276c 2026-11-02 Hospitality migration 40: a zimmer owner opens the business from the portal
+574caef 2026-11-02 Portal: open a zimmer business by yourself — address, trial, straight into management
+df5a5cf 2026-11-02 Hospitality panel: say that a portal business's switches turn on at its first publish
+3ec7ba9 2026-11-02 Hospitality H deploy doc: migration 40 pinned to df5a5cf (docs only)
+6ead93c 2026-11-02 E2E units: the plan-limit check targets the units page message
+86091d6 2026-11-02 Hospitality H deploy doc: H is on the server (docs only)
+f2fd3ed 2026-11-02 Hospitality server follow-ups: slow SSL for a new address (docs only)
+4ddcc1d 2026-11-02 Hospitality migration 41: the size of a unit (m²)
+4af8a61 2026-11-02 Hospitality site: size and what is special on the unit cards; the credit links to the portal
+4da712f 2026-11-02 Hospitality site: "מיטה אחת" instead of "1 מיטות" on the unit page
+51da684 2026-11-02 Hospitality I deploy doc: migration 41 pinned to 4da712f (docs only)
+e23629b 2026-11-02 Hospitality server follow-ups: the SSL diagnosis — nothing failed, ~80 seconds (docs only)
+d6f6247 2026-11-02 Hospitality I deploy doc: I is on the server (docs only)
+5b06732 2026-11-02 Hospitality logo: kept apart from the photos — never the main image (migration 42)
+e6b9d80 2026-11-02 Hospitality J deploy doc: the logo fix, migration 42 pinned to 5b06732 (docs only)
+eb098e2 2026-11-02 Hospitality J deploy doc: Prettier formatting (docs only)
+3829037 2026-11-02 Hospitality open dates (migration 43): rooms are bookable on the site only on dates the owner opened
+e4c5f5e 2026-11-02 Hospitality calendars: open dates, a bigger and clearer board and site calendar, three looks
+47fd64f 2026-11-02 Hospitality open dates: Prettier formatting of the browser test
+cd24b76 2026-11-02 Hospitality several rooms in one request (migration 44): all together or none, one email each way
+ae35b6c 2026-11-02 Hospitality site and management: book several rooms in one request; approve them all at once
+c13cd00 2026-11-02 Hospitality concurrency tests: open the units they create (migration 43)
+61ab354 2026-11-02 Hospitality J + K deploy doc: one update for migrations 42–44, pinned to c13cd00 (docs only)
+ad3a2fe 2026-11-02 Landing page (nuriel-app2): new Nuriel Computers landing page, server-rendered
+9433ef2 2026-11-02 Hospitality open-dates SQL test: use the business-local date, not the server's UTC date
+1ebba27 2026-11-03 Landing page (nuriel-app2): the original Nuriel Computers logo and a palette taken from it
+be62922 2026-11-03 Landing page (nuriel-app2): the original logo instead of the business name in text; every button and number checked
+a47d6b5 2026-11-03 Deploy plans (docs only): the landing page as its own update after J + K; J + K CI status
+fab4a94 2026-11-03 Landing page (nuriel-app2): a heading about the two products, without "נוריאל מחשבים: מחשבים"
+6c8d4bd 2026-11-03 Landing deploy plan (docs only): pinned to fab4a94 — the new heading
+f2e8bf7 2026-11-03 Landing page: a prominent signup button ("הרשמה קלה — תוך 2 דקות"), a login link, and a "store opened" email with the management login link
+92bf062 2026-11-03 Landing deploy plan (docs only): pinned to f2e8bf7 — the signup button and the "store opened" email
+b3dfce7 2026-11-03 E2E (Hospitality units): an exact locator for the plan-limit reason (CI run 117)
+249b80f 2026-11-03 Deploy status (docs only): J + K and the landing page are on the server (3 November 2026)
+5ea24e3 2026-11-03 Landing page: hide the Airbnb / Booking.com sync for now (one switch, SHOW_CHANNEL_SYNC)
+19ab7e8 2026-11-03 Security remediation (audit 2026-11-03): C1, H1-H6, M1-M5, P3 and privacy fixes
+657dbd0 2026-11-03 CI run 121: Prettier formatting in 8 files of the security remediation (format only)
+84b1393 2026-11-03 CI run 121: preview demo accounts carry the verified-account marker (SEC-H1)
+7ec7a26 2026-11-05 Digital license sending module — pilot for one store (Office / Windows)
+53bac87 2026-11-06 Production deploy runbook: security release (45-53) + license module (54)
+b24caf1 2026-11-06 Deploy runbook B1: the backup folder is created with mkdir -m 700 (no -p)
+9f99b62 2026-11-06 Deploy runbook S1: quiet fast-forward merge (git merge -q --ff-only)
+789843a 2026-11-07 Hospitality manager login: stop the bounce back to the login screen after a successful code
+beff543 2026-11-07 Hospitality sites: the business logo in share previews, favicon, home-screen icon and manifest
+d79ed30 2026-11-07 Hospitality bank transfer: the 7-day rule, transfer proofs from the guest, review by the business (migration 55)
+9fe1a31 2026-11-07 Hospitality guest area "ההזמנות שלי": email-code sign-in, the guest's bookings, payment and transfer proofs (migration 56)
+a0ae796 2026-11-07 Hospitality "מתחם שומר שבת": a settings switch, a candle badge in the site header and footer, a notice in booking (migration 57)
+8ca0288 2026-11-07 Hospitality manager login: Google through Nuriel's central login, password reset by email code
+0579a2b 2026-11-07 Platform panel: online stores and hospitality sites apart; a site's plan, status, end date and extra seats from "אתרי אירוח" (migration 58)
+4d1e565 2026-11-07 Hospitality packages: hospitality packages and special packages (e.g. a bride package, 2 nights in the VIP suite) as a bookable item (migration 59)
+d1df489 2026-11-07 CI fixes for stage A; "היכנס לניהול" on a hospitality site's card in the platform panel
+33ee9ea 2026-11-07 Production deploy runbook: stage A (migrations 55-59) for Nofi Dorit
+33e5b8f 2026-11-07 Guest area: a page heading while loading and on error (IS 5568 2.4.10)
+0cc33c1 2026-11-07 Hospitality sites: a floating accessibility button (display preferences), not a compliance claim
+2c660bf 2026-11-08 E2E: two-browser conflict tests wait until both pages show the data
+39dabcc 2026-11-08 Hospitality: site documents and policies, accessibility statement and arrangements, document consent at booking (migration 60)
+1772341 2026-11-08 Deploy runbook: accessibility and site documents (migration 60), after stage A
+009ec72 2026-11-08 Hospitality management on the phone: names on their own line, filters folded, titles not cut
+919ae23 2026-11-08 Hospitality sites: upload the main image, and a short hero video after it
+cb31e1a 2026-11-08 Deploy runbook: the accessibility and documents release also carries the phone fixes and the hero media
+f729211 2026-11-08 NURIEL AI ASSISTANT: a paid yearly help assistant, separate for online stores and zimmer sites
+dab90ee 2026-11-08 NURIEL AI deploy runbook: checks, backup, migration 61, verification and rollback
+58a47dc 2026-11-08 NURIEL AI: fixes from the independent security review (2 medium, 9 low)
+80c19b8 2026-11-08 NURIEL AI deploy runbook: pinned to 58a47dc (the review fixes)
+0df6fe0 2026-11-08 NURIEL AI: the E2E spec runs end to end; contrast of the selected mode hint
+4f6e45b 2026-11-08 NURIEL AI deploy runbook: pinned to 0df6fe0
+6dd034b 2026-11-08 NURIEL AI: pre-deploy review — shared quotas and budget cap, payment confirmation, isolation tests
+15b7b27 2026-11-08 NURIEL AI deploy runbook: pinned to 6dd034b (the pre-deploy review)
+c01a7ff 2026-11-08 NURIEL AI deploy runbook: deployed on 08.11.2026 — the commands as run
+0a62e32 2026-11-08 Hospitality: verified hero video, pool-compound events, client contracts, customer details correction (migrations 62–65)
+b6d3515 2026-11-09 Hospitality FINAL review: pool hours apart from event hours, stale contracts, privacy, video length and metadata
+cea407a 2026-11-09 SEO stage 0: read-only snapshot tool and the live baseline of Nofi Dorit
+f50d81b 2026-11-09 SEO stage 0: read-only snapshot tool and the live baseline of Nofi Dorit
+de766ac 2026-11-09 SEO stage 2: crawlable package pages and brand icons, PostalAddress, Google title and description per unit
+340c744 2026-11-09 SEO stage 2 deploy runbook: pinned to de766ac — code+build, migration and restart as separate approved steps
+3f37b66 2026-11-10 SEO stage 2 deploy runbook: deployed on 10.11.2026 — the commands as run and the live V results
+6a8ce22 2026-11-10 SEO stages 3–4: the root open for the favicon (301 to /stay), cookie consent built and off behind a switch
+5618f6f 2026-11-10 SEO stages 3–4 deploy runbook: pinned to 6a8ce22 — backup+code+build, migration and restart as separate approved steps
+80ddb09 2026-11-10 SEO stages 3–4 deploy runbook: deployed on 10.11.2026 — the outputs, the live V results and the stage 5 checks
+d9c85a8 2026-11-10 Merge the SEO branch (in production) into the events and contracts work — one base for the documents work
+e5d2c0a 2026-11-10 Standalone documents for signing — the database (migration 68, 20261111140000)
+33d66b9 2026-11-10 WIP: standalone documents — the app (paused for an urgent store fix; not for the server)
+9a692a6 2026-11-10 Product import that matches existing products — the database (migration 64, 20261110220000)
+2fef9da 2026-11-10 Product import that matches existing products — the app (check, choose, import, report, undo)
+8bad5cf 2026-11-10 GA4 events behind consent: unit/package views, booking start and request sent
+943de01 2026-11-10 Release doc (events, contracts): the standalone documents (migration 68) and GA4 behind consent
+12338a8 2026-11-10 Product import: right-to-left radio groups, E2E (same file twice, report, undo), strict lint
+a088810 2026-11-10 Product duplicates — the database: groups, "not a duplicate", atomic merge with a restore log (20261110230000)
+5586da4 2026-11-10 Product duplicates — the store admin screen, merge, and AI suggestions for NURIEL AI stores
+cc79c8f 2026-11-10 Product import: one import at a time per store, and a finished import never falls back to the check screen
+eeaa37e 2026-11-10 Product import (STORE-2): production deploy runbook, pinned to cc79c8f
+1011a89 2026-11-10 Store release: merge the duplicates manager into the matching import
+0206a99 2026-11-10 Import image pre-check only against this store's products; duplicates files in the strict lint
+bbb0153 2026-11-10 Store release runbook: backup + code + build, migration 64, migration 65, restart — pinned to 0206a99
+808835e 2026-11-10 E2E (standalone documents): open the way-B link on the local test address
+61afaf1 2026-11-10 Store release runbook: deployed on 10.11.2026 — the outputs and the live checks
+538f336 2026-11-10 Zimmer release: merge the deployed store version (ecommerce/store-release) into the documents work
+16679aa 2026-11-10 Zimmer release runbook (draft): backup + code + build, migrations 66–70 one at a time, restart
+ec41691 2026-11-10 Zimmer release runbook: pinned to 538f336, with the combined test results (SQL 3077/3077, E2E 71/71, rollback 224)
+c3ae295 2026-11-10 Zimmer release runbook: deployed on 10.11.2026 — the outputs and the live checks
+1552200 2026-11-10 Owner guide video: documents for signing and events, recorded on local demo data
+9b61364 2026-11-10 Zimmer runbook: client documents switched on for nofi-dorit only (10.11.2026), with the checks and the switch-off command
+e394df5 2026-11-10 Owner guide: GUIDE_SHOTS=1 takes sharp (2x) screenshots at each caption point instead of recording, for a printable customer guide
+9c02f1d 2026-11-12 Standalone documents: full flow on phones — entry points, existing customer when the customer fills, a fixed action bar, full-screen review, device share, a big finger pad
+802734f 2026-11-12 Signing audit doc: the full regression results (and the pre-existing date-dependent calendar contrast failures, same on the base branch)
+fa9a31a 2026-11-12 Signing closing check: pad ink only where it is seen, attack tests, review fixes
+fd44844 2026-11-12 Signing audit doc: the final closing results on fa9a31a
+bea4c57 2026-11-12 Hospitality email queue: each worker step stands alone — a failing expire_holds no longer stops every email
+c9e20c7 2026-11-12 setup-selfhost: a rerun keeps EMAIL_FROM_ADDRESS and the .env variables the script does not write itself
+797c9ce 2026-11-12 Email: one retry when Resend answers 429 (rate limit) — the email was not accepted, so no duplicate
+d8b327d 2026-11-12 Hospitality team: adding a manager (or the platform setting an owner) whose email has an unverified account says what to do instead of 'try again' forever
+b81904a 2026-11-12 SEC-H2 (completed): the platform admin's 'enter store' code always goes to <slug>.<base>, never the store's own domain
+1ca9b1a 2026-11-12 Service agreement: the signer IP kept as signature evidence comes from the trusted proxy header, not the spoofable first X-Forwarded-For hop
+443a1af 2026-11-12 Store logo: only a plain path in this store's branding folder is downloaded with the service key
+f890240 2026-11-12 Signed contract PDF: a rejected upload is no longer recorded as 'already stored'
+58dc0bd 2026-11-12 Store staff (migration 187): a manager the owner blocked can be unblocked only by the owner
+b548ba7 2026-11-12 Store users tab: a manager who is not the owner no longer sees owner-only actions on another manager's row, nor 'מנהל' as a role choice
+cfe1f6c 2026-11-12 DB tests: the two tests that failed between 00:00 and 02:00 (Israel time) no longer depend on the hour
+061fa07 2026-11-13 Site availability calendar: past days are marked inactive (aria-disabled); night report draft
+826cec6 2026-11-13 Password reset / login link emails: always on <slug>.<base>, never the store's own domain (security scan #2, N1)
+31c1e9a 2026-11-13 setup-selfhost: the .env carry-over keeps the last value of a repeated key, skips values over several lines and retired keys; the temp copy is outside the repo and removed on abort (security scan #2, N2/N3)
+e028d23 2026-11-13 Night report: security scans #1 and #2 compared
+adf1adc 2026-11-13 Rollback check: migration 71 (store owner guard) — rolled back first, the guard is the 20261019390000 body word for word, the schema equals migration 70; re-applied last
+92c94aa 2026-11-13 Night report: final test results on the final commit, branches and commits
+f71f004 2026-11-13 Signature pad unit test: typed point tuples — the tests typecheck (tsconfig.test.json) failed on number | undefined
+1f4bbe9 2026-11-13 Proposals before merge (no change made): a 'team management' grant for zimmer managers, how to read an email send error, a password reset without the password in the email, the merge plan
+7054ec4 2026-11-13 Docs: prettier on the maintenance notes
+8d4dbd2 2026-11-13 Proposals doc: the trial merge results (296 passed, 0 failed; typecheck and unit clean on the latest heads)
+9ab6262 2026-11-13 Zimmer: Business Admin role (migration 188) — enforced in the DB, owner-only appointment
+1a5a6a5 2026-11-13 Passwords never go out by email: confirmation without the password, no temp-password email
+d8fedf6 2026-11-13 Email: short guide for getting the exact Resend error from the test screen + E2E for the screen
+90fa168 2026-11-13 Email guide: formatting
+e55dacb 2026-11-13 Integration: merge hospitality/signing-mobile into release/next (trial merge)
+4355950 2026-11-13 Integration: merge maintenance/email-auth-security into release/next (trial merge)
+1c018c2 2026-11-13 Close-3 report (draft): Business Admin, passwords, email guide, release/next — final test results pending
+84a3613 2026-11-13 Tests: full role matrix (Owner / Business Admin / manager / Super Admin), business-admin scope, no password in any email
+2568a8c 2026-11-13 Deploy: one safe command for release/next (preflight, backup, build, 187 + 188, restart, health, auto app rollback)
+f4f2452 2026-11-13 Business-admin scope spec: afterAll reads the project from test.info() (lint: no empty pattern)
+5c1b4e2 2026-11-13 Role matrix SQL test: leave shared state as found (global flags off, no Shabbat badge) — fixes 2 later-file checks in the full run
+cd58c1d 2026-11-13 E2E manage-details: both pages finish loading before the concurrent edit (test race, not the merge)
+2d1c4ef 2026-11-13 Close-3 report: final results on cd58c1d (E2E 311 passed / 0 failed / 12 skipped of 323; unit 1140; DB 3133 x3; rollback 230), migrations 187 + 188, the deploy runbook and command
+ef76199 2026-11-13 Runbook: release/next deployed to production 13.11.2026 (cd58c1d, 186 → 188, healthy, live checks 200)
+98169c4 2026-11-14 Billing & Agreements: shared financial layer (migrations 189–190) + server functions
+20ef0ac 2026-11-14 Billing & Agreements UI: platform customer card, upgrade requests, owner area (both engines)
+10e0ca8 2026-11-14 Billing: E2E for both engines, legacy-history mapping (dry run), analytics plan
+b2e20b7 2026-11-14 Billing: final report (draft — the last test numbers are filled in when the runs finish)
+3c39795 2026-11-14 Billing report: the final test numbers (DB 3195/3195 ×3, rollback identical, E2E 315 passed / 0 failed, re-run 44/44, CI jobs)
+ea15c00 2026-11-14 CI: install pdftotext in the E2E job (the signing test reads the signed PDF with it)
+26e8aec 2026-11-14 Billing report: CI run 173 green (all jobs)
+7454622 2026-11-14 Billing report: list the CI workflow change
+bc6960a 2026-11-15 VAT by dealer type: central rate, order snapshot, owner-only store setting; legacy payment check
+fc063bf 2026-11-15 E2E: VAT spec adds to cart in its own context; billing phone test follows the seller's VAT
+ef7230b 2026-11-15 Billing report: round 2 (VAT by dealer type, the old "record payment", GTM waiting)
+999292e 2026-11-15 Google Tag Manager per site: container ID only, owner-only, consent-gated, one page view per page
+a6d0a54 2026-11-15 VAT round 3: seller-VAT proof test, stores at a rate other than 18% (read-only), zimmer VAT plan
+2e31202 2026-11-15 Reports: round 3 (GTM implemented, VAT plan and checks); final E2E and CI pending
+d1aa489 2026-11-15 Deposit VAT research: findings with sources, read-only deposit check; no calculation changed
+1f3da48 2026-11-15 Report: final local E2E for round 3 — 327 passed, 0 failed
+ea292fd 2026-11-15 Report: CI run 176 green on round 3 (all 4 jobs)
+8dbb662 2026-11-15 Merge remote-tracking branch 'origin/release/next' into billing/agreements
+773ad14 2026-11-15 Deploy script for migrations 189-192: per-migration checks, customer-data checksum, rolled-back order test
+31ccb4c 2026-11-15 Runbook + report: deployed to production 15.11.2026 (773ad14, 188 → 192, healthy, customer data unchanged, live checks pass)
+b23b142 2026-11-15 Websites Stage 0: audit + architecture plan for the business_profile engine (draft; pilot scan pending)
+6e0207a 2026-11-15 Websites Stage 0: pilot scan findings and content map (efratadir.com) in the report
+d2d274e 2026-11-15 Websites Stage 0 fixes: old-site forms finding (2 active forms + WhatsApp), content map in Git, Efrat missing-materials list
+11a754a 2026-11-15 Websites Stage 1: business_profile engine foundation (DB, routing, studio shell, first-publish approval)
+df3335a 2026-11-15 Websites Stage 2: editor with live preview, media library, Elegant + Portfolio, pilot draft preview
+aeab6a4 2026-11-15 Websites Stage 2: full regression results + pilot preview screenshots (desktop, phone, editor)
+58b8034 2026-11-16 Websites: visual scan of efratadir.com for a faithful rebuild (read-only) + old-vs-new comparison
+eb80549 2026-11-16 Websites: faithful rebuild of Efrat's old site in the engine (Classic template, site fonts), preview only
+955c8a2 2026-11-16 Websites: faithful rebuild — acceptance (screenshots, old-vs-new comparison, report), H1 markup kept for existing sites
+375dd68 2026-11-16 Websites: customer inquiries — migration 196 (inquiries, notes, settings, notification outbox, owner-only permission, retention, audit) + rollback + DB tests; working site form; studio inbox
+cee079d 2026-11-16 Websites: accessibility statement (/accessibility, footer link, studio tab), lightbox + motion controls, floating WhatsApp out of the way, inquiries E2E (12 acceptance checks)
+1072473 2026-11-16 Websites: reports — inquiries (12 acceptance checks), accessibility audit (findings, fixes, contrast warnings with exact proposals), licenses (pen animation, icons, fonts), differences from the old site; faithful spec expects the approved floating WhatsApp + statement link
+8eeb422 2026-11-16 Websites: final review fixes — sideways overflow with reduced motion, WhatsApp keeps clear of fields and headings, walkthrough shots
+d89d4fb 2026-11-16 Websites: Efrat's site connected to the platform panel — site file, audited admin editing, site address (subdomain + custom domain), Google preview, media audit and import (no deploy)
+7101181 2026-11-16 Websites platform report: final test numbers (full E2E 365 passed, rerun on the last build 49/49), DNS table spacing shot, site file shot
+bd07313 2026-11-16 Websites: owner invite link + production deploy package for Efrat's preview
+16b8ffd 2026-11-16 Websites: pin the deploy runbook to bd07313
+5b2daed 2026-11-16 Websites: import for a platform admin without a password (server session)
+6522f28 2026-11-16 Websites: record the production deploy and preview checks (not published)
+81764f2 2026-11-16 Hospitality: GA4 and Tag Manager IDs in the business settings (Promotion, Analytics & Tracking)
+81848f9 2026-11-16 Hospitality: tracking settings doc — exact test counts
+12a6f3b 2026-11-17 Hospitality: deploy steps for the tracking settings (migration 199)
+4e830b5 2026-11-17 Hospitality: record the tracking settings deploy (GA4 saved for nofi-dorit, measurement still off)
+6e28eb0 2026-11-17 Hospitality: guarded privacy-policy update before turning measurement on (GA4 section, consent only)
+eccd001 2026-11-17 Hospitality: the default privacy text follows measurement (GA4 / Tag Manager, consent only)
+bd7771f 2026-11-17 Hospitality: record turning measurement on for nofi-dorit (privacy text live, consent only, one gtag.js)
+0f35ed9 2026-11-17 Audit: fix the CI typecheck failure and the 28 known formatting errors
+15d2fa6 2026-11-17 Audit B-1: Grow webhook answers 500 (not 200) when marking the order paid fails
+87f583e 2026-11-17 Audit B-2: website inquiry form no longer depends on the visitor's device clock
+5e4368e 2026-11-17 Audit C-2: docker-compose forwards the operator variables the code reads
+f03232f 2026-11-17 Audit B-5: deleting a store/business also removes its files from the Hospitality and Websites buckets
+0647ba5 2026-11-17 Audit B-6: order/pick-slip PDFs and the reset e-mail print Israel time, not server time
+2fd08b6 2026-11-17 Audit D-1: remove the unused xlsx dependency; dompurify 3.4.14 -> 3.4.18
+d9cdb61 2026-11-17 Audit B-3/B-4: iCal import ignores cancelled reservations and refuses a truncated feed
+3876b82 2026-11-17 Audit B-7: sendOrderEmails is limited per order and per user
+11fcbfa 2026-11-17 Audit: reports (bugs and fixes, security, dependencies, architecture, performance, main merge plan) + agent interim reports
+241ed8c 2026-11-17 Audit: summary report (FULL-PLATFORM-AUDIT) with the test results; format the audit documents
+0cd6e12 2026-11-17 Audit: refresh numbers and SHAs in the reports
+7b101e7 2026-11-17 Audit: merge plan numbers (303 commits, 1367 files)
+c0615dd 2026-11-17 R-1: place_order is guarded in the database (migration 200): coupon grants and an order rate guard
+HEAD c0615dd378272fd4bcf2856d77e0f11ab6fae0db total_commits=305 (origin/main=4f7daa3dddce37f3d4542bfa974778202d7a506c, range origin/main..HEAD, oldest first; sections 1-8 of merge-review.md analyse 7b101e7, the delta is in its Addendum)

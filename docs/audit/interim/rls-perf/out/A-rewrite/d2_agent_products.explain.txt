@@ -1,0 +1,123 @@
+-- d2_agent_products: AdminProductsPanel list page 0 as agent (is_staff path)
+-- role=authenticated persona=t1_agent
+-- db=perf_scratch_b label=A-rewrite
+
+===== REP 0  (psql wall 64 ms)
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=399.58..399.59 rows=1 width=48) (actual time=30.286..30.289 rows=1 loops=1)
+   Buffers: shared hit=1061
+   ->  Limit  (cost=388.55..390.13 rows=630 width=1232) (actual time=17.067..17.267 rows=1000 loops=1)
+         Buffers: shared hit=1058
+         InitPlan 1 (returns $0)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.027..2.028 rows=1 loops=1)
+                 Buffers: shared hit=430
+         InitPlan 2 (returns $1)
+           ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.796..0.797 rows=1 loops=1)
+                 Buffers: shared hit=100
+         InitPlan 3 (returns $2)
+           ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
+         ->  Sort  (cost=387.73..389.30 rows=630 width=1232) (actual time=17.066..17.184 rows=1000 loops=1)
+               Sort Key: g.sort_order, g.created_at DESC, g.id
+               Sort Method: top-N heapsort  Memory: 4065kB
+               Buffers: shared hit=1058
+               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..358.43 rows=630 width=1232) (actual time=2.847..5.072 rows=3000 loops=1)
+                     Index Cond: (tenant_id = $0)
+                     Filter: ($1 OR $2)
+                     Buffers: shared hit=1049
+ Planning:
+   Buffers: shared hit=505
+ Planning Time: 1.264 ms
+ Execution Time: 30.866 ms
+(24 rows)
+
+
+===== REP 1  (psql wall 84 ms)
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=399.58..399.59 rows=1 width=48) (actual time=44.221..44.226 rows=1 loops=1)
+   Buffers: shared hit=1061
+   ->  Limit  (cost=388.55..390.13 rows=630 width=1232) (actual time=24.454..24.729 rows=1000 loops=1)
+         Buffers: shared hit=1058
+         InitPlan 1 (returns $0)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.791..2.792 rows=1 loops=1)
+                 Buffers: shared hit=430
+         InitPlan 2 (returns $1)
+           ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=1.506..1.506 rows=1 loops=1)
+                 Buffers: shared hit=100
+         InitPlan 3 (returns $2)
+           ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
+         ->  Sort  (cost=387.73..389.30 rows=630 width=1232) (actual time=24.451..24.611 rows=1000 loops=1)
+               Sort Key: g.sort_order, g.created_at DESC, g.id
+               Sort Method: top-N heapsort  Memory: 4065kB
+               Buffers: shared hit=1058
+               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..358.43 rows=630 width=1232) (actual time=4.327..7.806 rows=3000 loops=1)
+                     Index Cond: (tenant_id = $0)
+                     Filter: ($1 OR $2)
+                     Buffers: shared hit=1049
+ Planning:
+   Buffers: shared hit=505
+ Planning Time: 2.052 ms
+ Execution Time: 44.885 ms
+(24 rows)
+
+
+===== REP 2  (psql wall 77 ms)
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=399.58..399.59 rows=1 width=48) (actual time=43.113..43.117 rows=1 loops=1)
+   Buffers: shared hit=1061
+   ->  Limit  (cost=388.55..390.13 rows=630 width=1232) (actual time=24.381..24.635 rows=1000 loops=1)
+         Buffers: shared hit=1058
+         InitPlan 1 (returns $0)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.757..2.758 rows=1 loops=1)
+                 Buffers: shared hit=430
+         InitPlan 2 (returns $1)
+           ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=1.631..1.633 rows=1 loops=1)
+                 Buffers: shared hit=100
+         InitPlan 3 (returns $2)
+           ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
+         ->  Sort  (cost=387.73..389.30 rows=630 width=1232) (actual time=24.379..24.520 rows=1000 loops=1)
+               Sort Key: g.sort_order, g.created_at DESC, g.id
+               Sort Method: top-N heapsort  Memory: 4065kB
+               Buffers: shared hit=1058
+               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..358.43 rows=630 width=1232) (actual time=4.415..8.148 rows=3000 loops=1)
+                     Index Cond: (tenant_id = $0)
+                     Filter: ($1 OR $2)
+                     Buffers: shared hit=1049
+ Planning:
+   Buffers: shared hit=505
+ Planning Time: 1.648 ms
+ Execution Time: 43.756 ms
+(24 rows)
+
+
+===== REP 3  (psql wall 66 ms)
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=399.58..399.59 rows=1 width=48) (actual time=34.147..34.151 rows=1 loops=1)
+   Buffers: shared hit=1061
+   ->  Limit  (cost=388.55..390.13 rows=630 width=1232) (actual time=20.197..20.413 rows=1000 loops=1)
+         Buffers: shared hit=1058
+         InitPlan 1 (returns $0)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.287..2.287 rows=1 loops=1)
+                 Buffers: shared hit=430
+         InitPlan 2 (returns $1)
+           ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.987..0.988 rows=1 loops=1)
+                 Buffers: shared hit=100
+         InitPlan 3 (returns $2)
+           ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
+         ->  Sort  (cost=387.73..389.30 rows=630 width=1232) (actual time=20.195..20.324 rows=1000 loops=1)
+               Sort Key: g.sort_order, g.created_at DESC, g.id
+               Sort Method: top-N heapsort  Memory: 4065kB
+               Buffers: shared hit=1058
+               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..358.43 rows=630 width=1232) (actual time=3.297..6.355 rows=3000 loops=1)
+                     Index Cond: (tenant_id = $0)
+                     Filter: ($1 OR $2)
+                     Buffers: shared hit=1049
+ Planning:
+   Buffers: shared hit=505
+ Planning Time: 1.462 ms
+ Execution Time: 34.746 ms
+(24 rows)
+
