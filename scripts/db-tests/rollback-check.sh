@@ -185,6 +185,8 @@ M80=20261116120000_bp_inquiries
 M81=20261117090000_bp_site_address
 M82=20261117100000_bp_owner_invites
 M83=20261118100000_site_tracking_ga4
+# הצעות SEO (Hospitality) — נבדקת בפירוט ב-seo-proposals-rollback.sh; כאן רק השרשרת: ראשונה ב-rollback, אחרונה בהחלה
+M84=20261118200000_hosp_seo_proposals
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -227,6 +229,15 @@ same_as_ref() {
     echo "  FAIL schema after the rollback differs from $1:"; diff "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" | head -20; exit 1
   fi
 }
+
+# ---------- SEO proposals (Hospitality) — the newest migration, rolled back first ----------
+expect "before the rollback: the two closed SEO tables and the decide function" \
+  "SELECT to_regclass('hospitality.seo_proposals') IS NOT NULL AND to_regclass('hospitality.seo_runs') IS NOT NULL
+      AND to_regprocedure('hospitality.seo_proposal_decide(uuid,text,text)') IS NOT NULL"
+ref_upto "$M84"
+echo "rollback: $M84"
+down "$M84"
+same_as_ref "migration 83"
 
 # ---------- GA4 in the business settings, next to Tag Manager (migration 83) ----------
 expect "before the rollback: the GA4 column (format CHECK), the guest read, saving for signed-in users, zimmer edits by ownership" \
@@ -2702,6 +2713,9 @@ q "DELETE FROM public.site_tracking;
    DELETE FROM public.email_settings WHERE tenant_id IN (SELECT id FROM public.tenants WHERE slug LIKE 'rb-ga4-%');
    DELETE FROM public.tenants WHERE slug LIKE 'rb-ga4-%'" >/dev/null
 expect "the copy test left nothing behind" "SELECT NOT EXISTS (SELECT 1 FROM public.tenants WHERE slug LIKE 'rb-ga4-%')"
+up "$M84"
+expect "SEO proposals back: both tables and the functions" \
+  "SELECT to_regclass('hospitality.seo_proposals') IS NOT NULL AND to_regprocedure('hospitality.seo_proposals_add(uuid,uuid,jsonb,boolean)') IS NOT NULL"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')
@@ -2818,8 +2832,8 @@ expect "guard triggers back on all 40 Ecommerce tables (80 triggers)" \
   "SELECT count(*) = 80 FROM pg_trigger WHERE tgname IN ('ecommerce_rows_guard','ecommerce_row_move_guard')"
 expect "Ecommerce roles registered again" \
   "SELECT count(*) = 5 FROM public.platform_product_roles WHERE product = 'ecommerce'"
-expect "Hospitality schema back: 53 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions, the transfer proofs and the guest-area codes and sessions, the packages, the 5 site-document tables, the consent records, the 3 event tables and the 3 contract tables), RLS on all, role admin, 8 flags off (incl. management, analytics and contracts)" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 53
+expect "Hospitality schema back: 55 tables (incl. the action log, arrival info, site versions, room types, payments, channels, the rate counters, the site requests, the staff grants, the 4 support tables, the setup guide state, the payment instructions, the transfer proofs and the guest-area codes and sessions, the packages, the 5 site-document tables, the consent records, the 3 event tables, the 3 contract tables and the 2 SEO proposal tables), RLS on all, role admin, 8 flags off (incl. management, analytics and contracts)" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'hospitality'::regnamespace AND relkind = 'r' AND relrowsecurity) = 55
       AND (SELECT array_agg(role) FROM public.platform_product_roles WHERE product = 'hospitality') = ARRAY['admin']
       AND (SELECT count(*) FROM public.platform_feature_flags WHERE key LIKE 'hospitality%' AND NOT enabled) = 8"
 expect "hosp-media bucket back" "SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-media' AND public)"

@@ -6,7 +6,7 @@
 // כל שינוי מוצג מיד בתצוגה המקדימה (אותו רנדרר כמו האתר) ונשמר אוטומטית לטיוטה (revision —
 // עריכה מקבילה ממקום אחר מזוהה). הגולשים רואים רק מה שפורסם.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArrowDown,
   ArrowUp,
@@ -235,6 +235,13 @@ function Editor({
   };
 
   const reload = () => void qc.invalidateQueries({ queryKey: KEY });
+  // הצעת SEO לדף הבית אושרה (נשמרה בטיוטה במסד): העורך נטען מחדש עם הטיוטה, ונשאר בלשונית "גוגל ושיתוף"
+  const navigate = useNavigate();
+  const reloadOnSeo = () => {
+    void navigate({ href: "/manage/website?tab=seo", replace: true });
+    reload();
+    reloadPreview();
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -289,6 +296,8 @@ function Editor({
                 site={site}
                 addresses={view.addresses}
                 onChange={setDesign}
+                flush={flush}
+                onDraftChanged={reloadOnSeo}
               />
             </TabsContent>
             <TabsContent value="publish" className="p-3 pt-0">

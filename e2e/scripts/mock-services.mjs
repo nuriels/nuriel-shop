@@ -11,6 +11,8 @@
 //     שאלה עם "תקלה בשירות" → 529. בלי מפתח אמיתי ובלי קריאה החוצה.
 //     בקשת "הצעות למוצרים כפולים" (סכמה עם groups) → מקבץ מוצרים שיש להם אותן מילים בסדר אחר
 //     (אותו מוצר בניסוח אחר); שמות זהים לא מוצעים (הם כבר ברשימה הרגילה).
+//     בקשת הצעות SEO של אתר אירוח (סכמה עם home / units, alts או text) → טקסטים דטרמיניסטיים בעברית מתוך
+//     <business_data> (שם העסק ושמות היחידות), כך שהבדיקה רואה מה נשלח ומה חזר.
 import { createServer } from "node:http";
 
 /** "דגם" מדומה להצעות כפילויות: אותן מילים בסדר אחר = אותו מוצר */
@@ -50,10 +52,64 @@ function duplicatesMock(request) {
   };
 }
 
+/** "דגם" מדומה להצעות SEO: נבנה מהנתונים שבבקשה בלבד */
+function seoMock(request) {
+  const props = request.output_config?.format?.schema?.properties ?? {};
+  const content = request.messages?.at(-1)?.content;
+  const text = typeof content === "string" ? content : "";
+  let data = {};
+  try {
+    data = JSON.parse(/<business_data>\n([\s\S]*?)\n<\/business_data>/.exec(text)?.[1] ?? "{}");
+  } catch {
+    data = {};
+  }
+  const name = data.business?.name ?? "העסק";
+  let out;
+  if (props.alts) {
+    const refs = props.alts.items.properties.ref.enum ?? [];
+    out = { alts: refs.map((ref) => ({ ref, alt: `מרפסת מרוצפת עם פינת ישיבה, תמונה ${ref}` })) };
+  } else if (props.home) {
+    out = {
+      home: {
+        seo_title: `${name} | צימרים במושב (הצעת AI)`,
+        seo_description: `${name}: מתחם צימרים עם נוף פתוח. בדקו זמינות והזמינו באתר.`,
+        h1: "",
+        about_title: `על ${name}`,
+        about_body: `${name} הוא מתחם אירוח כפרי.\n\nבדקו זמינות באתר.`,
+      },
+      units: (data.units ?? []).map((u) => ({
+        ref: u.ref,
+        seo_title: `${u.name} – עד ${u.max_guests} אורחים (AI)`,
+        seo_description: `${u.name} ב${name}: יחידה לעד ${u.max_guests} אורחים.`,
+        description: "",
+      })),
+    };
+  } else {
+    out = { text: `ניסוח אחר: ${name} — מקום שקט לחופשה` };
+  }
+  return {
+    id: "msg_e2e_seo",
+    type: "message",
+    role: "assistant",
+    model: request.model,
+    content: [{ type: "text", text: JSON.stringify(out) }],
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: {
+      input_tokens: 2500,
+      output_tokens: 300,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+    },
+  };
+}
+
 /** "דגם" מדומה: מסווג לפי הניסוחים (id | title | keywords | summary) שבהוראות */
 function anthropicMock(body) {
   const request = JSON.parse(body);
   if (request.output_config?.format?.schema?.properties?.groups) return duplicatesMock(request);
+  const seoProps = request.output_config?.format?.schema?.properties ?? {};
+  if (seoProps.home || seoProps.alts || (seoProps.text && !seoProps.topic)) return seoMock(request);
   const system = (request.system ?? []).map((b) => b.text ?? "").join("\n");
   const message = String(request.messages?.at(-1)?.content ?? "");
   const question = (/<question>\n([\s\S]*?)\n<\/question>/.exec(message)?.[1] ?? "").trim();
