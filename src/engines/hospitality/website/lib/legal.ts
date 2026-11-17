@@ -21,6 +21,31 @@ function contactLine(site: PublicSite): string {
     .join(" · ");
 }
 
+/**
+ * עוגיות: בלי מדידה — רק הכרחיות. כשהמדידה מופעלת לאתר (Google Analytics / Tag Manager, אחרי הסכמה בלבד) —
+ * מה נמדד, מה לא נשלח, ואיך מבטלים. אותו נוסח כמו scripts/hospitality/privacy-analytics-section.sql
+ */
+function cookiesBody(site: PublicSite): string[] {
+  const a = site.analytics;
+  if (!a || (!a.ga4 && !a.gtm)) {
+    return ["האתר משתמש רק בעוגיות הכרחיות לפעולתו. אין באתר עוגיות פרסום או מעקב."];
+  }
+  const tool =
+    a.ga4 && a.gtm
+      ? "Google Analytics 4 ו-Google Tag Manager"
+      : a.ga4
+        ? "Google Analytics 4"
+        : "Google Tag Manager";
+  return [
+    'האתר משתמש בעוגיות הכרחיות לפעולתו (למשל הכניסה לאזור "ההזמנות שלי" ושמירת הבחירה שלכם לגבי עוגיות). אין באתר עוגיות פרסום.',
+    `מדידה (${tool}) — רק אם אישרתם: כדי להבין איך משתמשים באתר ולשפר אותו, האתר נעזר בשירותי המדידה של Google. הם פועלים רק אחרי שאישרתם זאת בחלון העוגיות; עד אז לא נטען באתר שום קוד של Google.`,
+    "נמדדים: אילו עמודים נצפו, צפייה ביחידות ובחבילות, התחלת הזמנה ושליחת בקשת הזמנה, ולחיצות על טלפון, וואטסאפ או אימייל, וכן נתונים טכניים כלליים כמו סוג המכשיר והדפדפן.",
+    "לא נשלחים ל-Google שם, טלפון, אימייל, מספר הזמנה או קישורים אישיים, וכתובת העמוד נשלחת בלי פרמטרים אישיים. המידע לא משמש לפרסום: אותות הפרסום של Google חסומים ו-Google Signals כבוי.",
+    "עוגיות המדידה (ששמן מתחיל ב-_ga) נשמרות על כתובת האתר הזה בלבד. הנתונים נשמרים ב-Google Analytics עד חודשיים. Google מעבדת את המידע עבור העסק, וייתכן שגם מחוץ לישראל (policies.google.com/privacy).",
+    'אפשר לשנות את הבחירה בכל רגע דרך "הגדרות Cookies" בתחתית האתר. ביטול ההסכמה מפסיק את המדידה ומוחק את עוגיות המדידה מהדפדפן.',
+  ];
+}
+
 /** מדיניות הפרטיות — תבנית (טיוטה) */
 export function privacySections(site: PublicSite): LegalSection[] {
   const name = site.business.name;
@@ -56,10 +81,7 @@ export function privacySections(site: PublicSite): LegalSection[] {
         "מידע יימסר לרשות מוסמכת רק כשהדין מחייב זאת.",
       ],
     },
-    {
-      title: "עוגיות (Cookies)",
-      body: ["האתר משתמש רק בעוגיות הכרחיות לפעולתו. אין באתר עוגיות פרסום או מעקב."],
-    },
+    { title: "עוגיות (Cookies)", body: cookiesBody(site) },
     {
       title: "הגנה מפני שימוש לרעה",
       body: [

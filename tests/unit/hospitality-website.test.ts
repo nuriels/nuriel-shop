@@ -570,6 +570,20 @@ describe("4b: booking flow helpers", () => {
     expect(privacy).toContain("צימרי הגליל");
     expect(privacy).toContain("050-0000101");
     expect(privacy).toContain("אין באתר עוגיות פרסום או מעקב");
+    expect(privacy).not.toContain("Google Analytics");
+    // מדידה מופעלת לאתר: הטקסט הכללי מתאר את Google Analytics (בהסכמה בלבד), ולא "אין מעקב"
+    const withGa = privacySections({ ...s, analytics: { ga4: "G-TEST12345", gtm: null } })
+      .flatMap((x) => x.body)
+      .join(" ");
+    expect(withGa).toContain("מדידה (Google Analytics 4) — רק אם אישרתם");
+    expect(withGa).toContain("לא נשלחים ל-Google שם, טלפון, אימייל");
+    expect(withGa).toContain("הגדרות Cookies");
+    expect(withGa).not.toContain("אין באתר עוגיות פרסום או מעקב");
+    expect(withGa).not.toContain("G-TEST12345");
+    const withGtm = privacySections({ ...s, analytics: { ga4: null, gtm: "GTM-TEST123" } })
+      .flatMap((x) => x.body)
+      .join(" ");
+    expect(withGtm).toContain("מדידה (Google Tag Manager) — רק אם אישרתם");
     // מיגרציה 60: הצהרה שלא פורסמה — רק הדרך לפנות ותפריט התצוגה; בלי הצהרת עמידה בתקן ובלי "המתחם נגיש"
     const access = accessibilityFallback(s);
     expect(access.map((x) => x.title)).toContain("פניות בנושא נגישות");

@@ -348,6 +348,29 @@ test("@mobile phone: the banner sits above the action bar, nothing sideways, acc
   await expectAccessible(page, "consent banner on the phone");
 });
 
+test("the privacy page follows the switch: 'necessary cookies only' while off; the Google Analytics section (consent only) while on", async ({
+  page,
+}) => {
+  test.skip(test.info().project.name === "mobile", "desktop flow");
+  setAnalytics(false);
+  await page.goto(url("/stay/privacy"));
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("אין באתר עוגיות פרסום או מעקב")).toBeVisible();
+  await expect(page.getByText(/מדידה \(Google Analytics 4\) — רק אם אישרתם/)).toHaveCount(0);
+  setAnalytics(true);
+  await expect
+    .poll(
+      async () => {
+        await page.goto(url("/stay/privacy"));
+        return page.getByText(/מדידה \(Google Analytics 4\) — רק אם אישרתם/).count();
+      },
+      { timeout: 20_000 },
+    )
+    .toBe(1);
+  await expect(page.getByText("אין באתר עוגיות פרסום או מעקב")).toHaveCount(0);
+  setAnalytics(false);
+});
+
 test("the website editor no longer keeps a GA4 field — it points to the business settings", async ({
   page,
 }) => {
