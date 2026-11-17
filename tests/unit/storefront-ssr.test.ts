@@ -16,6 +16,10 @@ describe("storefront SSR seed", () => {
     expect(trimmed.description).toHaveLength(SEED_DESCRIPTION_MAX);
     // לא משנה את האובייקט המקורי (הקטלוג במטמון)
     expect(long.description).toHaveLength(SEED_DESCRIPTION_MAX + 50);
+    // טקסט עשיר — טקסט פשוט בלבד (כמו שהכרטיס מציג), בלי תגית חתוכה באמצע
+    const rich = trimSeedDescription(item(`<p><strong>מודגש</strong> ${"ב".repeat(400)}</p>`));
+    expect(rich.description).not.toMatch(/[<>]/);
+    expect(rich.description?.startsWith("מודגש ב")).toBe(true);
   });
 });
 

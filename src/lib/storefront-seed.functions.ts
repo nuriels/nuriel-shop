@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { fetchHomeBanners } from "@/lib/banners";
 import type { CategoryRow } from "@/lib/category-tree";
 import type { CatalogItem } from "@/lib/catalog";
+import { richTextToPlain } from "@/lib/rich-text";
 import { loadSiteSettings } from "@/lib/site";
 import type { StorefrontSeed } from "@/lib/storefront-seed";
 
@@ -12,13 +13,18 @@ const CATALOG_TTL_MS = 60_000;
 const CATALOG_CACHE_MAX = 200;
 const catalogCache = new Map<string, { at: number; rows: CatalogItem[] }>();
 
-/** תיאור ארוך — מקוצר ב-HTML הראשוני (הכרטיסים מציגים שורה-שתיים); הדפדפן טוען את המלא מיד אחר כך */
-export const SEED_DESCRIPTION_MAX = 600;
+/**
+ * תיאור בכרטיס מוצר — ב-HTML הראשוני רק טקסט קצר (הכרטיס מציג שורה-שתיים, richTextToPlain); הדפדפן
+ * טוען את התיאור המלא מיד אחר כך. כך ה-HTML לא מתנפח בחנות עם הרבה מוצרים.
+ */
+export const SEED_DESCRIPTION_MAX = 200;
 
 export function trimSeedDescription(item: CatalogItem): CatalogItem {
   const text = item.description;
-  if (!text || text.length <= SEED_DESCRIPTION_MAX) return item;
-  return { ...item, description: text.slice(0, SEED_DESCRIPTION_MAX) };
+  if (!text) return item;
+  const plain = richTextToPlain(text);
+  if (plain === text && text.length <= SEED_DESCRIPTION_MAX) return item;
+  return { ...item, description: plain.slice(0, SEED_DESCRIPTION_MAX) };
 }
 
 /** כמו RELATED_GRID_LIMIT בעמוד המוצר */
