@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { loadSiteSettings, resolveSiteLogoUrl, type SiteSettings } from "@/lib/site";
+import { useStorefrontSeed } from "@/lib/storefront-seed";
 
 /** הגדרות האתר הציבוריות (כותרת, לוגו, תוכן עמודים) — נטענות פעם אחת ומשותפות */
 let cached: SiteSettings | null = null;
@@ -13,7 +14,9 @@ export async function refreshSiteSettings(): Promise<SiteSettings> {
 }
 
 export function useSiteSettings() {
-  const [settings, setSettings] = useState<SiteSettings | null>(cached);
+  // עמוד שנבנה בשרת: ההגדרות מהשרת הן המצב ההתחלתי (זהה בשרת ובדפדפן); המטמון של המודול — רק בדפדפן
+  const seed = useStorefrontSeed();
+  const [settings, setSettings] = useState<SiteSettings | null>(cached ?? seed?.settings ?? null);
 
   const refresh = useCallback(async () => {
     setSettings(await refreshSiteSettings());

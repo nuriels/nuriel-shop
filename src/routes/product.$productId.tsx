@@ -31,6 +31,8 @@ import { EMPTY_SALES, loadSalesData, type SalesData } from "@/lib/sales-data";
 import { recommendForProduct } from "@/lib/cart-promotions";
 import { RELATED_GRID_LIMIT } from "@/lib/reviews";
 import { getProductSeo, type ProductSeo } from "@/lib/seo.functions";
+import { isServerRender, StorefrontSeedProvider, type StorefrontSeed } from "@/lib/storefront-seed";
+import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { breadcrumbJsonLd, jsonLdText, productJsonLd } from "@/lib/structured-data";
 import { breadcrumbTrail } from "@/lib/seo-urls";
 
@@ -76,13 +78,26 @@ import { attributeNames, hasVariants, variantAttributesOf, variantLabel } from "
 
 /**
  * עמוד מוצר (חלק 14): /product/<id> — כתובת קבועה לכל מוצר, לגוגל (מפת
- * האתר), לזאפ ולשיתוף. התגיות (כותרת, תיאור, תמונה, מחיר) נוצרות בשרת
- * (ssr: data-only) — כך שגוגל, ווטסאפ ופייסבוק רואים אותן מיד. התוכן עצמו
- * (מחיר לפי מי שמחובר, וריאציות, הוספה לסל) — בדפדפן, כמו בקטלוג.
+ * האתר), לזאפ ולשיתוף. התגיות (כותרת, תיאור, תמונה, מחיר) נוצרות בשרת.
+ *
+ * העמוד עצמו נבנה בשרת (SSR) עם מה שאורח רואה — שם (H1), תמונה, מחיר, זמינות ותיאור — כך שגוגל מקבל
+ * HTML מלא בלי JavaScript. בדפדפן ממשיכים כמו קודם: הקטלוג נטען לפי מי שמחובר (מחיר אישי / דרג),
+ * ומוצרים נלווים, וריאציות והוספה לסל — אחרי הטעינה הזו.
  */
+type ProductRouteData = ProductSeo & { seed: StorefrontSeed | null };
+
 export const Route = createFileRoute("/product/$productId")({
-  ssr: "data-only",
-  loader: ({ params }) => getProductSeo({ data: { id: params.productId } }),
+  ssr: true,
+  loader: async ({ params, context }): Promise<ProductRouteData | null> => {
+    const [seo, seed] = await Promise.all([
+      getProductSeo({ data: { id: params.productId } }),
+      // רק בטעינה הראשונה (בשרת), רק בחנות; בניווט בתוך האתר — הדפדפן טוען בעצמו, כמו קודם
+      isServerRender() && context.hostMode.siteType === "ecommerce"
+        ? getStorefrontSeed({ data: { productId: params.productId } })
+        : Promise.resolve(null),
+    ]);
+    return seo ? { ...seo, seed } : null;
+  },
   head: ({ loaderData }) => {
     if (!loaderData) {
       return { meta: [{ title: "המוצר לא נמצא" }, { name: "robots", content: "noindex" }] };
@@ -119,6 +134,15 @@ export const Route = createFileRoute("/product/$productId")({
 });
 
 function ProductPage() {
+  const data = Route.useLoaderData();
+  return (
+    <StorefrontSeedProvider seed={data?.seed}>
+      <ProductPageBody />
+    </StorefrontSeedProvider>
+  );
+}
+
+function ProductPageBody() {
   const { productId } = Route.useParams();
   const seo = Route.useLoaderData();
   const navigate = useNavigate();
@@ -126,7 +150,10 @@ function ProductPage() {
   const { settings } = useSiteSettings();
   const { cart, setCart } = useCart();
   const categoryTree = useCategoryTree();
-  const [products, setProducts] = useState<CatalogItem[]>([]);
+  // המוצר כפי שאורח רואה אותו (מהשרת) — עד שהקטלוג נטען בדפדפן לפי מי שמחובר
+  const [products, setProducts] = useState<CatalogItem[]>(() =>
+    inStockFirst(seo?.seed?.catalog ?? []),
+  );
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState<SalesData>(EMPTY_SALES);
 
@@ -165,10 +192,16 @@ function ProductPage() {
   // חלק 35: שבת / חג (שעון ישראל) — הגלישה פתוחה, אבל אין הוספה לסל
   const { closed: restClosed } = useRestState();
   const canAddToCart = canUseCart && !restClosed;
+  // עד שהמחירים של מי שמחובר נטענו בדפדפן — הכפתור מוצג (בלי קפיצה בעמוד) אבל לא מוסיף לסל
+  const pricesReady = !loading && !authLoading;
   const hasPrices = products.some((p) => p.price !== null);
   const addLabel = hasPrices ? "הוספה לסל" : "הוספה לבקשה";
 
   const addToCart = (item: CatalogItem, requested = 1, options?: AddToCartOptions) => {
+    if (!pricesReady) {
+      toast.info("רגע, טוענים את המחירים…");
+      return;
+    }
     if (restClosed) {
       toast.info(REST_CHECKOUT_MESSAGE);
       return;
@@ -261,7 +294,8 @@ function ProductPage() {
           )}
         </div>
 
-        {loading || authLoading ? (
+        {/* המוצר מהשרת מוצג מיד; שלד טעינה — רק כשאין עדיין מוצר בכלל */}
+        {!product && (loading || authLoading) ? (
           <div className="grid gap-4 overflow-hidden rounded-2xl border bg-card p-4 md:grid-cols-2">
             <div className="h-72 animate-pulse rounded-xl bg-muted sm:h-96" />
             <div className="space-y-3 py-2">

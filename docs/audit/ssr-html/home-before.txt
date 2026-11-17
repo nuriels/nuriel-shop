@@ -1,0 +1,8 @@
+# home — before (HTML שהשרת מחזיר, בלי JavaScript)
+H1: []
+תמונות: 0
+Schema: ['Organization', 'WebSite']
+אורך הטקסט בגוף: 15 תווים
+
+הטקסט שגוגל רואה:
+דלג לתוכן הראשי

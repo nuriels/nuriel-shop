@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { buildCategoryTree, type CategoryRow, type CategoryTree } from "@/lib/category-tree";
+import { useStorefrontSeed } from "@/lib/storefront-seed";
 
 /** מטמון ברמת המודול — הקטגוריות נטענות פעם אחת לכל הדפדוף (גם לאורחים) */
 let cached: CategoryRow[] | null = null;
@@ -29,7 +30,9 @@ export async function refreshCategories(): Promise<CategoryRow[]> {
 }
 
 function useCategoryRows(): CategoryRow[] {
-  const [rows, setRows] = useState<CategoryRow[]>(cached ?? []);
+  // עמוד שנבנה בשרת: הקטגוריות מהשרת הן המצב ההתחלתי (זהה בשרת ובדפדפן)
+  const seed = useStorefrontSeed();
+  const [rows, setRows] = useState<CategoryRow[]>(cached ?? seed?.categories ?? []);
   useEffect(() => {
     listeners.add(setRows);
     void fetchCategoryRows().then(setRows);

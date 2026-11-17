@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { isServerRender, StorefrontSeedProvider } from "@/lib/storefront-seed";
+import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { Lock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { InfoPage, LoadingLine } from "@/components/legal/InfoPage";
@@ -7,9 +9,15 @@ import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { legalPageHtml } from "@/lib/legal-content";
 
 export const Route = createFileRoute("/privacy")({
-  ssr: false,
+  // נבנה בשרת (SEO): ההגדרות הציבוריות (טקסטים, פרטי העסק) והקטגוריות — מה שאורח רואה — כבר ב-HTML.
+  // רק בטעינה הראשונה; בניווט בתוך האתר הדפדפן טוען בעצמו, כמו קודם
+  ssr: true,
+  loader: ({ context }) =>
+    isServerRender() && context.hostMode.siteType === "ecommerce"
+      ? getStorefrontSeed({ data: {} })
+      : null,
   head: () => ({ meta: [{ title: "מדיניות פרטיות" }] }),
-  component: PrivacyPage,
+  component: SeededPrivacyPage,
 });
 
 /** מדיניות הפרטיות — הנוסח מלשונית "עמודים משפטיים" בפאנל (או ברירת המחדל) */
@@ -30,5 +38,13 @@ function PrivacyPage() {
         </CardContent>
       </Card>
     </InfoPage>
+  );
+}
+
+function SeededPrivacyPage() {
+  return (
+    <StorefrontSeedProvider seed={Route.useLoaderData()}>
+      <PrivacyPage />
+    </StorefrontSeedProvider>
   );
 }
