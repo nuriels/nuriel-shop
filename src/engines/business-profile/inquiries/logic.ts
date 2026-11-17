@@ -164,3 +164,24 @@ export function inquiryEmail(d: InquiryEmailData): { subject: string; html: stri
   const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>${escape(subject)}</title></head><body style="margin:0;padding:24px;background:#f5f5f4;font-family:Arial,Helvetica,sans-serif;direction:rtl;text-align:right"><div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:24px"><h1 style="font-size:20px;margin:0 0 4px">פנייה חדשה מהאתר</h1><p style="margin:0 0 16px;color:#5b5b5b">${escape(d.siteName)}</p>${test}<table role="presentation" style="border-collapse:collapse;width:100%">${rows}</table>${message}${button}<p style="margin:24px 0 0;color:#8a8a8a;font-size:12px">אפשר להשיב למייל הזה כדי לענות ישירות לפונה (כשצוין אימייל).</p></div></body></html>`;
   return { subject, html };
 }
+
+/** פחות מזה מרגע שהטופס נפתח עד השליחה — בוט, לא אדם */
+export const MIN_FILL_MS = 800;
+
+/**
+ * בדיקת "נשלח מהר מדי". הדפדפן שולח כמה זמן הטופס היה פתוח (elapsedMs) — בלי תלות בשעון המכשיר.
+ * לקוחות ישנים (במטמון) שולחים רק startedAt בשעון המכשיר: מושווה לשעון השרת, ורק כשההפרש חיובי וקטן —
+ * שעון מקדים (התחלה "בעתיד") לא נחשב בוט, כי אז כל שליחה נדחתה.
+ */
+export function submittedTooFast(
+  timing: { elapsedMs: number | null; startedAt: number },
+  now: number,
+): boolean {
+  const elapsed = timing.elapsedMs;
+  if (elapsed !== null && Number.isFinite(elapsed) && elapsed >= 0) return elapsed < MIN_FILL_MS;
+  if (timing.startedAt > 0) {
+    const diff = now - timing.startedAt;
+    return diff >= 0 && diff < MIN_FILL_MS;
+  }
+  return false;
+}

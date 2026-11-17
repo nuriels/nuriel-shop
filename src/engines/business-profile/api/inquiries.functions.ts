@@ -7,6 +7,7 @@ import { createServerFn } from "@tanstack/react-start";
 import {
   INQUIRY_KINDS,
   INQUIRY_STATUSES,
+  submittedTooFast,
   validateInquiry,
   type FieldErrors,
   type InquiryKind,
@@ -32,7 +33,6 @@ const RATE_ERROR = "נשלחו כמה פניות ברצף. נסו שוב בעו�
  * פחות מזה מפתיחת הטופס ועד השליחה — כנראה לא אדם. לא "בולעים" את הפנייה בשקט (מילוי אוטומטי של הדפדפן
  * יכול להיות מהיר): הגולש מקבל בקשה לשלוח שוב, ופנייה אמיתית לא הולכת לאיבוד.
  */
-const MIN_FILL_MS = 800;
 const TOO_FAST = "הטופס נשלח מהר מדי. נסו לשלוח שוב.";
 
 /** קוד אקראי במבנה של מספר פנייה — לבוט שנלכד במלכודת (שלא יידע שנחסם) */
@@ -54,12 +54,16 @@ export const submitInquiry = createServerFn({ method: "POST" })
     message: text(input?.["message"], 4100),
     website: text(input?.["website"], 200),
     startedAt: Number.isFinite(Number(input?.["startedAt"])) ? Number(input?.["startedAt"]) : 0,
+    elapsedMs:
+      input?.["elapsedMs"] !== undefined && Number.isFinite(Number(input?.["elapsedMs"]))
+        ? Number(input?.["elapsedMs"])
+        : null,
     preview: input?.["preview"] === true,
   }))
   .handler(async ({ data }): Promise<SubmitInquiryResult> => {
     // מלכודת: שדה שגולש לא רואה (ולא מגיע אליו) מולא — בוט. "התקבל", בלי לשמור, כדי שלא יידע שנחסם
     if (data.website.trim()) return { ok: true, reference: decoyReference(), test: false };
-    if (data.startedAt > 0 && Date.now() - data.startedAt < MIN_FILL_MS)
+    if (submittedTooFast({ elapsedMs: data.elapsedMs, startedAt: data.startedAt }, Date.now()))
       return { ok: false, error: TOO_FAST };
     const checked = validateInquiry(data);
     if (!checked.ok) return { ok: false, errors: checked.errors };

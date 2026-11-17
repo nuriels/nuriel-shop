@@ -98,7 +98,8 @@ export function InquiryForm({ id, kind, formTitle, labels, preview }: InquiryFor
           phone: values.phone,
           message: values.message,
           website: trap.current?.value ?? "",
-          startedAt: startedAt.current,
+          // כמה זמן הטופס פתוח — לא שעון המכשיר (שעון מקדים היה נדחה כ"מהיר מדי")
+          elapsedMs: startedAt.current > 0 ? Date.now() - startedAt.current : undefined,
           preview,
         },
       });
