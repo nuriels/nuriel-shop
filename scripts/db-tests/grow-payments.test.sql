@@ -111,6 +111,33 @@ SELECT tests.check('webhook: wrong amount → amount_mismatch, still unpaid',
 SELECT tests.check('webhook: a failed status code (1) → not_paid, still unpaid',
   $$SELECT public.grow_mark_paid('P-1001', false, current_setting('tests.h'), 118, '1', 'A1', 'T1', 'Visa', '1111', 1) ->> 'result' = 'not_paid'
        AND (SELECT payment_status FROM public.orders WHERE payment_method = 'grow' AND customer_id = 'a0000000-0000-0000-0000-0000000000e1') = 'awaiting'$$);
+-- כשל בעדכון ההזמנה באמצע הסימון (ביקורת B-1/R-2): הפונקציה כולה מתבטלת — לא נשאר חצי-סימון — והשגיאה מגיעה
+-- לשרת (שעונה 500, ו-Grow מנסה שוב). הניסיון החוזר שבא אחריו (הבדיקה הבאה) מצליח
+CREATE OR REPLACE FUNCTION tests.grow_fail_update() RETURNS trigger LANGUAGE plpgsql AS $f$
+BEGIN
+  IF NEW.payment_status = 'paid' THEN RAISE EXCEPTION 'simulated failure while updating the order'; END IF;
+  RETURN NEW;
+END $f$;
+CREATE TRIGGER tests_grow_fail_update BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION tests.grow_fail_update();
+DO $$
+DECLARE err text;
+BEGIN
+  BEGIN
+    PERFORM public.grow_mark_paid('P-1001', false, current_setting('tests.h'), 118, '2', '0289199', '145111110', 'Mastercard', '1177', 3);
+  EXCEPTION WHEN OTHERS THEN err := SQLERRM;
+  END;
+  INSERT INTO tests.results (name, ok, detail)
+  VALUES ('webhook: a failure while updating the order is raised to the caller (HTTP 500, Grow retries)',
+          err ILIKE '%simulated failure%', COALESCE('ERROR: ' || err, 'no error'));
+END $$;
+DROP TRIGGER tests_grow_fail_update ON public.orders;
+DROP FUNCTION tests.grow_fail_update();
+SELECT tests.check('webhook: after the failure the order is still unpaid and awaiting (nothing half-done)',
+  $$SELECT bool_and(payment_status = 'awaiting' AND paid_at IS NULL AND grow_asmachta IS NULL AND grow_transaction_id IS NULL)
+      FROM public.orders WHERE customer_id = 'a0000000-0000-0000-0000-0000000000e1' AND payment_method = 'grow' AND payment_status <> 'paid'
+        AND id = (SELECT order_id FROM public.grow_payment_processes WHERE process_id = 'P-1001')$$);
+SELECT tests.check('webhook: ... and the process is not marked paid',
+  $$SELECT status <> 'paid' AND paid_at IS NULL FROM public.grow_payment_processes WHERE process_id = 'P-1001'$$);
 SELECT set_config('tests.r', public.grow_mark_paid('P-1001', false, current_setting('tests.h'), 118, '2', '0289199', '145111110', 'Mastercard', '1177', 3)::text, false);
 SELECT tests.check('webhook: correct token + amount + status → paid',
   $$SELECT current_setting('tests.r')::jsonb ->> 'result' = 'paid'$$);

@@ -81,6 +81,7 @@ export async function processGrowWebhook(request: Request): Promise<GrowWebhookO
         action: "grow_payment_after_cancel",
         details: { orderId: mark.order_id ?? null, asmachta: hook.asmachta },
       });
+      await alertStaffPaidLate(tenantId, mark.order_id);
       return "paid_late";
     case "amount_mismatch":
     case "bad_token":
@@ -112,5 +113,47 @@ async function sendPaidEmails(tenantId: string | null, orderId: string | undefin
     );
   } catch (error) {
     console.error("[grow-webhook] order emails failed", error);
+  }
+}
+
+/**
+ * תשלום שהתקבל אחרי שההזמנה פגה / בוטלה: הלקוח חויב וההזמנה לא נפתחה מחדש. עד עכשיו זה נרשם רק ביומן הביקורת של
+ * הפלטפורמה ואף אחד בחנות לא ידע. עכשיו מנהלי החנות מקבלים התראה (פעמון) — לטיפול ידני: החזר או הזמנה חדשה.
+ */
+export async function alertStaffPaidLate(
+  tenantId: string | null,
+  orderId: string | undefined,
+): Promise<void> {
+  if (!tenantId) return;
+  try {
+    const { data: admins } = await supabaseAdminUnscoped
+      .from("user_roles")
+      .select("user_id")
+      .eq("tenant_id", tenantId)
+      .eq("role", "admin")
+      .eq("is_blocked", false);
+    let label = orderId ? orderId.slice(0, 8) : "";
+    if (orderId) {
+      const { data: order } = await supabaseAdminUnscoped
+        .from("orders")
+        .select("order_number")
+        .eq("id", orderId)
+        .maybeSingle();
+      if (order?.order_number) label = String(order.order_number);
+    }
+    const rows = (admins ?? []).map((a: { user_id: string }) => ({
+      tenant_id: tenantId,
+      user_id: a.user_id,
+      kind: "system",
+      title: "תשלום התקבל אחרי שההזמנה פגה",
+      body: `התקבל תשלום בכרטיס אשראי (Grow) להזמנה ${label} אחרי שהיא בוטלה או פגה, וההזמנה לא נפתחה מחדש. נדרש טיפול ידני: החזר ללקוח או הזמנה חדשה.`,
+      link: null,
+    }));
+    if (rows.length > 0) await supabaseAdminUnscoped.from("staff_notifications").insert(rows);
+  } catch (error) {
+    console.error(
+      "[grow-webhook] paid-late alert failed",
+      error instanceof Error ? error.message : error,
+    );
   }
 }
