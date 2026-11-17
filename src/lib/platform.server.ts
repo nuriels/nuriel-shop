@@ -110,6 +110,13 @@ export const TENANT_BUCKETS = [
   "payment-receipts",
   // מודול הרישיונות הדיגיטליים: תוכנות התקנה, מדריכים וקבלות (פרטי)
   "license-files",
+  // Hospitality: חוזים חתומים, אסמכתאות העברה, קבצי תמיכה (פרטיים) ומדיה של האתר. הנתיב: <tenant_id>/...
+  "hosp-contracts",
+  "hosp-payment-proofs",
+  "hosp-support",
+  "hosp-media",
+  // Nuriel Websites: מדיה של האתר (<site_id> = <tenant_id>)
+  "bp-media",
 ] as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
