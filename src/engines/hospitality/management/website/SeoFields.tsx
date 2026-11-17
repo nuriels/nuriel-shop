@@ -15,6 +15,7 @@ import {
   seoDefaults,
   type SiteAddresses,
 } from "../../website/seo";
+import { SeoKeywordsPanel } from "./SeoKeywordsPanel";
 import { ImagePicker } from "./SectionFields";
 
 const RECOMMENDED = { title: 60, description: 155 } as const;
@@ -86,6 +87,8 @@ export function SeoPanel({
           onChange={(v) => set({ description: v })}
         />
       </section>
+
+      <SeoKeywordsPanel design={design} site={site} onChange={onChange} />
 
       <section aria-labelledby="seo-share-title" className="flex flex-col gap-3">
         <h3 id="seo-share-title" className="text-sm font-bold">

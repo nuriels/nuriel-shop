@@ -27,6 +27,20 @@ function mediaUrls(publicUrl: PublicUrl) {
   };
 }
 
+/**
+ * המסמך כפי שנשלח לדפדפן: בלי ביטויי החיפוש של העסק (design.seo.keywords) — הם רשימת עבודה לעורך
+ * בלבד, לא תוכן של האתר, ולא נכנסים ל-HTML / לנתונים של העמוד. העורך קורא אותם מהטיוטה (site_editor)
+ */
+export function withoutKeywords(document: unknown): unknown {
+  if (!document || typeof document !== "object" || Array.isArray(document)) return document;
+  const d = document as Record<string, unknown>;
+  const seo = d["seo"];
+  if (!seo || typeof seo !== "object" || !("keywords" in seo)) return document;
+  const { keywords: _omit, ...rest } = seo as Record<string, unknown>;
+  void _omit;
+  return { ...d, seo: rest };
+}
+
 export function toPublicSite(
   raw: RawPublicSite,
   publicUrl: PublicUrl,
@@ -39,7 +53,7 @@ export function toPublicSite(
     room_types: roomTypes,
     packages: packages.map((p) => ({ ...p, price: Number(p.price) })),
     design: raw.design
-      ? { ...raw.design, document: JSON.stringify(raw.design.document ?? {}) }
+      ? { ...raw.design, document: JSON.stringify(withoutKeywords(raw.design.document) ?? {}) }
       : null,
     gallery: raw.gallery.map(urls),
     brand: (raw.brand ?? []).map(urls),

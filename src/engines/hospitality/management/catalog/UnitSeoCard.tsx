@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/platform/ui";
 import { hospitalitySaveUnitSeo, hospitalityUnitSeo } from "../../api/catalog.functions";
 import { SEO_LIMITS } from "../../website/design/schema";
+import { unitDefaultTitle } from "../../website/head";
 import { UNIT_SEO_RECOMMENDED, seoLine, unitSeoErrors } from "../../validation/unit-seo";
 import { TextAreaField, TextField } from "../lib/fields";
 import { useManagement } from "../shell/management-context";
@@ -58,7 +59,7 @@ export function UnitSeoCard(props: {
 
   const errors = unitSeoErrors(form);
   const dirty = !sameSeo(form, base);
-  const defaultTitle = `${props.unitName} | ${business.name}`;
+  const defaultTitle = unitDefaultTitle(props.unitName, business.name);
   const defaultDescription = props.unitDescription.trim()
     ? "המשפט הראשון של תיאור היחידה"
     : "התיאור של האתר";
