@@ -1,0 +1,77 @@
+bun audit v1.4.4 (38afee6c8)
+
+brace-expansion@1.1.16, 5.0.8
+  eslint > @eslint/eslintrc > minimatch > brace-expansion
+  typescript-eslint > @typescript-eslint/utils > @typescript-eslint/typescript-estree > minimatch > brace-expansion
+  high: brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash (<1.1.17) - https://github.com/advisories/GHSA-mh99-v99m-4gvg
+  high: brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation (>=4.0.0 <5.0.9) - https://github.com/advisories/GHSA-rgw5-rvv9-x895
+  high: brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation (<1.1.18) - https://github.com/advisories/GHSA-rgw5-rvv9-x895
+  high: brace-expansion: DoS via uncontrolled recursion on nested brace groups causing stack exhaustion (>=4.0.0 <5.0.11) - https://github.com/advisories/GHSA-qhr7-859c-m2p7
+  high: brace-expansion: DoS via uncontrolled recursion in parseCommaParts causing stack exhaustion (<1.1.19) - https://github.com/advisories/GHSA-6j4f-fj2g-mc7p
+  high: brace-expansion: DoS via uncontrolled recursion in parseCommaParts causing stack exhaustion (>=4.0.0 <5.0.10) - https://github.com/advisories/GHSA-6j4f-fj2g-mc7p
+  moderate: brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service (<1.1.21) - https://github.com/advisories/GHSA-q2hr-2g5m-vwhr
+  moderate: brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service (>=4.0.0 <5.0.12) - https://github.com/advisories/GHSA-q2hr-2g5m-vwhr
+  high: brace-expansion: DoS via uncontrolled recursion on nested brace groups causing stack exhaustion (<1.1.20) - https://github.com/advisories/GHSA-qhr7-859c-m2p7
+
+dompurify@3.4.14
+  (direct dependency)
+  jspdf > dompurify
+  low: DOMPurify: IN_PLACE: node-removing afterSanitize hook leaves detached subtree event handlers armed, causing DOM XSS (>=3.4.13 <=3.4.15) - https://github.com/advisories/GHSA-p98j-92pf-mc4p
+  low: DOMPurify: IN_PLACE returns a force-removed rawtext root whose text carries attacker markup — pure HTML reparse executes (<=3.4.15) - https://github.com/advisories/GHSA-6688-9rhm-gjv2
+  critical: DOMPurify SAFE_FOR_TEMPLATES bypass: split template expressions survive in attached shadow root content on DOM output modes (>=3.4.4 <=3.4.16) - https://github.com/advisories/GHSA-cg2g-xh64-v4q7
+  high: DOMPurify IN_PLACE: hook that removes a parent or sibling leaves the detached subtree's event handlers armed (incomplete fix for GHSA-p98j-92pf-mc4p) (<=3.4.16) - https://github.com/advisories/GHSA-mrv2-3pqr-j5jr
+  low: DOMPurify: SMIL attributeName=href guard is skipped when PARSER_MEDIA_TYPE is application/xhtml+xml (<=3.4.16) - https://github.com/advisories/GHSA-c6gr-qvv4-5v3f
+
+js-yaml@4.3.0
+  eslint > @eslint/eslintrc > js-yaml
+  @tanstack/react-start > @tanstack/start-plugin-core > xmlbuilder2 > js-yaml
+  high: JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) — CVE-2026-59870 fix not backported (>=4.0.0 <4.3.1) - https://github.com/advisories/GHSA-5p4m-2wfm-xmqj
+  high: js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources (>=4.0.0 <4.3.2) - https://github.com/advisories/GHSA-2883-xcg3-v3hh
+
+minimatch@3.1.5, 10.2.6
+  eslint > @eslint/eslintrc > minimatch
+  typescript-eslint > @typescript-eslint/utils > @typescript-eslint/typescript-estree > minimatch
+  moderate: minimatch has potential denial of service via globparts amplification (>=7.0.0 <11.0.1) - https://github.com/advisories/GHSA-g3hv-75wg-m249
+
+nanoid@3.3.16
+  vite > postcss > nanoid
+  high: nanoid: custom generators can loop indefinitely when size is zero (<3.3.18) - https://github.com/advisories/GHSA-2v37-7h3g-55p8
+
+source-map-js@1.2.1
+  @tailwindcss/vite > @tailwindcss/node > source-map-js
+  vite > postcss > source-map-js
+  high: source-map-js allows event-loop denial of service through indexed source-map section offsets (>=1.0.0 <1.2.2) - https://github.com/advisories/GHSA-68fv-2mgg-jv7q
+
+vite@8.1.5
+  (direct dependency)
+  @tailwindcss/vite > vite
+  @tanstack/react-start > vite
+  @tanstack/router-plugin > vite
+  @vitejs/plugin-react > vite
+  nitro > vite
+  vite-tsconfig-paths > vite
+  vitest > @vitest/mocker > vite
+  low: Vite: Cross origin script execution through Vite custom middleware (>=8.0.0 <=8.1.5) - https://github.com/advisories/GHSA-9jrq-w75r-8gcw
+  moderate: Vite: Files outside `server.fs.allow` could be served when project paths match system paths on non-Windows machine (>=8.0.0 <=8.1.5) - https://github.com/advisories/GHSA-rq7h-c2jc-7f22
+  moderate: launch-editor: escapeCmdArgs() omits % escaping on Windows (>=8.0.0 <=8.1.5) - https://github.com/advisories/GHSA-698v-4r3x-3vcv
+  moderate: launch-editor: Editor CLI flag misinterpretation causing arbitrary command execution for some editors (>=8.0.0 <=8.1.5) - https://github.com/advisories/GHSA-r825-w8mm-5pxw
+  high: launch-editor: `fs.existsSync()` existence check can be bypassed on Windows (>=8.0.0 <=8.1.5) - https://github.com/advisories/GHSA-587h-7wmj-h5pm
+
+xlsx@0.18.5
+  (direct dependency)
+  high: Prototype Pollution in sheetJS (<0.19.3) - https://github.com/advisories/GHSA-4r6h-8v6p-xvw6
+  high: SheetJS Regular Expression Denial of Service (ReDoS) (<0.20.2) - https://github.com/advisories/GHSA-5pgg-2g8v-p4x9
+
+zod@3.25.76, 4.6.7
+  (direct dependency)
+  @anthropic-ai/sdk > zod
+  @hookform/resolvers > zod
+  @tanstack/router-plugin > @tanstack/router-generator > zod
+  @tanstack/react-start > @tanstack/start-plugin-core > @tanstack/router-generator > zod
+  high: Zod can exhaust memory while validating oversized constrained collections (<4.6.6) - https://github.com/advisories/GHSA-mrhx-c7xc-m3w5
+
+27 vulnerabilities (1 critical, 16 high, 6 moderate, 4 low)
+
+  bun audit fix           upgrade the vulnerable packages within their ranges
+  bun audit fix --latest  also cross major versions
+audit exit 1

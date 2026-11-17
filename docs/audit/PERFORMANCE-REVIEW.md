@@ -1,0 +1,64 @@
+# סקירת ביצועים — ביקורת הפלטפורמה (17.11.2026)
+
+הדוח המלא של סוכן הביצועים (29 ממצאים, קובץ:שורה, הוכחה, מאמץ לכל אחד): [`interim/performance-deps.md`](interim/performance-deps.md).
+**מגבלות שיטה:** סטטי + סקריפטי AST + בדיקת ה-build הקיים (`.output/`, nitro 3.0.260603-beta, 362 קובצי JS, 5.8MB גולמי) + שאילתות קטלוג/`EXPLAIN` על מסד מקומי **ריק (0 שורות)**. כלומר: המנגנון והעלות לקריאה נמדדו; **ההשפעה בגודל ייצור לא נמדדה** ומסומנת "חשד". `vite build` לא הורץ על ידי הסוכן; הבנייה שלי (בהרצת ה-E2E) הצליחה על הקוד הסופי.
+**לא תוקן בביקורת הזו:** ממצאי הביצועים הם שינויים ארכיטקטוניים (פיצול באנדל, שאילתות קטלוג, ~90 מדיניות RLS). תיקון בחופזה מסכן את החנויות הפעילות; מוצגת תוכנית עם סדר עדיפויות.
+
+## סיכום
+
+| חומרה | כמות |
+| --- | --- |
+| High | 3 |
+| Medium | 9 |
+| Low | 13 |
+| Info | 4 |
+
+## High
+
+### P1 · כל גולש מוריד ~441KB gzip של JS בכניסה (1.42MB גולמי, 77 קבצים)
+- **סטטוס:** אומת בארטיפקט ה-build (חלקי ההערכה — חשד).
+- **הסיבה:** `src/start.ts:4-5` מייבא סטטית את `supabase-js` ואת `app/engines`; כל 14 נתיבי `/stay*` מקבלים את עמודי האתר דרך אפשרויות שמיובאות סטטית (`engines/hospitality/website/routes.ts:8-29`), ו-TanStack לא יכול לפצל אותן — לכן אין chunk בשם `stay-*.js`. נתיבי `bp-site` מביאים את `SiteView` + zod.
+- **נתונים:** הכניסה כוללת את ממשק האתר הציבורי של Hospitality (~120–200KB גולמי), supabase-js (208KB / 53KB gz), zod + סכמת אתרי עסקים (66KB / 16KB gz). לפי נתיב (גולמי/gz): `/` 1.78MB / 559KB; `/product/$id` 1.59MB / 500KB; `/login` 1.50MB / 467KB; `/bp-site` 1.42MB / 441KB; `/stay` = הכניסה לבדה, 441KB.
+- **השפעה:** אתר שיווק קטן של לקוח משלם ~2.5× תקציב טיפוסי של 170KB. על מכשיר בינוני — שניות של parse.
+- **תיקון:** (1) רכיבי `/stay` עצלים (`lazyRouteComponent`); (2) להוציא `requirePage`/`businessPageHead`/`pageBySlug` למודול קטן בלי zod ו-SiteView; (3) `supabase` עצל באתרי מנועים; (4) להריץ שוב את סקריפט סגירת הייבוא אחרי כל שינוי. **מאמץ:** M.
+
+### P2 · עמוד מוצר מוריד את כל הקטלוג; ה-loader של ה-SEO מחשב את כל ה-feed כדי להחזיר שורה אחת
+- **איפה:** `src/routes/product.$productId.tsx:136-146`, `src/lib/seo.functions.ts:64`, `src/routes/index.tsx:310-318`, `src/routes/sitemap.tsx:24-26`.
+- **הוכחה:** `EXPLAIN` — `Function Scan … Filter` (פונקציות SRF מסוג SECURITY DEFINER לא עוברות inlining); כל עמוד של `fetchAllRows` (1000 שורות, טורי) מחשב מחדש את כל הקטלוג, לכן עלות O(עמודים × N). `get_catalog` מחזיר תיאור מלא (עד 20,000 תווים), `images[]`, `variants`.
+- **גורם מחמיר:** ל-`anon` יש `statement_timeout = 3s`, ל-`authenticated` 8s — בקטלוג גדול זה **נכשל לאורחים**, לא רק מתאט.
+- **תיקון:** RPC של פריט בודד (`get_catalog_item`, `storefront_feed_product`), עימוד אמיתי ל-`get_catalog`, מטמון לכל tenant, `category_counts` לסייטמאפ. **מאמץ:** M. **סטטוס:** אומת (קוד ותוכניות), עוצמה — חשד.
+
+### P3 · RLS של Ecommerce קורא לפונקציות SECURITY DEFINER לכל שורה (~0.15–0.2ms)
+- **הוכחה:** 89 מתוך 160 מדיניות ב-`public` קוראות ל-`is_admin/is_staff/staff_can/can_view_order/auth.uid()` **בלי** עטיפת InitPlan `(SELECT …)`; ב-`hospitality` כל 68 עטופות. נמדד כ-`authenticated` על 20,000 קריאות: `is_admin(auth.uid())` 2.92s (146µs לקריאה), `can_view_order` 2.84s, `is_staff` 4.09s, `auth.uid()` גולמי 17ms. `EXPLAIN`: `Filter: can_view_order(...)` לכל שורה; `orders_customer_idx` לא נוצל.
+- **"ההזמנות שלי"** (`CustomerOrdersTab.tsx:79-82`) לא מסננת `customer_id` בצד הלקוח, ולכן עוברת על כל הזמנות העסק.
+- **השפעה (חשד):** בסביבות 18k–50k הזמנות לעסק מגיעים ל-timeout של 8 שניות. אין כיום עסק בסדר גודל כזה — זו פצצת זמן, לא תקלה פעילה.
+- **תיקון:** כתיבה מחדש ל-`(select is_admin(auth.uid()))`, `customer_id = (select auth.uid())`; הוספת `.eq("customer_id", uid)` בצד הלקוח; מטמון `current_tenant_id()` לכל statement; `EXPLAIN ANALYZE` על מסד עם נתונים. **מאמץ:** M (~90 מדיניות, מכני, דורש את חבילת בדיקות ה-RLS).
+
+## Medium (9)
+
+| # | ממצא | איפה | תיקון |
+| --- | --- | --- | --- |
+| P4 | דפי Zap (crawler) מחשבים את כל הקטלוג בכל בקשה, בלי מטמון (לסייטמאפ יש TTL ו-single-flight, ל-Zap אין) | `lib/zap-pages.server.ts:55-77,122-130` מול `lib/feeds.server.ts:353-380` | מטמון TTL לכל tenant, כמו בסייטמאפ |
+| P5 | 30 קריאות fetch לשרת Supabase בלי timeout, כולל זיהוי ה-tenant בכל בקשה לא-מטומנת | `integrations/supabase/tenant.server.ts:71,95,147`, `client.server.ts:41` ועוד | `AbortSignal.timeout` אחיד |
+| P6 | מטמון ה-tenant נקבע לפי ה-Host הגולמי, לא מפונה, ופספוס עולה שתי קריאות HTTP טוריות | `tenant.server.ts:33-35,64-82` | תקרת גודל + מפתח מנורמל |
+| P7 | עמודי `bp-site`: 2–4 קריאות RPC טוריות בלי מטמון לכל צפייה (`bp_public_site` ואז `bp_media_public` — בלתי תלויות) + נרמול zod לכל צפייה | `engines/business-profile/data/public-site.server.ts:16-30`, `access.server.ts:22-35` | `Promise.all` + מטמון HTML קצר |
+| P8 | רשימות ניהול בלי תקרה, נחתכות בשקט ב-1000 שורות (`max_rows`); 46 שרשראות `from().select()` ללא גבול | `OrderManagementPanel.tsx:197-205`, `CustomerOrdersTab.tsx:79`, `AdminUsersPanel.tsx:234-240` ועוד | עימוד |
+| P9 | `/admin` — ~45 פאנלים + recharts ב-chunk אחד (3.2MB גולמי) | `routes/admin.tsx:10-47` (ייבוא סטטי; רק `EcommerceAssistant` עצל) | פיצול לפי פאנל |
+| P10 | `getSiteSeo` נקרא פעמיים בדף הבית ב-SSR; עבודת DB כפולה בלי מטמון | routes | Dedup |
+| P11 | אין עדות לדחיסה/מטמון ארוך לנכסים סטטיים (0 קובצי `.gz/.br` ב-`.output/public/assets`; ב-`deploy/nginx/*.conf` אין gzip/brotli) | `vite.config.ts:31-52`, `deploy/nginx/` | לבדוק ב-Nginx/CDN בייצור (חשד) |
+| D1 | `xlsx` בשימוש אפס עם 2 high | `package.json` | **הוסר** (`2fd08b6`) |
+
+## Low / Info (17)
+
+פונטים של Google חוסמי-רינדור בדפי Ecommerce אף שהם מתארחים מקומית (P12); מגביל קצב בזיכרון עם סריקה O(n) ובלי תקרה (P13); `logoCache` שומר Buffers של לוגואים לכל tenant לנצח (P14); בדיקת הקונטיינר תלויה בזיהוי tenant (P15 = C1); היגיינת אינדקסים (P16); לולאות N+1 מוגבלות ולאדמין בלבד (P17); תמונות מוצר ממוזערות בשימוש חוזר ב-1000px בלי `srcset` (P18); polling של תג אדמין לא מושהה כשהלשונית מוסתרת (P19); העלאת תמונה ב-Hospitality מפענחת את המקור 4 פעמים (P20); וידאו hero: `preload="auto"`, העלאה גולמית עד 50MB, בלי transcode בקליינט (P21); קוד שרת בלבד שנשלח כנכסי קליינט (P22, Info); **היגיינת SSR/Hydration תקינה** (P23, Info).
+
+## מה כן נבדק ונמצא תקין
+
+היעדר N+1 בנתיבי הלקוח החמים; אין `Date.now()/Math.random()/localStorage` בקוד שמרונדר ב-SSR של דפים ציבוריים (סיכון hydration נמוך); אינדקסים קיימים על `orders (tenant_id, created_at)`; מנגנוני הנעילה והאכיפה ב-Hospitality מחושבים ב-DB.
+
+## סדר עדיפויות מומלץ
+
+1. **P2** (עמוד מוצר) — משפיע ישירות על חנויות פעילות, ויכול להיכשל מול `statement_timeout`. פתרון: RPC בודד.
+2. **P1** (באנדל) — שיפור מורגש לגולשים באתרי הלקוחות (נופי דורית, אפרת). פתרון נקודתי: lazy ל-`/stay`.
+3. **P3** — אחרי שנמדד גודל הזמנות אמיתי. אין דחיפות כשכל עסק מתחת לאלפי הזמנות.
+4. **P5** (timeout על קריאות Supabase) — קטן וזול, מונע תקיעת בקשות.
