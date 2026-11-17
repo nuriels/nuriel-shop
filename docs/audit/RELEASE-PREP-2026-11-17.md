@@ -12,7 +12,7 @@
 | הורים | `4f97ee0` (merge ה-SEO) ← `e989e86` (ענף הביקורת); merge ה-SSR (`ed85789`) |
 | בסיס | `e989e86` (`audit/platform-review-2026-11`) + 2 commits של merge |
 | נוצר | 17.11.2026 18:40 UTC |
-| CI על ה-SHA הזה | ריצה **193** — [actions/runs/44150392774](https://github.com/nuriels/nuriel-shop/actions/runs/44150392774) — **בריצה בעת כתיבת המסמך**: typecheck · lint · unit · build ✅ עברו; E2E, SQL ו-Hospitality preview עוד רצים. התוצאה הסופית בסעיף 10 |
+| CI על ה-SHA הזה | ריצה **193** — [actions/runs/44150392774](https://github.com/nuriels/nuriel-shop/actions/runs/44150392774) — ✅ **הצליחה** (4/4 משימות; פירוט בסעיף 10) |
 
 **שני ה-commits החדשים (merge בלבד, אין קוד חדש):**
 - `4f97ee0` — Release 2026-11-17: merge Hospitality SEO proposals (`claude/ecstatic-euler-z7wmrg` @ `42c2ccd`). **התנגשות אחת בלבד** — `scripts/db-tests/rollback-check.sh` (שני הענפים קראו למיגרציה שלהם `M84`) — נפתרה לפי סדר חותמות הזמן: **`M84` = `20261118110000_order_guard`, `M85` = `20261118200000_hosp_seo_proposals`**; גוש ה-rollback של SEO ראשון; שורת ההחלה מחדש `M84` ואז `M85` (ה-patch: `docs/audit/integration/rollback-check.sh.audit-to-integrated.patch`).
@@ -106,4 +106,16 @@
 
 ## 10. תוצאת CI סופית על ה-SHA של השחרור
 
-_ריצה 193 — ממתין לסיום; יתועד כאן._
+ריצה **193** (`tests.yml`, `workflow_dispatch`) על `release/2026-11-17` @ `20f49eb8f611eac903877121c00d1e7223ee42c1` — **הסתיימה בהצלחה** (`conclusion: success`), 17.11.2026 18:40–19:02 UTC. [actions/runs/44150392774](https://github.com/nuriels/nuriel-shop/actions/runs/44150392774)
+
+| משימה | תוצאה |
+| --- | --- |
+| typecheck · lint · unit · build | ✅ הצליחה (כולל legacy check scripts) |
+| SQL tests (Postgres 16) | ✅ הצליחה — SQL tests, SEO proposals rollback, migration rollback check, rollback data guards (R-3), 4 סוויטות concurrency (הזמנות, הורדות רישיון, NURIEL AI, order guard) |
+| Hospitality preview | ✅ הצליחה |
+| E2E (Playwright + Supabase מקומי) | ✅ הצליחה — **391 עברו, 1 flaky, 18 דולגו, 0 נכשלו** (19.1 דקות) |
+
+**ה-flaky היחיד:** `websites-efrat-preview.spec.ts:60` (Efrat's draft on a computer) — הבדיקה הקרטעת **הידועה** (/admin-handoff "invalid link"), שנשארה לא פתורה ונצפתה גם בריצה 192. עברה בניסיון החוזר; **אינה קשורה** ל-SSR, ל-SEO, ל-order guard או לחתימות, והקוד שלה לא השתנה בשחרור. הבדיקה המקומית המלאה על אותו קוד (RC `a54973f`) נתנה 396 עברו / 0 נכשלו.
+
+**מסקנה:** ה-SHA `20f49eb…` עבר CI מלא רשמי. תנאי "CI על ה-SHA של השחרור" **סגור**. אין שינוי בכל שאר התנאים: Merge, מיגרציות 200 ו-201, Deploy ובדיקות עשן — כל אחד ממתין לאישור מפורש נפרד.
+
