@@ -71,6 +71,17 @@ services:
       HOSPITALITY_SECRET: ${HOSPITALITY_SECRET:-}
       # קושי אתגר ה-CAPTCHA (לא חובה; 1000–2000000, ברירת מחדל 50000)
       HOSPITALITY_POW_MAX: ${HOSPITALITY_POW_MAX:-}
+      # --- הגדרות מפעיל שהקוד קורא (ריק = ברירת המחדל שבקוד; בלי הרשימה הזו הן לא מגיעות לקונטיינר) ---
+      # כתובת/ות (מופרדות בפסיק) שמקבלות התראות תמיכה במקום כתובת מנהל הפלטפורמה
+      SUPPORT_NOTIFY_EMAIL: ${SUPPORT_NOTIFY_EMAIL:-}
+      # סוד HMAC לקודי האימות והפניות של אתרי העסקים. ריק = נגזר מ-LOGIN_CODE_SECRET
+      BUSINESS_PROFILE_SECRET: ${BUSINESS_PROFILE_SECRET:-}
+      # יעד ה-CNAME שמוצג ללקוח בחיבור דומיין משלו. ריק = <slug>.<TENANT_BASE_DOMAIN> של השער
+      CUSTOM_DOMAIN_CNAME_TARGET: ${CUSTOM_DOMAIN_CNAME_TARGET:-}
+      # מארחי תמונות נוספים (מופרדים בפסיק) שמותר לייבא מהם תמונות מוצרים. ריק = רק הרשימה המובנית
+      IMPORT_IMAGE_ALLOW_HOSTS: ${IMPORT_IMAGE_ALLOW_HOSTS:-}
+      # "off" מכבה את מתזמן התראות החידוש של תוסף ה-AI בתהליך הזה (למשל בשרת שני). ריק = פועל
+      AI_RENEWAL_JOB: ${AI_RENEWAL_JOB:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/robots.txt').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
