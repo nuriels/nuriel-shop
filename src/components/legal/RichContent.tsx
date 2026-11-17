@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { richContentHtml } from "@/lib/rich-text";
+import { useHydrated } from "@/hooks/useHydrated";
+import { richContentHtml, serverRichContentHtml } from "@/lib/rich-text";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,7 +18,12 @@ export function RichContent({
   /** document — מסמך ארוך (תקנון, פרטיות, ביטולים): טקסט מלא בגודל קריא, כותרות ורווחים */
   variant?: "default" | "document";
 }) {
-  const html = useMemo(() => richContentHtml(content), [content]);
+  // עמוד שנבנה בשרת: בשרת וברינדור הראשון — טקסט בפסקאות (זהה בשניהם); מיד אחרי ההידרציה — העיצוב המלא
+  const hydrated = useHydrated();
+  const html = useMemo(
+    () => (hydrated ? richContentHtml(content) : serverRichContentHtml(content)),
+    [content, hydrated],
+  );
   if (html === "") return null;
   return (
     <div

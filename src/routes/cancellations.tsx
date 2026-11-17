@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { isServerRender, StorefrontSeedProvider } from "@/lib/storefront-seed";
+import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { CheckCircle2, Loader2, RefreshCw, RotateCcw, Send, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,13 +32,19 @@ type Search = {
 };
 
 export const Route = createFileRoute("/cancellations")({
-  ssr: false,
+  // נבנה בשרת (SEO): ההגדרות הציבוריות (טקסטים, פרטי העסק) והקטגוריות — מה שאורח רואה — כבר ב-HTML.
+  // רק בטעינה הראשונה; בניווט בתוך האתר הדפדפן טוען בעצמו, כמו קודם
+  ssr: true,
+  loader: ({ context }) =>
+    isServerRender() && context.hostMode.siteType === "ecommerce"
+      ? getStorefrontSeed({ data: {} })
+      : null,
   head: () => ({ meta: [{ title: "ביטול עסקה" }] }),
   validateSearch: (search: Record<string, unknown>): Search => {
     const order = search["order"];
     return typeof order === "string" && /^[A-Za-z0-9_/#\s-]{1,40}$/.test(order) ? { order } : {};
   },
-  component: CancellationsPage,
+  component: SeededCancellationsPage,
 });
 
 /**
@@ -389,5 +397,13 @@ function CancellationForm({ initialOrder }: { initialOrder: string }) {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+function SeededCancellationsPage() {
+  return (
+    <StorefrontSeedProvider seed={Route.useLoaderData()}>
+      <CancellationsPage />
+    </StorefrontSeedProvider>
   );
 }

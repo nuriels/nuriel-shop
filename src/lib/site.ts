@@ -210,11 +210,15 @@ export type EmailSettings = {
 const SITE_SETTINGS_COLUMNS =
   "site_title, logo_path, about_content, contact_content, terms_content, privacy_content, business_name, business_tax_id, business_address, business_phone, business_email, support_phone, sells_alcohol, prices_include_vat, vat_rate, business_type, maintenance_mode, maintenance_message, email_signature, price_tiers_enabled, is_sabbath_mode, brand_color, free_shipping_threshold, label_width_mm, label_height_mm, cancellation_policy_content, business_hours, payment_phone_enabled, payment_bit_enabled, payment_bit_phone, desktop_banner_active, desktop_banner_image_url, desktop_banner_link, minimum_order_amount, shabbat_auto_enabled, shabbat_start_time, shabbat_end_time, holidays, shabbat_message, shabbat_image_url, banner_interval_seconds, announcement_enabled, announcement_items, announcement_mode, announcement_interval_seconds, announcement_style" as const;
 
-export async function loadSiteSettings(): Promise<SiteSettings> {
+/**
+ * ההגדרות הציבוריות של החנות. ברירת המחדל — הלקוח של הדפדפן; בשרת (עמודים שנבנים בשרת) — הלקוח של השרת
+ * שמוגבל לחנות של הבקשה. אותן עמודות בדיוק בשני המקרים — מה שכל אורח כבר קורא בדפדפן (RLS: קריאה לכולם).
+ */
+export async function loadSiteSettings(client: typeof supabase = supabase): Promise<SiteSettings> {
   // מצב המע"מ — מה שהשרת יחשב בפועל (מיגרציה 191: השיעור המרכזי, פטור → 0). מסד בלי הפונקציה → מהשורה
   const [{ data }, vatResult] = await Promise.all([
-    supabase.from("site_settings").select(SITE_SETTINGS_COLUMNS).eq("id", true).maybeSingle(),
-    supabase.rpc("store_vat_profile"),
+    client.from("site_settings").select(SITE_SETTINGS_COLUMNS).eq("id", true).maybeSingle(),
+    client.rpc("store_vat_profile"),
   ]);
   const vat = vatResult.error ? null : parseVatProfile(vatResult.data);
   if (data) {
