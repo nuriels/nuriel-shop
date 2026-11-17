@@ -303,4 +303,12 @@ d9cdb61 2026-11-17 Audit B-3/B-4: iCal import ignores cancelled reservations and
 0cd6e12 2026-11-17 Audit: refresh numbers and SHAs in the reports
 7b101e7 2026-11-17 Audit: merge plan numbers (303 commits, 1367 files)
 c0615dd 2026-11-17 R-1: place_order is guarded in the database (migration 200): coupon grants and an order rate guard
-HEAD c0615dd378272fd4bcf2856d77e0f11ab6fae0db total_commits=305 (origin/main=4f7daa3dddce37f3d4542bfa974778202d7a506c, range origin/main..HEAD, oldest first; sections 1-8 of merge-review.md analyse 7b101e7, the delta is in its Addendum)
+4206cee 2026-11-17 R-2: Grow — atomicity test for a failed order update, staff alert for a payment after expiry, verification document
+4e2aca2 2026-11-17 R-3 + R-4: rollback data guards, and a healthcheck that does not depend on the database
+9663db1 2026-11-17 Audit phase 2: merge review (commit list, diff summary, migrations) and RLS measurement work in progress
+d62b16d 2026-11-17 Audit phase 2: security and architecture docs updated for S-1, S-2, C1 and B8
+e2626c9 2026-11-17 Audit phase 2: RLS measurement work in progress (load-test output, scenario B)
+ff0518b 2026-11-17 Audit phase 2: RLS performance report (measured on 20k and 150k orders) and the isolation proof output
+8b1ba89 2026-11-17 Audit phase 2: PRE-MERGE-READINESS draft, merge plan, performance and bug documents updated
+3c2d3f7 2026-11-17 Audit phase 2: readiness document, local E2E result (377 passed, 14 skipped, 0 failed)
+HEAD 3c2d3f746ae5fdbe81cf54e21b89128aa1a33d07 total_commits=313 (origin/main=4f7daa3dddce37f3d4542bfa974778202d7a506c, range origin/main..HEAD, oldest first; the commit that adds this file makes it 314)
