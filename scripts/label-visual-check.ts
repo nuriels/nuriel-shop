@@ -26,7 +26,13 @@ function check(name: string, condition: boolean, detail?: string): void {
 
 type NodeCanvas = ReturnType<typeof createCanvas>;
 
-function darkPixelColumns(canvas: NodeCanvas, x0: number, x1: number, y0: number, y1: number): number {
+function darkPixelColumns(
+  canvas: NodeCanvas,
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+): number {
   const ctx = canvas.getContext("2d");
   const { data } = ctx.getImageData(x0, y0, x1 - x0, y1 - y0);
   let darkColumns = 0;
@@ -52,7 +58,11 @@ function darkPixelColumns(canvas: NodeCanvas, x0: number, x1: number, y0: number
 const item = { name: "טבעת כסף 925 עדינה", barcode: "7290011224135", sellingPrice: 30 };
 const canvas = buildLabelCanvas(item) as unknown as NodeCanvas;
 
-check("קנבס בגודל הנכון (80x7מ״מ בסקאלה)", canvas.width > 0 && canvas.height > 0, `${canvas.width}x${canvas.height}`);
+check(
+  "קנבס בגודל הנכון (80x7מ״מ בסקאלה)",
+  canvas.width > 0 && canvas.height > 0,
+  `${canvas.width}x${canvas.height}`,
+);
 
 const width = canvas.width;
 const height = canvas.height;
@@ -60,7 +70,13 @@ const height = canvas.height;
 // אזור הברקוד = 60% הימניים של המדבקה (rightZoneX~=0.43 מהרוחב ואילך)
 const barcodeZoneX0 = Math.round(width * 0.43);
 const barcodeZoneX1 = width - Math.round(height * 0.05);
-const barcodeCols = darkPixelColumns(canvas, barcodeZoneX0, barcodeZoneX1, Math.round(height * 0.1), Math.round(height * 0.9));
+const barcodeCols = darkPixelColumns(
+  canvas,
+  barcodeZoneX0,
+  barcodeZoneX1,
+  Math.round(height * 0.1),
+  Math.round(height * 0.9),
+);
 const barcodeZoneWidth = barcodeZoneX1 - barcodeZoneX0;
 const barcodeCoverage = barcodeCols / barcodeZoneWidth;
 check(
@@ -70,11 +86,23 @@ check(
 );
 
 // אזור המחיר = 40% השמאליים; בודקים ששורת המחיר (תחתית האזור) לא ריקה
-const priceZoneDark = darkPixelColumns(canvas, Math.round(width * 0.05), Math.round(width * 0.38), Math.round(height * 0.4), Math.round(height * 0.92));
+const priceZoneDark = darkPixelColumns(
+  canvas,
+  Math.round(width * 0.05),
+  Math.round(width * 0.38),
+  Math.round(height * 0.4),
+  Math.round(height * 0.92),
+);
 check("יש תוכן כהה (המחיר) באזור השמאלי", priceZoneDark > 5, `עמודות כהות: ${priceZoneDark}`);
 
 // שורת השם — למעלה באזור השמאלי, גם היא לא אמורה להיות ריקה לגמרי
-const nameZoneDark = darkPixelColumns(canvas, Math.round(width * 0.05), Math.round(width * 0.38), Math.round(height * 0.08), Math.round(height * 0.3));
+const nameZoneDark = darkPixelColumns(
+  canvas,
+  Math.round(width * 0.05),
+  Math.round(width * 0.38),
+  Math.round(height * 0.08),
+  Math.round(height * 0.3),
+);
 check("יש טקסט בשורת השם", nameZoneDark > 2, `עמודות כהות: ${nameZoneDark}`);
 
 // שמירת PNG לבדיקה עינית
@@ -88,7 +116,12 @@ if (failed > 0) process.exit(1);
 
 // --- וריאציות קצה: שם ארוך, מחיר עם אגורות, ברקוד לא-EAN (CODE128) ---
 const variants = [
-  { name: "שרשרת זהב 18 קראט משובצת אבנים יוקרתית לאירועים חגיגיים", barcode: "7290011224135", sellingPrice: 199.9, file: "long-name" },
+  {
+    name: "שרשרת זהב 18 קראט משובצת אבנים יוקרתית לאירועים חגיגיים",
+    barcode: "7290011224135",
+    sellingPrice: 199.9,
+    file: "long-name",
+  },
   { name: "עגיל", barcode: "SKU00042190", sellingPrice: 45, file: "code128" },
   { name: "טבעת", barcode: "7290011224135", sellingPrice: 9.5, file: "decimal-price" },
 ];

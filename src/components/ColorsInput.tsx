@@ -5,7 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export const COLOR_SUGGESTIONS = ["1.5 ליטר", "פחית 330 מ\"ל", "בקבוק זכוכית", "ללא סוכר", "אריזת מארז"] as const;
+export const COLOR_SUGGESTIONS = [
+  "1.5 ליטר",
+  'פחית 330 מ"ל',
+  "בקבוק זכוכית",
+  "ללא סוכר",
+  "אריזת מארז",
+] as const;
 
 /** ניהול וריאציות מוצר (נפחים/טעמים/אריזות) – בחירת כמה תגיות והוספת תגית חופשית */
 export function ColorsInput({

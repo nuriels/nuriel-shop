@@ -97,7 +97,7 @@ const PLATFORM_MESSAGE =
   "The platform must not import an engine, the composition root or product code — add an adapter in src/platform instead.";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi"] },
+  { ignores: ["dist", ".output", ".vinxi", ".claude", ".cache", ".tanstack"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

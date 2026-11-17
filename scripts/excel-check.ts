@@ -69,12 +69,32 @@ async function main(): Promise<void> {
   // --- תרחישי שגיאה: כל אחד חייב להיתפס ---
   const bad = (rows: unknown[][]) => parseWorkbookData([H, ...rows]);
 
-  check("שם חסר נתפס", bad([["", "", "טבעת", 10, 20, 1, "", "", "", ""]]).errors.some((e) => e.includes("שם")));
-  check("קטגוריה לא חוקית נתפסת", bad([["", "מוצר", "כובע", 10, 20, 1, "", "", "", ""]]).errors.some((e) => e.includes("קטגוריה")));
-  check("מחיר שלילי נתפס", bad([["", "מוצר", "טבעת", -5, 20, 1, "", "", "", ""]]).errors.some((e) => e.includes("עלות")));
-  check("מכירה מתחת לעלות נתפסת", bad([["", "מוצר", "טבעת", 50, 20, 1, "", "", "", ""]]).errors.some((e) => e.includes("נמוך")));
-  check("כמות לא שלמה נתפסת", bad([["", "מוצר", "טבעת", 10, 20, 1.5, "", "", "", ""]]).errors.some((e) => e.includes("כמות")));
-  check("מקט קצר נתפס", bad([["123", "מוצר", "טבעת", 10, 20, 1, "", "", "", ""]]).errors.some((e) => e.includes("מקט")));
+  check(
+    "שם חסר נתפס",
+    bad([["", "", "טבעת", 10, 20, 1, "", "", "", ""]]).errors.some((e) => e.includes("שם")),
+  );
+  check(
+    "קטגוריה לא חוקית נתפסת",
+    bad([["", "מוצר", "כובע", 10, 20, 1, "", "", "", ""]]).errors.some((e) =>
+      e.includes("קטגוריה"),
+    ),
+  );
+  check(
+    "מחיר שלילי נתפס",
+    bad([["", "מוצר", "טבעת", -5, 20, 1, "", "", "", ""]]).errors.some((e) => e.includes("עלות")),
+  );
+  check(
+    "מכירה מתחת לעלות נתפסת",
+    bad([["", "מוצר", "טבעת", 50, 20, 1, "", "", "", ""]]).errors.some((e) => e.includes("נמוך")),
+  );
+  check(
+    "כמות לא שלמה נתפסת",
+    bad([["", "מוצר", "טבעת", 10, 20, 1.5, "", "", "", ""]]).errors.some((e) => e.includes("כמות")),
+  );
+  check(
+    "מקט קצר נתפס",
+    bad([["123", "מוצר", "טבעת", 10, 20, 1, "", "", "", ""]]).errors.some((e) => e.includes("מקט")),
+  );
   check(
     "מקט כפול בקובץ נתפס",
     bad([
@@ -82,22 +102,49 @@ async function main(): Promise<void> {
       ["11112222", "מוצר ב", "שעון", 10, 20, 1, "", "", "", ""],
     ]).errors.some((e) => e.includes("פעמיים")),
   );
-  check("כותרות חסרות נתפסות", parseWorkbookData([["א", "ב"], ["1", "2"]]).errors.some((e) => e.includes("כותרות")));
+  check(
+    "כותרות חסרות נתפסות",
+    parseWorkbookData([
+      ["א", "ב"],
+      ["1", "2"],
+    ]).errors.some((e) => e.includes("כותרות")),
+  );
 
   // --- קטגוריות דינמיות: רשימה מותאמת מתקבלת, ומה שלא בה נחסם ---
-  const custom = parseWorkbookData([H, ["", "צמיד זהב", "צמיד", 10, 30, 2, "", "", "", ""]], ["צמיד", "טבעת"]);
-  check("קטגוריה מותאמת אישית מתקבלת", custom.errors.length === 0 && custom.items[0]?.category === "צמיד", custom.errors.join(" | "));
-  const notInList = parseWorkbookData([H, ["", "שעון יד", "שעון", 10, 30, 2, "", "", "", ""]], ["צמיד"]);
-  check("קטגוריה שהוסרה נחסמת", notInList.errors.some((e) => e.includes("קטגוריה")));
+  const custom = parseWorkbookData(
+    [H, ["", "צמיד זהב", "צמיד", 10, 30, 2, "", "", "", ""]],
+    ["צמיד", "טבעת"],
+  );
+  check(
+    "קטגוריה מותאמת אישית מתקבלת",
+    custom.errors.length === 0 && custom.items[0]?.category === "צמיד",
+    custom.errors.join(" | "),
+  );
+  const notInList = parseWorkbookData(
+    [H, ["", "שעון יד", "שעון", 10, 30, 2, "", "", "", ""]],
+    ["צמיד"],
+  );
+  check(
+    "קטגוריה שהוסרה נחסמת",
+    notInList.errors.some((e) => e.includes("קטגוריה")),
+  );
   check("קובץ ריק נתפס", parseWorkbookData([]).errors.length === 1);
-  check("קובץ לא-אקסל נתפס", (await parseWorkbookBytes(new TextEncoder().encode("לא אקסל").buffer as ArrayBuffer)).errors.length >= 1);
+  check(
+    "קובץ לא-אקסל נתפס",
+    (await parseWorkbookBytes(new TextEncoder().encode("לא אקסל").buffer as ArrayBuffer)).errors
+      .length >= 1,
+  );
 
   // --- גמישות: סדר עמודות שונה עדיין עובד (איתור לפי כותרת) ---
   const shuffled = parseWorkbookData([
     ["שם המוצר", "כמות במלאי", "קטגוריה", "מחיר מכירה", "מחיר עלות"],
     ["עגילי פנינה", 4, "עגילים", 99, 30],
   ]);
-  check("סדר עמודות שונה נתמך", shuffled.errors.length === 0 && shuffled.items[0]?.selling_price === 99, shuffled.errors.join(" | "));
+  check(
+    "סדר עמודות שונה נתמך",
+    shuffled.errors.length === 0 && shuffled.items[0]?.selling_price === 99,
+    shuffled.errors.join(" | "),
+  );
 
   // --- שורות ריקות בסוף לא מייצרות שגיאות ---
   const withEmpty = bad([okRow, ["", "", "", "", "", "", "", "", "", ""]]);

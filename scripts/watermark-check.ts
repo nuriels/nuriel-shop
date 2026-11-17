@@ -17,7 +17,12 @@ function check(name: string, condition: boolean, detail?: string): void {
 }
 
 /** ממוצע בהירות של אזור בתמונה */
-async function regionMean(bytes: Uint8Array, left: number, top: number, size: number): Promise<number> {
+async function regionMean(
+  bytes: Uint8Array,
+  left: number,
+  top: number,
+  size: number,
+): Promise<number> {
   const { data } = await sharp(Buffer.from(bytes))
     .extract({ left, top, width: size, height: size })
     .greyscale()
@@ -60,11 +65,23 @@ async function main(): Promise<void> {
   }
 
   // שקיפות: 30% צריך להשאיר את הפינה בהירה משמעותית מ-100%
-  const strong = await applyWatermark(base, { watermarkBytes: stamp, position: "bottom-right", opacity: 100 });
-  const soft = await applyWatermark(base, { watermarkBytes: stamp, position: "bottom-right", opacity: 30 });
+  const strong = await applyWatermark(base, {
+    watermarkBytes: stamp,
+    position: "bottom-right",
+    opacity: 100,
+  });
+  const soft = await applyWatermark(base, {
+    watermarkBytes: stamp,
+    position: "bottom-right",
+    opacity: 30,
+  });
   const strongMean = await regionMean(strong.bytes, 340, 240, 30);
   const softMean = await regionMean(soft.bytes, 340, 240, 30);
-  check("שקיפות 30% עדינה מ-100%", softMean > strongMean + 60, `100%=${strongMean.toFixed(0)} 30%=${softMean.toFixed(0)}`);
+  check(
+    "שקיפות 30% עדינה מ-100%",
+    softMean > strongMean + 60,
+    `100%=${strongMean.toFixed(0)} 30%=${softMean.toFixed(0)}`,
+  );
 
   // שימור פורמט webp (הפורמט הנפוץ ב-AliExpress)
   const webpBase = new Uint8Array(
@@ -72,12 +89,18 @@ async function main(): Promise<void> {
       .webp()
       .toBuffer(),
   );
-  const webpOut = await applyWatermark(webpBase, { watermarkBytes: stamp, position: "bottom-right", opacity: 50 });
+  const webpOut = await applyWatermark(webpBase, {
+    watermarkBytes: stamp,
+    position: "bottom-right",
+    opacity: 50,
+  });
   check("webp נשאר webp", webpOut.contentType === "image/webp");
 
   // תמונה זעירה נדחית עם הודעה ברורה
   const tiny = new Uint8Array(
-    await sharp({ create: { width: 20, height: 20, channels: 3, background: "#fff" } }).jpeg().toBuffer(),
+    await sharp({ create: { width: 20, height: 20, channels: 3, background: "#fff" } })
+      .jpeg()
+      .toBuffer(),
   );
   let rejected = false;
   try {

@@ -115,9 +115,7 @@ export function StaffNotificationsBell({ userId }: { userId: string }) {
                     {timeAgo(item.created_at)}
                   </span>
                 </div>
-                {item.body && (
-                  <p className="truncate text-xs text-muted-foreground">{item.body}</p>
-                )}
+                {item.body && <p className="truncate text-xs text-muted-foreground">{item.body}</p>}
               </button>
             ))
           )}

@@ -33,7 +33,10 @@ export function AccountNotice({
             {isBlocked ? "החשבון נחסם" : "החשבון ממתין לאישור מנהל"}
           </h1>
           <p className="text-sm text-muted-foreground">
-            החשבון <span dir="ltr" className="font-medium text-foreground">{email}</span>{" "}
+            החשבון{" "}
+            <span dir="ltr" className="font-medium text-foreground">
+              {email}
+            </span>{" "}
             {isBlocked
               ? "נחסם לגישה למערכת. לבירור נא ליצור קשר עם הסוכן/ת המטפל/ת או עם מנהל המערכת."
               : "נרשם בהצלחה וממתין לאישור מנהל. ניתן להמשיך ולעיין בקטלוג המוצרים בינתיים."}
