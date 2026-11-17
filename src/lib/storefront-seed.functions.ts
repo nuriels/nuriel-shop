@@ -21,6 +21,9 @@ export function trimSeedDescription(item: CatalogItem): CatalogItem {
   return { ...item, description: text.slice(0, SEED_DESCRIPTION_MAX) };
 }
 
+/** כמו RELATED_GRID_LIMIT בעמוד המוצר */
+const RELATED_SEED_LIMIT = 8;
+
 export function clearStorefrontSeedCache(): void {
   catalogCache.clear();
 }
@@ -72,7 +75,22 @@ export const getStorefrontSeed = createServerFn({ method: "GET" })
           .eq("id", data.productId)
           .limit(1);
         if (error) throw new Error(error.message);
-        return { ...base, catalog: (rows ?? []) as CatalogItem[] };
+        const product = (rows ?? [])[0] as CatalogItem | undefined;
+        if (!product) return { ...base, catalog: [] };
+        // "מוצרים נוספים" כבר ב-HTML (כמו ברירת המחדל בדפדפן: אותה קטגוריה, במלאי, לפי סדר הקטלוג) —
+        // כדי שהאזור לא "יקפוץ" כשהקטלוג נטען, ולקישורים פנימיים
+        const { data: same } = await supabaseAdmin
+          .rpc("get_catalog")
+          .eq("category", product.category)
+          .eq("is_out_of_stock", false)
+          .neq("id", product.id)
+          .order("created_at", { ascending: false })
+          .order("id")
+          .limit(RELATED_SEED_LIMIT);
+        return {
+          ...base,
+          catalog: [product, ...((same ?? []) as CatalogItem[]).map(trimSeedDescription)],
+        };
       }
       if (!data.catalog) return { ...base, catalog: null };
 

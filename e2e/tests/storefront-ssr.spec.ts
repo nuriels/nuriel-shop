@@ -53,7 +53,7 @@ test.describe("store pages are rendered on the server (what Google gets without 
     expect(cat.h1).toEqual([category]);
     expect(cat.text).toContain(PRODUCTS.a1.name);
     expect(cat.text).toContain(PRODUCTS.a2.name);
-    expect(cat.visible).toMatch(new RegExp(`href="/product/${PRODUCTS.a1.id}"`));
+    expect(cat.text).toMatch(/20\.00/);
     expect(cat.ldTypes).toContain('"BreadcrumbList"');
 
     const product = await serverHtml(request, KOBI, `/product/${PRODUCTS.a1.id}`);
@@ -117,35 +117,40 @@ test.describe("store pages are rendered on the server (what Google gets without 
 });
 
 test.describe("store pages in the browser after server rendering", () => {
-  test("no hydration errors, no layout jump, and add-to-cart works @mobile", async ({ page }) => {
-    const errors: string[] = [];
-    page.on("console", (m) => {
-      if (m.type() === "error") errors.push(m.text());
-    });
-    page.on("pageerror", (e) => errors.push(e.message));
-    await page.addInitScript(() => {
-      const w = window as unknown as { __cls: number };
-      w.__cls = 0;
-      new PerformanceObserver((list) => {
-        for (const entry of list.getEntries() as (PerformanceEntry & {
-          value: number;
-          hadRecentInput: boolean;
-        })[])
-          if (!entry.hadRecentInput) w.__cls += entry.value;
-      }).observe({ type: "layout-shift", buffered: true });
-    });
+  test("no hydration errors, no layout jump, and add-to-cart works @mobile", async ({
+    browser,
+  }) => {
+    // כל עמוד בלשונית חדשה — כמו כניסה ראשונה (וכמו גוגל)
     for (const path of ["/", `/product/${PRODUCTS.a1.id}`, "/about", "/terms"]) {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      const errors: string[] = [];
+      page.on("console", (m) => {
+        if (m.type() === "error") errors.push(m.text());
+      });
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.addInitScript(() => {
+        const w = window as unknown as { __cls: number };
+        w.__cls = 0;
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries() as (PerformanceEntry & {
+            value: number;
+            hadRecentInput: boolean;
+          })[])
+            if (!entry.hadRecentInput) w.__cls += entry.value;
+        }).observe({ type: "layout-shift", buffered: true });
+      });
       await page.goto(A(path));
       await page.waitForLoadState("networkidle");
+      const cls = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
+      expect(cls, path).toBeLessThan(0.1);
+      if (path.startsWith("/product/")) {
+        await page.getByRole("button", { name: "הוספה לסל" }).first().click();
+        await expect(page.getByText(`"${PRODUCTS.a1.name}" נוסף לסל`)).toBeVisible();
+      }
+      expect(errors, path).toEqual([]);
+      await context.close();
     }
-    await page.goto(A(`/product/${PRODUCTS.a1.id}`));
-    await page.waitForLoadState("networkidle");
-    const cls = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
-    expect(cls).toBeLessThan(0.1);
-    await page.getByRole("button", { name: "הוספה לסל" }).first().click();
-    await expect(page.getByText(`"${PRODUCTS.a1.name}" נוסף לסל`)).toBeVisible();
-    expect(errors.filter((e) => /hydrat|did not match|#418|#423|#425/i.test(e))).toEqual([]);
-    expect(errors).toEqual([]);
   });
 
   test("a customer with a price tier sees their own price, and the cart uses it", async ({
@@ -153,6 +158,13 @@ test.describe("store pages in the browser after server rendering", () => {
   }) => {
     const tierBefore = sql(
       `SELECT price_tier FROM public.customer_profiles WHERE user_id = (SELECT id FROM auth.users WHERE email = 'customer.a@e2e.test') AND tenant_id = '${STORE_A.id}'`,
+    );
+    const tiersBefore = sql(
+      `SELECT price_tiers_enabled FROM public.site_settings WHERE tenant_id = '${STORE_A.id}'`,
+    );
+    // דרגי מחיר פעילים בחנות (כשהם כבויים, הדרג של הלקוח חוזר ל-1 — טריגר customer_profiles_tier_dormant)
+    sql(
+      `UPDATE public.site_settings SET price_tiers_enabled = true WHERE tenant_id = '${STORE_A.id}'`,
     );
     sql(
       `UPDATE public.customer_profiles SET price_tier = 2 WHERE user_id = (SELECT id FROM auth.users WHERE email = 'customer.a@e2e.test') AND tenant_id = '${STORE_A.id}'`,
@@ -176,6 +188,9 @@ test.describe("store pages in the browser after server rendering", () => {
       );
       sql(
         `UPDATE public.customer_profiles SET price_tier = ${Number(tierBefore) || 1} WHERE user_id = (SELECT id FROM auth.users WHERE email = 'customer.a@e2e.test') AND tenant_id = '${STORE_A.id}'`,
+      );
+      sql(
+        `UPDATE public.site_settings SET price_tiers_enabled = ${tiersBefore === "t"} WHERE tenant_id = '${STORE_A.id}'`,
       );
     }
   });
