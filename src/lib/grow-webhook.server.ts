@@ -12,7 +12,18 @@ import {
 import { recordPlatformAudit } from "@/lib/platform-files.server";
 
 export type GrowWebhookOutcome =
-  "malformed" | "paid" | "already_paid" | "paid_late" | "rejected" | "ignored";
+  "malformed" | "paid" | "already_paid" | "paid_late" | "rejected" | "ignored" | "error";
+
+/**
+ * קוד התשובה ל-Grow. 400 — פורמט לא תקין. 500 — תקלה אצלנו בסימון ההזמנה כשולמה: Grow יכול לנסות שוב
+ * (תשובת 2xx עוצרת אותו, ואז ההזמנה פגה אחרי שעתיים והמלאי משתחרר אף שהלקוח חויב). כל השאר 200 — לא
+ * חושפים למי ששולח מה נדחה.
+ */
+export function growWebhookStatus(outcome: GrowWebhookOutcome): 200 | 400 | 500 {
+  if (outcome === "malformed") return 400;
+  if (outcome === "error") return 500;
+  return 200;
+}
 
 type MarkResult = { result?: string; order_id?: string; tenant_id?: string };
 
@@ -38,7 +49,7 @@ export async function processGrowWebhook(request: Request): Promise<GrowWebhookO
     });
     if (error) {
       console.error("[grow-webhook] mark paid failed", error.message);
-      return "ignored";
+      return "error";
     }
     mark = (data ?? {}) as MarkResult;
     if (mark.result !== "unknown" && mark.result !== "bad_token") break;
