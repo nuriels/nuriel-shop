@@ -91,7 +91,7 @@ function setup() {
     const r = spawnSync("bash", [SCRIPT, ...args], {
       encoding: "utf8",
       env: {
-        PATH: `${bin}:${process.env.PATH}`,
+        PATH: `${bin}:${process.env["PATH"]}`,
         STATE: state,
         APP_DIR: app,
         NODE_IMAGE: "x",
