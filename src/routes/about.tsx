@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { isServerRender, StorefrontSeedProvider } from "@/lib/storefront-seed";
+import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { Clock, Mail, MessageSquare, Monitor, Phone, ShieldCheck } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -10,9 +12,12 @@ import { APP_VERSION } from "@/lib/branding";
 import { ORDER_HOURS } from "@/lib/order-hours";
 
 export const Route = createFileRoute("/about")({
-  ssr: false,
+  // נבנה בשרת (SEO): ההגדרות הציבוריות (טקסטים, פרטי העסק) והקטגוריות — מה שאורח רואה — כבר ב-HTML.
+  // רק בטעינה הראשונה; בניווט בתוך האתר הדפדפן טוען בעצמו, כמו קודם
+  ssr: true,
+  loader: () => (isServerRender() ? getStorefrontSeed({ data: {} }) : null),
   head: () => ({ meta: [{ title: "אודות" }] }),
-  component: AboutPage,
+  component: SeededAboutPage,
 });
 
 /** עמוד אודות ויצירת קשר — ציבורי, כולל הצהרת נגישות */
@@ -26,10 +31,11 @@ function AboutPage() {
       <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 px-4 py-6">
         <Card className="shadow-card">
           <CardContent className="space-y-3 pt-5">
-            <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
+            {/* הכותרת הראשית של העמוד (H1 לגוגל ולקוראי מסך) — אותו עיצוב כמו שאר הכותרות */}
+            <h1 className="flex items-center gap-2 text-lg font-bold text-foreground">
               <Monitor className="size-5 text-primary" aria-hidden="true" />
               על העסק
-            </h2>
+            </h1>
             {settings?.about_content?.trim() ? (
               <RichContent content={settings.about_content} className="leading-7" />
             ) : (
@@ -147,5 +153,13 @@ function AboutPage() {
 
       <AppFooter />
     </div>
+  );
+}
+
+function SeededAboutPage() {
+  return (
+    <StorefrontSeedProvider seed={Route.useLoaderData()}>
+      <AboutPage />
+    </StorefrontSeedProvider>
   );
 }

@@ -186,6 +186,15 @@ export function sanitizeRichHtml(html: string): string {
 }
 
 /** תוכן שמור → HTML נקי להצגה */
+/**
+ * הגרסה שנבנית בשרת (אין DOM): טקסט בלבד, בפסקאות, מוברח — בדיוק מה ש-sanitizeRichHtml מחזיר בשרת.
+ * משמשת גם ברינדור הראשון בדפדפן (הידרציה), כדי שה-HTML יהיה זהה; מיד אחרי — הגרסה המעוצבת.
+ */
+export function serverRichContentHtml(content: string | null | undefined): string {
+  const html = toRichHtml(content);
+  return html === "" ? "" : plainTextToHtml(stripTags(html));
+}
+
 export function richContentHtml(content: string | null | undefined): string {
   const html = toRichHtml(content);
   return html === "" ? "" : sanitizeRichHtml(html);

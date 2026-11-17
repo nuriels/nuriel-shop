@@ -63,7 +63,9 @@ import { loadHomeBanners, type BannerSet } from "@/lib/banners";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { CatalogSections } from "@/components/CatalogSections";
 import { PlatformLanding } from "@/components/portal/PlatformLanding";
-import { getPortalLanding, isPortalSite } from "@/lib/portal-landing.functions";
+import { getPortalLanding } from "@/lib/portal-landing.functions";
+import { isServerRender, StorefrontSeedProvider, useStorefrontSeed } from "@/lib/storefront-seed";
+import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { LANDING_TITLE, landingDescription, landingJsonLd } from "@/lib/portal-landing";
 import { groupBySubcategory } from "@/lib/catalog-sections";
 import { evaluateCartPromotions, type PromotionEvaluation } from "@/lib/cart-promotions";
@@ -86,20 +88,22 @@ type CatalogSearch = {
 };
 
 export const Route = createFileRoute("/")({
-  // חלק 21: "data-only" (במקום false) — פרטי החנות לתגיות (כותרת, קנונית,
-  // JSON-LD) נטענים בשרת ונשמרים במצב שהדפדפן ממשיך ממנו, כך שהתגיות זהות בשרת
-  // ובדפדפן (בלי אי-התאמה בהידרציה). הקטלוג עצמו עדיין נטען ומוצג בדפדפן בלבד.
-  //
-  // דף הנחיתה של שער הפלטפורמה (nuriel-app2): SSR מלא — התוכן כבר ב-HTML הראשוני (גוגל, Bing
-  // וכלי AI רואים את הדף בלי JavaScript). בכל חנות אחרת — "data-only" בדיוק כמו קודם.
-  ssr: async () => ((await isPortalSite()) ? true : "data-only"),
+  // SSR מלא — התוכן כבר ב-HTML הראשוני (גוגל, Bing וכלי AI רואים את הדף בלי JavaScript):
+  // דף הנחיתה של שער הפלטפורמה (nuriel-app2), וגם הקטלוג של כל חנות — מה שאורח רואה (מהשרת, מוגבל
+  // לחנות של הבקשה). בדפדפן הקטלוג נטען שוב כמו קודם, לפי מי שמחובר (מחיר אישי / דרג).
+  ssr: true,
   // פעם אחת לטעינת עמוד — מעבר בין קטגוריות לא טוען שוב (התגיות לפי ?category=).
   // חלק 31: גם קטגוריות האב — לפירורי לחם היררכיים בעמודי הקטגוריה
   loader: async () => {
     const [site, categoryParents] = await Promise.all([getSiteSeo(), getCategoryParents()]);
     // דף הנחיתה: המחירים וימי הניסיון מהמסד (רק בשער; בחנויות — בלי קריאה נוספת)
     const landing = site.isPortal ? await getPortalLanding().catch(() => null) : null;
-    return { ...site, categoryParents, landing };
+    // הקטלוג כפי שאורח רואה אותו — רק בטעינה הראשונה (בשרת), רק בחנות (לא בשער)
+    const seed =
+      !site.isPortal && isServerRender()
+        ? await getStorefrontSeed({ data: { catalog: true, banners: true } })
+        : null;
+    return { ...site, categoryParents, landing, seed };
   },
   staleTime: Infinity,
   // הקטגוריה והתצוגה בכתובת: כל בחירה נרשמת בהיסטוריה, ו"חזור" בדפדפן מחזיר
@@ -203,11 +207,15 @@ export const Route = createFileRoute("/")({
  */
 function Index() {
   const site = useLoaderData({ from: "__root__" });
-  const { landing } = Route.useLoaderData();
+  const { landing, seed } = Route.useLoaderData();
   if (site?.isPortal) {
     return <PlatformLanding siteName={site.siteName || DEFAULT_STORE_NAME} landing={landing} />;
   }
-  return <StoreCatalog />;
+  return (
+    <StorefrontSeedProvider seed={seed}>
+      <StoreCatalog />
+    </StorefrontSeedProvider>
+  );
 }
 
 function StoreCatalog() {
@@ -216,8 +224,12 @@ function StoreCatalog() {
   const { loading: profileLoading, refresh: refreshProfile } = useCustomerProfile(
     role?.role === "customer" ? role.user_id : null,
   );
-  const [products, setProducts] = useState<CatalogItem[]>([]);
-  const [catalogLoading, setCatalogLoading] = useState(true);
+  // עמוד שנבנה בשרת: הקטלוג של אורח הוא המצב ההתחלתי (זהה בשרת ובדפדפן) — ומיד נטען שוב בדפדפן
+  const seed = useStorefrontSeed();
+  const [products, setProducts] = useState<CatalogItem[]>(() => inStockFirst(seed?.catalog ?? []));
+  const [catalogLoading, setCatalogLoading] = useState(!seed?.catalog);
+  // הקטלוג נטען בדפדפן לפי מי שמחובר — עד אז (נתוני השרת) לא מוסיפים לסל ולא מסנכרנים את הסל
+  const [catalogFresh, setCatalogFresh] = useState(false);
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const category = search.category ?? null;
@@ -291,19 +303,23 @@ function StoreCatalog() {
       search: (prev) => ({ ...prev, view: next === "all" ? undefined : next }),
       resetScroll: false,
     });
-  const [banners, setBanners] = useState<BannerSet>({ top: [], bottom: [] });
+  const [banners, setBanners] = useState<BannerSet>(() => seed?.banners ?? { top: [], bottom: [] });
   // הטבות עגלה, מוצרים קשורים ומוצרי קופה — נטענים יחד עם הקטלוג
   const [sales, setSales] = useState<SalesData>(EMPTY_SALES);
 
+  const seededBanners = seed?.banners != null;
   useEffect(() => {
+    // באנרים מהשרת — כבר מוצגים (אין צורך לטעון שוב)
+    if (seededBanners) return;
     // באנרים הם תוספת — תקלה בטעינה שלהם לא עוצרת את הקטלוג
     loadHomeBanners()
       .then(setBanners)
       .catch(() => undefined);
-  }, []);
+  }, [seededBanners]);
 
-  const loadCatalog = useCallback(async () => {
-    setCatalogLoading(true);
+  // background — רענון של קטלוג שכבר מוצג (נתוני השרת): בלי מצב טעינה, כדי שהעמוד לא יקפוץ
+  const loadCatalog = useCallback(async (background = false) => {
+    if (!background) setCatalogLoading(true);
     // בעמודים — אלפי מוצרים לא נחתכים במגבלת השורות של ה-API.
     // חלק 20: מה שיש במלאי קודם, מה שאזל (גם מלאי 0) — בסוף. כל התצוגות
     // (מסך הבית, קטגוריות, חיפוש, מבצעים) מסננות את הרשימה הזו ושומרות על הסדר.
@@ -316,18 +332,22 @@ function StoreCatalog() {
         .range(from, to),
     );
     if (error) toast.error(error.message);
-    setProducts(inStockFirst(data as CatalogItem[]));
+    // תקלה ברענון ברקע בלי שום שורה — משאירים את מה שכבר מוצג
+    if (!(background && error && data.length === 0))
+      setProducts(inStockFirst(data as CatalogItem[]));
     setCatalogLoading(false);
+    setCatalogFresh(true);
   }, []);
 
   const loadSales = useCallback(async () => {
     setSales(await loadSalesData());
   }, []);
 
+  const seededCatalog = seed?.catalog != null;
   useEffect(() => {
-    void loadCatalog();
+    void loadCatalog(seededCatalog);
     void loadSales();
-  }, [loadCatalog, loadSales, session?.user?.id]);
+  }, [loadCatalog, loadSales, seededCatalog, session?.user?.id]);
 
   const signOut = async () => {
     setCart([]);
@@ -447,6 +467,11 @@ function StoreCatalog() {
   const cartEdited = useRef(false);
 
   const addToCart = (item: CatalogItem, requested = 1, options?: AddToCartOptions) => {
+    // עד שהמחירים של מי שמחובר נטענו בדפדפן — לא מוסיפים לסל במחיר של אורח
+    if (!catalogFresh) {
+      toast.info("רגע, טוענים את המחירים…");
+      return;
+    }
     if (restClosed) {
       toast.info(REST_CHECKOUT_MESSAGE);
       return;
@@ -491,7 +516,7 @@ function StoreCatalog() {
   // מסונכרן מול הקטלוג — מוצר שאינו זמין יוצא עם הודעה, הכמות מתעגלת למארז /
   // למינימום, והמחיר מתעדכן למחירון של מי שמחובר עכשיו
   useEffect(() => {
-    if (catalogLoading || products.length === 0 || cart.length === 0) return;
+    if (catalogLoading || !catalogFresh || products.length === 0 || cart.length === 0) return;
     const synced = syncCartWithCatalog(cart, catalogById);
     if (synced.items === cart) return;
     setCart(synced.items);
@@ -508,7 +533,7 @@ function StoreCatalog() {
     }
     // catalogById נגזר מ-products
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, cart, catalogLoading]);
+  }, [products, cart, catalogLoading, catalogFresh]);
   const removeFromCart = (lineKey: string) => {
     cartEdited.current = true;
     setCart((current) => current.filter((c) => cartLineKey(c) !== lineKey));
@@ -632,7 +657,9 @@ function StoreCatalog() {
         {/* חלק 22: בלי "הבלוק הכחול" (שם החנות, "להזמנה מהקטלוג" וסטטיסטיקות) — זה
             נראה כמו לוח בקרה ולא כמו חנות. העמוד נפתח ישר בבאנרים. הכותרת הראשית
             (h1) נשארת לגוגל ולקוראי מסך, בלי תצוגה. */}
-        <h1 className="sr-only">{settings?.site_title?.trim() || DEFAULT_STORE_NAME}</h1>
+        <h1 className="sr-only">
+          {category ?? (settings?.site_title?.trim() || DEFAULT_STORE_NAME)}
+        </h1>
 
         {/* חלק 19: Grid עם באנר צדדי (רק במחשב, כשהוא פעיל).
             חלק 36ב: במחשב העמוד מחולק לשתי עמודות — מימין רק תפריט הקטגוריות,

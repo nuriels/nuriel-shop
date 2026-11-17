@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { isServerRender, StorefrontSeedProvider } from "@/lib/storefront-seed";
+import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { InfoPage, LoadingLine } from "@/components/legal/InfoPage";
@@ -7,9 +9,12 @@ import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { legalPageHtml } from "@/lib/legal-content";
 
 export const Route = createFileRoute("/terms")({
-  ssr: false,
+  // נבנה בשרת (SEO): ההגדרות הציבוריות (טקסטים, פרטי העסק) והקטגוריות — מה שאורח רואה — כבר ב-HTML.
+  // רק בטעינה הראשונה; בניווט בתוך האתר הדפדפן טוען בעצמו, כמו קודם
+  ssr: true,
+  loader: () => (isServerRender() ? getStorefrontSeed({ data: {} }) : null),
   head: () => ({ meta: [{ title: "תקנון האתר" }] }),
-  component: TermsPage,
+  component: SeededTermsPage,
 });
 
 /** תקנון האתר — הנוסח מלשונית "עמודים משפטיים" בפאנל (או נוסח ברירת המחדל) */
@@ -30,5 +35,13 @@ function TermsPage() {
         </CardContent>
       </Card>
     </InfoPage>
+  );
+}
+
+function SeededTermsPage() {
+  return (
+    <StorefrontSeedProvider seed={Route.useLoaderData()}>
+      <TermsPage />
+    </StorefrontSeedProvider>
   );
 }

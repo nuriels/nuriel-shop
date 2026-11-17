@@ -140,7 +140,17 @@ let cache: BannerSet | null = null;
 
 export async function loadHomeBanners(force = false): Promise<BannerSet> {
   if (cache && !force) return cache;
-  const { data, error } = await supabase
+  const set = await fetchHomeBanners();
+  cache = set;
+  return set;
+}
+
+/**
+ * הבאנרים בלי מטמון — גם לבניית העמוד בשרת (עם הלקוח של השרת, שמוגבל לחנות של הבקשה). בשרת אסור
+ * להשתמש במטמון של המודול: הוא משותף לכל הבקשות (ולכל החנויות).
+ */
+export async function fetchHomeBanners(client: typeof supabase = supabase): Promise<BannerSet> {
+  const { data, error } = await client
     .from("home_banner_slides")
     .select(
       "placement, position, desktop_image_url, desktop_width, desktop_height, mobile_image_url, mobile_width, mobile_height, show_desktop, show_mobile, link_url, alt_text, is_active, desktop_poster_url, mobile_poster_url",
@@ -161,7 +171,6 @@ export async function loadHomeBanners(force = false): Promise<BannerSet> {
       mobile_poster_url: row.mobile_poster_url ?? null,
     });
   }
-  cache = set;
   return set;
 }
 

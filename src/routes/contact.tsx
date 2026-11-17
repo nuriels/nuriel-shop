@@ -1,5 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { isServerRender, StorefrontSeedProvider } from "@/lib/storefront-seed";
+import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { useServerFn } from "@tanstack/react-start";
 import {
   Building2,
@@ -37,9 +39,12 @@ import {
 } from "@/lib/site-forms";
 
 export const Route = createFileRoute("/contact")({
-  ssr: false,
+  // נבנה בשרת (SEO): ההגדרות הציבוריות (טקסטים, פרטי העסק) והקטגוריות — מה שאורח רואה — כבר ב-HTML.
+  // רק בטעינה הראשונה; בניווט בתוך האתר הדפדפן טוען בעצמו, כמו קודם
+  ssr: true,
+  loader: () => (isServerRender() ? getStorefrontSeed({ data: {} }) : null),
   head: () => ({ meta: [{ title: "צור קשר" }] }),
-  component: ContactPage,
+  component: SeededContactPage,
 });
 
 const EMPTY: ContactInput = { fullName: "", phone: "", email: "", message: "", orderNumber: "" };
@@ -454,5 +459,13 @@ function ContactForm() {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+function SeededContactPage() {
+  return (
+    <StorefrontSeedProvider seed={Route.useLoaderData()}>
+      <ContactPage />
+    </StorefrontSeedProvider>
   );
 }

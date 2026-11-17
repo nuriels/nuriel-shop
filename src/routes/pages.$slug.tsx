@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { isServerRender, StorefrontSeedProvider } from "@/lib/storefront-seed";
+import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { EyeOff, FileQuestion, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,10 +23,15 @@ import { breadcrumbJsonLd, jsonLdText } from "@/lib/structured-data";
  * נטענת בדפדפן עם ההרשאות שלו.
  */
 export const Route = createFileRoute("/pages/$slug")({
-  ssr: "data-only",
-  loader: async ({ params }) => ({
-    page: await getStorePageSeo({ data: { slug: params.slug } }),
-  }),
+  // נבנה בשרת (SEO): העמוד שפורסם — כותרת ותוכן — כבר ב-HTML (טיוטה — רק למנהל, בדפדפן, כמו קודם)
+  ssr: true,
+  loader: async ({ params }) => {
+    const [page, seed] = await Promise.all([
+      getStorePageSeo({ data: { slug: params.slug } }),
+      isServerRender() ? getStorefrontSeed({ data: {} }) : Promise.resolve(null),
+    ]);
+    return { page, seed };
+  },
   head: ({ loaderData }) => {
     const page = loaderData?.page ?? null;
     if (!page) {
@@ -58,7 +65,7 @@ export const Route = createFileRoute("/pages/$slug")({
         : [],
     };
   },
-  component: StorePageView,
+  component: SeededStorePageView,
 });
 
 type ViewPage = { title: string; content_html: string; is_published: boolean; updated_at: string };
@@ -133,5 +140,13 @@ function StorePageView() {
       </Card>
       <p className="text-xs text-muted-foreground">עודכן לאחרונה: {updated}</p>
     </InfoPage>
+  );
+}
+
+function SeededStorePageView() {
+  return (
+    <StorefrontSeedProvider seed={Route.useLoaderData().seed}>
+      <StorePageView />
+    </StorefrontSeedProvider>
   );
 }

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { isServerRender, StorefrontSeedProvider } from "@/lib/storefront-seed";
+import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { ChevronLeft, FolderTree, Map as MapIcon, Navigation } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoPage, LoadingLine } from "@/components/legal/InfoPage";
@@ -10,9 +12,12 @@ import { countByCategory, totalCounts, type CategoryNode } from "@/lib/category-
 import { fetchAllRows } from "@/lib/fetch-all";
 
 export const Route = createFileRoute("/sitemap")({
-  ssr: false,
+  // נבנה בשרת (SEO): ההגדרות הציבוריות (טקסטים, פרטי העסק) והקטגוריות — מה שאורח רואה — כבר ב-HTML.
+  // רק בטעינה הראשונה; בניווט בתוך האתר הדפדפן טוען בעצמו, כמו קודם
+  ssr: true,
+  loader: () => (isServerRender() ? getStorefrontSeed({ data: {} }) : null),
   head: () => ({ meta: [{ title: "מפת האתר" }] }),
-  component: SitemapPage,
+  component: SeededSitemapPage,
 });
 
 /** הקטגוריות שיש בהן מוצרים (כולל בתת-הקטגוריות) — null בזמן הטעינה */
@@ -195,5 +200,13 @@ function CategoryList({
         );
       })}
     </ul>
+  );
+}
+
+function SeededSitemapPage() {
+  return (
+    <StorefrontSeedProvider seed={Route.useLoaderData()}>
+      <SitemapPage />
+    </StorefrontSeedProvider>
   );
 }
