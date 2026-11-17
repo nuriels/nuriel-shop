@@ -1,0 +1,7 @@
+-- c5_feed_one_anon: storefront_feed_products() filtered to 1 id, anon
+-- role=anon persona=anon
+-- db=perf_scratch_b label=B-rewrite
+
+===== REP 0  (psql wall 33 ms)
+
+STDERR: ERROR:  permission denied for function storefront_feed_products

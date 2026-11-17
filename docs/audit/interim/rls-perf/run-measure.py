@@ -119,6 +119,12 @@ Q = {
      pgrst(f"SELECT {qual(PRODUCT_ADMIN_COLS, 'g')} FROM public.global_products g ORDER BY g.sort_order ASC NULLS LAST, g.created_at DESC, g.id LIMIT 1000 OFFSET 0")),
  "d2_agent_products": ("AdminProductsPanel list page 0 as agent (is_staff path)", "t1_agent", "authenticated",
      pgrst(f"SELECT {qual(PRODUCT_ADMIN_COLS, 'g')} FROM public.global_products g ORDER BY g.sort_order ASC NULLS LAST, g.created_at DESC, g.id LIMIT 1000 OFFSET 0")),
+ # ---- EXTRA (not RLS): same reads through the experimental get_catalog_exp()/storefront_feed_products_exp() (09-catalog-experiment.sql, perf_scratch_b only)
+ "x1_catalog_exp_anon": ("EXPERIMENT get_catalog_exp() as anon", "anon", "anon", pgrst("SELECT * FROM public.get_catalog_exp()")),
+ "x2_catalog_exp_auth": ("EXPERIMENT get_catalog_exp() as authenticated customer", "t1_customer_a", "authenticated", pgrst("SELECT * FROM public.get_catalog_exp()")),
+ "x3_catalog_exp_admin": ("EXPERIMENT get_catalog_exp() as admin", "t1_admin", "authenticated", pgrst("SELECT * FROM public.get_catalog_exp()")),
+ "x4_feed_exp_service": ("EXPERIMENT storefront_feed_products_exp() one id, service_role", "service", "service_role",
+     pgrst(f"SELECT * FROM public.storefront_feed_products_exp() WHERE id = '{PROD1}' LIMIT 1")),
  "e1_items_one_order": ("order_items?order_id=eq.<own order> as customer A", "t1_customer_a", "authenticated",
      pgrst(f"SELECT {qual(ITEM_COLS, 'i')} FROM public.order_items i WHERE i.order_id = '{A_ORDER}'")),
  "e2_items_count_cust": ("SELECT count(*) FROM order_items as customer A (worst-case scan)", "t1_customer_a", "authenticated",
@@ -224,7 +230,7 @@ if os.environ.get("DUMP_SQL"):
 
 results = []
 for qid in Q:
-    if ONLY and qid not in ONLY:
+    if (ONLY and qid not in ONLY) or (not ONLY and qid.startswith('x')):
         continue
     t0 = time.time()
     r = run_query(qid)

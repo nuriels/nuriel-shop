@@ -1,0 +1,16 @@
+[
+ {
+  "label": "B-orig",
+  "db": "perf_scratch",
+  "workload": "cust_orders",
+  "clients": 8,
+  "secs": 30,
+  "tx": 8,
+  "tps": 0.221635,
+  "p50_ms": 35759.249,
+  "p95_ms": 36095.082,
+  "max_ms": 36095.082,
+  "failed": 0,
+  "stderr": ""
+ }
+]

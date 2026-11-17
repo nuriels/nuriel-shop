@@ -1,0 +1,61 @@
+-- e3_items_count_admin: SELECT count(*) FROM order_items as admin
+-- role=authenticated persona=t1_admin
+-- db=perf_scratch label=B-orig
+
+===== REP 0  (psql wall 27477 ms)
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=1275715.55..1275715.56 rows=1 width=48) (actual time=27445.550..27445.555 rows=1 loops=1)
+   Buffers: shared hit=3000457 read=16689 written=151
+   ->  Aggregate  (cost=1275715.53..1275715.54 rows=1 width=8) (actual time=27445.494..27445.498 rows=1 loops=1)
+         Buffers: shared hit=3000454 read=16689 written=151
+         InitPlan 1 (returns $0)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.513..2.514 rows=1 loops=1)
+                 Buffers: shared hit=408 read=69 written=15
+         ->  Index Scan using order_items_tenant_id_idx on order_items  (cost=0.42..1275542.73 rows=69015 width=0) (actual time=27278.554..27421.288 rows=449763 loops=1)
+               Index Cond: (tenant_id = $0)
+               Filter: (hashed SubPlan 5)
+               Buffers: shared hit=3000454 read=16689 written=151
+               SubPlan 5
+                 ->  Index Scan using orders_tenant_id_idx on orders o  (cost=0.55..26089.93 rows=5111 width=16) (actual time=0.967..27138.599 rows=150000 loops=1)
+                       Index Cond: (tenant_id = $4)
+                       Filter: (can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
+                       Buffers: shared hit=3000040 read=7086 written=8
+                       InitPlan 4 (returns $4)
+                         ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.151..0.152 rows=1 loops=1)
+                               Buffers: shared hit=5
+ Planning:
+   Buffers: shared hit=486 read=36 written=4
+ Planning Time: 1.391 ms
+ Execution Time: 27446.770 ms
+(23 rows)
+
+
+===== REP 1  (psql wall 29756 ms)
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=1275715.55..1275715.56 rows=1 width=48) (actual time=29704.517..29704.521 rows=1 loops=1)
+   Buffers: shared hit=3000444 read=16702 written=250
+   ->  Aggregate  (cost=1275715.53..1275715.54 rows=1 width=8) (actual time=29704.458..29704.462 rows=1 loops=1)
+         Buffers: shared hit=3000441 read=16702 written=250
+         InitPlan 1 (returns $0)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=3.126..3.127 rows=1 loops=1)
+                 Buffers: shared hit=397 read=80
+         ->  Index Scan using order_items_tenant_id_idx on order_items  (cost=0.42..1275542.73 rows=69015 width=0) (actual time=29533.145..29681.390 rows=449763 loops=1)
+               Index Cond: (tenant_id = $0)
+               Filter: (hashed SubPlan 5)
+               Buffers: shared hit=3000441 read=16702 written=250
+               SubPlan 5
+                 ->  Index Scan using orders_tenant_id_idx on orders o  (cost=0.55..26089.93 rows=5111 width=16) (actual time=0.893..29385.373 rows=150000 loops=1)
+                       Index Cond: (tenant_id = $4)
+                       Filter: (can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
+                       Buffers: shared hit=3000039 read=7087
+                       InitPlan 4 (returns $4)
+                         ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.159..0.160 rows=1 loops=1)
+                               Buffers: shared hit=5
+ Planning:
+   Buffers: shared hit=472 read=50
+ Planning Time: 1.453 ms
+ Execution Time: 29705.492 ms
+(23 rows)
+

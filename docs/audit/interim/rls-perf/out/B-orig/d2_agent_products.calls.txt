@@ -1,0 +1,7 @@
+RESULT|1000|1848288
+current_tenant_id|30001|437.6|437.6
+is_admin|10000|818.8|72.0
+is_super_admin|10000|746.8|425.6
+is_staff|10000|1517.5|41.1
+is_agent|10000|657.6|367.8
+is_platform_admin|10000|175.4|175.4
