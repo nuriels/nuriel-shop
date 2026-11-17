@@ -1,6 +1,6 @@
 RESULT|728|2349504
-current_tenant_id|154485|2806.5|2806.5
-is_admin|154482|13833.0|1073.5
-is_super_admin|154482|12759.5|7079.3
-can_view_order|154482|15125.1|1292.1
-is_platform_admin|154482|2875.5|2875.5
+current_tenant_id|154485|2876.4|2876.4
+is_admin|154482|14115.5|1103.1
+is_super_admin|154482|13012.3|7224.9
+can_view_order|154482|15435.0|1319.5
+is_platform_admin|154482|2912.9|2912.9

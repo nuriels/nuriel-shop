@@ -1,0 +1,63 @@
+     nspname      | policies | unwrapped_p3_helpers | unwrapped_any_helper | has_some_wrapper 
+------------------+----------+----------------------+----------------------+------------------
+ business_profile |        5 |                    0 |                    3 |                1
+ hospitality      |      116 |                    0 |                    0 |              116
+ public           |      160 |                   89 |                   89 |               60
+ storage          |       17 |                    6 |                    6 |                7
+                  |      298 |                   95 |                   98 |              184
+(5 rows)
+
+-- public tables carrying unwrapped policies (count of policies)
+            relname             | count 
+--------------------------------+-------
+ customer_profiles              |     6
+ orders                         |     5
+ user_roles                     |     5
+ customer_carts                 |     4
+ order_items                    |     4
+ abandoned_carts                |     3
+ categories                     |     3
+ email_settings                 |     3
+ password_reset_requests        |     3
+ stock_counts                   |     3
+ user_custom_prices             |     3
+ cancellation_requests          |     2
+ cart_promotions                |     2
+ contact_messages               |     2
+ global_products                |     2
+ product_categories             |     2
+ shipping_methods               |     2
+ site_settings                  |     2
+ staff_notifications            |     2
+ stock_count_lines              |     2
+ billing_history                |     1
+ coupons                        |     1
+ customer_emails                |     1
+ home_banner_slides             |     1
+ marketing_consent_events       |     1
+ marketing_consents             |     1
+ notification_logs              |     1
+ order_courier_links            |     1
+ order_delivery_events          |     1
+ pages                          |     1
+ pending_products               |     1
+ picking_events                 |     1
+ platform_agreement_acceptances |     1
+ platform_agreement_versions    |     1
+ platform_audit_log             |     1
+ platform_documents             |     1
+ platform_email_log             |     1
+ product_drafts                 |     1
+ product_locations              |     1
+ product_relations              |     1
+ product_reviews                |     1
+ product_serials                |     1
+ product_stickers               |     1
+ product_variants               |     1
+ service_agreements             |     1
+ tenant_addons                  |     1
+ tenant_billing_profile         |     1
+ tenant_subscriptions           |     1
+ upgrade_requests               |     1
+(49 rows)
+

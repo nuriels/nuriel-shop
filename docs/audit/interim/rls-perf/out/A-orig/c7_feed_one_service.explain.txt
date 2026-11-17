@@ -2,74 +2,74 @@
 -- role=service_role persona=service
 -- db=perf_scratch label=A-orig
 
-===== REP 0  (psql wall 532 ms)
+===== REP 0  (psql wall 625 ms)
                                                                 QUERY PLAN                                                                
 ------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=504.717..504.718 rows=1 loops=1)
-   Buffers: shared hit=56118
-   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=504.671..504.672 rows=1 loops=1)
-         Buffers: shared hit=56118
-         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=504.668..504.669 rows=1 loops=1)
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=590.999..591.000 rows=1 loops=1)
+   Buffers: shared hit=56106 read=13
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=590.962..590.963 rows=1 loops=1)
+         Buffers: shared hit=56106 read=13
+         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=590.960..590.960 rows=1 loops=1)
                Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
                Rows Removed by Filter: 436
-               Buffers: shared hit=56118
+               Buffers: shared hit=56106 read=13
  Planning:
    Buffers: shared hit=25
- Planning Time: 0.217 ms
- Execution Time: 505.059 ms
+ Planning Time: 0.293 ms
+ Execution Time: 591.346 ms
 (12 rows)
 
 
-===== REP 1  (psql wall 656 ms)
+===== REP 1  (psql wall 539 ms)
                                                                 QUERY PLAN                                                                
 ------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=613.376..613.377 rows=1 loops=1)
-   Buffers: shared hit=56118
-   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=613.336..613.337 rows=1 loops=1)
-         Buffers: shared hit=56118
-         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=613.333..613.334 rows=1 loops=1)
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=458.344..458.345 rows=1 loops=1)
+   Buffers: shared hit=56119
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=458.303..458.305 rows=1 loops=1)
+         Buffers: shared hit=56119
+         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=458.301..458.301 rows=1 loops=1)
                Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
                Rows Removed by Filter: 436
-               Buffers: shared hit=56118
+               Buffers: shared hit=56119
  Planning:
    Buffers: shared hit=25
- Planning Time: 0.244 ms
- Execution Time: 613.604 ms
+ Planning Time: 0.371 ms
+ Execution Time: 458.717 ms
 (12 rows)
 
 
-===== REP 2  (psql wall 664 ms)
+===== REP 2  (psql wall 650 ms)
                                                                 QUERY PLAN                                                                
 ------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=629.828..629.829 rows=1 loops=1)
-   Buffers: shared hit=56118
-   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=629.800..629.801 rows=1 loops=1)
-         Buffers: shared hit=56118
-         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=629.798..629.798 rows=1 loops=1)
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=600.742..600.743 rows=1 loops=1)
+   Buffers: shared hit=56119
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=600.706..600.707 rows=1 loops=1)
+         Buffers: shared hit=56119
+         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=600.704..600.704 rows=1 loops=1)
                Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
                Rows Removed by Filter: 436
-               Buffers: shared hit=56118
+               Buffers: shared hit=56119
  Planning:
    Buffers: shared hit=25
- Planning Time: 0.304 ms
- Execution Time: 630.090 ms
+ Planning Time: 0.350 ms
+ Execution Time: 601.047 ms
 (12 rows)
 
 
-===== REP 3  (psql wall 683 ms)
+===== REP 3  (psql wall 558 ms)
                                                                 QUERY PLAN                                                                
 ------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=648.535..648.536 rows=1 loops=1)
-   Buffers: shared hit=56118
-   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=648.497..648.498 rows=1 loops=1)
-         Buffers: shared hit=56118
-         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=648.495..648.495 rows=1 loops=1)
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=524.470..524.471 rows=1 loops=1)
+   Buffers: shared hit=56119
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=524.430..524.431 rows=1 loops=1)
+         Buffers: shared hit=56119
+         ->  Function Scan on storefront_feed_products  (cost=0.25..12.75 rows=5 width=347) (actual time=524.428..524.428 rows=1 loops=1)
                Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
                Rows Removed by Filter: 436
-               Buffers: shared hit=56118
+               Buffers: shared hit=56119
  Planning:
    Buffers: shared hit=25
- Planning Time: 0.233 ms
- Execution Time: 648.881 ms
+ Planning Time: 0.277 ms
+ Execution Time: 524.771 ms
 (12 rows)
 

@@ -1,0 +1,5 @@
+RESULT|728|2349504
+current_tenant_id|6|1.9|1.9
+is_admin|3|0.9|0.1
+is_super_admin|3|0.8|0.3
+is_platform_admin|3|0.2|0.2

@@ -1,5 +1,5 @@
 RESULT|1000|1846265
-current_tenant_id|6001|94.1|94.1
-is_super_admin|3000|260.5|168.2
-is_staff|3000|297.1|10.4
-is_admin|3000|286.7|26.2
+current_tenant_id|6001|107.6|107.6
+is_super_admin|3000|287.6|181.7
+is_staff|3000|325.2|11.1
+is_admin|3000|314.1|26.6

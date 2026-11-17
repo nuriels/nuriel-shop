@@ -2,6 +2,6 @@
 -- role=anon persona=anon
 -- db=perf_scratch_b label=A-rewrite
 
-===== REP 0  (psql wall 28 ms)
+===== REP 0  (psql wall 32 ms)
 
 STDERR: ERROR:  permission denied for function storefront_feed_products

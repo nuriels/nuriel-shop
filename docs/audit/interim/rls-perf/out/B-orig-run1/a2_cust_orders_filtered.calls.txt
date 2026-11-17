@@ -1,0 +1,6 @@
+RESULT|728|2349504
+current_tenant_id|5213|109.4|109.4
+is_admin|5210|504.2|38.6
+is_super_admin|5210|465.7|255.6
+can_view_order|5210|552.9|48.7
+is_platform_admin|5210|102.6|102.6

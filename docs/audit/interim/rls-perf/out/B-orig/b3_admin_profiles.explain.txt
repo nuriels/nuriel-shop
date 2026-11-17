@@ -2,78 +2,78 @@
 -- role=authenticated persona=t1_admin
 -- db=perf_scratch label=B-orig
 
-===== REP 0  (psql wall 74 ms)
+===== REP 0  (psql wall 58 ms)
                                                                                                                                                                                                                                                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                   
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=43.80..43.82 rows=1 width=48) (actual time=27.626..27.627 rows=1 loops=1)
-   Buffers: shared hit=2473 read=5
+ Aggregate  (cost=49.33..49.35 rows=1 width=48) (actual time=23.787..23.789 rows=1 loops=1)
+   Buffers: shared hit=3075 read=7 dirtied=3
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.875..2.876 rows=1 loops=1)
-           Buffers: shared hit=435
-   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..43.45 rows=19 width=26) (actual time=3.628..27.230 rows=200 loops=1)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.468..2.469 rows=1 loops=1)
+           Buffers: shared hit=436
+   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..48.96 rows=22 width=26) (actual time=3.024..23.411 rows=200 loops=1)
          Index Cond: (tenant_id = $0)
          Filter: ((user_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR (is_agent((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) AND (agent_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid)))
-         Buffers: shared hit=2470 read=5
+         Buffers: shared hit=3072 read=7 dirtied=3
  Planning:
-   Buffers: shared hit=215 read=4 dirtied=2
- Planning Time: 1.308 ms
- Execution Time: 27.709 ms
+   Buffers: shared hit=210 read=3
+ Planning Time: 1.198 ms
+ Execution Time: 23.874 ms
 (13 rows)
 
 
-===== REP 1  (psql wall 47 ms)
+===== REP 1  (psql wall 59 ms)
                                                                                                                                                                                                                                                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                   
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=43.80..43.82 rows=1 width=48) (actual time=16.915..16.916 rows=1 loops=1)
-   Buffers: shared hit=2478
+ Aggregate  (cost=49.33..49.35 rows=1 width=48) (actual time=24.197..24.198 rows=1 loops=1)
+   Buffers: shared hit=3081
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.010..2.010 rows=1 loops=1)
-           Buffers: shared hit=435
-   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..43.45 rows=19 width=26) (actual time=2.428..16.668 rows=200 loops=1)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.171..2.171 rows=1 loops=1)
+           Buffers: shared hit=436
+   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..48.96 rows=22 width=26) (actual time=2.673..23.858 rows=200 loops=1)
          Index Cond: (tenant_id = $0)
          Filter: ((user_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR (is_agent((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) AND (agent_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid)))
-         Buffers: shared hit=2475
+         Buffers: shared hit=3078
  Planning:
    Buffers: shared hit=213
- Planning Time: 0.736 ms
- Execution Time: 16.968 ms
+ Planning Time: 0.782 ms
+ Execution Time: 24.260 ms
 (13 rows)
 
 
-===== REP 2  (psql wall 55 ms)
+===== REP 2  (psql wall 50 ms)
                                                                                                                                                                                                                                                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                   
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=43.80..43.82 rows=1 width=48) (actual time=20.854..20.856 rows=1 loops=1)
-   Buffers: shared hit=2478
+ Aggregate  (cost=49.33..49.35 rows=1 width=48) (actual time=22.171..22.173 rows=1 loops=1)
+   Buffers: shared hit=3081
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.151..2.151 rows=1 loops=1)
-           Buffers: shared hit=435
-   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..43.45 rows=19 width=26) (actual time=2.610..20.585 rows=200 loops=1)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.417..2.418 rows=1 loops=1)
+           Buffers: shared hit=436
+   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..48.96 rows=22 width=26) (actual time=3.025..21.883 rows=200 loops=1)
          Index Cond: (tenant_id = $0)
          Filter: ((user_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR (is_agent((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) AND (agent_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid)))
-         Buffers: shared hit=2475
+         Buffers: shared hit=3078
  Planning:
    Buffers: shared hit=213
- Planning Time: 0.728 ms
- Execution Time: 20.937 ms
+ Planning Time: 0.810 ms
+ Execution Time: 22.237 ms
 (13 rows)
 
 
-===== REP 3  (psql wall 80 ms)
+===== REP 3  (psql wall 48 ms)
                                                                                                                                                                                                                                                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                   
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=43.80..43.82 rows=1 width=48) (actual time=35.344..35.346 rows=1 loops=1)
-   Buffers: shared hit=2478
+ Aggregate  (cost=49.33..49.35 rows=1 width=48) (actual time=17.815..17.816 rows=1 loops=1)
+   Buffers: shared hit=3081
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.744..2.745 rows=1 loops=1)
-           Buffers: shared hit=435
-   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..43.45 rows=19 width=26) (actual time=3.435..34.846 rows=200 loops=1)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.148..2.149 rows=1 loops=1)
+           Buffers: shared hit=436
+   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..48.96 rows=22 width=26) (actual time=2.724..17.578 rows=200 loops=1)
          Index Cond: (tenant_id = $0)
          Filter: ((user_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR (is_agent((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) AND (agent_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid)))
-         Buffers: shared hit=2475
+         Buffers: shared hit=3078
  Planning:
    Buffers: shared hit=213
- Planning Time: 1.139 ms
- Execution Time: 35.422 ms
+ Planning Time: 0.834 ms
+ Execution Time: 17.881 ms
 (13 rows)
 

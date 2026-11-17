@@ -1,0 +1,59 @@
+-- c1_catalog_anon: SELECT * FROM get_catalog() as anon
+-- role=anon persona=anon
+-- db=perf_scratch label=B-orig
+
+===== REP 0  (psql wall 1054 ms)
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=15.25..15.27 rows=1 width=48) (actual time=1017.284..1017.285 rows=1 loops=1)
+   Buffers: shared hit=55074 read=2061 dirtied=17, temp read=2681 written=2683
+   ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=913.259..915.909 rows=9697 loops=1)
+         Buffers: shared hit=55074 read=2061 dirtied=17, temp read=2681 written=2683
+ Planning:
+   Buffers: shared hit=18
+ Planning Time: 0.174 ms
+ Execution Time: 1020.672 ms
+(8 rows)
+
+
+===== REP 1  (psql wall 766 ms)
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=15.25..15.27 rows=1 width=48) (actual time=729.332..729.333 rows=1 loops=1)
+   Buffers: shared hit=57047, temp read=2681 written=2683
+   ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=586.300..589.688 rows=9697 loops=1)
+         Buffers: shared hit=57047, temp read=2681 written=2683
+ Planning:
+   Buffers: shared hit=18
+ Planning Time: 0.301 ms
+ Execution Time: 733.787 ms
+(8 rows)
+
+
+===== REP 2  (psql wall 904 ms)
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=15.25..15.27 rows=1 width=48) (actual time=854.525..854.526 rows=1 loops=1)
+   Buffers: shared hit=57047, temp read=2681 written=2683
+   ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=746.374..749.107 rows=9697 loops=1)
+         Buffers: shared hit=57047, temp read=2681 written=2683
+ Planning:
+   Buffers: shared hit=18
+ Planning Time: 0.267 ms
+ Execution Time: 857.898 ms
+(8 rows)
+
+
+===== REP 3  (psql wall 951 ms)
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=15.25..15.27 rows=1 width=48) (actual time=914.176..914.177 rows=1 loops=1)
+   Buffers: shared hit=57047, temp read=2681 written=2683
+   ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=806.941..809.628 rows=9697 loops=1)
+         Buffers: shared hit=57047, temp read=2681 written=2683
+ Planning:
+   Buffers: shared hit=18
+ Planning Time: 0.228 ms
+ Execution Time: 916.988 ms
+(8 rows)
+

@@ -2,94 +2,94 @@
 -- role=authenticated persona=t1_admin
 -- db=perf_scratch label=B-orig
 
-===== REP 0  (psql wall 56 ms)
+===== REP 0  (psql wall 58 ms)
                                                                                                                                                                                                                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=59.56..59.58 rows=1 width=48) (actual time=18.876..18.877 rows=1 loops=1)
-   Buffers: shared hit=2271 read=4
+ Aggregate  (cost=59.56..59.58 rows=1 width=48) (actual time=24.525..24.526 rows=1 loops=1)
+   Buffers: shared hit=2875 read=5
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.835..1.836 rows=1 loops=1)
-           Buffers: shared hit=225
-   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..59.18 rows=24 width=87) (actual time=1.888..18.471 rows=202 loops=1)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.918..1.918 rows=1 loops=1)
+           Buffers: shared hit=226
+   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..59.18 rows=24 width=87) (actual time=1.964..24.000 rows=202 loops=1)
          Recheck Cond: (tenant_id = $0)
          Filter: ((user_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR (is_agent((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) AND is_agent_of_customer((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid, user_id)))
-         Heap Blocks: exact=4
-         Buffers: shared hit=2268 read=4
-         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.867..1.868 rows=202 loops=1)
+         Heap Blocks: exact=5
+         Buffers: shared hit=2872 read=5
+         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.944..1.944 rows=212 loops=1)
                Index Cond: (tenant_id = $0)
-               Buffers: shared hit=225 read=1
+               Buffers: shared hit=226 read=1
  Planning:
-   Buffers: shared hit=325 dirtied=2
- Planning Time: 1.194 ms
- Execution Time: 18.959 ms
+   Buffers: shared hit=316 read=1
+ Planning Time: 1.171 ms
+ Execution Time: 24.649 ms
 (17 rows)
 
 
-===== REP 1  (psql wall 64 ms)
+===== REP 1  (psql wall 54 ms)
                                                                                                                                                                                                                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=59.56..59.58 rows=1 width=48) (actual time=22.172..22.173 rows=1 loops=1)
-   Buffers: shared hit=2275
+ Aggregate  (cost=59.56..59.58 rows=1 width=48) (actual time=24.459..24.461 rows=1 loops=1)
+   Buffers: shared hit=2880
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.208..2.209 rows=1 loops=1)
-           Buffers: shared hit=225
-   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..59.18 rows=24 width=87) (actual time=2.607..21.674 rows=202 loops=1)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.845..1.845 rows=1 loops=1)
+           Buffers: shared hit=226
+   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..59.18 rows=24 width=87) (actual time=1.880..23.955 rows=202 loops=1)
          Recheck Cond: (tenant_id = $0)
          Filter: ((user_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR (is_agent((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) AND is_agent_of_customer((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid, user_id)))
-         Heap Blocks: exact=4
-         Buffers: shared hit=2272
-         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=2.230..2.230 rows=202 loops=1)
+         Heap Blocks: exact=5
+         Buffers: shared hit=2877
+         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.861..1.861 rows=212 loops=1)
                Index Cond: (tenant_id = $0)
-               Buffers: shared hit=226
+               Buffers: shared hit=227
  Planning:
    Buffers: shared hit=317
- Planning Time: 1.174 ms
- Execution Time: 22.302 ms
+ Planning Time: 1.227 ms
+ Execution Time: 24.564 ms
 (17 rows)
 
 
-===== REP 2  (psql wall 55 ms)
+===== REP 2  (psql wall 78 ms)
                                                                                                                                                                                                                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=59.56..59.58 rows=1 width=48) (actual time=17.793..17.794 rows=1 loops=1)
-   Buffers: shared hit=2275
+ Aggregate  (cost=59.56..59.58 rows=1 width=48) (actual time=25.951..25.953 rows=1 loops=1)
+   Buffers: shared hit=2880
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.686..1.686 rows=1 loops=1)
-           Buffers: shared hit=225
-   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..59.18 rows=24 width=87) (actual time=1.725..17.405 rows=202 loops=1)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.356..2.356 rows=1 loops=1)
+           Buffers: shared hit=226
+   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..59.18 rows=24 width=87) (actual time=2.396..25.487 rows=202 loops=1)
          Recheck Cond: (tenant_id = $0)
          Filter: ((user_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR (is_agent((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) AND is_agent_of_customer((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid, user_id)))
-         Heap Blocks: exact=4
-         Buffers: shared hit=2272
-         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.705..1.705 rows=202 loops=1)
+         Heap Blocks: exact=5
+         Buffers: shared hit=2877
+         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=2.378..2.378 rows=212 loops=1)
                Index Cond: (tenant_id = $0)
-               Buffers: shared hit=226
+               Buffers: shared hit=227
  Planning:
    Buffers: shared hit=317
- Planning Time: 1.619 ms
- Execution Time: 17.870 ms
+ Planning Time: 1.123 ms
+ Execution Time: 26.040 ms
 (17 rows)
 
 
-===== REP 3  (psql wall 50 ms)
+===== REP 3  (psql wall 52 ms)
                                                                                                                                                                                                                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=59.56..59.58 rows=1 width=48) (actual time=18.633..18.634 rows=1 loops=1)
-   Buffers: shared hit=2275
+ Aggregate  (cost=59.56..59.58 rows=1 width=48) (actual time=18.432..18.434 rows=1 loops=1)
+   Buffers: shared hit=2880
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.498..1.498 rows=1 loops=1)
-           Buffers: shared hit=225
-   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..59.18 rows=24 width=87) (actual time=1.535..18.241 rows=202 loops=1)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.646..1.646 rows=1 loops=1)
+           Buffers: shared hit=226
+   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..59.18 rows=24 width=87) (actual time=1.674..18.017 rows=202 loops=1)
          Recheck Cond: (tenant_id = $0)
          Filter: ((user_id = (COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR (is_agent((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) AND is_agent_of_customer((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid, user_id)))
-         Heap Blocks: exact=4
-         Buffers: shared hit=2272
-         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.516..1.516 rows=202 loops=1)
+         Heap Blocks: exact=5
+         Buffers: shared hit=2877
+         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.659..1.659 rows=212 loops=1)
                Index Cond: (tenant_id = $0)
-               Buffers: shared hit=226
+               Buffers: shared hit=227
  Planning:
    Buffers: shared hit=317
- Planning Time: 1.196 ms
- Execution Time: 18.699 ms
+ Planning Time: 1.016 ms
+ Execution Time: 18.516 ms
 (17 rows)
 

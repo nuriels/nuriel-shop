@@ -1,0 +1,46 @@
+rel,pol,cmd,permissive,before_using,after_using,before_check,after_check
+customer_profiles,customer profile admin delete,DELETE,PERMISSIVE,is_admin(auth.uid()),( SELECT is_admin(auth.uid()) AS is_admin),,
+customer_profiles,customer profile self insert,INSERT,PERMISSIVE,,,((user_id = auth.uid()) AND (price_tier IS NULL) AND (agent_id IS NULL)),((user_id = ( SELECT auth.uid() AS uid)) AND (price_tier IS NULL) AND (agent_id IS NULL))
+customer_profiles,customer profile select,SELECT,PERMISSIVE,((user_id = auth.uid()) OR is_admin(auth.uid()) OR (is_agent(auth.uid()) AND (agent_id = auth.uid()))),((user_id = ( SELECT auth.uid() AS uid)) OR ( SELECT is_admin(auth.uid()) AS is_admin) OR (( SELECT is_agent(auth.uid()) AS is_agent) AND (agent_id = ( SELECT auth.uid() AS uid)))),,
+customer_profiles,customer profile admin update,UPDATE,PERMISSIVE,is_admin(auth.uid()),( SELECT is_admin(auth.uid()) AS is_admin),is_admin(auth.uid()),( SELECT is_admin(auth.uid()) AS is_admin)
+customer_profiles,customer profile agent update,UPDATE,PERMISSIVE,(is_agent(auth.uid()) AND (agent_id = auth.uid())),(( SELECT is_agent(auth.uid()) AS is_agent) AND (agent_id = ( SELECT auth.uid() AS uid))),(is_agent(auth.uid()) AND (agent_id = auth.uid())),(( SELECT is_agent(auth.uid()) AS is_agent) AND (agent_id = ( SELECT auth.uid() AS uid)))
+customer_profiles,customer profile self update,UPDATE,PERMISSIVE,(user_id = auth.uid()),(user_id = ( SELECT auth.uid() AS uid)),(user_id = auth.uid()),(user_id = ( SELECT auth.uid() AS uid))
+global_products,products managed by admin,ALL,PERMISSIVE,is_admin(auth.uid()),( SELECT is_admin(auth.uid()) AS is_admin),is_admin(auth.uid()),( SELECT is_admin(auth.uid()) AS is_admin)
+global_products,products readable by staff,SELECT,PERMISSIVE,is_staff(auth.uid()),( SELECT is_staff(auth.uid()) AS is_staff),,
+inquiries,tenant_isolation,ALL,RESTRICTIVE,(tenant_id = current_tenant_id()),(tenant_id = ( SELECT current_tenant_id() AS current_tenant_id)),(tenant_id = current_tenant_id()),(tenant_id = ( SELECT current_tenant_id() AS current_tenant_id))
+inquiry_notes,tenant_isolation,ALL,RESTRICTIVE,(tenant_id = current_tenant_id()),(tenant_id = ( SELECT current_tenant_id() AS current_tenant_id)),(tenant_id = current_tenant_id()),(tenant_id = ( SELECT current_tenant_id() AS current_tenant_id))
+inquiry_settings,tenant_isolation,ALL,RESTRICTIVE,(tenant_id = current_tenant_id()),(tenant_id = ( SELECT current_tenant_id() AS current_tenant_id)),(tenant_id = current_tenant_id()),(tenant_id = ( SELECT current_tenant_id() AS current_tenant_id))
+order_items,order items delete by staff,DELETE,PERMISSIVE,"(EXISTS ( SELECT 1
+   FROM orders o
+  WHERE ((o.id = order_items.order_id) AND (is_admin(auth.uid()) OR (o.agent_id = auth.uid())))))","(EXISTS ( SELECT 1
+   FROM orders o
+  WHERE ((o.id = order_items.order_id) AND (( SELECT is_admin(auth.uid()) AS is_admin) OR (o.agent_id = ( SELECT auth.uid() AS uid))))))",,
+order_items,order items insert,INSERT,PERMISSIVE,,,"(EXISTS ( SELECT 1
+   FROM orders o
+  WHERE ((o.id = order_items.order_id) AND (((o.customer_id = auth.uid()) AND (o.status = 'pending'::text)) OR is_admin(auth.uid()) OR (o.agent_id = auth.uid())))))","(EXISTS ( SELECT 1
+   FROM orders o
+  WHERE ((o.id = order_items.order_id) AND (((o.customer_id = ( SELECT auth.uid() AS uid)) AND (o.status = 'pending'::text)) OR ( SELECT is_admin(auth.uid()) AS is_admin) OR (o.agent_id = ( SELECT auth.uid() AS uid))))))"
+order_items,order items select,SELECT,PERMISSIVE,"(EXISTS ( SELECT 1
+   FROM orders o
+  WHERE ((o.id = order_items.order_id) AND can_view_order(o.customer_id, o.agent_id))))","(EXISTS ( SELECT 1
+   FROM orders o
+  WHERE ((o.id = order_items.order_id) AND (( SELECT is_admin(auth.uid()) AS is_admin) OR (o.customer_id = ( SELECT auth.uid() AS uid)) OR ((o.agent_id IS NOT NULL) AND (o.agent_id = ( SELECT auth.uid() AS uid)))))))",,
+order_items,order items update by staff,UPDATE,PERMISSIVE,"(EXISTS ( SELECT 1
+   FROM orders o
+  WHERE ((o.id = order_items.order_id) AND (is_admin(auth.uid()) OR (o.agent_id = auth.uid())))))","(EXISTS ( SELECT 1
+   FROM orders o
+  WHERE ((o.id = order_items.order_id) AND (( SELECT is_admin(auth.uid()) AS is_admin) OR (o.agent_id = ( SELECT auth.uid() AS uid))))))","(EXISTS ( SELECT 1
+   FROM orders o
+  WHERE ((o.id = order_items.order_id) AND (is_admin(auth.uid()) OR (o.agent_id = auth.uid())))))","(EXISTS ( SELECT 1
+   FROM orders o
+  WHERE ((o.id = order_items.order_id) AND (( SELECT is_admin(auth.uid()) AS is_admin) OR (o.agent_id = ( SELECT auth.uid() AS uid))))))"
+orders,orders delete by admin,DELETE,PERMISSIVE,is_admin(auth.uid()),( SELECT is_admin(auth.uid()) AS is_admin),,
+orders,orders insert by customer or staff,INSERT,PERMISSIVE,,,"((customer_id = auth.uid()) OR is_admin(auth.uid()) OR (is_agent(auth.uid()) AND is_agent_of_customer(auth.uid(), customer_id)))","((customer_id = ( SELECT auth.uid() AS uid)) OR ( SELECT is_admin(auth.uid()) AS is_admin) OR (( SELECT is_agent(auth.uid()) AS is_agent) AND is_agent_of_customer(( SELECT auth.uid() AS uid), customer_id)))"
+orders,tenant_active_for_new_orders,INSERT,RESTRICTIVE,,,(tenant_is_active(tenant_id) OR is_staff(auth.uid())),(tenant_is_active(tenant_id) OR ( SELECT is_staff(auth.uid()) AS is_staff))
+orders,orders select,SELECT,PERMISSIVE,"can_view_order(customer_id, agent_id)",(( SELECT is_admin(auth.uid()) AS is_admin) OR (customer_id = ( SELECT auth.uid() AS uid)) OR ((agent_id IS NOT NULL) AND (agent_id = ( SELECT auth.uid() AS uid)))),,
+orders,orders update by staff,UPDATE,PERMISSIVE,(is_admin(auth.uid()) OR (agent_id = auth.uid())),(( SELECT is_admin(auth.uid()) AS is_admin) OR (agent_id = ( SELECT auth.uid() AS uid))),(is_admin(auth.uid()) OR (agent_id = auth.uid())),(( SELECT is_admin(auth.uid()) AS is_admin) OR (agent_id = ( SELECT auth.uid() AS uid)))
+user_roles,admin deletes roles,DELETE,PERMISSIVE,is_admin(auth.uid()),( SELECT is_admin(auth.uid()) AS is_admin),,
+user_roles,self register pending customer,INSERT,PERMISSIVE,,,((user_id = auth.uid()) AND (role = 'customer'::text) AND (is_approved = false) AND (is_blocked = false)),((user_id = ( SELECT auth.uid() AS uid)) AND (role = 'customer'::text) AND (is_approved = false) AND (is_blocked = false))
+user_roles,role readable by self staff or agent of customer,SELECT,PERMISSIVE,"((user_id = auth.uid()) OR is_admin(auth.uid()) OR (is_agent(auth.uid()) AND is_agent_of_customer(auth.uid(), user_id)))","((user_id = ( SELECT auth.uid() AS uid)) OR ( SELECT is_admin(auth.uid()) AS is_admin) OR (( SELECT is_agent(auth.uid()) AS is_agent) AND is_agent_of_customer(( SELECT auth.uid() AS uid), user_id)))",,
+user_roles,admin updates roles,UPDATE,PERMISSIVE,is_admin(auth.uid()),( SELECT is_admin(auth.uid()) AS is_admin),is_admin(auth.uid()),( SELECT is_admin(auth.uid()) AS is_admin)
+user_roles,self updates own username,UPDATE,PERMISSIVE,(user_id = auth.uid()),(user_id = ( SELECT auth.uid() AS uid)),(user_id = auth.uid()),(user_id = ( SELECT auth.uid() AS uid))

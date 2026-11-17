@@ -2,114 +2,114 @@
 -- role=authenticated persona=t1_admin
 -- db=perf_scratch_b label=A-rewrite
 
-===== REP 0  (psql wall 49 ms)
+===== REP 0  (psql wall 37 ms)
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=4.51..4.53 rows=1 width=48) (actual time=3.406..3.408 rows=1 loops=1)
-   Buffers: shared hit=481 read=2
+ Aggregate  (cost=4.51..4.53 rows=1 width=48) (actual time=2.833..2.835 rows=1 loops=1)
+   Buffers: shared hit=487
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.699..2.699 rows=1 loops=1)
-           Buffers: shared hit=440
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.257..2.257 rows=1 loops=1)
+           Buffers: shared hit=444
    InitPlan 2 (returns $1)
-     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.009..0.009 rows=1 loops=1)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.011..0.011 rows=1 loops=1)
    InitPlan 3 (returns $2)
-     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.570..0.570 rows=1 loops=1)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.434..0.435 rows=1 loops=1)
            Buffers: shared hit=38
    InitPlan 4 (returns $3)
      ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
    InitPlan 5 (returns $4)
      ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
-   ->  Seq Scan on customer_profiles p  (cost=0.00..3.58 rows=9 width=26) (actual time=3.303..3.332 rows=50 loops=1)
+   ->  Seq Scan on customer_profiles p  (cost=0.00..3.58 rows=9 width=26) (actual time=2.720..2.732 rows=50 loops=1)
          Filter: ((tenant_id = $0) AND ((user_id = $1) OR $2 OR ($3 AND (agent_id = $4))))
          Rows Removed by Filter: 40
-         Buffers: shared hit=478 read=2
+         Buffers: shared hit=484
  Planning:
-   Buffers: shared hit=196 read=4
- Planning Time: 1.086 ms
- Execution Time: 3.502 ms
+   Buffers: shared hit=198 read=2 dirtied=1
+ Planning Time: 0.962 ms
+ Execution Time: 2.935 ms
 (22 rows)
 
 
-===== REP 1  (psql wall 43 ms)
+===== REP 1  (psql wall 44 ms)
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=4.51..4.53 rows=1 width=48) (actual time=3.039..3.041 rows=1 loops=1)
-   Buffers: shared hit=483
+ Aggregate  (cost=4.51..4.53 rows=1 width=48) (actual time=2.653..2.655 rows=1 loops=1)
+   Buffers: shared hit=487
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.316..2.317 rows=1 loops=1)
-           Buffers: shared hit=440
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.118..2.118 rows=1 loops=1)
+           Buffers: shared hit=444
    InitPlan 2 (returns $1)
      ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.009..0.009 rows=1 loops=1)
    InitPlan 3 (returns $2)
-     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.539..0.539 rows=1 loops=1)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.444..0.445 rows=1 loops=1)
            Buffers: shared hit=38
    InitPlan 4 (returns $3)
      ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
    InitPlan 5 (returns $4)
      ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
-   ->  Seq Scan on customer_profiles p  (cost=0.00..3.58 rows=9 width=26) (actual time=2.884..2.943 rows=50 loops=1)
+   ->  Seq Scan on customer_profiles p  (cost=0.00..3.58 rows=9 width=26) (actual time=2.586..2.598 rows=50 loops=1)
          Filter: ((tenant_id = $0) AND ((user_id = $1) OR $2 OR ($3 AND (agent_id = $4))))
          Rows Removed by Filter: 40
-         Buffers: shared hit=480
+         Buffers: shared hit=484
  Planning:
    Buffers: shared hit=200
- Planning Time: 1.004 ms
- Execution Time: 3.135 ms
+ Planning Time: 0.890 ms
+ Execution Time: 2.740 ms
 (22 rows)
 
 
 ===== REP 2  (psql wall 39 ms)
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=4.51..4.53 rows=1 width=48) (actual time=2.475..2.477 rows=1 loops=1)
-   Buffers: shared hit=483
+ Aggregate  (cost=4.51..4.53 rows=1 width=48) (actual time=4.082..4.085 rows=1 loops=1)
+   Buffers: shared hit=487
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.988..1.988 rows=1 loops=1)
-           Buffers: shared hit=440
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.789..2.790 rows=1 loops=1)
+           Buffers: shared hit=444
    InitPlan 2 (returns $1)
-     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.007..0.008 rows=1 loops=1)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.014..0.014 rows=1 loops=1)
    InitPlan 3 (returns $2)
-     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.396..0.396 rows=1 loops=1)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=1.160..1.161 rows=1 loops=1)
            Buffers: shared hit=38
    InitPlan 4 (returns $3)
      ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
    InitPlan 5 (returns $4)
      ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
-   ->  Seq Scan on customer_profiles p  (cost=0.00..3.58 rows=9 width=26) (actual time=2.408..2.423 rows=50 loops=1)
+   ->  Seq Scan on customer_profiles p  (cost=0.00..3.58 rows=9 width=26) (actual time=3.983..4.006 rows=50 loops=1)
          Filter: ((tenant_id = $0) AND ((user_id = $1) OR $2 OR ($3 AND (agent_id = $4))))
          Rows Removed by Filter: 40
-         Buffers: shared hit=480
+         Buffers: shared hit=484
  Planning:
    Buffers: shared hit=200
- Planning Time: 0.724 ms
- Execution Time: 2.594 ms
+ Planning Time: 0.990 ms
+ Execution Time: 4.188 ms
 (22 rows)
 
 
-===== REP 3  (psql wall 37 ms)
+===== REP 3  (psql wall 45 ms)
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=4.51..4.53 rows=1 width=48) (actual time=3.626..3.628 rows=1 loops=1)
-   Buffers: shared hit=483
+ Aggregate  (cost=4.51..4.53 rows=1 width=48) (actual time=3.019..3.021 rows=1 loops=1)
+   Buffers: shared hit=487
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.772..2.773 rows=1 loops=1)
-           Buffers: shared hit=440
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.366..2.367 rows=1 loops=1)
+           Buffers: shared hit=444
    InitPlan 2 (returns $1)
      ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.011..0.011 rows=1 loops=1)
    InitPlan 3 (returns $2)
-     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.703..0.703 rows=1 loops=1)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.492..0.493 rows=1 loops=1)
            Buffers: shared hit=38
    InitPlan 4 (returns $3)
      ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
    InitPlan 5 (returns $4)
      ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
-   ->  Seq Scan on customer_profiles p  (cost=0.00..3.58 rows=9 width=26) (actual time=3.510..3.536 rows=50 loops=1)
+   ->  Seq Scan on customer_profiles p  (cost=0.00..3.58 rows=9 width=26) (actual time=2.885..2.901 rows=50 loops=1)
          Filter: ((tenant_id = $0) AND ((user_id = $1) OR $2 OR ($3 AND (agent_id = $4))))
          Rows Removed by Filter: 40
-         Buffers: shared hit=480
+         Buffers: shared hit=484
  Planning:
    Buffers: shared hit=200
- Planning Time: 1.022 ms
- Execution Time: 3.734 ms
+ Planning Time: 1.050 ms
+ Execution Time: 3.115 ms
 (22 rows)
 

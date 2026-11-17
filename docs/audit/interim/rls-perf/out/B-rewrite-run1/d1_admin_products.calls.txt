@@ -1,0 +1,5 @@
+RESULT|1000|1848288
+current_tenant_id|3|1.8|1.8
+is_admin|1|0.4|0.0
+is_super_admin|1|0.4|0.1
+is_staff|1|0.5|0.1

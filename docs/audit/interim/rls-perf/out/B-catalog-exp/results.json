@@ -1,0 +1,284 @@
+[
+ {
+  "qid": "x1_catalog_exp_anon",
+  "desc": "EXPERIMENT get_catalog_exp() as anon",
+  "persona": "anon",
+  "role": "anon",
+  "db": "perf_scratch_b",
+  "label": "B-catalog-exp",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 294.504,
+  "exec_ms_min": 264.548,
+  "exec_ms_max": 312.46,
+  "plan_ms_median": 0.218,
+  "rows": 1,
+  "hit": 57187,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 321.549,
+  "rows_returned": 9697,
+  "body_bytes": 14731355,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 4,
+    "total_ms": 1.0,
+    "self_ms": 1.0
+   },
+   {
+    "fn": "get_catalog_exp",
+    "calls": 1,
+    "total_ms": 234.7,
+    "self_ms": 231.8
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "buyer_price_tier",
+    "calls": 1,
+    "total_ms": 2.3,
+    "self_ms": 1.4
+   },
+   {
+    "fn": "tenant_storefront_open",
+    "calls": 1,
+    "total_ms": 0.5,
+    "self_ms": 0.5
+   }
+  ]
+ },
+ {
+  "qid": "x2_catalog_exp_auth",
+  "desc": "EXPERIMENT get_catalog_exp() as authenticated customer",
+  "persona": "t1_customer_a",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "B-catalog-exp",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 309.232,
+  "exec_ms_min": 303.994,
+  "exec_ms_max": 317.75,
+  "plan_ms_median": 0.205,
+  "rows": 1,
+  "hit": 57323,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 353.807,
+  "rows_returned": 9697,
+  "body_bytes": 14714093,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 8,
+    "total_ms": 1.6,
+    "self_ms": 1.6
+   },
+   {
+    "fn": "get_catalog_exp",
+    "calls": 1,
+    "total_ms": 211.8,
+    "self_ms": 208.1
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 1,
+    "total_ms": 0.3,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_staff",
+    "calls": 1,
+    "total_ms": 0.6,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_agent",
+    "calls": 1,
+    "total_ms": 0.2,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_admin",
+    "calls": 1,
+    "total_ms": 0.4,
+    "self_ms": 0.0
+   },
+   {
+    "fn": "is_platform_admin",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "buyer_price_tier",
+    "calls": 1,
+    "total_ms": 2.5,
+    "self_ms": 1.2
+   },
+   {
+    "fn": "tenant_storefront_open",
+    "calls": 1,
+    "total_ms": 0.5,
+    "self_ms": 0.4
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   }
+  ]
+ },
+ {
+  "qid": "x3_catalog_exp_admin",
+  "desc": "EXPERIMENT get_catalog_exp() as admin",
+  "persona": "t1_admin",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "B-catalog-exp",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 281.733,
+  "exec_ms_min": 265.872,
+  "exec_ms_max": 317.651,
+  "plan_ms_median": 0.208,
+  "rows": 1,
+  "hit": 57261,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 294.04,
+  "rows_returned": 9697,
+  "body_bytes": 14731355,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 6,
+    "total_ms": 2.2,
+    "self_ms": 2.2
+   },
+   {
+    "fn": "get_catalog_exp",
+    "calls": 1,
+    "total_ms": 317.4,
+    "self_ms": 312.2
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 1,
+    "total_ms": 0.7,
+    "self_ms": 0.3
+   },
+   {
+    "fn": "is_staff",
+    "calls": 1,
+    "total_ms": 0.8,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_admin",
+    "calls": 1,
+    "total_ms": 0.7,
+    "self_ms": 0.0
+   },
+   {
+    "fn": "buyer_price_tier",
+    "calls": 1,
+    "total_ms": 3.4,
+    "self_ms": 1.8
+   },
+   {
+    "fn": "tenant_storefront_open",
+    "calls": 1,
+    "total_ms": 0.8,
+    "self_ms": 0.7
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   }
+  ]
+ },
+ {
+  "qid": "x4_feed_exp_service",
+  "desc": "EXPERIMENT storefront_feed_products_exp() one id, service_role",
+  "persona": "service",
+  "role": "service_role",
+  "db": "perf_scratch_b",
+  "label": "B-catalog-exp",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 84.302,
+  "exec_ms_min": 67.666,
+  "exec_ms_max": 88.151,
+  "plan_ms_median": 0.346,
+  "rows": 1,
+  "hit": 7983,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 62.556,
+  "rows_returned": 1,
+  "body_bytes": 1181,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 4,
+    "total_ms": 2.0,
+    "self_ms": 2.0
+   },
+   {
+    "fn": "tenant_active_addons",
+    "calls": 2,
+    "total_ms": 0.4,
+    "self_ms": 0.4
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 1,
+    "total_ms": 0.2,
+    "self_ms": 0.2
+   },
+   {
+    "fn": "tenant_subscription_active",
+    "calls": 1,
+    "total_ms": 3.7,
+    "self_ms": 0.2
+   },
+   {
+    "fn": "plan_features",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "storefront_feed_products_exp",
+    "calls": 1,
+    "total_ms": 87.2,
+    "self_ms": 81.3
+   },
+   {
+    "fn": "tenant_subscription_state",
+    "calls": 1,
+    "total_ms": 3.5,
+    "self_ms": 2.4
+   },
+   {
+    "fn": "tenant_features",
+    "calls": 1,
+    "total_ms": 1.1,
+    "self_ms": 0.6
+   }
+  ]
+ }
+]

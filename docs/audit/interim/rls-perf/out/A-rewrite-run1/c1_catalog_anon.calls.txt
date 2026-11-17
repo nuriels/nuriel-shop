@@ -1,0 +1,6 @@
+RESULT|2910|4413586
+buyer_price_tier|23493|107.8|106.8
+current_tenant_id|43|2.1|2.1
+tenant_is_active|1|0.1|0.1
+tenant_storefront_open|1|0.5|0.4
+get_catalog|1|206.9|97.4

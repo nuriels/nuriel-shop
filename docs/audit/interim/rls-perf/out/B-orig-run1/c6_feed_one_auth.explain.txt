@@ -1,0 +1,7 @@
+-- c6_feed_one_auth: storefront_feed_products() filtered to 1 id, authenticated
+-- role=authenticated persona=t1_customer_a
+-- db=perf_scratch label=B-orig
+
+===== REP 0  (psql wall 28 ms)
+
+STDERR: ERROR:  permission denied for function storefront_feed_products

@@ -1,5 +1,5 @@
 RESULT|1|14
-current_tenant_id|600002|9409.4|9409.4
-is_admin|300000|26280.6|2390.5
-is_super_admin|300000|23890.1|14483.1
-can_view_order|300000|28294.5|2013.9
+current_tenant_id|600002|9376.6|9376.6
+is_admin|300000|25814.3|2299.9
+is_super_admin|300000|23514.4|14140.4
+can_view_order|300000|27837.2|2023.0

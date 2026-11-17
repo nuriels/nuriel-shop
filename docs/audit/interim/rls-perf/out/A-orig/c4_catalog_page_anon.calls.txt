@@ -1,6 +1,6 @@
 RESULT|1000|1522402
-buyer_price_tier|23493|125.7|124.8
-current_tenant_id|43|2.2|2.2
+buyer_price_tier|23493|110.8|109.7
+current_tenant_id|43|2.6|2.6
 tenant_is_active|1|0.1|0.1
-tenant_storefront_open|1|0.6|0.5
-get_catalog|1|241.8|114.3
+tenant_storefront_open|1|0.6|0.6
+get_catalog|1|212.3|99.3

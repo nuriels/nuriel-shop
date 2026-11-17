@@ -2,60 +2,60 @@
 -- role=authenticated persona=t1_admin
 -- db=perf_scratch label=B-orig
 
-===== REP 0  (psql wall 27477 ms)
+===== REP 0  (psql wall 29404 ms)
                                                                                 QUERY PLAN                                                                                
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=1275715.55..1275715.56 rows=1 width=48) (actual time=27445.550..27445.555 rows=1 loops=1)
-   Buffers: shared hit=3000457 read=16689 written=151
-   ->  Aggregate  (cost=1275715.53..1275715.54 rows=1 width=8) (actual time=27445.494..27445.498 rows=1 loops=1)
-         Buffers: shared hit=3000454 read=16689 written=151
+ Aggregate  (cost=1275808.73..1275808.75 rows=1 width=48) (actual time=29361.572..29361.577 rows=1 loops=1)
+   Buffers: shared hit=3905657 read=11494
+   ->  Aggregate  (cost=1275808.72..1275808.73 rows=1 width=8) (actual time=29361.502..29361.507 rows=1 loops=1)
+         Buffers: shared hit=3905654 read=11494
          InitPlan 1 (returns $0)
-           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.513..2.514 rows=1 loops=1)
-                 Buffers: shared hit=408 read=69 written=15
-         ->  Index Scan using order_items_tenant_id_idx on order_items  (cost=0.42..1275542.73 rows=69015 width=0) (actual time=27278.554..27421.288 rows=449763 loops=1)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.328..2.329 rows=1 loops=1)
+                 Buffers: shared hit=422 read=56
+         ->  Index Scan using order_items_tenant_id_idx on order_items  (cost=0.42..1275635.91 rows=69020 width=0) (actual time=29202.793..29338.208 rows=449763 loops=1)
                Index Cond: (tenant_id = $0)
                Filter: (hashed SubPlan 5)
-               Buffers: shared hit=3000454 read=16689 written=151
+               Buffers: shared hit=3905654 read=11494
                SubPlan 5
-                 ->  Index Scan using orders_tenant_id_idx on orders o  (cost=0.55..26089.93 rows=5111 width=16) (actual time=0.967..27138.599 rows=150000 loops=1)
+                 ->  Index Scan using orders_tenant_id_idx on orders o  (cost=0.55..26106.46 rows=5114 width=16) (actual time=1.236..29051.244 rows=150000 loops=1)
                        Index Cond: (tenant_id = $4)
                        Filter: (can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
-                       Buffers: shared hit=3000040 read=7086 written=8
+                       Buffers: shared hit=3900053 read=7076
                        InitPlan 4 (returns $4)
-                         ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.151..0.152 rows=1 loops=1)
-                               Buffers: shared hit=5
+                         ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.160..0.160 rows=1 loops=1)
+                               Buffers: shared hit=6
  Planning:
-   Buffers: shared hit=486 read=36 written=4
- Planning Time: 1.391 ms
- Execution Time: 27446.770 ms
+   Buffers: shared hit=516 read=5
+ Planning Time: 1.283 ms
+ Execution Time: 29362.685 ms
 (23 rows)
 
 
-===== REP 1  (psql wall 29756 ms)
+===== REP 1  (psql wall 27840 ms)
                                                                                 QUERY PLAN                                                                                
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=1275715.55..1275715.56 rows=1 width=48) (actual time=29704.517..29704.521 rows=1 loops=1)
-   Buffers: shared hit=3000444 read=16702 written=250
-   ->  Aggregate  (cost=1275715.53..1275715.54 rows=1 width=8) (actual time=29704.458..29704.462 rows=1 loops=1)
-         Buffers: shared hit=3000441 read=16702 written=250
+ Aggregate  (cost=1275808.73..1275808.75 rows=1 width=48) (actual time=27803.412..27803.415 rows=1 loops=1)
+   Buffers: shared hit=3911281 read=5870
+   ->  Aggregate  (cost=1275808.72..1275808.73 rows=1 width=8) (actual time=27803.339..27803.341 rows=1 loops=1)
+         Buffers: shared hit=3911278 read=5870
          InitPlan 1 (returns $0)
-           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=3.126..3.127 rows=1 loops=1)
-                 Buffers: shared hit=397 read=80
-         ->  Index Scan using order_items_tenant_id_idx on order_items  (cost=0.42..1275542.73 rows=69015 width=0) (actual time=29533.145..29681.390 rows=449763 loops=1)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.550..2.550 rows=1 loops=1)
+                 Buffers: shared hit=415 read=63
+         ->  Index Scan using order_items_tenant_id_idx on order_items  (cost=0.42..1275635.91 rows=69020 width=0) (actual time=27658.462..27780.739 rows=449763 loops=1)
                Index Cond: (tenant_id = $0)
                Filter: (hashed SubPlan 5)
-               Buffers: shared hit=3000441 read=16702 written=250
+               Buffers: shared hit=3911278 read=5870
                SubPlan 5
-                 ->  Index Scan using orders_tenant_id_idx on orders o  (cost=0.55..26089.93 rows=5111 width=16) (actual time=0.893..29385.373 rows=150000 loops=1)
+                 ->  Index Scan using orders_tenant_id_idx on orders o  (cost=0.55..26106.46 rows=5114 width=16) (actual time=0.979..27517.086 rows=150000 loops=1)
                        Index Cond: (tenant_id = $4)
                        Filter: (can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
-                       Buffers: shared hit=3000039 read=7087
+                       Buffers: shared hit=3906726 read=403
                        InitPlan 4 (returns $4)
-                         ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.159..0.160 rows=1 loops=1)
-                               Buffers: shared hit=5
+                         ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.155..0.155 rows=1 loops=1)
+                               Buffers: shared hit=6
  Planning:
-   Buffers: shared hit=472 read=50
- Planning Time: 1.453 ms
- Execution Time: 29705.492 ms
+   Buffers: shared hit=489 read=32
+ Planning Time: 1.568 ms
+ Execution Time: 27806.108 ms
 (23 rows)
 

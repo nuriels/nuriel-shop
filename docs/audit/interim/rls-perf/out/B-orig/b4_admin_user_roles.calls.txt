@@ -1,4 +1,4 @@
 RESULT|202|32415
-current_tenant_id|403|11.3|11.3
-is_admin|201|19.9|0.4
-is_super_admin|201|19.5|9.6
+current_tenant_id|403|7.3|7.3
+is_admin|201|15.1|0.4
+is_super_admin|201|14.7|8.6

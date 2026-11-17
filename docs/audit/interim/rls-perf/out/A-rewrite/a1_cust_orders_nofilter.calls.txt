@@ -1,5 +1,5 @@
-RESULT|420|1347529
-current_tenant_id|9|2.2|2.2
+RESULT|420|1339609
+current_tenant_id|9|2.1|2.1
 is_super_admin|3|0.9|0.3
 is_admin|3|0.9|0.1
 is_platform_admin|3|0.2|0.2

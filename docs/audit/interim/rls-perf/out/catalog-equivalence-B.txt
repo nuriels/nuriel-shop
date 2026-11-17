@@ -1,0 +1,12 @@
+get_catalog  anon     rows(orig exp equal-set) = 9697 9697 true  OK
+get_catalog  cA       rows(orig exp equal-set) = 9697 9697 true  OK
+get_catalog  cB       rows(orig exp equal-set) = 9697 9697 true  OK
+get_catalog  agent    rows(orig exp equal-set) = 9697 9697 true  OK
+get_catalog  admin    rows(orig exp equal-set) = 9697 9697 true  OK
+get_catalog  c2on1    rows(orig exp equal-set) = 0 0 true  OK
+get_catalog  c2       rows(orig exp equal-set) = 970 970 true  OK
+get_catalog  plat1    rows(orig exp equal-set) = 9697 9697 true  OK
+get_catalog  anon_T2  rows(orig exp equal-set) = 970 970 true  OK
+feed         tenant 1 rows(orig exp equal-set) = 9697 9697 true  OK
+feed         tenant 2 rows(orig exp equal-set) = 970 970 true  OK
+ALL EQUAL

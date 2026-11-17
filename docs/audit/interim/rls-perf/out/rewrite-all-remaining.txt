@@ -1,0 +1,6 @@
+ still-unwrapped after scope=all: billing_history.store admin reads billing history :: staff_can('billing.manage'::text, ( SELECT auth.uid() AS uid))
+ still-unwrapped after scope=all: user_custom_prices.custom prices readable at pos :: staff_can('pos'::text)
+ still-unwrapped after scope=all: product_reviews.reviews readable by store managers :: staff_can('admin'::text)
+ still-unwrapped after scope=all: product_serials.serials readable by stock staff :: (staff_can('inventory'::text) OR staff_can('orders.fulfill'::text) OR staff_can('pos'::text))
+ still-unwrapped after scope=all: tenant_subscriptions.store admin reads subscription :: staff_can('billing.manage'::text, ( SELECT auth.uid() AS uid))
+

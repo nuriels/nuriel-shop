@@ -12,7 +12,7 @@
 --   R3  any remaining bare auth.uid()                          -> (SELECT auth.uid())
 --   R4  any remaining bare current_tenant_id()                 -> (SELECT current_tenant_id())
 -- Row-dependent helpers (is_agent_of_customer(uid, customer_id), tenant_is_active(tenant_id), ...) are NOT touched
--- except for their auth.uid() argument (R3).  Policy names, commands, roles, PERMISSIVE/RESTRICTIVE are unchanged.
+-- except for their auth.uid() argument (R3).  The rules are idempotent (re-running on a rewritten DB changes nothing).  Policy names, commands, roles, PERMISSIVE/RESTRICTIVE are unchanged.
 -- ============================================================================
 \set ON_ERROR_STOP on
 \if :{?scope}
@@ -33,7 +33,9 @@ BEGIN
   r := regexp_replace(r, '\mcan_view_order\(([A-Za-z_.]+), ([A-Za-z_.]+)\)',
         '((SELECT is_admin(@@UID@@)) OR (\1 = (SELECT @@UID@@)) OR ((\2 IS NOT NULL) AND (\2 = (SELECT @@UID@@))))', 'g');
   -- R1
-  r := regexp_replace(r, '\m(is_admin|is_staff|is_agent|is_cashier)\(auth\.uid\(\)\)', '(SELECT \1(@@UID@@))', 'g');
+  r := regexp_replace(r, '(?<!SELECT )\m(is_admin|is_staff|is_agent|is_cashier)\(auth\.uid\(\)\)', '(SELECT \1(@@UID@@))', 'g');
+  -- (idempotence) protect auth.uid() inside already-wrapped calls: "( SELECT is_admin(auth.uid()) AS is_admin)"
+  r := regexp_replace(r, '\( SELECT ([a-z_]+)\(auth\.uid\(\)\) AS', '( SELECT \1(@@UID@@) AS', 'g');
   -- R3: remaining bare auth.uid() (not already inside "( SELECT auth.uid() ...")
   r := regexp_replace(r, '(?<!SELECT )auth\.uid\(\)', '(SELECT auth.uid())', 'g');
   r := replace(r, '@@UID@@', 'auth.uid()');

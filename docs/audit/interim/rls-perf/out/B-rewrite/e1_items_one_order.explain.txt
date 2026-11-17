@@ -2,166 +2,166 @@
 -- role=authenticated persona=t1_customer_a
 -- db=perf_scratch_b label=B-rewrite
 
-===== REP 0  (psql wall 33 ms)
+===== REP 0  (psql wall 37 ms)
                                                                                      QUERY PLAN                                                                                      
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=58.39..58.41 rows=1 width=48) (actual time=2.543..2.545 rows=1 loops=1)
-   Buffers: shared hit=541
+ Aggregate  (cost=58.39..58.41 rows=1 width=48) (actual time=3.033..3.036 rows=1 loops=1)
+   Buffers: shared hit=547
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.760..1.761 rows=1 loops=1)
-           Buffers: shared hit=422
-   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.42..58.12 rows=1 width=304) (actual time=2.494..2.507 rows=5 loops=1)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.010..2.010 rows=1 loops=1)
+           Buffers: shared hit=423
+   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.42..58.12 rows=1 width=304) (actual time=2.976..2.991 rows=5 loops=1)
          Index Cond: (order_id = '80b5d8b1-40fd-4225-a12b-a5c54ab78d7d'::uuid)
          Filter: ((tenant_id = $0) AND (SubPlan 9))
-         Buffers: shared hit=538
+         Buffers: shared hit=544
          SubPlan 9
-           ->  Index Scan using orders_tenant_id_key on orders o  (cost=1.38..9.40 rows=1 width=0) (actual time=0.124..0.124 rows=1 loops=5)
+           ->  Index Scan using orders_tenant_id_key on orders o  (cost=1.38..9.40 rows=1 width=0) (actual time=0.163..0.163 rows=1 loops=5)
                  Index Cond: ((tenant_id = $5) AND (id = i.order_id))
                  Filter: (($6 OR (customer_id = $7) OR ((agent_id IS NOT NULL) AND (agent_id = $8))) AND ($1 OR (customer_id = $2) OR ((agent_id IS NOT NULL) AND (agent_id = $3))))
-                 Buffers: shared hit=107
+                 Buffers: shared hit=111
                  InitPlan 2 (returns $1)
-                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.232..0.232 rows=1 loops=1)
-                         Buffers: shared hit=8
+                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.205..0.205 rows=1 loops=1)
+                         Buffers: shared hit=10
                  InitPlan 3 (returns $2)
-                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.003..0.004 rows=1 loops=1)
+                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.003..0.003 rows=1 loops=1)
                  InitPlan 4 (returns $3)
                    ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
                  InitPlan 5 (returns $5)
-                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.096..0.096 rows=1 loops=1)
-                         Buffers: shared hit=5
+                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.135..0.135 rows=1 loops=1)
+                         Buffers: shared hit=6
                  InitPlan 6 (returns $6)
-                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.355..0.356 rows=1 loops=1)
-                         Buffers: shared hit=79
+                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.575..0.575 rows=1 loops=1)
+                         Buffers: shared hit=81
                  InitPlan 7 (returns $7)
-                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.005..0.005 rows=1 loops=1)
+                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.007..0.007 rows=1 loops=1)
                  InitPlan 8 (returns $8)
                    ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
  Planning:
-   Buffers: shared hit=667
- Planning Time: 1.669 ms
- Execution Time: 2.698 ms
+   Buffers: shared hit=666
+ Planning Time: 1.835 ms
+ Execution Time: 3.196 ms
 (35 rows)
 
 
-===== REP 1  (psql wall 34 ms)
+===== REP 1  (psql wall 37 ms)
                                                                                      QUERY PLAN                                                                                      
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=58.39..58.41 rows=1 width=48) (actual time=2.736..2.738 rows=1 loops=1)
-   Buffers: shared hit=541
+ Aggregate  (cost=58.39..58.41 rows=1 width=48) (actual time=3.822..3.824 rows=1 loops=1)
+   Buffers: shared hit=547
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.932..1.932 rows=1 loops=1)
-           Buffers: shared hit=422
-   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.42..58.12 rows=1 width=304) (actual time=2.682..2.696 rows=5 loops=1)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.568..2.568 rows=1 loops=1)
+           Buffers: shared hit=423
+   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.42..58.12 rows=1 width=304) (actual time=3.746..3.765 rows=5 loops=1)
          Index Cond: (order_id = '80b5d8b1-40fd-4225-a12b-a5c54ab78d7d'::uuid)
          Filter: ((tenant_id = $0) AND (SubPlan 9))
-         Buffers: shared hit=538
+         Buffers: shared hit=544
          SubPlan 9
-           ->  Index Scan using orders_tenant_id_key on orders o  (cost=1.38..9.40 rows=1 width=0) (actual time=0.123..0.124 rows=1 loops=5)
+           ->  Index Scan using orders_tenant_id_key on orders o  (cost=1.38..9.40 rows=1 width=0) (actual time=0.201..0.201 rows=1 loops=5)
                  Index Cond: ((tenant_id = $5) AND (id = i.order_id))
                  Filter: (($6 OR (customer_id = $7) OR ((agent_id IS NOT NULL) AND (agent_id = $8))) AND ($1 OR (customer_id = $2) OR ((agent_id IS NOT NULL) AND (agent_id = $3))))
-                 Buffers: shared hit=107
+                 Buffers: shared hit=111
                  InitPlan 2 (returns $1)
-                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.196..0.196 rows=1 loops=1)
-                         Buffers: shared hit=8
+                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.288..0.289 rows=1 loops=1)
+                         Buffers: shared hit=10
+                 InitPlan 3 (returns $2)
+                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.005..0.005 rows=1 loops=1)
+                 InitPlan 4 (returns $3)
+                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
+                 InitPlan 5 (returns $5)
+                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.152..0.153 rows=1 loops=1)
+                         Buffers: shared hit=6
+                 InitPlan 6 (returns $6)
+                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.670..0.670 rows=1 loops=1)
+                         Buffers: shared hit=81
+                 InitPlan 7 (returns $7)
+                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.010..0.010 rows=1 loops=1)
+                 InitPlan 8 (returns $8)
+                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
+ Planning:
+   Buffers: shared hit=666
+ Planning Time: 2.322 ms
+ Execution Time: 4.060 ms
+(35 rows)
+
+
+===== REP 2  (psql wall 39 ms)
+                                                                                     QUERY PLAN                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=58.39..58.41 rows=1 width=48) (actual time=2.894..2.896 rows=1 loops=1)
+   Buffers: shared hit=547
+   InitPlan 1 (returns $0)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.963..1.964 rows=1 loops=1)
+           Buffers: shared hit=423
+   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.42..58.12 rows=1 width=304) (actual time=2.836..2.850 rows=5 loops=1)
+         Index Cond: (order_id = '80b5d8b1-40fd-4225-a12b-a5c54ab78d7d'::uuid)
+         Filter: ((tenant_id = $0) AND (SubPlan 9))
+         Buffers: shared hit=544
+         SubPlan 9
+           ->  Index Scan using orders_tenant_id_key on orders o  (cost=1.38..9.40 rows=1 width=0) (actual time=0.151..0.151 rows=1 loops=5)
+                 Index Cond: ((tenant_id = $5) AND (id = i.order_id))
+                 Filter: (($6 OR (customer_id = $7) OR ((agent_id IS NOT NULL) AND (agent_id = $8))) AND ($1 OR (customer_id = $2) OR ((agent_id IS NOT NULL) AND (agent_id = $3))))
+                 Buffers: shared hit=111
+                 InitPlan 2 (returns $1)
+                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.215..0.215 rows=1 loops=1)
+                         Buffers: shared hit=10
                  InitPlan 3 (returns $2)
                    ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.004..0.004 rows=1 loops=1)
                  InitPlan 4 (returns $3)
                    ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
                  InitPlan 5 (returns $5)
-                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.113..0.114 rows=1 loops=1)
-                         Buffers: shared hit=5
+                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.104..0.104 rows=1 loops=1)
+                         Buffers: shared hit=6
                  InitPlan 6 (returns $6)
-                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.386..0.387 rows=1 loops=1)
-                         Buffers: shared hit=79
+                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.504..0.504 rows=1 loops=1)
+                         Buffers: shared hit=81
                  InitPlan 7 (returns $7)
-                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.005..0.005 rows=1 loops=1)
+                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.007..0.007 rows=1 loops=1)
                  InitPlan 8 (returns $8)
                    ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
  Planning:
-   Buffers: shared hit=667
- Planning Time: 1.731 ms
- Execution Time: 2.902 ms
+   Buffers: shared hit=666
+ Planning Time: 1.688 ms
+ Execution Time: 3.052 ms
 (35 rows)
 
 
-===== REP 2  (psql wall 43 ms)
+===== REP 3  (psql wall 42 ms)
                                                                                      QUERY PLAN                                                                                      
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=58.39..58.41 rows=1 width=48) (actual time=2.880..2.882 rows=1 loops=1)
-   Buffers: shared hit=541
+ Aggregate  (cost=58.39..58.41 rows=1 width=48) (actual time=3.420..3.422 rows=1 loops=1)
+   Buffers: shared hit=547
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.003..2.003 rows=1 loops=1)
-           Buffers: shared hit=422
-   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.42..58.12 rows=1 width=304) (actual time=2.825..2.840 rows=5 loops=1)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.286..2.286 rows=1 loops=1)
+           Buffers: shared hit=423
+   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.42..58.12 rows=1 width=304) (actual time=3.351..3.369 rows=5 loops=1)
          Index Cond: (order_id = '80b5d8b1-40fd-4225-a12b-a5c54ab78d7d'::uuid)
          Filter: ((tenant_id = $0) AND (SubPlan 9))
-         Buffers: shared hit=538
+         Buffers: shared hit=544
          SubPlan 9
-           ->  Index Scan using orders_tenant_id_key on orders o  (cost=1.38..9.40 rows=1 width=0) (actual time=0.133..0.133 rows=1 loops=5)
+           ->  Index Scan using orders_tenant_id_key on orders o  (cost=1.38..9.40 rows=1 width=0) (actual time=0.180..0.180 rows=1 loops=5)
                  Index Cond: ((tenant_id = $5) AND (id = i.order_id))
                  Filter: (($6 OR (customer_id = $7) OR ((agent_id IS NOT NULL) AND (agent_id = $8))) AND ($1 OR (customer_id = $2) OR ((agent_id IS NOT NULL) AND (agent_id = $3))))
-                 Buffers: shared hit=107
+                 Buffers: shared hit=111
                  InitPlan 2 (returns $1)
-                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.196..0.196 rows=1 loops=1)
-                         Buffers: shared hit=8
+                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.306..0.307 rows=1 loops=1)
+                         Buffers: shared hit=10
                  InitPlan 3 (returns $2)
-                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.004..0.004 rows=1 loops=1)
+                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.006..0.006 rows=1 loops=1)
                  InitPlan 4 (returns $3)
                    ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
                  InitPlan 5 (returns $5)
-                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.133..0.133 rows=1 loops=1)
-                         Buffers: shared hit=5
+                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.149..0.149 rows=1 loops=1)
+                         Buffers: shared hit=6
                  InitPlan 6 (returns $6)
-                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.430..0.430 rows=1 loops=1)
-                         Buffers: shared hit=79
+                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.550..0.550 rows=1 loops=1)
+                         Buffers: shared hit=81
                  InitPlan 7 (returns $7)
-                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.005..0.006 rows=1 loops=1)
+                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.008..0.008 rows=1 loops=1)
                  InitPlan 8 (returns $8)
                    ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
  Planning:
-   Buffers: shared hit=667
- Planning Time: 2.456 ms
- Execution Time: 3.119 ms
-(35 rows)
-
-
-===== REP 3  (psql wall 37 ms)
-                                                                                     QUERY PLAN                                                                                      
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=58.39..58.41 rows=1 width=48) (actual time=2.868..2.870 rows=1 loops=1)
-   Buffers: shared hit=541
-   InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.000..2.000 rows=1 loops=1)
-           Buffers: shared hit=422
-   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.42..58.12 rows=1 width=304) (actual time=2.811..2.825 rows=5 loops=1)
-         Index Cond: (order_id = '80b5d8b1-40fd-4225-a12b-a5c54ab78d7d'::uuid)
-         Filter: ((tenant_id = $0) AND (SubPlan 9))
-         Buffers: shared hit=538
-         SubPlan 9
-           ->  Index Scan using orders_tenant_id_key on orders o  (cost=1.38..9.40 rows=1 width=0) (actual time=0.139..0.139 rows=1 loops=5)
-                 Index Cond: ((tenant_id = $5) AND (id = i.order_id))
-                 Filter: (($6 OR (customer_id = $7) OR ((agent_id IS NOT NULL) AND (agent_id = $8))) AND ($1 OR (customer_id = $2) OR ((agent_id IS NOT NULL) AND (agent_id = $3))))
-                 Buffers: shared hit=107
-                 InitPlan 2 (returns $1)
-                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.270..0.270 rows=1 loops=1)
-                         Buffers: shared hit=8
-                 InitPlan 3 (returns $2)
-                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.004..0.004 rows=1 loops=1)
-                 InitPlan 4 (returns $3)
-                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
-                 InitPlan 5 (returns $5)
-                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.099..0.099 rows=1 loops=1)
-                         Buffers: shared hit=5
-                 InitPlan 6 (returns $6)
-                   ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.393..0.393 rows=1 loops=1)
-                         Buffers: shared hit=79
-                 InitPlan 7 (returns $7)
-                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.005..0.005 rows=1 loops=1)
-                 InitPlan 8 (returns $8)
-                   ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
- Planning:
-   Buffers: shared hit=667
- Planning Time: 1.885 ms
- Execution Time: 3.020 ms
+   Buffers: shared hit=666
+ Planning Time: 2.023 ms
+ Execution Time: 3.599 ms
 (35 rows)
 

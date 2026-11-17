@@ -29,31 +29,39 @@ def idx(r):
     names = [i for i in r["indexes"] if i in ("orders_customer_idx", "orders_tenant_created_idx", "orders_tenant_id_idx")]
     return ", ".join(names) if names else "-"
 
+def pct(r):
+    if not r or "exec_ms_median" not in r: return ""
+    lim = limit(r["role"])
+    if lim is None: return "n/a (no limit)"
+    p = r["exec_ms_median"] / lim * 100
+    return f"{p:.0f}% of {lim // 1000} s" + (" **EXCEEDS**" if p > 100 else "")
+
 def table(scn):
     o, w = load(scn + "-orig"), load(scn + "-rewrite")
     print(f"\n#### Scenario {scn}\n")
-    print("| query | role / persona | rows | JSON KB | plan ms | exec ms orig | exec ms rewrite | speed-up | over limit (orig) | orders idx (orig) | helper calls orig → rewrite | buffers hit orig |")
-    print("|---|---|--:|--:|--:|--:|--:|--:|---|---|---|--:|")
+    print("| query | role / persona | rows | plan ms | exec ms orig | vs timeout | exec ms rewrite | speed-up | orders index (orig) | helper calls orig → rewrite | buffers hit orig → rewrite |")
+    print("|---|---|--:|--:|--:|---|--:|--:|---|---|---|")
     for qid, r in o.items():
         rw = w.get(qid)
-        sp = ""
-        if "exec_ms_median" in r and rw and "exec_ms_median" in rw and rw["exec_ms_median"] > 0:
-            sp = f"{r['exec_ms_median'] / rw['exec_ms_median']:.1f}×"
-        kb = f"{r.get('body_bytes', 0) / 1024:.0f}" if r.get("body_bytes") else ""
-        print(f"| `{qid}` | {r['role']} / {r['persona']} | {r.get('rows_returned', '')} | {kb} | {r.get('plan_ms_median', 0):.1f} | {fmt(r)} | {fmt(rw)} | {sp} | {over(r)} | {idx(r)} | {fn(r)} → {fn(rw)} | {r.get('hit', '')} |"
-              if "exec_ms_median" in r else
-              f"| `{qid}` | {r['role']} / {r['persona']} | | | | {fmt(r)} | {fmt(rw)} | | | | | |")
+        if "exec_ms_median" not in r:
+            print(f"| `{qid}` | {r['role']} / {r['persona']} | | | {fmt(r)} | | {fmt(rw)} | | | | |"); continue
+        sp = f"{r['exec_ms_median'] / rw['exec_ms_median']:.1f}x" if rw and "exec_ms_median" in rw and rw["exec_ms_median"] > 0 else ""
+        print(f"| `{qid}` | {r['role']} / {r['persona']} | {r.get('rows_returned', '')} | {r.get('plan_ms_median', 0):.1f} | {fmt(r)} | {pct(r)} | {fmt(rw)} | {sp} | {idx(r)} | {fn(r)} → {fn(rw)} | {r.get('hit', '')} → {rw.get('hit', '') if rw else ''} |")
 
 def loadtable():
-    print("\n#### Load test (pgbench, 30 s per cell, real API roles)\n")
-    print("| scenario | variant | workload | clients | tx | TPS | p50 ms | p95 ms | max ms | failed |")
-    print("|---|---|---|--:|--:|--:|--:|--:|--:|--:|")
+    print("\n#### Load test (pgbench, 30 s per cell, real API roles; run 2 = quiet machine, run 1 = shared with other jobs)\n")
+    print("| scenario | variant | workload | clients | tx (run 2) | TPS run 2 | TPS run 1 | p50 ms run 2 | p50 ms run 1 | p95 ms run 2 | p95 ms run 1 | max ms run 2 |")
+    print("|---|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for scn in ("A", "B"):
         for var in ("orig", "rewrite"):
-            p = os.path.join(HERE, "out", f"{scn}-{var}-load", "load.json")
-            if not os.path.exists(p): continue
-            for r in json.load(open(p)):
-                print(f"| {scn} | {var} | {r['workload']} | {r['clients']} | {r['tx']} | {r['tps']:.1f} | {r['p50_ms']:.0f} | {r['p95_ms']:.0f} | {r['max_ms']:.0f} | {r['failed']} |")
+            p2 = os.path.join(HERE, "out", f"{scn}-{var}-load", "load.json")
+            p1 = os.path.join(HERE, "out", f"{scn}-{var}-load-run1", "load.json")
+            if not os.path.exists(p2): continue
+            r1 = {(r["workload"], r["clients"]): r for r in json.load(open(p1))} if os.path.exists(p1) else {}
+            for r in json.load(open(p2)):
+                o = r1.get((r["workload"], r["clients"]), {})
+                g = lambda k, f="{:.0f}": f.format(o[k]) if o.get(k) is not None else ""
+                print(f"| {scn} | {var} | {r['workload']} | {r['clients']} | {r['tx']} | {r['tps']:.1f} | {g('tps', '{:.1f}')} | {r['p50_ms']:.0f} | {g('p50_ms')} | {r['p95_ms']:.0f} | {g('p95_ms')} | {r['max_ms']:.0f} |")
 
 if __name__ == "__main__":
     for scn in ("A", "B"):

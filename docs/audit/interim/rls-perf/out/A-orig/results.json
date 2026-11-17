@@ -8,12 +8,12 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 2603.527,
-  "exec_ms_min": 2340.87,
-  "exec_ms_max": 2798.554,
-  "plan_ms_median": 2.146,
+  "exec_ms_median": 2898.476,
+  "exec_ms_min": 2729.055,
+  "exec_ms_max": 2959.891,
+  "plan_ms_median": 1.963,
   "rows": 1,
-  "hit": 164995,
+  "hit": 164725,
   "read": 0,
   "indexes": [
    "order_items_order_idx",
@@ -21,39 +21,39 @@
    "orders_tenant_created_idx"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 2546.963,
+  "first_run_exec_ms": 3117.26,
   "rows_returned": 420,
-  "body_bytes": 1347529,
+  "body_bytes": 1339609,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
-    "calls": 45127,
-    "total_ms": 806.0,
-    "self_ms": 806.0
+    "calls": 45063,
+    "total_ms": 610.8,
+    "self_ms": 610.8
    },
    {
     "fn": "is_super_admin",
-    "calls": 22562,
-    "total_ms": 2618.9,
-    "self_ms": 1302.7
+    "calls": 22530,
+    "total_ms": 1982.3,
+    "self_ms": 988.5
    },
    {
     "fn": "is_admin",
-    "calls": 22562,
-    "total_ms": 2811.3,
-    "self_ms": 192.4
+    "calls": 22530,
+    "total_ms": 2126.9,
+    "self_ms": 144.7
    },
    {
     "fn": "can_view_order",
-    "calls": 22562,
-    "total_ms": 3028.7,
-    "self_ms": 217.4
+    "calls": 22530,
+    "total_ms": 2295.8,
+    "self_ms": 168.9
    },
    {
     "fn": "is_platform_admin",
-    "calls": 22562,
-    "total_ms": 511.9,
-    "self_ms": 511.9
+    "calls": 22530,
+    "total_ms": 385.0,
+    "self_ms": 385.0
    }
   ]
  },
@@ -66,12 +66,12 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 536.049,
-  "exec_ms_min": 484.653,
-  "exec_ms_max": 710.578,
-  "plan_ms_median": 1.989,
+  "exec_ms_median": 458.453,
+  "exec_ms_min": 445.22,
+  "exec_ms_max": 462.001,
+  "plan_ms_median": 2.661,
   "rows": 1,
-  "hit": 26920,
+  "hit": 26650,
   "read": 0,
   "indexes": [
    "order_items_order_idx",
@@ -80,39 +80,39 @@
    "orders_tenant_id_idx"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 460.326,
+  "first_run_exec_ms": 501.538,
   "rows_returned": 420,
-  "body_bytes": 1347529,
+  "body_bytes": 1339609,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
-    "calls": 5967,
-    "total_ms": 168.2,
-    "self_ms": 168.2
+    "calls": 5903,
+    "total_ms": 125.0,
+    "self_ms": 125.0
    },
    {
     "fn": "is_super_admin",
-    "calls": 2982,
-    "total_ms": 469.6,
-    "self_ms": 214.5
+    "calls": 2950,
+    "total_ms": 340.8,
+    "self_ms": 155.0
    },
    {
     "fn": "is_admin",
-    "calls": 2982,
-    "total_ms": 523.2,
-    "self_ms": 53.5
+    "calls": 2950,
+    "total_ms": 381.0,
+    "self_ms": 40.2
    },
    {
     "fn": "can_view_order",
-    "calls": 2982,
-    "total_ms": 572.2,
-    "self_ms": 49.0
+    "calls": 2950,
+    "total_ms": 416.1,
+    "self_ms": 35.0
    },
    {
     "fn": "is_platform_admin",
-    "calls": 2982,
-    "total_ms": 90.2,
-    "self_ms": 90.2
+    "calls": 2950,
+    "total_ms": 62.7,
+    "self_ms": 62.7
    }
   ]
  },
@@ -125,12 +125,12 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 1523.373,
-  "exec_ms_min": 1310.614,
-  "exec_ms_max": 1585.471,
-  "plan_ms_median": 2.43,
+  "exec_ms_median": 1426.641,
+  "exec_ms_min": 1348.436,
+  "exec_ms_max": 1459.008,
+  "plan_ms_median": 2.308,
   "rows": 1,
-  "hit": 93154,
+  "hit": 92086,
   "read": 0,
   "indexes": [
    "order_items_order_idx",
@@ -138,39 +138,39 @@
    "orders_tenant_created_idx"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 1429.092,
+  "first_run_exec_ms": 1324.064,
   "rows_returned": 1000,
-  "body_bytes": 3232513,
+  "body_bytes": 3201440,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
-    "calls": 22885,
-    "total_ms": 365.3,
-    "self_ms": 365.3
+    "calls": 22633,
+    "total_ms": 389.8,
+    "self_ms": 389.8
    },
    {
     "fn": "is_super_admin",
-    "calls": 11441,
-    "total_ms": 1198.4,
-    "self_ms": 600.5
+    "calls": 11315,
+    "total_ms": 1293.2,
+    "self_ms": 650.7
    },
    {
     "fn": "is_admin",
-    "calls": 11441,
-    "total_ms": 1286.1,
-    "self_ms": 87.7
+    "calls": 11315,
+    "total_ms": 1386.1,
+    "self_ms": 93.0
    },
    {
     "fn": "can_view_order",
-    "calls": 11441,
-    "total_ms": 1394.1,
-    "self_ms": 108.0
+    "calls": 11315,
+    "total_ms": 1505.1,
+    "self_ms": 119.0
    },
    {
     "fn": "is_platform_admin",
-    "calls": 11441,
-    "total_ms": 234.6,
-    "self_ms": 234.6
+    "calls": 11315,
+    "total_ms": 254.9,
+    "self_ms": 254.9
    }
   ]
  },
@@ -183,12 +183,12 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 678.683,
-  "exec_ms_min": 571.384,
-  "exec_ms_max": 690.025,
-  "plan_ms_median": 2.478,
+  "exec_ms_median": 667.184,
+  "exec_ms_min": 563.527,
+  "exec_ms_max": 726.587,
+  "plan_ms_median": 3.396,
   "rows": 1,
-  "hit": 53935,
+  "hit": 54929,
   "read": 0,
   "indexes": [
    "order_items_order_idx",
@@ -196,33 +196,33 @@
    "orders_tenant_created_idx"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 733.908,
+  "first_run_exec_ms": 917.974,
   "rows_returned": 1000,
-  "body_bytes": 3167934,
+  "body_bytes": 3200529,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
-    "calls": 13823,
-    "total_ms": 193.4,
-    "self_ms": 193.4
+    "calls": 14087,
+    "total_ms": 248.6,
+    "self_ms": 248.6
    },
    {
     "fn": "is_super_admin",
-    "calls": 6910,
-    "total_ms": 529.6,
-    "self_ms": 338.0
+    "calls": 7042,
+    "total_ms": 684.6,
+    "self_ms": 438.6
    },
    {
     "fn": "is_admin",
-    "calls": 6910,
-    "total_ms": 583.9,
-    "self_ms": 54.3
+    "calls": 7042,
+    "total_ms": 757.5,
+    "self_ms": 72.9
    },
    {
     "fn": "can_view_order",
-    "calls": 6910,
-    "total_ms": 631.0,
-    "self_ms": 47.1
+    "calls": 7042,
+    "total_ms": 821.0,
+    "self_ms": 63.5
    }
   ]
  },
@@ -235,37 +235,37 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 6.436,
-  "exec_ms_min": 5.506,
-  "exec_ms_max": 6.567,
-  "plan_ms_median": 0.687,
+  "exec_ms_median": 10.223,
+  "exec_ms_min": 8.115,
+  "exec_ms_max": 12.185,
+  "plan_ms_median": 1.124,
   "rows": 1,
-  "hit": 780,
+  "hit": 782,
   "read": 0,
   "indexes": [
    "customer_profiles_tenant_user_key"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 6.535,
+  "first_run_exec_ms": 6.305,
   "rows_returned": 50,
   "body_bytes": 4098,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
     "calls": 101,
-    "total_ms": 2.7,
-    "self_ms": 2.7
+    "total_ms": 3.9,
+    "self_ms": 3.9
    },
    {
     "fn": "is_super_admin",
     "calls": 50,
-    "total_ms": 3.5,
-    "self_ms": 2.0
+    "total_ms": 4.6,
+    "self_ms": 2.8
    },
    {
     "fn": "is_admin",
     "calls": 50,
-    "total_ms": 3.6,
+    "total_ms": 4.7,
     "self_ms": 0.1
    }
   ]
@@ -279,38 +279,38 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 5.755,
-  "exec_ms_min": 5.0,
-  "exec_ms_max": 7.465,
-  "plan_ms_median": 0.849,
+  "exec_ms_median": 8.22,
+  "exec_ms_min": 7.723,
+  "exec_ms_max": 8.549,
+  "plan_ms_median": 1.375,
   "rows": 1,
-  "hit": 574,
+  "hit": 575,
   "read": 0,
   "indexes": [
    "user_roles_email_unique_idx"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 6.102,
+  "first_run_exec_ms": 7.858,
   "rows_returned": 52,
   "body_bytes": 8314,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
     "calls": 103,
-    "total_ms": 2.2,
-    "self_ms": 2.2
+    "total_ms": 4.3,
+    "self_ms": 4.3
    },
    {
     "fn": "is_super_admin",
     "calls": 51,
-    "total_ms": 3.2,
-    "self_ms": 2.0
+    "total_ms": 7.6,
+    "self_ms": 4.9
    },
    {
     "fn": "is_admin",
     "calls": 51,
-    "total_ms": 3.3,
-    "self_ms": 0.1
+    "total_ms": 7.8,
+    "self_ms": 0.2
    }
   ]
  },
@@ -323,50 +323,50 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 10.652,
-  "exec_ms_min": 8.564,
-  "exec_ms_max": 12.907,
-  "plan_ms_median": 0.795,
+  "exec_ms_median": 11.965,
+  "exec_ms_min": 8.601,
+  "exec_ms_max": 12.074,
+  "plan_ms_median": 0.89,
   "rows": 1,
-  "hit": 1062,
+  "hit": 1064,
   "read": 0,
   "indexes": [
    "customer_profiles_tenant_user_key"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 8.576,
+  "first_run_exec_ms": 8.946,
   "rows_returned": 1,
   "body_bytes": 80,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
     "calls": 149,
-    "total_ms": 6.0,
-    "self_ms": 6.0
+    "total_ms": 4.2,
+    "self_ms": 4.2
    },
    {
     "fn": "is_super_admin",
     "calls": 49,
-    "total_ms": 9.5,
-    "self_ms": 4.7
+    "total_ms": 5.0,
+    "self_ms": 2.4
    },
    {
     "fn": "is_admin",
     "calls": 49,
-    "total_ms": 9.8,
-    "self_ms": 0.3
+    "total_ms": 5.1,
+    "self_ms": 0.1
    },
    {
     "fn": "is_agent",
     "calls": 49,
-    "total_ms": 1.8,
-    "self_ms": 0.6
+    "total_ms": 1.1,
+    "self_ms": 0.4
    },
    {
     "fn": "is_platform_admin",
     "calls": 49,
-    "total_ms": 2.1,
-    "self_ms": 2.1
+    "total_ms": 1.0,
+    "self_ms": 1.0
    }
   ]
  },
@@ -379,192 +379,30 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 233.511,
-  "exec_ms_min": 232.166,
-  "exec_ms_max": 243.848,
-  "plan_ms_median": 0.171,
+  "exec_ms_median": 282.561,
+  "exec_ms_min": 217.745,
+  "exec_ms_max": 282.613,
+  "plan_ms_median": 0.224,
   "rows": 1,
-  "hit": 18962,
+  "hit": 18964,
   "read": 0,
   "indexes": [],
   "seqscans": [],
-  "first_run_exec_ms": 215.065,
+  "first_run_exec_ms": 240.646,
   "rows_returned": 2910,
   "body_bytes": 4413586,
   "fn_calls": [
    {
     "fn": "buyer_price_tier",
     "calls": 23493,
-    "total_ms": 102.8,
-    "self_ms": 101.8
+    "total_ms": 97.1,
+    "self_ms": 96.2
    },
    {
     "fn": "current_tenant_id",
     "calls": 43,
-    "total_ms": 2.5,
-    "self_ms": 2.5
-   },
-   {
-    "fn": "tenant_is_active",
-    "calls": 1,
-    "total_ms": 0.1,
-    "self_ms": 0.1
-   },
-   {
-    "fn": "tenant_storefront_open",
-    "calls": 1,
-    "total_ms": 0.5,
-    "self_ms": 0.5
-   },
-   {
-    "fn": "get_catalog",
-    "calls": 1,
-    "total_ms": 196.0,
-    "self_ms": 91.1
-   }
-  ]
- },
- {
-  "qid": "c2_catalog_auth",
-  "desc": "SELECT * FROM get_catalog() as authenticated (customer A)",
-  "persona": "t1_customer_a",
-  "role": "authenticated",
-  "db": "perf_scratch",
-  "label": "A-orig",
-  "n_reps": 4,
-  "timed_out_cap": false,
-  "exec_ms_median": 881.043,
-  "exec_ms_min": 872.372,
-  "exec_ms_max": 917.044,
-  "plan_ms_median": 0.182,
-  "rows": 1,
-  "hit": 207863,
-  "read": 0,
-  "indexes": [],
-  "seqscans": [],
-  "first_run_exec_ms": 1004.556,
-  "rows_returned": 2910,
-  "body_bytes": 4407869,
-  "fn_calls": [
-   {
-    "fn": "current_tenant_id",
-    "calls": 47257,
-    "total_ms": 580.4,
-    "self_ms": 580.4
-   },
-   {
-    "fn": "buyer_price_tier",
-    "calls": 23607,
-    "total_ms": 787.8,
-    "self_ms": 209.2
-   },
-   {
-    "fn": "tenant_is_active",
-    "calls": 1,
-    "total_ms": 0.1,
-    "self_ms": 0.1
-   },
-   {
-    "fn": "tenant_storefront_open",
-    "calls": 1,
-    "total_ms": 0.5,
-    "self_ms": 0.4
-   },
-   {
-    "fn": "get_catalog",
-    "calls": 1,
-    "total_ms": 917.4,
-    "self_ms": 127.3
-   }
-  ]
- },
- {
-  "qid": "c3_catalog_admin",
-  "desc": "SELECT * FROM get_catalog() as authenticated staff (admin)",
-  "persona": "t1_admin",
-  "role": "authenticated",
-  "db": "perf_scratch",
-  "label": "A-orig",
-  "n_reps": 4,
-  "timed_out_cap": false,
-  "exec_ms_median": 251.39,
-  "exec_ms_min": 251.184,
-  "exec_ms_max": 339.868,
-  "plan_ms_median": 0.208,
-  "rows": 1,
-  "hit": 42500,
-  "read": 0,
-  "indexes": [],
-  "seqscans": [],
-  "first_run_exec_ms": 250.828,
-  "rows_returned": 2910,
-  "body_bytes": 4413586,
-  "fn_calls": [
-   {
-    "fn": "buyer_price_tier",
-    "calls": 23493,
-    "total_ms": 120.0,
-    "self_ms": 118.6
-   },
-   {
-    "fn": "current_tenant_id",
-    "calls": 43,
-    "total_ms": 3.9,
-    "self_ms": 3.9
-   },
-   {
-    "fn": "tenant_is_active",
-    "calls": 1,
-    "total_ms": 0.1,
-    "self_ms": 0.1
-   },
-   {
-    "fn": "tenant_storefront_open",
-    "calls": 1,
-    "total_ms": 0.7,
-    "self_ms": 0.6
-   },
-   {
-    "fn": "get_catalog",
-    "calls": 1,
-    "total_ms": 233.9,
-    "self_ms": 110.7
-   }
-  ]
- },
- {
-  "qid": "c4_catalog_page_anon",
-  "desc": "get_catalog() page 0 as the app pages it (order+range 0-999) as anon",
-  "persona": "anon",
-  "role": "anon",
-  "db": "perf_scratch",
-  "label": "A-orig",
-  "n_reps": 4,
-  "timed_out_cap": false,
-  "exec_ms_median": 213.28,
-  "exec_ms_min": 171.213,
-  "exec_ms_max": 251.953,
-  "plan_ms_median": 0.311,
-  "rows": 1,
-  "hit": 18697,
-  "read": 0,
-  "indexes": [],
-  "seqscans": [],
-  "first_run_exec_ms": 166.3,
-  "rows_returned": 1000,
-  "body_bytes": 1522402,
-  "fn_calls": [
-   {
-    "fn": "buyer_price_tier",
-    "calls": 23493,
-    "total_ms": 125.7,
-    "self_ms": 124.8
-   },
-   {
-    "fn": "current_tenant_id",
-    "calls": 43,
-    "total_ms": 2.2,
-    "self_ms": 2.2
+    "total_ms": 2.1,
+    "self_ms": 2.1
    },
    {
     "fn": "tenant_is_active",
@@ -581,8 +419,170 @@
    {
     "fn": "get_catalog",
     "calls": 1,
-    "total_ms": 241.8,
-    "self_ms": 114.3
+    "total_ms": 186.3,
+    "self_ms": 87.3
+   }
+  ]
+ },
+ {
+  "qid": "c2_catalog_auth",
+  "desc": "SELECT * FROM get_catalog() as authenticated (customer A)",
+  "persona": "t1_customer_a",
+  "role": "authenticated",
+  "db": "perf_scratch",
+  "label": "A-orig",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 1142.568,
+  "exec_ms_min": 1108.456,
+  "exec_ms_max": 1257.274,
+  "plan_ms_median": 0.229,
+  "rows": 1,
+  "hit": 207865,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 996.437,
+  "rows_returned": 2910,
+  "body_bytes": 4407869,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 47257,
+    "total_ms": 647.6,
+    "self_ms": 647.6
+   },
+   {
+    "fn": "buyer_price_tier",
+    "calls": 23607,
+    "total_ms": 884.0,
+    "self_ms": 238.6
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "tenant_storefront_open",
+    "calls": 1,
+    "total_ms": 0.8,
+    "self_ms": 0.7
+   },
+   {
+    "fn": "get_catalog",
+    "calls": 1,
+    "total_ms": 1037.4,
+    "self_ms": 150.3
+   }
+  ]
+ },
+ {
+  "qid": "c3_catalog_admin",
+  "desc": "SELECT * FROM get_catalog() as authenticated staff (admin)",
+  "persona": "t1_admin",
+  "role": "authenticated",
+  "db": "perf_scratch",
+  "label": "A-orig",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 212.064,
+  "exec_ms_min": 193.415,
+  "exec_ms_max": 246.754,
+  "plan_ms_median": 0.195,
+  "rows": 1,
+  "hit": 42502,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 311.721,
+  "rows_returned": 2910,
+  "body_bytes": 4413586,
+  "fn_calls": [
+   {
+    "fn": "buyer_price_tier",
+    "calls": 23493,
+    "total_ms": 101.5,
+    "self_ms": 100.4
+   },
+   {
+    "fn": "current_tenant_id",
+    "calls": 43,
+    "total_ms": 3.0,
+    "self_ms": 3.0
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "tenant_storefront_open",
+    "calls": 1,
+    "total_ms": 0.6,
+    "self_ms": 0.5
+   },
+   {
+    "fn": "get_catalog",
+    "calls": 1,
+    "total_ms": 198.1,
+    "self_ms": 94.1
+   }
+  ]
+ },
+ {
+  "qid": "c4_catalog_page_anon",
+  "desc": "get_catalog() page 0 as the app pages it (order+range 0-999) as anon",
+  "persona": "anon",
+  "role": "anon",
+  "db": "perf_scratch",
+  "label": "A-orig",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 219.831,
+  "exec_ms_min": 193.791,
+  "exec_ms_max": 236.594,
+  "plan_ms_median": 0.33,
+  "rows": 1,
+  "hit": 18699,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 234.358,
+  "rows_returned": 1000,
+  "body_bytes": 1522402,
+  "fn_calls": [
+   {
+    "fn": "buyer_price_tier",
+    "calls": 23493,
+    "total_ms": 110.8,
+    "self_ms": 109.7
+   },
+   {
+    "fn": "current_tenant_id",
+    "calls": 43,
+    "total_ms": 2.6,
+    "self_ms": 2.6
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "tenant_storefront_open",
+    "calls": 1,
+    "total_ms": 0.6,
+    "self_ms": 0.6
+   },
+   {
+    "fn": "get_catalog",
+    "calls": 1,
+    "total_ms": 212.3,
+    "self_ms": 99.3
    }
   ]
  },
@@ -597,7 +597,7 @@
   "timed_out_cap": false,
   "error": {
    "error": "STDERR: ERROR:  permission denied for function storefront_feed_products",
-   "wall_ms": 26.83854103088379
+   "wall_ms": 34.00731086730957
   }
  },
  {
@@ -611,7 +611,7 @@
   "timed_out_cap": false,
   "error": {
    "error": "STDERR: ERROR:  permission denied for function storefront_feed_products",
-   "wall_ms": 26.921749114990234
+   "wall_ms": 31.92758560180664
   }
  },
  {
@@ -623,66 +623,66 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 630.09,
-  "exec_ms_min": 613.604,
-  "exec_ms_max": 648.881,
-  "plan_ms_median": 0.244,
+  "exec_ms_median": 524.771,
+  "exec_ms_min": 458.717,
+  "exec_ms_max": 601.047,
+  "plan_ms_median": 0.35,
   "rows": 1,
-  "hit": 56118,
+  "hit": 56119,
   "read": 0,
   "indexes": [],
   "seqscans": [],
-  "first_run_exec_ms": 505.059,
+  "first_run_exec_ms": 591.346,
   "rows_returned": 1,
   "body_bytes": 1182,
   "fn_calls": [
    {
     "fn": "tenant_active_addons",
     "calls": 5820,
-    "total_ms": 262.0,
-    "self_ms": 262.0
+    "total_ms": 294.6,
+    "self_ms": 294.6
    },
    {
     "fn": "tenant_subscription_state",
     "calls": 2910,
-    "total_ms": 492.8,
-    "self_ms": 89.5
+    "total_ms": 569.3,
+    "self_ms": 107.3
    },
    {
     "fn": "plan_features",
     "calls": 2910,
-    "total_ms": 62.9,
-    "self_ms": 62.9
+    "total_ms": 73.6,
+    "self_ms": 73.6
    },
    {
     "fn": "tenant_is_active",
     "calls": 2910,
-    "total_ms": 10.8,
-    "self_ms": 10.8
+    "total_ms": 13.4,
+    "self_ms": 13.4
    },
    {
     "fn": "tenant_features",
     "calls": 2910,
-    "total_ms": 403.2,
-    "self_ms": 78.3
+    "total_ms": 462.0,
+    "self_ms": 93.7
    },
    {
     "fn": "tenant_subscription_active",
     "calls": 2910,
-    "total_ms": 502.2,
-    "self_ms": 9.4
+    "total_ms": 580.3,
+    "self_ms": 11.0
    },
    {
     "fn": "current_tenant_id",
     "calls": 2,
-    "total_ms": 1.2,
-    "self_ms": 1.2
+    "total_ms": 1.8,
+    "self_ms": 1.8
    },
    {
     "fn": "storefront_feed_products",
     "calls": 1,
-    "total_ms": 544.0,
-    "self_ms": 29.8
+    "total_ms": 632.5,
+    "self_ms": 36.9
    }
   ]
  },
@@ -695,44 +695,44 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 378.685,
-  "exec_ms_min": 293.54,
-  "exec_ms_max": 383.326,
-  "plan_ms_median": 1.54,
+  "exec_ms_median": 313.307,
+  "exec_ms_min": 292.257,
+  "exec_ms_max": 372.983,
+  "plan_ms_median": 1.366,
   "rows": 1,
-  "hit": 19008,
+  "hit": 19010,
   "read": 0,
   "indexes": [
    "global_products_tenant_id_idx"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 331.895,
+  "first_run_exec_ms": 389.565,
   "rows_returned": 1000,
   "body_bytes": 1846265,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
     "calls": 6001,
-    "total_ms": 94.1,
-    "self_ms": 94.1
+    "total_ms": 107.6,
+    "self_ms": 107.6
    },
    {
     "fn": "is_super_admin",
     "calls": 3000,
-    "total_ms": 260.5,
-    "self_ms": 168.2
+    "total_ms": 287.6,
+    "self_ms": 181.7
    },
    {
     "fn": "is_staff",
     "calls": 3000,
-    "total_ms": 297.1,
-    "self_ms": 10.4
+    "total_ms": 325.2,
+    "self_ms": 11.1
    },
    {
     "fn": "is_admin",
     "calls": 3000,
-    "total_ms": 286.7,
-    "self_ms": 26.2
+    "total_ms": 314.1,
+    "self_ms": 26.6
    }
   ]
  },
@@ -745,56 +745,56 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 631.551,
-  "exec_ms_min": 574.435,
-  "exec_ms_max": 662.947,
-  "plan_ms_median": 1.389,
+  "exec_ms_median": 652.685,
+  "exec_ms_min": 631.932,
+  "exec_ms_max": 706.653,
+  "plan_ms_median": 1.395,
   "rows": 1,
-  "hit": 40049,
+  "hit": 40051,
   "read": 0,
   "indexes": [
    "global_products_tenant_id_idx"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 607.487,
+  "first_run_exec_ms": 851.89,
   "rows_returned": 1000,
   "body_bytes": 1846265,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
     "calls": 12001,
-    "total_ms": 220.3,
-    "self_ms": 220.3
+    "total_ms": 205.8,
+    "self_ms": 205.8
    },
    {
     "fn": "is_super_admin",
     "calls": 3000,
-    "total_ms": 375.1,
-    "self_ms": 189.6
+    "total_ms": 361.2,
+    "self_ms": 184.4
    },
    {
     "fn": "is_staff",
     "calls": 3000,
-    "total_ms": 690.9,
-    "self_ms": 17.4
+    "total_ms": 662.9,
+    "self_ms": 16.6
    },
    {
     "fn": "is_admin",
     "calls": 3000,
-    "total_ms": 405.1,
-    "self_ms": 30.0
+    "total_ms": 389.3,
+    "self_ms": 28.1
    },
    {
     "fn": "is_agent",
     "calls": 3000,
-    "total_ms": 268.5,
-    "self_ms": 160.6
+    "total_ms": 257.0,
+    "self_ms": 155.2
    },
    {
     "fn": "is_platform_admin",
     "calls": 3000,
-    "total_ms": 75.2,
-    "self_ms": 75.2
+    "total_ms": 74.4,
+    "self_ms": 74.4
    }
   ]
  },
@@ -807,51 +807,51 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 3.888,
-  "exec_ms_min": 3.571,
-  "exec_ms_max": 4.15,
-  "plan_ms_median": 1.282,
+  "exec_ms_median": 5.348,
+  "exec_ms_min": 4.182,
+  "exec_ms_max": 5.396,
+  "plan_ms_median": 1.509,
   "rows": 1,
-  "hit": 599,
+  "hit": 652,
   "read": 0,
   "indexes": [
    "order_items_order_idx",
    "orders_pkey"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 5.551,
-  "rows_returned": 2,
-  "body_bytes": 987,
+  "first_run_exec_ms": 6.414,
+  "rows_returned": 5,
+  "body_bytes": 2467,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
-    "calls": 10,
-    "total_ms": 2.0,
-    "self_ms": 2.0
+    "calls": 22,
+    "total_ms": 2.2,
+    "self_ms": 2.2
    },
    {
     "fn": "is_super_admin",
-    "calls": 4,
-    "total_ms": 1.1,
-    "self_ms": 0.5
+    "calls": 10,
+    "total_ms": 1.6,
+    "self_ms": 0.7
    },
    {
     "fn": "is_admin",
-    "calls": 4,
-    "total_ms": 1.1,
-    "self_ms": 0.0
+    "calls": 10,
+    "total_ms": 1.7,
+    "self_ms": 0.1
    },
    {
     "fn": "can_view_order",
-    "calls": 4,
-    "total_ms": 1.3,
-    "self_ms": 0.2
+    "calls": 10,
+    "total_ms": 1.9,
+    "self_ms": 0.3
    },
    {
     "fn": "is_platform_admin",
-    "calls": 4,
-    "total_ms": 0.2,
-    "self_ms": 0.2
+    "calls": 10,
+    "total_ms": 0.3,
+    "self_ms": 0.3
    }
   ]
  },
@@ -864,51 +864,51 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 2555.437,
-  "exec_ms_min": 2391.313,
-  "exec_ms_max": 2866.781,
-  "plan_ms_median": 1.356,
+  "exec_ms_median": 2429.934,
+  "exec_ms_min": 2073.533,
+  "exec_ms_max": 2534.27,
+  "plan_ms_median": 1.293,
   "rows": 1,
-  "hit": 145726,
+  "hit": 145727,
   "read": 0,
   "indexes": [
    "order_items_tenant_id_idx",
    "orders_tenant_id_idx"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 2464.235,
+  "first_run_exec_ms": 2153.925,
   "rows_returned": 1,
   "body_bytes": 12,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
     "calls": 40842,
-    "total_ms": 708.0,
-    "self_ms": 708.0
+    "total_ms": 628.2,
+    "self_ms": 628.2
    },
    {
     "fn": "is_super_admin",
     "calls": 20420,
-    "total_ms": 2317.9,
-    "self_ms": 1157.7
+    "total_ms": 2041.2,
+    "self_ms": 1018.5
    },
    {
     "fn": "is_admin",
     "calls": 20420,
-    "total_ms": 2481.9,
-    "self_ms": 164.0
+    "total_ms": 2186.1,
+    "self_ms": 144.9
    },
    {
     "fn": "can_view_order",
     "calls": 20420,
-    "total_ms": 2672.2,
-    "self_ms": 190.3
+    "total_ms": 2357.1,
+    "self_ms": 171.0
    },
    {
     "fn": "is_platform_admin",
     "calls": 20420,
-    "total_ms": 454.2,
-    "self_ms": 454.2
+    "total_ms": 396.2,
+    "self_ms": 396.2
    }
   ]
  },
@@ -921,45 +921,45 @@
   "label": "A-orig",
   "n_reps": 4,
   "timed_out_cap": false,
-  "exec_ms_median": 3714.826,
-  "exec_ms_min": 3671.535,
-  "exec_ms_max": 3813.605,
-  "plan_ms_median": 1.674,
+  "exec_ms_median": 3863.749,
+  "exec_ms_min": 3754.471,
+  "exec_ms_max": 3941.226,
+  "plan_ms_median": 1.337,
   "rows": 1,
-  "hit": 242745,
+  "hit": 242746,
   "read": 0,
   "indexes": [
    "order_items_tenant_id_idx",
    "orders_tenant_id_idx"
   ],
   "seqscans": [],
-  "first_run_exec_ms": 3472.605,
+  "first_run_exec_ms": 3605.304,
   "rows_returned": 1,
   "body_bytes": 13,
   "fn_calls": [
    {
     "fn": "current_tenant_id",
     "calls": 80002,
-    "total_ms": 1600.1,
-    "self_ms": 1600.1
+    "total_ms": 1150.7,
+    "self_ms": 1150.7
    },
    {
     "fn": "is_super_admin",
     "calls": 40000,
-    "total_ms": 4366.1,
-    "self_ms": 2767.7
+    "total_ms": 3139.1,
+    "self_ms": 1991.1
    },
    {
     "fn": "is_admin",
     "calls": 40000,
-    "total_ms": 4838.4,
-    "self_ms": 472.4
+    "total_ms": 3449.9,
+    "self_ms": 310.8
    },
    {
     "fn": "can_view_order",
     "calls": 40000,
-    "total_ms": 5206.9,
-    "self_ms": 368.4
+    "total_ms": 3722.9,
+    "self_ms": 273.0
    }
   ]
  }

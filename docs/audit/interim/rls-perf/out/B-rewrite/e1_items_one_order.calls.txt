@@ -1,5 +1,5 @@
 RESULT|5|2472
-current_tenant_id|4|2.3|2.3
-is_admin|2|0.6|0.1
-is_super_admin|2|0.6|0.2
-is_platform_admin|2|0.1|0.1
+current_tenant_id|4|2.2|2.2
+is_admin|2|0.9|0.1
+is_super_admin|2|0.8|0.3
+is_platform_admin|2|0.3|0.3

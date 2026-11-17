@@ -1,9 +1,9 @@
 RESULT|1|1181
-tenant_active_addons|19394|910.5|910.5
-tenant_features|9697|1409.1|278.0
+tenant_active_addons|19394|922.4|922.4
+tenant_features|9697|1424.0|279.8
 tenant_is_active|9697|39.6|39.6
-tenant_subscription_active|9697|1769.0|35.0
-plan_features|9697|220.6|220.6
-tenant_subscription_state|9697|1734.0|324.9
+tenant_subscription_active|9697|1778.6|33.9
+plan_features|9697|221.8|221.8
+tenant_subscription_state|9697|1744.7|320.7
 current_tenant_id|2|1.1|1.1
-storefront_feed_products|1|1927.3|117.6
+storefront_feed_products|1|1939.8|120.5

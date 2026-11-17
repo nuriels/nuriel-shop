@@ -1,6 +1,6 @@
 RESULT|5|2472
-current_tenant_id|12|2.1|2.1
+current_tenant_id|12|2.2|2.2
 is_admin|10|1.5|0.1
 is_super_admin|10|1.4|0.6
-can_view_order|10|1.7|0.2
+can_view_order|10|1.8|0.2
 is_platform_admin|10|0.3|0.3

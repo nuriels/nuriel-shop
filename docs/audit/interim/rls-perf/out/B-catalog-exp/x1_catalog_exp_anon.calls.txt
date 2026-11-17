@@ -1,0 +1,6 @@
+RESULT|9697|14731355
+current_tenant_id|4|1.0|1.0
+get_catalog_exp|1|234.7|231.8
+tenant_is_active|1|0.1|0.1
+buyer_price_tier|1|2.3|1.4
+tenant_storefront_open|1|0.5|0.5

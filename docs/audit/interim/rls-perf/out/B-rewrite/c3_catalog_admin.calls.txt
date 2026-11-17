@@ -1,6 +1,6 @@
 RESULT|9697|14731355
-buyer_price_tier|78265|383.3|381.7
-current_tenant_id|43|3.5|3.5
+buyer_price_tier|78265|400.8|399.5
+current_tenant_id|43|3.0|3.0
 tenant_is_active|1|0.1|0.1
 tenant_storefront_open|1|0.5|0.5
-get_catalog|1|738.7|353.0
+get_catalog|1|771.6|368.5

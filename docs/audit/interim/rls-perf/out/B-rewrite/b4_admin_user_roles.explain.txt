@@ -2,130 +2,130 @@
 -- role=authenticated persona=t1_admin
 -- db=perf_scratch_b label=B-rewrite
 
-===== REP 0  (psql wall 33 ms)
+===== REP 0  (psql wall 34 ms)
                                                                  QUERY PLAN                                                                 
 --------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=26.02..26.04 rows=1 width=48) (actual time=2.049..2.051 rows=1 loops=1)
-   Buffers: shared hit=268 read=4
+ Aggregate  (cost=26.02..26.04 rows=1 width=48) (actual time=2.460..2.463 rows=1 loops=1)
+   Buffers: shared hit=272 read=5
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.417..1.418 rows=1 loops=1)
-           Buffers: shared hit=225
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.600..1.601 rows=1 loops=1)
+           Buffers: shared hit=226
    InitPlan 2 (returns $1)
-     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.008..0.009 rows=1 loops=1)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.006..0.007 rows=1 loops=1)
    InitPlan 3 (returns $2)
-     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.350..0.351 rows=1 loops=1)
-           Buffers: shared hit=39
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.370..0.370 rows=1 loops=1)
+           Buffers: shared hit=42
    InitPlan 4 (returns $3)
      ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
    InitPlan 5 (returns $4)
      ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
-   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..24.96 rows=34 width=87) (actual time=1.461..1.855 rows=202 loops=1)
+   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..24.96 rows=34 width=87) (actual time=1.646..2.094 rows=202 loops=1)
          Recheck Cond: (tenant_id = $0)
          Filter: ((user_id = $1) OR $2 OR ($3 AND is_agent_of_customer($4, user_id)))
-         Heap Blocks: exact=4
-         Buffers: shared hit=265 read=4
-         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.445..1.445 rows=202 loops=1)
+         Heap Blocks: exact=5
+         Buffers: shared hit=269 read=5
+         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.628..1.628 rows=212 loops=1)
                Index Cond: (tenant_id = $0)
-               Buffers: shared hit=225 read=1
+               Buffers: shared hit=226 read=1
  Planning:
    Buffers: shared hit=317
- Planning Time: 0.868 ms
- Execution Time: 2.139 ms
+ Planning Time: 0.926 ms
+ Execution Time: 2.628 ms
 (26 rows)
 
 
-===== REP 1  (psql wall 31 ms)
+===== REP 1  (psql wall 32 ms)
                                                                  QUERY PLAN                                                                 
 --------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=26.02..26.04 rows=1 width=48) (actual time=2.289..2.291 rows=1 loops=1)
-   Buffers: shared hit=272
+ Aggregate  (cost=26.02..26.04 rows=1 width=48) (actual time=2.303..2.305 rows=1 loops=1)
+   Buffers: shared hit=277
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.600..1.601 rows=1 loops=1)
-           Buffers: shared hit=225
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.569..1.570 rows=1 loops=1)
+           Buffers: shared hit=226
    InitPlan 2 (returns $1)
-     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.009..0.010 rows=1 loops=1)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.008..0.009 rows=1 loops=1)
    InitPlan 3 (returns $2)
-     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.363..0.364 rows=1 loops=1)
-           Buffers: shared hit=39
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.411..0.411 rows=1 loops=1)
+           Buffers: shared hit=42
    InitPlan 4 (returns $3)
      ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
    InitPlan 5 (returns $4)
      ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
-   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..24.96 rows=34 width=87) (actual time=1.636..2.032 rows=202 loops=1)
+   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..24.96 rows=34 width=87) (actual time=1.605..2.058 rows=202 loops=1)
          Recheck Cond: (tenant_id = $0)
          Filter: ((user_id = $1) OR $2 OR ($3 AND is_agent_of_customer($4, user_id)))
-         Heap Blocks: exact=4
-         Buffers: shared hit=269
-         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.617..1.617 rows=202 loops=1)
+         Heap Blocks: exact=5
+         Buffers: shared hit=274
+         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.587..1.587 rows=212 loops=1)
                Index Cond: (tenant_id = $0)
-               Buffers: shared hit=226
+               Buffers: shared hit=227
  Planning:
    Buffers: shared hit=317
- Planning Time: 0.883 ms
- Execution Time: 2.381 ms
+ Planning Time: 0.854 ms
+ Execution Time: 2.407 ms
 (26 rows)
 
 
 ===== REP 2  (psql wall 30 ms)
                                                                  QUERY PLAN                                                                 
 --------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=26.02..26.04 rows=1 width=48) (actual time=2.197..2.198 rows=1 loops=1)
-   Buffers: shared hit=272
+ Aggregate  (cost=26.02..26.04 rows=1 width=48) (actual time=2.026..2.028 rows=1 loops=1)
+   Buffers: shared hit=277
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.518..1.518 rows=1 loops=1)
-           Buffers: shared hit=225
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.323..1.323 rows=1 loops=1)
+           Buffers: shared hit=226
    InitPlan 2 (returns $1)
-     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.008..0.008 rows=1 loops=1)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.006..0.006 rows=1 loops=1)
    InitPlan 3 (returns $2)
-     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.341..0.341 rows=1 loops=1)
-           Buffers: shared hit=39
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.337..0.337 rows=1 loops=1)
+           Buffers: shared hit=42
    InitPlan 4 (returns $3)
      ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
    InitPlan 5 (returns $4)
      ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
-   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..24.96 rows=34 width=87) (actual time=1.550..1.938 rows=202 loops=1)
+   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..24.96 rows=34 width=87) (actual time=1.364..1.742 rows=202 loops=1)
          Recheck Cond: (tenant_id = $0)
          Filter: ((user_id = $1) OR $2 OR ($3 AND is_agent_of_customer($4, user_id)))
-         Heap Blocks: exact=4
-         Buffers: shared hit=269
-         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.534..1.534 rows=202 loops=1)
+         Heap Blocks: exact=5
+         Buffers: shared hit=274
+         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.349..1.349 rows=212 loops=1)
                Index Cond: (tenant_id = $0)
-               Buffers: shared hit=226
+               Buffers: shared hit=227
  Planning:
    Buffers: shared hit=317
- Planning Time: 1.052 ms
- Execution Time: 2.297 ms
+ Planning Time: 0.762 ms
+ Execution Time: 2.149 ms
 (26 rows)
 
 
-===== REP 3  (psql wall 28 ms)
+===== REP 3  (psql wall 34 ms)
                                                                  QUERY PLAN                                                                 
 --------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=26.02..26.04 rows=1 width=48) (actual time=3.143..3.146 rows=1 loops=1)
-   Buffers: shared hit=272
+ Aggregate  (cost=26.02..26.04 rows=1 width=48) (actual time=2.280..2.281 rows=1 loops=1)
+   Buffers: shared hit=277
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.022..2.022 rows=1 loops=1)
-           Buffers: shared hit=225
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.511..1.511 rows=1 loops=1)
+           Buffers: shared hit=226
    InitPlan 2 (returns $1)
-     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.013..0.013 rows=1 loops=1)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.007..0.007 rows=1 loops=1)
    InitPlan 3 (returns $2)
-     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.575..0.576 rows=1 loops=1)
-           Buffers: shared hit=39
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.429..0.429 rows=1 loops=1)
+           Buffers: shared hit=42
    InitPlan 4 (returns $3)
      ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
    InitPlan 5 (returns $4)
      ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
-   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..24.96 rows=34 width=87) (actual time=2.069..2.697 rows=202 loops=1)
+   ->  Bitmap Heap Scan on user_roles r  (cost=4.59..24.96 rows=34 width=87) (actual time=1.547..2.019 rows=202 loops=1)
          Recheck Cond: (tenant_id = $0)
          Filter: ((user_id = $1) OR $2 OR ($3 AND is_agent_of_customer($4, user_id)))
-         Heap Blocks: exact=4
-         Buffers: shared hit=269
-         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=2.043..2.043 rows=202 loops=1)
+         Heap Blocks: exact=5
+         Buffers: shared hit=274
+         ->  Bitmap Index Scan on user_roles_tenant_role_idx  (cost=0.00..4.58 rows=58 width=0) (actual time=1.529..1.529 rows=212 loops=1)
                Index Cond: (tenant_id = $0)
-               Buffers: shared hit=226
+               Buffers: shared hit=227
  Planning:
    Buffers: shared hit=317
- Planning Time: 1.114 ms
- Execution Time: 3.248 ms
+ Planning Time: 1.090 ms
+ Execution Time: 2.425 ms
 (26 rows)
 

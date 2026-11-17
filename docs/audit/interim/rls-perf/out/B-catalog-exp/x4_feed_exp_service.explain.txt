@@ -1,0 +1,75 @@
+-- x4_feed_exp_service: EXPERIMENT storefront_feed_products_exp() one id, service_role
+-- role=service_role persona=service
+-- db=perf_scratch_b label=B-catalog-exp
+
+===== REP 0  (psql wall 95 ms)
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=60.036..60.037 rows=1 loops=1)
+   Buffers: shared hit=7983, temp read=1170 written=2222
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=59.970..59.971 rows=1 loops=1)
+         Buffers: shared hit=7983, temp read=1170 written=2222
+         ->  Function Scan on storefront_feed_products_exp  (cost=0.25..12.75 rows=5 width=347) (actual time=59.968..59.968 rows=1 loops=1)
+               Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
+               Rows Removed by Filter: 436
+               Buffers: shared hit=7983, temp read=1170 written=2222
+ Planning:
+   Buffers: shared hit=25
+ Planning Time: 0.274 ms
+ Execution Time: 62.556 ms
+(12 rows)
+
+
+===== REP 1  (psql wall 100 ms)
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=66.274..66.275 rows=1 loops=1)
+   Buffers: shared hit=7983, temp read=1170 written=2222
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=66.238..66.239 rows=1 loops=1)
+         Buffers: shared hit=7983, temp read=1170 written=2222
+         ->  Function Scan on storefront_feed_products_exp  (cost=0.25..12.75 rows=5 width=347) (actual time=66.236..66.236 rows=1 loops=1)
+               Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
+               Rows Removed by Filter: 436
+               Buffers: shared hit=7983, temp read=1170 written=2222
+ Planning:
+   Buffers: shared hit=25
+ Planning Time: 0.346 ms
+ Execution Time: 67.666 ms
+(12 rows)
+
+
+===== REP 2  (psql wall 116 ms)
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=82.126..82.127 rows=1 loops=1)
+   Buffers: shared hit=7983, temp read=1170 written=2222
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=82.075..82.077 rows=1 loops=1)
+         Buffers: shared hit=7983, temp read=1170 written=2222
+         ->  Function Scan on storefront_feed_products_exp  (cost=0.25..12.75 rows=5 width=347) (actual time=82.073..82.074 rows=1 loops=1)
+               Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
+               Rows Removed by Filter: 436
+               Buffers: shared hit=7983, temp read=1170 written=2222
+ Planning:
+   Buffers: shared hit=25
+ Planning Time: 0.305 ms
+ Execution Time: 84.302 ms
+(12 rows)
+
+
+===== REP 3  (psql wall 120 ms)
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=2.76..2.77 rows=1 width=48) (actual time=86.049..86.050 rows=1 loops=1)
+   Buffers: shared hit=7983, temp read=1170 written=2222
+   ->  Limit  (cost=0.25..2.75 rows=1 width=347) (actual time=85.999..86.000 rows=1 loops=1)
+         Buffers: shared hit=7983, temp read=1170 written=2222
+         ->  Function Scan on storefront_feed_products_exp  (cost=0.25..12.75 rows=5 width=347) (actual time=85.996..85.996 rows=1 loops=1)
+               Filter: (id = 'aca7b051-d9ca-8713-9a02-fca22edb3e72'::uuid)
+               Rows Removed by Filter: 436
+               Buffers: shared hit=7983, temp read=1170 written=2222
+ Planning:
+   Buffers: shared hit=25
+ Planning Time: 0.405 ms
+ Execution Time: 88.151 ms
+(12 rows)
+

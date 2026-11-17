@@ -1,6 +1,6 @@
-RESULT|420|1347529
-current_tenant_id|45127|806.0|806.0
-is_super_admin|22562|2618.9|1302.7
-is_admin|22562|2811.3|192.4
-can_view_order|22562|3028.7|217.4
-is_platform_admin|22562|511.9|511.9
+RESULT|420|1339609
+current_tenant_id|45063|610.8|610.8
+is_super_admin|22530|1982.3|988.5
+is_admin|22530|2126.9|144.7
+can_view_order|22530|2295.8|168.9
+is_platform_admin|22530|385.0|385.0

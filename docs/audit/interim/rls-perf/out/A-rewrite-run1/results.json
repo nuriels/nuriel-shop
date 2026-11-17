@@ -1,0 +1,924 @@
+[
+ {
+  "qid": "a1_cust_orders_nofilter",
+  "desc": "CustomerOrdersTab.tsx:79-82 as written (no customer_id filter), embedded items",
+  "persona": "t1_customer_a",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 27.345,
+  "exec_ms_min": 26.424,
+  "exec_ms_max": 38.135,
+  "plan_ms_median": 3.503,
+  "rows": 1,
+  "hit": 7028,
+  "read": 0,
+  "indexes": [
+   "order_items_order_idx",
+   "orders_pkey",
+   "orders_tenant_created_idx"
+  ],
+  "seqscans": [],
+  "first_run_exec_ms": 38.991,
+  "rows_returned": 420,
+  "body_bytes": 1347529,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 9,
+    "total_ms": 2.2,
+    "self_ms": 2.2
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 3,
+    "total_ms": 0.9,
+    "self_ms": 0.3
+   },
+   {
+    "fn": "is_admin",
+    "calls": 3,
+    "total_ms": 0.9,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_platform_admin",
+    "calls": 3,
+    "total_ms": 0.2,
+    "self_ms": 0.2
+   }
+  ]
+ },
+ {
+  "qid": "a2_cust_orders_filtered",
+  "desc": "same + .eq(customer_id, uid)  (proposed client fix)",
+  "persona": "t1_customer_a",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 22.146,
+  "exec_ms_min": 21.808,
+  "exec_ms_max": 22.205,
+  "plan_ms_median": 2.809,
+  "rows": 1,
+  "hit": 6013,
+  "read": 0,
+  "indexes": [
+   "order_items_order_idx",
+   "orders_customer_idx",
+   "orders_pkey",
+   "orders_tenant_id_idx"
+  ],
+  "seqscans": [],
+  "first_run_exec_ms": 22.875,
+  "rows_returned": 420,
+  "body_bytes": 1347529,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 9,
+    "total_ms": 2.0,
+    "self_ms": 2.0
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 3,
+    "total_ms": 0.8,
+    "self_ms": 0.3
+   },
+   {
+    "fn": "is_admin",
+    "calls": 3,
+    "total_ms": 0.9,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_platform_admin",
+    "calls": 3,
+    "total_ms": 0.2,
+    "self_ms": 0.2
+   }
+  ]
+ },
+ {
+  "qid": "b1_agent_orders",
+  "desc": "OrderManagementPanel.tsx:197-205 as agent (is_staff, not admin), limit 1000",
+  "persona": "t1_agent",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 44.831,
+  "exec_ms_min": 42.703,
+  "exec_ms_max": 64.021,
+  "plan_ms_median": 2.777,
+  "rows": 1,
+  "hit": 13034,
+  "read": 0,
+  "indexes": [
+   "order_items_order_idx",
+   "orders_pkey",
+   "orders_tenant_created_idx"
+  ],
+  "seqscans": [],
+  "first_run_exec_ms": 54.172,
+  "rows_returned": 1000,
+  "body_bytes": 3232513,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 9,
+    "total_ms": 2.1,
+    "self_ms": 2.1
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 3,
+    "total_ms": 0.9,
+    "self_ms": 0.3
+   },
+   {
+    "fn": "is_admin",
+    "calls": 3,
+    "total_ms": 1.0,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_platform_admin",
+    "calls": 3,
+    "total_ms": 0.2,
+    "self_ms": 0.2
+   }
+  ]
+ },
+ {
+  "qid": "b2_admin_orders",
+  "desc": "OrderManagementPanel.tsx:197-205 as admin, limit 1000",
+  "persona": "t1_admin",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 52.948,
+  "exec_ms_min": 41.389,
+  "exec_ms_max": 56.793,
+  "plan_ms_median": 3.517,
+  "rows": 1,
+  "hit": 12439,
+  "read": 0,
+  "indexes": [
+   "order_items_order_idx",
+   "orders_pkey",
+   "orders_tenant_created_idx"
+  ],
+  "seqscans": [],
+  "first_run_exec_ms": 50.967,
+  "rows_returned": 1000,
+  "body_bytes": 3167934,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 9,
+    "total_ms": 2.1,
+    "self_ms": 2.1
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 3,
+    "total_ms": 0.8,
+    "self_ms": 0.4
+   },
+   {
+    "fn": "is_admin",
+    "calls": 3,
+    "total_ms": 0.8,
+    "self_ms": 0.1
+   }
+  ]
+ },
+ {
+  "qid": "b3_admin_profiles",
+  "desc": "customer_profiles?select=user_id,business_name as admin",
+  "persona": "t1_admin",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 3.135,
+  "exec_ms_min": 2.594,
+  "exec_ms_max": 3.734,
+  "plan_ms_median": 1.004,
+  "rows": 1,
+  "hit": 483,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [
+   "customer_profiles"
+  ],
+  "first_run_exec_ms": 3.502,
+  "rows_returned": 50,
+  "body_bytes": 4098,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 3,
+    "total_ms": 1.8,
+    "self_ms": 1.8
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 1,
+    "total_ms": 0.4,
+    "self_ms": 0.2
+   },
+   {
+    "fn": "is_admin",
+    "calls": 1,
+    "total_ms": 0.4,
+    "self_ms": 0.0
+   }
+  ]
+ },
+ {
+  "qid": "b4_admin_user_roles",
+  "desc": "user_roles?select=... as admin (OrderManagementPanel admin scope)",
+  "persona": "t1_admin",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 2.747,
+  "exec_ms_min": 2.332,
+  "exec_ms_max": 3.359,
+  "plan_ms_median": 1.228,
+  "rows": 1,
+  "hit": 271,
+  "read": 0,
+  "indexes": [
+   "user_roles_email_unique_idx"
+  ],
+  "seqscans": [],
+  "first_run_exec_ms": 2.623,
+  "rows_returned": 52,
+  "body_bytes": 8314,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 3,
+    "total_ms": 2.3,
+    "self_ms": 2.3
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 1,
+    "total_ms": 0.5,
+    "self_ms": 0.2
+   },
+   {
+    "fn": "is_admin",
+    "calls": 1,
+    "total_ms": 0.6,
+    "self_ms": 0.1
+   }
+  ]
+ },
+ {
+  "qid": "b5_cust_profiles",
+  "desc": "customer_profiles select as customer A",
+  "persona": "t1_customer_a",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 3.797,
+  "exec_ms_min": 3.435,
+  "exec_ms_max": 3.976,
+  "plan_ms_median": 0.905,
+  "rows": 1,
+  "hit": 533,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [
+   "customer_profiles"
+  ],
+  "first_run_exec_ms": 2.864,
+  "rows_returned": 1,
+  "body_bytes": 80,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 5,
+    "total_ms": 1.7,
+    "self_ms": 1.7
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 1,
+    "total_ms": 0.4,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_admin",
+    "calls": 1,
+    "total_ms": 0.4,
+    "self_ms": 0.0
+   },
+   {
+    "fn": "is_agent",
+    "calls": 1,
+    "total_ms": 0.2,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_platform_admin",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   }
+  ]
+ },
+ {
+  "qid": "c1_catalog_anon",
+  "desc": "SELECT * FROM get_catalog() as anon",
+  "persona": "anon",
+  "role": "anon",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 231.627,
+  "exec_ms_min": 213.757,
+  "exec_ms_max": 257.225,
+  "plan_ms_median": 0.217,
+  "rows": 1,
+  "hit": 18987,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 231.376,
+  "rows_returned": 2910,
+  "body_bytes": 4413586,
+  "fn_calls": [
+   {
+    "fn": "buyer_price_tier",
+    "calls": 23493,
+    "total_ms": 107.8,
+    "self_ms": 106.8
+   },
+   {
+    "fn": "current_tenant_id",
+    "calls": 43,
+    "total_ms": 2.1,
+    "self_ms": 2.1
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "tenant_storefront_open",
+    "calls": 1,
+    "total_ms": 0.5,
+    "self_ms": 0.4
+   },
+   {
+    "fn": "get_catalog",
+    "calls": 1,
+    "total_ms": 206.9,
+    "self_ms": 97.4
+   }
+  ]
+ },
+ {
+  "qid": "c2_catalog_auth",
+  "desc": "SELECT * FROM get_catalog() as authenticated (customer A)",
+  "persona": "t1_customer_a",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 965.729,
+  "exec_ms_min": 941.976,
+  "exec_ms_max": 966.368,
+  "plan_ms_median": 0.191,
+  "rows": 1,
+  "hit": 207888,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 994.364,
+  "rows_returned": 2910,
+  "body_bytes": 4407869,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 47257,
+    "total_ms": 584.0,
+    "self_ms": 584.0
+   },
+   {
+    "fn": "buyer_price_tier",
+    "calls": 23607,
+    "total_ms": 789.5,
+    "self_ms": 207.7
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "tenant_storefront_open",
+    "calls": 1,
+    "total_ms": 0.7,
+    "self_ms": 0.6
+   },
+   {
+    "fn": "get_catalog",
+    "calls": 1,
+    "total_ms": 917.1,
+    "self_ms": 124.6
+   }
+  ]
+ },
+ {
+  "qid": "c3_catalog_admin",
+  "desc": "SELECT * FROM get_catalog() as authenticated staff (admin)",
+  "persona": "t1_admin",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 325.949,
+  "exec_ms_min": 282.451,
+  "exec_ms_max": 459.644,
+  "plan_ms_median": 0.24,
+  "rows": 1,
+  "hit": 42525,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 211.215,
+  "rows_returned": 2910,
+  "body_bytes": 4413586,
+  "fn_calls": [
+   {
+    "fn": "buyer_price_tier",
+    "calls": 23493,
+    "total_ms": 181.1,
+    "self_ms": 178.9
+   },
+   {
+    "fn": "current_tenant_id",
+    "calls": 43,
+    "total_ms": 6.6,
+    "self_ms": 6.6
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 1,
+    "total_ms": 0.3,
+    "self_ms": 0.3
+   },
+   {
+    "fn": "tenant_storefront_open",
+    "calls": 1,
+    "total_ms": 1.2,
+    "self_ms": 0.9
+   },
+   {
+    "fn": "get_catalog",
+    "calls": 1,
+    "total_ms": 359.3,
+    "self_ms": 172.6
+   }
+  ]
+ },
+ {
+  "qid": "c4_catalog_page_anon",
+  "desc": "get_catalog() page 0 as the app pages it (order+range 0-999) as anon",
+  "persona": "anon",
+  "role": "anon",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 226.228,
+  "exec_ms_min": 225.379,
+  "exec_ms_max": 297.165,
+  "plan_ms_median": 0.304,
+  "rows": 1,
+  "hit": 18722,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 264.92,
+  "rows_returned": 1000,
+  "body_bytes": 1522402,
+  "fn_calls": [
+   {
+    "fn": "buyer_price_tier",
+    "calls": 23493,
+    "total_ms": 107.4,
+    "self_ms": 106.2
+   },
+   {
+    "fn": "current_tenant_id",
+    "calls": 43,
+    "total_ms": 2.5,
+    "self_ms": 2.5
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 1,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "tenant_storefront_open",
+    "calls": 1,
+    "total_ms": 0.6,
+    "self_ms": 0.5
+   },
+   {
+    "fn": "get_catalog",
+    "calls": 1,
+    "total_ms": 203.2,
+    "self_ms": 93.9
+   }
+  ]
+ },
+ {
+  "qid": "c5_feed_one_anon",
+  "desc": "storefront_feed_products() filtered to 1 id, anon",
+  "persona": "anon",
+  "role": "anon",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 0,
+  "timed_out_cap": false,
+  "error": {
+   "error": "STDERR: ERROR:  permission denied for function storefront_feed_products",
+   "wall_ms": 28.351545333862305
+  }
+ },
+ {
+  "qid": "c6_feed_one_auth",
+  "desc": "storefront_feed_products() filtered to 1 id, authenticated",
+  "persona": "t1_customer_a",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 0,
+  "timed_out_cap": false,
+  "error": {
+   "error": "STDERR: ERROR:  permission denied for function storefront_feed_products",
+   "wall_ms": 32.3948860168457
+  }
+ },
+ {
+  "qid": "c7_feed_one_service",
+  "desc": "storefront_feed_products() filtered to 1 id as service_role (what seo.functions.ts really uses)",
+  "persona": "service",
+  "role": "service_role",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 600.269,
+  "exec_ms_min": 494.215,
+  "exec_ms_max": 677.257,
+  "plan_ms_median": 0.356,
+  "rows": 1,
+  "hit": 56117,
+  "read": 0,
+  "indexes": [],
+  "seqscans": [],
+  "first_run_exec_ms": 553.86,
+  "rows_returned": 1,
+  "body_bytes": 1182,
+  "fn_calls": [
+   {
+    "fn": "tenant_active_addons",
+    "calls": 5820,
+    "total_ms": 322.7,
+    "self_ms": 322.7
+   },
+   {
+    "fn": "tenant_subscription_state",
+    "calls": 2910,
+    "total_ms": 613.3,
+    "self_ms": 115.1
+   },
+   {
+    "fn": "plan_features",
+    "calls": 2910,
+    "total_ms": 79.9,
+    "self_ms": 79.9
+   },
+   {
+    "fn": "tenant_is_active",
+    "calls": 2910,
+    "total_ms": 13.5,
+    "self_ms": 13.5
+   },
+   {
+    "fn": "tenant_features",
+    "calls": 2910,
+    "total_ms": 498.2,
+    "self_ms": 95.6
+   },
+   {
+    "fn": "tenant_subscription_active",
+    "calls": 2910,
+    "total_ms": 624.9,
+    "self_ms": 11.6
+   },
+   {
+    "fn": "current_tenant_id",
+    "calls": 2,
+    "total_ms": 1.6,
+    "self_ms": 1.6
+   },
+   {
+    "fn": "storefront_feed_products",
+    "calls": 1,
+    "total_ms": 676.2,
+    "self_ms": 36.2
+   }
+  ]
+ },
+ {
+  "qid": "d1_admin_products",
+  "desc": "AdminProductsPanel list page 0 (limit 1000) as admin",
+  "persona": "t1_admin",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 40.581,
+  "exec_ms_min": 33.002,
+  "exec_ms_max": 46.25,
+  "plan_ms_median": 1.414,
+  "rows": 1,
+  "hit": 1011,
+  "read": 0,
+  "indexes": [
+   "global_products_tenant_id_idx"
+  ],
+  "seqscans": [],
+  "first_run_exec_ms": 45.501,
+  "rows_returned": 1000,
+  "body_bytes": 1846265,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 3,
+    "total_ms": 1.6,
+    "self_ms": 1.6
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 1,
+    "total_ms": 0.3,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_staff",
+    "calls": 1,
+    "total_ms": 0.4,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_admin",
+    "calls": 1,
+    "total_ms": 0.4,
+    "self_ms": 0.0
+   }
+  ]
+ },
+ {
+  "qid": "d2_agent_products",
+  "desc": "AdminProductsPanel list page 0 as agent (is_staff path)",
+  "persona": "t1_agent",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 43.756,
+  "exec_ms_min": 34.746,
+  "exec_ms_max": 44.885,
+  "plan_ms_median": 1.648,
+  "rows": 1,
+  "hit": 1061,
+  "read": 0,
+  "indexes": [
+   "global_products_tenant_id_idx"
+  ],
+  "seqscans": [],
+  "first_run_exec_ms": 30.866,
+  "rows_returned": 1000,
+  "body_bytes": 1846265,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 5,
+    "total_ms": 2.8,
+    "self_ms": 2.8
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 1,
+    "total_ms": 0.8,
+    "self_ms": 0.2
+   },
+   {
+    "fn": "is_staff",
+    "calls": 1,
+    "total_ms": 1.3,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_admin",
+    "calls": 1,
+    "total_ms": 0.9,
+    "self_ms": 0.0
+   },
+   {
+    "fn": "is_agent",
+    "calls": 1,
+    "total_ms": 0.3,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_platform_admin",
+    "calls": 1,
+    "total_ms": 0.2,
+    "self_ms": 0.2
+   }
+  ]
+ },
+ {
+  "qid": "e1_items_one_order",
+  "desc": "order_items?order_id=eq.<own order> as customer A",
+  "persona": "t1_customer_a",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 3.935,
+  "exec_ms_min": 3.736,
+  "exec_ms_max": 5.892,
+  "plan_ms_median": 1.99,
+  "rows": 1,
+  "hit": 531,
+  "read": 0,
+  "indexes": [
+   "order_items_order_idx",
+   "orders_pkey"
+  ],
+  "seqscans": [],
+  "first_run_exec_ms": 4.647,
+  "rows_returned": 2,
+  "body_bytes": 987,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 6,
+    "total_ms": 3.3,
+    "self_ms": 3.3
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 2,
+    "total_ms": 1.3,
+    "self_ms": 0.4
+   },
+   {
+    "fn": "is_admin",
+    "calls": 2,
+    "total_ms": 1.5,
+    "self_ms": 0.2
+   },
+   {
+    "fn": "is_platform_admin",
+    "calls": 2,
+    "total_ms": 0.2,
+    "self_ms": 0.2
+   }
+  ]
+ },
+ {
+  "qid": "e2_items_count_cust",
+  "desc": "SELECT count(*) FROM order_items as customer A (worst-case scan)",
+  "persona": "t1_customer_a",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 20.118,
+  "exec_ms_min": 17.669,
+  "exec_ms_max": 25.385,
+  "plan_ms_median": 1.985,
+  "rows": 1,
+  "hit": 2742,
+  "read": 0,
+  "indexes": [
+   "order_items_tenant_id_idx",
+   "orders_tenant_id_idx"
+  ],
+  "seqscans": [],
+  "first_run_exec_ms": 26.947,
+  "rows_returned": 1,
+  "body_bytes": 12,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 6,
+    "total_ms": 2.3,
+    "self_ms": 2.3
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 2,
+    "total_ms": 0.7,
+    "self_ms": 0.2
+   },
+   {
+    "fn": "is_admin",
+    "calls": 2,
+    "total_ms": 0.8,
+    "self_ms": 0.1
+   },
+   {
+    "fn": "is_platform_admin",
+    "calls": 2,
+    "total_ms": 0.1,
+    "self_ms": 0.1
+   }
+  ]
+ },
+ {
+  "qid": "e3_items_count_admin",
+  "desc": "SELECT count(*) FROM order_items as admin",
+  "persona": "t1_admin",
+  "role": "authenticated",
+  "db": "perf_scratch_b",
+  "label": "A-rewrite",
+  "n_reps": 4,
+  "timed_out_cap": false,
+  "exec_ms_median": 39.426,
+  "exec_ms_min": 26.913,
+  "exec_ms_max": 44.032,
+  "plan_ms_median": 2.68,
+  "rows": 1,
+  "hit": 2699,
+  "read": 0,
+  "indexes": [
+   "order_items_tenant_id_idx",
+   "orders_tenant_id_idx"
+  ],
+  "seqscans": [],
+  "first_run_exec_ms": 35.827,
+  "rows_returned": 1,
+  "body_bytes": 13,
+  "fn_calls": [
+   {
+    "fn": "current_tenant_id",
+    "calls": 6,
+    "total_ms": 4.1,
+    "self_ms": 4.1
+   },
+   {
+    "fn": "is_super_admin",
+    "calls": 2,
+    "total_ms": 1.3,
+    "self_ms": 0.6
+   },
+   {
+    "fn": "is_admin",
+    "calls": 2,
+    "total_ms": 1.6,
+    "self_ms": 0.3
+   }
+  ]
+ }
+]

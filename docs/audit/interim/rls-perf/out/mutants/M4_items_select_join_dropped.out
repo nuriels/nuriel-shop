@@ -81,9 +81,9 @@ anon|bp.inquiry_settings|sel_all|ERR 42501 permission denied for schema business
 anon|bp.inquiry_settings|ins|ERR 42501 permission denied for schema business_profile|ok
 anon|bp.inquiry_settings|upd|ERR 42501 permission denied for schema business_profile|ok
 anon|bp.inquiry_settings|del|ERR 42501 permission denied for schema business_profile|ok
-cA|orders|sel_all|rows=420 fp=31eba05e|ok
+cA|orders|sel_all|rows=420 fp=80bcba72|ok
 cA|orders|sel_B_orders|rows=0 fp=-|ok
-cA|orders|sel_A_orders|rows=420 fp=31eba05e|ok
+cA|orders|sel_A_orders|rows=420 fp=80bcba72|ok
 cA|orders|sel_T2_orders|rows=0 fp=-|ok
 cA|orders|sel_agent_orders|rows=0 fp=-|ok
 cA|orders|sel_guest_orders|rows=0 fp=-|ok
@@ -99,11 +99,11 @@ cA|orders|upd_steal_order|rows=0 fp=-|ok
 cA|orders|del_B_order|rows=0 fp=-|ok
 cA|orders|del_A_order|rows=0 fp=-|ok
 cA|orders|del_T2_order|rows=0 fp=-|ok
-cA|order_items|sel_all|rows=60197 fp=8a828607|ok
-cA|order_items|sel_B_items|rows=4 fp=b5688b58|LEAK
-cA|order_items|sel_A_items|rows=2 fp=8e20deea|ok
+cA|order_items|sel_all|rows=60158 fp=4843492b|ok
+cA|order_items|sel_B_items|rows=3 fp=7039f352|LEAK
+cA|order_items|sel_A_items|rows=5 fp=9275762d|ok
 cA|order_items|sel_T2_items|rows=0 fp=-|ok
-cA|order_items|sel_AG_items|rows=3 fp=89a2028f|LEAK
+cA|order_items|sel_AG_items|rows=4 fp=57e31028|LEAK
 cA|order_items|ins_into_B_order|ERR 42501 new row violates row-level security policy for table "order_items"|ok
 cA|order_items|ins_into_A_pending|rows=1 fp=-|ok
 cA|order_items|ins_into_T2_order|ERR 42501 new row violates row-level security policy for table "order_items"|ok
@@ -163,8 +163,8 @@ cA|bp.inquiry_settings|sel_all|ERR 42501 permission denied for schema business_p
 cA|bp.inquiry_settings|ins|ERR 42501 permission denied for schema business_profile|ok
 cA|bp.inquiry_settings|upd|ERR 42501 permission denied for schema business_profile|ok
 cA|bp.inquiry_settings|del|ERR 42501 permission denied for schema business_profile|ok
-cB|orders|sel_all|rows=370 fp=4426a7fe|ok
-cB|orders|sel_B_orders|rows=370 fp=4426a7fe|ok
+cB|orders|sel_all|rows=370 fp=a9da74e3|ok
+cB|orders|sel_B_orders|rows=370 fp=a9da74e3|ok
 cB|orders|sel_A_orders|rows=0 fp=-|ok
 cB|orders|sel_T2_orders|rows=0 fp=-|ok
 cB|orders|sel_agent_orders|rows=0 fp=-|ok
@@ -181,11 +181,11 @@ cB|orders|upd_steal_order|rows=0 fp=-|ok
 cB|orders|del_B_order|rows=0 fp=-|ok
 cB|orders|del_A_order|rows=0 fp=-|ok
 cB|orders|del_T2_order|rows=0 fp=-|ok
-cB|order_items|sel_all|rows=60197 fp=8a828607|ok
-cB|order_items|sel_B_items|rows=4 fp=b5688b58|ok
-cB|order_items|sel_A_items|rows=2 fp=8e20deea|LEAK
+cB|order_items|sel_all|rows=60158 fp=4843492b|ok
+cB|order_items|sel_B_items|rows=3 fp=7039f352|ok
+cB|order_items|sel_A_items|rows=5 fp=9275762d|LEAK
 cB|order_items|sel_T2_items|rows=0 fp=-|ok
-cB|order_items|sel_AG_items|rows=3 fp=89a2028f|LEAK
+cB|order_items|sel_AG_items|rows=4 fp=57e31028|LEAK
 cB|order_items|ins_into_B_order|ERR 42501 new row violates row-level security policy for table "order_items"|ok
 cB|order_items|ins_into_A_pending|ERR 42501 new row violates row-level security policy for table "order_items"|ok
 cB|order_items|ins_into_T2_order|ERR 42501 new row violates row-level security policy for table "order_items"|ok
@@ -245,11 +245,11 @@ cB|bp.inquiry_settings|sel_all|ERR 42501 permission denied for schema business_p
 cB|bp.inquiry_settings|ins|ERR 42501 permission denied for schema business_profile|ok
 cB|bp.inquiry_settings|upd|ERR 42501 permission denied for schema business_profile|ok
 cB|bp.inquiry_settings|del|ERR 42501 permission denied for schema business_profile|ok
-cAG|orders|sel_all|rows=363 fp=b61d36fc|ok
+cAG|orders|sel_all|rows=363 fp=36eb3b71|ok
 cAG|orders|sel_B_orders|rows=0 fp=-|ok
 cAG|orders|sel_A_orders|rows=0 fp=-|ok
 cAG|orders|sel_T2_orders|rows=0 fp=-|ok
-cAG|orders|sel_agent_orders|rows=363 fp=b61d36fc|ok
+cAG|orders|sel_agent_orders|rows=363 fp=36eb3b71|ok
 cAG|orders|sel_guest_orders|rows=0 fp=-|ok
 cAG|orders|ins_for_B|ERR 42501 new row violates row-level security policy for table "orders"|ok
 cAG|orders|ins_for_self|rows=1 fp=-|ok
@@ -263,11 +263,11 @@ cAG|orders|upd_steal_order|rows=0 fp=-|ok
 cAG|orders|del_B_order|rows=0 fp=-|ok
 cAG|orders|del_A_order|rows=0 fp=-|ok
 cAG|orders|del_T2_order|rows=0 fp=-|ok
-cAG|order_items|sel_all|rows=60197 fp=8a828607|ok
-cAG|order_items|sel_B_items|rows=4 fp=b5688b58|LEAK
-cAG|order_items|sel_A_items|rows=2 fp=8e20deea|LEAK
+cAG|order_items|sel_all|rows=60158 fp=4843492b|ok
+cAG|order_items|sel_B_items|rows=3 fp=7039f352|LEAK
+cAG|order_items|sel_A_items|rows=5 fp=9275762d|LEAK
 cAG|order_items|sel_T2_items|rows=0 fp=-|ok
-cAG|order_items|sel_AG_items|rows=3 fp=89a2028f|ok
+cAG|order_items|sel_AG_items|rows=4 fp=57e31028|ok
 cAG|order_items|ins_into_B_order|ERR 42501 new row violates row-level security policy for table "order_items"|ok
 cAG|order_items|ins_into_A_pending|ERR 42501 new row violates row-level security policy for table "order_items"|ok
 cAG|order_items|ins_into_T2_order|ERR 42501 new row violates row-level security policy for table "order_items"|ok
@@ -327,11 +327,11 @@ cAG|bp.inquiry_settings|sel_all|ERR 42501 permission denied for schema business_
 cAG|bp.inquiry_settings|ins|ERR 42501 permission denied for schema business_profile|ok
 cAG|bp.inquiry_settings|upd|ERR 42501 permission denied for schema business_profile|ok
 cAG|bp.inquiry_settings|del|ERR 42501 permission denied for schema business_profile|ok
-agent|orders|sel_all|rows=3735 fp=bf128907|ok
+agent|orders|sel_all|rows=3735 fp=21dc23c0|ok
 agent|orders|sel_B_orders|rows=0 fp=-|ok
 agent|orders|sel_A_orders|rows=0 fp=-|ok
 agent|orders|sel_T2_orders|rows=0 fp=-|ok
-agent|orders|sel_agent_orders|rows=3735 fp=bf128907|ok
+agent|orders|sel_agent_orders|rows=3735 fp=21dc23c0|ok
 agent|orders|sel_guest_orders|rows=0 fp=-|ok
 agent|orders|ins_for_B|ERR 42501 new row violates row-level security policy for table "orders"|ok
 agent|orders|ins_for_self|rows=1 fp=-|ok
@@ -409,12 +409,12 @@ agent|bp.inquiry_settings|sel_all|ERR 42501 permission denied for schema busines
 agent|bp.inquiry_settings|ins|ERR 42501 permission denied for schema business_profile|ok
 agent|bp.inquiry_settings|upd|ERR 42501 permission denied for schema business_profile|ok
 agent|bp.inquiry_settings|del|ERR 42501 permission denied for schema business_profile|ok
-admin|orders|sel_all|rows=20000 fp=0722a56c|ok
-admin|orders|sel_B_orders|rows=370 fp=4426a7fe|ok
-admin|orders|sel_A_orders|rows=420 fp=31eba05e|ok
+admin|orders|sel_all|rows=20000 fp=ebbab5ce|ok
+admin|orders|sel_B_orders|rows=370 fp=a9da74e3|ok
+admin|orders|sel_A_orders|rows=420 fp=80bcba72|ok
 admin|orders|sel_T2_orders|rows=0 fp=-|ok
-admin|orders|sel_agent_orders|rows=3735 fp=bf128907|ok
-admin|orders|sel_guest_orders|rows=1000 fp=1acd0674|ok
+admin|orders|sel_agent_orders|rows=3735 fp=21dc23c0|ok
+admin|orders|sel_guest_orders|rows=1000 fp=77af9a35|ok
 admin|orders|ins_for_B|rows=1 fp=-|ok
 admin|orders|ins_for_self|rows=1 fp=-|ok
 admin|orders|ins_other_tenant|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "orders"|ok
@@ -427,21 +427,21 @@ admin|orders|upd_steal_order|rows=1 fp=-|ok
 admin|orders|del_B_order|rows=1 fp=-|ok
 admin|orders|del_A_order|rows=1 fp=-|ok
 admin|orders|del_T2_order|rows=0 fp=-|ok
-admin|order_items|sel_all|rows=60197 fp=8a828607|ok
-admin|order_items|sel_B_items|rows=4 fp=b5688b58|ok
-admin|order_items|sel_A_items|rows=2 fp=8e20deea|ok
+admin|order_items|sel_all|rows=60158 fp=4843492b|ok
+admin|order_items|sel_B_items|rows=3 fp=7039f352|ok
+admin|order_items|sel_A_items|rows=5 fp=9275762d|ok
 admin|order_items|sel_T2_items|rows=0 fp=-|ok
-admin|order_items|sel_AG_items|rows=3 fp=89a2028f|ok
+admin|order_items|sel_AG_items|rows=4 fp=57e31028|ok
 admin|order_items|ins_into_B_order|rows=1 fp=-|ok
 admin|order_items|ins_into_A_pending|rows=1 fp=-|ok
 admin|order_items|ins_into_T2_order|ERR 42501 new row violates row-level security policy for table "order_items"|ok
 admin|order_items|ins_into_AG_order|rows=1 fp=-|ok
-admin|order_items|upd_B_items|rows=4 fp=-|ok
-admin|order_items|upd_A_items|rows=2 fp=-|ok
-admin|order_items|upd_AG_items|rows=3 fp=-|ok
+admin|order_items|upd_B_items|rows=3 fp=-|ok
+admin|order_items|upd_A_items|rows=5 fp=-|ok
+admin|order_items|upd_AG_items|rows=4 fp=-|ok
 admin|order_items|upd_T2_items|rows=0 fp=-|ok
-admin|order_items|del_B_items|rows=4 fp=-|ok
-admin|order_items|del_A_items|rows=2 fp=-|ok
+admin|order_items|del_B_items|rows=3 fp=-|ok
+admin|order_items|del_A_items|rows=5 fp=-|ok
 admin|order_items|del_T2_items|rows=0 fp=-|ok
 admin|customer_profiles|sel_all|rows=50 fp=18202b08|ok
 admin|customer_profiles|sel_B|rows=1 fp=eb29ac79|ok
@@ -491,10 +491,10 @@ admin|bp.inquiry_settings|sel_all|ERR 42501 permission denied for schema busines
 admin|bp.inquiry_settings|ins|ERR 42501 permission denied for schema business_profile|ok
 admin|bp.inquiry_settings|upd|ERR 42501 permission denied for schema business_profile|ok
 admin|bp.inquiry_settings|del|ERR 42501 permission denied for schema business_profile|ok
-c2|orders|sel_all|rows=189 fp=4f4d6b7e|ok
+c2|orders|sel_all|rows=189 fp=304f5995|ok
 c2|orders|sel_B_orders|rows=0 fp=-|ok
 c2|orders|sel_A_orders|rows=0 fp=-|ok
-c2|orders|sel_T2_orders|rows=189 fp=4f4d6b7e|ok
+c2|orders|sel_T2_orders|rows=189 fp=304f5995|ok
 c2|orders|sel_agent_orders|rows=0 fp=-|ok
 c2|orders|sel_guest_orders|rows=0 fp=-|ok
 c2|orders|ins_for_B|ERR 42501 new row violates row-level security policy for table "orders"|ok
@@ -509,10 +509,10 @@ c2|orders|upd_steal_order|rows=0 fp=-|ok
 c2|orders|del_B_order|rows=0 fp=-|ok
 c2|orders|del_A_order|rows=0 fp=-|ok
 c2|orders|del_T2_order|rows=0 fp=-|ok
-c2|order_items|sel_all|rows=6032 fp=5c700382|ok
+c2|order_items|sel_all|rows=5980 fp=ece47c3b|ok
 c2|order_items|sel_B_items|rows=0 fp=-|ok
 c2|order_items|sel_A_items|rows=0 fp=-|ok
-c2|order_items|sel_T2_items|rows=6032 fp=5c700382|ok
+c2|order_items|sel_T2_items|rows=5980 fp=ece47c3b|ok
 c2|order_items|sel_AG_items|rows=0 fp=-|ok
 c2|order_items|ins_into_B_order|ERR 42501 new row violates row-level security policy for table "order_items"|ok
 c2|order_items|ins_into_A_pending|ERR 42501 new row violates row-level security policy for table "order_items"|ok
@@ -737,12 +737,12 @@ a2on1|bp.inquiry_settings|sel_all|ERR 42501 permission denied for schema busines
 a2on1|bp.inquiry_settings|ins|ERR 42501 permission denied for schema business_profile|ok
 a2on1|bp.inquiry_settings|upd|ERR 42501 permission denied for schema business_profile|ok
 a2on1|bp.inquiry_settings|del|ERR 42501 permission denied for schema business_profile|ok
-plat1|orders|sel_all|rows=20000 fp=0722a56c|ok
-plat1|orders|sel_B_orders|rows=370 fp=4426a7fe|ok
-plat1|orders|sel_A_orders|rows=420 fp=31eba05e|ok
+plat1|orders|sel_all|rows=20000 fp=ebbab5ce|ok
+plat1|orders|sel_B_orders|rows=370 fp=a9da74e3|ok
+plat1|orders|sel_A_orders|rows=420 fp=80bcba72|ok
 plat1|orders|sel_T2_orders|rows=0 fp=-|ok
-plat1|orders|sel_agent_orders|rows=3735 fp=bf128907|ok
-plat1|orders|sel_guest_orders|rows=1000 fp=1acd0674|ok
+plat1|orders|sel_agent_orders|rows=3735 fp=21dc23c0|ok
+plat1|orders|sel_guest_orders|rows=1000 fp=77af9a35|ok
 plat1|orders|ins_for_B|rows=1 fp=-|ok
 plat1|orders|ins_for_self|ERR 23503 insert or update on table "orders" violates foreign key constraint "orders_customer_id_fke|ok
 plat1|orders|ins_other_tenant|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "orders"|ok
@@ -755,21 +755,21 @@ plat1|orders|upd_steal_order|ERR 23503 insert or update on table "orders" violat
 plat1|orders|del_B_order|rows=1 fp=-|ok
 plat1|orders|del_A_order|rows=1 fp=-|ok
 plat1|orders|del_T2_order|rows=0 fp=-|ok
-plat1|order_items|sel_all|rows=60197 fp=8a828607|ok
-plat1|order_items|sel_B_items|rows=4 fp=b5688b58|ok
-plat1|order_items|sel_A_items|rows=2 fp=8e20deea|ok
+plat1|order_items|sel_all|rows=60158 fp=4843492b|ok
+plat1|order_items|sel_B_items|rows=3 fp=7039f352|ok
+plat1|order_items|sel_A_items|rows=5 fp=9275762d|ok
 plat1|order_items|sel_T2_items|rows=0 fp=-|ok
-plat1|order_items|sel_AG_items|rows=3 fp=89a2028f|ok
+plat1|order_items|sel_AG_items|rows=4 fp=57e31028|ok
 plat1|order_items|ins_into_B_order|rows=1 fp=-|ok
 plat1|order_items|ins_into_A_pending|rows=1 fp=-|ok
 plat1|order_items|ins_into_T2_order|ERR 42501 new row violates row-level security policy for table "order_items"|ok
 plat1|order_items|ins_into_AG_order|rows=1 fp=-|ok
-plat1|order_items|upd_B_items|rows=4 fp=-|ok
-plat1|order_items|upd_A_items|rows=2 fp=-|ok
-plat1|order_items|upd_AG_items|rows=3 fp=-|ok
+plat1|order_items|upd_B_items|rows=3 fp=-|ok
+plat1|order_items|upd_A_items|rows=5 fp=-|ok
+plat1|order_items|upd_AG_items|rows=4 fp=-|ok
 plat1|order_items|upd_T2_items|rows=0 fp=-|ok
-plat1|order_items|del_B_items|rows=4 fp=-|ok
-plat1|order_items|del_A_items|rows=2 fp=-|ok
+plat1|order_items|del_B_items|rows=3 fp=-|ok
+plat1|order_items|del_A_items|rows=5 fp=-|ok
 plat1|order_items|del_T2_items|rows=0 fp=-|ok
 plat1|customer_profiles|sel_all|rows=50 fp=18202b08|ok
 plat1|customer_profiles|sel_B|rows=1 fp=eb29ac79|ok
@@ -819,12 +819,12 @@ plat1|bp.inquiry_settings|sel_all|ERR 42501 permission denied for schema busines
 plat1|bp.inquiry_settings|ins|ERR 42501 permission denied for schema business_profile|ok
 plat1|bp.inquiry_settings|upd|ERR 42501 permission denied for schema business_profile|ok
 plat1|bp.inquiry_settings|del|ERR 42501 permission denied for schema business_profile|ok
-plat2|orders|sel_all|rows=2000 fp=70d5e398|ok
+plat2|orders|sel_all|rows=2000 fp=f0559aa9|ok
 plat2|orders|sel_B_orders|rows=0 fp=-|ok
 plat2|orders|sel_A_orders|rows=0 fp=-|ok
-plat2|orders|sel_T2_orders|rows=2000 fp=70d5e398|ok
+plat2|orders|sel_T2_orders|rows=2000 fp=f0559aa9|ok
 plat2|orders|sel_agent_orders|rows=0 fp=-|ok
-plat2|orders|sel_guest_orders|rows=100 fp=56bf4639|ok
+plat2|orders|sel_guest_orders|rows=100 fp=92a8901c|ok
 plat2|orders|ins_for_B|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "orders"|ok
 plat2|orders|ins_for_self|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "orders"|ok
 plat2|orders|ins_other_tenant|ERR 23503 insert or update on table "orders" violates foreign key constraint "orders_customer_id_fke|ok
@@ -837,10 +837,10 @@ plat2|orders|upd_steal_order|rows=0 fp=-|ok
 plat2|orders|del_B_order|rows=0 fp=-|ok
 plat2|orders|del_A_order|rows=0 fp=-|ok
 plat2|orders|del_T2_order|rows=1 fp=-|ok
-plat2|order_items|sel_all|rows=6032 fp=5c700382|ok
+plat2|order_items|sel_all|rows=5980 fp=ece47c3b|ok
 plat2|order_items|sel_B_items|rows=0 fp=-|ok
 plat2|order_items|sel_A_items|rows=0 fp=-|ok
-plat2|order_items|sel_T2_items|rows=6032 fp=5c700382|ok
+plat2|order_items|sel_T2_items|rows=5980 fp=ece47c3b|ok
 plat2|order_items|sel_AG_items|rows=0 fp=-|ok
 plat2|order_items|ins_into_B_order|ERR 42501 new row violates row-level security policy for table "order_items"|ok
 plat2|order_items|ins_into_A_pending|ERR 42501 new row violates row-level security policy for table "order_items"|ok
@@ -983,12 +983,12 @@ nobody|bp.inquiry_settings|sel_all|ERR 42501 permission denied for schema busine
 nobody|bp.inquiry_settings|ins|ERR 42501 permission denied for schema business_profile|ok
 nobody|bp.inquiry_settings|upd|ERR 42501 permission denied for schema business_profile|ok
 nobody|bp.inquiry_settings|del|ERR 42501 permission denied for schema business_profile|ok
-service|orders|sel_all|rows=28000 fp=3b36bab1|ok
-service|orders|sel_B_orders|rows=370 fp=4426a7fe|ok
-service|orders|sel_A_orders|rows=420 fp=31eba05e|ok
-service|orders|sel_T2_orders|rows=2000 fp=70d5e398|ok
-service|orders|sel_agent_orders|rows=3735 fp=bf128907|ok
-service|orders|sel_guest_orders|rows=1400 fp=8706ae1d|ok
+service|orders|sel_all|rows=28000 fp=3f43b072|ok
+service|orders|sel_B_orders|rows=370 fp=a9da74e3|ok
+service|orders|sel_A_orders|rows=420 fp=80bcba72|ok
+service|orders|sel_T2_orders|rows=2000 fp=f0559aa9|ok
+service|orders|sel_agent_orders|rows=3735 fp=21dc23c0|ok
+service|orders|sel_guest_orders|rows=1400 fp=5575bbe9|ok
 service|orders|ins_for_B|rows=1 fp=-|ok
 service|orders|ins_for_self|ERR 23514 new row for relation "orders" violates check constraint "orders_guest_details_check"|ok
 service|orders|ins_other_tenant|ERR 23514 new row for relation "orders" violates check constraint "orders_guest_details_check"|ok
@@ -1001,21 +1001,21 @@ service|orders|upd_steal_order|rows=1 fp=-|ok
 service|orders|del_B_order|rows=1 fp=-|ok
 service|orders|del_A_order|rows=1 fp=-|ok
 service|orders|del_T2_order|rows=1 fp=-|ok
-service|order_items|sel_all|rows=84145 fp=8dc4ba18|ok
-service|order_items|sel_B_items|rows=4 fp=b5688b58|ok
-service|order_items|sel_A_items|rows=2 fp=8e20deea|ok
-service|order_items|sel_T2_items|rows=6032 fp=5c700382|ok
-service|order_items|sel_AG_items|rows=3 fp=89a2028f|ok
+service|order_items|sel_all|rows=84132 fp=862ea6fe|ok
+service|order_items|sel_B_items|rows=3 fp=7039f352|ok
+service|order_items|sel_A_items|rows=5 fp=9275762d|ok
+service|order_items|sel_T2_items|rows=5980 fp=ece47c3b|ok
+service|order_items|sel_AG_items|rows=4 fp=57e31028|ok
 service|order_items|ins_into_B_order|rows=1 fp=-|ok
 service|order_items|ins_into_A_pending|rows=1 fp=-|ok
 service|order_items|ins_into_T2_order|rows=1 fp=-|ok
 service|order_items|ins_into_AG_order|rows=1 fp=-|ok
-service|order_items|upd_B_items|rows=4 fp=-|ok
-service|order_items|upd_A_items|rows=2 fp=-|ok
-service|order_items|upd_AG_items|rows=3 fp=-|ok
+service|order_items|upd_B_items|rows=3 fp=-|ok
+service|order_items|upd_A_items|rows=5 fp=-|ok
+service|order_items|upd_AG_items|rows=4 fp=-|ok
 service|order_items|upd_T2_items|rows=5 fp=-|ok
-service|order_items|del_B_items|rows=4 fp=-|ok
-service|order_items|del_A_items|rows=2 fp=-|ok
+service|order_items|del_B_items|rows=3 fp=-|ok
+service|order_items|del_A_items|rows=5 fp=-|ok
 service|order_items|del_T2_items|rows=5 fp=-|ok
 service|customer_profiles|sel_all|rows=90 fp=d11473ec|ok
 service|customer_profiles|sel_B|rows=1 fp=eb29ac79|ok
@@ -1057,7 +1057,7 @@ service|bp.inquiries|sel_all|rows=2800 fp=036205e4|ok
 service|bp.inquiries|ins|ERR 42501 permission denied for table inquiries|ok
 service|bp.inquiries|upd|ERR 42501 permission denied for table inquiries|ok
 service|bp.inquiries|del|ERR 42501 permission denied for table inquiries|ok
-service|bp.inquiry_notes|sel_all|rows=700 fp=8729f0c2|ok
+service|bp.inquiry_notes|sel_all|rows=700 fp=afa59c92|ok
 service|bp.inquiry_notes|ins|ERR 42501 permission denied for table inquiry_notes|ok
 service|bp.inquiry_notes|upd|ERR 42501 permission denied for table inquiry_notes|ok
 service|bp.inquiry_notes|del|ERR 42501 permission denied for table inquiry_notes|ok
@@ -1075,8 +1075,8 @@ anon|bp.inquiries|open_del_T2|rows=0 fp=-|ok
 anon|bp.inquiries|open_move_T1_to_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
 anon|bp.inquiries|open_ins_T1|rows=1 fp=-|ok
 anon|bp.inquiries|open_ins_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
-anon|bp.inquiry_notes|open_sel_all|rows=500 fp=298b33c9|ok
-anon|bp.inquiry_notes|open_sel_T1|rows=500 fp=298b33c9|ok
+anon|bp.inquiry_notes|open_sel_all|rows=500 fp=18fb77bb|ok
+anon|bp.inquiry_notes|open_sel_T1|rows=500 fp=18fb77bb|ok
 anon|bp.inquiry_notes|open_sel_T2|rows=0 fp=-|ok
 anon|bp.inquiry_notes|open_upd_T1|rows=500 fp=-|ok
 anon|bp.inquiry_notes|open_upd_T2|rows=0 fp=-|ok
@@ -1100,8 +1100,8 @@ cA|bp.inquiries|open_del_T2|rows=0 fp=-|ok
 cA|bp.inquiries|open_move_T1_to_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
 cA|bp.inquiries|open_ins_T1|rows=1 fp=-|ok
 cA|bp.inquiries|open_ins_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
-cA|bp.inquiry_notes|open_sel_all|rows=500 fp=298b33c9|ok
-cA|bp.inquiry_notes|open_sel_T1|rows=500 fp=298b33c9|ok
+cA|bp.inquiry_notes|open_sel_all|rows=500 fp=18fb77bb|ok
+cA|bp.inquiry_notes|open_sel_T1|rows=500 fp=18fb77bb|ok
 cA|bp.inquiry_notes|open_sel_T2|rows=0 fp=-|ok
 cA|bp.inquiry_notes|open_upd_T1|rows=500 fp=-|ok
 cA|bp.inquiry_notes|open_upd_T2|rows=0 fp=-|ok
@@ -1125,8 +1125,8 @@ cB|bp.inquiries|open_del_T2|rows=0 fp=-|ok
 cB|bp.inquiries|open_move_T1_to_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
 cB|bp.inquiries|open_ins_T1|rows=1 fp=-|ok
 cB|bp.inquiries|open_ins_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
-cB|bp.inquiry_notes|open_sel_all|rows=500 fp=298b33c9|ok
-cB|bp.inquiry_notes|open_sel_T1|rows=500 fp=298b33c9|ok
+cB|bp.inquiry_notes|open_sel_all|rows=500 fp=18fb77bb|ok
+cB|bp.inquiry_notes|open_sel_T1|rows=500 fp=18fb77bb|ok
 cB|bp.inquiry_notes|open_sel_T2|rows=0 fp=-|ok
 cB|bp.inquiry_notes|open_upd_T1|rows=500 fp=-|ok
 cB|bp.inquiry_notes|open_upd_T2|rows=0 fp=-|ok
@@ -1150,8 +1150,8 @@ cAG|bp.inquiries|open_del_T2|rows=0 fp=-|ok
 cAG|bp.inquiries|open_move_T1_to_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
 cAG|bp.inquiries|open_ins_T1|rows=1 fp=-|ok
 cAG|bp.inquiries|open_ins_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
-cAG|bp.inquiry_notes|open_sel_all|rows=500 fp=298b33c9|ok
-cAG|bp.inquiry_notes|open_sel_T1|rows=500 fp=298b33c9|ok
+cAG|bp.inquiry_notes|open_sel_all|rows=500 fp=18fb77bb|ok
+cAG|bp.inquiry_notes|open_sel_T1|rows=500 fp=18fb77bb|ok
 cAG|bp.inquiry_notes|open_sel_T2|rows=0 fp=-|ok
 cAG|bp.inquiry_notes|open_upd_T1|rows=500 fp=-|ok
 cAG|bp.inquiry_notes|open_upd_T2|rows=0 fp=-|ok
@@ -1175,8 +1175,8 @@ agent|bp.inquiries|open_del_T2|rows=0 fp=-|ok
 agent|bp.inquiries|open_move_T1_to_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
 agent|bp.inquiries|open_ins_T1|rows=1 fp=-|ok
 agent|bp.inquiries|open_ins_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
-agent|bp.inquiry_notes|open_sel_all|rows=500 fp=298b33c9|ok
-agent|bp.inquiry_notes|open_sel_T1|rows=500 fp=298b33c9|ok
+agent|bp.inquiry_notes|open_sel_all|rows=500 fp=18fb77bb|ok
+agent|bp.inquiry_notes|open_sel_T1|rows=500 fp=18fb77bb|ok
 agent|bp.inquiry_notes|open_sel_T2|rows=0 fp=-|ok
 agent|bp.inquiry_notes|open_upd_T1|rows=500 fp=-|ok
 agent|bp.inquiry_notes|open_upd_T2|rows=0 fp=-|ok
@@ -1200,8 +1200,8 @@ admin|bp.inquiries|open_del_T2|rows=0 fp=-|ok
 admin|bp.inquiries|open_move_T1_to_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
 admin|bp.inquiries|open_ins_T1|rows=1 fp=-|ok
 admin|bp.inquiries|open_ins_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
-admin|bp.inquiry_notes|open_sel_all|rows=500 fp=298b33c9|ok
-admin|bp.inquiry_notes|open_sel_T1|rows=500 fp=298b33c9|ok
+admin|bp.inquiry_notes|open_sel_all|rows=500 fp=18fb77bb|ok
+admin|bp.inquiry_notes|open_sel_T1|rows=500 fp=18fb77bb|ok
 admin|bp.inquiry_notes|open_sel_T2|rows=0 fp=-|ok
 admin|bp.inquiry_notes|open_upd_T1|rows=500 fp=-|ok
 admin|bp.inquiry_notes|open_upd_T2|rows=0 fp=-|ok
@@ -1225,9 +1225,9 @@ c2|bp.inquiries|open_del_T2|rows=200 fp=-|ok
 c2|bp.inquiries|open_move_T1_to_T2|rows=0 fp=-|ok
 c2|bp.inquiries|open_ins_T1|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
 c2|bp.inquiries|open_ins_T2|rows=1 fp=-|ok
-c2|bp.inquiry_notes|open_sel_all|rows=50 fp=8dfc66da|ok
+c2|bp.inquiry_notes|open_sel_all|rows=50 fp=d6ff8716|ok
 c2|bp.inquiry_notes|open_sel_T1|rows=0 fp=-|ok
-c2|bp.inquiry_notes|open_sel_T2|rows=50 fp=8dfc66da|ok
+c2|bp.inquiry_notes|open_sel_T2|rows=50 fp=d6ff8716|ok
 c2|bp.inquiry_notes|open_upd_T1|rows=0 fp=-|ok
 c2|bp.inquiry_notes|open_upd_T2|rows=50 fp=-|ok
 c2|bp.inquiry_notes|open_del_T2|rows=50 fp=-|ok
@@ -1300,8 +1300,8 @@ plat1|bp.inquiries|open_del_T2|rows=0 fp=-|ok
 plat1|bp.inquiries|open_move_T1_to_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
 plat1|bp.inquiries|open_ins_T1|rows=1 fp=-|ok
 plat1|bp.inquiries|open_ins_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
-plat1|bp.inquiry_notes|open_sel_all|rows=500 fp=298b33c9|ok
-plat1|bp.inquiry_notes|open_sel_T1|rows=500 fp=298b33c9|ok
+plat1|bp.inquiry_notes|open_sel_all|rows=500 fp=18fb77bb|ok
+plat1|bp.inquiry_notes|open_sel_T1|rows=500 fp=18fb77bb|ok
 plat1|bp.inquiry_notes|open_sel_T2|rows=0 fp=-|ok
 plat1|bp.inquiry_notes|open_upd_T1|rows=500 fp=-|ok
 plat1|bp.inquiry_notes|open_upd_T2|rows=0 fp=-|ok
@@ -1325,9 +1325,9 @@ plat2|bp.inquiries|open_del_T2|rows=200 fp=-|ok
 plat2|bp.inquiries|open_move_T1_to_T2|rows=0 fp=-|ok
 plat2|bp.inquiries|open_ins_T1|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
 plat2|bp.inquiries|open_ins_T2|rows=1 fp=-|ok
-plat2|bp.inquiry_notes|open_sel_all|rows=50 fp=8dfc66da|ok
+plat2|bp.inquiry_notes|open_sel_all|rows=50 fp=d6ff8716|ok
 plat2|bp.inquiry_notes|open_sel_T1|rows=0 fp=-|ok
-plat2|bp.inquiry_notes|open_sel_T2|rows=50 fp=8dfc66da|ok
+plat2|bp.inquiry_notes|open_sel_T2|rows=50 fp=d6ff8716|ok
 plat2|bp.inquiry_notes|open_upd_T1|rows=0 fp=-|ok
 plat2|bp.inquiry_notes|open_upd_T2|rows=50 fp=-|ok
 plat2|bp.inquiry_notes|open_del_T2|rows=50 fp=-|ok
@@ -1350,8 +1350,8 @@ nobody|bp.inquiries|open_del_T2|rows=0 fp=-|ok
 nobody|bp.inquiries|open_move_T1_to_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
 nobody|bp.inquiries|open_ins_T1|rows=1 fp=-|ok
 nobody|bp.inquiries|open_ins_T2|ERR 42501 new row violates row-level security policy "tenant_isolation" for table "inquiries"|ok
-nobody|bp.inquiry_notes|open_sel_all|rows=500 fp=298b33c9|ok
-nobody|bp.inquiry_notes|open_sel_T1|rows=500 fp=298b33c9|ok
+nobody|bp.inquiry_notes|open_sel_all|rows=500 fp=18fb77bb|ok
+nobody|bp.inquiry_notes|open_sel_T1|rows=500 fp=18fb77bb|ok
 nobody|bp.inquiry_notes|open_sel_T2|rows=0 fp=-|ok
 nobody|bp.inquiry_notes|open_upd_T1|rows=500 fp=-|ok
 nobody|bp.inquiry_notes|open_upd_T2|rows=0 fp=-|ok

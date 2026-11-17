@@ -2,110 +2,110 @@
 -- role=authenticated persona=t1_customer_a
 -- db=perf_scratch label=A-orig
 
-===== REP 0  (psql wall 47 ms)
+===== REP 0  (psql wall 51 ms)
                                                                   QUERY PLAN                                                                  
 ----------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=43.82..43.84 rows=1 width=48) (actual time=5.351..5.353 rows=1 loops=1)
-   Buffers: shared hit=599
+ Aggregate  (cost=43.82..43.84 rows=1 width=48) (actual time=6.267..6.269 rows=1 loops=1)
+   Buffers: shared hit=652
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=3.739..3.740 rows=1 loops=1)
-           Buffers: shared hit=475
-   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=4.960..5.304 rows=2 loops=1)
-         Index Cond: (order_id = 'b276ca6b-0369-4911-85df-61614cfbf7b2'::uuid)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=3.067..3.068 rows=1 loops=1)
+           Buffers: shared hit=477
+   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=4.749..6.186 rows=5 loops=1)
+         Index Cond: (order_id = '2813f779-8800-4e95-a818-e300d22cd5f8'::uuid)
          Filter: ((tenant_id = $0) AND (SubPlan 3))
-         Buffers: shared hit=596
+         Buffers: shared hit=649
          SubPlan 3
-           ->  Index Scan using orders_pkey on orders o  (cost=0.55..9.07 rows=1 width=0) (actual time=0.756..0.757 rows=1 loops=2)
+           ->  Index Scan using orders_pkey on orders o  (cost=0.55..9.07 rows=1 width=0) (actual time=0.612..0.612 rows=1 loops=5)
                  Index Cond: (id = i.order_id)
                  Filter: ((tenant_id = $2) AND can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
-                 Buffers: shared hit=118
+                 Buffers: shared hit=169
                  InitPlan 2 (returns $2)
-                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.172..0.172 rows=1 loops=1)
+                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.150..0.150 rows=1 loops=1)
                          Buffers: shared hit=3
  Planning:
    Buffers: shared hit=583
- Planning Time: 2.390 ms
- Execution Time: 5.551 ms
+ Planning Time: 1.931 ms
+ Execution Time: 6.414 ms
 (21 rows)
 
 
-===== REP 1  (psql wall 34 ms)
+===== REP 1  (psql wall 48 ms)
                                                                   QUERY PLAN                                                                  
 ----------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=43.82..43.84 rows=1 width=48) (actual time=3.764..3.766 rows=1 loops=1)
-   Buffers: shared hit=599
+ Aggregate  (cost=43.82..43.84 rows=1 width=48) (actual time=5.270..5.271 rows=1 loops=1)
+   Buffers: shared hit=652
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.288..2.288 rows=1 loops=1)
-           Buffers: shared hit=475
-   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=3.439..3.728 rows=2 loops=1)
-         Index Cond: (order_id = 'b276ca6b-0369-4911-85df-61614cfbf7b2'::uuid)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.565..2.566 rows=1 loops=1)
+           Buffers: shared hit=477
+   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=4.006..5.207 rows=5 loops=1)
+         Index Cond: (order_id = '2813f779-8800-4e95-a818-e300d22cd5f8'::uuid)
          Filter: ((tenant_id = $0) AND (SubPlan 3))
-         Buffers: shared hit=596
+         Buffers: shared hit=649
          SubPlan 3
-           ->  Index Scan using orders_pkey on orders o  (cost=0.55..9.07 rows=1 width=0) (actual time=0.702..0.702 rows=1 loops=2)
+           ->  Index Scan using orders_pkey on orders o  (cost=0.55..9.07 rows=1 width=0) (actual time=0.519..0.519 rows=1 loops=5)
                  Index Cond: (id = i.order_id)
                  Filter: ((tenant_id = $2) AND can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
-                 Buffers: shared hit=118
+                 Buffers: shared hit=169
                  InitPlan 2 (returns $2)
-                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.105..0.105 rows=1 loops=1)
+                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.152..0.152 rows=1 loops=1)
                          Buffers: shared hit=3
  Planning:
    Buffers: shared hit=583
- Planning Time: 1.282 ms
- Execution Time: 3.888 ms
+ Planning Time: 1.543 ms
+ Execution Time: 5.396 ms
 (21 rows)
 
 
-===== REP 2  (psql wall 44 ms)
+===== REP 2  (psql wall 42 ms)
                                                                   QUERY PLAN                                                                  
 ----------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=43.82..43.84 rows=1 width=48) (actual time=3.993..3.995 rows=1 loops=1)
-   Buffers: shared hit=599
+ Aggregate  (cost=43.82..43.84 rows=1 width=48) (actual time=4.080..4.082 rows=1 loops=1)
+   Buffers: shared hit=652
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.363..2.364 rows=1 loops=1)
-           Buffers: shared hit=475
-   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=3.645..3.954 rows=2 loops=1)
-         Index Cond: (order_id = 'b276ca6b-0369-4911-85df-61614cfbf7b2'::uuid)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.035..2.035 rows=1 loops=1)
+           Buffers: shared hit=477
+   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=3.115..4.030 rows=5 loops=1)
+         Index Cond: (order_id = '2813f779-8800-4e95-a818-e300d22cd5f8'::uuid)
          Filter: ((tenant_id = $0) AND (SubPlan 3))
-         Buffers: shared hit=596
+         Buffers: shared hit=649
          SubPlan 3
-           ->  Index Scan using orders_pkey on orders o  (cost=0.55..9.07 rows=1 width=0) (actual time=0.775..0.776 rows=1 loops=2)
+           ->  Index Scan using orders_pkey on orders o  (cost=0.55..9.07 rows=1 width=0) (actual time=0.392..0.392 rows=1 loops=5)
                  Index Cond: (id = i.order_id)
                  Filter: ((tenant_id = $2) AND can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
-                 Buffers: shared hit=118
+                 Buffers: shared hit=169
                  InitPlan 2 (returns $2)
-                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.174..0.174 rows=1 loops=1)
+                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.097..0.097 rows=1 loops=1)
                          Buffers: shared hit=3
  Planning:
    Buffers: shared hit=583
- Planning Time: 1.563 ms
- Execution Time: 4.150 ms
+ Planning Time: 1.293 ms
+ Execution Time: 4.182 ms
 (21 rows)
 
 
-===== REP 3  (psql wall 36 ms)
+===== REP 3  (psql wall 38 ms)
                                                                   QUERY PLAN                                                                  
 ----------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=43.82..43.84 rows=1 width=48) (actual time=3.463..3.465 rows=1 loops=1)
-   Buffers: shared hit=599
+ Aggregate  (cost=43.82..43.84 rows=1 width=48) (actual time=5.151..5.153 rows=1 loops=1)
+   Buffers: shared hit=652
    InitPlan 1 (returns $0)
-     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.994..1.995 rows=1 loops=1)
-           Buffers: shared hit=475
-   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=3.105..3.426 rows=2 loops=1)
-         Index Cond: (order_id = 'b276ca6b-0369-4911-85df-61614cfbf7b2'::uuid)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.501..2.501 rows=1 loops=1)
+           Buffers: shared hit=477
+   ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=3.944..5.084 rows=5 loops=1)
+         Index Cond: (order_id = '2813f779-8800-4e95-a818-e300d22cd5f8'::uuid)
          Filter: ((tenant_id = $0) AND (SubPlan 3))
-         Buffers: shared hit=596
+         Buffers: shared hit=649
          SubPlan 3
-           ->  Index Scan using orders_pkey on orders o  (cost=0.55..9.07 rows=1 width=0) (actual time=0.699..0.700 rows=1 loops=2)
+           ->  Index Scan using orders_pkey on orders o  (cost=0.55..9.07 rows=1 width=0) (actual time=0.508..0.508 rows=1 loops=5)
                  Index Cond: (id = i.order_id)
                  Filter: ((tenant_id = $2) AND can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
-                 Buffers: shared hit=118
+                 Buffers: shared hit=169
                  InitPlan 2 (returns $2)
-                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.102..0.102 rows=1 loops=1)
+                   ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.206..0.206 rows=1 loops=1)
                          Buffers: shared hit=3
  Planning:
    Buffers: shared hit=583
- Planning Time: 1.155 ms
- Execution Time: 3.571 ms
+ Planning Time: 1.509 ms
+ Execution Time: 5.348 ms
 (21 rows)
 

@@ -2,82 +2,82 @@
 -- role=anon persona=anon
 -- db=perf_scratch_b label=B-rewrite
 
-===== REP 0  (psql wall 805 ms)
+===== REP 0  (psql wall 687 ms)
                                                                QUERY PLAN                                                                
 -----------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=763.708..763.711 rows=1 loops=1)
-   Buffers: shared hit=58357, temp read=2681 written=2683
-   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=749.601..749.825 rows=1000 loops=1)
-         Buffers: shared hit=58345, temp read=2681 written=2683
-         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=749.599..749.712 rows=1000 loops=1)
+ Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=654.974..654.977 rows=1 loops=1)
+   Buffers: shared hit=56906, temp read=2681 written=2683
+   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=646.984..647.111 rows=1000 loops=1)
+         Buffers: shared hit=56906, temp read=2681 written=2683
+         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=646.982..647.042 rows=1000 loops=1)
                Sort Key: get_catalog.is_out_of_stock, get_catalog.created_at DESC, get_catalog.id
                Sort Method: top-N heapsort  Memory: 4060kB
-               Buffers: shared hit=58345, temp read=2681 written=2683
-               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=731.550..735.108 rows=9697 loops=1)
-                     Buffers: shared hit=58334, temp read=2681 written=2683
+               Buffers: shared hit=56906, temp read=2681 written=2683
+               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=635.083..637.700 rows=9697 loops=1)
+                     Buffers: shared hit=56895, temp read=2681 written=2683
  Planning:
    Buffers: shared hit=52
- Planning Time: 0.286 ms
- Execution Time: 766.108 ms
+ Planning Time: 0.267 ms
+ Execution Time: 656.385 ms
 (14 rows)
 
 
-===== REP 1  (psql wall 670 ms)
+===== REP 1  (psql wall 658 ms)
                                                                QUERY PLAN                                                                
 -----------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=644.115..644.117 rows=1 loops=1)
-   Buffers: shared hit=56808, temp read=2681 written=2683
-   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=635.458..635.593 rows=1000 loops=1)
-         Buffers: shared hit=56808, temp read=2681 written=2683
-         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=635.456..635.519 rows=1000 loops=1)
+ Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=617.729..617.731 rows=1 loops=1)
+   Buffers: shared hit=56906, temp read=2681 written=2683
+   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=608.960..609.096 rows=1000 loops=1)
+         Buffers: shared hit=56906, temp read=2681 written=2683
+         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=608.958..609.019 rows=1000 loops=1)
                Sort Key: get_catalog.is_out_of_stock, get_catalog.created_at DESC, get_catalog.id
                Sort Method: top-N heapsort  Memory: 4060kB
-               Buffers: shared hit=56808, temp read=2681 written=2683
-               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=623.103..625.513 rows=9697 loops=1)
-                     Buffers: shared hit=56797, temp read=2681 written=2683
+               Buffers: shared hit=56906, temp read=2681 written=2683
+               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=595.918..598.592 rows=9697 loops=1)
+                     Buffers: shared hit=56895, temp read=2681 written=2683
  Planning:
    Buffers: shared hit=52
- Planning Time: 0.251 ms
- Execution Time: 645.401 ms
+ Planning Time: 0.450 ms
+ Execution Time: 619.286 ms
 (14 rows)
 
 
-===== REP 2  (psql wall 766 ms)
+===== REP 2  (psql wall 836 ms)
                                                                QUERY PLAN                                                                
 -----------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=730.961..730.963 rows=1 loops=1)
-   Buffers: shared hit=56798, temp read=2681 written=2683
-   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=718.399..718.675 rows=1000 loops=1)
-         Buffers: shared hit=56798, temp read=2681 written=2683
-         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=718.397..718.500 rows=1000 loops=1)
+ Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=802.363..802.365 rows=1 loops=1)
+   Buffers: shared hit=56906, temp read=2681 written=2683
+   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=789.077..789.309 rows=1000 loops=1)
+         Buffers: shared hit=56906, temp read=2681 written=2683
+         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=789.074..789.196 rows=1000 loops=1)
                Sort Key: get_catalog.is_out_of_stock, get_catalog.created_at DESC, get_catalog.id
                Sort Method: top-N heapsort  Memory: 4060kB
-               Buffers: shared hit=56798, temp read=2681 written=2683
-               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=700.628..705.188 rows=9697 loops=1)
-                     Buffers: shared hit=56787, temp read=2681 written=2683
+               Buffers: shared hit=56906, temp read=2681 written=2683
+               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=770.648..774.179 rows=9697 loops=1)
+                     Buffers: shared hit=56895, temp read=2681 written=2683
  Planning:
    Buffers: shared hit=52
- Planning Time: 0.328 ms
- Execution Time: 732.619 ms
+ Planning Time: 0.332 ms
+ Execution Time: 804.950 ms
 (14 rows)
 
 
-===== REP 3  (psql wall 752 ms)
+===== REP 3  (psql wall 696 ms)
                                                                QUERY PLAN                                                                
 -----------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=719.451..719.454 rows=1 loops=1)
-   Buffers: shared hit=56808, temp read=2681 written=2683
-   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=706.595..706.805 rows=1000 loops=1)
-         Buffers: shared hit=56808, temp read=2681 written=2683
-         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=706.592..706.696 rows=1000 loops=1)
+ Aggregate  (cost=67.58..67.60 rows=1 width=48) (actual time=658.317..658.319 rows=1 loops=1)
+   Buffers: shared hit=56906, temp read=2681 written=2683
+   ->  Limit  (cost=60.08..62.58 rows=1000 width=530) (actual time=648.547..648.699 rows=1000 loops=1)
+         Buffers: shared hit=56906, temp read=2681 written=2683
+         ->  Sort  (cost=60.08..62.58 rows=1000 width=530) (actual time=648.545..648.616 rows=1000 loops=1)
                Sort Key: get_catalog.is_out_of_stock, get_catalog.created_at DESC, get_catalog.id
                Sort Method: top-N heapsort  Memory: 4060kB
-               Buffers: shared hit=56808, temp read=2681 written=2683
-               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=689.167..692.426 rows=9697 loops=1)
-                     Buffers: shared hit=56797, temp read=2681 written=2683
+               Buffers: shared hit=56906, temp read=2681 written=2683
+               ->  Function Scan on get_catalog  (cost=0.25..10.25 rows=1000 width=530) (actual time=634.582..637.395 rows=9697 loops=1)
+                     Buffers: shared hit=56895, temp read=2681 written=2683
  Planning:
    Buffers: shared hit=52
- Planning Time: 0.314 ms
- Execution Time: 721.764 ms
+ Planning Time: 0.366 ms
+ Execution Time: 660.080 ms
 (14 rows)
 

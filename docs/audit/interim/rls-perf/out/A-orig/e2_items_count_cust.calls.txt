@@ -1,6 +1,6 @@
 RESULT|1|12
-current_tenant_id|40842|708.0|708.0
-is_super_admin|20420|2317.9|1157.7
-is_admin|20420|2481.9|164.0
-can_view_order|20420|2672.2|190.3
-is_platform_admin|20420|454.2|454.2
+current_tenant_id|40842|628.2|628.2
+is_super_admin|20420|2041.2|1018.5
+is_admin|20420|2186.1|144.9
+can_view_order|20420|2357.1|171.0
+is_platform_admin|20420|396.2|396.2

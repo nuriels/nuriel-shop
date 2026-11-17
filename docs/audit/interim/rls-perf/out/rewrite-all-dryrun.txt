@@ -1,0 +1,4 @@
+NOTICE:  schema "perf" already exists, skipping
+NOTICE:  table "policy_rewrite_log" does not exist, skipping
+NOTICE:  rewrote 86 policies (scope=all)
+dry-run scope=all: policies rewritten = 86 (public 86, business_profile 0)

@@ -6,7 +6,7 @@
  global_products   |        3000 |  4200
  bp.inquiries      |        2000 |  2800
  orders            |       20000 | 28000
- order_items       |       60197 | 84145
+ order_items       |       60158 | 84132
 (7 rows)
 
               tenant_id               | orders 
@@ -21,10 +21,10 @@
       relname      | total_with_indexes |  heap   
 -------------------+--------------------+---------
  customer_profiles | 104 kB             | 16 kB
- global_products   | 6864 kB            | 5728 kB
+ global_products   | 6736 kB            | 5624 kB
  order_items       | 19 MB              | 13 MB
- orders            | 23 MB              | 10 MB
- user_roles        | 200 kB             | 32 kB
+ orders            | 22 MB              | 10 MB
+ user_roles        | 184 kB             | 16 kB
 (5 rows)
 
                           ?column?                          

@@ -1,0 +1,115 @@
+-- b3_admin_profiles: customer_profiles?select=user_id,business_name as admin
+-- role=authenticated persona=t1_admin
+-- db=perf_scratch_b label=B-rewrite
+
+===== REP 0  (psql wall 48 ms)
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=11.45..11.46 rows=1 width=48) (actual time=3.190..3.192 rows=1 loops=1)
+   Buffers: shared hit=480 read=5
+   InitPlan 1 (returns $0)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.470..2.470 rows=1 loops=1)
+           Buffers: shared hit=435
+   InitPlan 2 (returns $1)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.010..0.010 rows=1 loops=1)
+   InitPlan 3 (returns $2)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.478..0.479 rows=1 loops=1)
+           Buffers: shared hit=42
+   InitPlan 4 (returns $3)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
+   InitPlan 5 (returns $4)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
+   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..10.41 rows=29 width=26) (actual time=2.993..3.041 rows=200 loops=1)
+         Index Cond: (tenant_id = $0)
+         Filter: ((user_id = $1) OR $2 OR ($3 AND (agent_id = $4)))
+         Buffers: shared hit=477 read=5
+ Planning:
+   Buffers: shared hit=197 read=3
+ Planning Time: 0.987 ms
+ Execution Time: 3.344 ms
+(22 rows)
+
+
+===== REP 1  (psql wall 35 ms)
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=11.45..11.46 rows=1 width=48) (actual time=3.327..3.329 rows=1 loops=1)
+   Buffers: shared hit=485
+   InitPlan 1 (returns $0)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.339..2.340 rows=1 loops=1)
+           Buffers: shared hit=435
+   InitPlan 2 (returns $1)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.012..0.012 rows=1 loops=1)
+   InitPlan 3 (returns $2)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.725..0.726 rows=1 loops=1)
+           Buffers: shared hit=42
+   InitPlan 4 (returns $3)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
+   InitPlan 5 (returns $4)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
+   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..10.41 rows=29 width=26) (actual time=3.098..3.135 rows=200 loops=1)
+         Index Cond: (tenant_id = $0)
+         Filter: ((user_id = $1) OR $2 OR ($3 AND (agent_id = $4)))
+         Buffers: shared hit=482
+ Planning:
+   Buffers: shared hit=200
+ Planning Time: 0.775 ms
+ Execution Time: 3.428 ms
+(22 rows)
+
+
+===== REP 2  (psql wall 47 ms)
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=11.45..11.46 rows=1 width=48) (actual time=2.719..2.721 rows=1 loops=1)
+   Buffers: shared hit=485
+   InitPlan 1 (returns $0)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.039..2.039 rows=1 loops=1)
+           Buffers: shared hit=435
+   InitPlan 2 (returns $1)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.009..0.009 rows=1 loops=1)
+   InitPlan 3 (returns $2)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.483..0.483 rows=1 loops=1)
+           Buffers: shared hit=42
+   InitPlan 4 (returns $3)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
+   InitPlan 5 (returns $4)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
+   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..10.41 rows=29 width=26) (actual time=2.550..2.580 rows=200 loops=1)
+         Index Cond: (tenant_id = $0)
+         Filter: ((user_id = $1) OR $2 OR ($3 AND (agent_id = $4)))
+         Buffers: shared hit=482
+ Planning:
+   Buffers: shared hit=200
+ Planning Time: 0.703 ms
+ Execution Time: 2.811 ms
+(22 rows)
+
+
+===== REP 3  (psql wall 46 ms)
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=11.45..11.46 rows=1 width=48) (actual time=2.468..2.469 rows=1 loops=1)
+   Buffers: shared hit=485
+   InitPlan 1 (returns $0)
+     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.945..1.945 rows=1 loops=1)
+           Buffers: shared hit=435
+   InitPlan 2 (returns $1)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.009..0.009 rows=1 loops=1)
+   InitPlan 3 (returns $2)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (actual time=0.361..0.362 rows=1 loops=1)
+           Buffers: shared hit=42
+   InitPlan 4 (returns $3)
+     ->  Result  (cost=0.00..0.28 rows=1 width=1) (never executed)
+   InitPlan 5 (returns $4)
+     ->  Result  (cost=0.00..0.03 rows=1 width=16) (never executed)
+   ->  Index Scan using customer_profiles_tenant_id_idx on customer_profiles p  (cost=0.15..10.41 rows=29 width=26) (actual time=2.329..2.355 rows=200 loops=1)
+         Index Cond: (tenant_id = $0)
+         Filter: ((user_id = $1) OR $2 OR ($3 AND (agent_id = $4)))
+         Buffers: shared hit=482
+ Planning:
+   Buffers: shared hit=200
+ Planning Time: 0.624 ms
+ Execution Time: 2.544 ms
+(22 rows)
+

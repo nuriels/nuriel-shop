@@ -1,0 +1,167 @@
+-- a1_cust_orders_nofilter: CustomerOrdersTab.tsx:79-82 as written (no customer_id filter), embedded items
+-- role=authenticated persona=t1_customer_a
+-- db=perf_scratch label=A-orig
+
+===== REP 0  (psql wall 2579 ms)
+                                                                            QUERY PLAN                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=46063.06..46063.07 rows=1 width=48) (actual time=2546.581..2546.585 rows=1 loops=1)
+   Buffers: shared hit=164995
+   ->  Limit  (cost=44.49..46058.05 rows=1000 width=964) (actual time=5.977..2532.856 rows=420 loops=1)
+         Buffers: shared hit=164995
+         InitPlan 1 (returns $0)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=1.899..1.899 rows=1 loops=1)
+                 Buffers: shared hit=475
+         ->  Nested Loop Left Join  (cost=44.23..85951.55 rows=1867 width=964) (actual time=5.976..2531.796 rows=420 loops=1)
+               Buffers: shared hit=164995
+               ->  Index Scan using orders_tenant_created_idx on orders o  (cost=0.41..4103.86 rows=1867 width=932) (actual time=5.261..2213.862 rows=420 loops=1)
+                     Index Cond: (tenant_id = $0)
+                     Filter: can_view_order(customer_id, agent_id)
+                     Rows Removed by Filter: 19580
+                     Buffers: shared hit=141927
+               ->  Aggregate  (cost=43.82..43.83 rows=1 width=32) (actual time=0.754..0.754 rows=1 loops=420)
+                     Buffers: shared hit=23068
+                     InitPlan 2 (returns $2)
+                       ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.018..0.018 rows=1 loops=1)
+                             Buffers: shared hit=2
+                     ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=0.246..0.731 rows=3 loops=420)
+                           Index Cond: (order_id = o.id)
+                           Filter: ((tenant_id = $2) AND (SubPlan 4))
+                           Buffers: shared hit=23065
+                           SubPlan 4
+                             ->  Index Scan using orders_pkey on orders o_1  (cost=0.55..9.07 rows=1 width=0) (actual time=0.234..0.234 rows=1 loops=1281)
+                                   Index Cond: (id = i.order_id)
+                                   Filter: ((tenant_id = $4) AND can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
+                                   Buffers: shared hit=21779
+                                   InitPlan 3 (returns $4)
+                                     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.014..0.014 rows=1 loops=1)
+                                           Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=907
+ Planning Time: 1.799 ms
+ Execution Time: 2546.963 ms
+(35 rows)
+
+
+===== REP 1  (psql wall 2375 ms)
+                                                                            QUERY PLAN                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=46063.06..46063.07 rows=1 width=48) (actual time=2340.442..2340.447 rows=1 loops=1)
+   Buffers: shared hit=164995
+   ->  Limit  (cost=44.49..46058.05 rows=1000 width=964) (actual time=9.714..2328.761 rows=420 loops=1)
+         Buffers: shared hit=164995
+         InitPlan 1 (returns $0)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.066..2.066 rows=1 loops=1)
+                 Buffers: shared hit=475
+         ->  Nested Loop Left Join  (cost=44.23..85951.55 rows=1867 width=964) (actual time=9.713..2328.559 rows=420 loops=1)
+               Buffers: shared hit=164995
+               ->  Index Scan using orders_tenant_created_idx on orders o  (cost=0.41..4103.86 rows=1867 width=932) (actual time=8.062..2047.929 rows=420 loops=1)
+                     Index Cond: (tenant_id = $0)
+                     Filter: can_view_order(customer_id, agent_id)
+                     Rows Removed by Filter: 19580
+                     Buffers: shared hit=141927
+               ->  Aggregate  (cost=43.82..43.83 rows=1 width=32) (actual time=0.665..0.665 rows=1 loops=420)
+                     Buffers: shared hit=23068
+                     InitPlan 2 (returns $2)
+                       ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.032..0.032 rows=1 loops=1)
+                             Buffers: shared hit=2
+                     ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=0.225..0.646 rows=3 loops=420)
+                           Index Cond: (order_id = o.id)
+                           Filter: ((tenant_id = $2) AND (SubPlan 4))
+                           Buffers: shared hit=23065
+                           SubPlan 4
+                             ->  Index Scan using orders_pkey on orders o_1  (cost=0.55..9.07 rows=1 width=0) (actual time=0.207..0.207 rows=1 loops=1281)
+                                   Index Cond: (id = i.order_id)
+                                   Filter: ((tenant_id = $4) AND can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
+                                   Buffers: shared hit=21779
+                                   InitPlan 3 (returns $4)
+                                     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.043..0.043 rows=1 loops=1)
+                                           Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=907
+ Planning Time: 2.146 ms
+ Execution Time: 2340.870 ms
+(35 rows)
+
+
+===== REP 2  (psql wall 2833 ms)
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=46063.06..46063.07 rows=1 width=48) (actual time=2797.854..2797.859 rows=1 loops=1)
+   Buffers: shared hit=164995
+   ->  Limit  (cost=44.49..46058.05 rows=1000 width=964) (actual time=12.425..2784.263 rows=420 loops=1)
+         Buffers: shared hit=164995
+         InitPlan 1 (returns $0)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=3.078..3.079 rows=1 loops=1)
+                 Buffers: shared hit=475
+         ->  Nested Loop Left Join  (cost=44.23..85951.55 rows=1867 width=964) (actual time=12.423..2783.980 rows=420 loops=1)
+               Buffers: shared hit=164995
+               ->  Index Scan using orders_tenant_created_idx on orders o  (cost=0.41..4103.86 rows=1867 width=932) (actual time=10.918..2437.960 rows=420 loops=1)
+                     Index Cond: (tenant_id = $0)
+                     Filter: can_view_order(customer_id, agent_id)
+                     Rows Removed by Filter: 19580
+                     Buffers: shared hit=141927
+               ->  Aggregate  (cost=43.82..43.83 rows=1 width=32) (actual time=0.820..0.820 rows=1 loops=420)
+                     Buffers: shared hit=23068
+                     InitPlan 2 (returns $2)
+                       ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.031..0.031 rows=1 loops=1)
+                             Buffers: shared hit=2
+                     ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=0.277..0.797 rows=3 loops=420)
+                           Index Cond: (order_id = o.id)
+                           Filter: ((tenant_id = $2) AND (SubPlan 4))
+                           Buffers: shared hit=23065
+                           SubPlan 4
+                             ->  Index Scan using orders_pkey on orders o_1  (cost=0.55..9.07 rows=1 width=0) (actual time=0.255..0.255 rows=1 loops=1281)
+                                   Index Cond: (id = i.order_id)
+                                   Filter: ((tenant_id = $4) AND can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
+                                   Buffers: shared hit=21779
+                                   InitPlan 3 (returns $4)
+                                     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.023..0.024 rows=1 loops=1)
+                                           Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=907
+ Planning Time: 3.042 ms
+ Execution Time: 2798.554 ms
+(35 rows)
+
+
+===== REP 3  (psql wall 2638 ms)
+                                                                            QUERY PLAN                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=46063.06..46063.07 rows=1 width=48) (actual time=2602.868..2602.876 rows=1 loops=1)
+   Buffers: shared hit=164995
+   ->  Limit  (cost=44.49..46058.05 rows=1000 width=964) (actual time=8.156..2588.521 rows=420 loops=1)
+         Buffers: shared hit=164995
+         InitPlan 1 (returns $0)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.569..2.570 rows=1 loops=1)
+                 Buffers: shared hit=475
+         ->  Nested Loop Left Join  (cost=44.23..85951.55 rows=1867 width=964) (actual time=8.154..2588.289 rows=420 loops=1)
+               Buffers: shared hit=164995
+               ->  Index Scan using orders_tenant_created_idx on orders o  (cost=0.41..4103.86 rows=1867 width=932) (actual time=7.070..2273.689 rows=420 loops=1)
+                     Index Cond: (tenant_id = $0)
+                     Filter: can_view_order(customer_id, agent_id)
+                     Rows Removed by Filter: 19580
+                     Buffers: shared hit=141927
+               ->  Aggregate  (cost=43.82..43.83 rows=1 width=32) (actual time=0.746..0.746 rows=1 loops=420)
+                     Buffers: shared hit=23068
+                     InitPlan 2 (returns $2)
+                       ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.020..0.021 rows=1 loops=1)
+                             Buffers: shared hit=2
+                     ->  Index Scan using order_items_order_idx on order_items i  (cost=0.29..43.55 rows=1 width=303) (actual time=0.251..0.724 rows=3 loops=420)
+                           Index Cond: (order_id = o.id)
+                           Filter: ((tenant_id = $2) AND (SubPlan 4))
+                           Buffers: shared hit=23065
+                           SubPlan 4
+                             ->  Index Scan using orders_pkey on orders o_1  (cost=0.55..9.07 rows=1 width=0) (actual time=0.232..0.232 rows=1 loops=1281)
+                                   Index Cond: (id = i.order_id)
+                                   Filter: ((tenant_id = $4) AND can_view_order(customer_id, agent_id) AND can_view_order(customer_id, agent_id))
+                                   Buffers: shared hit=21779
+                                   InitPlan 3 (returns $4)
+                                     ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=0.015..0.015 rows=1 loops=1)
+                                           Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=907
+ Planning Time: 2.057 ms
+ Execution Time: 2603.527 ms
+(35 rows)
+

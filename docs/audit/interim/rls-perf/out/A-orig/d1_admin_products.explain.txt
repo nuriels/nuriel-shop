@@ -2,102 +2,102 @@
 -- role=authenticated persona=t1_admin
 -- db=perf_scratch label=A-orig
 
-===== REP 0  (psql wall 363 ms)
+===== REP 0  (psql wall 432 ms)
                                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                                               
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=845.37..845.39 rows=1 width=48) (actual time=331.145..331.152 rows=1 loops=1)
-   Buffers: shared hit=19008
-   ->  Limit  (cost=837.20..838.37 rows=467 width=1232) (actual time=310.716..311.127 rows=1000 loops=1)
-         Buffers: shared hit=19005
+ Aggregate  (cost=845.37..845.39 rows=1 width=48) (actual time=388.808..388.812 rows=1 loops=1)
+   Buffers: shared hit=19009 read=1
+   ->  Limit  (cost=837.20..838.37 rows=467 width=1232) (actual time=375.692..375.934 rows=1000 loops=1)
+         Buffers: shared hit=19006 read=1
          InitPlan 1 (returns $0)
-           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.417..2.418 rows=1 loops=1)
-                 Buffers: shared hit=430
-         ->  Sort  (cost=836.94..838.11 rows=467 width=1232) (actual time=310.714..310.957 rows=1000 loops=1)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=3.083..3.084 rows=1 loops=1)
+                 Buffers: shared hit=432
+         ->  Sort  (cost=836.94..838.11 rows=467 width=1232) (actual time=375.683..375.845 rows=1000 loops=1)
                Sort Key: g.sort_order, g.created_at DESC, g.id
                Sort Method: top-N heapsort  Memory: 4065kB
-               Buffers: shared hit=19005
-               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..816.23 rows=467 width=1232) (actual time=3.163..294.660 rows=3000 loops=1)
+               Buffers: shared hit=19006 read=1
+               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..816.23 rows=467 width=1232) (actual time=4.179..355.102 rows=3000 loops=1)
                      Index Cond: (tenant_id = $0)
                      Filter: (is_staff((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid))
-                     Buffers: shared hit=18996
+                     Buffers: shared hit=18997 read=1
  Planning:
    Buffers: shared hit=502
- Planning Time: 1.069 ms
- Execution Time: 331.895 ms
+ Planning Time: 1.969 ms
+ Execution Time: 389.565 ms
 (19 rows)
 
 
-===== REP 1  (psql wall 429 ms)
+===== REP 1  (psql wall 338 ms)
                                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                                               
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=845.37..845.39 rows=1 width=48) (actual time=378.087..378.090 rows=1 loops=1)
-   Buffers: shared hit=19008
-   ->  Limit  (cost=837.20..838.37 rows=467 width=1232) (actual time=364.909..365.123 rows=1000 loops=1)
-         Buffers: shared hit=19005
+ Aggregate  (cost=845.37..845.39 rows=1 width=48) (actual time=291.275..291.278 rows=1 loops=1)
+   Buffers: shared hit=19010
+   ->  Limit  (cost=837.20..838.37 rows=467 width=1232) (actual time=275.187..275.470 rows=1000 loops=1)
+         Buffers: shared hit=19007
          InitPlan 1 (returns $0)
-           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.834..2.834 rows=1 loops=1)
-                 Buffers: shared hit=430
-         ->  Sort  (cost=836.94..838.11 rows=467 width=1232) (actual time=364.906..365.042 rows=1000 loops=1)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.030..2.031 rows=1 loops=1)
+                 Buffers: shared hit=432
+         ->  Sort  (cost=836.94..838.11 rows=467 width=1232) (actual time=275.186..275.374 rows=1000 loops=1)
                Sort Key: g.sort_order, g.created_at DESC, g.id
                Sort Method: top-N heapsort  Memory: 4065kB
-               Buffers: shared hit=19005
-               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..816.23 rows=467 width=1232) (actual time=3.718..341.047 rows=3000 loops=1)
+               Buffers: shared hit=19007
+               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..816.23 rows=467 width=1232) (actual time=2.613..260.806 rows=3000 loops=1)
                      Index Cond: (tenant_id = $0)
                      Filter: (is_staff((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid))
-                     Buffers: shared hit=18996
+                     Buffers: shared hit=18998
  Planning:
    Buffers: shared hit=502
- Planning Time: 1.631 ms
- Execution Time: 378.685 ms
+ Planning Time: 1.366 ms
+ Execution Time: 292.257 ms
 (19 rows)
 
 
-===== REP 2  (psql wall 417 ms)
+===== REP 2  (psql wall 405 ms)
                                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                                               
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=845.37..845.39 rows=1 width=48) (actual time=382.722..382.725 rows=1 loops=1)
-   Buffers: shared hit=19008
-   ->  Limit  (cost=837.20..838.37 rows=467 width=1232) (actual time=369.822..370.032 rows=1000 loops=1)
-         Buffers: shared hit=19005
+ Aggregate  (cost=845.37..845.39 rows=1 width=48) (actual time=371.892..371.895 rows=1 loops=1)
+   Buffers: shared hit=19010
+   ->  Limit  (cost=837.20..838.37 rows=467 width=1232) (actual time=353.639..353.954 rows=1000 loops=1)
+         Buffers: shared hit=19007
          InitPlan 1 (returns $0)
-           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.775..2.775 rows=1 loops=1)
-                 Buffers: shared hit=430
-         ->  Sort  (cost=836.94..838.11 rows=467 width=1232) (actual time=369.820..369.958 rows=1000 loops=1)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.050..2.051 rows=1 loops=1)
+                 Buffers: shared hit=432
+         ->  Sort  (cost=836.94..838.11 rows=467 width=1232) (actual time=353.637..353.844 rows=1000 loops=1)
                Sort Key: g.sort_order, g.created_at DESC, g.id
                Sort Method: top-N heapsort  Memory: 4065kB
-               Buffers: shared hit=19005
-               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..816.23 rows=467 width=1232) (actual time=3.624..350.466 rows=3000 loops=1)
+               Buffers: shared hit=19007
+               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..816.23 rows=467 width=1232) (actual time=2.525..333.102 rows=3000 loops=1)
                      Index Cond: (tenant_id = $0)
                      Filter: (is_staff((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid))
-                     Buffers: shared hit=18996
+                     Buffers: shared hit=18998
  Planning:
    Buffers: shared hit=502
- Planning Time: 1.540 ms
- Execution Time: 383.326 ms
+ Planning Time: 1.286 ms
+ Execution Time: 372.983 ms
 (19 rows)
 
 
-===== REP 3  (psql wall 320 ms)
+===== REP 3  (psql wall 357 ms)
                                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                                               
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=845.37..845.39 rows=1 width=48) (actual time=292.966..292.968 rows=1 loops=1)
-   Buffers: shared hit=19008
-   ->  Limit  (cost=837.20..838.37 rows=467 width=1232) (actual time=279.914..280.132 rows=1000 loops=1)
-         Buffers: shared hit=19005
+ Aggregate  (cost=845.37..845.39 rows=1 width=48) (actual time=312.536..312.540 rows=1 loops=1)
+   Buffers: shared hit=19010
+   ->  Limit  (cost=837.20..838.37 rows=467 width=1232) (actual time=298.052..298.292 rows=1000 loops=1)
+         Buffers: shared hit=19007
          InitPlan 1 (returns $0)
-           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.004..2.005 rows=1 loops=1)
-                 Buffers: shared hit=430
-         ->  Sort  (cost=836.94..838.11 rows=467 width=1232) (actual time=279.912..280.053 rows=1000 loops=1)
+           ->  Result  (cost=0.00..0.26 rows=1 width=16) (actual time=2.456..2.456 rows=1 loops=1)
+                 Buffers: shared hit=432
+         ->  Sort  (cost=836.94..838.11 rows=467 width=1232) (actual time=298.049..298.207 rows=1000 loops=1)
                Sort Key: g.sort_order, g.created_at DESC, g.id
                Sort Method: top-N heapsort  Memory: 4065kB
-               Buffers: shared hit=19005
-               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..816.23 rows=467 width=1232) (actual time=2.649..264.584 rows=3000 loops=1)
+               Buffers: shared hit=19007
+               ->  Index Scan using global_products_tenant_id_idx on global_products g  (cost=0.28..816.23 rows=467 width=1232) (actual time=3.326..282.568 rows=3000 loops=1)
                      Index Cond: (tenant_id = $0)
                      Filter: (is_staff((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid) OR is_admin((COALESCE(NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text), ((NULLIF(current_setting('request.jwt.claims'::text, true), ''::text))::jsonb ->> 'sub'::text)))::uuid))
-                     Buffers: shared hit=18996
+                     Buffers: shared hit=18998
  Planning:
    Buffers: shared hit=502
- Planning Time: 1.177 ms
- Execution Time: 293.540 ms
+ Planning Time: 2.359 ms
+ Execution Time: 313.307 ms
 (19 rows)
 

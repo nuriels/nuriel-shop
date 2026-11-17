@@ -1,0 +1,6 @@
+RESULT|1|80
+current_tenant_id|5|1.7|1.7
+is_super_admin|1|0.4|0.1
+is_admin|1|0.4|0.0
+is_agent|1|0.2|0.1
+is_platform_admin|1|0.1|0.1

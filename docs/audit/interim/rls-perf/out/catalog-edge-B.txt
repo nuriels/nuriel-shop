@@ -1,0 +1,7 @@
+state|persona|orig_rows|exp_rows|same_set
+sabbath
+sabbath|anon|0|0|true
+sabbath|admin|9697|9697|true
+suspended|anon|0|0|true
+suspended|admin|9697|9697|true
+suspended|feed(service)|0|0|true
