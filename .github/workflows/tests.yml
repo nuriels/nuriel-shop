@@ -63,6 +63,8 @@ jobs:
           fi
       - name: SQL tests
         run: bash scripts/db-tests/run.sh
+      - name: SEO proposals rollback (Hospitality, guard + exact schema)
+        run: bash scripts/db-tests/seo-proposals-rollback.sh
       - name: migration rollback check
         run: bash scripts/db-tests/rollback-check.sh
       - name: rollback data guards — a rollback stops when customer data exists (R-3)

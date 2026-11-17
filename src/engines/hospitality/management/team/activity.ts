@@ -215,6 +215,13 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} פרסם/ה את האתר (${target})`;
     case "site.restored":
       return `${actor} החזיר/ה לטיוטה את ${target} של האתר`;
+    // הצעות SEO (מיגרציה 20261118200000): נוצרו (המערכת), אושרה / בוטלה (שם השדה — בלי הטקסט עצמו)
+    case "seo.suggestions_created":
+      return "המערכת הכינה הצעות לשיפור האתר בגוגל";
+    case "seo.proposal_approved":
+      return `${actor} אישר/ה הצעה לשיפור בגוגל ${target}`;
+    case "seo.proposal_rejected":
+      return `${actor} ביטל/ה הצעה לשיפור בגוגל ${target}`;
     case "support.opened":
       return `${actor} פתח/ה פנייה לתמיכה ${target}`;
     case "support.closed":
