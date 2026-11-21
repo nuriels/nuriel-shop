@@ -8,6 +8,7 @@ import { businessProfileEngine } from "@/engines/business-profile/engine";
 import { edgeRequestOf, gateEdgeRequest } from "@/platform/engines/edge";
 import { createEngineGuard } from "@/platform/engines/engine-guard";
 import { createEngineRegistry } from "@/platform/engines/registry";
+import { startSeoWorkerOnServer } from "@/platform/seo/start";
 
 export const engineRegistry = createEngineRegistry([
   ecommerceEngine,
@@ -22,8 +23,7 @@ export * as hospitalityServerFunctions from "@/engines/hospitality/server";
 export function startEngineWorkers(): void {
   for (const engine of engineRegistry.all()) engine.startWorkers?.();
   // NURIEL AI SEO ENGINE: העובד של הפלטפורמה — אחרי שהמנועים רשמו את החלק שלהם (הריצה הראשונה אחרי 90 שניות)
-  if (typeof window === "undefined")
-    void import("@/platform/seo/worker.server").then((m) => m.startSeoWorker());
+  if (typeof window === "undefined") void startSeoWorkerOnServer();
 }
 
 /** המתג של פונקציות השרת — נרשם כ-middleware גלובלי ב-src/start.ts */

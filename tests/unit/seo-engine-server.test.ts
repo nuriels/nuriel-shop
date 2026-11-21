@@ -203,7 +203,7 @@ describe("hospitality package templates — the owner's own words, never the pac
   it("the description is the owner's opening sentence — nothing added (the jacuzzi sentence is not invented or changed)", () => {
     const d = pkg.find((i) => i.field === "seo_description")!;
     expect(d.text.startsWith("חבילת הכלה שלנו נבנתה במיוחד")).toBe(true);
-    expect(site.packages[0]!.description).toContain(d.text.replace(/…$/, "").slice(0, 40));
+    expect(site.packages?.[0]?.description).toContain(d.text.replace(/…$/, "").slice(0, 40));
     expect(openingOf("קצר מדי", 155)).toBeNull();
   });
 });

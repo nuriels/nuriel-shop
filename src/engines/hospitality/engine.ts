@@ -1,7 +1,21 @@
 // מנוע Hospitality — מממש את חוזה הפלטפורמה (plan B1). נטען גם בדפדפן (דרך
 // שורש ההרכבה), ולכן כל קוד שרת נטען כאן רק בתוך הפונקציות (import דינמי).
+import { createServerOnlyFn } from "@tanstack/react-start";
 import type { EdgeRequest, Engine, SiteRef } from "@/platform/engines/contract";
 import { HOSPITALITY_SOURCE_PREFIX } from "./config";
+
+// מנוע ה-SEO של הפלטפורמה: ההצעות והעובדות של אתרי אירוח (העובד עצמו — בפלטפורמה). בשרת בלבד — בבנייה של
+// הדפדפן גוף הפונקציה מוסר, כך שקוד ה-SEO של השרת לא נכנס לבאנדל. כשל נרשם ביומן ולא מפיל את השרת
+const registerSeo = createServerOnlyFn(async () => {
+  try {
+    (await import("./seo/background.server")).registerHospitalitySeo();
+  } catch (e) {
+    console.error(
+      "[seo] hospitality handler not registered",
+      e instanceof Error ? e.message : String(e),
+    );
+  }
+});
 
 export const hospitalityEngine: Engine = {
   key: "hospitality",
@@ -14,8 +28,7 @@ export const hospitalityEngine: Engine = {
   startWorkers() {
     if (typeof window !== "undefined") return;
     void import("./outbox/worker.server").then((m) => m.startOutboxWorker());
-    // מנוע ה-SEO של הפלטפורמה: ההצעות והעובדות של אתרי אירוח (העובד עצמו — בפלטפורמה)
-    void import("./seo/background.server").then((m) => m.registerHospitalitySeo());
+    void registerSeo();
   },
   async enabledFor(site: SiteRef) {
     const { backendEnabled } = await import("./access.server");
