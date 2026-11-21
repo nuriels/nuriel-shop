@@ -70,6 +70,7 @@ DROP FUNCTION IF EXISTS public.seo_tenant_basics(uuid);
 DROP FUNCTION IF EXISTS public.seo_platform_request(uuid, text);
 DROP FUNCTION IF EXISTS public.seo_platform_overview();
 DROP FUNCTION IF EXISTS public.seo_center();
+DROP FUNCTION IF EXISTS public.seo_keyword_idea_add(text, text, text);
 DROP FUNCTION IF EXISTS public.seo_keyword_idea_set(uuid, text);
 DROP FUNCTION IF EXISTS public.seo_settings_save(jsonb);
 DROP FUNCTION IF EXISTS public.seo_gsc_can_connect();

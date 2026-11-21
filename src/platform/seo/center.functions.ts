@@ -37,6 +37,15 @@ export const setKeywordIdeaFn = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => (await server()).setKeywordIdea(data.id, data.status));
 
+export const addKeywordIdeaFn = createServerFn({ method: "POST" })
+  .inputValidator((input: { phrase?: unknown }) => {
+    const phrase = typeof input?.phrase === "string" ? input.phrase.trim() : "";
+    if (phrase.length < 2 || phrase.length > 80 || /[<>]/.test(phrase))
+      throw new Error("כתבו ביטוי בין 2 ל-80 תווים");
+    return { phrase };
+  })
+  .handler(async ({ data }) => (await server()).addKeywordIdea(data.phrase));
+
 export const importGscCsvFn = createServerFn({ method: "POST" })
   .inputValidator((input: { csv?: unknown; start?: unknown; end?: unknown }) => {
     if (typeof input?.csv !== "string" || !input.csv.trim()) throw new Error("לא נבחר קובץ");

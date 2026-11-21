@@ -192,7 +192,13 @@ export function StoreSeoProposals() {
               const restorable =
                 p.status === "approved" && p.current !== null && p.current === (p.applied ?? "");
               return (
-                <li key={p.id} className="flex flex-wrap items-center gap-2">
+                <li
+                  key={p.id}
+                  className="flex flex-wrap items-center gap-2"
+                  data-testid="store-seo-history-item"
+                  data-target={`${p.target_kind}:${p.target_id ?? ""}:${p.field}`}
+                  data-status={p.status}
+                >
                   <span className="min-w-0 flex-1">
                     {FIELD[p.field]} · {groupTitle(p)} — {HISTORY[p.status] ?? p.status}
                     {p.applied ? (
@@ -250,6 +256,7 @@ function ProposalCard(props: {
       className={cn("flex flex-col gap-2 rounded-md border p-3", stale && "border-amber-500")}
       data-testid="store-seo-proposal"
       data-field={p.field}
+      data-target={`${p.target_kind}:${p.target_id ?? ""}:${p.field}`}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{FIELD[p.field]}</span>

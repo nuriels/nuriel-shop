@@ -173,6 +173,12 @@ describe("free templates: only real data, for every business", () => {
     expect(get("unit", U2, "seo_description")).toBe(
       "אדיר בנופי דורית, מושב ישעי: צימר, עד 5 אורחים, חדר שינה, חדר רחצה. מיזוג.",
     );
+    // שם העסק כבר בשם היחידה — לא חוזר פעמיים גם בתיאור (נמצא בפיילוט של נופי דורית)
+    expect(get("unit", U3, "seo_description")).toBe(
+      "כל המתחם — נופי דורית, מושב ישעי: המתחם כולו, עד 12 אורחים, 3 חדרי שינה, 3 חדרי רחצה. מיזוג.",
+    );
+    for (const i of items)
+      expect(i.text.split("נופי דורית").length - 1, i.text).toBeLessThanOrEqual(1);
     const titles = items.filter((i) => i.field === "seo_title").map((i) => i.text);
     expect(new Set(titles).size).toBe(titles.length);
     for (const i of items) {

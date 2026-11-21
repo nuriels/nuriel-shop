@@ -33,6 +33,7 @@ import {
 } from "@/platform/ui";
 import type { AuditIssue, Severity } from "../audit/rules";
 import {
+  addKeywordIdeaFn,
   disconnectGscFn,
   getSeoCenter,
   gscConnectLinkFn,
@@ -291,6 +292,17 @@ function KeywordsCard({ view, onChange }: { view: SeoCenterView; onChange: () =>
     onSuccess: onChange,
     onError: (e) => toast.error(messageOf(e)),
   });
+  const [own, setOwn] = useState("");
+  const add = useMutation({
+    mutationFn: (phrase: string) => addKeywordIdeaFn({ data: { phrase } }),
+    onSuccess: () => {
+      setOwn("");
+      toast.success("הביטוי נוסף לביטויים שבחרתם");
+      onChange();
+    },
+    onError: (e) => toast.error(messageOf(e)),
+  });
+  const ownId = useId();
   const adopted = view.keywords.filter((k) => k.status === "adopted");
   const fresh = view.keywords.filter((k) => k.status === "new");
   const [more, setMore] = useState(false);
@@ -308,6 +320,31 @@ function KeywordsCard({ view, onChange }: { view: SeoCenterView; onChange: () =>
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        <form
+          className="flex flex-wrap items-end gap-2"
+          data-testid="seo-keyword-add"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (own.trim().length >= 2) add.mutate(own.trim());
+          }}
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <Label htmlFor={ownId} className="text-sm">
+              ביטוי משלכם — חיפוש שאתם רוצים שימצאו אתכם בו
+            </Label>
+            <Input
+              id={ownId}
+              value={own}
+              maxLength={80}
+              onChange={(e) => setOwn(e.target.value)}
+              placeholder="למשל: צימר לכלה ליד בית שמש"
+            />
+          </div>
+          <Button type="submit" variant="outline" disabled={add.isPending || own.trim().length < 2}>
+            {add.isPending && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+            הוספה
+          </Button>
+        </form>
         {adopted.length > 0 && (
           <div>
             <h3 className="mb-1 text-sm font-semibold">הביטויים שבחרתם</h3>
@@ -316,6 +353,12 @@ function KeywordsCard({ view, onChange }: { view: SeoCenterView; onChange: () =>
                 <li key={k.id}>
                   <Badge variant="secondary" className="gap-1 text-sm font-normal">
                     {k.phrase}
+                    {k.metrics && (
+                      <span className="text-[11px]" data-testid="seo-keyword-metrics">
+                        · Google: {num(k.metrics.impressions)} חשיפות · מיקום{" "}
+                        {k.metrics.position?.toFixed(1) ?? "—"}
+                      </span>
+                    )}
                     <button
                       type="button"
                       className="ms-1 rounded px-1 text-xs underline"
@@ -353,7 +396,12 @@ function KeywordsCard({ view, onChange }: { view: SeoCenterView; onChange: () =>
                     className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
                     data-testid="seo-keyword-idea-label"
                   >
-                    רעיון — {k.source === "ai" ? "NURIEL AI" : "מהפרטים שלכם"}
+                    רעיון —{" "}
+                    {k.source === "ai"
+                      ? "NURIEL AI"
+                      : k.source === "owner"
+                        ? "ביטוי שהוזן ידנית"
+                        : "מהפרטים שלכם"}
                   </span>
                 )}
                 <span className="flex gap-1">

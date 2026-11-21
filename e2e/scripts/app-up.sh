@@ -17,6 +17,9 @@ export RESEND_API_KEY=re_e2e_mock RESEND_API_URL=http://127.0.0.1:4010
 export AI_ASSISTANT_TEST_API_URL=http://127.0.0.1:4010
 # התראות החידוש רצות בבדיקות רק מהכפתור בפאנל ("בדיקת התראות עכשיו") — לא מתזמן שעתי שירוץ באמצע בדיקה
 export AI_RENEWAL_JOB=off
+# NURIEL AI SEO ENGINE: העובד ברקע לא רץ בבדיקות (משימות של עסקים / מוצרים חדשים היו רצות באמצע בדיקות אחרות);
+# הלוגיקה שלו בבדיקות יחידה ומסד, וה-E2E בודק את מה שבעל העסק ומנהל הפלטפורמה עושים (seo-engine.spec.ts)
+export SEO_WORKER=off
 export GROW_SANDBOX_URL=http://127.0.0.1:4010/grow GROW_SECRETS_KEY=ZTJlLW9ubHktbm90LWEtcmVhbC1rZXktMDEyMzQ1Njc=
 export LOGIN_CODE_SECRET=e2e-only-login-code-secret
 # מודול הרישיונות: סוד הצפנת המפתחות — לבדיקות בלבד (בשרת: נוצר ב-setup-selfhost)

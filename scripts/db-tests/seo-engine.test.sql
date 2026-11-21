@@ -452,6 +452,34 @@ SELECT tests.check('seo engine: the SEO center (hospitality owner): its settings
              AND (c ->> 'pending_proposals')::int >= 2
              AND (SELECT bool_and((k ->> 'metrics' IS NULL) OR k ->> 'source' IN ('gsc', 'import')) FROM jsonb_array_elements(c -> 'keywords') k)
       FROM (SELECT pg_temp.call(%L, %L, 'SELECT public.seo_center()') AS c) x$$, :'sa', :OWNER_A));
+-- the owner's own phrases: an idea without numbers, chosen at once; a phrase Google already reported keeps its numbers
+SELECT pg_temp.call(:'sa', :OWNER_A, $q$SELECT public.seo_keyword_idea_add('  צימר לכלה   ליד בית שמש ', 'local', 'local')$q$) AS kw1 \gset
+SELECT pg_temp.call(:'sa', :OWNER_A, $q$SELECT public.seo_keyword_idea_add('נופי דורית', 'brand', 'navigational')$q$) AS kw2 \gset
+SELECT tests.check('seo engine: the owner adds a phrase of their own — stored as the owner''s, chosen, WITHOUT numbers; a phrase with Google''s numbers keeps them and its source',
+  format($$SELECT (%1$L::jsonb ->> 'source') = 'owner' AND (%1$L::jsonb ->> 'status') = 'adopted'
+           AND (SELECT metrics IS NULL AND source = 'owner' AND status = 'adopted' AND kind = 'local'
+                  FROM public.seo_keyword_ideas WHERE tenant_id = %3$L AND phrase = 'צימר לכלה ליד בית שמש')
+           AND (%2$L::jsonb ->> 'source') = 'gsc' AND (%2$L::jsonb ->> 'status') = 'adopted'
+           AND (SELECT metrics ->> 'impressions' = '1500' FROM public.seo_keyword_ideas WHERE tenant_id = %3$L AND phrase = 'נופי דורית')$$,
+         :'kw1', :'kw2', :'sa'));
+SELECT pg_temp.expect_error('seo engine: the database refuses numbers on an owner''s phrase too (CHECK)',
+  format($$UPDATE public.seo_keyword_ideas SET metrics = '{"volume": 900}' WHERE tenant_id = %L AND phrase = 'צימר לכלה ליד בית שמש'$$, :'sa'),
+  'seo_keyword_ideas_honesty');
+SELECT pg_temp.expect_error('seo engine: an owner''s phrase must be 2–80 characters, without tags',
+  format($$SELECT pg_temp.call(%L, %L, 'SELECT public.seo_keyword_idea_add(''<b>x</b>'', ''primary'', ''commercial'')')$$, :'sa', :OWNER_A), 'ביטוי לא תקין');
+SELECT pg_temp.expect_error('seo engine: an owner''s phrase needs a known kind',
+  format($$SELECT pg_temp.call(%L, %L, 'SELECT public.seo_keyword_idea_add(''צימר זוגי'', ''invented'', ''commercial'')')$$, :'sa', :OWNER_A), 'בקשה לא תקינה');
+SELECT pg_temp.expect_error('seo engine: a guest cannot add phrases',
+  format($$SELECT pg_temp.call(%L, NULL, 'SELECT public.seo_keyword_idea_add(''צימר זוגי'', ''primary'', ''commercial'')')$$, :'sa'), 'permission denied');
+SELECT pg_temp.expect_error('seo engine: a signed-in stranger cannot add phrases to another business',
+  format($$SELECT pg_temp.call(%L, %L, 'SELECT public.seo_keyword_idea_add(''צימר זוגי'', ''primary'', ''commercial'')')$$, :'sa', :STRANGER), 'אין הרשאה');
+SELECT pg_temp.expect_error('seo engine: a store agent cannot add phrases',
+  format($$SELECT pg_temp.call(%L, %L, 'SELECT public.seo_keyword_idea_add(''מוצר חדש'', ''primary'', ''commercial'')')$$, :STORE_A, :S_AGENT), 'אין הרשאה');
+SELECT tests.check('seo engine: the SEO center names the business (to tell its own name in a phrase) and shows the owner''s phrase without numbers',
+  format($$SELECT c ->> 'business_name' = (SELECT name FROM public.tenants WHERE id = %2$L)
+             AND EXISTS (SELECT 1 FROM jsonb_array_elements(c -> 'keywords') k
+                          WHERE k ->> 'phrase' = 'צימר לכלה ליד בית שמש' AND k ->> 'source' = 'owner' AND k -> 'metrics' = 'null'::jsonb)
+      FROM (SELECT pg_temp.call(%1$L, %3$L, 'SELECT public.seo_center()') AS c) x$$, :'sa', :'sa', :OWNER_A));
 SELECT pg_temp.call(:'sa', :OWNER_A, $q$SELECT public.seo_request('audit')$q$) ->> 'queued' AS q1 \gset
 SELECT pg_temp.call(:'sa', :OWNER_A, $q$SELECT public.seo_request('audit')$q$) ->> 'already' AS q2 \gset
 SELECT tests.check('seo engine: "check now" queues ONE audit — a second click while it waits does not queue another',

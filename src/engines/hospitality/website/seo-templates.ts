@@ -136,12 +136,13 @@ export function templateProposals({ site }: TemplateInput): SeoProposalItem[] {
       .filter(Boolean)
       .slice(0, 3)
       .join(", ");
-    const at = `ב${name}${loc ? `, ${loc}` : ""}`;
+    // שם העסק כבר בשם היחידה ("כל המתחם — נופי דורית") — לא חוזר פעמיים
+    const lead = `${u.name}${u.name.includes(name) ? "" : ` ב${name}`}${loc ? `, ${loc}` : ""}`;
     const desc = fit(
       SEO_RECOMMENDED.description,
-      amenities ? `${u.name} ${at}: ${label}, ${facts}. ${amenities}.` : null,
-      `${u.name} ${at}: ${label}, ${facts}.`,
-      `${u.name} ${at}: ${facts}.`,
+      amenities ? `${lead}: ${label}, ${facts}. ${amenities}.` : null,
+      `${lead}: ${label}, ${facts}.`,
+      `${lead}: ${facts}.`,
     );
     if (desc)
       out.push({ target_kind: "unit", target_id: u.id, field: "seo_description", text: desc });

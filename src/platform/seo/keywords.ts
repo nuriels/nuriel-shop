@@ -73,6 +73,16 @@ export function classifyIntent(
   return "commercial";
 }
 
+/** the kind of a phrase the owner typed — from its own words (a typed phrase is an idea, never data) */
+export function ownKeywordKind(phrase: string, name?: string | null): KeywordKind {
+  const p = normalizePhrase(phrase);
+  if (name && normalizePhrase(name) && p.includes(normalizePhrase(name))) return "brand";
+  if (QUESTION.test(p)) return "question";
+  if (TRANSACTIONAL.test(p)) return "transactional";
+  if (LOCAL.test(p)) return "local";
+  return p.split(" ").length >= 4 ? "long_tail" : "primary";
+}
+
 const uniqueBy = (items: KeywordIdea[]) => {
   const seen = new Set<string>();
   return items.filter((k) => {

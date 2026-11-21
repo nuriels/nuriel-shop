@@ -5,6 +5,7 @@ import { sessionFromRequest } from "../auth/session.server";
 import { apiClient } from "../supabase/api-client.server";
 import { currentSite, currentSiteHosts } from "../tenancy/current-site.server";
 import { findOpportunities } from "./gsc/opportunities";
+import { classifyIntent, normalizePhrase, ownKeywordKind } from "./keywords";
 import { gscConfig } from "./gsc/api.server";
 import { GscCsvError, parseGscCsv } from "./gsc/csv";
 import { totals } from "./gsc/opportunities";
@@ -94,6 +95,23 @@ export function setKeywordIdea(id: string, status: "new" | "adopted" | "dismisse
     _id: id,
     _status: status,
   });
+}
+
+/**
+ * the owner's own phrase (a search they want to be found for) — "chosen" at once, an idea without numbers. Its
+ * kind / intent come from its own words; Google's numbers appear only if Search Console reports that search.
+ */
+export async function addKeywordIdea(phrase: string): Promise<SeoCenterView> {
+  const p = normalizePhrase(phrase);
+  if (p.length < 2) throw new Error("כתבו ביטוי של 2 תווים לפחות");
+  const { business_name: name } =
+    await staffRpc<Pick<SeoCenterData, "business_name">>("seo_center");
+  await staffRpc("seo_keyword_idea_add", {
+    _phrase: p,
+    _kind: ownKeywordKind(p, name),
+    _intent: classifyIntent(p, { name: name ?? "", places: [] }),
+  });
+  return seoCenter();
 }
 
 /** a Search Console CSV export, parsed HERE (Google's own numbers) and stored as a snapshot of this business */

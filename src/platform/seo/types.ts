@@ -33,7 +33,8 @@ export interface SeoKeywordIdea {
   phrase: string;
   kind: string;
   intent: string;
-  source: "template" | "ai" | "gsc" | "import";
+  /** owner = a phrase a person typed (an idea, never numbers) */
+  source: "owner" | "template" | "ai" | "gsc" | "import";
   reason: string | null;
   status: "new" | "adopted" | "dismissed";
   /** only for Search Console rows: Google's numbers and their period */
@@ -59,6 +60,7 @@ export interface SeoSnapshot {
 
 export interface SeoCenterData {
   site_type: SeoSiteType | string;
+  business_name?: string | null;
   can_connect_gsc: boolean;
   settings: {
     auto_apply: { alt: boolean; meta: boolean; keywords: boolean };

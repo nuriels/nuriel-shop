@@ -97,7 +97,8 @@ CREATE TABLE IF NOT EXISTS public.seo_keyword_ideas (
   kind       text NOT NULL CHECK (kind IN ('brand', 'primary', 'local', 'service', 'product', 'long_tail', 'question',
                                            'transactional')),
   intent     text NOT NULL CHECK (intent IN ('navigational', 'informational', 'commercial', 'transactional', 'local')),
-  source     text NOT NULL CHECK (source IN ('template', 'ai', 'gsc', 'import')),
+  -- owner = a phrase a person typed (the owner, or the platform team for the business) — an idea, never numbers
+  source     text NOT NULL CHECK (source IN ('owner', 'template', 'ai', 'gsc', 'import')),
   reason     text CHECK (reason IS NULL OR char_length(reason) <= 300),
   status     text NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'adopted', 'dismissed')),
   -- the honesty rule, enforced by the database: numbers only from Google (Search Console API / its CSV export)
@@ -374,7 +375,8 @@ BEGIN
   FOR _i IN SELECT * FROM jsonb_array_elements(_items) LOOP
     _phrase := lower(btrim(regexp_replace(COALESCE(_i ->> 'phrase', ''), '\s+', ' ', 'g')));
     _src := _i ->> 'source';
-    CONTINUE WHEN char_length(_phrase) NOT BETWEEN 2 AND 80 OR _src IS NULL OR _src NOT IN ('template', 'ai', 'gsc', 'import')
+    CONTINUE WHEN char_length(_phrase) NOT BETWEEN 2 AND 80 OR _src IS NULL
+               OR _src NOT IN ('owner', 'template', 'ai', 'gsc', 'import')
                OR _phrase ~ '[<>]'
                OR COALESCE(_i ->> 'kind', '') NOT IN ('brand', 'primary', 'local', 'service', 'product', 'long_tail',
                                                      'question', 'transactional')
@@ -536,6 +538,34 @@ BEGIN
   RETURN jsonb_build_object('id', k.id, 'phrase', k.phrase, 'status', k.status);
 END $$;
 
+-- the owner adds a phrase of their own (a search they want to be found for): an idea without numbers, "chosen" at
+-- once. An existing idea with the same phrase is just marked chosen (its source and Google's numbers stay)
+CREATE OR REPLACE FUNCTION public.seo_keyword_idea_add(_phrase text, _kind text, _intent text) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _t uuid := public._seo_tenant();
+  _p text := lower(btrim(regexp_replace(COALESCE(_phrase, ''), '\s+', ' ', 'g')));
+  k public.seo_keyword_ideas;
+BEGIN
+  IF char_length(_p) NOT BETWEEN 2 AND 80 OR _p ~ '[<>]' THEN
+    RAISE EXCEPTION 'ביטוי לא תקין — בין 2 ל-80 תווים' USING ERRCODE = 'check_violation';
+  END IF;
+  IF COALESCE(_kind, '') NOT IN ('brand', 'primary', 'local', 'service', 'product', 'long_tail', 'question',
+                                 'transactional')
+     OR COALESCE(_intent, '') NOT IN ('navigational', 'informational', 'commercial', 'transactional', 'local') THEN
+    RAISE EXCEPTION 'בקשה לא תקינה' USING ERRCODE = 'check_violation';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.seo_keyword_ideas x WHERE x.tenant_id = _t AND x.phrase = _p)
+     AND (SELECT count(*) FROM public.seo_keyword_ideas x WHERE x.tenant_id = _t) >= 500 THEN
+    RAISE EXCEPTION 'יש כבר 500 ביטויים — סמנו קודם ביטויים שלא רלוונטיים' USING ERRCODE = 'check_violation';
+  END IF;
+  INSERT INTO public.seo_keyword_ideas (tenant_id, phrase, kind, intent, source, reason, status)
+  VALUES (_t, _p, _kind, _intent, 'owner', 'ביטוי שהוספתם בעצמכם', 'adopted')
+  ON CONFLICT (tenant_id, phrase) DO UPDATE SET status = 'adopted', updated_at = now()
+  RETURNING * INTO k;
+  RETURN jsonb_build_object('id', k.id, 'phrase', k.phrase, 'status', k.status, 'source', k.source);
+END $$;
+
 -- one round trip for the whole SEO center (proposal lists stay engine-specific: store_seo_proposals() /
 -- hospitality.seo_proposals())
 CREATE OR REPLACE FUNCTION public.seo_center() RETURNS jsonb
@@ -559,6 +589,7 @@ BEGIN
   END IF;
   RETURN jsonb_build_object(
     'site_type', public.current_site_type(),
+    'business_name', (SELECT t.name FROM public.tenants t WHERE t.id = _t),
     'can_connect_gsc', COALESCE(public.site_tracking_can_edit(), false),
     'settings', jsonb_build_object(
       'auto_apply', COALESCE(s.auto_apply, '{"alt": false, "meta": false, "keywords": false}'::jsonb),
@@ -986,11 +1017,13 @@ GRANT EXECUTE ON FUNCTION public.seo_jobs_claim(integer), public.seo_job_finish(
   TO service_role;
 
 REVOKE ALL ON FUNCTION public.seo_center(), public.seo_settings_save(jsonb), public.seo_keyword_idea_set(uuid, text),
+  public.seo_keyword_idea_add(text, text, text),
   public.seo_gsc_csv_import(text, date, date, jsonb, jsonb), public.seo_gsc_disconnect(), public.seo_gsc_can_connect(),
   public.seo_request(text), public.seo_platform_overview(), public.seo_platform_request(uuid, text),
   public.store_seo_proposals(), public.store_seo_proposal_decide(uuid, text, text), public.store_seo_proposal_revert(uuid)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.seo_center(), public.seo_settings_save(jsonb), public.seo_keyword_idea_set(uuid, text),
+  public.seo_keyword_idea_add(text, text, text),
   public.seo_gsc_csv_import(text, date, date, jsonb, jsonb), public.seo_gsc_disconnect(), public.seo_gsc_can_connect(),
   public.seo_request(text), public.seo_platform_overview(), public.seo_platform_request(uuid, text),
   public.store_seo_proposals(), public.store_seo_proposal_decide(uuid, text, text), public.store_seo_proposal_revert(uuid)

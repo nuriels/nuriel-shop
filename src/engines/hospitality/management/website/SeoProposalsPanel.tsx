@@ -401,6 +401,8 @@ export function SeoProposalsPanel({
                 key={p.id}
                 className="flex flex-wrap items-center gap-2"
                 data-testid="seo-history-item"
+                data-target={`${p.target_kind}:${p.target_id ?? ""}:${p.field}`}
+                data-status={p.status}
               >
                 <span>
                   {FIELD_LABEL[`${p.target_kind}.${p.field}`]}

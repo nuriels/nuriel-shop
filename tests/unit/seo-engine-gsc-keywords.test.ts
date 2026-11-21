@@ -6,6 +6,7 @@ import {
   classifyIntent,
   mergeIdeas,
   normalizePhrase,
+  ownKeywordKind,
   seedKeywords,
   stuffingCount,
 } from "@/platform/seo/keywords";
@@ -120,5 +121,26 @@ describe("keyword ideas", () => {
     expect(merged[0]?.source).toBe("owner");
     expect(normalizePhrase("  צימר, ")).toBe("צימר");
     expect(stuffingCount("צימר בישעי | צימר בישעי זוגי | צימר בישעי", "צימר בישעי")).toBe(3);
+  });
+});
+
+describe("the owner's own phrases (the Nofi Dorit pilot list)", () => {
+  const name = "נופי דורית";
+  const kinds = (p: string) => [ownKeywordKind(p, name), classifyIntent(p, { name, places: [] })];
+  it("a phrase with the business name is the brand (navigational)", () => {
+    expect(kinds("נופי דורית")).toEqual(["brand", "navigational"]);
+    expect(kinds("צימר נופי דורית")).toEqual(["brand", "navigational"]);
+    expect(kinds("נופי דורית חוויה בכפר")).toEqual(["brand", "navigational"]);
+  });
+  it("local, long and plain phrases — from their own words, nothing invented", () => {
+    expect(kinds("צימרים ליד בית שמש")).toEqual(["local", "local"]);
+    expect(kinds("צימר לכלה ליד בית שמש")).toEqual(["local", "local"]);
+    expect(kinds("מתחם אירוח למשפחות באזור בית שמש")).toEqual(["local", "local"]);
+    expect(ownKeywordKind("מקום להתארגנות כלה", name)).toBe("primary");
+    expect(ownKeywordKind("איך בוחרים צימר לכלה", name)).toBe("question");
+    expect(ownKeywordKind("מחיר צימר לזוג", name)).toBe("transactional");
+    expect(ownKeywordKind("צימר זוגי עם בריכה פרטית מחוממת", name)).toBe("long_tail");
+    // without a business name nothing is called "brand"
+    expect(ownKeywordKind("נופי דורית", null)).toBe("primary");
   });
 });
