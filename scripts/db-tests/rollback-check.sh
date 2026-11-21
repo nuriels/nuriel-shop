@@ -190,6 +190,9 @@ M84=20261118110000_order_guard
 M85=20261118200000_hosp_seo_proposals
 # חדרים נוספים לחבילה (מיגרציה 202) — נבדקת בפירוט ב-package-addons-rollback.sh; כאן רק השרשרת
 M86=20261121100000_hosp_package_addon_rooms
+# NURIEL AI SEO ENGINE — the core (203) and Hospitality on it (204); 204 rolls back first
+M87=20261122100000_seo_engine
+M88=20261122110000_hosp_seo_engine
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -233,7 +236,40 @@ same_as_ref() {
   fi
 }
 
-# ---------- package add-on rooms (migration 202) — the newest migration, rolled back first ----------
+# ---------- NURIEL AI SEO ENGINE: Hospitality on the engine (migration 204) — the newest, rolled back first ----------
+expect "before the rollback: package Google fields, the restore function, the auto-fill helper, the unit/package/image triggers" \
+  "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'packages'
+                    AND column_name = 'seo_title')
+      AND to_regprocedure('hospitality.seo_proposal_revert(uuid)') IS NOT NULL
+      AND to_regprocedure('hospitality._seo_auto_write(uuid,text,uuid,text,text)') IS NOT NULL
+      AND (SELECT count(*) FROM pg_trigger WHERE tgname IN ('seo_on_unit', 'seo_on_package', 'seo_on_media')) = 3"
+echo "rollback guard: $M87 refuses while $M88 is still applied"
+if down "$M87" 2>/dev/null; then echo "  FAIL $M87 rolled back before $M88"; exit 1; else echo "  ok   $M87 refused (roll back $M88 first)"; fi
+echo "rollback guard: $M88 refuses while a package has a Google title (the owner's work)"
+q "UPDATE hospitality.packages SET seo_title = 'rb-guard' WHERE id = (SELECT id FROM hospitality.packages ORDER BY created_at LIMIT 1)" >/dev/null
+if [ "$(q "SELECT count(*) FROM hospitality.packages WHERE seo_title = 'rb-guard'")" != "0" ]; then
+  if down "$M88" 2>/dev/null; then echo "  FAIL $M88 rolled back over a package Google title"; exit 1; else echo "  ok   $M88 refused, nothing changed"; fi
+  q "UPDATE hospitality.packages SET seo_title = NULL WHERE seo_title = 'rb-guard'" >/dev/null
+else
+  echo "  ok   (no package in this database — guard covered by seo-engine.test.sql / the rollback rehearsal)"
+fi
+ref_upto "$M88"
+echo "rollback: $M88"
+down "$M88"
+same_as_ref "migration 203"
+
+# ---------- NURIEL AI SEO ENGINE: the core (migration 203) ----------
+expect "before the rollback: the 7 closed tables, the queue functions, the category SEO columns" \
+  "SELECT to_regclass('public.seo_jobs') IS NOT NULL AND to_regclass('public.store_seo_proposals') IS NOT NULL
+      AND to_regprocedure('public.seo_jobs_claim(integer)') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'categories'
+                    AND column_name = 'seo_title')"
+ref_upto "$M87"
+echo "rollback: $M87"
+down "$M87"
+same_as_ref "migration 202"
+
+# ---------- package add-on rooms (migration 202) ----------
 expect "before the rollback: the three add-on columns, the room quote and the request with rooms" \
   "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'packages'
                     AND column_name = 'addon_unit_ids')
@@ -2772,6 +2808,15 @@ expect "package add-on rooms back: the columns, the quotes and the request with 
                     AND column_name = 'addon_max')
       AND to_regprocedure('hospitality.package_addons_quote(uuid,date)') IS NOT NULL
       AND (SELECT count(*) FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace AND proname = 'package_save') = 1"
+up "$M87"
+expect "SEO engine core back: the queue, the store proposals, the honesty CHECK, the new-business trigger" \
+  "SELECT to_regclass('public.seo_jobs') IS NOT NULL AND to_regclass('public.store_seo_proposals') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'seo_keyword_ideas_honesty')
+      AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'seo_on_tenant')"
+up "$M88"
+expect "Hospitality on the SEO engine back: package Google fields, restore, the unit/package/image triggers" \
+  "SELECT to_regprocedure('hospitality.seo_proposal_revert(uuid)') IS NOT NULL
+      AND (SELECT count(*) FROM pg_trigger WHERE tgname IN ('seo_on_unit', 'seo_on_package', 'seo_on_media')) = 3"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')

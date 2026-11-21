@@ -11,6 +11,7 @@ export {
   describeImageError,
   fetchRemoteImage,
   isBlockedAddress,
+  safeLookup,
   sniffImageType,
 } from "@/server/services/image-fetch";
 export type { SniffedType } from "@/server/services/image-fetch";
