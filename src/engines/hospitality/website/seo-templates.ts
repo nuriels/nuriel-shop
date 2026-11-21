@@ -61,7 +61,8 @@ function unitFacts(u: PublicUnit): string[] {
 }
 
 export interface TemplateInput {
-  site: Pick<PublicSite, "business" | "properties" | "units">;
+  site: Pick<PublicSite, "business" | "properties" | "units"> &
+    Partial<Pick<PublicSite, "packages">>;
   design: Pick<SiteDesign, "seo" | "sections">;
 }
 
@@ -145,5 +146,70 @@ export function templateProposals({ site }: TemplateInput): SeoProposalItem[] {
     if (desc)
       out.push({ target_kind: "unit", target_id: u.id, field: "seo_description", text: desc });
   }
+
+  // מיגרציה 204 — החבילות: רק הכותרת והתיאור לגוגל. השם והתיאור של החבילה הם המילים של בעל העסק —
+  // הכותרת היא השם (בלי סמלים), והתיאור הוא משפט הפתיחה שבעל העסק כתב; בלי עובדה שלא כתובה בחבילה
+  for (const pk of site.packages ?? []) {
+    const pkName = plain(pk.name);
+    if (!pkName) continue;
+    const title = fit(
+      SEO_RECOMMENDED.title,
+      pkName.includes(name) ? pkName : `${pkName} | ${name}`,
+      pkName,
+    );
+    if (title)
+      out.push({
+        target_kind: "package",
+        target_id: pk.id,
+        field: "seo_title",
+        text: title,
+        reason: "שם החבילה ושם העסק — בלי סמלים, כפי שגוגל מציג כותרות",
+      });
+    const own = openingOf(pk.description, SEO_RECOMMENDED.description);
+    const unit = site.units.find((u) => u.id === pk.unit_id);
+    const nightsText = pk.nights === 1 ? "לילה אחד" : `${pk.nights} לילות`;
+    const desc =
+      own ??
+      fit(
+        SEO_RECOMMENDED.description,
+        unit ? `${pkName}: ${nightsText} ב${unit.name}, ${name}.` : null,
+        `${pkName}: ${nightsText}, ${name}.`,
+      );
+    if (desc)
+      out.push({
+        target_kind: "package",
+        target_id: pk.id,
+        field: "seo_description",
+        text: desc,
+        reason: own
+          ? "משפט הפתיחה מתיאור החבילה שכתבתם"
+          : "שם החבילה, מספר הלילות והיחידה — מהפרטים שבחבילה",
+      });
+  }
   return out;
+}
+
+/** שם / טקסט לגוגל: בלי תגיות, בלי סמלים (אמוג'י), רווח אחד */
+function plain(s: string | null | undefined): string {
+  return (s ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/[<>]/g, "")
+    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** משפט הפתיחה (או שניים) של הטקסט של בעל העסק, עד max תווים, בלי לחתוך מילה; קצר / ריק — null */
+export function openingOf(text: string | null | undefined, max: number): string | null {
+  const t = plain(text);
+  if (!t) return null;
+  let out = "";
+  for (const sentence of t.split(/(?<=[.!?])\s+/u)) {
+    const next = out ? `${out} ${sentence}` : sentence;
+    if (next.length > max) break;
+    out = next;
+  }
+  if (out.length >= 40) return out;
+  if (t.length <= max && t.length >= 40) return t;
+  return null;
 }

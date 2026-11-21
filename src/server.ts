@@ -148,6 +148,13 @@ async function route(request: Request, env: unknown, ctx: unknown): Promise<Resp
     if (health) return health;
     const host = requestHost(request);
     const pathname = new URL(request.url).pathname;
+    // NURIEL AI SEO ENGINE: חיבור Google Search Console של בעל העסק (קריאה בלבד) — בכתובת הפלטפורמה בלבד,
+    // לפני זיהוי האתר (הכתובת הרשומה ב-Google אחת לכל הפלטפורמה)
+    if (pathname.startsWith("/api/seo/gsc/")) {
+      const { handleGscRoute } = await import("./platform/seo/gsc/oauth.server");
+      const gsc = await handleGscRoute(request);
+      if (gsc) return gsc;
+    }
     // חלק 38: פיד ה-XML לזאפ הוסר — הסורקים עוברים לעמודי ה-HTML (/zap)
     if (pathname === "/zap.xml") {
       return new Response("Gone — the Zap index moved to /zap\n", {

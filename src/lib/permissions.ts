@@ -164,6 +164,8 @@ export const ADMIN_TAB_RULES: Record<string, AdminTabRule> = {
   legal: { permission: "admin" },
   pages: { permission: "admin" },
   marketing: { permission: "admin" },
+  // NURIEL AI SEO ENGINE: מרכז ה-SEO — בעלים ומנהל (החיבור ל-Search Console — בעל החנות בלבד, נבדק במסד)
+  seo: { permission: "admin" },
   email: { permission: "admin" },
   domain: { permission: "admin" },
   staff: { permission: "staff.manage" },

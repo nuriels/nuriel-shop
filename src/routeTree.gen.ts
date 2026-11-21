@@ -62,6 +62,7 @@ import { Route as ManagePoliciesRouteImport } from './routes/manage.policies'
 import { Route as ManagePricingRouteImport } from './routes/manage.pricing'
 import { Route as ManageReportsRouteImport } from './routes/manage.reports'
 import { Route as ManageRoomTypesRouteImport } from './routes/manage.room-types'
+import { Route as ManageSeoRouteImport } from './routes/manage.seo'
 import { Route as ManageSettingsRouteImport } from './routes/manage.settings'
 import { Route as ManageSetupRouteImport } from './routes/manage.setup'
 import { Route as ManageSupportRouteImport } from './routes/manage.support'
@@ -75,6 +76,7 @@ import { Route as PagesSlugRouteImport } from './routes/pages.$slug'
 import { Route as PlatformAiRouteImport } from './routes/platform_.ai'
 import { Route as PlatformHospitalityRouteImport } from './routes/platform_.hospitality'
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
+import { Route as PlatformSeoRouteImport } from './routes/platform_.seo'
 import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
 import { Route as PlatformUpgradesRouteImport } from './routes/platform_.upgrades'
 import { Route as PlatformWebsitesRouteImport } from './routes/platform_.websites'
@@ -394,6 +396,11 @@ const ManageRoomTypesRoute = ManageRoomTypesRouteImport.update({
   path: '/room-types',
   getParentRoute: () => ManageRoute,
 } as any)
+const ManageSeoRoute = ManageSeoRouteImport.update({
+  id: '/seo',
+  path: '/seo',
+  getParentRoute: () => ManageRoute,
+} as any)
 const ManageSettingsRoute = ManageSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -457,6 +464,11 @@ const PlatformHospitalityRoute = PlatformHospitalityRouteImport.update({
 const PlatformPlansRoute = PlatformPlansRouteImport.update({
   id: '/platform_/plans',
   path: '/platform/plans',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlatformSeoRoute = PlatformSeoRouteImport.update({
+  id: '/platform_/seo',
+  path: '/platform/seo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlatformSupportRoute = PlatformSupportRouteImport.update({
@@ -782,6 +794,7 @@ export interface FileRoutesByFullPath {
   '/manage/pricing': typeof ManagePricingRoute
   '/manage/reports': typeof ManageReportsRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
+  '/manage/seo': typeof ManageSeoRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/setup': typeof ManageSetupRoute
   '/manage/support': typeof ManageSupportRoute
@@ -795,6 +808,7 @@ export interface FileRoutesByFullPath {
   '/platform/ai': typeof PlatformAiRoute
   '/platform/hospitality': typeof PlatformHospitalityRoute
   '/platform/plans': typeof PlatformPlansRoute
+  '/platform/seo': typeof PlatformSeoRoute
   '/platform/support': typeof PlatformSupportRoute
   '/platform/upgrades': typeof PlatformUpgradesRoute
   '/platform/websites': typeof PlatformWebsitesRoute
@@ -899,6 +913,7 @@ export interface FileRoutesByTo {
   '/manage/pricing': typeof ManagePricingRoute
   '/manage/reports': typeof ManageReportsRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
+  '/manage/seo': typeof ManageSeoRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/setup': typeof ManageSetupRoute
   '/manage/support': typeof ManageSupportRoute
@@ -912,6 +927,7 @@ export interface FileRoutesByTo {
   '/platform/ai': typeof PlatformAiRoute
   '/platform/hospitality': typeof PlatformHospitalityRoute
   '/platform/plans': typeof PlatformPlansRoute
+  '/platform/seo': typeof PlatformSeoRoute
   '/platform/support': typeof PlatformSupportRoute
   '/platform/upgrades': typeof PlatformUpgradesRoute
   '/platform/websites': typeof PlatformWebsitesRoute
@@ -1021,6 +1037,7 @@ export interface FileRoutesById {
   '/manage/pricing': typeof ManagePricingRoute
   '/manage/reports': typeof ManageReportsRoute
   '/manage/room-types': typeof ManageRoomTypesRoute
+  '/manage/seo': typeof ManageSeoRoute
   '/manage/settings': typeof ManageSettingsRoute
   '/manage/setup': typeof ManageSetupRoute
   '/manage/support': typeof ManageSupportRoute
@@ -1034,6 +1051,7 @@ export interface FileRoutesById {
   '/platform_/ai': typeof PlatformAiRoute
   '/platform_/hospitality': typeof PlatformHospitalityRoute
   '/platform_/plans': typeof PlatformPlansRoute
+  '/platform_/seo': typeof PlatformSeoRoute
   '/platform_/support': typeof PlatformSupportRoute
   '/platform_/upgrades': typeof PlatformUpgradesRoute
   '/platform_/websites': typeof PlatformWebsitesRoute
@@ -1144,6 +1162,7 @@ export interface FileRouteTypes {
     | '/manage/pricing'
     | '/manage/reports'
     | '/manage/room-types'
+    | '/manage/seo'
     | '/manage/settings'
     | '/manage/setup'
     | '/manage/support'
@@ -1157,6 +1176,7 @@ export interface FileRouteTypes {
     | '/platform/ai'
     | '/platform/hospitality'
     | '/platform/plans'
+    | '/platform/seo'
     | '/platform/support'
     | '/platform/upgrades'
     | '/platform/websites'
@@ -1261,6 +1281,7 @@ export interface FileRouteTypes {
     | '/manage/pricing'
     | '/manage/reports'
     | '/manage/room-types'
+    | '/manage/seo'
     | '/manage/settings'
     | '/manage/setup'
     | '/manage/support'
@@ -1274,6 +1295,7 @@ export interface FileRouteTypes {
     | '/platform/ai'
     | '/platform/hospitality'
     | '/platform/plans'
+    | '/platform/seo'
     | '/platform/support'
     | '/platform/upgrades'
     | '/platform/websites'
@@ -1382,6 +1404,7 @@ export interface FileRouteTypes {
     | '/manage/pricing'
     | '/manage/reports'
     | '/manage/room-types'
+    | '/manage/seo'
     | '/manage/settings'
     | '/manage/setup'
     | '/manage/support'
@@ -1395,6 +1418,7 @@ export interface FileRouteTypes {
     | '/platform_/ai'
     | '/platform_/hospitality'
     | '/platform_/plans'
+    | '/platform_/seo'
     | '/platform_/support'
     | '/platform_/upgrades'
     | '/platform_/websites'
@@ -1496,6 +1520,7 @@ export interface RootRouteChildren {
   PlatformAiRoute: typeof PlatformAiRoute
   PlatformHospitalityRoute: typeof PlatformHospitalityRoute
   PlatformPlansRoute: typeof PlatformPlansRoute
+  PlatformSeoRoute: typeof PlatformSeoRoute
   PlatformSupportRoute: typeof PlatformSupportRoute
   PlatformUpgradesRoute: typeof PlatformUpgradesRoute
   PlatformWebsitesRoute: typeof PlatformWebsitesRoute
@@ -1898,6 +1923,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageRoomTypesRouteImport
       parentRoute: typeof ManageRoute
     }
+    '/manage/seo': {
+      id: '/manage/seo'
+      path: '/seo'
+      fullPath: '/manage/seo'
+      preLoaderRoute: typeof ManageSeoRouteImport
+      parentRoute: typeof ManageRoute
+    }
     '/manage/settings': {
       id: '/manage/settings'
       path: '/settings'
@@ -1987,6 +2019,13 @@ declare module '@tanstack/react-router' {
       path: '/platform/plans'
       fullPath: '/platform/plans'
       preLoaderRoute: typeof PlatformPlansRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/platform_/seo': {
+      id: '/platform_/seo'
+      path: '/platform/seo'
+      fullPath: '/platform/seo'
+      preLoaderRoute: typeof PlatformSeoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/platform_/support': {
@@ -2391,6 +2430,7 @@ interface ManageRouteChildren {
   ManagePricingRoute: typeof ManagePricingRoute
   ManageReportsRoute: typeof ManageReportsRoute
   ManageRoomTypesRoute: typeof ManageRoomTypesRoute
+  ManageSeoRoute: typeof ManageSeoRoute
   ManageSettingsRoute: typeof ManageSettingsRoute
   ManageSetupRoute: typeof ManageSetupRoute
   ManageSupportRoute: typeof ManageSupportRoute
@@ -2423,6 +2463,7 @@ const ManageRouteChildren: ManageRouteChildren = {
   ManagePricingRoute: ManagePricingRoute,
   ManageReportsRoute: ManageReportsRoute,
   ManageRoomTypesRoute: ManageRoomTypesRoute,
+  ManageSeoRoute: ManageSeoRoute,
   ManageSettingsRoute: ManageSettingsRoute,
   ManageSetupRoute: ManageSetupRoute,
   ManageSupportRoute: ManageSupportRoute,
@@ -2540,6 +2581,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformAiRoute: PlatformAiRoute,
   PlatformHospitalityRoute: PlatformHospitalityRoute,
   PlatformPlansRoute: PlatformPlansRoute,
+  PlatformSeoRoute: PlatformSeoRoute,
   PlatformSupportRoute: PlatformSupportRoute,
   PlatformUpgradesRoute: PlatformUpgradesRoute,
   PlatformWebsitesRoute: PlatformWebsitesRoute,

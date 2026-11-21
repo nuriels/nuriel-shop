@@ -21,6 +21,9 @@ export * as hospitalityServerFunctions from "@/engines/hospitality/server";
 /** תהליכי הרקע של המנועים — נקרא פעם אחת מ-src/server.ts */
 export function startEngineWorkers(): void {
   for (const engine of engineRegistry.all()) engine.startWorkers?.();
+  // NURIEL AI SEO ENGINE: העובד של הפלטפורמה — אחרי שהמנועים רשמו את החלק שלהם (הריצה הראשונה אחרי 90 שניות)
+  if (typeof window === "undefined")
+    void import("@/platform/seo/worker.server").then((m) => m.startSeoWorker());
 }
 
 /** המתג של פונקציות השרת — נרשם כ-middleware גלובלי ב-src/start.ts */

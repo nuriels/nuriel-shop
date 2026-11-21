@@ -21,6 +21,7 @@ import {
   UserCog,
   Users,
   type LucideIcon,
+  SearchCheck,
 } from "lucide-react";
 import type { NavKey } from "../lib/nav";
 
@@ -38,6 +39,7 @@ export const NAV_ICONS: Record<NavKey, LucideIcon> = {
   emails: Mail,
   channels: Share2,
   website: Palette,
+  seo: SearchCheck,
   documents: ScrollText,
   contracts: FileSignature,
   settings: Settings,

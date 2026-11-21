@@ -14,16 +14,29 @@ export interface FetchedText {
   finalUrl: string | null;
 }
 
-export type Fetcher = (url: string, opts: { timeoutMs: number; userAgent: string }) => Promise<FetchedText>;
+export type Fetcher = (
+  url: string,
+  opts: { timeoutMs: number; userAgent: string },
+) => Promise<FetchedText>;
 
 export const AUDIT_USER_AGENT = "NurielSEOAudit/1.0 (+https://nuri1.fit; site owner audit)";
 const MAX_BODY = 2 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
-const TEXT_TYPES = ["text/html", "application/xhtml+xml", "application/xml", "text/xml", "text/plain"];
+const TEXT_TYPES = [
+  "text/html",
+  "application/xhtml+xml",
+  "application/xml",
+  "text/xml",
+  "text/plain",
+];
 
 export class AuditFetchError extends Error {}
 
-function once(url: URL, timeoutMs: number, userAgent: string): Promise<FetchedText & { location: string | null }> {
+function once(
+  url: URL,
+  timeoutMs: number,
+  userAgent: string,
+): Promise<FetchedText & { location: string | null }> {
   return new Promise((resolve, reject) => {
     const client = url.protocol === "https:" ? https : http;
     let settled = false;
@@ -46,10 +59,18 @@ function once(url: URL, timeoutMs: number, userAgent: string): Promise<FetchedTe
       (res) => {
         const status = res.statusCode ?? 0;
         const headers: Record<string, string> = {};
-        for (const [k, v] of Object.entries(res.headers)) if (v !== undefined) headers[k.toLowerCase()] = Array.isArray(v) ? v.join(", ") : String(v);
+        for (const [k, v] of Object.entries(res.headers))
+          if (v !== undefined)
+            headers[k.toLowerCase()] = Array.isArray(v) ? v.join(", ") : String(v);
         if (status >= 300 && status < 400 && res.headers.location) {
           res.resume();
-          done(null, { status, headers, body: null, finalUrl: null, location: res.headers.location });
+          done(null, {
+            status,
+            headers,
+            body: null,
+            finalUrl: null,
+            location: res.headers.location,
+          });
           req.destroy();
           return;
         }
@@ -71,7 +92,15 @@ function once(url: URL, timeoutMs: number, userAgent: string): Promise<FetchedTe
           }
           chunks.push(c);
         });
-        res.on("end", () => done(null, { status, headers, body: Buffer.concat(chunks).toString("utf8"), finalUrl: null, location: null }));
+        res.on("end", () =>
+          done(null, {
+            status,
+            headers,
+            body: Buffer.concat(chunks).toString("utf8"),
+            finalUrl: null,
+            location: null,
+          }),
+        );
         res.on("error", (e) => done(e));
       },
     );
@@ -93,11 +122,18 @@ export function makeSafeFetcher(allowedHosts: string[]): Fetcher {
   const allowed = new Set(allowedHosts.map((h) => h.toLowerCase()));
   return async (raw, { timeoutMs, userAgent }) => {
     let url = assertFetchableUrl(raw);
-    if (!allowed.has(url.host.toLowerCase())) throw new AuditFetchError("host is not the business's own domain");
+    if (!allowed.has(url.host.toLowerCase()))
+      throw new AuditFetchError("host is not the business's own domain");
     let redirected = false;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
       const r = await once(url, timeoutMs, userAgent);
-      if (!r.location) return { status: r.status, headers: r.headers, body: r.body, finalUrl: redirected ? url.toString() : null };
+      if (!r.location)
+        return {
+          status: r.status,
+          headers: r.headers,
+          body: r.body,
+          finalUrl: redirected ? url.toString() : null,
+        };
       const next = assertFetchableUrl(new URL(r.location, url).toString());
       if (!allowed.has(next.host.toLowerCase())) {
         return { status: r.status, headers: r.headers, body: null, finalUrl: next.toString() };

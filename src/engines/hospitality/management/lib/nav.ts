@@ -16,6 +16,7 @@ export type NavKey =
   | "emails"
   | "channels"
   | "website"
+  | "seo"
   | "documents"
   | "contracts"
   | "settings"
@@ -45,6 +46,7 @@ export type NavPath =
   | "/manage/emails"
   | "/manage/settings"
   | "/manage/website"
+  | "/manage/seo"
   | "/manage/documents"
   | "/manage/client-documents"
   | "/manage/channels"
@@ -191,6 +193,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: "site",
     permission: "settings",
     keywords: "עורך תבנית",
+  },
+  {
+    // NURIEL AI SEO ENGINE: הבדיקה הטכנית, ביטויי החיפוש, Search Console והגדרות ה-SEO
+    key: "seo",
+    label: "SEO וגוגל",
+    to: "/manage/seo",
+    group: "site",
+    permission: "settings",
+    keywords: "גוגל חיפוש Search Console קידום אורגני כותרת תיאור מילות מפתח",
   },
   {
     key: "documents",

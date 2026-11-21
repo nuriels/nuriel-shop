@@ -14,6 +14,8 @@ export const hospitalityEngine: Engine = {
   startWorkers() {
     if (typeof window !== "undefined") return;
     void import("./outbox/worker.server").then((m) => m.startOutboxWorker());
+    // מנוע ה-SEO של הפלטפורמה: ההצעות והעובדות של אתרי אירוח (העובד עצמו — בפלטפורמה)
+    void import("./seo/background.server").then((m) => m.registerHospitalitySeo());
   },
   async enabledFor(site: SiteRef) {
     const { backendEnabled } = await import("./access.server");

@@ -10,4 +10,9 @@ export const ecommerceEngine: Engine = {
   ownsServerFn: () => false,
   enabledFor: async () => true,
   gate: async () => null,
+  // מנוע ה-SEO של הפלטפורמה: ההצעות והעובדות של החנויות (העובד עצמו — בפלטפורמה)
+  startWorkers() {
+    if (typeof window !== "undefined") return;
+    void import("@/lib/seo/store-seo.server").then((m) => m.registerStoreSeo());
+  },
 };

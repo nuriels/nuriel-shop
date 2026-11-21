@@ -57,7 +57,7 @@ export function parseCsv(text: string): string[][] {
   let row: string[] = [];
   let field = "";
   let quoted = false;
-  const src = text.replace(/^﻿/, "");
+  const src = text.replace(/^\uFEFF/, "");
   for (let i = 0; i < src.length; i += 1) {
     const c = src[i];
     if (quoted) {
@@ -110,7 +110,9 @@ export function parseGscCsv(text: string): GscCsv {
   const iCtr = at("ctr");
   const iPos = at("position");
   if (dimIdx < 0 || iClicks < 0 || iImpr < 0)
-    throw new GscCsvError("זה לא נראה כמו קובץ ביצועים מ-Search Console (חסרות עמודות שאילתה / קליקים / חשיפות)");
+    throw new GscCsvError(
+      "זה לא נראה כמו קובץ ביצועים מ-Search Console (חסרות עמודות שאילתה / קליקים / חשיפות)",
+    );
   const dimension = cols[dimIdx] as GscDimension;
   const rows: GscRow[] = [];
   let skipped = 0;
@@ -118,18 +120,38 @@ export function parseGscCsv(text: string): GscCsv {
     const key = (r[dimIdx] ?? "").trim();
     const clicks = num(r[iClicks]);
     const impressions = num(r[iImpr]);
-    if (!key || clicks === null || impressions === null || clicks < 0 || impressions < 0 || clicks > impressions) {
+    if (
+      !key ||
+      clicks === null ||
+      impressions === null ||
+      clicks < 0 ||
+      impressions < 0 ||
+      clicks > impressions
+    ) {
       skipped += 1;
       continue;
     }
     const ctrRaw = iCtr >= 0 ? num(r[iCtr]) : null;
-    const ctr = ctrRaw !== null ? (ctrRaw > 1 ? ctrRaw / 100 : ctrRaw) : impressions > 0 ? clicks / impressions : 0;
+    const ctr =
+      ctrRaw !== null
+        ? ctrRaw > 1
+          ? ctrRaw / 100
+          : ctrRaw
+        : impressions > 0
+          ? clicks / impressions
+          : 0;
     const position = iPos >= 0 ? (num(r[iPos]) ?? 0) : 0;
     if (dimension === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(key)) {
       skipped += 1;
       continue;
     }
-    rows.push({ key: key.slice(0, 500), clicks, impressions, ctr: Math.max(0, Math.min(1, ctr)), position: Math.max(0, position) });
+    rows.push({
+      key: key.slice(0, 500),
+      clicks,
+      impressions,
+      ctr: Math.max(0, Math.min(1, ctr)),
+      position: Math.max(0, position),
+    });
     if (rows.length >= GSC_CSV_MAX_ROWS) break;
   }
   if (rows.length === 0) throw new GscCsvError("לא נמצאו שורות תקינות בקובץ");

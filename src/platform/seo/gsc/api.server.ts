@@ -59,7 +59,11 @@ export function authorizeUrl(cfg: GscConfig, state: string): string {
 
 type FetchLike = typeof fetch;
 
-async function postForm(f: FetchLike, url: string, body: Record<string, string>): Promise<Record<string, unknown>> {
+async function postForm(
+  f: FetchLike,
+  url: string,
+  body: Record<string, string>,
+): Promise<Record<string, unknown>> {
   let res: Response;
   try {
     res = await f(url, {
@@ -74,12 +78,19 @@ async function postForm(f: FetchLike, url: string, body: Record<string, string>)
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     const err = String(json["error"] ?? res.status);
-    throw new GscError(`Google token error: ${err}`, err === "invalid_grant" ? "auth" : "bad_response");
+    throw new GscError(
+      `Google token error: ${err}`,
+      err === "invalid_grant" ? "auth" : "bad_response",
+    );
   }
   return json;
 }
 
-export async function exchangeCode(cfg: GscConfig, code: string, f: FetchLike = fetch): Promise<{ refreshToken: string; accessToken: string; scope: string }> {
+export async function exchangeCode(
+  cfg: GscConfig,
+  code: string,
+  f: FetchLike = fetch,
+): Promise<{ refreshToken: string; accessToken: string; scope: string }> {
   const j = await postForm(f, TOKEN_URL, {
     code,
     client_id: cfg.clientId,
@@ -90,12 +101,18 @@ export async function exchangeCode(cfg: GscConfig, code: string, f: FetchLike = 
   const refreshToken = typeof j["refresh_token"] === "string" ? j["refresh_token"] : "";
   const accessToken = typeof j["access_token"] === "string" ? j["access_token"] : "";
   const scope = typeof j["scope"] === "string" ? j["scope"] : "";
-  if (!refreshToken || !accessToken) throw new GscError("Google did not return a refresh token", "auth");
-  if (!scope.split(" ").includes(GSC_SCOPE)) throw new GscError("Search Console read access was not granted", "forbidden");
+  if (!refreshToken || !accessToken)
+    throw new GscError("Google did not return a refresh token", "auth");
+  if (!scope.split(" ").includes(GSC_SCOPE))
+    throw new GscError("Search Console read access was not granted", "forbidden");
   return { refreshToken, accessToken, scope };
 }
 
-export async function refreshAccessToken(cfg: GscConfig, refreshToken: string, f: FetchLike = fetch): Promise<string> {
+export async function refreshAccessToken(
+  cfg: GscConfig,
+  refreshToken: string,
+  f: FetchLike = fetch,
+): Promise<string> {
   const j = await postForm(f, TOKEN_URL, {
     refresh_token: refreshToken,
     client_id: cfg.clientId,
@@ -107,12 +124,20 @@ export async function refreshAccessToken(cfg: GscConfig, refreshToken: string, f
   return token;
 }
 
-async function api(f: FetchLike, accessToken: string, path: string, body?: unknown): Promise<Record<string, unknown>> {
+async function api(
+  f: FetchLike,
+  accessToken: string,
+  path: string,
+  body?: unknown,
+): Promise<Record<string, unknown>> {
   let res: Response;
   try {
     res = await f(`${API}${path}`, {
       method: body === undefined ? "GET" : "POST",
-      headers: { authorization: `Bearer ${accessToken}`, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -121,18 +146,27 @@ async function api(f: FetchLike, accessToken: string, path: string, body?: unkno
   }
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (res.status === 401) throw new GscError("Search Console access expired — reconnect", "auth");
-  if (res.status === 403) throw new GscError("No access to this Search Console property", "forbidden");
+  if (res.status === 403)
+    throw new GscError("No access to this Search Console property", "forbidden");
   if (res.status === 429) throw new GscError("Search Console quota reached — try later", "quota");
   if (!res.ok) throw new GscError(`Search Console error ${res.status}`, "bad_response");
   return json;
 }
 
 /** the properties this Google account can see, with its permission level */
-export async function listSites(accessToken: string, f: FetchLike = fetch): Promise<{ siteUrl: string; permission: string }[]> {
+export async function listSites(
+  accessToken: string,
+  f: FetchLike = fetch,
+): Promise<{ siteUrl: string; permission: string }[]> {
   const j = await api(f, accessToken, "/sites");
-  const entries = Array.isArray(j["siteEntry"]) ? (j["siteEntry"] as Record<string, unknown>[]) : [];
+  const entries = Array.isArray(j["siteEntry"])
+    ? (j["siteEntry"] as Record<string, unknown>[])
+    : [];
   return entries
-    .map((e) => ({ siteUrl: String(e["siteUrl"] ?? ""), permission: String(e["permissionLevel"] ?? "") }))
+    .map((e) => ({
+      siteUrl: String(e["siteUrl"] ?? ""),
+      permission: String(e["permissionLevel"] ?? ""),
+    }))
     .filter((e) => e.siteUrl && e.permission !== "siteUnverifiedUser");
 }
 
@@ -144,7 +178,9 @@ export function matchProperty(origin: string, sites: { siteUrl: string }[]): str
   } catch {
     return null;
   }
-  const exact = sites.find((s) => s.siteUrl.replace(/\/$/, "").toLowerCase() === origin.replace(/\/$/, "").toLowerCase());
+  const exact = sites.find(
+    (s) => s.siteUrl.replace(/\/$/, "").toLowerCase() === origin.replace(/\/$/, "").toLowerCase(),
+  );
   if (exact) return exact.siteUrl;
   const domain = sites.find((s) => {
     if (!s.siteUrl.startsWith("sc-domain:")) return false;
@@ -158,7 +194,13 @@ export function matchProperty(origin: string, sites: { siteUrl: string }[]): str
 export async function searchAnalytics(
   accessToken: string,
   siteUrl: string,
-  q: { startDate: string; endDate: string; dimension: "query" | "page" | "date"; rowLimit?: number; pagePrefix?: string },
+  q: {
+    startDate: string;
+    endDate: string;
+    dimension: "query" | "page" | "date";
+    rowLimit?: number;
+    pagePrefix?: string;
+  },
   f: FetchLike = fetch,
 ): Promise<GscRow[]> {
   const body: Record<string, unknown> = {
@@ -169,8 +211,15 @@ export async function searchAnalytics(
     dataState: "final",
   };
   if (q.pagePrefix)
-    body["dimensionFilterGroups"] = [{ filters: [{ dimension: "page", operator: "contains", expression: q.pagePrefix }] }];
-  const j = await api(f, accessToken, `/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, body);
+    body["dimensionFilterGroups"] = [
+      { filters: [{ dimension: "page", operator: "contains", expression: q.pagePrefix }] },
+    ];
+  const j = await api(
+    f,
+    accessToken,
+    `/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+    body,
+  );
   const rows = Array.isArray(j["rows"]) ? (j["rows"] as Record<string, unknown>[]) : [];
   return rows.map((r) => ({
     key: String((Array.isArray(r["keys"]) ? r["keys"][0] : "") ?? ""),

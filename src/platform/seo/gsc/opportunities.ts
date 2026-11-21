@@ -36,13 +36,22 @@ export function findOpportunities(
   const out: Opportunity[] = [];
   const R = OPPORTUNITY_RULES;
   for (const r of current) {
-    if (r.impressions >= R.lowCtr.minImpressions && r.position > 0 && r.position <= R.lowCtr.maxPosition && r.ctr <= R.lowCtr.maxCtr)
+    if (
+      r.impressions >= R.lowCtr.minImpressions &&
+      r.position > 0 &&
+      r.position <= R.lowCtr.maxPosition &&
+      r.ctr <= R.lowCtr.maxCtr
+    )
       out.push({
         kind: "low_ctr",
         ...r,
         message: `${r.impressions.toLocaleString("he-IL")} חשיפות בעמוד הראשון (מיקום ${pos(r.position)}) אבל רק ${pct(r.ctr)} לוחצים — כדאי לשפר את הכותרת והתיאור`,
       });
-    else if (r.impressions >= R.striking.minImpressions && r.position >= R.striking.minPosition && r.position <= R.striking.maxPosition)
+    else if (
+      r.impressions >= R.striking.minImpressions &&
+      r.position >= R.striking.minPosition &&
+      r.position <= R.striking.maxPosition
+    )
       out.push({
         kind: "striking_distance",
         ...r,
@@ -81,7 +90,10 @@ export function findOpportunities(
     const known = options.knownKeywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
     for (const r of current) {
       const q = r.key.trim().toLowerCase();
-      if (r.impressions >= R.newQuery.minImpressions && !known.some((k) => q === k || q.includes(k) || k.includes(q)))
+      if (
+        r.impressions >= R.newQuery.minImpressions &&
+        !known.some((k) => q === k || q.includes(k) || k.includes(q))
+      )
         out.push({
           kind: "new_query",
           ...r,
@@ -89,14 +101,24 @@ export function findOpportunities(
         });
     }
   }
-  const weight: Record<OpportunityKind, number> = { drop: 0, low_ctr: 1, striking_distance: 2, new_query: 3 };
+  const weight: Record<OpportunityKind, number> = {
+    drop: 0,
+    low_ctr: 1,
+    striking_distance: 2,
+    new_query: 3,
+  };
   return out
     .sort((a, b) => weight[a.kind] - weight[b.kind] || b.impressions - a.impressions)
     .slice(0, options.limit ?? 50);
 }
 
 /** totals for a period (impressions-weighted average position, like Search Console) */
-export function totals(rows: GscRow[]): { clicks: number; impressions: number; ctr: number; position: number } {
+export function totals(rows: GscRow[]): {
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+} {
   const clicks = rows.reduce((s, r) => s + r.clicks, 0);
   const impressions = rows.reduce((s, r) => s + r.impressions, 0);
   const weighted = rows.reduce((s, r) => s + r.position * r.impressions, 0);

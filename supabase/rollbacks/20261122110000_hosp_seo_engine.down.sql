@@ -35,6 +35,7 @@ DROP TRIGGER IF EXISTS seo_on_unit ON hospitality.units;
 DROP TRIGGER IF EXISTS seo_on_package ON hospitality.packages;
 DROP TRIGGER IF EXISTS seo_on_media ON hospitality.media;
 DROP FUNCTION IF EXISTS hospitality.seo_proposal_revert(uuid);
+DROP FUNCTION IF EXISTS hospitality.seo_open_targets(uuid);
 DROP FUNCTION IF EXISTS hospitality._seo_apply(uuid, text, uuid, text, text);
 DROP FUNCTION IF EXISTS hospitality._seo_auto_write(uuid, text, uuid, text, text);
 DROP FUNCTION IF EXISTS hospitality.package_seo_set(uuid, text, text, integer);

@@ -275,6 +275,7 @@ describe("architecture: dependency boundaries", () => {
       "src/routes/manage.properties.$propertyId.tsx",
       "src/routes/manage.reports.tsx",
       "src/routes/manage.room-types.tsx",
+      "src/routes/manage.seo.tsx",
       "src/routes/manage.settings.tsx",
       "src/routes/manage.setup.tsx",
       "src/routes/manage.support.tsx",

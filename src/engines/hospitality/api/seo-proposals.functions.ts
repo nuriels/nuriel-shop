@@ -58,7 +58,7 @@ export const hospitalitySeoGenerate = createServerFn({ method: "POST" })
 type DecideInput = { ids?: unknown; action?: unknown; text?: unknown };
 export type SeoDecision = {
   id: string;
-  status: "approved" | "rejected" | "stale" | "error";
+  status: "approved" | "rejected" | "stale" | "later" | "reverted" | "error";
   message?: string;
 };
 
@@ -69,7 +69,9 @@ export const hospitalitySeoDecide = createServerFn({ method: "POST" })
     if (!ids.length || ids.length > 100 || !ids.every((x) => typeof x === "string" && UUID.test(x)))
       throw new InputError("בחרו הצעות");
     const action = input?.action;
-    if (action !== "approve" && action !== "reject") throw new InputError("פעולה לא תקינה");
+    // מיגרציה 204: later — "לשמור לאחר כך" (ההצעה נשארת פתוחה, לא מוחלת)
+    if (action !== "approve" && action !== "reject" && action !== "later")
+      throw new InputError("פעולה לא תקינה");
     const text = input?.text;
     if (
       text !== undefined &&
@@ -99,4 +101,30 @@ export const hospitalitySeoDecide = createServerFn({ method: "POST" })
       }
     }
     return out;
+  });
+
+/**
+ * מיגרציה 204: שחזור — חזרה לערך שהיה לפני האישור. רק כשהשדה עדיין מכיל את מה שאושר (שינוי מאוחר יותר לא
+ * נדרס); דרך הפונקציה הקיימת של אותו שדה (הרשאה, גרסה, יומן). טקסט באתר — לטיוטה בלבד (צריך "פרסום")
+ */
+export const hospitalitySeoRevert = createServerFn({ method: "POST" })
+  .inputValidator((input: { id?: unknown }) => {
+    if (typeof input?.id !== "string" || !UUID.test(input.id))
+      throw new InputError("בקשה לא תקינה");
+    return { id: input.id };
+  })
+  .handler(async ({ data }): Promise<SeoDecision> => {
+    const { manageRpc } = await import("../server/manage.server");
+    try {
+      const r = await manageRpc<{ status: SeoDecision["status"] }>("seo_proposal_revert", {
+        _id: data.id,
+      });
+      return { id: data.id, status: r.status };
+    } catch (error) {
+      return {
+        id: data.id,
+        status: "error",
+        message: error instanceof Error ? error.message : "השחזור נכשל",
+      };
+    }
   });

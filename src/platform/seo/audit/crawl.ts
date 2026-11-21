@@ -2,7 +2,13 @@
 // page rules + site rules → technical health. Takes a Fetcher (fetch.server.ts in production: the business's own
 // host only, SSRF-safe; a fake in tests), so this file has no I/O of its own.
 import type { Fetcher, FetchedText } from "./fetch.server";
-import { extractSignals, parseRobots, parseSitemap, type PageSignals, type RobotsRules } from "./html";
+import {
+  extractSignals,
+  parseRobots,
+  parseSitemap,
+  type PageSignals,
+  type RobotsRules,
+} from "./html";
 import {
   auditPage,
   auditSite,
@@ -51,7 +57,12 @@ export interface CrawlResult {
   issues: AuditIssue[];
 }
 
-async function safeGet(fetcher: Fetcher, url: string, timeoutMs: number, userAgent: string): Promise<FetchedText> {
+async function safeGet(
+  fetcher: Fetcher,
+  url: string,
+  timeoutMs: number,
+  userAgent: string,
+): Promise<FetchedText> {
   try {
     return await fetcher(url, { timeoutMs, userAgent });
   } catch {
@@ -82,7 +93,8 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
   const host = new URL(origin).host;
 
   const robotsRes = await safeGet(fetcher, `${origin}/robots.txt`, timeoutMs, userAgent);
-  const robots: RobotsRules | null = robotsRes.status === 200 && robotsRes.body ? parseRobots(robotsRes.body) : null;
+  const robots: RobotsRules | null =
+    robotsRes.status === 200 && robotsRes.body ? parseRobots(robotsRes.body) : null;
 
   // sitemaps: the ones robots.txt declares (same host), else /sitemap.xml; one level of sitemap index, at most 5 files
   const declared = (robots?.sitemaps ?? []).filter((u) => {
@@ -137,7 +149,8 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
       finalUrl: r.finalUrl,
     };
     const isHtml = (r.headers["content-type"] ?? "").includes("html");
-    const signals: PageSignals | null = r.status === 200 && r.body && isHtml ? extractSignals(r.body) : null;
+    const signals: PageSignals | null =
+      r.status === 200 && r.body && isHtml ? extractSignals(r.body) : null;
     return { page, signals };
   });
 
@@ -189,7 +202,8 @@ export function kindOfPath(engine: SiteEngine, path: string): PageKind {
   if (engine === "ecommerce") {
     if (p === "/") return "home";
     if (p.startsWith("/product/") || p.startsWith("/products/")) return "product";
-    if (p.startsWith("/category/") || p.startsWith("/categories/") || p.startsWith("/c/")) return "category";
+    if (p.startsWith("/category/") || p.startsWith("/categories/") || p.startsWith("/c/"))
+      return "category";
     if (/^\/(cart|checkout|account|login|admin|orders|search)/.test(p)) return "other";
     return "content";
   }

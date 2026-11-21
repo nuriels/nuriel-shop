@@ -40,12 +40,14 @@ const TABLES = {
     stock_counts tenant_addons tenant_subscriptions user_custom_prices
     license_files license_deliveries license_download_links license_audit
     product_imports product_import_changes product_supplier_keys
-    product_duplicate_dismissals product_merges`,
+    product_duplicate_dismissals product_merges
+    store_seo_proposals`,
   platform: `tenants user_roles site_settings email_settings tenant_email_secrets login_codes
     password_reset_requests password_reset_tokens staff_notifications contact_messages support_tickets
     support_messages marketing_consents marketing_consent_events notification_logs tenant_ssl tenant_host_redirects
     tenant_billing_profile billing_history upgrade_requests tenant_grow_credentials
-    platform_product_roles platform_feature_flags tenant_feature_flags vat_rates site_tracking`,
+    platform_product_roles platform_feature_flags tenant_feature_flags vat_rates site_tracking
+    seo_settings seo_audits seo_keyword_ideas seo_gsc_connections seo_gsc_snapshots seo_jobs`,
   "platform-admin": `platform_addons platform_admin_handoffs platform_admins platform_agreement_acceptances
     platform_agreement_versions platform_audit_log platform_documents platform_email_log platform_plans
     platform_pricing_settings
@@ -114,6 +116,10 @@ const PLATFORM_FUNCTIONS = new RegExp(
       "enforce_plan_custom_domain",
       "site_settings_custom_domain_sync",
       "site_settings_legal_defaults",
+      // NURIEL AI SEO ENGINE (migration 203): the platform core of both products (the store's own proposals —
+      // store_seo_* — are Ecommerce)
+      "seo_.*",
+      "_seo_.*",
     ].join("|") +
     ")$",
 );

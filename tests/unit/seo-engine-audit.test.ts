@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { cleanText, extractSignals, isPathAllowed, parseRobots, parseSitemap } from "@/platform/seo/audit/html";
+import {
+  cleanText,
+  extractSignals,
+  isPathAllowed,
+  parseRobots,
+  parseSitemap,
+} from "@/platform/seo/audit/html";
 import { auditPage, auditSite, healthScore, type FetchedPage } from "@/platform/seo/audit/rules";
 
 const GOOD = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
@@ -25,7 +31,11 @@ const page = (over: Partial<FetchedPage> = {}): FetchedPage => ({
   finalUrl: null,
   ...over,
 });
-const ctx = { origin: "https://nofi-dorit.nuri1.fit", engine: "hospitality" as const, hebrew: true };
+const ctx = {
+  origin: "https://nofi-dorit.nuri1.fit",
+  engine: "hospitality" as const,
+  hebrew: true,
+};
 
 describe("SEO engine — page signals", () => {
   it("reads title, description, canonical, viewport, lang/dir, OG and JSON-LD types; ignores comments and scripts", () => {
@@ -45,13 +55,18 @@ describe("SEO engine — page signals", () => {
       ["/a.webp", "המיטה הזוגית", true],
       ["/b.webp", "", true],
     ]);
-    expect(s.links.map((l) => l.href)).toEqual(["/stay/gallery", "https://nofi-dorit.nuri1.fit/stay"]);
+    expect(s.links.map((l) => l.href)).toEqual([
+      "/stay/gallery",
+      "https://nofi-dorit.nuri1.fit/stay",
+    ]);
     expect(s.wordCount).toBeGreaterThan(80);
   });
 
   it("decodes entities, drops invisible direction marks, reports broken JSON-LD", () => {
     expect(cleanText("&#x200F;4,000&nbsp;&#8362; &amp; עוד")).toBe("4,000 ₪ & עוד");
-    const s = extractSignals(`<html><head><script type="application/ld+json">{bad</script></head></html>`);
+    const s = extractSignals(
+      `<html><head><script type="application/ld+json">{bad</script></head></html>`,
+    );
     expect(s.jsonLd[0]?.error).toBeTruthy();
     expect(s.jsonLd[0]?.types).toEqual([]);
   });
@@ -70,13 +85,18 @@ describe("SEO engine — page signals", () => {
   });
 
   it("sitemap: urlset URLs, index entries, CDATA and entities", () => {
-    expect(parseSitemap("<urlset><url><loc>https://a/x?a=1&amp;b=2</loc></url><url><loc><![CDATA[https://a/y]]></loc></url></urlset>")).toEqual({
+    expect(
+      parseSitemap(
+        "<urlset><url><loc>https://a/x?a=1&amp;b=2</loc></url><url><loc><![CDATA[https://a/y]]></loc></url></urlset>",
+      ),
+    ).toEqual({
       urls: ["https://a/x?a=1&b=2", "https://a/y"],
       sitemaps: [],
     });
-    expect(parseSitemap("<sitemapindex><sitemap><loc>https://a/s1.xml</loc></sitemap></sitemapindex>").sitemaps).toEqual([
-      "https://a/s1.xml",
-    ]);
+    expect(
+      parseSitemap("<sitemapindex><sitemap><loc>https://a/s1.xml</loc></sitemap></sitemapindex>")
+        .sitemaps,
+    ).toEqual(["https://a/s1.xml"]);
   });
 });
 
@@ -109,7 +129,10 @@ describe("SEO engine — audit rules", () => {
 
   it("lengths are hints (low), never failures; a product page needs Product + Offer", () => {
     const html = GOOD.replace(/<title>[^<]*<\/title>/, "<title>קצר</title>");
-    const issues = auditPage(page({ html, kind: "product" }), extractSignals(html), { ...ctx, engine: "ecommerce" });
+    const issues = auditPage(page({ html, kind: "product" }), extractSignals(html), {
+      ...ctx,
+      engine: "ecommerce",
+    });
     expect(issues.find((i) => i.code === "title.length_hint")?.severity).toBe("low");
     expect(issues.map((i) => i.code)).toContain("schema.product_missing");
   });
@@ -145,9 +168,16 @@ describe("SEO engine — audit rules", () => {
   });
 
   it("health score caps each issue code (50 pages without alt do not sink the site)", () => {
-    const many = Array.from({ length: 50 }, () => ({ code: "images.alt_missing", severity: "medium" as const, url: null, message: "" }));
+    const many = Array.from({ length: 50 }, () => ({
+      code: "images.alt_missing",
+      severity: "medium" as const,
+      url: null,
+      message: "",
+    }));
     expect(healthScore(many).score).toBe(91);
-    expect(healthScore([{ code: "page.noindex", severity: "critical", url: null, message: "" }]).score).toBe(80);
+    expect(
+      healthScore([{ code: "page.noindex", severity: "critical", url: null, message: "" }]).score,
+    ).toBe(80);
     expect(healthScore([]).score).toBe(100);
   });
 });

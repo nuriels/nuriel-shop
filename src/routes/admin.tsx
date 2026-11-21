@@ -19,6 +19,7 @@ import { CartPromotionsPanel } from "@/components/sales/CartPromotionsPanel";
 import { CouponsPanel } from "@/components/marketing/CouponsPanel";
 import { AbandonedCartsPanel } from "@/components/marketing/AbandonedCartsPanel";
 import { MarketingPanel } from "@/components/marketing/MarketingPanel";
+import { StoreSeoTab } from "@/components/seo/StoreSeoTab";
 import { HomeDesignPanel } from "@/components/home-design/HomeDesignPanel";
 import { StockCountPanel } from "@/components/StockCountPanel";
 import { PosPanel } from "@/components/pos/PosPanel";
@@ -496,6 +497,9 @@ function AdminPage() {
               </TabsContent>
               <TabsContent value="marketing">
                 <MarketingPanel canManageTracking={staffCan(staffRole, "billing.manage")} />
+              </TabsContent>
+              <TabsContent value="seo">
+                <StoreSeoTab />
               </TabsContent>
               <TabsContent value="email">
                 <EmailSettingsPanel />

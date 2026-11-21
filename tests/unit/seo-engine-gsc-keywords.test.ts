@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { GscCsvError, parseCsv, parseGscCsv } from "@/platform/seo/gsc/csv";
 import { findOpportunities, totals } from "@/platform/seo/gsc/opportunities";
 import { matchProperty } from "@/platform/seo/gsc/api.server";
-import { classifyIntent, mergeIdeas, normalizePhrase, seedKeywords, stuffingCount } from "@/platform/seo/keywords";
+import {
+  classifyIntent,
+  mergeIdeas,
+  normalizePhrase,
+  seedKeywords,
+  stuffingCount,
+} from "@/platform/seo/keywords";
 
 describe("Search Console CSV import", () => {
   it("parses quoted CSV with BOM, CRLF and doubled quotes", () => {
@@ -13,7 +19,8 @@ describe("Search Console CSV import", () => {
   });
 
   it("reads the Hebrew UI export (queries), percent CTR, thousands separators", () => {
-    const csv = "שאילתות מובילות,קליקים,חשיפות,שיעור קליקים (CTR),מיקום\nנופי דורית,120,\"1,500\",8%,1.4\nצימר ליד בית שמש,3,410,0.73%,9.2\n";
+    const csv =
+      'שאילתות מובילות,קליקים,חשיפות,שיעור קליקים (CTR),מיקום\nנופי דורית,120,"1,500",8%,1.4\nצימר ליד בית שמש,3,410,0.73%,9.2\n';
     const r = parseGscCsv(csv);
     expect(r.dimension).toBe("query");
     expect(r.rows).toEqual([
@@ -23,7 +30,9 @@ describe("Search Console CSV import", () => {
   });
 
   it("reads the English pages export and skips impossible rows (clicks > impressions)", () => {
-    const r = parseGscCsv("Top pages,Clicks,Impressions,CTR,Position\nhttps://a/x,5,100,5%,3\nhttps://a/y,50,10,1%,2\n");
+    const r = parseGscCsv(
+      "Top pages,Clicks,Impressions,CTR,Position\nhttps://a/x,5,100,5%,3\nhttps://a/y,50,10,1%,2\n",
+    );
     expect(r.dimension).toBe("page");
     expect(r.rows).toHaveLength(1);
     expect(r.skipped).toBe(1);
@@ -56,14 +65,21 @@ describe("opportunities — real numbers only", () => {
     const t = totals(rows);
     expect(t.clicks).toBe(83);
     expect(t.impressions).toBe(790);
-    expect(Number(t.position.toFixed(2))).toBe(Number(((4 * 400 + 12 * 90 + 1.1 * 300) / 790).toFixed(2)));
+    expect(Number(t.position.toFixed(2))).toBe(
+      Number(((4 * 400 + 12 * 90 + 1.1 * 300) / 790).toFixed(2)),
+    );
   });
 });
 
 describe("Search Console property matching", () => {
   it("prefers the exact URL-prefix property, else a domain property that covers the host", () => {
-    const sites = [{ siteUrl: "sc-domain:nuri1.fit" }, { siteUrl: "https://nofi-dorit.nuri1.fit/" }];
-    expect(matchProperty("https://nofi-dorit.nuri1.fit", sites)).toBe("https://nofi-dorit.nuri1.fit/");
+    const sites = [
+      { siteUrl: "sc-domain:nuri1.fit" },
+      { siteUrl: "https://nofi-dorit.nuri1.fit/" },
+    ];
+    expect(matchProperty("https://nofi-dorit.nuri1.fit", sites)).toBe(
+      "https://nofi-dorit.nuri1.fit/",
+    );
     expect(matchProperty("https://other.nuri1.fit", sites)).toBe("sc-domain:nuri1.fit");
     expect(matchProperty("https://shop.example.com", sites)).toBeNull();
   });

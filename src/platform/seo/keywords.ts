@@ -11,7 +11,8 @@ export type KeywordKind =
   | "long_tail"
   | "question"
   | "transactional";
-export type KeywordIntent = "navigational" | "informational" | "commercial" | "transactional" | "local";
+export type KeywordIntent =
+  "navigational" | "informational" | "commercial" | "transactional" | "local";
 export type KeywordSource = "owner" | "template" | "ai" | "gsc" | "import";
 
 export interface KeywordIdea {
@@ -53,17 +54,22 @@ export function normalizePhrase(raw: string): string {
 // JS \b is ASCII-only — Hebrew words need an explicit "space or end" after them
 const QUESTION =
   /^(?:איך|מה|למה|מדוע|איפה|היכן|מתי|כמה|האם|מי|באיזה|איזה|איזו)(?=\s|$)|^(?:how|what|why|where|when|which|who|is|are|can)\b/i;
-const TRANSACTIONAL = /(הזמנ|להזמין|מחיר|מחירים|קני|לקנות|משלוח|מבצע|הנחה|זול|buy|price|order|book|booking|deal|cheap|discount)/i;
+const TRANSACTIONAL =
+  /(הזמנ|להזמין|מחיר|מחירים|קני|לקנות|משלוח|מבצע|הנחה|זול|buy|price|order|book|booking|deal|cheap|discount)/i;
 const COMMERCIAL = /(הכי טוב|הטוב|מומלצ|השוואה|ביקורות|חוות דעת|best|top|review|compare|vs\b)/i;
 const LOCAL = /(ליד|באזור|קרוב|בסביבת|near|nearby)/i;
 
-export function classifyIntent(phrase: string, facts?: Pick<BusinessFacts, "name" | "places">): KeywordIntent {
+export function classifyIntent(
+  phrase: string,
+  facts?: Pick<BusinessFacts, "name" | "places">,
+): KeywordIntent {
   const p = normalizePhrase(phrase);
   if (facts?.name && p.includes(normalizePhrase(facts.name))) return "navigational";
   if (QUESTION.test(p)) return "informational";
   if (TRANSACTIONAL.test(p)) return "transactional";
   if (COMMERCIAL.test(p)) return "commercial";
-  if (LOCAL.test(p) || (facts?.places ?? []).some((pl) => pl && p.includes(normalizePhrase(pl)))) return "local";
+  if (LOCAL.test(p) || (facts?.places ?? []).some((pl) => pl && p.includes(normalizePhrase(pl))))
+    return "local";
   return "commercial";
 }
 
@@ -87,22 +93,43 @@ const inPlace = (place: string) => `ב${place}`;
 export function seedKeywords(facts: BusinessFacts): KeywordIdea[] {
   const out: KeywordIdea[] = [];
   const name = facts.name.trim();
-  const places = facts.places.map((p) => p.trim()).filter(Boolean).slice(0, 4);
-  const cats = facts.categories.map((c) => c.trim()).filter(Boolean).slice(0, 4);
-  const offerings = facts.offerings.map((o) => o.trim()).filter(Boolean).slice(0, 12);
-  const audiences = facts.audiences.map((a) => a.trim()).filter(Boolean).slice(0, 6);
+  const places = facts.places
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+  const cats = facts.categories
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+  const offerings = facts.offerings
+    .map((o) => o.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+  const audiences = facts.audiences
+    .map((a) => a.trim())
+    .filter(Boolean)
+    .slice(0, 6);
   const push = (phrase: string, kind: KeywordKind, reason: string) =>
-    out.push({ phrase, kind, intent: classifyIntent(phrase, { name, places }), source: "template", reason });
+    out.push({
+      phrase,
+      kind,
+      intent: classifyIntent(phrase, { name, places }),
+      source: "template",
+      reason,
+    });
 
   if (name) {
     push(name, "brand", "שם העסק — חיפוש של מי שכבר מכיר אתכם");
-    for (const c of cats.slice(0, 2)) if (!normalizePhrase(name).includes(normalizePhrase(c))) push(`${c} ${name}`, "brand", "שם העסק עם סוג העסק");
+    for (const c of cats.slice(0, 2))
+      if (!normalizePhrase(name).includes(normalizePhrase(c)))
+        push(`${c} ${name}`, "brand", "שם העסק עם סוג העסק");
   }
   for (const c of cats) {
     push(c, "primary", "סוג העסק");
     for (const pl of places) {
       push(`${c} ${inPlace(pl)}`, "local", "סוג העסק + המקום שלכם");
-      if (facts.engine === "hospitality") push(`${c} ליד ${pl}`, "local", "חיפוש מקומי — אנשים מחפשים לפי עיר קרובה");
+      if (facts.engine === "hospitality")
+        push(`${c} ליד ${pl}`, "local", "חיפוש מקומי — אנשים מחפשים לפי עיר קרובה");
     }
   }
   for (const a of audiences)
@@ -118,7 +145,8 @@ export function seedKeywords(facts: BusinessFacts): KeywordIdea[] {
     push(`הזמנת ${cats[0]} ${inPlace(places[0])}`, "transactional", "חיפוש עם כוונת הזמנה");
     push(`איפה יש ${cats[0]} ליד ${places[0]}`, "question", "שאלה שאנשים שואלים");
   }
-  if (facts.engine === "ecommerce" && cats[0]) push(`${cats[0]} אונליין`, "transactional", "קנייה באינטרנט");
+  if (facts.engine === "ecommerce" && cats[0])
+    push(`${cats[0]} אונליין`, "transactional", "קנייה באינטרנט");
   return uniqueBy(out);
 }
 

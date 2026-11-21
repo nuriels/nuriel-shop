@@ -292,6 +292,24 @@ BEGIN
   DELETE FROM public.seo_jobs WHERE status IN ('done', 'skipped', 'failed') AND updated_at < now() - interval '30 days';
 END $$;
 
+-- the server queues one job for a business (e.g. a Search Console sync right after the owner connected it);
+-- already waiting → it runs now instead of later (never doubled)
+CREATE OR REPLACE FUNCTION public.seo_jobs_enqueue(_tenant uuid, _kind text, _entity_type text DEFAULT NULL)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _new boolean;
+BEGIN
+  IF _tenant IS NULL OR _kind NOT IN ('initial', 'entity', 'audit', 'gsc_sync') THEN
+    RAISE EXCEPTION 'bad job' USING ERRCODE = 'check_violation';
+  END IF;
+  INSERT INTO public.seo_jobs (tenant_id, kind, entity_type)
+  VALUES (_tenant, _kind, CASE WHEN _kind = 'initial' THEN 'store' ELSE _entity_type END)
+  ON CONFLICT (tenant_id, kind, (COALESCE(entity_type, ''))) WHERE status IN ('queued', 'running')
+  DO UPDATE SET run_after = LEAST(public.seo_jobs.run_after, now()), updated_at = now()
+  RETURNING (xmax = 0) INTO _new;
+  RETURN _new;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.seo_jobs_enqueue_periodic() RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -632,7 +650,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.seo_tenant_basics(_tenant uuid) RETURNS jsonb
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT jsonb_build_object('id', t.id, 'slug', t.slug, 'name', t.name, 'site_type', t.site_type, 'status', t.status,
-                            'domain', t.domain, 'custom_domain', t.custom_domain,
+                            'is_default', t.is_default, 'domain', t.domain, 'custom_domain', t.custom_domain,
                             'custom_domain_status', t.custom_domain_status,
                             'settings', (SELECT to_jsonb(s) FROM public.seo_settings s WHERE s.tenant_id = t.id))
     FROM public.tenants t WHERE t.id = _tenant;
@@ -912,7 +930,13 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
                                                                 'seo_title', c.seo_title, 'seo_description', c.seo_description,
                                                                 'products', (SELECT count(*) FROM public.global_products g
                                                                               WHERE g.tenant_id = _tenant AND g.category = c.name
-                                                                                AND NOT COALESCE(g.is_hidden, false)))
+                                                                                AND NOT COALESCE(g.is_hidden, false)),
+                                                                -- real product names of the category (its description)
+                                                                'top', COALESCE((SELECT jsonb_agg(x.name) FROM (
+                                                                          SELECT g.name FROM public.global_products g
+                                                                           WHERE g.tenant_id = _tenant AND g.category = c.name
+                                                                             AND NOT COALESCE(g.is_hidden, false)
+                                                                           ORDER BY g.created_at DESC LIMIT 3) x), '[]'::jsonb))
                                              ORDER BY c.sort_order, c.name)
                               FROM public.categories c WHERE c.tenant_id = _tenant
                                 AND (NOT _only_missing OR c.seo_title IS NULL OR c.seo_description IS NULL)), '[]'::jsonb),
@@ -934,6 +958,7 @@ $$;
 REVOKE ALL ON FUNCTION public.seo_jobs_claim(integer) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.seo_job_finish(bigint, text, jsonb, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.seo_jobs_enqueue_periodic() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.seo_jobs_enqueue(uuid, text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.seo_audit_save(uuid, text, jsonb, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.seo_keyword_ideas_add(uuid, jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.seo_gsc_connection_save(uuid, text, text, uuid) FROM PUBLIC, anon, authenticated;
@@ -957,7 +982,7 @@ GRANT EXECUTE ON FUNCTION public.seo_jobs_claim(integer), public.seo_job_finish(
   public.seo_gsc_connection_get(uuid), public.seo_gsc_connection_status(uuid, text, text, boolean),
   public.seo_gsc_snapshot_save(uuid, text, date, date, text, jsonb, jsonb, uuid), public.seo_tenant_basics(uuid),
   public.seo_mark_initial_done(uuid), public.store_seo_proposals_add(uuid, jsonb, boolean),
-  public.store_seo_snapshot(uuid, boolean, integer)
+  public.store_seo_snapshot(uuid, boolean, integer), public.seo_jobs_enqueue(uuid, text, text)
   TO service_role;
 
 REVOKE ALL ON FUNCTION public.seo_center(), public.seo_settings_save(jsonb), public.seo_keyword_idea_set(uuid, text),
@@ -971,4 +996,5 @@ GRANT EXECUTE ON FUNCTION public.seo_center(), public.seo_settings_save(jsonb), 
   public.store_seo_proposals(), public.store_seo_proposal_decide(uuid, text, text), public.store_seo_proposal_revert(uuid)
   TO authenticated, service_role;
 
+NOTIFY pgrst, 'reload schema';
 COMMIT;

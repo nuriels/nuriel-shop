@@ -82,6 +82,7 @@ DROP FUNCTION IF EXISTS public.seo_gsc_connection_save(uuid, text, text, uuid);
 DROP FUNCTION IF EXISTS public.seo_keyword_ideas_add(uuid, jsonb);
 DROP FUNCTION IF EXISTS public.seo_audit_save(uuid, text, jsonb, uuid);
 DROP FUNCTION IF EXISTS public.seo_jobs_enqueue_periodic();
+DROP FUNCTION IF EXISTS public.seo_jobs_enqueue(uuid, text, text);
 DROP FUNCTION IF EXISTS public.seo_job_finish(bigint, text, jsonb, text);
 DROP FUNCTION IF EXISTS public.seo_jobs_claim(integer);
 DROP FUNCTION IF EXISTS public._seo_on_entity();

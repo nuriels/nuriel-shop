@@ -1,11 +1,13 @@
 // הצעות SEO שממתינות לאישור (מיגרציה 20261118200000_hosp_seo_proposals) — הטיפוסים המשותפים לשרת ולמסך.
 
-export type SeoTargetKind = "site" | "unit" | "media";
+export type SeoTargetKind = "site" | "unit" | "media" | "package";
 export type SiteSeoField =
   "seo_title" | "seo_description" | "hero_title" | "about_title" | "about_body";
 export type UnitSeoField = "seo_title" | "seo_description" | "description";
 export type MediaSeoField = "alt";
-export type SeoField = SiteSeoField | UnitSeoField | MediaSeoField;
+/** מיגרציה 204: חבילה — רק הכותרת והתיאור לגוגל (לא התיאור / התנאים שבעל העסק כתב) */
+export type PackageSeoField = "seo_title" | "seo_description";
+export type SeoField = SiteSeoField | UnitSeoField | MediaSeoField | PackageSeoField;
 
 /** הצעה לפני שנכנסה למסד (מהתבנית או מ-NURIEL AI) */
 export interface SeoProposalItem {
@@ -14,9 +16,13 @@ export interface SeoProposalItem {
   target_id: string | null;
   field: SeoField;
   text: string;
+  /** מיגרציה 204: למה ההצעה — מוצג לבעל העסק ליד ההצעה */
+  reason?: string;
 }
 
-export type SeoProposalStatus = "pending" | "approved" | "rejected" | "superseded" | "stale";
+/** מיגרציה 204: later — נשמרה "לאחר כך" (עדיין פתוחה); reverted — שוחזרה לערך שלפני האישור */
+export type SeoProposalStatus =
+  "pending" | "later" | "approved" | "rejected" | "superseded" | "stale" | "reverted";
 
 /** הצעה כפי שהמסד מחזיר לצוות (seo_proposals()) */
 export interface SeoProposal {
@@ -34,8 +40,12 @@ export interface SeoProposal {
   decided_at: string | null;
   /** שם היחידה (ליעד מסוג יחידה) */
   target_label: string | null;
-  /** הערך עכשיו (רק בהצעה ממתינה) — אם שונה מ-base, ההצעה לא תוחל */
+  /** הערך עכשיו (בהצעה פתוחה / שאושרה) — פתוחה: אם שונה מ-base, ההצעה לא תוחל; מאושרת: אפשר לשחזר רק כשזהה ל-applied */
   current: string | null;
+  /** מיגרציה 204 */
+  reason?: string | null;
+  auto_applied?: boolean;
+  reverted_at?: string | null;
 }
 
 export interface SeoProposalsView {
@@ -67,4 +77,5 @@ export const SEO_FIELD_MAX: Record<SeoTargetKind, Partial<Record<SeoField, numbe
   },
   unit: { seo_title: 70, seo_description: 200, description: 5000 },
   media: { alt: 250 },
+  package: { seo_title: 70, seo_description: 200 },
 };

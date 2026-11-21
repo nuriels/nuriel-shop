@@ -62,7 +62,10 @@ const ENTITIES: Record<string, string> = {
 export function decodeEntities(input: string): string {
   return input.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, body: string) => {
     if (body[0] === "#") {
-      const code = body[1] === "x" || body[1] === "X" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+      const code =
+        body[1] === "x" || body[1] === "X"
+          ? parseInt(body.slice(2), 16)
+          : parseInt(body.slice(1), 10);
       if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return whole;
       if (code === 0x200f || code === 0x200e) return ""; // RLM / LRM — invisible in a result
       try {
@@ -98,7 +101,8 @@ export function parseAttributes(source: string): Record<string, string> {
   return out;
 }
 
-const attr = (a: Record<string, string>, k: string): string | null => (k in a ? (a[k] ?? "") : null);
+const attr = (a: Record<string, string>, k: string): string | null =>
+  k in a ? (a[k] ?? "") : null;
 
 function stripTags(html: string): string {
   return html.replace(/<[^>]*>/g, " ");
@@ -170,7 +174,8 @@ export function extractSignals(html: string): PageSignals {
     signals.dir = attr(a, "dir");
   }
 
-  for (const m of content.matchAll(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/gi)) signals.titles.push(cleanText(m[1] ?? ""));
+  for (const m of content.matchAll(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/gi))
+    signals.titles.push(cleanText(m[1] ?? ""));
 
   for (const m of content.matchAll(/<meta\b([^>]*)>/gi)) {
     const a = parseAttributes(m[1] ?? "");
@@ -178,9 +183,11 @@ export function extractSignals(html: string): PageSignals {
     const property = (attr(a, "property") ?? "").toLowerCase();
     const value = cleanText(attr(a, "content") ?? "");
     if (attr(a, "charset") !== null) signals.charset = true;
-    if ((attr(a, "http-equiv") ?? "").toLowerCase() === "content-type" && /utf-?8/i.test(value)) signals.charset = true;
+    if ((attr(a, "http-equiv") ?? "").toLowerCase() === "content-type" && /utf-?8/i.test(value))
+      signals.charset = true;
     if (name === "description") signals.metaDescriptions.push(value);
-    else if (name === "robots" || name === "googlebot") signals.metaRobots.push(value.toLowerCase());
+    else if (name === "robots" || name === "googlebot")
+      signals.metaRobots.push(value.toLowerCase());
     else if (name === "viewport") signals.viewport = value;
     if (property.startsWith("og:")) signals.og[property] = value;
     else if (name.startsWith("twitter:")) signals.og[name] = value;
@@ -217,7 +224,11 @@ export function extractSignals(html: string): PageSignals {
     const href = (attr(a, "href") ?? "").trim();
     if (!href) continue;
     const aria = attr(a, "aria-label");
-    signals.links.push({ href, text: cleanText(stripTags(m[2] ?? "")) || cleanText(aria ?? ""), rel: attr(a, "rel") });
+    signals.links.push({
+      href,
+      text: cleanText(stripTags(m[2] ?? "")) || cleanText(aria ?? ""),
+      rel: attr(a, "rel"),
+    });
   }
 
   const body = /<body\b[^>]*>([\s\S]*)<\/body\s*>/i.exec(content);
@@ -264,7 +275,8 @@ export function parseRobots(text: string): RobotsRules {
     if (key === "allow" && value) current.allow.push(value);
   }
   const pick =
-    groups.find((g) => g.agents.some((a) => a === "googlebot")) ?? groups.find((g) => g.agents.includes("*"));
+    groups.find((g) => g.agents.some((a) => a === "googlebot")) ??
+    groups.find((g) => g.agents.includes("*"));
   return { disallow: pick?.disallow ?? [], allow: pick?.allow ?? [], sitemaps };
 }
 
@@ -273,7 +285,12 @@ function ruleMatches(rule: string, path: string): number {
   const anchored = rule.endsWith("$");
   const body = anchored ? rule.slice(0, -1) : rule;
   const re = new RegExp(
-    "^" + body.split("*").map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*") + (anchored ? "$" : ""),
+    "^" +
+      body
+        .split("*")
+        .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+        .join(".*") +
+      (anchored ? "$" : ""),
   );
   return re.test(path) ? body.length : -1;
 }

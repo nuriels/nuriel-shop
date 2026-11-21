@@ -73,6 +73,12 @@ import {
 import { SafeError } from "@/platform/ai/safe-error";
 import * as store from "@/platform/ai/store.server";
 
+/**
+ * מנוע ה-SEO (הפקה ברקע): "משתמש" קבוע רק לדלי המכסה למשתמש בדקה (ai_quota_take) — המכסה של העסק, "אותה
+ * בקשה", כלל המערכת ותקרת התקציב חלים כרגיל. לא נרשם כפעולה של אדם (seo_run_start מקבל NULL).
+ */
+export const SEO_SYSTEM_USER = "00000000-0000-4000-8000-00000000a1e0";
+
 /** בקשת הפקה (הצעות בסיסיות / AI / ניסוח אחר) — למשתמש בדקה, לפני השאילתות במסד */
 export const SEO_GATE_PER_MINUTE = 10;
 /**
@@ -271,7 +277,8 @@ export async function aiAvailability(
 // ------------------------------------------------------------------ הפקה
 
 type RunKind = "template" | "ai";
-type RunScope = "initial" | "request";
+/** auto — a background run of the SEO engine (new units / packages / images): empty fields only, like initial */
+type RunScope = "initial" | "request" | "auto";
 
 async function startRun(
   rpc: NonNullable<SeoDeps["rpc"]>,
@@ -281,7 +288,8 @@ async function startRun(
 ): Promise<string | null> {
   return rpc<string | null>("seo_run_start", {
     _tenant: caller.tenantId,
-    _actor: caller.userId,
+    // a background run has no person behind it — not recorded as anyone's action
+    _actor: caller.userId === SEO_SYSTEM_USER ? null : caller.userId,
     _kind: kind,
     _scope: scope,
   });
@@ -361,7 +369,7 @@ async function runAi(
   let calls = 0;
   let succeeded = 0;
   let stop: SeoGenerateResult | null = null;
-  const onlyEmpty = scope === "initial";
+  const onlyEmpty = scope !== "request";
 
   // כל קריאה: מכסה → דגם → בדיקה → הצעות → יומן
   const call = async (
@@ -437,7 +445,12 @@ async function runAi(
         // תמונות שכבר יש להן הצעה ממתינה — דילוג (כך כל בקשה מתקדמת בגלריה)
         const pending = new Set(
           loaded.view.proposals
-            .filter((p) => p.status === "pending" && p.target_kind === "media" && p.target_id)
+            .filter(
+              (p) =>
+                (p.status === "pending" || p.status === "later") &&
+                p.target_kind === "media" &&
+                p.target_id,
+            )
             .map((p) => p.target_id!),
         );
         const images = altCandidates(loaded.site, {
@@ -576,4 +589,68 @@ export async function handleSeoGenerate(
     return runAi(rpc, caller, loaded, "request", [{ what: "reword", proposal: p }], deps);
   }
   throw new SafeError("בקשה לא תקינה");
+}
+
+// ------------------------------------------------------------------ מנוע ה-SEO: הפקה ברקע (בלי דפדפן)
+
+/**
+ * הפקת AI ברקע — מהעובד של מנוע ה-SEO (src/platform/seo/worker.server.ts), רק כש-SEO_BACKGROUND_AI=on ורק
+ * לעסק עם חבילת NURIEL AI – Hospitality בתוקף (evaluateAccess, בדיוק כמו בבקשה מהמסך). אותו צינור, אותו
+ * מפתח, אותו דגם, אותן מכסות ואותו יומן. רק לשדות ריקים, ורק כהצעות ממתינות.
+ */
+export async function runBackgroundAi(
+  tenantId: string,
+  data: { site: PublicSite; design: SiteDesign },
+  opts: {
+    scope: "initial" | "entity";
+    entityType: string | null;
+    rpc: <T>(fn: string, args: Record<string, unknown>) => Promise<T>;
+  },
+  deps: SeoDeps = {},
+): Promise<SeoGenerateResult> {
+  const caller: AiCaller = {
+    userId: SEO_SYSTEM_USER,
+    tenantId,
+    role: "owner",
+    platformAdmin: false,
+  };
+  const open = await opts.rpc<{
+    open: {
+      target_kind: SeoProposal["target_kind"];
+      target_id: string | null;
+      field: SeoProposal["field"];
+      status: SeoProposal["status"];
+    }[];
+    runs: SeoProposalsView["runs"];
+  }>("seo_open_targets", { _tenant: tenantId });
+  const loaded: Loaded = {
+    site: data.site,
+    design: data.design,
+    view: {
+      proposals: open.open.map((o, i) => ({
+        id: `open-${i}`,
+        target_kind: o.target_kind,
+        target_id: o.target_id,
+        field: o.field,
+        proposed: "",
+        base: null,
+        source: "template" as const,
+        status: o.status,
+        applied: null,
+        created_at: "",
+        decided_at: null,
+        target_label: null,
+        current: null,
+      })),
+      runs: open.runs,
+    },
+  };
+  if (opts.scope === "initial" && loaded.view.runs.ai_initial) return { status: "already" };
+  const jobs: AiJob[] =
+    opts.scope === "initial"
+      ? [{ what: "text" }, { what: "alt", onlyEmpty: true }]
+      : opts.entityType === "media"
+        ? [{ what: "alt", onlyEmpty: true }]
+        : [{ what: "text" }];
+  return runAi(opts.rpc, caller, loaded, opts.scope === "initial" ? "initial" : "auto", jobs, deps);
 }

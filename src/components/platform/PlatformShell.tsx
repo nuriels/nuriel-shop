@@ -1,6 +1,16 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { BedDouble, Gem, Globe, LifeBuoy, Lock, Sparkles, Store, UserPlus } from "lucide-react";
+import {
+  BedDouble,
+  Gem,
+  Globe,
+  LifeBuoy,
+  Lock,
+  SearchCheck,
+  Sparkles,
+  Store,
+  UserPlus,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthState } from "@/hooks/useAuthState";
 import { FORBIDDEN_PAGE } from "@/lib/blocked-pages";
@@ -16,7 +26,7 @@ export function PlatformShell({
   active,
   children,
 }: {
-  active: "stores" | "support" | "plans" | "upgrades" | "ai";
+  active: "stores" | "support" | "plans" | "upgrades" | "ai" | "seo";
   children: (props: { userId: string }) => ReactNode;
 }) {
   const { session, loading } = useAuthState();
@@ -79,6 +89,14 @@ export function PlatformShell({
                   icon={<Sparkles className="size-4" />}
                 >
                   ניהול תוסף AI
+                </NavLink>
+                {/* NURIEL AI SEO ENGINE: מספרים לכל עסק (ציון בדיקה, הצעות פתוחות, Search Console) — בלי מידע פרטי */}
+                <NavLink
+                  to="/platform/seo"
+                  active={active === "seo"}
+                  icon={<SearchCheck className="size-4" />}
+                >
+                  SEO
                 </NavLink>
                 {/* מסך של מנוע האירוח — רק קישור (הקוד שלו לא מיובא לכאן). שלב א' 4: אתרי האירוח והחבילות
                     שלהם — רק שם (לא ברשימת החנויות ולא בחבילות של החנויות) */}
@@ -154,6 +172,7 @@ function NavLink({
     | "/platform/plans"
     | "/platform/upgrades"
     | "/platform/ai"
+    | "/platform/seo"
     | "/platform/hospitality"
     | "/platform/websites";
   active: boolean;

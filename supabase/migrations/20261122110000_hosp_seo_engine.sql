@@ -433,8 +433,27 @@ BEGIN
     _added := _added + 1;
     IF _apply THEN _applied := _applied + 1; END IF;
   END LOOP;
-  RETURN jsonb_build_object('added', _added, 'skipped', _skipped, 'applied', _applied);
+  -- 'applied' only when something was filled automatically (the shape stays what migration 201's callers expect)
+  RETURN jsonb_build_object('added', _added, 'skipped', _skipped)
+         || CASE WHEN _applied > 0 THEN jsonb_build_object('applied', _applied) ELSE '{}'::jsonb END;
 END $$;
+
+-- the app server's background runs: which fields already have an OPEN proposal (so a run does not spend AI on
+-- them again) and whether the initial runs happened — no texts, no customer data
+CREATE OR REPLACE FUNCTION hospitality.seo_open_targets(_tenant uuid)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _t uuid := hospitality._seo_server_tenant(_tenant);
+BEGIN
+  RETURN jsonb_build_object(
+    'open', COALESCE((SELECT jsonb_agg(jsonb_build_object('target_kind', p.target_kind, 'target_id', p.target_id,
+                                                          'field', p.field, 'status', p.status))
+                        FROM hospitality.seo_proposals p WHERE p.tenant_id = _t AND p.status IN ('pending', 'later')),
+                     '[]'::jsonb),
+    'runs', hospitality.seo_runs_state(_t));
+END $$;
+REVOKE ALL ON FUNCTION hospitality.seo_open_targets(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION hospitality.seo_open_targets(uuid) TO service_role;
 
 -- ------------------------------------------------------------
 -- 5. Staff (settings permission): the list, decide (+ later), restore

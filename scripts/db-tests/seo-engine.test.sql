@@ -256,7 +256,7 @@ SELECT pg_temp.hadd(:'sa', :'run1', jsonb_build_array(
   jsonb_build_object('target_kind', 'site', 'field', 'seo_title', 'text', 'מנוע SEO A — צימרים'),
   jsonb_build_object('target_kind', 'media', 'target_id', :'img', 'field', 'alt', 'text', 'נוף מהמרפסת')), false) AS add1 \gset
 SELECT tests.check('seo engine: proposals enter as PENDING only — the package''s own description is never a target, another business''s item is skipped, the reason is kept',
-  format($$SELECT (%3$L::jsonb ->> 'added')::int = 4 AND (%3$L::jsonb ->> 'skipped')::int = 2 AND (%3$L::jsonb ->> 'applied')::int = 0
+  format($$SELECT (%3$L::jsonb ->> 'added')::int = 4 AND (%3$L::jsonb ->> 'skipped')::int = 2 AND NOT (%3$L::jsonb ? 'applied')
            AND (SELECT reason FROM hospitality.seo_proposals WHERE id = pg_temp.hpid(%1$L, 'package', %2$L, 'seo_title'))
                = 'כותרת קצרה עם שם החבילה — מה שאנשים מחפשים'
            AND (SELECT seo_title IS NULL AND description = 'תיאור שבעל העסק כתב' FROM hospitality.packages WHERE id = %2$L)$$,
