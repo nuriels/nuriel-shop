@@ -203,8 +203,9 @@ export const sitePackageRoute = {
         ...unit,
         name: pkg.name,
         description: pkg.description ?? unit.description,
-        seo_title: null,
-        seo_description: null,
+        // מיגרציה 204: הכותרת והתיאור לגוגל של החבילה (רק אחרי אישור של בעל העסק); ריק — ברירת המחדל
+        seo_title: pkg.seo_title ?? null,
+        seo_description: pkg.seo_description ?? null,
         media: packageImages(pkg, site),
       },
       `${SITE_PATH}/packages/${seg(pkg.slug)}`,

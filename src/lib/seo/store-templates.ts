@@ -76,7 +76,8 @@ export function firstSentences(text: string | null | undefined, max: number): st
     out = next;
   }
   if (out.length >= 40) return out;
-  if (t.length <= max) return t;
+  // a very short owner text is not a description — the template sentence is used instead
+  if (t.length <= max) return t.length >= 40 ? t : null;
   const cut = t.slice(0, max - 1);
   const at = cut.lastIndexOf(" ");
   return at >= 40 ? `${cut.slice(0, at)}…` : null;

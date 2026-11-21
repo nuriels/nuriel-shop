@@ -82,6 +82,16 @@ services:
       IMPORT_IMAGE_ALLOW_HOSTS: ${IMPORT_IMAGE_ALLOW_HOSTS:-}
       # "off" מכבה את מתזמן התראות החידוש של תוסף ה-AI בתהליך הזה (למשל בשרת שני). ריק = פועל
       AI_RENEWAL_JOB: ${AI_RENEWAL_JOB:-}
+      # NURIEL AI SEO ENGINE: "off" מכבה את עובד ה-SEO בתהליך הזה (בדיקות, הצעות, Search Console). ריק = פועל
+      SEO_WORKER: ${SEO_WORKER:-}
+      # "on" — ההפקה ברקע (עסק / יחידה / מוצר חדשים) רשאית להשתמש ב-NURIEL AI, רק לעסק עם חבילה בתוקף ובמכסות
+      # שלו. ריק = ברקע רק הצעות בסיסיות (בלי AI); בעל העסק עדיין יכול לבקש הצעות AI מהמסך
+      SEO_BACKGROUND_AI: ${SEO_BACKGROUND_AI:-}
+      # Google Search Console (קריאה בלבד): לקוח OAuth של הפלטפורמה. ריק = החיבור הישיר לא מוצע (ייבוא CSV עובד)
+      GSC_OAUTH_CLIENT_ID: ${GSC_OAUTH_CLIENT_ID:-}
+      GSC_OAUTH_CLIENT_SECRET: ${GSC_OAUTH_CLIENT_SECRET:-}
+      # הכתובת שאליה Google מחזיר אחרי האישור (/api/seo/gsc/callback). ריק = PLATFORM_ADMIN_HOST
+      GSC_OAUTH_REDIRECT_HOST: ${GSC_OAUTH_REDIRECT_HOST:-}
     healthcheck:
       # R-4: /healthz (חיות, בלי מסד). הגיבוי ל-/robots.txt — רק לתמונה ישנה בחזרה לאחור (ראו Dockerfile)
       test: ["CMD", "node", "-e", "const u='http://127.0.0.1:3000',ok=p=>fetch(u+p).then(r=>r.ok).catch(()=>false);ok('/healthz').then(a=>a||ok('/robots.txt')).then(a=>process.exit(a?0:1))"]

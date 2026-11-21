@@ -25,6 +25,9 @@ export interface PublicPackage {
   /** תמונות מהגלריות של האתר (יחידה / מתחם / אתר) — לפי הסדר שנבחר */
   media_ids: string[];
   sort_order: number;
+  /** מיגרציה 204: הכותרת והתיאור בתוצאות של גוגל (ריק — שם החבילה ומשפט הפתיחה של התיאור) */
+  seo_title?: string | null;
+  seo_description?: string | null;
   /** מדיניות ביטול משלה (אחרת — כמו ביחידה) */
   policy: PublicPolicy | null;
   /**

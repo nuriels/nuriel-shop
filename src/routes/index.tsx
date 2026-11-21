@@ -4,7 +4,7 @@ import { RestGreetingCard } from "@/components/RestGreetingCard";
 import { REST_CHECKOUT_MESSAGE } from "@/lib/rest-window";
 import { DEFAULT_STORE_NAME } from "@/lib/branding";
 import { getSiteSeo } from "@/lib/platform.functions";
-import { getCategoryParents } from "@/lib/seo.functions";
+import { getCategoryParents, getCategorySeo } from "@/lib/seo.functions";
 import { breadcrumbTrail, categoryTrail } from "@/lib/seo-urls";
 import { createFileRoute, Link, useLoaderData } from "@tanstack/react-router";
 import { RefreshCw, Search } from "lucide-react";
@@ -96,7 +96,11 @@ export const Route = createFileRoute("/")({
   // פעם אחת לטעינת עמוד — מעבר בין קטגוריות לא טוען שוב (התגיות לפי ?category=).
   // חלק 31: גם קטגוריות האב — לפירורי לחם היררכיים בעמודי הקטגוריה
   loader: async ({ context }) => {
-    const [site, categoryParents] = await Promise.all([getSiteSeo(), getCategoryParents()]);
+    const [site, categoryParents, categorySeo] = await Promise.all([
+      getSiteSeo(),
+      getCategoryParents(),
+      getCategorySeo().catch(() => ({}) as Awaited<ReturnType<typeof getCategorySeo>>),
+    ]);
     // דף הנחיתה: המחירים וימי הניסיון מהמסד (רק בשער; בחנויות — בלי קריאה נוספת)
     const landing = site.isPortal ? await getPortalLanding().catch(() => null) : null;
     // הקטלוג כפי שאורח רואה אותו — רק בטעינה הראשונה (בשרת), רק בחנות (לא בשער)
@@ -104,7 +108,7 @@ export const Route = createFileRoute("/")({
       !site.isPortal && isServerRender() && context.hostMode.siteType === "ecommerce"
         ? await getStorefrontSeed({ data: { catalog: true, banners: true } })
         : null;
-    return { ...site, categoryParents, landing, seed };
+    return { ...site, categoryParents, categorySeo, landing, seed };
   },
   staleTime: Infinity,
   // הקטגוריה והתצוגה בכתובת: כל בחירה נרשמת בהיסטוריה, ו"חזור" בדפדפן מחזיר
@@ -154,7 +158,13 @@ export const Route = createFileRoute("/")({
     const siteName = site.siteName || DEFAULT_STORE_NAME;
     const category = (match.search as CatalogSearch).category;
     if (category) {
-      const meta = categoryMeta(siteName, category);
+      // NURIEL AI SEO ENGINE: הכותרת / התיאור שבעל החנות אישר לקטגוריה; אחרת — התבנית
+      const template = categoryMeta(siteName, category);
+      const own = site.categorySeo?.[category];
+      const meta = {
+        title: own?.title || template.title,
+        description: own?.description || template.description,
+      };
       const url = categoryUrl(schema.url, category);
       const trail = categoryTrail(category, site.categoryParents ?? {});
       return {

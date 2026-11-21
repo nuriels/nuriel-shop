@@ -164,3 +164,34 @@ export const getCategoryParents = createServerFn({ method: "GET" }).handler(
     return categoryParentsFrom(data);
   },
 );
+
+/**
+ * NURIEL AI SEO ENGINE (מיגרציה 203): כותרת ותיאור לגוגל לקטגוריה — רק מה שבעל החנות אישר (או מילא בעצמו).
+ * קטגוריה בלי — נשארת התבנית (categoryMeta). רק החנות של הבקשה.
+ */
+export const getCategorySeo = createServerFn({ method: "GET" }).handler(
+  async (): Promise<Record<string, { title: string | null; description: string | null }>> => {
+    const { isPlatformRequest, maybeCurrentTenant } =
+      await import("@/integrations/supabase/tenant.server");
+    const tenant = maybeCurrentTenant();
+    if (isPlatformRequest() || !tenant) return {};
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("categories")
+      .select("name, seo_title, seo_description")
+      .eq("tenant_id", tenant.id)
+      .or("seo_title.not.is.null,seo_description.not.is.null");
+    if (error) return {}; // before migration 203 the columns do not exist — the template stays
+    const out: Record<string, { title: string | null; description: string | null }> = {};
+    for (const c of (data ?? []) as unknown as {
+      name: string;
+      seo_title: string | null;
+      seo_description: string | null;
+    }[])
+      out[c.name] = {
+        title: c.seo_title?.trim() || null,
+        description: c.seo_description?.trim() || null,
+      };
+    return out;
+  },
+);

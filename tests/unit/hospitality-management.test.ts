@@ -243,6 +243,7 @@ describe("navigation", () => {
       "emails",
       "channels",
       "website",
+      "seo",
       "documents",
       "contracts",
       "setup",

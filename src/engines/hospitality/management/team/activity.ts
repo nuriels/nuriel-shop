@@ -222,6 +222,11 @@ export function activityText(entry: ActivityEntry): string {
       return `${actor} אישר/ה הצעה לשיפור בגוגל ${target}`;
     case "seo.proposal_rejected":
       return `${actor} ביטל/ה הצעה לשיפור בגוגל ${target}`;
+    // מיגרציה 204: נשמרה "לאחר כך" / שוחזרה לערך שלפני האישור
+    case "seo.proposal_later":
+      return `${actor} שמר/ה לאחר כך הצעה לשיפור בגוגל ${target}`;
+    case "seo.proposal_reverted":
+      return `${actor} שחזר/ה ערך קודם במקום הצעה שאושרה ${target}`;
     case "support.opened":
       return `${actor} פתח/ה פנייה לתמיכה ${target}`;
     case "support.closed":

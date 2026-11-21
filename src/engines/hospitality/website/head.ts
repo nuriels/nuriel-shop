@@ -172,14 +172,30 @@ export function siteUnitHead(site: PublicSite, unit: PublicUnit, path: string): 
   const url = absolute(site, path);
   // A1: תמונת היחידה; יחידה בלי תמונה — הלוגו של העסק (לא תמונה ריקה ולא האייקון הכללי)
   const logoId = normalizeDesign(site.design?.document ?? null, site.design?.theme).logo;
+  const home = absolute(site, SITE_PATH);
+  // NURIEL AI SEO ENGINE: פירורי לחם לגוגל (דף הבית ← העמוד) — רק כשיש כתובת קנונית אמיתית
+  const crumbs =
+    url && home
+      ? {
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: site.business.name, item: home },
+            { "@type": "ListItem", position: 2, name: unit.name, item: url },
+          ],
+        }
+      : null;
   return {
-    meta: base({
-      title,
-      description,
-      image: photo(unitCover(unit, site)?.url) ?? logoShareImage(site, logoId),
-      url,
-      siteName: site.business.name,
-    }),
+    meta: [
+      ...base({
+        title,
+        description,
+        image: photo(unitCover(unit, site)?.url) ?? logoShareImage(site, logoId),
+        url,
+        siteName: site.business.name,
+      }),
+      ...(crumbs ? [{ "script:ld+json": crumbs } as unknown as Meta] : []),
+    ],
     links: canonical(url),
   };
 }
