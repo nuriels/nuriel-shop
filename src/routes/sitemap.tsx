@@ -29,8 +29,9 @@ function useActiveCategoryCounts(): Map<string, number> | null {
   const [direct, setDirect] = useState<Map<string, number> | null>(null);
   useEffect(() => {
     let alive = true;
-    void fetchAllRows<{ category: string }>((from, to) =>
-      supabase.rpc("get_catalog").select("category").order("id").range(from, to),
+    // המיון לפי id דורש את id בבחירה (בלעדיו PostgREST מחזיר 400: "column record.id does not exist")
+    void fetchAllRows<{ id: string; category: string }>((from, to) =>
+      supabase.rpc("get_catalog").select("id,category").order("id").range(from, to),
     ).then(({ data, error }) => {
       if (!alive) return;
       // בלי גישה לקטלוג (למשל תקלה) — מציגים את כל הקטגוריות

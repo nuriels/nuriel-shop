@@ -420,6 +420,24 @@ export const he = {
       "קראתי ואני מאשר/ת את תנאי החבילה ואת תנאי הביטול שלמעלה (תשלום והחזר — לפי מה שמופיע כאן)",
     line: (name: string) => `חבילה: ${name}`,
     row: "חבילה",
+    // מיגרציה 202: חדרים נוספים לחבילה
+    addonRole: "חדר נוסף לחבילה",
+    addonsLine: (price: string) =>
+      `אפשר להוסיף חדר למלוות או למשפחה — ${price} ללילה לחדר, לפי זמינות`,
+    addonsTitle: "חדר נוסף למלוות או למשפחה",
+    addonsHint: (price: string, nights: number) =>
+      `אפשר להוסיף חדר במתחם לאותם לילות — ${price} ללילה לחדר${nights > 1 ? `, ל-${nights} הלילות` : ""}. מוצגים רק החדרים הפנויים בתאריכים שבחרתם.`,
+    addonsPickDate: "בחרו תאריך הגעה כדי לראות אם יש חדר נוסף פנוי",
+    addonsLoading: "בודקים אילו חדרים פנויים…",
+    addonsNone: "אין חדר נוסף פנוי בתאריכים האלה — החבילה עצמה זמינה",
+    addonRoomPrice: (total: string, nights: number, nightly: string) =>
+      nights > 1 ? `${total} ל-${nights} לילות (${nightly} ללילה)` : `${total} ללילה`,
+    addRoom: (name: string) => `הוספת ${name} כחדר נוסף`,
+    addonsMax: (n: number) => (n === 1 ? "אפשר להוסיף חדר אחד" : `אפשר להוסיף עד ${n} חדרים`),
+    addonsSummary: "חדרים נוספים",
+    grandTotal: "סה״כ לחבילה ולחדרים",
+    depositAll: (amount: string) => `מקדמה לכל ההזמנה: ${amount}`,
+    roomTaken: "החדר כבר לא פנוי — הסירו אותו או בחרו תאריך אחר",
   },
   // שלב א' 2: "ההזמנות שלי" — האזור האישי (כניסה בקוד למייל)
   account: {

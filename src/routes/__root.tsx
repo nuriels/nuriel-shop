@@ -8,6 +8,7 @@ import {
   Scripts,
   redirect,
   type ErrorComponentProps,
+  ScriptOnce,
 } from "@tanstack/react-router";
 import { type ReactNode } from "react";
 
@@ -28,6 +29,7 @@ import { canonicalUrl } from "@/lib/seo-urls";
 import { EngineSiteShell } from "@/app/site-shell";
 import { engineRouteRedirect } from "@/app/site-routes";
 import { engineSiteData, engineSiteLinks, engineSiteMeta } from "@/app/site-head";
+import { SIGNED_IN_HINT_SCRIPT } from "@/lib/price-hold";
 
 // גופני אתרי המנוע (Hospitality): Heebo + Frank Ruhl Libre, משתנים, עברית ולטינית — public/fonts/hosp
 const ENGINE_FONT_LINKS = [
@@ -239,8 +241,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="he" dir="rtl">
+    // suppressHydrationWarning: הסקריפט ב-<head> מוסיף ל-<html> את data-signed-in לפני ש-React מתחבר לעמוד
+    <html lang="he" dir="rtl" suppressHydrationWarning>
       <head>
+        {/* לפני הציור הראשון: יש התחברות שמורה בדפדפן? — מחיר של אורח מה-HTML לא יוצג עד שהמחירון
+            של מי שמחובר נטען (lib/price-hold.ts). רק בשרת; הסקריפט מוחק את עצמו */}
+        <ScriptOnce>{SIGNED_IN_HINT_SCRIPT}</ScriptOnce>
         <HeadContent />
       </head>
       <body>

@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import { VariantPicker, useVariantSelection } from "@/components/VariantPicker";
 import type { CatalogVariant } from "@/lib/variants";
+import { usePriceAttr } from "@/lib/price-hold";
 
 /** פיקדון ליחידת כמות אחת (כפי שנספרת בסל) */
 function depositPerQuantityUnit(item: CatalogItem): number {
@@ -50,6 +51,7 @@ export function QuantityPicker({
   /** מחיר ליחידה לחישוב הסכום (וריאציה עם מחיר משלה); ברירת מחדל — מחיר המוצר */
   price?: number | null;
 }) {
+  const priceAttr = usePriceAttr();
   const step = packStep(item);
   // מינימום להזמנה (נפרד מהמארזים): לא יורדים ממנו; בלי מינימום — ממארז / יחידה אחת
   const minPacks = Math.max(1, minimumQuantity(item) / step);
@@ -139,7 +141,7 @@ export function QuantityPicker({
         </div>
       </div>
       {lineTotal !== null && (
-        <p className="text-sm text-muted-foreground">
+        <p data-price={priceAttr} className="text-sm text-muted-foreground">
           סה"כ: <span className="numeric font-bold text-foreground">{formatIls(lineTotal)}</span>
           {deposit > 0 && <span className="numeric"> + פיקדון {formatIls(deposit)}</span>}
         </p>
@@ -150,13 +152,17 @@ export function QuantityPicker({
 
 /** שורת מידע על המארז: "נמכר במארזים של 24 · מינימום 24 יחידות" */
 export function PackNote({ item, className }: { item: CatalogItem; className?: string }) {
+  const priceAttr = usePriceAttr();
   const step = packStep(item);
   if (step <= 1) return null;
   return (
     <p className={className ?? "text-sm text-muted-foreground"}>
       נמכר במארזים של {step} יחידות, מינימום {step}.
       {item.price !== null && (
-        <span className="numeric"> מחיר מארז: {formatIls(item.price * step)}</span>
+        <span data-price={priceAttr} className="numeric">
+          {" "}
+          מחיר מארז: {formatIls(item.price * step)}
+        </span>
       )}
     </p>
   );
@@ -204,6 +210,7 @@ export function QuantityDialog({
   addLabel?: string;
   onAdd: (item: CatalogItem, units: number, variant: CatalogVariant | null) => void;
 }) {
+  const priceAttr = usePriceAttr();
   const [units, setUnits] = useState(1);
   const choice = useVariantSelection(item, preset);
 
@@ -244,7 +251,7 @@ export function QuantityDialog({
               <DialogTitle className="line-clamp-2 break-words text-base font-bold leading-snug">
                 {item.name}
               </DialogTitle>
-              <DialogDescription className="numeric">
+              <DialogDescription data-price={priceAttr} className="numeric">
                 {choice.price !== null ? (
                   <>
                     {formatIls(choice.price)} ליחידה <VatNote />

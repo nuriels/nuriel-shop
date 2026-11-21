@@ -317,27 +317,43 @@ function Booking({ b }: { b: BookingDetail }) {
         )}
       </Section>
 
-      {b.package && (
-        <Section title={`חבילה — ${b.package.name}`}>
-          <div className="space-y-2 text-sm" data-testid="booking-package">
+      {b.package && b.package.role === "addon" ? (
+        <Section title={`חדר נוסף לחבילה — ${b.package.name}`}>
+          <div className="space-y-2 text-sm" data-testid="booking-package-addon">
             <p>
-              {b.package.kind === "special" ? "חבילה מיוחדת" : "חבילת אירוח"} ·{" "}
-              {b.package.nights === 1 ? "לילה אחד" : `${b.package.nights} לילות`} · עד{" "}
-              {b.package.max_guests} אורחים · {money(Number(b.package.price), b.currency)} לכל
-              החבילה
+              חדר נוסף שהאורח הוסיף לחבילה, באותם לילות ·{" "}
+              {money(Number(b.package.addon_nightly_price ?? 0), b.currency)} ללילה ·{" "}
+              {money(Number(b.total), b.currency)} לחדר
             </p>
-            {b.package.terms && (
-              <p className="whitespace-pre-line text-muted-foreground">
-                <span className="font-medium text-foreground">תנאי החבילה: </span>
-                {b.package.terms}
-              </p>
-            )}
             <p className="text-xs text-muted-foreground">
-              כך האורח הזמין ואישר. שינוי תאריכים מחשב מחיר לפי התעריפים — אפשר לקבוע את מחיר החבילה
-              ידנית בשינוי.
+              החבילה והחדרים נשלחו בבקשה אחת — אישור או דחייה מהכרטיס "בקשה אחת לכמה חדרים" חלים על
+              כולם. תשלומים וביטול — לכל הזמנה בנפרד.
             </p>
           </div>
         </Section>
+      ) : (
+        b.package && (
+          <Section title={`חבילה — ${b.package.name}`}>
+            <div className="space-y-2 text-sm" data-testid="booking-package">
+              <p>
+                {b.package.kind === "special" ? "חבילה מיוחדת" : "חבילת אירוח"} ·{" "}
+                {b.package.nights === 1 ? "לילה אחד" : `${b.package.nights} לילות`} · עד{" "}
+                {b.package.max_guests} אורחים · {money(Number(b.package.price), b.currency)} לכל
+                החבילה
+              </p>
+              {b.package.terms && (
+                <p className="whitespace-pre-line text-muted-foreground">
+                  <span className="font-medium text-foreground">תנאי החבילה: </span>
+                  {b.package.terms}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                כך האורח הזמין ואישר. שינוי תאריכים מחשב מחיר לפי התעריפים — אפשר לקבוע את מחיר
+                החבילה ידנית בשינוי.
+              </p>
+            </div>
+          </Section>
+        )
       )}
 
       <Section title="סוג העסקה והמסמכים שאושרו">
@@ -396,7 +412,11 @@ function Booking({ b }: { b: BookingDetail }) {
           ]}
         />
         {b.package ? (
-          <p className="mt-2 text-sm text-muted-foreground">מחיר החבילה (מתחלק בין הלילות).</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {b.package.role === "addon"
+              ? "מחיר קבוע ללילה לחדר נוסף בחבילה (לא מהתעריפים)."
+              : "מחיר החבילה (מתחלק בין הלילות)."}
+          </p>
         ) : (
           b.price_manual && <p className="mt-2 text-sm text-muted-foreground">המחיר נקבע ידנית.</p>
         )}

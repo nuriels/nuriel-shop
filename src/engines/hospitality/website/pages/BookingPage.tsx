@@ -3,6 +3,8 @@
 // המחיר, הזמינות והתנאים נבדקים שוב במסד בזמן השליחה (policy_hash; EXCLUDE נגד הזמנה כפולה).
 // מזהה בקשה קבוע לכל ניסיון — לחיצה כפולה / רענון לא יוצרים שתי בקשות.
 // מיגרציה 44: אפשר להוסיף חדרים נוספים באותם תאריכים — בקשה אחת לכל החדרים (כולם או אף אחד).
+// מיגרציה 202: בחבילה עם חדרים נוספים (למשל חבילת כלה) — חדר למלוות במחיר קבוע ללילה, רק כשהוא פנוי;
+// הסכום הכולל מחושב במסד, והחבילה וכל החדרים נשמרים יחד או אף אחד.
 // אימות נגד בוטים (D1): אתגר שנפתר ברקע (lib/bot-check) + שדה מלכודת מוסתר — בלי שום פעולה
 // מהאורח ובלי עוגיות.
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
@@ -12,7 +14,9 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { cn } from "@/platform/ui";
 import {
   hospitalitySiteFreeUnits,
+  hospitalitySitePackageAddons,
   hospitalitySitePackageQuote,
+  hospitalitySitePackageRoomsQuote,
   hospitalitySiteQuote,
   hospitalitySiteQuoteType,
   hospitalitySiteRequestBooking,
@@ -22,7 +26,12 @@ import {
   hospitalitySitePaymentMethods,
 } from "../../api/website.functions";
 import type { GroupRequestResult, Quote } from "../../types/domain";
-import type { PackageQuote, PublicPackage } from "../../types/packages";
+import type {
+  PackageQuote,
+  PackageRoomChoice,
+  PackageRoomsQuote,
+  PublicPackage,
+} from "../../types/packages";
 import { CAPTCHA_RETRY, TRAP_FIELD } from "../../security/messages";
 import type { PublicUnit } from "../../types/website";
 import { AvailabilityCalendar, type DateRange } from "../components/AvailabilityCalendar";
@@ -897,6 +906,17 @@ function QuoteDetails({
   );
 }
 
+const NO_ROOMS: {
+  choice: PackageRoomChoice;
+  unit: { slug: string; name: string };
+  total: number;
+}[] = [];
+
+/** מיגרציה 202: הצעה משותפת לחבילה ולחדרים הנוספים (ולא הצעה לחבילה בלבד) */
+function isRoomsQuote(q: PackageQuote | PackageRoomsQuote | undefined): q is PackageRoomsQuote {
+  return !!q && "grand_total" in q;
+}
+
 type GuestQuote = Pick<
   Quote,
   | "check_in"
@@ -915,6 +935,8 @@ function GuestForm({
   pkg,
   quote,
   extras,
+  packageRooms = NO_ROOMS,
+  grandTotal,
   idempotencyKey,
   onBack,
   onTermsChanged,
@@ -926,6 +948,14 @@ function GuestForm({
   quote: GuestQuote;
   /** מיגרציה 44: חדרים נוספים (עם הצעת המחיר שלהם) — בקשה אחת לכל החדרים */
   extras: (ExtraRoom & { unit: PublicUnit; quote: SiteQuote })[];
+  /** מיגרציה 202: חדרים נוספים לחבילה (המחיר — מההצעה המשותפת מהמסד) */
+  packageRooms?: {
+    choice: PackageRoomChoice;
+    unit: { slug: string; name: string };
+    total: number;
+  }[];
+  /** מיגרציה 202: הסכום הכולל של החבילה והחדרים (מהמסד) */
+  grandTotal?: number;
   idempotencyKey: string;
   onBack: () => void;
   onTermsChanged: () => void;
@@ -963,16 +993,20 @@ function GuestForm({
   // בלי פרטי האורח ובלי מספר ההזמנה
   const ga = useMemo(() => {
     const items: GaItem[] = pkg
-      ? [siteItem(pkg, "package", Number(quote.total))]
+      ? [
+          siteItem(pkg, "package", Number(pkg.price)),
+          ...packageRooms.map((r) => siteItem(r.unit, "unit", r.total)),
+        ]
       : [
           roomType
             ? siteItem(roomType.type, "room_type", Number(quote.total))
             : siteItem(unit, "unit", Number(quote.total)),
           ...extras.map((x) => siteItem(x.unit, "unit", Number(x.quote.total))),
         ];
-    const total = Number(quote.total) + extras.reduce((sum, x) => sum + Number(x.quote.total), 0);
+    const total =
+      grandTotal ?? Number(quote.total) + extras.reduce((sum, x) => sum + Number(x.quote.total), 0);
     return checkoutParams(items, total, quote.currency);
-  }, [pkg, roomType, unit, extras, quote.total, quote.currency]);
+  }, [pkg, roomType, unit, extras, packageRooms, grandTotal, quote.total, quote.currency]);
   // פעם אחת בכל כניסה לשלב הפרטים
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => gaEvent("begin_checkout", ga), []);
@@ -1000,8 +1034,12 @@ function GuestForm({
         // שלב א' 5: רק אם עדיין זמין לתאריכים (השרת בודק שוב)
         paymentMethod: chosenMethod && payOptions.includes(chosenMethod) ? chosenMethod : null,
       };
-      // שלב א' 7: חבילה — המסד מחשב את העזיבה, המחיר והתנאים לפי החבילה
-      if (pkg) return hospitalitySiteRequestPackage({ data: { packageId: pkg.id, ...guest } });
+      // שלב א' 7: חבילה — המסד מחשב את העזיבה, המחיר והתנאים לפי החבילה. מיגרציה 202: עם חדרים
+      // נוספים — אותה בקשה, והמסד שומר את החבילה ואת החדרים יחד או אף אחד
+      if (pkg)
+        return hospitalitySiteRequestPackage({
+          data: { packageId: pkg.id, rooms: packageRooms.map((r) => r.choice), ...guest },
+        });
       // מיגרציה 44: כמה חדרים — בקשה אחת (כל החדרים יחד או אף אחד)
       if (extras.length > 0)
         return hospitalitySiteRequestGroup({
@@ -1096,7 +1134,8 @@ function GuestForm({
               : (roomType?.type.name ?? unit.name)}{" "}
           · {stayText(quote.check_in, quote.check_out, t.locale)} ·{" "}
           {money(
-            Number(quote.total) + extras.reduce((s, x) => s + Number(x.quote.total), 0),
+            grandTotal ??
+              Number(quote.total) + extras.reduce((s, x) => s + Number(x.quote.total), 0),
             quote.currency,
           )}
         </p>
@@ -1349,6 +1388,10 @@ function PackageBooking({ pkg }: { pkg: PublicPackage }) {
   const [step, setStep] = useState<"choose" | "details">("choose");
   const keyRef = useRef(newKey());
   const period = packagePeriod(pkg, t.locale);
+  // מיגרציה 202: חדרים נוספים לחבילה (כשבעל העסק הגדיר) — מתאפסים כשמשנים תאריך
+  const addons = pkg.addons ?? null;
+  const [rooms, setRooms] = useState<PackageRoomChoice[]>([]);
+  useEffect(() => setRooms([]), [range.from]);
 
   useEffect(() => {
     void navigate({
@@ -1361,7 +1404,7 @@ function PackageBooking({ pkg }: { pkg: PublicPackage }) {
   // שינוי בבחירה = ניסיון חדש (מזהה בקשה חדש)
   useEffect(() => {
     keyRef.current = newKey();
-  }, [pkg.id, range.from, adults, children]);
+  }, [pkg.id, range.from, adults, children, rooms]);
 
   const maxAdults = Math.min(unit.max_adults ?? capacity, capacity);
   const maxChildren = Math.min(
@@ -1373,12 +1416,17 @@ function PackageBooking({ pkg }: { pkg: PublicPackage }) {
     if (children > maxChildren) setChildren(Math.max(0, maxChildren));
   }, [adults, children, maxAdults, maxChildren]);
 
-  const quote = useQuery({
-    queryKey: ["hospitality", "site", "package-quote", pkg.id, range.from, adults, children],
+  // חבילה עם חדרים נוספים — הצעה משותפת (גם בלי חדרים: אותו מחיר ואותם תנאים); בלי — כמו קודם
+  const quote = useQuery<PackageQuote | PackageRoomsQuote>({
+    queryKey: ["hospitality", "site", "package-quote", pkg.id, range.from, adults, children, rooms],
     queryFn: () =>
-      hospitalitySitePackageQuote({
-        data: { packageId: pkg.id, checkIn: range.from!, adults, children },
-      }),
+      addons
+        ? hospitalitySitePackageRoomsQuote({
+            data: { packageId: pkg.id, checkIn: range.from!, adults, children, rooms },
+          })
+        : hospitalitySitePackageQuote({
+            data: { packageId: pkg.id, checkIn: range.from!, adults, children },
+          }),
     enabled: !!range.from && site.booking_open,
     retry: false,
     staleTime: 30_000,
@@ -1386,6 +1434,7 @@ function PackageBooking({ pkg }: { pkg: PublicPackage }) {
 
   if (!site.booking_open) return <BookingClosed />;
   const q = quote.data;
+  const roomsQuote = isRoomsQuote(q) ? q : null;
   const canContinue = !!range.from && !!q?.available;
   const summary = (
     <PackageSummary pkg={pkg} unit={unit} quote={quote} adults={adults} children={children} />
@@ -1475,6 +1524,21 @@ function PackageBooking({ pkg }: { pkg: PublicPackage }) {
                   <p className="text-sm text-muted-foreground">{t.packages.upTo(capacity)}</p>
                 </div>
               </Field>
+              {addons && (
+                <Field title={t.packages.addonsTitle} index={4}>
+                  {range.from ? (
+                    <PackageAddonsPicker
+                      pkg={pkg}
+                      checkIn={range.from}
+                      rooms={rooms}
+                      quote={roomsQuote}
+                      onChange={setRooms}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t.packages.addonsPickDate}</p>
+                  )}
+                </Field>
+              )}
               <div className="lg:hidden">{summary}</div>
               <button
                 type="button"
@@ -1495,6 +1559,17 @@ function PackageBooking({ pkg }: { pkg: PublicPackage }) {
               pkg={pkg}
               quote={q!}
               extras={[]}
+              packageRooms={(roomsQuote?.rooms ?? []).map((r) => ({
+                choice: { unitId: r.unit_id, adults: r.adults, children: r.children },
+                unit: site.units.find((u) => u.id === r.unit_id) ?? {
+                  slug: r.unit_id,
+                  name: r.unit_name,
+                },
+                total: Number(r.total),
+              }))}
+              {...(roomsQuote && roomsQuote.rooms.length > 0
+                ? { grandTotal: Number(roomsQuote.grand_total) }
+                : {})}
               idempotencyKey={keyRef.current}
               onBack={() => setStep("choose")}
               onTermsChanged={() => {
@@ -1519,7 +1594,7 @@ function PackageSummary({
 }: {
   pkg: PublicPackage;
   unit: PublicUnit;
-  quote: ReturnType<typeof useQuery<PackageQuote>>;
+  quote: ReturnType<typeof useQuery<PackageQuote | PackageRoomsQuote>>;
   adults: number;
   children: number;
 }) {
@@ -1528,6 +1603,8 @@ function PackageSummary({
   const q = quote.data;
   const property = site.properties.find((p) => p.id === unit.property_id);
   const rules = property ? rulesLines(property, t) : [];
+  // מיגרציה 202: החבילה פנויה גם כשחדר נוסף שנבחר כבר לא פנוי (אז מסירים אותו)
+  const packageAvailable = isRoomsQuote(q) ? q.package_available : q?.available;
   return (
     <div className="rounded-[var(--radius)] border border-border bg-card p-6 shadow-[var(--site-shadow)]">
       <h2 className="font-display text-2xl">{t.book.summary}</h2>
@@ -1545,14 +1622,204 @@ function PackageSummary({
           ) : (
             <p className="text-sm text-muted-foreground">{t.book.pickToPrice}</p>
           )
-        ) : !q.available ? (
+        ) : !packageAvailable ? (
           <p role="alert" className="text-sm text-destructive">
             {q.open === false ? t.book.notOpen : t.book.unavailable}
           </p>
         ) : (
-          <QuoteDetails quote={q} rules={rules} />
+          <>
+            <QuoteDetails quote={q} rules={rules} />
+            {isRoomsQuote(q) && q.rooms.length > 0 && <PackageRoomsSummary quote={q} />}
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+/** מיגרציה 202: בסיכום — כל חדר נוסף (המחיר הקבוע × הלילות), והסכום הכולל והמקדמה של כל ההזמנה */
+function PackageRoomsSummary({ quote: q }: { quote: PackageRoomsQuote }) {
+  const t = useCopy();
+  const deposit =
+    Number(q.deposit_amount) + q.rooms.reduce((s, r) => s + Number(r.deposit_amount), 0);
+  return (
+    <div
+      className="mt-5 space-y-3 border-t border-border pt-5 text-sm"
+      data-testid="package-rooms-summary"
+    >
+      <h3 className="font-medium">{t.packages.addonsSummary}</h3>
+      <ul className="space-y-2">
+        {q.rooms.map((r) => (
+          <li
+            key={r.unit_id}
+            className="flex justify-between gap-4"
+            data-addon-summary={r.unit_name}
+          >
+            <span>
+              {r.unit_name} · {t.my.guestsText(r.adults, r.children)}
+            </span>
+            <span className="tabular-nums">
+              {r.available ? money(Number(r.total), q.currency) : t.book.roomUnavailable}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {q.available && (
+        <>
+          <div className="flex items-baseline justify-between gap-4 border-t border-border pt-3 text-base">
+            <span className="font-medium">{t.packages.grandTotal}</span>
+            <span className="font-display text-2xl tabular-nums" data-testid="package-grand-total">
+              {money(Number(q.grand_total), q.currency)}
+            </span>
+          </div>
+          {deposit > 0 && (
+            <p className="text-muted-foreground">
+              {t.packages.depositAll(money(deposit, q.currency))}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * מיגרציה 202: החדרים הנוספים של החבילה שפנויים בלילות שלה (רק הפנויים — מהמסד), עם המחיר לכל חדר;
+ * סימון, ואורחים לכל חדר (לפי התפוסה של היחידה). עד המספר שבעל העסק קבע.
+ */
+function PackageAddonsPicker({
+  pkg,
+  checkIn,
+  rooms,
+  quote,
+  onChange,
+}: {
+  pkg: PublicPackage;
+  checkIn: string;
+  rooms: PackageRoomChoice[];
+  quote: PackageRoomsQuote | null;
+  onChange: (rooms: PackageRoomChoice[]) => void;
+}) {
+  const t = useCopy();
+  const { site } = useSite();
+  const free = useQuery({
+    queryKey: ["hospitality", "site", "package-addons", pkg.id, checkIn],
+    queryFn: () => hospitalitySitePackageAddons({ data: { packageId: pkg.id, checkIn } }),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const nightly = Number(pkg.addons?.nightly_price ?? 0);
+  const max = free.data?.max ?? 0;
+  const set = (unitId: string, patch: Partial<PackageRoomChoice> | null) => {
+    if (patch === null) onChange(rooms.filter((r) => r.unitId !== unitId));
+    else if (rooms.some((r) => r.unitId === unitId))
+      onChange(rooms.map((r) => (r.unitId === unitId ? { ...r, ...patch } : r)));
+    else onChange([...rooms, { unitId, adults: 2, children: 0, ...patch }]);
+  };
+  return (
+    <div className="space-y-4" data-testid="package-addons">
+      <p className="text-sm text-muted-foreground">
+        {t.packages.addonsHint(money(nightly, site.business.currency), pkg.nights)}
+      </p>
+      {free.isPending ? (
+        <p className="text-sm text-muted-foreground">{t.packages.addonsLoading}</p>
+      ) : free.isError ? (
+        <p role="alert" className="text-sm text-destructive">
+          {errText(free.error, t.book.error)}
+        </p>
+      ) : (free.data?.units.length ?? 0) === 0 ? (
+        <p className="text-sm text-muted-foreground" data-testid="package-addons-none">
+          {t.packages.addonsNone}
+        </p>
+      ) : (
+        <>
+          {max > 0 && <p className="text-xs text-muted-foreground">{t.packages.addonsMax(max)}</p>}
+          <ul className="grid gap-3">
+            {free.data!.units.map((u) => {
+              const picked = rooms.find((r) => r.unitId === u.unit_id);
+              const room = quote?.rooms.find((r) => r.unit_id === u.unit_id);
+              const capacity = u.capacity;
+              const maxAdults = Math.min(u.max_adults ?? capacity, capacity);
+              const adults = picked?.adults ?? Math.min(2, Math.max(1, maxAdults));
+              const maxChildren = Math.min(
+                u.max_children ?? Math.max(0, capacity - 1),
+                Math.max(0, capacity - adults),
+              );
+              const full = !picked && rooms.length >= max;
+              return (
+                <li
+                  key={u.unit_id}
+                  className={cn(
+                    "rounded-[var(--radius)] border bg-card p-4",
+                    picked ? "border-primary" : "border-border",
+                  )}
+                  data-addon-room={u.unit_name}
+                >
+                  <label
+                    className={cn(
+                      "flex items-center gap-3",
+                      full ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="size-5 accent-[var(--site-gold-ink)]"
+                      checked={!!picked}
+                      disabled={full}
+                      onChange={(e) =>
+                        set(
+                          u.unit_id,
+                          e.target.checked ? { adults: Math.min(2, Math.max(1, maxAdults)) } : null,
+                        )
+                      }
+                      aria-label={t.packages.addRoom(u.unit_name)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium">{u.unit_name}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {t.book.capacity(capacity)}
+                      </span>
+                    </span>
+                    <span className="text-sm tabular-nums">
+                      {t.packages.addonRoomPrice(
+                        money(Number(u.total), site.business.currency),
+                        pkg.nights,
+                        money(Number(u.nightly_price), site.business.currency),
+                      )}
+                    </span>
+                  </label>
+                  {picked && room && !room.available && (
+                    <p role="alert" className="mt-2 text-sm text-destructive">
+                      {t.packages.roomTaken}
+                    </p>
+                  )}
+                  {picked && (
+                    <fieldset className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <legend className="sr-only">{t.book.roomGuests(u.unit_name)}</legend>
+                      <Stepper
+                        label={t.book.adults}
+                        value={adults}
+                        min={1}
+                        max={Math.max(1, maxAdults)}
+                        onChange={(n) => set(u.unit_id, { adults: n })}
+                      />
+                      {(u.max_children ?? 1) > 0 && capacity > 1 && (
+                        <Stepper
+                          label={t.book.children}
+                          value={Math.min(picked.children, Math.max(0, maxChildren))}
+                          min={0}
+                          max={Math.max(0, maxChildren)}
+                          onChange={(n) => set(u.unit_id, { children: n })}
+                        />
+                      )}
+                    </fieldset>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

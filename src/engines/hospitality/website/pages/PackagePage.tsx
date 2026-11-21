@@ -155,6 +155,14 @@ export function PackagePage() {
                 {t.packages.pricePer(pkg.nights)} · {t.packages.guests(pkg.max_guests)}
               </span>
             </p>
+            {/* מיגרציה 202: חדר נוסף למלוות או למשפחה, לפי זמינות */}
+            {pkg.addons && (
+              <p className="mt-3 text-sm text-muted-foreground" data-testid="package-addons-offer">
+                {t.packages.addonsLine(
+                  money(Number(pkg.addons.nightly_price), site.business.currency),
+                )}
+              </p>
+            )}
             {unit && (
               <div className="mt-6 border-t border-border pt-6">
                 <h2 className="mb-2 text-sm font-medium">{t.availability.title}</h2>

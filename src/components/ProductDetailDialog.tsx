@@ -28,6 +28,7 @@ import { ProductImageCarousel } from "@/components/products/ProductImageCarousel
 import { ProductSticker } from "@/components/products/ProductSticker";
 import { RatingInline } from "@/components/reviews/RatingInline";
 import { useRatingSummaries } from "@/hooks/useRatingSummaries";
+import { usePriceAttr } from "@/lib/price-hold";
 
 /** הכתובת הקבועה של עמוד המוצר (SEO, שיתוף, זאפ) */
 function productPath(productId: string): string {
@@ -134,6 +135,7 @@ export function ProductDetailView({
   /** השורה "מוצרים נוספים שאולי תאהבו" (בעמוד המוצר — רשת מלאה מתחת לפרטים) */
   showRecommendations?: boolean;
 }) {
+  const priceAttr = usePriceAttr();
   const tree = useCategoryTree();
   const sales = useStorefrontSales();
   // חלק 34: דירוג הלקוחות (ממוצע + מספר ביקורות מאושרות)
@@ -306,7 +308,10 @@ export function ProductDetailView({
               {...(isPage ? { href: "#reviews" } : { href: `${productPath(product.id)}#reviews` })}
             />
             {(product.is_promo || onSale) && (
-              <Badge className="gap-1 border-0 bg-accent text-accent-foreground">
+              <Badge
+                data-price={priceAttr}
+                className="gap-1 border-0 bg-accent text-accent-foreground"
+              >
                 <Flame className="size-3" />
                 {onSale && product.original_price !== null
                   ? `מבצע -${discountPercent(product.price ?? 0, product.original_price)}%`
@@ -317,7 +322,7 @@ export function ProductDetailView({
 
           <div className="space-y-1">
             {shownPrice !== null ? (
-              <div className="flex flex-wrap items-baseline gap-2">
+              <div data-price={priceAttr} className="flex flex-wrap items-baseline gap-2">
                 {fromPrice !== null && (
                   <span className="text-sm font-medium text-muted-foreground">החל מ-</span>
                 )}
@@ -337,10 +342,14 @@ export function ProductDetailView({
                 )}
               </div>
             ) : (
-              <p className="text-base font-medium text-muted-foreground">מחיר לפי הצעה</p>
+              <p data-price={priceAttr} className="text-base font-medium text-muted-foreground">
+                מחיר לפי הצעה
+              </p>
             )}
             {saleUntil && (
-              <p className="text-sm text-muted-foreground">המבצע בתוקף עד {saleUntil}</p>
+              <p data-price={priceAttr} className="text-sm text-muted-foreground">
+                המבצע בתוקף עד {saleUntil}
+              </p>
             )}
             {depositPerCase !== null && (
               <p className="text-sm text-muted-foreground">

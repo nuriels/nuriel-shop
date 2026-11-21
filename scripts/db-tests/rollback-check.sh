@@ -188,6 +188,8 @@ M83=20261118100000_site_tracking_ga4
 M84=20261118110000_order_guard
 # הצעות SEO (Hospitality) — נבדקת בפירוט ב-seo-proposals-rollback.sh; כאן רק השרשרת: ראשונה ב-rollback, אחרונה בהחלה
 M85=20261118200000_hosp_seo_proposals
+# חדרים נוספים לחבילה (מיגרציה 202) — נבדקת בפירוט ב-package-addons-rollback.sh; כאן רק השרשרת
+M86=20261121100000_hosp_package_addon_rooms
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -231,7 +233,18 @@ same_as_ref() {
   fi
 }
 
-# ---------- SEO proposals (Hospitality) — the newest migration, rolled back first ----------
+# ---------- package add-on rooms (migration 202) — the newest migration, rolled back first ----------
+expect "before the rollback: the three add-on columns, the room quote and the request with rooms" \
+  "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'packages'
+                    AND column_name = 'addon_unit_ids')
+      AND to_regprocedure('hospitality.package_rooms_quote(uuid,date,integer,integer,jsonb)') IS NOT NULL
+      AND to_regprocedure('hospitality.request_booking_package_with_rooms(uuid,date,jsonb,text,text,text,text,boolean,text,integer,integer,text,boolean,text)') IS NOT NULL"
+ref_upto "$M86"
+echo "rollback: $M86"
+down "$M86"
+same_as_ref "migration 85"
+
+# ---------- SEO proposals (Hospitality) ----------
 expect "before the rollback: the two closed SEO tables and the decide function" \
   "SELECT to_regclass('hospitality.seo_proposals') IS NOT NULL AND to_regclass('hospitality.seo_runs') IS NOT NULL
       AND to_regprocedure('hospitality.seo_proposal_decide(uuid,text,text)') IS NOT NULL"
@@ -2753,6 +2766,12 @@ expect "the copy test left nothing behind" "SELECT NOT EXISTS (SELECT 1 FROM pub
 up "$M85"
 expect "SEO proposals back: both tables and the functions" \
   "SELECT to_regclass('hospitality.seo_proposals') IS NOT NULL AND to_regprocedure('hospitality.seo_proposals_add(uuid,uuid,jsonb,boolean)') IS NOT NULL"
+up "$M86"
+expect "package add-on rooms back: the columns, the quotes and the request with rooms; one package_save" \
+  "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'packages'
+                    AND column_name = 'addon_max')
+      AND to_regprocedure('hospitality.package_addons_quote(uuid,date)') IS NOT NULL
+      AND (SELECT count(*) FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace AND proname = 'package_save') = 1"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')

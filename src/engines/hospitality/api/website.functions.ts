@@ -23,8 +23,19 @@ import type {
   RawPublicSite,
   SiteGuestBooking,
 } from "../types/website";
-import type { PackageQuote, PublicPackage } from "../types/packages";
-import { parsePackageQuote, parseRequestPackage } from "../validation/packages";
+import type {
+  PackageAddonsQuote,
+  PackageQuote,
+  PackageRoomsQuote,
+  PublicPackage,
+} from "../types/packages";
+import {
+  parsePackageAddonsQuote,
+  parsePackageQuote,
+  parsePackageRoomsQuote,
+  parseRequestPackage,
+  roomsArg,
+} from "../validation/packages";
 import type { PublicDocument, PublicDocumentMeta } from "../types/documents";
 import { parseAcceptedDocuments, parseDocumentKind } from "../validation/documents";
 import type {
@@ -391,9 +402,45 @@ export const hospitalitySitePackageQuote = createServerFn({ method: "POST" })
     );
   });
 
+/** מיגרציה 202: החדרים הנוספים שפנויים ופתוחים בכל לילות החבילה (רק הפנויים; המחיר — מהמסד) */
+export const hospitalitySitePackageAddons = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parsePackageAddonsQuote(input))
+  .handler(async ({ data }): Promise<PackageAddonsQuote> => {
+    const client = await throttle("availability");
+    const { callServerRpc } = await import("../server/rpc.server");
+    return callServerRpc<PackageAddonsQuote>(
+      "package_addons_quote",
+      { _package_id: data.packageId, _check_in: data.checkIn },
+      client,
+    );
+  });
+
+/**
+ * מיגרציה 202: הצעה אחת לחבילה + החדרים הנוספים שנבחרו — הסכום הכולל, המקדמה לכל הזמנה ו-hash אחד
+ * לכל התנאים מחושבים במסד (הדפדפן רק מציג)
+ */
+export const hospitalitySitePackageRoomsQuote = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parsePackageRoomsQuote(input))
+  .handler(async ({ data }): Promise<PackageRoomsQuote> => {
+    const client = await throttle("quote");
+    const { callServerRpc } = await import("../server/rpc.server");
+    return callServerRpc<PackageRoomsQuote>(
+      "package_rooms_quote",
+      {
+        _package_id: data.packageId,
+        _check_in: data.checkIn,
+        _adults: data.adults,
+        _children: data.children,
+        _rooms: roomsArg(data.rooms),
+      },
+      client,
+    );
+  });
+
 /**
  * בקשת הזמנה לחבילה — אותן בדיקות כמו לחדר אחד (מלכודת, CAPTCHA, הגבלת קצב), ואז המסד: הזמנה על
- * היחידה של החבילה (אותה תפוסה — בלי הזמנה כפולה), במחיר החבילה ובתנאים שהאורח אישר
+ * היחידה של החבילה (אותה תפוסה — בלי הזמנה כפולה), במחיר החבילה ובתנאים שהאורח אישר. מיגרציה 202: עם
+ * חדרים נוספים — בקשה אחת לחבילה ולכל החדרים (הכול או כלום), כמו בקשה לכמה חדרים
  */
 export const hospitalitySiteRequestPackage = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => ({
@@ -402,30 +449,44 @@ export const hospitalitySiteRequestPackage = createServerFn({ method: "POST" })
     paymentMethod: optionalPaymentMethod(input?.["paymentMethod"]),
     documents: parseAcceptedDocuments(input?.["documents"]),
   }))
-  .handler(async ({ data }): Promise<BookingRequestResult> => {
+  .handler(async ({ data }): Promise<BookingRequestResult | GroupRequestResult> => {
     const client = await guardRequest(data);
     const [{ callServerRpc }, { kickOutbox }] = await Promise.all([
       import("../server/rpc.server"),
       import("../outbox/worker.server"),
     ]);
+    const args = {
+      ...documentsArg(data.documents),
+      _package_id: data.packageId,
+      _check_in: data.checkIn,
+      _full_name: data.fullName,
+      _email: data.email,
+      _phone: data.phone,
+      _idempotency_key: data.idempotencyKey,
+      _policy_accepted: true,
+      _policy_hash: data.policyHash,
+      _adults: data.adults,
+      _children: data.children,
+      _special_requests: data.specialRequests,
+      _marketing_consent: data.marketingConsent,
+      _language: data.language,
+    };
+    if (data.rooms.length > 0) {
+      const group = await callServerRpc<GroupRequestResult>(
+        withDocuments("request_booking_package_with_rooms", data.documents),
+        { ...args, _rooms: roomsArg(data.rooms) },
+        client,
+      );
+      await applyPaymentChoice(
+        (group.bookings ?? []).map((b) => b.manage_token),
+        data.paymentMethod,
+      );
+      kickOutbox();
+      return group;
+    }
     const result = await callServerRpc<BookingRequestResult>(
       withDocuments("request_booking_package", data.documents),
-      {
-        ...documentsArg(data.documents),
-        _package_id: data.packageId,
-        _check_in: data.checkIn,
-        _full_name: data.fullName,
-        _email: data.email,
-        _phone: data.phone,
-        _idempotency_key: data.idempotencyKey,
-        _policy_accepted: true,
-        _policy_hash: data.policyHash,
-        _adults: data.adults,
-        _children: data.children,
-        _special_requests: data.specialRequests,
-        _marketing_consent: data.marketingConsent,
-        _language: data.language,
-      },
+      args,
       client,
     );
     await applyPaymentChoice([result.manage_token], data.paymentMethod);

@@ -8,7 +8,10 @@
 #   3. הזמנה רגילה שתופסת רק את הלילה השני → החבילה לא זמינה (שני הלילות נבדקים)
 #   4. ה-VIP חלק מ"כל המתחם" — אחרי החבילה "כל המתחם" לא זמין באותם לילות
 #   5. המחיר — 4,000 ₪ קבוע לשני לילות (לא מהתעריף), והעזיבה — אחרי שני לילות בדיוק
-#   6. הפער שהאפיון סוגר: חדר נוסף היום הוא בקשה נפרדת במחיר התעריף, לא חלק מהחבילה ולא 1,200 ₪ ללילה
+#   6. מיגרציה 202 סוגרת את הפער: חדר נוסף לחבילה — במחיר קבוע של 1,200 ₪ ללילה, באותם לילות, והכול בבקשה אחת
+#   7. שתי כלות (שתי חבילות על יחידות שונות) על אותו חדר נוסף, במקביל → בדיוק אחת מקבלת אותו; השנייה — שום הזמנה
+#   8. כלה עם חדר נוסף מול אורח רגיל על אותו חדר, במקביל → בדיוק אחת; אם האורח זכה — גם ה-VIP לא נתפס (הכול או כלום)
+#   9. 10 בקשות במקביל (5 כלות עם החדר הנוסף + 5 אורחים על החדר) → בדיוק בקשה אחת מצליחה, ואין חבילה בלי החדר שלה
 # ============================================================
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -110,11 +113,65 @@ check "5  the package price is fixed: 4,000 for 2 nights (not 2 × the 1,400 nig
 check "5  the quote shows the same total before the guest confirms" \
   "SELECT (hospitality.package_quote('$PKG', current_date + 100) ->> 'total')::numeric = 4000"
 
-# ---- 6. the gap the spec closes ----
-check "6  today an extra room is a separate request at the unit's own rate (500/night here), not 1,200/night and not linked to the package" \
-  "SELECT (hospitality.quote('c2000000-0000-0000-0000-000000000022', current_date + 90, current_date + 92) ->> 'total')::numeric = 1000
-      AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'packages'
-                        AND column_name LIKE 'addon%')"
+# ---- 6. migration 202: an add-on room for the package — 1,200 a night, the same nights, in the same request ----
+ADIR=c2000000-0000-0000-0000-000000000022
+PKG2=b1000000-0000-0000-0000-0000000000b2
+q "UPDATE hospitality.packages SET addon_unit_ids = ARRAY['$ADIR']::uuid[], addon_nightly_price = 1200, addon_max = 1
+    WHERE id = '$PKG'" >/dev/null
+# a second package on another unit (25) that offers the same add-on room — to make two brides compete for it
+q "INSERT INTO hospitality.packages (id, tenant_id, unit_id, kind, name, slug, nights, price, max_guests, is_active,
+                                     addon_unit_ids, addon_nightly_price, addon_max)
+   VALUES ('$PKG2', '$SITE', 'c2000000-0000-0000-0000-000000000025', 'special', 'חבילה שנייה', 'bridal-2', 2, 3000, 2, true,
+           ARRAY['$ADIR']::uuid[], 1200, 1)" >/dev/null
+q "CREATE OR REPLACE FUNCTION conc.bride_room(_pkg uuid, _in integer, _email text, _key text) RETURNS jsonb LANGUAGE sql AS \$\$
+     SELECT hospitality.request_booking_package_with_rooms(
+       _package_id => _pkg, _check_in => current_date + _in,
+       _rooms => jsonb_build_array(jsonb_build_object('unit_id', '$ADIR', 'adults', 2, 'children', 0)),
+       _full_name => 'כלה עם חדר', _email => _email,
+       _phone => '05' || lpad((abs(hashtext(_email)) % 100000000)::text, 8, '0'), _idempotency_key => _key,
+       _policy_accepted => true,
+       _policy_hash => hospitality.package_rooms_quote(_pkg, current_date + _in, 2, 0,
+                         jsonb_build_array(jsonb_build_object('unit_id', '$ADIR', 'adults', 2, 'children', 0))) ->> 'policy_hash') \$\$;
+   GRANT EXECUTE ON FUNCTION conc.bride_room(uuid, integer, text, text) TO service_role;" >/dev/null
+check "6  the package + the add-on room: 4,000 + 1,200 × 2 = 6,400, computed in the database; the room alone at its rate stays 1,000" \
+  "SELECT (hospitality.package_rooms_quote('$PKG', current_date + 100, 2, 0,
+             jsonb_build_array(jsonb_build_object('unit_id', '$ADIR'))) ->> 'grand_total')::numeric = 6400
+      AND (hospitality.quote('$ADIR', current_date + 100, current_date + 102) ->> 'total')::numeric = 1000"
+
+# ---- 7. two brides (two packages) want the same add-on room at the same moment ----
+parallel b7 "$(as_guest) SELECT conc.bride_room('$PKG', 110, 'bride7a@example.com', 'b7-key-a');" \
+            "$(as_guest) SELECT conc.bride_room('$PKG2', 110, 'bride7b@example.com', 'b7-key-b');"
+check "7  two brides, the same add-on room, in parallel → exactly one gets it; the other is told the room is taken" \
+  "SELECT $(ok_count b7) = 1 AND $(err_count b7 'כבר לא פנוי') = 1"
+check "7  … and the loser has no booking at all — her package unit stays free (all or nothing)" \
+  "SELECT (SELECT count(*) FROM hospitality.bookings WHERE idempotency_key LIKE 'b7-key-%') = 2
+      AND (SELECT count(DISTINCT group_id) FROM hospitality.bookings WHERE idempotency_key LIKE 'b7-key-%') = 1
+      AND (SELECT count(*) FROM hospitality.unit_occupancy WHERE unit_id = '$ADIR' AND lower(nights) = current_date + 110) = 1"
+
+# ---- 8. a bride with the add-on room vs a regular guest on that room, at the same moment ----
+parallel b8 "$(as_guest) SELECT conc.bride_room('$PKG', 120, 'bride8@example.com', 'b8-key-a');" \
+            "$(as_guest) SELECT conc.req('$ADIR', 121, 123, 'guest8@example.com', 'b8-key-b');"
+check "8  bride + add-on room vs a regular guest on the room → exactly one succeeds" \
+  "SELECT $(ok_count b8) = 1"
+check "8  … if the guest won, the VIP is not held either; if the bride won, she holds both (never the package alone)" \
+  "SELECT CASE WHEN EXISTS (SELECT 1 FROM hospitality.bookings WHERE idempotency_key = 'b8-key-b')
+               THEN NOT EXISTS (SELECT 1 FROM hospitality.bookings WHERE idempotency_key LIKE 'b8-key-a%')
+                    AND NOT EXISTS (SELECT 1 FROM hospitality.unit_occupancy WHERE unit_id = '$VIP' AND lower(nights) = current_date + 120)
+               ELSE (SELECT count(*) FROM hospitality.bookings WHERE idempotency_key LIKE 'b8-key-a-%') = 2 END"
+
+# ---- 9. ten requests at the same moment ----
+B9=()
+for i in 1 2 3 4 5; do
+  B9+=("$(as_guest) SELECT conc.bride_room('$PKG', 130, 'bride9$i@example.com', 'b9-key-bride$i');")
+  B9+=("$(as_guest) SELECT conc.req('$ADIR', 130, 132, 'guest9$i@example.com', 'b9-key-guest$i');")
+done
+parallel b9 "${B9[@]}"
+check "9  10 requests in parallel (5 brides with the room + 5 guests on the room) → exactly one succeeds" \
+  "SELECT $(ok_count b9) = 1"
+check "9  … the room is held once, and no bride holds the VIP without her room" \
+  "SELECT (SELECT count(*) FROM hospitality.unit_occupancy WHERE unit_id = '$ADIR' AND lower(nights) = current_date + 130) = 1
+      AND NOT EXISTS (SELECT 1 FROM hospitality.bookings b WHERE b.idempotency_key LIKE 'b9-key-bride%'
+                        AND NOT EXISTS (SELECT 1 FROM hospitality.bookings x WHERE x.group_id = b.group_id AND x.unit_id = '$ADIR'))"
 
 "${PG[@]}" -d postgres -c "DROP DATABASE $DB" >/dev/null 2>&1 || true
 echo "bridal package availability: $PASSED passed, $FAILED failed"

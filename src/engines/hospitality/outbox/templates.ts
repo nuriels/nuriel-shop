@@ -337,7 +337,11 @@ export function renderBookingEmail(
   if (p.booking_number && !rooms.length) rows.push(["מספר הזמנה", `#${p.booking_number}`]);
   // שלב א' 7: הזמנת חבילה — שם החבילה (בכל מייל שלה)
   if (typeof p["package_name"] === "string" && p["package_name"])
-    rows.push(["חבילה", p["package_name"]]);
+    rows.push([
+      "חבילה",
+      // מיגרציה 202: מייל של חדר נוסף לחבילה (בבקשה משותפת — החבילה והחדרים בטבלת החדרים)
+      p["package_role"] === "addon" ? `${p["package_name"]} · חדר נוסף` : p["package_name"],
+    ]);
   if (p.unit_name && !rooms.length) rows.push(["יחידה", p.unit_name]);
   if (p.check_in) rows.push(["הגעה", dateText(p.check_in)]);
   if (p.check_out) rows.push(["עזיבה", dateText(p.check_out)]);

@@ -162,8 +162,13 @@ SELECT tests.check('structure: the site list for everyone; quote and request for
        AND has_function_privilege('authenticated', 'hospitality.packages_view()', 'EXECUTE')
        AND NOT has_function_privilege('anon', 'hospitality.package_delete(uuid)', 'EXECUTE')
        AND NOT has_function_privilege('authenticated', 'hospitality._package_quote(uuid, uuid, date, integer, integer)', 'EXECUTE')$$);
+-- בעסק שאין לו חבילות — כל הזמנה היא הזמנה רגילה (המיגרציה לא סימנה הזמנות קיימות כהזמנות חבילה). מוגבל לעסקים
+-- בלי חבילות: מאז מיגרציה 202 קובץ בדיקה אחר (hospitality-package-addons) רץ לפני הקובץ הזה בהרצה המלאה ויוצר הזמנות
+-- חבילה בעסק משלו — בלי ההגבלה הבדיקה הייתה תלויה בסדר הקבצים
 SELECT tests.check('structure: every booking so far is a regular booking (no package, no snapshot)',
-  $$SELECT NOT EXISTS (SELECT 1 FROM hospitality.bookings WHERE package_id IS NOT NULL OR package_snapshot IS NOT NULL)$$);
+  $$SELECT NOT EXISTS (SELECT 1 FROM hospitality.bookings b
+                        WHERE (b.package_id IS NOT NULL OR b.package_snapshot IS NOT NULL)
+                          AND NOT EXISTS (SELECT 1 FROM hospitality.packages p WHERE p.tenant_id = b.tenant_id))$$);
 
 -- ============================================================
 -- 2. Staff: create, validate, show / hide
