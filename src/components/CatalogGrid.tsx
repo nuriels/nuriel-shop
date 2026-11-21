@@ -24,8 +24,10 @@ import { useRatingSummaries } from "@/hooks/useRatingSummaries";
 import type { RatingSummary } from "@/lib/reviews";
 import { cn } from "@/lib/utils";
 import { useStorefrontWide } from "@/components/layout/storefront-frame";
+import { usePriceAttr } from "@/lib/price-hold";
 
 function ProductImage({ item }: { item: CatalogItem }) {
+  const priceAttr = usePriceAttr();
   // במסגרת הרחבה של החנות, במחשב (xl+): גובה התמונה לפי רוחב הכרטיס (4:3) — הכרטיס
   // גדל, והתמונה גדלה איתו. בטאבלט ובטלפון — כמו קודם
   const wide = useStorefrontWide();
@@ -50,7 +52,10 @@ function ProductImage({ item }: { item: CatalogItem }) {
       {/* חלק 23: מדבקת המוצר — תמיד בפינה העליונה השמאלית */}
       <ProductSticker sticker={item.sticker} />
       {(item.is_promo || item.original_price !== null) && (
-        <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground sm:right-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs">
+        <span
+          data-price={priceAttr}
+          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground sm:right-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs"
+        >
           <Flame className="size-3" />
           {item.original_price !== null
             ? `-${discountPercent(item.price ?? 0, item.original_price)}%`
@@ -99,6 +104,7 @@ function CatalogCard({
   /** חלק 34: דירוג הלקוחות (ממוצע + מספר ביקורות מאושרות) */
   rating?: RatingSummary | undefined;
 }) {
+  const priceAttr = usePriceAttr();
   const choice = useVariantSelection(product);
   const range = choice.hasVariants ? variantPriceRange(choice.variants) : null;
   // מחיר: של הוריאציה שנבחרה; לפני בחירה — "החל מ-" אם המחירים שונים
@@ -141,7 +147,7 @@ function CatalogCard({
 
         <div className="mt-auto space-y-2 pt-1 sm:space-y-3 sm:pt-2">
           {shownPrice !== null ? (
-            <div className="flex flex-wrap items-baseline gap-x-2">
+            <div data-price={priceAttr} className="flex flex-wrap items-baseline gap-x-2">
               {fromPrice !== null && (
                 <span className="text-xs font-medium text-muted-foreground">החל מ-</span>
               )}
@@ -161,10 +167,15 @@ function CatalogCard({
               )}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground sm:text-sm">מחיר לפי הצעה</p>
+            <p data-price={priceAttr} className="text-xs text-muted-foreground sm:text-sm">
+              מחיר לפי הצעה
+            </p>
           )}
           {product.original_price !== null && product.sale_ends_at && !variantOwnPrice && (
-            <p className="text-[11px] font-medium text-accent-foreground/80 sm:text-xs">
+            <p
+              data-price={priceAttr}
+              className="text-[11px] font-medium text-accent-foreground/80 sm:text-xs"
+            >
               {formatSaleCountdown(product.sale_ends_at)}
             </p>
           )}
@@ -174,7 +185,7 @@ function CatalogCard({
                 מינימום {packStep(product)}
               </span>
               {shownPrice !== null && (
-                <span className="numeric whitespace-nowrap">
+                <span data-price={priceAttr} className="numeric whitespace-nowrap">
                   מארז {formatIls(shownPrice * packStep(product))}
                 </span>
               )}

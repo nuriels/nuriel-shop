@@ -15,6 +15,7 @@ import {
 import { ProductSticker } from "@/components/products/ProductSticker";
 import { useStorefrontWide } from "@/components/layout/storefront-frame";
 import { cn } from "@/lib/utils";
+import { usePriceAttr } from "@/lib/price-hold";
 
 /**
  * רוחב כרטיס ברירת מחדל (w-44) — עד שנמדד הרוחב האמיתי (במסך רחב הכרטיס גדל ל-w-52);
@@ -43,6 +44,7 @@ export function HotDealsStrip({
   addLabel?: string;
   onAddToCart?: AddToCart | undefined;
 }) {
+  const priceAttr = usePriceAttr();
   // חלק 39: לחיצה על מבצע עוברת לעמוד המוצר (כתובת לשיתוף)
   const navigate = useNavigate();
   const openProduct = (item: CatalogItem) =>
@@ -140,7 +142,7 @@ export function HotDealsStrip({
             {item.name}
           </button>
           {item.price !== null ? (
-            <p className="flex flex-wrap items-baseline gap-1.5">
+            <p data-price={priceAttr} className="flex flex-wrap items-baseline gap-1.5">
               <span className="numeric font-bold text-accent">{formatIls(item.price)}</span>
               <VatNote />
               {item.original_price !== null && (
@@ -150,10 +152,15 @@ export function HotDealsStrip({
               )}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">מחיר לפי הצעה</p>
+            <p data-price={priceAttr} className="text-xs text-muted-foreground">
+              מחיר לפי הצעה
+            </p>
           )}
           {item.original_price !== null && (
-            <p className="text-[11px] font-semibold text-accent-foreground/80">
+            <p
+              data-price={priceAttr}
+              className="text-[11px] font-semibold text-accent-foreground/80"
+            >
               {discountPercent(item.price ?? 0, item.original_price)}% הנחה
               {item.sale_ends_at ? ` · ${formatSaleCountdown(item.sale_ends_at)}` : ""}
             </p>

@@ -32,6 +32,7 @@ import { recommendForProduct } from "@/lib/cart-promotions";
 import { RELATED_GRID_LIMIT } from "@/lib/reviews";
 import { getProductSeo, type ProductSeo } from "@/lib/seo.functions";
 import { isServerRender, StorefrontSeedProvider, type StorefrontSeed } from "@/lib/storefront-seed";
+import { PriceHoldProvider } from "@/lib/price-hold";
 import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { breadcrumbJsonLd, jsonLdText, productJsonLd } from "@/lib/structured-data";
 import { breadcrumbTrail } from "@/lib/seo-urls";
@@ -270,91 +271,100 @@ function ProductPageBody() {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <SiteHeader role={role} email={session?.user.email ?? null} onSignOut={signOut} wide search />
-      {/* חלק 19: Grid עם באנר צדדי (רק במחשב, כשהוא פעיל). המסגרת הרחבה — מיושרת
+    // עד שהקטלוג של מי שמחובר נטען — המחירים של אורח (מה-HTML) לא מוצגים לו (lib/price-hold.ts)
+    <PriceHoldProvider value={!pricesReady}>
+      <div className="flex min-h-screen flex-col bg-background">
+        <SiteHeader
+          role={role}
+          email={session?.user.email ?? null}
+          onSignOut={signOut}
+          wide
+          search
+        />
+        {/* חלק 19: Grid עם באנר צדדי (רק במחשב, כשהוא פעיל). המסגרת הרחבה — מיושרת
           לכותרת ולפוטר, כמו בקטלוג */}
-      <StorefrontMain width="wide" className="py-5 sm:py-8" contentClassName="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Link
-            to="/"
-            search={product ? { category: product.category } : {}}
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowRight className="size-4" aria-hidden="true" />
-            {product ? `חזרה ל${product.category}` : "לכל המוצרים"}
-          </Link>
-          {cartCount > 0 && canUseCart && (
-            <Button asChild size="sm" variant="outline">
-              <Link to="/checkout">
-                <ShoppingCart className="size-4" />
-                לקופה ({cartCount})
-              </Link>
-            </Button>
-          )}
-        </div>
-
-        {/* המוצר מהשרת מוצג מיד; שלד טעינה — רק כשאין עדיין מוצר בכלל */}
-        {!product && (loading || authLoading) ? (
-          <div className="grid gap-4 overflow-hidden rounded-2xl border bg-card p-4 md:grid-cols-2">
-            <div className="h-72 animate-pulse rounded-xl bg-muted sm:h-96" />
-            <div className="space-y-3 py-2">
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                טוען את המוצר…
-              </p>
-              <p className="font-display text-2xl font-bold text-foreground">{seo?.name ?? ""}</p>
-              <div className="h-8 w-32 animate-pulse rounded bg-muted" />
-              <div className="h-24 animate-pulse rounded bg-muted" />
-            </div>
-          </div>
-        ) : product ? (
-          <StorefrontSalesProvider value={storefrontSales}>
-            <div className="space-y-8">
-              <ProductDetailView
-                product={product}
-                mode="page"
-                canAdd={canAddToCart}
-                addLabel={addLabel}
-                onAddToCart={canAddToCart ? addToCart : undefined}
-                onShowProduct={(item) =>
-                  void navigate({ to: "/product/$productId", params: { productId: item.id } })
-                }
-                // בעמוד: רשת מלאה של מוצרים נלווים מתחת לפרטים (במקום השורה הקטנה)
-                showRecommendations={false}
-              />
-              {/* חלק 34: מוצרים נלווים (Upsell) */}
-              <RelatedProductsSection
-                items={related.items}
-                linked={related.linked}
-                category={product.category}
-                canAdd={canAddToCart}
-                addLabel={addLabel}
-                onAddToCart={canAddToCart ? addToCart : undefined}
-                onOpenProduct={(item) =>
-                  void navigate({ to: "/product/$productId", params: { productId: item.id } })
-                }
-              />
-              {/* חלק 34: חוות דעת לקוחות */}
-              <ProductReviews productId={product.id} productName={product.name} />
-            </div>
-          </StorefrontSalesProvider>
-        ) : (
-          <Card className="mx-auto max-w-xl border-dashed">
-            <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
-              <PackageX className="size-10 text-muted-foreground" aria-hidden="true" />
-              <p className="text-lg font-semibold text-foreground">המוצר לא נמצא</p>
-              <p className="text-sm text-muted-foreground">
-                ייתכן שהמוצר הוסר מהחנות או שאינו זמין כרגע.
-              </p>
-              <Button asChild>
-                <Link to="/">לכל המוצרים</Link>
+        <StorefrontMain width="wide" className="py-5 sm:py-8" contentClassName="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Link
+              to="/"
+              search={product ? { category: product.category } : {}}
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <ArrowRight className="size-4" aria-hidden="true" />
+              {product ? `חזרה ל${product.category}` : "לכל המוצרים"}
+            </Link>
+            {cartCount > 0 && canUseCart && (
+              <Button asChild size="sm" variant="outline">
+                <Link to="/checkout">
+                  <ShoppingCart className="size-4" />
+                  לקופה ({cartCount})
+                </Link>
               </Button>
-            </CardContent>
-          </Card>
-        )}
-      </StorefrontMain>
-      <AppFooter wide />
-    </div>
+            )}
+          </div>
+
+          {/* המוצר מהשרת מוצג מיד; שלד טעינה — רק כשאין עדיין מוצר בכלל */}
+          {!product && (loading || authLoading) ? (
+            <div className="grid gap-4 overflow-hidden rounded-2xl border bg-card p-4 md:grid-cols-2">
+              <div className="h-72 animate-pulse rounded-xl bg-muted sm:h-96" />
+              <div className="space-y-3 py-2">
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  טוען את המוצר…
+                </p>
+                <p className="font-display text-2xl font-bold text-foreground">{seo?.name ?? ""}</p>
+                <div className="h-8 w-32 animate-pulse rounded bg-muted" />
+                <div className="h-24 animate-pulse rounded bg-muted" />
+              </div>
+            </div>
+          ) : product ? (
+            <StorefrontSalesProvider value={storefrontSales}>
+              <div className="space-y-8">
+                <ProductDetailView
+                  product={product}
+                  mode="page"
+                  canAdd={canAddToCart}
+                  addLabel={addLabel}
+                  onAddToCart={canAddToCart ? addToCart : undefined}
+                  onShowProduct={(item) =>
+                    void navigate({ to: "/product/$productId", params: { productId: item.id } })
+                  }
+                  // בעמוד: רשת מלאה של מוצרים נלווים מתחת לפרטים (במקום השורה הקטנה)
+                  showRecommendations={false}
+                />
+                {/* חלק 34: מוצרים נלווים (Upsell) */}
+                <RelatedProductsSection
+                  items={related.items}
+                  linked={related.linked}
+                  category={product.category}
+                  canAdd={canAddToCart}
+                  addLabel={addLabel}
+                  onAddToCart={canAddToCart ? addToCart : undefined}
+                  onOpenProduct={(item) =>
+                    void navigate({ to: "/product/$productId", params: { productId: item.id } })
+                  }
+                />
+                {/* חלק 34: חוות דעת לקוחות */}
+                <ProductReviews productId={product.id} productName={product.name} />
+              </div>
+            </StorefrontSalesProvider>
+          ) : (
+            <Card className="mx-auto max-w-xl border-dashed">
+              <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+                <PackageX className="size-10 text-muted-foreground" aria-hidden="true" />
+                <p className="text-lg font-semibold text-foreground">המוצר לא נמצא</p>
+                <p className="text-sm text-muted-foreground">
+                  ייתכן שהמוצר הוסר מהחנות או שאינו זמין כרגע.
+                </p>
+                <Button asChild>
+                  <Link to="/">לכל המוצרים</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </StorefrontMain>
+        <AppFooter wide />
+      </div>
+    </PriceHoldProvider>
   );
 }

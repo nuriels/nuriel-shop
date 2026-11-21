@@ -1,5 +1,12 @@
 # מוכנות למיזוג ל-`main` — סגירת סיכונים, שלב 2 (17.11.2026)
 
+> ### ✅ עדכון מצב — 21.11.2026 (המסמך נשמר כתיעוד היסטורי של מה שתוכנן לפני הפריסה)
+> - **מוזג ל-`main`:** `20f49eb` — שלושת הענפים (ביקורת, SEO של Hospitality, SSR של החנות).
+> - **נפרס לייצור:** 19.11.2026, 10:50 UTC — image `876ba03ebdfd` (תג `release-20f49eb`); **201** מיגרציות רשומות ב-`public._migrations_applied`.
+> - **נקודת חזרה:** תג `before-audit-seo-ssr` = image `3839fed06c71`; גיבוי `before-deploy.dump` (sha256 `0fbc850a…`) + עותק Storage (1,369 קבצים) — בשרת.
+> - **מה הלאה:** הגרסה הבאה (חבילת כלה עם חדר נוסף, `/sitemap`, מחיר אישי בלי הבהוב, E2E קופון) ותוכנית הפריסה שלה —
+>   [`RELEASE-2026-11-21.md`](RELEASE-2026-11-21.md). גיבוי מחוץ לשרת — [`OFFSITE-BACKUP-PROPOSAL.md`](OFFSITE-BACKUP-PROPOSAL.md).
+
 ענף: **`audit/platform-review-2026-11`** (הקוד = `ff0518b`, שעליו רץ ה-CI; מאז רק מסמכים) · **לא בוצע מיזוג, לא בוצעה פריסה, לא נגעתי בייצור, בענפים, בסודות או בנתוני לקוחות.** כל העבודה מקומית ובענף הביקורת (נדחף ל-origin, בלי PR). המסמך נכתב כדי שתוכל להחליט; **אני עוצר כאן וממתין לאישורך** לכל צעד שנוגע ב-`main`, בענפים או בשרת.
 
 מסמכי המשך: [`FULL-PLATFORM-AUDIT.md`](FULL-PLATFORM-AUDIT.md) · [`MAIN-MERGE-PLAN.md`](MAIN-MERGE-PLAN.md) · [`SECURITY-FINDINGS.md`](SECURITY-FINDINGS.md) · [`GROW-VERIFICATION.md`](GROW-VERIFICATION.md) · [`ROLLBACK-GUARDS.md`](ROLLBACK-GUARDS.md) · [`HEALTHCHECK.md`](HEALTHCHECK.md) · [`interim/rls-performance.md`](interim/rls-performance.md) · [`interim/merge-review.md`](interim/merge-review.md) · [`COMMITS-main-to-audit.txt`](COMMITS-main-to-audit.txt)

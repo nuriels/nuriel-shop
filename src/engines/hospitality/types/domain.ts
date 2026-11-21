@@ -115,6 +115,8 @@ export interface GuestBookingView {
   can_request_cancellation: boolean;
   /** שלב א' 7 (מיגרציה 59): הזמנת חבילה — שם החבילה; null / חסר — הזמנה רגילה */
   package_name?: string | null;
+  /** מיגרציה 202: "addon" — חדר נוסף לחבילה; ריק — החבילה עצמה / הזמנה רגילה */
+  package_role?: "addon" | null;
 }
 
 export interface CancellationQuote {

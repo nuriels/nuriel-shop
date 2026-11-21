@@ -536,3 +536,10 @@ html.a11y-focus :focus-visible {
     page-break-after: auto;
   }
 }
+
+/* מחיר של אורח מה-HTML שנבנה בשרת: למי שמחובר הוא לא מוצג עד שהמחירון שלו נטען בדפדפן
+   (data-signed-in — סקריפט ב-<head> לפני הציור הראשון; data-price="hold" — עד שהקטלוג נטען).
+   visibility ולא display — בלי קפיצה בעמוד. אורח וגוגל רואים את המחירים מיד (src/lib/price-hold.ts) */
+html[data-signed-in] [data-price="hold"] {
+  visibility: hidden;
+}

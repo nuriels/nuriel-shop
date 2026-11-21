@@ -5,6 +5,7 @@ import { formatIls, type CatalogItem } from "@/lib/catalog";
 import { ProductSticker } from "@/components/products/ProductSticker";
 import { cn } from "@/lib/utils";
 import { hasVariants } from "@/lib/variants";
+import { usePriceAttr } from "@/lib/price-hold";
 
 /**
  * "מוצרים נוספים שאולי תאהבו" — שורה נגללת (גם במגע) של כרטיסים קטנים.
@@ -26,6 +27,7 @@ export function ProductRecommendations({
   /** כרטיסים צרים יותר (מגירת הסל) */
   compact?: boolean;
 }) {
+  const priceAttr = usePriceAttr();
   if (items.length === 0) return null;
 
   return (
@@ -78,7 +80,7 @@ export function ProductRecommendations({
                 </p>
               </button>
               <div className="mt-auto flex items-end justify-between gap-1 px-2 pb-2 pt-1">
-                <div className="min-w-0">
+                <div data-price={priceAttr} className="min-w-0">
                   {item.price !== null ? (
                     <>
                       <p className="numeric text-sm font-bold text-accent">

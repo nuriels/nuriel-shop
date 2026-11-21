@@ -34,8 +34,19 @@ import {
   hospitalityPackages,
 } from "../../api/packages.functions";
 import type { MediaItem } from "../../types/media";
-import type { PackageKind, PackagesView, StaffPackage } from "../../types/packages";
-import { PACKAGE_MAX_MEDIA, PACKAGE_MAX_NIGHTS, PACKAGE_TEXT_MAX } from "../../validation/packages";
+import type {
+  PackageKind,
+  PackageUnitOption,
+  PackagesView,
+  StaffPackage,
+} from "../../types/packages";
+import {
+  PACKAGE_ADDON_MAX_PRICE,
+  PACKAGE_ADDON_MAX_UNITS,
+  PACKAGE_MAX_MEDIA,
+  PACKAGE_MAX_NIGHTS,
+  PACKAGE_TEXT_MAX,
+} from "../../validation/packages";
 import { FormSheet } from "../catalog/CatalogSheets";
 import { errorText } from "../catalog/refresh";
 import { formatDate, formatMoney } from "../lib/format";
@@ -125,6 +136,7 @@ export function PackagesPage() {
             <li key={p.id}>
               <PackageRow
                 pkg={p}
+                units={data.units}
                 busy={toggle.isPending}
                 onToggle={(active) => toggle.mutate({ id: p.id, active })}
                 onEdit={() => setEditing(p)}
@@ -180,18 +192,30 @@ export function PackagesPage() {
 
 function PackageRow({
   pkg,
+  units,
   busy,
   onToggle,
   onEdit,
   onDelete,
 }: {
   pkg: StaffPackage;
+  units: PackageUnitOption[];
   busy: boolean;
   onToggle: (active: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const switchId = `pkg-active-${pkg.id}`;
+  // מיגרציה 202: החדרים הנוספים שאפשר להוסיף לחבילה
+  const addonsLine =
+    pkg.addons && pkg.addons.unit_ids.length > 0
+      ? `+ חדר נוסף: ${pkg.addons.unit_ids
+          .map((id) => units.find((u) => u.id === id)?.name)
+          .filter(Boolean)
+          .join(", ")} · ${formatMoney(Number(pkg.addons.nightly_price))} ללילה לחדר · עד ${
+          pkg.addons.max === 1 ? "חדר אחד" : `${pkg.addons.max} חדרים`
+        }`
+      : null;
   const period =
     pkg.stay_from || pkg.stay_to
       ? `לשהייה ${pkg.stay_from ? `מ-${formatDate(pkg.stay_from)}` : ""}${pkg.stay_from && pkg.stay_to ? " " : ""}${pkg.stay_to ? `עד ${formatDate(pkg.stay_to)}` : ""}`
@@ -220,6 +244,11 @@ function PackageRow({
               .filter(Boolean)
               .join(" · ")}
           </p>
+          {addonsLine && (
+            <p className="mt-0.5 text-sm text-muted-foreground" data-testid="package-addons-line">
+              {addonsLine}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
@@ -264,6 +293,15 @@ interface Form {
   terms: string;
   policyId: string;
   mediaIds: string[];
+  /** מיגרציה 202: החדרים הנוספים (ריק — בלי) */
+  addonUnitIds: string[];
+  addonPrice: string;
+  addonMax: string;
+}
+
+/** יחידה שאפשר להציע כחדר נוסף: לא היחידה של החבילה, לא "כל המתחם" ולא חדר מלון לפי סוג */
+function addonOptions(units: PackageUnitOption[], packageUnit: string): PackageUnitOption[] {
+  return units.filter((u) => u.id !== packageUnit && u.kind !== "whole_property" && !u.typed);
 }
 
 function initialForm(view: PackagesView, pkg: StaffPackage | null): Form {
@@ -282,6 +320,9 @@ function initialForm(view: PackagesView, pkg: StaffPackage | null): Form {
         terms: pkg.terms ?? "",
         policyId: pkg.policy_id ?? "",
         mediaIds: pkg.media_ids,
+        addonUnitIds: pkg.addons?.unit_ids ?? [],
+        addonPrice: pkg.addons ? String(Number(pkg.addons.nightly_price)) : "",
+        addonMax: pkg.addons ? String(pkg.addons.max) : "1",
       }
     : {
         kind: "special",
@@ -296,6 +337,9 @@ function initialForm(view: PackagesView, pkg: StaffPackage | null): Form {
         terms: "",
         policyId: "",
         mediaIds: [],
+        addonUnitIds: [],
+        addonPrice: "",
+        addonMax: "1",
       };
 }
 
@@ -319,6 +363,20 @@ function validate(f: Form, capacity: number): Partial<Record<keyof Form, string>
   }
   if (f.description.length > PACKAGE_TEXT_MAX) e.description = "עד 4000 תווים";
   if (f.terms.length > PACKAGE_TEXT_MAX) e.terms = "עד 4000 תווים";
+  if (f.addonUnitIds.length > 0) {
+    const addonPrice = Number(f.addonPrice);
+    const addonMax = Number(f.addonMax);
+    if (
+      !f.addonPrice ||
+      !Number.isFinite(addonPrice) ||
+      addonPrice <= 0 ||
+      addonPrice > PACKAGE_ADDON_MAX_PRICE ||
+      Math.round(addonPrice * 100) !== addonPrice * 100
+    )
+      e.addonPrice = "מחיר ללילה לכל חדר נוסף, בשקלים";
+    if (!Number.isInteger(addonMax) || addonMax < 1 || addonMax > f.addonUnitIds.length)
+      e.addonMax = `בין 1 ל-${f.addonUnitIds.length} (מספר החדרים שנבחרו)`;
+  }
   return e;
 }
 
@@ -359,6 +417,15 @@ function PackageSheet({
           policyId: form.policyId || null,
           mediaIds: form.mediaIds,
           expectedRevision: pkg?.revision ?? null,
+          // מיגרציה 202: תמיד נשלח — רשימה ריקה מבטלת את החדרים הנוספים
+          addons:
+            form.addonUnitIds.length > 0
+              ? {
+                  unitIds: form.addonUnitIds,
+                  nightlyPrice: Number(form.addonPrice),
+                  max: Number(form.addonMax),
+                }
+              : { unitIds: [], nightlyPrice: null, max: 0 },
         },
       }),
     onSuccess: (p) => onSaved(p, !pkg),
@@ -445,7 +512,14 @@ function PackageSheet({
           id="pkg-unit"
           className={SELECT}
           value={form.unitId}
-          onChange={(e) => setForm((f) => ({ ...f, unitId: e.target.value, mediaIds: [] }))}
+          onChange={(e) =>
+            setForm((f) => ({
+              ...f,
+              unitId: e.target.value,
+              mediaIds: [],
+              addonUnitIds: f.addonUnitIds.filter((id) => id !== e.target.value),
+            }))
+          }
         >
           {view.units.map((u) => (
             <option key={u.id} value={u.id}>
@@ -577,6 +651,13 @@ function PackageSheet({
           ))}
         </select>,
       )}
+      <AddonRooms
+        options={addonOptions(view.units, form.unitId)}
+        form={form}
+        setForm={setForm}
+        nights={Number(form.nights) || 0}
+        errors={submitted ? errors : {}}
+      />
       {unit && (
         <ImagePicker
           unitId={unit.id}
@@ -586,6 +667,116 @@ function PackageSheet({
         />
       )}
     </FormSheet>
+  );
+}
+
+/**
+ * מיגרציה 202: חדרים נוספים לחבילה (לא חובה) — יחידות שהאורח יכול להוסיף באותם לילות, רק כשהן פנויות,
+ * במחיר קבוע ללילה לחדר. החדרים הנוספים — באותה מדיניות ביטול של החבילה (המקדמה לכל חדר לפי הסכום שלו).
+ */
+function AddonRooms({
+  options,
+  form,
+  setForm,
+  nights,
+  errors,
+}: {
+  options: PackageUnitOption[];
+  form: Form;
+  setForm: (f: (prev: Form) => Form) => void;
+  nights: number;
+  errors: Partial<Record<keyof Form, string>>;
+}) {
+  const picked = form.addonUnitIds;
+  const toggle = (id: string) =>
+    setForm((f) => {
+      const next = f.addonUnitIds.includes(id)
+        ? f.addonUnitIds.filter((x) => x !== id)
+        : [...f.addonUnitIds, id].slice(0, PACKAGE_ADDON_MAX_UNITS);
+      const max = Math.min(Math.max(1, Number(f.addonMax) || 1), Math.max(1, next.length));
+      return { ...f, addonUnitIds: next, addonMax: String(max) };
+    });
+  const price = Number(form.addonPrice);
+  const example =
+    picked.length > 0 && Number.isFinite(price) && price > 0 && nights > 0
+      ? `לדוגמה: חדר נוסף אחד לכל ${nights === 1 ? "הלילה" : `${nights} הלילות`} — ${formatMoney(price * nights)}`
+      : null;
+  return (
+    <fieldset className="flex flex-col gap-3 rounded-md border p-4" data-testid="package-addons">
+      <legend className="px-1 text-sm font-medium">חדרים נוספים לחבילה (לא חובה)</legend>
+      <p className="text-xs text-muted-foreground">
+        האורח יוכל להוסיף חדר למלוות או למשפחה — באותם לילות של החבילה, ורק כשהחדר פנוי. המחיר קבוע
+        ללילה לכל חדר. החדרים הנוספים באותה מדיניות ביטול של החבילה, והמקדמה לכל חדר לפי הסכום שלו.
+      </p>
+      {options.length === 0 ? (
+        <p className="text-sm text-muted-foreground">אין יחידה נוספת שאפשר להציע כחדר נוסף.</p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {options.map((u) => {
+            const on = picked.includes(u.id);
+            return (
+              <label
+                key={u.id}
+                className={cn(
+                  "flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm",
+                  on ? "border-primary bg-primary/5" : "border-input",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => toggle(u.id)}
+                  className="size-4 accent-[var(--primary)]"
+                  aria-label={`חדר נוסף: ${u.name}`}
+                />
+                <span>
+                  {u.name}
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · עד {u.capacity} אורחים{u.is_active ? "" : " (מוסתרת)"}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+      {picked.length > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="pkg-addon-price">מחיר ללילה לחדר נוסף (₪)</Label>
+            <Input
+              id="pkg-addon-price"
+              type="number"
+              inputMode="decimal"
+              min={1}
+              value={form.addonPrice}
+              onChange={(e) => setForm((f) => ({ ...f, addonPrice: e.target.value }))}
+              aria-invalid={!!errors.addonPrice}
+            />
+            {errors.addonPrice ? (
+              <p className="text-sm text-destructive">{errors.addonPrice}</p>
+            ) : (
+              example && <p className="text-xs text-muted-foreground">{example}</p>
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="pkg-addon-max">כמה חדרים נוספים לכל היותר</Label>
+            <Input
+              id="pkg-addon-max"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={picked.length}
+              value={form.addonMax}
+              onChange={(e) => setForm((f) => ({ ...f, addonMax: e.target.value }))}
+              aria-invalid={!!errors.addonMax}
+            />
+            {errors.addonMax && <p className="text-sm text-destructive">{errors.addonMax}</p>}
+          </div>
+        </div>
+      )}
+    </fieldset>
   );
 }
 

@@ -31,6 +31,16 @@ export const hospitalityPackageSave = createServerFn({ method: "POST" })
       _policy_id: data.policyId,
       _media_ids: data.mediaIds,
       _expected_revision: data.expectedRevision,
+      // מיגרציה 202: החדרים הנוספים — רק כשנשלחו (בלי — המסד משאיר את מה שנשמר)
+      ...(data.addons
+        ? {
+            _addons: {
+              unit_ids: data.addons.unitIds,
+              nightly_price: data.addons.nightlyPrice,
+              max: data.addons.max,
+            },
+          }
+        : {}),
     });
   });
 

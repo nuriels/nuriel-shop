@@ -65,6 +65,10 @@ jobs:
         run: bash scripts/db-tests/run.sh
       - name: SEO proposals rollback (Hospitality, guard + exact schema)
         run: bash scripts/db-tests/seo-proposals-rollback.sh
+      - name: package add-on rooms rollback (migration 202, guard + exact schema)
+        run: bash scripts/db-tests/package-addons-rollback.sh
+      - name: bridal package + add-on rooms (parallel sessions)
+        run: bash scripts/db-tests/hospitality/bridal-package-availability.sh
       - name: migration rollback check
         run: bash scripts/db-tests/rollback-check.sh
       - name: rollback data guards — a rollback stops when customer data exists (R-3)
