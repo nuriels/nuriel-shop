@@ -14,6 +14,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 PORT=${PGPORT:-5499}
 M=20261121100000_hosp_package_addon_rooms
+# migrations that build on M (their functions use the add-on columns) — left out while M itself is applied and rolled
+# back, then applied at the end on top of the re-applied M (204: the SEO engine's Hospitality part)
+DEPENDENTS=(20261122110000_hosp_seo_engine)
 MIGRATIONS="$ROOT/supabase/migrations"
 DB=addons_rb
 PSQL=(psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d "$DB")
@@ -40,7 +43,9 @@ psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres -c "SET client_min_mess
   -c "CREATE DATABASE $DB ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
 "${PSQL[@]}" -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
-  [ "$(basename "$f" .sql)" = "$M" ] && continue
+  name=$(basename "$f" .sql)
+  [ "$name" = "$M" ] && continue
+  [[ " ${DEPENDENTS[*]} " == *" $name "* ]] && continue
   "${PSQL[@]}" -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 dump "$DIR/before.sql"
@@ -113,5 +118,10 @@ expect "the regular package booking survives the rollback" \
 "${PSQL[@]}" -f "$MIGRATIONS/$M.sql" >/dev/null
 dump "$DIR/reapplied.sql"
 same "$DIR/after.sql" "$DIR/reapplied.sql" "re-applying after the rollback gives the same schema as the first apply"
+for d in "${DEPENDENTS[@]}"; do
+  "${PSQL[@]}" -f "$MIGRATIONS/$d.sql" >/dev/null 2>&1 || { echo "  FAIL $d does not apply on top of the re-applied $M"; exit 1; }
+done
+expect "the migrations that build on it still apply on top (${DEPENDENTS[*]})" \
+  "SELECT to_regprocedure('hospitality.package_seo_set(uuid,text,text,integer)') IS NOT NULL"
 psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres -c "DROP DATABASE $DB" >/dev/null 2>&1 || true
 echo "package add-on rooms rollback check passed"

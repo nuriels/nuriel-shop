@@ -480,6 +480,14 @@ SELECT tests.check('seo engine: the SEO center names the business (to tell its o
              AND EXISTS (SELECT 1 FROM jsonb_array_elements(c -> 'keywords') k
                           WHERE k ->> 'phrase' = 'צימר לכלה ליד בית שמש' AND k ->> 'source' = 'owner' AND k -> 'metrics' = 'null'::jsonb)
       FROM (SELECT pg_temp.call(%1$L, %3$L, 'SELECT public.seo_center()') AS c) x$$, :'sa', :'sa', :OWNER_A));
+SELECT tests.check('seo engine: the Analytics check — nothing saved yet: GA4 not set up',
+  format($$SELECT coalesce((pg_temp.call(%L, %L, 'SELECT public.seo_center()') #>> '{analytics,ga4}')::boolean, false) = false$$, :'sa', :OWNER_A));
+INSERT INTO public.site_tracking (tenant_id, ga4_measurement_id) VALUES (:'sa', 'G-SEOTEST12')
+  ON CONFLICT (tenant_id) DO UPDATE SET ga4_measurement_id = EXCLUDED.ga4_measurement_id;
+SELECT tests.check('seo engine: the Analytics check — GA4 set up shows as set up (only a yes / no — never the ID)',
+  format($$SELECT (c #>> '{analytics,ga4}')::boolean AND NOT (c #>> '{analytics,gtm}')::boolean AND c::text NOT LIKE '%%G-SEOTEST12%%'
+      FROM (SELECT pg_temp.call(%L, %L, 'SELECT public.seo_center()') AS c) x$$, :'sa', :OWNER_A));
+DELETE FROM public.site_tracking WHERE tenant_id = :'sa';
 SELECT pg_temp.call(:'sa', :OWNER_A, $q$SELECT public.seo_request('audit')$q$) ->> 'queued' AS q1 \gset
 SELECT pg_temp.call(:'sa', :OWNER_A, $q$SELECT public.seo_request('audit')$q$) ->> 'already' AS q2 \gset
 SELECT tests.check('seo engine: "check now" queues ONE audit — a second click while it waits does not queue another',

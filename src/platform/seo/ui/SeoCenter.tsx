@@ -137,7 +137,7 @@ export function SeoCenter(props: {
         view={view}
         onChange={() => void qc.invalidateQueries({ queryKey: SEO_CENTER_KEY })}
       />
-      <SearchConsoleCard view={view} onView={set} />
+      <SearchConsoleCard view={view} onView={set} variant={props.variant} />
       <SettingsCard view={view} variant={props.variant} onView={set} />
     </div>
   );
@@ -269,6 +269,35 @@ function IssueRow({ issue }: { issue: AuditIssue }) {
         )}
       </span>
     </li>
+  );
+}
+
+// ------------------------------------------------------------------ the Analytics check
+
+/** whether Google Analytics 4 / Tag Manager are set up — the IDs themselves live in the tracking settings screen */
+function AnalyticsRow({
+  view,
+  variant,
+}: {
+  view: SeoCenterView;
+  variant: "store" | "hospitality";
+}) {
+  const a = view.analytics;
+  const href = variant === "store" ? "/admin?tab=marketing" : "/manage/settings";
+  return (
+    <div className="rounded-md border p-2 text-sm" data-testid="seo-analytics">
+      <span className="font-medium">Google Analytics 4: </span>
+      {a?.ga4 ? "מוגדר באתר" : "לא מוגדר"}
+      {a?.gtm ? " · Google Tag Manager פעיל" : ""}
+      {" — "}
+      <a href={href} className="font-medium underline">
+        {a?.ga4 ? "להגדרות המעקב" : 'להגדרה ב"קידום, Analytics ומעקב"'}
+      </a>
+      <span className="block text-xs text-muted-foreground">
+        Analytics מודד ביקורים באתר (רק אחרי הסכמה לעוגיות); Search Console מראה איך מוצאים אתכם
+        בגוגל.
+      </span>
+    </div>
   );
 }
 
@@ -451,9 +480,11 @@ function KeywordsCard({ view, onChange }: { view: SeoCenterView; onChange: () =>
 function SearchConsoleCard({
   view,
   onView,
+  variant,
 }: {
   view: SeoCenterView;
   onView: (v: SeoCenterView) => void;
+  variant: "store" | "hospitality";
 }) {
   const g = view.gsc;
   const connect = useMutation({
@@ -620,6 +651,7 @@ function SearchConsoleCard({
           <p className="text-sm text-muted-foreground">עוד אין נתונים מ-Search Console.</p>
         )}
         {view.can_connect_gsc && <CsvImport onView={onView} />}
+        <AnalyticsRow view={view} variant={variant} />
       </CardContent>
     </Card>
   );

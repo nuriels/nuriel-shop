@@ -590,6 +590,10 @@ BEGIN
   RETURN jsonb_build_object(
     'site_type', public.current_site_type(),
     'business_name', (SELECT t.name FROM public.tenants t WHERE t.id = _t),
+    -- the Analytics check: only whether GA4 / Tag Manager are set up (the IDs stay in their own settings screen)
+    'analytics', (SELECT jsonb_build_object('ga4', COALESCE(st.ga4_measurement_id, '') <> '',
+                                            'gtm', COALESCE(st.gtm_enabled, false) AND COALESCE(st.gtm_container_id, '') <> '')
+                    FROM public.site_tracking st WHERE st.tenant_id = _t),
     'can_connect_gsc', COALESCE(public.site_tracking_can_edit(), false),
     'settings', jsonb_build_object(
       'auto_apply', COALESCE(s.auto_apply, '{"alt": false, "meta": false, "keywords": false}'::jsonb),

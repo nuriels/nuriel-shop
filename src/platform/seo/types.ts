@@ -61,6 +61,8 @@ export interface SeoSnapshot {
 export interface SeoCenterData {
   site_type: SeoSiteType | string;
   business_name?: string | null;
+  /** the Analytics check: only whether GA4 / Tag Manager are set up (null = nothing saved yet) */
+  analytics?: { ga4: boolean; gtm: boolean } | null;
   can_connect_gsc: boolean;
   settings: {
     auto_apply: { alt: boolean; meta: boolean; keywords: boolean };

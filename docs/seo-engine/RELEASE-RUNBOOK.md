@@ -176,7 +176,7 @@ docker exec -i nuriel-shop-db psql -U postgres -d postgres -X -q -tA -v ON_ERROR
 # PL2
 B=/root/backups/nuriel-shop/before-seo-engine && docker exec -i nuriel-shop-db psql -U postgres -d postgres -X -q -tA < $B/release/deploy/seo-engine/pilot-check.sql && docker exec -i nuriel-shop-db psql -U postgres -d postgres -X -q -tA < $B/release/deploy/seo-engine/nofi-snapshot.sql | diff - $B/nofi-before.txt && echo "nofi-dorit unchanged: ok"
 ```
-**תקין:** `job|initial|-|done|1|-`; שורת `audit` עם ציון; שורות `proposal|pending|template|…` — כ-11 (כותרת "על המקום", כותרת
+**תקין:** `job|initial|store|done|1|-`; שורת `audit` עם ציון; שורות `proposal|pending|template|…` — כ-11 (כותרת "על המקום", כותרת
 ותיאור לגוגל ל-4 יחידות בלי טקסט כזה, וכותרת + תיאור לחבילת הכלה מהמילים שלכם); `applied by the engine (must be 0)|0`; 7 שורות
 `phrase|…|owner|new|t`; `nofi-dorit unchanged: ok`. (אם `job … queued` — עוד לא רץ; מריצים שוב בעוד דקה-שתיים.)
 

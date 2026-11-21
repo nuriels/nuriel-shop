@@ -134,6 +134,7 @@ test.describe("store owner (Ecommerce) — the SEO tab", () => {
     await page.goto(A("/admin?tab=seo"));
     await expect(page.getByTestId("seo-center")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("seo-audit")).toContainText("לא תחזית למיקום בגוגל");
+    await expect(page.getByTestId("seo-analytics")).toContainText("Google Analytics 4");
     const settings = page.getByTestId("seo-settings");
     await expect(settings).toContainText("שום דבר לא משתנה באתר בלי האישור שלכם");
     const autos = settings.getByRole("switch", { name: /אוטומטית/ });

@@ -85,7 +85,7 @@ export function StoreSeoProposals() {
     onError: (e) => toast.error(messageOf(e)),
   });
 
-  const all = query.data?.proposals ?? [];
+  const all = useMemo(() => query.data?.proposals ?? [], [query.data]);
   const open = useMemo(
     () => all.filter((p) => p.status === "pending" || p.status === "later"),
     [all],
