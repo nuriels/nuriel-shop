@@ -7,6 +7,8 @@ import {
   parseSitemap,
 } from "@/platform/seo/audit/html";
 import { auditPage, auditSite, healthScore, type FetchedPage } from "@/platform/seo/audit/rules";
+import { crawlSite } from "@/platform/seo/audit/crawl";
+import type { Fetcher } from "@/platform/seo/audit/fetch.server";
 
 const GOOD = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -179,5 +181,200 @@ describe("SEO engine — audit rules", () => {
       healthScore([{ code: "page.noindex", severity: "critical", url: null, message: "" }]).score,
     ).toBe(80);
     expect(healthScore([]).score).toBe(100);
+  });
+});
+
+// ------------------------------------------------------------------------------------------------------------
+// Hostile input: the pages, robots.txt and sitemaps come from the business's own address — a business with its
+// own domain controls them. Every parse must stay linear, or one site could stall the whole server (the worker
+// runs inside the web process). Each case below took effectively forever with the old backtracking regexes.
+// ------------------------------------------------------------------------------------------------------------
+const timed = <T>(fn: () => T): { value: T; ms: number } => {
+  const t0 = performance.now();
+  const value = fn();
+  return { value, ms: performance.now() - t0 };
+};
+const LIMIT_MS = 1500; // generous for a slow CI machine; the linear scans take a few ms here
+
+/** the old robots semantics (a regex per rule) — the reference for the new matcher, on small inputs only */
+function referenceRuleMatches(rule: string, path: string): number {
+  const anchored = rule.endsWith("$");
+  const body = anchored ? rule.slice(0, -1) : rule;
+  const re = new RegExp(
+    "^" +
+      body
+        .split("*")
+        .map((x) => x.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+        .join(".*") +
+      (anchored ? "$" : ""),
+  );
+  return re.test(path) ? body.length : -1;
+}
+function referenceAllowed(rules: { disallow: string[]; allow: string[] }, path: string): boolean {
+  let best = -1;
+  let allowed = true;
+  for (const r of rules.disallow) {
+    const n = referenceRuleMatches(r, path);
+    if (n > best) {
+      best = n;
+      allowed = false;
+    }
+  }
+  for (const r of rules.allow) {
+    const n = referenceRuleMatches(r, path);
+    if (n >= best && n >= 0) {
+      best = n;
+      allowed = true;
+    }
+  }
+  return allowed;
+}
+
+describe("SEO engine — hostile input stays fast (linear scans)", () => {
+  it("robots.txt: a rule full of wildcards does not backtrack (the case from the security review)", () => {
+    const rule = "/" + Array.from({ length: 20 }, () => "*a").join("") + "*b";
+    const rules = parseRobots(`User-agent: *\nDisallow: ${rule}\n`);
+    const { value, ms } = timed(() => isPathAllowed(rules, "/" + "a".repeat(60)));
+    expect(value).toBe(true); // no "b" in the path: the rule does not match
+    expect(ms).toBeLessThan(LIMIT_MS);
+    expect(isPathAllowed(rules, "/" + "a".repeat(60) + "b")).toBe(false);
+  });
+
+  it("robots.txt: the new matcher agrees with the old regex semantics (random rules and paths)", () => {
+    let seed = 20261122;
+    const rnd = (n: number) => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % n;
+    };
+    const pick = (alphabet: string, len: number) =>
+      Array.from({ length: len }, () => alphabet[rnd(alphabet.length)]).join("");
+    for (let i = 0; i < 4000; i += 1) {
+      const disallow = Array.from(
+        { length: 1 + rnd(3) },
+        () => "/" + pick("ab/*.", rnd(7)) + (rnd(4) === 0 ? "$" : ""),
+      );
+      const allow = Array.from(
+        { length: rnd(3) },
+        () => "/" + pick("ab/*.", rnd(7)) + (rnd(4) === 0 ? "$" : ""),
+      );
+      const rules = { disallow, allow, sitemaps: [] };
+      const path = "/" + pick("ab/.", rnd(9));
+      expect(isPathAllowed(rules, path), JSON.stringify({ rules, path })).toBe(
+        referenceAllowed(rules, path),
+      );
+    }
+  });
+
+  it("robots.txt: absurd rules are not evaluated (length and count caps)", () => {
+    const long = "/" + "x".repeat(600);
+    expect(parseRobots(`User-agent: *\nDisallow: ${long}\n`).disallow).toEqual([]);
+    const many = Array.from({ length: 1500 }, (_, i) => `Disallow: /p${i}`).join("\n");
+    expect(parseRobots(`User-agent: *\n${many}\n`).disallow).toHaveLength(1000);
+  });
+
+  it("sitemap: an unclosed <loc>, or <loc> followed by a sea of spaces, ends the scan quickly", () => {
+    const spaces = timed(() => parseSitemap("<urlset><loc>" + " ".repeat(300_000)));
+    expect(spaces.value).toEqual({ urls: [], sitemaps: [] });
+    expect(spaces.ms).toBeLessThan(LIMIT_MS);
+    const unclosed = timed(() => parseSitemap("<loc> ".repeat(150_000)));
+    expect(unclosed.ms).toBeLessThan(LIMIT_MS);
+    const fine = parseSitemap(
+      "<urlset><url><LOC> https://a/x </LOC></url><url><loc>https://a/y</loc ></url></urlset>",
+    );
+    expect(fine.urls).toEqual(["https://a/x", "https://a/y"]);
+  });
+
+  it("pages: unclosed tags, runs of '<' and unclosed comments are parsed in linear time", () => {
+    const cases: Record<string, string> = {
+      "<a without >": "<a".repeat(300_000),
+      "<a> without </a>": "<a>".repeat(250_000),
+      "unclosed comments": "<!--".repeat(250_000),
+      "<script> without </script>": "<script>".repeat(120_000),
+      "a sea of <": "<".repeat(1_000_000),
+      "<title> without </title>": "<title>".repeat(140_000),
+      "<body> without </body>": "<body>".repeat(140_000),
+      "<meta without >": "<meta ".repeat(160_000),
+      "<html + 1 MB": "<html " + "a".repeat(1_000_000),
+      "</a + spaces": "<a href=x>" + "</a ".repeat(200_000),
+    };
+    for (const [name, html] of Object.entries(cases)) {
+      const { ms } = timed(() => extractSignals(html));
+      expect(ms, name).toBeLessThan(LIMIT_MS);
+    }
+  });
+
+  it("pages: one heading level left unclosed does not hide the others (and stays linear)", () => {
+    const html = "<h1>".repeat(150_000) + "<h2>עוד מידע</h2><h3>פרטים</h3>";
+    const { value, ms } = timed(() => extractSignals(html));
+    expect(ms).toBeLessThan(LIMIT_MS);
+    expect(value.headings).toEqual([
+      { level: 2, text: "עוד מידע" },
+      { level: 3, text: "פרטים" },
+    ]);
+  });
+
+  it("pages: the same answers as before on ordinary markup (case, spaces in closing tags, nesting, body)", () => {
+    const s = extractSignals(
+      `<HTML LANG="he"><HEAD><TITLE>כותרת</TITLE ></HEAD><BODY><H1>ראשי</h1 ><A HREF="/x">קישור</A>` +
+        `<a href="/1">אחד <a href="/2">שתיים</a><p>טקסט אחרון</p></BODY></HTML>`,
+    );
+    expect(s.lang).toBe("he");
+    expect(s.titles).toEqual(["כותרת"]);
+    expect(s.headings).toEqual([{ level: 1, text: "ראשי" }]);
+    expect(s.links.map((l) => [l.href, l.text])).toEqual([
+      ["/x", "קישור"],
+      ["/1", "אחד שתיים"],
+    ]);
+    expect(s.wordCount).toBe(6); // the body only — the title is in the head
+  });
+
+  it("pages: an unclosed comment hides the rest (as in a browser); <svg/> does not swallow the page", () => {
+    expect(extractSignals("<title>א</title><!-- <title>ב</title>").titles).toEqual(["א"]);
+    const svg = extractSignals(
+      '<body><svg viewBox="0 0 1 1"/><h1>כותרת</h1><svg><path/></svg><p>מילה</p></body>',
+    );
+    expect(svg.headings).toEqual([{ level: 1, text: "כותרת" }]);
+    expect(svg.wordCount).toBe(2);
+  });
+});
+
+describe("SEO engine — the crawl has one overall budget", () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const html = `<html lang="he"><head><title>דף</title></head><body><h1>דף</h1></body></html>`;
+  const fetcherWithDelay =
+    (ms: number): Fetcher =>
+    async (url) => {
+      await sleep(ms);
+      if (url.endsWith("/robots.txt"))
+        return { status: 404, headers: {}, body: null, finalUrl: url };
+      if (url.endsWith("/sitemap.xml"))
+        return {
+          status: 200,
+          headers: { "content-type": "application/xml" },
+          body: `<urlset>${Array.from({ length: 10 }, (_, i) => `<url><loc>https://s.example/p${i}</loc></url>`).join("")}</urlset>`,
+          finalUrl: url,
+        };
+      return { status: 200, headers: { "content-type": "text/html" }, body: html, finalUrl: url };
+    };
+  const opts = {
+    origin: "https://s.example",
+    engine: "ecommerce" as const,
+    startPaths: ["/"],
+    maxPages: 30,
+    kindOf: () => "home" as const,
+    concurrency: 2,
+  };
+
+  it("a slow host: the crawl stops at the budget; pages it did not reach are left out, not reported as broken", async () => {
+    const r = await crawlSite({ ...opts, deadlineMs: 150 }, fetcherWithDelay(60));
+    expect(r.stoppedEarly).toBe(true);
+    expect(r.pagesAudited).toBeLessThan(11);
+    expect(r.pages.every((p) => p.status === 200)).toBe(true);
+  });
+
+  it("a normal host finishes everything inside the budget", async () => {
+    const r = await crawlSite({ ...opts, deadlineMs: 60_000 }, fetcherWithDelay(0));
+    expect(r.stoppedEarly).toBe(false);
+    expect(r.pagesAudited).toBe(11);
   });
 });

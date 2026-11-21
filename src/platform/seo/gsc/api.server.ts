@@ -210,9 +210,19 @@ export async function searchAnalytics(
     rowLimit: Math.min(q.rowLimit ?? 1000, 25_000),
     dataState: "final",
   };
+  // only the business's own pages: the address must START with its origin (a shared domain property holds every
+  // business — "contains" would also count another site's page that merely mentions this address). RE2 syntax
   if (q.pagePrefix)
     body["dimensionFilterGroups"] = [
-      { filters: [{ dimension: "page", operator: "contains", expression: q.pagePrefix }] },
+      {
+        filters: [
+          {
+            dimension: "page",
+            operator: "includingRegex",
+            expression: `^${q.pagePrefix.replace(/[\\^$.|?*+()[\]{}]/g, "\\$&")}`,
+          },
+        ],
+      },
     ];
   const j = await api(
     f,

@@ -31,7 +31,12 @@ export interface CrawlOptions {
   timeoutMs?: number;
   concurrency?: number;
   userAgent?: string;
+  /** one budget for the whole crawl (default 4 minutes) — well inside the 15-minute job lock, so a slow or
+   *  hostile host can never make a second worker pick the same audit up while this one still runs */
+  deadlineMs?: number;
 }
+
+export const CRAWL_DEADLINE_MS = 4 * 60_000;
 
 export interface PageResult {
   url: string;
@@ -55,6 +60,8 @@ export interface CrawlResult {
   sitemapStatus: number;
   pages: PageResult[];
   issues: AuditIssue[];
+  /** the crawl budget ran out: the pages after that point were not fetched (the result covers the rest) */
+  stoppedEarly: boolean;
 }
 
 async function safeGet(
@@ -91,6 +98,13 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
   const userAgent = opts.userAgent ?? "NurielSEOAudit/1.0";
   const origin = opts.origin.replace(/\/$/, "");
   const host = new URL(origin).host;
+  const deadline = Date.now() + (opts.deadlineMs ?? CRAWL_DEADLINE_MS);
+  let stoppedEarly = false;
+  const timeLeft = () => {
+    if (Date.now() < deadline) return true;
+    stoppedEarly = true;
+    return false;
+  };
 
   const robotsRes = await safeGet(fetcher, `${origin}/robots.txt`, timeoutMs, userAgent);
   const robots: RobotsRules | null =
@@ -108,7 +122,7 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
   const sitemapUrls: string[] = [];
   let sitemapStatus = 0;
   const seenMaps = new Set<string>();
-  while (queue.length > 0 && seenMaps.size < 5) {
+  while (queue.length > 0 && seenMaps.size < 5 && timeLeft()) {
     const mapUrl = queue.shift();
     if (!mapUrl || seenMaps.has(mapUrl)) continue;
     seenMaps.add(mapUrl);
@@ -136,7 +150,8 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
   for (const p of opts.startPaths) add(new URL(p, origin + "/").toString());
   for (const u of sitemapUrls) add(u);
 
-  const fetched = await pool(targets, opts.concurrency ?? 3, async (url) => {
+  const results = await pool(targets, opts.concurrency ?? 3, async (url) => {
+    if (!timeLeft()) return null; // out of budget: not fetched, not reported as broken
     const r = await safeGet(fetcher, url, timeoutMs, userAgent);
     const path = new URL(url).pathname;
     const page: FetchedPage = {
@@ -153,6 +168,7 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
       r.status === 200 && r.body && isHtml ? extractSignals(r.body) : null;
     return { page, signals };
   });
+  const fetched = results.filter((x): x is NonNullable<typeof x> => x !== null);
 
   const ctx = { origin, engine: opts.engine, hebrew: true };
   const pages: PageResult[] = fetched.map(({ page, signals }) => ({
@@ -185,6 +201,7 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
     sitemapStatus,
     pages,
     issues,
+    stoppedEarly,
   };
 }
 

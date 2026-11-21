@@ -392,7 +392,8 @@ function KeywordsCard({ view, onChange }: { view: SeoCenterView; onChange: () =>
                       type="button"
                       className="ms-1 rounded px-1 text-xs underline"
                       onClick={() => mark.mutate({ id: k.id, status: "new" })}
-                      aria-label={`להחזיר לרעיונות: ${k.phrase}`}
+                      // the accessible name starts with the visible word (WCAG 2.5.3 — label in name)
+                      aria-label={`הסרה מהביטויים שבחרתם: ${k.phrase}`}
                     >
                       הסרה
                     </button>
