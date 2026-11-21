@@ -336,6 +336,27 @@ SELECT d AS "הגעה", (q ->> 'check_out')::date AS "עזיבה", (q ->> 'total
        COALESCE((SELECT string_agg(u ->> 'unit_name' || ' ' || (u ->> 'total'), ', ')
                    FROM jsonb_array_elements(a -> 'units') u), '—') AS "חדרים נוספים פנויים (לשני לילות)"
   FROM d WHERE (q ->> 'available')::boolean ORDER BY d LIMIT 8;
+\echo '== ג׳קוזי באתר היום (קריאה בלבד; הסקריפט לא נוגע בזה): מתקן ברשימת המתקנים / טקסט באתר / תיאור יחידה או מתחם'
+SELECT 'מתקן ברשימה: ' || a.name || ' — ' || COALESCE(u.name, pr.name, '') AS "איפה זה מופיע כרגע"
+  FROM hospitality.unit_amenities l
+  JOIN hospitality.amenities a ON a.id = l.amenity_id
+  JOIN public.tenants t ON t.id = l.tenant_id
+  LEFT JOIN hospitality.units u ON u.id = l.unit_id
+  LEFT JOIN hospitality.properties pr ON pr.id = l.property_id
+ WHERE t.slug = 'nofi-dorit' AND (a.preset_code = 'jacuzzi' OR a.name ~* '(קוזי|jacuzzi)')
+UNION ALL
+SELECT 'טקסט באתר (הגרסה המפורסמת ' || v.version || ')'
+  FROM hospitality.site_versions v JOIN public.tenants t ON t.id = v.tenant_id
+ WHERE t.slug = 'nofi-dorit' AND v.kind = 'published' AND v.document::text ~* '(קוזי|jacuzzi)'
+   AND v.version = (SELECT max(x.version) FROM hospitality.site_versions x WHERE x.tenant_id = v.tenant_id AND x.kind = 'published')
+UNION ALL
+SELECT 'תיאור היחידה: ' || u.name
+  FROM hospitality.units u JOIN public.tenants t ON t.id = u.tenant_id
+ WHERE t.slug = 'nofi-dorit' AND u.description ~* '(קוזי|jacuzzi)'
+UNION ALL
+SELECT 'תיאור המתחם: ' || pr.name
+  FROM hospitality.properties pr JOIN public.tenants t ON t.id = pr.tenant_id
+ WHERE t.slug = 'nofi-dorit' AND (pr.description ~* '(קוזי|jacuzzi)' OR pr.guest_info ~* '(קוזי|jacuzzi)');
 \echo '== תאריכים פתוחים להזמנה באתר (open_until)'
 SELECT u.name AS "יחידה", u.open_until AS "פתוח עד"
   FROM hospitality.units u JOIN public.tenants t ON t.id = u.tenant_id
