@@ -589,7 +589,13 @@ BEGIN
   END IF;
   RETURN jsonb_build_object(
     'site_type', public.current_site_type(),
-    'business_name', (SELECT t.name FROM public.tenants t WHERE t.id = _t),
+    -- the name the business shows (to tell its own name in a phrase): hospitality — its settings; a store — its business
+    -- name, else its site title; else the tenant's name
+    'business_name', COALESCE(CASE WHEN public.current_site_type() = 'hospitality'
+                                   THEN (SELECT NULLIF(btrim(h.business_name), '') FROM hospitality.settings h WHERE h.tenant_id = _t)
+                                   ELSE (SELECT COALESCE(NULLIF(btrim(ss.business_name), ''), NULLIF(btrim(ss.site_title), ''))
+                                           FROM public.site_settings ss WHERE ss.tenant_id = _t) END,
+                              (SELECT t.name FROM public.tenants t WHERE t.id = _t)),
     -- the Analytics check: only whether GA4 / Tag Manager are set up (the IDs stay in their own settings screen)
     'analytics', (SELECT jsonb_build_object('ga4', COALESCE(st.ga4_measurement_id, '') <> '',
                                             'gtm', COALESCE(st.gtm_enabled, false) AND COALESCE(st.gtm_container_id, '') <> '')
@@ -958,9 +964,13 @@ END $$;
 CREATE OR REPLACE FUNCTION public.store_seo_snapshot(_tenant uuid, _only_missing boolean DEFAULT true, _limit integer DEFAULT 60)
 RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT jsonb_build_object(
-    'store', (SELECT jsonb_build_object('name', s.business_name, 'seo_title', s.seo_title,
+    -- the store's name as the store itself shows it (footer, labels): its business name, else its site title, else the
+    -- tenant's name. Most stores never fill the business name, and the templates make nothing without a name
+    'store', (SELECT jsonb_build_object('name', COALESCE(NULLIF(btrim(s.business_name), ''), NULLIF(btrim(s.site_title), ''),
+                                                         NULLIF(btrim(t.name), '')),
+                                        'seo_title', s.seo_title,
                                         'seo_description', s.seo_description, 'seo_keywords', s.seo_keywords)
-                FROM public.site_settings s WHERE s.tenant_id = _tenant LIMIT 1),
+                FROM public.tenants t LEFT JOIN public.site_settings s ON s.tenant_id = t.id WHERE t.id = _tenant),
     'categories', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'parent', c.parent_name,
                                                                 'seo_title', c.seo_title, 'seo_description', c.seo_description,
                                                                 'products', (SELECT count(*) FROM public.global_products g

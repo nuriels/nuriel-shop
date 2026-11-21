@@ -389,6 +389,25 @@ SELECT id AS g1 FROM public.global_products WHERE sku = '99520001' \gset
 SELECT id AS g2 FROM public.global_products WHERE sku = '99520002' \gset
 SELECT id AS g3 FROM public.global_products WHERE sku = '99520003' \gset
 UPDATE public.global_products SET seo_description = 'תיאור שבעל החנות כתב' WHERE id = :'g2';
+-- the store's name in the snapshot = the name the store shows (business name → site title → tenant name):
+-- most stores never fill the business name, and the templates make nothing without a name
+CREATE TEMP TABLE seo_ss_name AS SELECT tenant_id, business_name, site_title FROM public.site_settings WHERE tenant_id = :STORE_A;
+UPDATE public.site_settings SET business_name = 'כלי בית א', site_title = 'כותרת האתר' WHERE tenant_id = :STORE_A;
+SELECT tests.check('seo engine (store): the snapshot names the store by its business name when there is one',
+  format($$SELECT pg_temp.srv(format('SELECT public.store_seo_snapshot(%%L)', %1$L)) #>> '{store,name}' = 'כלי בית א'
+           AND pg_temp.call(%1$L, %2$L, 'SELECT public.seo_center()') ->> 'business_name' = 'כלי בית א'$$, :STORE_A, :S_OWNER));
+UPDATE public.site_settings SET business_name = '  ', site_title = 'כלי בית של א' WHERE tenant_id = :STORE_A;
+SELECT tests.check('seo engine (store): no business name → the snapshot names the store by its site title (as the storefront does)',
+  format($$SELECT pg_temp.srv(format('SELECT public.store_seo_snapshot(%%L)', %1$L)) #>> '{store,name}' = 'כלי בית של א'
+           AND pg_temp.call(%1$L, %2$L, 'SELECT public.seo_center()') ->> 'business_name' = 'כלי בית של א'$$, :STORE_A, :S_OWNER));
+UPDATE public.site_settings SET business_name = '', site_title = ' ' WHERE tenant_id = :STORE_A;
+SELECT tests.check('seo engine (store): no business name and no site title → the tenant''s name; the products are still there',
+  format($$SELECT (x #>> '{store,name}') = (SELECT name FROM public.tenants WHERE id = %1$L)
+           AND jsonb_array_length(x -> 'products') >= 2
+      FROM (SELECT pg_temp.srv(format('SELECT public.store_seo_snapshot(%%L)', %1$L)) AS x) y$$, :STORE_A));
+UPDATE public.site_settings s SET business_name = o.business_name, site_title = o.site_title
+  FROM seo_ss_name o WHERE s.tenant_id = o.tenant_id;
+DROP TABLE seo_ss_name;
 SELECT tests.check('seo engine: new products → ONE queued "new products" job per store',
   format($$SELECT (SELECT count(*) FROM public.seo_jobs WHERE tenant_id = %L AND entity_type = 'product' AND status = 'queued') = 1$$, :STORE_A));
 SELECT pg_temp.sadd(:STORE_A, jsonb_build_array(
@@ -475,11 +494,19 @@ SELECT pg_temp.expect_error('seo engine: a signed-in stranger cannot add phrases
   format($$SELECT pg_temp.call(%L, %L, 'SELECT public.seo_keyword_idea_add(''צימר זוגי'', ''primary'', ''commercial'')')$$, :'sa', :STRANGER), 'אין הרשאה');
 SELECT pg_temp.expect_error('seo engine: a store agent cannot add phrases',
   format($$SELECT pg_temp.call(%L, %L, 'SELECT public.seo_keyword_idea_add(''מוצר חדש'', ''primary'', ''commercial'')')$$, :STORE_A, :S_AGENT), 'אין הרשאה');
-SELECT tests.check('seo engine: the SEO center names the business (to tell its own name in a phrase) and shows the owner''s phrase without numbers',
-  format($$SELECT c ->> 'business_name' = (SELECT name FROM public.tenants WHERE id = %2$L)
+CREATE TEMP TABLE seo_hs_name AS SELECT tenant_id, business_name FROM hospitality.settings WHERE tenant_id = :'sa';
+UPDATE hospitality.settings SET business_name = 'מנוע SEO A חוויה בכפר' WHERE tenant_id = :'sa';
+SELECT tests.check('seo engine: the SEO center names the business as it shows itself (its own settings, not the tenant row) and shows the owner''s phrase without numbers',
+  format($$SELECT c ->> 'business_name' = 'מנוע SEO A חוויה בכפר'
              AND EXISTS (SELECT 1 FROM jsonb_array_elements(c -> 'keywords') k
                           WHERE k ->> 'phrase' = 'צימר לכלה ליד בית שמש' AND k ->> 'source' = 'owner' AND k -> 'metrics' = 'null'::jsonb)
-      FROM (SELECT pg_temp.call(%1$L, %3$L, 'SELECT public.seo_center()') AS c) x$$, :'sa', :'sa', :OWNER_A));
+      FROM (SELECT pg_temp.call(%1$L, %2$L, 'SELECT public.seo_center()') AS c) x$$, :'sa', :OWNER_A));
+UPDATE hospitality.settings SET business_name = ''  WHERE tenant_id = :'sa';
+SELECT tests.check('seo engine: a business without a name in its settings is named by its tenant row',
+  format($$SELECT pg_temp.call(%1$L, %2$L, 'SELECT public.seo_center()') ->> 'business_name' = (SELECT name FROM public.tenants WHERE id = %1$L)$$,
+         :'sa', :OWNER_A));
+UPDATE hospitality.settings h SET business_name = o.business_name FROM seo_hs_name o WHERE h.tenant_id = o.tenant_id;
+DROP TABLE seo_hs_name;
 SELECT tests.check('seo engine: the Analytics check — nothing saved yet: GA4 not set up',
   format($$SELECT coalesce((pg_temp.call(%L, %L, 'SELECT public.seo_center()') #>> '{analytics,ga4}')::boolean, false) = false$$, :'sa', :OWNER_A));
 INSERT INTO public.site_tracking (tenant_id, ga4_measurement_id) VALUES (:'sa', 'G-SEOTEST12')

@@ -1,6 +1,7 @@
 # NURIEL AI SEO ENGINE — פריסה לייצור, פקודה אחר פקודה
 
 ענף: **`feature/ai-seo-engine`** (יוצא מ-`main` = `696ccf0`, גרסת 21.11). **`<REL>`** = ה-commit שנבדק ב-CI (נמסר בהודעה).
+**`<SHA203>` / `<SHA204>` / `<SHA203DOWN>` / `<SHA204DOWN>`** = טביעות האצבע מסעיף 9. בהודעות הפקודות נשלחות כשהערכים כבר בפנים.
 
 > **כל צעד בשרת — בעל המערכת מריץ, פקודה אחת בכל פעם, ומדביק את הפלט.** כל פקודה עצמאית, נעצרת בשגיאה (`&&`), ולא מדפיסה
 > סודות. ⛔ = נקודת אישור. 🔍 = קריאה בלבד. ✏️ = משנה משהו (מה בדיוק — כתוב ליד). ✋ = בדיקה בדפדפן.
@@ -187,10 +188,10 @@ B=/root/backups/nuriel-shop/before-seo-engine && docker exec -i nuriel-shop-db p
 
 | קובץ | sha256 |
 | --- | --- |
-| `supabase/migrations/20261122100000_seo_engine.sql` | `<SHA203>` |
-| `supabase/migrations/20261122110000_hosp_seo_engine.sql` | `<SHA204>` |
-| `supabase/rollbacks/20261122100000_seo_engine.down.sql` | `<SHA203DOWN>` |
-| `supabase/rollbacks/20261122110000_hosp_seo_engine.down.sql` | `<SHA204DOWN>` |
+| `supabase/migrations/20261122100000_seo_engine.sql` | `cc342c1219ab858c17f2cdddb79249261ad425da15b25937dbd0f551a6b58ff2` |
+| `supabase/migrations/20261122110000_hosp_seo_engine.sql` | `7f6f9452433857033ae5d006ef29200244a50c7ad6a093de9fe85546ac7e9f7c` |
+| `supabase/rollbacks/20261122100000_seo_engine.down.sql` | `61faab5dff6c7dc4a197026d54fa859ae7a12261403cdc1c176b771e5edca734` |
+| `supabase/rollbacks/20261122110000_hosp_seo_engine.down.sql` | `4bfcd86a3d54601df04af1fc7fedfce36b1161255a16fc5ff56eb4174e8bdc80` |
 
 ## 10. Rollback (⛔ אישור לפני כל פעולה)
 
