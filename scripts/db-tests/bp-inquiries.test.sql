@@ -271,7 +271,9 @@ SELECT tests.check('bp inquiries: "done" and deleting the note — every admin a
              AND (SELECT bool_and(actor_id = %4$L) FROM business_profile.audit_log
                    WHERE tenant_id = %3$L AND details ->> 'id' = %1$L::text)
              AND NOT EXISTS (SELECT 1 FROM business_profile.audit_log WHERE tenant_id = %3$L
-                              AND (details::text LIKE '%%חזרתי%%' OR details::text LIKE '%%dana@%%' OR details::text LIKE '%%050%%'))$$,
+                              -- the phone's own digits: "050" alone also matches random UUIDs in the log (a false alarm
+                              -- in about one run in ten once earlier rounds' rows are there)
+                              AND (details::text LIKE '%%חזרתי%%' OR details::text LIKE '%%dana@%%' OR details::text LIKE '%%1234567%%'))$$,
          :'sub1'::jsonb ->> 'id', :'note1', :'q1', :Q_OWNER1));
 
 -- ============================================================
