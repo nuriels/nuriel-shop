@@ -42,4 +42,5 @@ END $$;
 REVOKE ALL ON FUNCTION hospitality.unit_delete(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION hospitality.unit_delete(uuid) TO authenticated, service_role;
 
+NOTIFY pgrst, 'reload schema';
 COMMIT;
