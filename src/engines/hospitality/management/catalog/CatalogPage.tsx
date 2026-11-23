@@ -4,7 +4,8 @@
 // השרת (מיגרציה 10).
 import { useEffect, useId, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   ArrowUpDown,
   BedDouble,
@@ -46,6 +47,8 @@ import {
   type UnitForm,
 } from "./model";
 import { StatusPill } from "./parts";
+import { useRefresh } from "./refresh";
+import { UnitDeleteDialog } from "./UnitDeleteDialog";
 import { UnitCard } from "./UnitCard";
 import { UnitOrder } from "./UnitOrder";
 import { useUnitExtras, type UnitExtras } from "./useUnitExtras";
@@ -147,6 +150,9 @@ function ArchivedNote({ view }: { view: CatalogView }) {
 
 function CatalogList({ view }: { view: CatalogView }) {
   const [sheet, setSheet] = useState<SheetState | null>(null);
+  const [deleting, setDeleting] = useState<CatalogUnit | null>(null);
+  const refresh = useRefresh();
+  const queryClient = useQueryClient();
   const extras = useUnitExtras();
   const properties = visibleProperties(view);
   const limit = unitsLimit(view.limits);
@@ -220,10 +226,26 @@ function CatalogList({ view }: { view: CatalogView }) {
           onEdit={() => setSheet({ kind: "property-edit", property: p })}
           onAddUnit={() => addUnit(p)}
           onEditUnit={(unit) => setSheet({ kind: "unit-edit", unit })}
+          onDeleteUnit={view.can_owner ? (unit) => setDeleting(unit) : undefined}
         />
       ))}
 
       <ArchivedNote view={view} />
+
+      {deleting && (
+        <UnitDeleteDialog
+          key={deleting.id}
+          unit={deleting}
+          open
+          onOpenChange={(open) => !open && setDeleting(null)}
+          onDeleted={refresh}
+          onDeactivated={refresh}
+          onConflict={(latest, message) => {
+            queryClient.setQueryData<CatalogView>(manageKeys.catalog, latest);
+            toast.message(message);
+          }}
+        />
+      )}
 
       {sheet?.kind === "property-new" && <PropertySheet open property={null} onClose={close} />}
       {sheet?.kind === "property-edit" && (
@@ -261,6 +283,8 @@ function PropertyCard(props: {
   onEdit: () => void;
   onAddUnit: () => void;
   onEditUnit: (u: CatalogUnit) => void;
+  /** בעל העסק בלבד */
+  onDeleteUnit?: ((u: CatalogUnit) => void) | undefined;
 }) {
   const p = props.property;
   const Icon = PROPERTY_ICONS[p.property_type];
@@ -356,6 +380,7 @@ function PropertyCard(props: {
                   amenities={props.amenities}
                   extras={props.extras}
                   onEdit={() => props.onEditUnit(u)}
+                  onDelete={props.onDeleteUnit ? () => props.onDeleteUnit?.(u) : undefined}
                 />
               ))}
               {whole && <WholeRow unit={whole} onEdit={() => props.onEditUnit(whole)} />}
@@ -391,6 +416,7 @@ function PropertyCard(props: {
                     amenities={props.amenities}
                     extras={props.extras}
                     onEdit={() => props.onEditUnit(u)}
+                    onDelete={props.onDeleteUnit ? () => props.onDeleteUnit?.(u) : undefined}
                   />
                 ))}
               </ul>

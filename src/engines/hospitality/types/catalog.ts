@@ -299,6 +299,29 @@ export type CatalogSaveResult =
  * done: בוצעה (revision — הגרסה החדשה של מה שהשתנה, אם יש); conflict: מישהו אחר שינה
  * בינתיים — לא בוצע דבר, ומוחזרים הנתונים העדכניים.
  */
+/**
+ * מיגרציה 205 — החלון "האם למחוק?": מה יימחק יחד עם היחידה ומה עוצר את המחיקה (ולמה). קריאה בלבד,
+ * בעלים בלבד (unit_delete_preview). התנאים — אותה פונקציה במסד שהמחיקה עצמה בודקת.
+ */
+export interface UnitDeletePreview {
+  id: string;
+  name: string;
+  kind: "unit" | "whole_property";
+  is_active: boolean;
+  revision: number;
+  /** null — אפשר למחוק */
+  block: { code: "history" | "whole" | "package"; reason: string } | null;
+  photos: number;
+  prices: number;
+  beds: number;
+  amenities: number;
+  calendars: number;
+  /** חבילות שהיחידה היא חדר נוסף בהן — תצא מהרשימה */
+  addon_packages: string[];
+  /** הצעות SEO פתוחות ליחידה ולתמונות שלה — ייסגרו */
+  seo_open: number;
+}
+
 export type CatalogActionResult =
   | { status: "done"; revision: number | null }
   | { status: "conflict"; message: string; view: CatalogView };

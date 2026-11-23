@@ -32,6 +32,7 @@ import {
   Switch,
 } from "@/platform/ui";
 import type { AuditIssue, Severity } from "../audit/rules";
+import { issueHint, issueOwner, OWNER_NOTE } from "../issue-help";
 import {
   addKeywordIdeaFn,
   disconnectGscFn,
@@ -94,6 +95,8 @@ const messageOf = (e: unknown) =>
 export function SeoCenter(props: {
   /** the engine's proposals list (store / hospitality) — rendered in its own section */
   proposals?: ReactNode;
+  /** the engine's fix for a finding ("תקנו לי", a link to the right screen) — null: nothing to do there */
+  issueAction?: (issue: AuditIssue) => ReactNode;
   /** store: the "keywords" auto switch exists (store SEO keywords field) */
   variant: "store" | "hospitality";
 }) {
@@ -131,7 +134,7 @@ export function SeoCenter(props: {
 
   return (
     <div className="flex flex-col gap-4" data-testid="seo-center">
-      <AuditCard view={view} />
+      <AuditCard view={view} issueAction={props.issueAction} />
       {props.proposals}
       <KeywordsCard
         view={view}
@@ -145,7 +148,13 @@ export function SeoCenter(props: {
 
 // ------------------------------------------------------------------ the technical check
 
-function AuditCard({ view }: { view: SeoCenterView }) {
+function AuditCard({
+  view,
+  issueAction,
+}: {
+  view: SeoCenterView;
+  issueAction?: ((issue: AuditIssue) => ReactNode) | undefined;
+}) {
   const a = view.audit;
   const run = useMutation({
     mutationFn: () => requestSeoRunFn({ data: { kind: "audit" } }),
@@ -221,7 +230,11 @@ function AuditCard({ view }: { view: SeoCenterView }) {
             <h3 className="text-sm font-semibold">מה כדאי לתקן</h3>
             <ul className="flex flex-col gap-1.5" data-testid="seo-issues">
               {shown.map((i, n) => (
-                <IssueRow key={`${i.code}:${i.url ?? ""}:${n}`} issue={i} />
+                <IssueRow
+                  key={`${i.code}:${i.url ?? ""}:${n}`}
+                  issue={i}
+                  action={issueAction?.(i)}
+                />
               ))}
             </ul>
             {issues.length > 12 && (
@@ -248,9 +261,16 @@ function AuditCard({ view }: { view: SeoCenterView }) {
   );
 }
 
-function IssueRow({ issue }: { issue: AuditIssue }) {
+function IssueRow({ issue, action }: { issue: AuditIssue; action?: ReactNode }) {
+  const owner = issueOwner(issue.code);
+  const hint = issueHint(issue.code);
+  // a finding that spans pages lists every page (newer audits); older ones carry the first page only
+  const pages = issue.urls && issue.urls.length > 0 ? issue.urls : issue.url ? [issue.url] : [];
   return (
-    <li className="flex flex-wrap items-start gap-2 rounded border p-2 text-sm">
+    <li
+      className="flex flex-wrap items-start gap-2 rounded border p-2 text-sm"
+      data-issue={issue.code}
+    >
       <span
         className={cn(
           "shrink-0 rounded px-1.5 py-0.5 text-[11px]",
@@ -259,14 +279,27 @@ function IssueRow({ issue }: { issue: AuditIssue }) {
       >
         {SEVERITY[issue.severity].label}
       </span>
-      <span className="min-w-0 flex-1">
-        {issue.message}
-        {issue.count && issue.count > 1 ? ` (${issue.count})` : ""}
-        {issue.url && (
-          <span dir="ltr" className="block truncate text-xs text-muted-foreground">
-            {pathOf(issue.url)}
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span>
+          {issue.message}
+          {issue.count && issue.count > 1 ? ` (${issue.count})` : ""}
+        </span>
+        {pages.length > 0 && (
+          <span dir="ltr" className="flex flex-col text-xs text-muted-foreground">
+            {pages.slice(0, 6).map((u) => (
+              <span key={u} className="truncate">
+                {pathOf(u)}
+              </span>
+            ))}
           </span>
         )}
+        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+        {owner !== "you" && !action && (
+          <span className="text-xs text-muted-foreground" data-testid="seo-issue-owner">
+            {OWNER_NOTE[owner]}
+          </span>
+        )}
+        {action}
       </span>
     </li>
   );

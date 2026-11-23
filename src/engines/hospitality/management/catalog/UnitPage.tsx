@@ -11,7 +11,6 @@ import { Power, PowerOff, Trash2 } from "lucide-react";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/platform/ui";
 import {
   hospitalityCatalog,
-  hospitalityDeleteUnit,
   hospitalitySetUnitActive,
   hospitalityUpdateUnit,
 } from "../../api/catalog.functions";
@@ -29,6 +28,7 @@ import { MediaGallery } from "../media/MediaGallery";
 import { useManagement } from "../shell/management-context";
 import { manageKeys } from "../lib/query-keys";
 import { ConflictNotice } from "./CatalogSheets";
+import { UnitDeleteDialog } from "./UnitDeleteDialog";
 import { UnitSeoCard } from "./UnitSeoCard";
 import { PROPERTY_TYPE_LABELS, UNIT_TYPE_LABELS } from "./labels";
 import {
@@ -107,6 +107,7 @@ function UnitEditor({
   const [serverError, setServerError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [gone, setGone] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const errors = unitFormErrors(form);
   const hasErrors = Object.keys(errors).length > 0;
@@ -186,19 +187,6 @@ function UnitEditor({
       setNotice(null);
       toast.success(active ? "היחידה הופעלה" : "היחידה הושבתה");
       refresh();
-    } catch (e) {
-      setServerError(errorText(e));
-    }
-  };
-
-  const remove = async () => {
-    setServerError(null);
-    try {
-      const result = await hospitalityDeleteUnit({ data: { id: unit.id, revision } });
-      if (result.status === "conflict") return applyLatest(result.view, true);
-      toast.success(`היחידה "${unit.name}" נמחקה`);
-      setForm(base);
-      setGone(true);
     } catch (e) {
       setServerError(errorText(e));
     }
@@ -608,16 +596,29 @@ function UnitEditor({
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               {deleteReason && <p className="text-sm text-muted-foreground">{deleteReason}.</p>}
-              <ConfirmButton
-                label="מחיקה לצמיתות"
-                destructive
-                icon={<Trash2 className="size-4" aria-hidden="true" />}
+              <Button
+                type="button"
+                variant="destructive"
+                className="min-h-11 w-fit gap-2"
                 disabled={Boolean(deleteReason)}
-                title={`למחוק את ${unit.name} לצמיתות?`}
-                description={<p>היחידה תימחק עם כל הפרטים שלה. אי אפשר לבטל את זה.</p>}
-                confirmLabel="מחיקה לצמיתות"
-                onConfirm={remove}
-              />
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                מחיקה לצמיתות
+              </Button>
+              {deleteOpen && (
+                <UnitDeleteDialog
+                  unit={{ ...unit, revision }}
+                  open
+                  onOpenChange={setDeleteOpen}
+                  onDeleted={() => {
+                    setForm(base);
+                    setGone(true);
+                  }}
+                  onDeactivated={refresh}
+                  onConflict={(latest) => applyLatest(latest, true)}
+                />
+              )}
             </CardContent>
           </Card>
         )}

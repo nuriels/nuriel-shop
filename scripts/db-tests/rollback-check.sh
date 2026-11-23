@@ -193,6 +193,8 @@ M86=20261121100000_hosp_package_addon_rooms
 # NURIEL AI SEO ENGINE — the core (203) and Hospitality on it (204); 204 rolls back first
 M87=20261122100000_seo_engine
 M88=20261122110000_hosp_seo_engine
+# safe unit delete (205): functions only — the newest, rolled back first
+M89=20261123100000_hosp_unit_delete_safe
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -236,7 +238,21 @@ same_as_ref() {
   fi
 }
 
-# ---------- NURIEL AI SEO ENGINE: Hospitality on the engine (migration 204) — the newest, rolled back first ----------
+# ---------- safe unit delete (migration 205) — the newest, rolled back first ----------
+expect "before the rollback: the delete preview, the shared block helper, unit_delete returns jsonb (the files for the bucket)" \
+  "SELECT to_regprocedure('hospitality.unit_delete_preview(uuid)') IS NOT NULL
+      AND to_regprocedure('hospitality._unit_delete_block(uuid,uuid)') IS NOT NULL
+      AND pg_get_function_result('hospitality.unit_delete(uuid)'::regprocedure) = 'jsonb'"
+ref_upto "$M89"
+echo "rollback: $M89"
+down "$M89"
+expect "unit_delete is back to migration 10 (boolean); the preview and the helper are gone" \
+  "SELECT pg_get_function_result('hospitality.unit_delete(uuid)'::regprocedure) = 'boolean'
+      AND to_regprocedure('hospitality.unit_delete_preview(uuid)') IS NULL
+      AND to_regprocedure('hospitality._unit_delete_block(uuid,uuid)') IS NULL"
+same_as_ref "migration 204"
+
+# ---------- NURIEL AI SEO ENGINE: Hospitality on the engine (migration 204) ----------
 expect "before the rollback: package Google fields, the restore function, the auto-fill helper, the unit/package/image triggers" \
   "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'packages'
                     AND column_name = 'seo_title')
@@ -2817,6 +2833,10 @@ up "$M88"
 expect "Hospitality on the SEO engine back: package Google fields, restore, the unit/package/image triggers" \
   "SELECT to_regprocedure('hospitality.seo_proposal_revert(uuid)') IS NOT NULL
       AND (SELECT count(*) FROM pg_trigger WHERE tgname IN ('seo_on_unit', 'seo_on_package', 'seo_on_media')) = 3"
+up "$M89"
+expect "safe unit delete back: the preview, the helper, unit_delete returns jsonb" \
+  "SELECT to_regprocedure('hospitality.unit_delete_preview(uuid)') IS NOT NULL
+      AND pg_get_function_result('hospitality.unit_delete(uuid)'::regprocedure) = 'jsonb'"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')

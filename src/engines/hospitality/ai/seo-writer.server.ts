@@ -39,6 +39,7 @@ import {
 import type { PublicPackage } from "../types/packages";
 import type { PublicRoomType, PublicSite, RawPublicSite } from "../types/website";
 import type {
+  SeoField,
   SeoGenerateResult,
   SeoProposal,
   SeoProposalItem,
@@ -47,6 +48,14 @@ import type {
 import { normalizeDesign, type SiteDesign } from "../website/design/schema";
 import { toPublicSite } from "../website/lib/site-map";
 import { templateProposals } from "../website/seo-templates";
+import {
+  SEO_FIX_FIELD,
+  parseSeoFix,
+  sameTarget,
+  seoFixTargets,
+  type SeoFixResult,
+  type SeoFixTarget,
+} from "../website/seo-fix";
 import {
   BUDGET_REACHED,
   evaluateAccess,
@@ -222,17 +231,23 @@ export interface Loaded {
   view: { proposals: SeoProposal[]; runs: SeoProposalsView["runs"] };
 }
 
-/** בשם המשתמש: הרשימה (בודקת הרשאת settings במסד) והאתר עם הטיוטה */
-async function loadForCaller(): Promise<Loaded> {
-  const [{ manageRpc }, { publicUrl }] = await Promise.all([
+/**
+ * בשם המשתמש: הרשימה (בודקת הרשאת settings במסד) והאתר עם הטיוטה. החבילות — הרשימה הציבורית של העסק
+ * (public_packages, כמו מנוע ה-SEO ברקע), כך שגם "הצעות בסיסיות" ו"תקנו לי" מהמסך מכסים את החבילות.
+ */
+async function loadForCaller(caller: AiCaller): Promise<Loaded> {
+  const [{ manageRpc }, { publicUrl }, { rpc: publicRpc }] = await Promise.all([
     import("../server/manage.server"),
     import("../server/media.server"),
+    import("../website/seo.server"),
   ]);
   const view = await manageRpc<Loaded["view"]>("seo_proposals", {});
   const [raw, types, packages] = await Promise.all([
     manageRpc<RawPublicSite>("site_preview", {}),
     manageRpc<PublicRoomType[]>("room_types_view", {}).catch(() => [] as PublicRoomType[]),
-    Promise.resolve([] as PublicPackage[]),
+    publicRpc<PublicPackage[]>(caller.tenantId, "public_packages").catch(
+      () => [] as PublicPackage[],
+    ),
   ]);
   // הביטויים של העסק נקראים מהמסמך לפני toPublicSite (שמסיר אותם מכל מה שנשלח לדפדפן)
   const design = normalizeDesign(raw.design?.document ?? null, raw.design?.theme);
@@ -342,7 +357,9 @@ async function runTemplates(
 type AiJob =
   | { what: "text" }
   | { what: "alt"; onlyEmpty: boolean }
-  | { what: "reword"; proposal: SeoProposal };
+  | { what: "reword"; proposal: SeoProposal }
+  /** "תקנו לי": ניסוח חדש לשדה אחד של עמוד אחד, במקום הטקסט שיש עכשיו (חבילות — בלי AI: לא בהקשר) */
+  | { what: "fix"; target: SeoFixTarget; field: SeoField; previous: string };
 
 /**
  * הפקת AI. עסק בלי NURIEL AI פעיל — "unavailable" בלי קריאה, בלי מכסה ובלי חיוב. כל קריאה לדגם עוברת
@@ -467,6 +484,26 @@ async function runAi(
             job.onlyEmpty,
           );
         }
+      } else if (job.what === "fix") {
+        const { target, field } = job;
+        if (target.target_kind === "package") continue;
+        const unitRef =
+          target.target_kind === "unit"
+            ? ([...ctx.unitRefs.entries()].find(([, id]) => id === target.target_id)?.[0] ?? null)
+            : null;
+        if (target.target_kind === "unit" && !unitRef) continue;
+        const ask = { kind: target.target_kind, field, unitRef, previous: job.previous };
+        await call(
+          `seo:fix:${target.target_kind}:${target.target_id ?? "home"}:${field}`,
+          () => buildRewordParams(ev.model, ctx, ask),
+          (parsed) => {
+            const text = parseRewordOutput(parsed, ask, ctx.phone);
+            return text && text !== job.previous
+              ? [{ target_kind: target.target_kind, target_id: target.target_id, field, text }]
+              : [];
+          },
+          false,
+        );
       } else {
         const p = job.proposal;
         if (p.target_kind === "media") {
@@ -589,6 +626,107 @@ export async function handleSeoGenerate(
     return runAi(rpc, caller, loaded, "request", [{ what: "reword", proposal: p }], deps);
   }
   throw new SafeError("בקשה לא תקינה");
+}
+
+export const SEO_FIX_GONE =
+  'לא מצאנו את העמוד הזה באתר — ייתכן שהוא השתנה מאז הבדיקה. לחצו "לבדוק עכשיו" ונסו שוב.';
+export const SEO_FIX_BUSY = "הכנת הצעות אחרת רצה ממש עכשיו — נסו שוב בעוד רגע.";
+export const SEO_FIX_NOTHING =
+  "אין לנו הצעה טובה יותר ממה שכתוב עכשיו. אפשר לערוך את הטקסט בעצמכם בעמוד עצמו.";
+
+/** הטקסט שיש עכשיו בשדה (או מה שגוגל רואה במקומו) — הבסיס לניסוח החדש */
+function currentText(loaded: Loaded, t: SeoFixTarget, field: SeoField): string {
+  if (t.target_kind === "site")
+    return (
+      (field === "seo_title" ? loaded.design.seo?.title : loaded.design.seo?.description) ?? ""
+    );
+  if (t.target_kind === "unit") {
+    const u = loaded.site.units.find((x) => x.id === t.target_id);
+    if (!u) return "";
+    return field === "seo_title"
+      ? (u.seo_title ?? u.name)
+      : (u.seo_description ?? (u.description ?? "").slice(0, 300));
+  }
+  return "";
+}
+
+/**
+ * "תקנו לי" ליד ממצא בבדיקה הטכנית (כותרת / תיאור לגוגל): הצעה ממתינה לכל עמוד שבממצא — קודם התבנית
+ * (בחינם, מהנתונים של העסק), ולעמוד שהתבנית לא מציעה לו משהו חדש — NURIEL AI (רק לעסק זכאי, במכסות). עמוד
+ * שכבר מחכה לו הצעה לאותו שדה — לא מפיקים שוב, רק מצביעים עליה. שום דבר לא משתנה באתר עד שבעל העסק מאשר.
+ */
+export async function handleSeoFix(input: unknown, deps: SeoDeps = {}): Promise<SeoFixResult> {
+  const request = parseSeoFix(input);
+  if (!request) throw new SafeError("לממצא הזה אין תיקון אוטומטי");
+  const field = SEO_FIX_FIELD[request.code]!;
+  const r = await ready(deps);
+  if (!r.ok)
+    return {
+      status: r.result.status === "limited" ? "limited" : "failed",
+      message: "message" in r.result ? r.result.message : null,
+      field,
+      targets: [],
+      added: 0,
+    };
+  const rpc = deps.rpc ?? serverRpc;
+  const { caller } = r;
+  let loaded = r.loaded;
+  const reload = async () => {
+    loaded = await (deps.load ?? loadForCaller)(caller);
+  };
+  const targets = seoFixTargets(loaded.site, request);
+  if (!targets.length)
+    return { status: "none", message: SEO_FIX_GONE, field, targets: [], added: 0 };
+  const waiting = () =>
+    targets.filter((t) =>
+      loaded.view.proposals.some(
+        (p) =>
+          (p.status === "pending" || p.status === "later") && p.field === field && sameTarget(p, t),
+      ),
+    );
+
+  let added = 0;
+  const need = targets.filter((t) => !waiting().some((w) => sameTarget(w, t)));
+  const items = templateProposals(loaded).filter(
+    (i) => i.field === field && need.some((t) => sameTarget(t, i)),
+  );
+  if (items.length) {
+    const run = await startRun(rpc, caller, "template", "request");
+    if (!run) return { status: "busy", message: SEO_FIX_BUSY, field, targets: waiting(), added: 0 };
+    try {
+      added += (await addItems(rpc, caller, run, items, false)).added;
+      await finishRun(rpc, caller, run, true);
+    } catch (error) {
+      await finishRun(rpc, caller, run, false).catch(() => undefined);
+      throw error;
+    }
+    if (added > 0) await reload();
+  }
+
+  // התבנית לא הציעה משהו חדש (הטקסט שלה כבר באתר) — ניסוח חדש עם NURIEL AI, מהטקסט שיש עכשיו
+  let note: string | null = null;
+  const missing = targets.filter(
+    (t) => t.target_kind !== "package" && !waiting().some((w) => sameTarget(w, t)),
+  );
+  if (missing.length) {
+    const jobs: AiJob[] = missing.slice(0, 5).map((t) => ({
+      what: "fix",
+      target: t,
+      field,
+      previous: currentText(loaded, t, field),
+    }));
+    const ai = await runAi(rpc, caller, loaded, "request", jobs, deps);
+    if (ai.status === "ok" && ai.added > 0) {
+      added += ai.added;
+      await reload();
+    } else if (ai.status === "unavailable" || ai.status === "limited" || ai.status === "failed") {
+      note = ai.message;
+    }
+  }
+  const found = waiting();
+  if (!found.length)
+    return { status: "none", message: note ?? SEO_FIX_NOTHING, field, targets: [], added };
+  return { status: "ok", message: null, field, targets: found, added };
 }
 
 // ------------------------------------------------------------------ מנוע ה-SEO: הפקה ברקע (בלי דפדפן)

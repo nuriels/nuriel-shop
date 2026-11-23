@@ -9,6 +9,8 @@ import { normalizeDesign } from "../../website/design/schema";
 import { manageKeys } from "../lib/query-keys";
 import { PageHeader } from "../ui/kit";
 import { SeoProposalsPanel } from "../website/SeoProposalsPanel";
+import { hasSeoIssueAction } from "../../website/seo-fix";
+import { SeoIssueAction } from "./SeoIssueAction";
 
 // אותם מפתחות כמו בעורך — הנתונים משותפים, ואישור כאן מרענן גם את העורך
 const KEY = [...manageKeys.all, "site-editor"] as const;
@@ -45,13 +47,27 @@ function Proposals() {
 }
 
 export function SeoPage() {
+  // אותו מפתח כמו ההצעות — בקשה אחת; "תקנו לי" מתרגם כתובת לעמוד (יחידה / חבילה) לפי האתר
+  const preview = useQuery({
+    queryKey: [...KEY, "site"],
+    queryFn: () => hospitalitySitePreview(),
+    retry: false,
+  });
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="SEO וגוגל"
         description="איך האתר נראה בגוגל, מה כדאי לשפר, ונתונים אמיתיים מ-Google — בלי הבטחות לדירוג ובלי קיצורי דרך."
       />
-      <SeoCenter variant="hospitality" proposals={<Proposals />} />
+      <SeoCenter
+        variant="hospitality"
+        proposals={<Proposals />}
+        issueAction={(issue) =>
+          hasSeoIssueAction(issue.code) ? (
+            <SeoIssueAction issue={issue} site={preview.data} />
+          ) : null
+        }
+      />
     </div>
   );
 }

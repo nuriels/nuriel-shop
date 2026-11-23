@@ -7,6 +7,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { safeErrors } from "@/platform/ai/ai-middleware";
 import type { SeoGenerateResult, SeoProposalsView } from "../types/seo";
+import type { SeoFixResult } from "../website/seo-fix";
 import { InputError } from "../validation/input";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -53,6 +54,19 @@ export const hospitalitySeoGenerate = createServerFn({ method: "POST" })
     await requireOpen();
     const { handleSeoGenerate } = await import("../ai/seo-writer.server");
     return handleSeoGenerate(data);
+  });
+
+/**
+ * "תקנו לי" ליד ממצא בבדיקה הטכנית של מרכז ה-SEO: הצעה ממתינה לעמוד שבממצא (תבנית, ואם אין חדש — NURIEL AI
+ * לעסק זכאי). כמו ההפקה: אותה הגבלת קצב, אותן הרשאות, ושום דבר לא נכתב באתר.
+ */
+export const hospitalitySeoFix = createServerFn({ method: "POST" })
+  .middleware([safeErrors])
+  .inputValidator((input: { code?: unknown; urls?: unknown }) => input)
+  .handler(async ({ data }): Promise<SeoFixResult> => {
+    await requireOpen();
+    const { handleSeoFix } = await import("../ai/seo-writer.server");
+    return handleSeoFix(data);
   });
 
 type DecideInput = { ids?: unknown; action?: unknown; text?: unknown };

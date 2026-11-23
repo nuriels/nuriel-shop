@@ -1,6 +1,7 @@
 // חלוניות ההוספה והעריכה של מתחם ושל יחידה (מלמטה בטלפון, מהצד במחשב). השמירה דרך
 // פונקציות השרת בלבד; "עודכן בינתיים" — מיזוג בלי לדרוס את השינוי של המשתמש האחר.
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Info, Loader2 } from "lucide-react";
@@ -562,6 +563,19 @@ export function UnitSheet(props: {
         error={err("description")}
         hint="מה מיוחד ביחידה — נוף, ג׳קוזי, פרטיות."
       />
+      {editing && !whole && !dirty && (
+        <p className="text-sm text-muted-foreground" data-testid="unit-sheet-full-page">
+          מחיר, תמונות, מיטות, מתקנים ומחיקת היחידה —{" "}
+          <Link
+            to="/manage/units/$unitId"
+            params={{ unitId: props.unit!.id }}
+            className="font-medium text-primary underline underline-offset-2"
+          >
+            בעמוד היחידה המלא
+          </Link>
+          .
+        </p>
+      )}
     </FormSheet>
   );
 }

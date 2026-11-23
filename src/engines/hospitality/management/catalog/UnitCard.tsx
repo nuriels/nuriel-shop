@@ -1,7 +1,8 @@
 // כרטיס יחידה במסך "יחידות ומתחמים": תמונה ראשית, שם, סוג, אורחים ומיטות, מחיר ללילה (ובסוף
-// השבוע), מתקנים, הלילה (פנוי / תפוס), מצב הפרסום באתר, עריכה מהירה וצפייה באתר.
+// השבוע), מתקנים, הלילה (פנוי / תפוס), מצב הפרסום באתר, עריכה מהירה, צפייה באתר — ולבעל העסק גם
+// מחיקה (יחידה שנפתחה בטעות), עם חלון "האם למחוק?" שמסביר מה יימחק או למה אי אפשר.
 import { Link } from "@tanstack/react-router";
-import { ExternalLink, Pencil } from "lucide-react";
+import { ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { Button, cn } from "@/platform/ui";
 import type { Amenity, CatalogProperty, CatalogUnit } from "../../types/catalog";
 import { unitPath } from "../../website/lib/format";
@@ -26,12 +27,15 @@ export function UnitCard({
   amenities,
   extras,
   onEdit,
+  onDelete,
 }: {
   unit: CatalogUnit;
   property: CatalogProperty;
   amenities: readonly Amenity[];
   extras: UnitExtras;
   onEdit: () => void;
+  /** בעל העסק בלבד — בלי הפעולה הכפתור לא מוצג */
+  onDelete?: (() => void) | undefined;
 }) {
   const Icon = UNIT_ICONS[u.unit_type];
   const cover = extras.cover.get(u.id);
@@ -138,6 +142,17 @@ export function UnitCard({
               צפייה באתר
               <span className="sr-only">(נפתח בחלון חדש)</span>
             </a>
+          )}
+          {onDelete && u.kind !== "whole_property" && (
+            <Button
+              variant="ghost"
+              className="ms-auto min-h-11 gap-1.5 px-3 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              onClick={onDelete}
+              data-testid="unit-card-delete"
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+              מחיקה<span className="sr-only"> של {u.name}</span>
+            </Button>
           )}
         </div>
       </div>

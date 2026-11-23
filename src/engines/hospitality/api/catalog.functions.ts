@@ -7,6 +7,7 @@ import type {
   CatalogSaveResult,
   CatalogView,
   SetupResult,
+  UnitDeletePreview,
   UnitFields,
 } from "../types/catalog";
 import {
@@ -211,18 +212,49 @@ export const hospitalitySetUnitActive = createServerFn({ method: "POST" })
     );
   });
 
-/** מחיקה לצמיתות של יחידה שלא הוזמנה / נחסמה (בעלים בלבד — נאכף במסד) */
+/**
+ * מיגרציה 205 — מה יימחק יחד עם היחידה ומה עוצר את המחיקה, לחלון "האם למחוק?" (בעלים בלבד — נאכף במסד).
+ * קריאה בלבד: שום דבר לא משתנה.
+ */
+export const hospitalityUnitDeletePreview = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseUnitSeoGet(input))
+  .handler(async ({ data }): Promise<UnitDeletePreview> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<UnitDeletePreview>("unit_delete_preview", { _id: data.id });
+  });
+
+/**
+ * מחיקה לצמיתות של יחידה שלא הוזמנה / נחסמה (בעלים בלבד — נאכף במסד). מיגרציה 205: המסד מחזיר את קובצי
+ * התמונות של היחידה, והם נמחקים מהדלי — כמו במחיקת תמונה אחת. מסד לפני 205 מחזיר true — אין קבצים למחוק.
+ */
 export const hospitalityDeleteUnit = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => parseTarget(input, "היחידה"))
   .handler(async ({ data }): Promise<CatalogActionResult> => {
     const { staleUnit } = await model();
-    return guardedAction(
+    let files: string[] = [];
+    const result = await guardedAction(
       (view) => staleUnit(view, data.id, data.revision),
       async (rpc) => {
-        await rpc<boolean>("unit_delete", { _id: data.id });
+        const r = await rpc<{ removed_files?: unknown } | boolean>("unit_delete", { _id: data.id });
+        if (r && typeof r === "object" && Array.isArray(r.removed_files))
+          files = r.removed_files.filter((f): f is string => typeof f === "string");
         return null;
       },
     );
+    if (result.status === "done" && files.length > 0) {
+      const [{ manageSession }, { removeFiles }] = await Promise.all([
+        import("../server/manage.server"),
+        import("../server/media.server"),
+      ]);
+      // היחידה כבר נמחקה — תקלה בניקוי הקבצים לא הופכת את המחיקה לשגיאה אצל בעל העסק (נרשמת בלוג)
+      try {
+        const { siteId, accessToken } = await manageSession();
+        await removeFiles(siteId, accessToken, files);
+      } catch (error) {
+        console.error("[hospitality] unit files cleanup failed", files.length, error);
+      }
+    }
+    return result;
   });
 
 /** העברת מתחם לארכיון — היחידות שלו מושבתות (בעלים בלבד — נאכף במסד) */

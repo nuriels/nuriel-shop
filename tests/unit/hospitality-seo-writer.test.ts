@@ -695,3 +695,191 @@ describe("the SEO pipeline: the existing NURIEL AI entitlement, quotas, key, mod
     ).rejects.toBeInstanceOf(SafeError);
   });
 });
+
+// ------------------------------------------------------------------ "תקנו לי" ליד ממצא בבדיקה הטכנית
+type SeoProposal = import("@/engines/hospitality/types/seo").SeoProposal;
+const SITE_URL = "https://nofi-dorit.nuri1.fit";
+const unitUrl = (slug: string) => `${SITE_URL}/stay/units/${encodeURIComponent(slug)}`;
+
+/** "מסד" של הצעות: seo_proposals_add מדלג על טקסט שכבר נמצא בשדה (כמו המסד) ומוסיף את השאר כממתינות */
+function fixWorld(over: { site?: PublicSite; proposals?: SeoProposal[] } = {}) {
+  const theSite = over.site ?? zimmerSite();
+  const proposals: SeoProposal[] = [...(over.proposals ?? [])];
+  const base = (it: SeoProposalItem) => {
+    const u = theSite.units.find((x) => x.id === it.target_id);
+    return it.target_kind === "unit" && u
+      ? ((u as unknown as Record<string, string | null>)[it.field] ?? null)
+      : null;
+  };
+  const fixRpc = async <T>(fn: string, args: Record<string, unknown>): Promise<T> => {
+    hosp.calls.push({ fn, args });
+    if (fn === "seo_run_start") return "run-fix" as T;
+    if (fn === "seo_proposals_add") {
+      let added = 0;
+      for (const it of args["_items"] as SeoProposalItem[]) {
+        if (base(it) === it.text) continue;
+        proposals.push({
+          id: `p${proposals.length + 1}`,
+          target_kind: it.target_kind,
+          target_id: it.target_id,
+          field: it.field,
+          proposed: it.text,
+          base: base(it),
+          source: "template",
+          status: "pending",
+          applied: null,
+          created_at: "2026-11-23T08:00:00Z",
+          decided_at: null,
+          target_label: null,
+          current: base(it),
+        });
+        added += 1;
+      }
+      return { added, skipped: 0 } as T;
+    }
+    if (fn === "seo_run_finish") return { status: "done" } as T;
+    throw new Error(`unexpected hospitality rpc ${fn}`);
+  };
+  const load = async () => ({
+    site: theSite,
+    design: design(),
+    view: { proposals: [...proposals], runs: { template_initial: true, ai_initial: true } },
+  });
+  return { rpc: fixRpc, load, proposals };
+}
+
+describe('"תקנו לי": a finding of the technical check becomes a pending proposal for that page', () => {
+  it("the same description on two units: a free template proposal for each — on request, pending, no model call", async () => {
+    as(OWNER2, NO_AI);
+    const w = fixWorld();
+    const r = await server.handleSeoFix(
+      { code: "description.duplicate", urls: [unitUrl("גן עדן VIP"), unitUrl("אדיר")] },
+      { load: w.load, rpc: w.rpc, createClient: model(goodReply) },
+    );
+    expect(r).toMatchObject({ status: "ok", field: "seo_description", added: 2 });
+    expect(r.targets).toEqual([
+      { target_kind: "unit", target_id: U1 },
+      { target_kind: "unit", target_id: U2 },
+    ]);
+    const add = hosp.calls.find((c) => c.fn === "seo_proposals_add")!;
+    // on request: a filled field may get a proposal — the owner approves, nothing is applied
+    expect(add.args["_only_empty"]).toBe(false);
+    const items = add.args["_items"] as SeoProposalItem[];
+    expect(items.map((i) => [i.target_id, i.field])).toEqual([
+      [U1, "seo_description"],
+      [U2, "seo_description"],
+    ]);
+    expect(new Set(items.map((i) => i.text)).size).toBe(2); // every page its own description
+    expect(w.proposals.every((p) => p.status === "pending")).toBe(true);
+    expect(sent).toHaveLength(0);
+  });
+
+  it("a page that already has a pending proposal for the field: nothing is generated — the proposal is pointed to", async () => {
+    as(OWNER2, NO_AI);
+    const w = fixWorld({
+      proposals: [
+        {
+          id: "p-old",
+          target_kind: "unit",
+          target_id: U2,
+          field: "seo_title",
+          proposed: "אדיר – צימר עד 5 אורחים",
+          base: null,
+          source: "template",
+          status: "pending",
+          applied: null,
+          created_at: "2026-11-20T08:00:00Z",
+          decided_at: null,
+          target_label: "אדיר",
+          current: null,
+        },
+      ],
+    });
+    const r = await server.handleSeoFix(
+      { code: "title.length_hint", urls: [unitUrl("אדיר")] },
+      { load: w.load, rpc: w.rpc },
+    );
+    expect(r).toMatchObject({
+      status: "ok",
+      added: 0,
+      targets: [{ target_kind: "unit", target_id: U2 }],
+    });
+    expect(hosp.calls).toHaveLength(0);
+  });
+
+  it("the template's text is already on the page: without NURIEL AI — an honest message, no call; with it — a new wording from the current text", async () => {
+    const site0 = zimmerSite();
+    const tpl = templateProposals({ site: site0, design: design() }).find(
+      (i) => i.target_id === U2 && i.field === "seo_description",
+    )!;
+    const site = {
+      ...site0,
+      units: site0.units.map((u) => (u.id === U2 ? { ...u, seo_description: tpl.text } : u)),
+    } as PublicSite;
+    const request = { code: "description.length_hint", urls: [unitUrl("אדיר")] };
+
+    as(OWNER2, NO_AI);
+    const w1 = fixWorld({ site });
+    const r1 = await server.handleSeoFix(request, {
+      load: w1.load,
+      rpc: w1.rpc,
+      createClient: model(goodReply),
+    });
+    expect(r1).toMatchObject({ status: "none", message: server.SEO_UNAVAILABLE_MESSAGE, added: 0 });
+    expect(sent).toHaveLength(0);
+    expect(db.quotaCalls).toHaveLength(0);
+
+    as(OWNER, ZIMMER);
+    hosp.calls = [];
+    const w2 = fixWorld({ site });
+    const reworded =
+      "אדיר בנופי דורית: צימר מרווח עד 5 אורחים במושב ישעי. בודקים זמינות ומזמינים באתר.";
+    const r2 = await server.handleSeoFix(request, {
+      load: w2.load,
+      rpc: w2.rpc,
+      createClient: model(() => ({ text: reworded })),
+    });
+    expect(r2).toMatchObject({
+      status: "ok",
+      added: 1,
+      targets: [{ target_kind: "unit", target_id: U2 }],
+    });
+    expect(w2.proposals.map((p) => p.proposed)).toEqual([reworded]);
+    // one model call, after a quota check, with the current text as "previous" and the unit by its ref
+    expect(sent).toHaveLength(1);
+    expect(db.quotaCalls).toHaveLength(1);
+    const message = JSON.stringify(sent[0]!["messages"]);
+    expect(message).toContain("unit with ref u2");
+    expect(message).toContain(tpl.text.slice(0, 30));
+    expect(db.log.at(-1)?.["guides"]).toEqual(["seo-writer"]);
+  });
+
+  it("a page that no longer exists / a finding with no text fix: an explanation, nothing generated", async () => {
+    as(OWNER2, NO_AI);
+    const w = fixWorld();
+    const r = await server.handleSeoFix(
+      { code: "title.duplicate", urls: [unitUrl("צימר שנמחק")] },
+      { load: w.load, rpc: w.rpc },
+    );
+    expect(r).toMatchObject({ status: "none", message: server.SEO_FIX_GONE, targets: [] });
+    await expect(
+      server.handleSeoFix(
+        { code: "schema.breadcrumbs_missing", urls: [SITE_URL] },
+        { load: w.load, rpc: w.rpc },
+      ),
+    ).rejects.toBeInstanceOf(SafeError);
+    expect(hosp.calls).toHaveLength(0);
+  });
+
+  it("not a manager of this business — refused before anything", async () => {
+    as(OWNER, NO_AI);
+    const w = fixWorld();
+    await expect(
+      server.handleSeoFix(
+        { code: "title.duplicate", urls: [unitUrl("אדיר")] },
+        { load: w.load, rpc: w.rpc },
+      ),
+    ).rejects.toBeInstanceOf(SafeError);
+    expect(hosp.calls).toHaveLength(0);
+  });
+});

@@ -10,9 +10,11 @@ import {
   type RobotsRules,
 } from "./html";
 import {
+  addressKey,
   auditPage,
   auditSite,
   healthScore,
+  landedAt,
   sortIssues,
   type AuditIssue,
   type FetchedPage,
@@ -168,7 +170,10 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
       r.status === 200 && r.body && isHtml ? extractSignals(r.body) : null;
     return { page, signals };
   });
-  const fetched = results.filter((x): x is NonNullable<typeof x> => x !== null);
+  const fetched = onePagePerAddress(
+    results.filter((x): x is NonNullable<typeof x> => x !== null),
+    { host, inSitemap, kindOf: opts.kindOf },
+  );
 
   const ctx = { origin, engine: opts.engine, hebrew: true };
   const pages: PageResult[] = fetched.map(({ page, signals }) => ({
@@ -203,6 +208,54 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
     issues,
     stoppedEarly,
   };
+}
+
+/**
+ * One page per address. A start path that redirects (a zimmer site's "/" → "/stay") IS the page it lands on:
+ * when that page was fetched too (it is in the sitemap) the start path is dropped, otherwise it is reported under
+ * the address it lands on. Before this, "/" and "/stay" were two pages with "the same title and description" and
+ * "/" was "missing from the sitemap" — three findings nobody could fix, because there was nothing to fix.
+ * Sitemap URLs that redirect are kept: "a sitemap URL redirects" is a real finding of its own.
+ */
+export function onePagePerAddress<T extends { page: FetchedPage }>(
+  fetched: T[],
+  site: { host: string; inSitemap: Set<string>; kindOf: (path: string) => PageKind },
+): T[] {
+  const direct = new Set(
+    fetched.filter((f) => !landedAt(f.page)).map((f) => addressKey(f.page.url)),
+  );
+  const out: T[] = [];
+  for (const f of fetched) {
+    const to = landedAt(f.page);
+    if (!to || f.page.inSitemap) {
+      out.push(f);
+      continue;
+    }
+    let target: URL;
+    try {
+      target = new URL(to);
+    } catch {
+      out.push(f);
+      continue;
+    }
+    if (target.host !== site.host) {
+      out.push(f);
+      continue;
+    }
+    if (direct.has(addressKey(to))) continue;
+    out.push({
+      ...f,
+      page: {
+        ...f.page,
+        url: to,
+        kind: site.kindOf(target.pathname),
+        inSitemap: site.inSitemap.has(addressKey(to)),
+        finalUrl: null,
+      },
+    });
+    direct.add(addressKey(to));
+  }
+  return out;
 }
 
 /** how a URL path maps to a page kind, per engine (used by the crawler and the reports) */

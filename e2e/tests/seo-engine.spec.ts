@@ -270,6 +270,94 @@ test("zimmer owner: /manage/seo — the SEO center with the proposals; later kee
   ).toBe("1");
 });
 
+test('zimmer owner: "תקנו לי" next to a finding — a pending proposal for every page of the finding, shown in the list; nothing changes on the site', async ({
+  page,
+}) => {
+  desktopOnly();
+  // the same description on both units (a real duplicate), and a technical finding the platform owns
+  const same = "מתחם צימרים כפרי עם נוף פתוח — בואו לנוח אצלנו.";
+  const both = `'${ids.u1}', '${ids.u2}'`;
+  sql(`UPDATE hospitality.units SET seo_description = '${same}' WHERE id IN (${both})`);
+  const origin = hUrl();
+  const rimon = `${origin}/stay/units/${H.slug}-rimon`;
+  const teena = `${origin}/stay/units/${H.slug}-teena`;
+  const issues = [
+    {
+      code: "description.duplicate",
+      severity: "medium",
+      url: rimon,
+      message: "תיאור זהה ב-2 עמודים",
+      detail: same,
+      count: 2,
+      urls: [rimon, teena],
+    },
+    {
+      code: "schema.breadcrumbs_missing",
+      severity: "low",
+      url: rimon,
+      message: "אין פירורי לחם (BreadcrumbList) בנתונים המובנים",
+    },
+  ];
+  sql(`DELETE FROM public.seo_audits WHERE tenant_id = '${ids.h}'`);
+  sql(`INSERT INTO public.seo_audits (tenant_id, source, origin, score, counts, pages_audited, sitemap_urls,
+         robots_status, sitemap_status, pages, issues, started_at, finished_at)
+       VALUES ('${ids.h}', 'manual', '${origin}', 96, '{"medium": 1, "low": 1}', 3, 3, 200, 200, '[]',
+               '${JSON.stringify(issues).replace(/'/g, "''")}'::jsonb, now(), now())`);
+  // the owner already decided on the first suggestions (the initial run proposed for the then-empty descriptions)
+  sql(`UPDATE hospitality.seo_proposals SET status = 'rejected', decided_at = now()
+        WHERE tenant_id = '${ids.h}' AND field = 'seo_description' AND status IN ('pending', 'later')
+          AND target_id IN (${both})`);
+  const pendingDescriptions = () =>
+    sql(`SELECT count(*) FROM hospitality.seo_proposals WHERE tenant_id = '${ids.h}'
+          AND field = 'seo_description' AND status IN ('pending', 'later') AND target_id IN (${both})`);
+  expect(pendingDescriptions()).toBe("0");
+
+  await loadSession(page, hSession!, "/manage/seo");
+  await expect(page.getByTestId("seo-proposals")).toBeVisible({ timeout: 20_000 });
+  const row = page.locator('[data-issue="description.duplicate"]');
+  await expect(row).toBeVisible({ timeout: 20_000 });
+  // plain words: why it matters; every page of the finding is listed
+  await expect(row).toContainText("לכל עמוד כדאי תיאור משלו");
+  await expect(row).toContainText(`${H.slug}-teena`);
+  // the platform's own finding: no action for the owner, and it says so
+  await expect(page.locator('[data-issue="schema.breadcrumbs_missing"]')).toContainText(
+    "לא צריך לעשות כלום",
+  );
+  await expect(
+    page.locator('[data-issue="schema.breadcrumbs_missing"]').getByTestId("seo-issue-fix"),
+  ).toHaveCount(0);
+
+  await row.getByTestId("seo-issue-fix").click();
+  await expect(page.getByText("הכנו הצעה").first()).toBeVisible({ timeout: 20_000 });
+  const card = (target: string) =>
+    page.locator(`[data-testid=seo-proposal][data-target="${target}"]`);
+  await expect(card(`unit:${ids.u1}:seo_description`)).toBeVisible({ timeout: 15_000 });
+  await expect(card(`unit:${ids.u2}:seo_description`)).toBeVisible();
+  expect(pendingDescriptions()).toBe("2");
+  const texts =
+    sql(`SELECT string_agg(proposed, ' || ' ORDER BY target_id) FROM hospitality.seo_proposals
+     WHERE tenant_id = '${ids.h}' AND field = 'seo_description' AND status = 'pending'
+       AND target_id IN (${both})`).split(" || ");
+  expect(texts).toHaveLength(2);
+  expect(texts[0]).not.toBe(texts[1]); // every page its own description
+  // nothing changes on the site until the owner approves
+  expect(
+    sql(
+      `SELECT count(*) FROM hospitality.units WHERE id IN (${both}) AND seo_description = '${same}'`,
+    ),
+  ).toBe("2");
+
+  // pressed again: the waiting proposals are pointed to, nothing new is generated
+  await row.getByTestId("seo-issue-fix").click();
+  await expect(page.getByText("יש כבר הצעה שמחכה לאישור שלכם").first()).toBeVisible({
+    timeout: 15_000,
+  });
+  expect(pendingDescriptions()).toBe("2");
+
+  sql(`UPDATE hospitality.units SET seo_description = NULL WHERE id IN (${both})`);
+  sql(`DELETE FROM public.seo_audits WHERE tenant_id = '${ids.h}'`);
+});
+
 test('platform admin: /platform/seo — numbers per business only, "check" queues ONE job', async ({
   browser,
 }) => {

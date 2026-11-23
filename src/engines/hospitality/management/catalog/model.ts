@@ -18,6 +18,7 @@ import type {
   PropertyType,
   SmokingRule,
   UnitChanges,
+  UnitDeletePreview,
   UnitFields,
   UnitKey,
   UnitType,
@@ -629,4 +630,28 @@ export function unitsOverview(view: CatalogView): UnitsOverview {
     missingPrice: active.filter((u) => !u.has_price).length,
     single: units.length === 1 ? units[0]! : null,
   };
+}
+
+// ---------- מחיקת יחידה (מיגרציה 205) ----------
+
+const countOf = (n: number, one: string, many: string) => (n === 1 ? one : `${n} ${many}`);
+
+/** מה יימחק יחד עם היחידה — לחלון "האם למחוק?", בשפה פשוטה, רק מה שקיים */
+export function unitDeleteSummary(
+  p: Pick<UnitDeletePreview, "photos" | "prices" | "beds" | "amenities" | "calendars">,
+): string[] {
+  const out: string[] = [];
+  if (p.photos > 0) out.push(countOf(p.photos, "תמונה אחת", "תמונות"));
+  if (p.prices > 0)
+    out.push(
+      countOf(
+        p.prices,
+        "כלל מחיר אחד (סוף שבוע / עונה / מבצע)",
+        "כללי מחיר (סוף שבוע / עונה / מבצע)",
+      ),
+    );
+  if (p.beds > 0 || p.amenities > 0) out.push("המיטות והמתקנים שהוגדרו לה");
+  if (p.calendars > 0)
+    out.push(countOf(p.calendars, "קישור סנכרון יומן אחד", "קישורי סנכרון יומן"));
+  return out;
 }

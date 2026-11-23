@@ -17,6 +17,8 @@ export interface AuditIssue {
   message: string;
   detail?: string;
   count?: number;
+  /** a finding that spans pages (the same title on 3 pages): every page, so each one can be fixed */
+  urls?: string[];
 }
 
 export interface FetchedPage {
@@ -28,6 +30,14 @@ export interface FetchedPage {
   inSitemap: boolean;
   /** final URL after redirects (null when there were none) */
   finalUrl: string | null;
+}
+
+/** an address without the fragment and the trailing slash — how two URLs are compared */
+export const addressKey = (u: string) => u.replace(/#.*$/, "").replace(/\/$/, "");
+
+/** where the page landed after redirects — null when it did not move (or the fetcher echoed the same URL) */
+export function landedAt(page: Pick<FetchedPage, "url" | "finalUrl">): string | null {
+  return page.finalUrl && addressKey(page.finalUrl) !== addressKey(page.url) ? page.finalUrl : null;
 }
 
 export interface AuditContext {
@@ -75,7 +85,7 @@ function issue(
   severity: Severity,
   url: string | null,
   message: string,
-  extra: { detail?: string; count?: number } = {},
+  extra: { detail?: string; count?: number; urls?: string[] } = {},
 ): AuditIssue {
   return { code, severity, url, message, ...extra };
 }
@@ -390,34 +400,44 @@ export function auditSite(
   const indexable = pages.filter(
     (p) => p.page.status === 200 && p.signals && !noindex(p.page, p.signals),
   );
+  // one page = one address: a URL that redirects to another audited URL is that page, not a second one
+  const where = (p: FetchedPage) => addressKey(landedAt(p) ?? p.url);
   const dup = (
     pick: (s: PageSignals) => string | undefined,
     code: string,
     severity: Severity,
     label: string,
   ) => {
-    const seen = new Map<string, string[]>();
+    const seen = new Map<string, Map<string, string>>();
     for (const p of indexable) {
       const v = p.signals ? (pick(p.signals) ?? "").trim() : "";
       if (!v) continue;
-      seen.set(v, [...(seen.get(v) ?? []), p.page.url]);
+      const pages = seen.get(v) ?? new Map<string, string>();
+      const at = where(p.page);
+      // the page under its own address wins over a URL that redirects to it
+      if (!pages.has(at) || !landedAt(p.page)) pages.set(at, p.page.url);
+      seen.set(v, pages);
     }
-    for (const [value, urls] of seen)
+    for (const [value, pages] of seen) {
+      const urls = [...pages.values()];
       if (urls.length > 1)
         out.push(
           issue(code, severity, urls[0] ?? null, `${label} זהה ב-${urls.length} עמודים`, {
             detail: value,
             count: urls.length,
+            urls,
           }),
         );
+    }
   };
   dup((s) => s.titles[0], "title.duplicate", "high", "כותרת");
   dup((s) => s.metaDescriptions[0], "description.duplicate", "medium", "תיאור");
 
   // indexable pages missing from the sitemap
-  const inMap = new Set(site.sitemapUrls.map((u) => u.replace(/\/$/, "")));
+  const inMap = new Set(site.sitemapUrls.map(addressKey));
   const missing = indexable.filter(
-    (p) => p.page.kind !== "other" && !inMap.has(p.page.url.replace(/\/$/, "")),
+    (p) =>
+      p.page.kind !== "other" && !inMap.has(addressKey(p.page.url)) && !inMap.has(where(p.page)),
   );
   if (site.sitemapStatus === 200 && missing.length > 0)
     out.push(

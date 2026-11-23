@@ -7,7 +7,7 @@ import {
   parseSitemap,
 } from "@/platform/seo/audit/html";
 import { auditPage, auditSite, healthScore, type FetchedPage } from "@/platform/seo/audit/rules";
-import { crawlSite } from "@/platform/seo/audit/crawl";
+import { crawlSite, kindOfPath } from "@/platform/seo/audit/crawl";
 import type { Fetcher } from "@/platform/seo/audit/fetch.server";
 
 const GOOD = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
@@ -376,5 +376,133 @@ describe("SEO engine — the crawl has one overall budget", () => {
     const r = await crawlSite({ ...opts, deadlineMs: 60_000 }, fetcherWithDelay(0));
     expect(r.stoppedEarly).toBe(false);
     expect(r.pagesAudited).toBe(11);
+  });
+});
+
+describe('SEO engine — one page per address (a zimmer site\'s "/" redirects to "/stay")', () => {
+  const O = "https://nofi-dorit.nuri1.fit";
+  const pageHtml = (title: string, description: string, canonical: string) =>
+    `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title>
+<meta name="description" content="${description}"><link rel="canonical" href="${canonical}">
+</head><body><h1>${title}</h1><p>${"מילה ".repeat(80)}</p><a href="/stay">בית</a></body></html>`;
+  const HOME = pageHtml(
+    "צימר נופי דורית – חוויית אירוח קסומה ומפנקת ליד בית שמש",
+    "מתחם אירוח בישעי: צימרים זוגיים ומשפחתיים, בריכה ומדשאה. בודקים תאריכים ומזמינים ישירות באתר.",
+    `${O}/stay`,
+  );
+  // the production shape: "/" answers 301 → /stay (the fetcher follows it and reports where it landed)
+  const site = (units: Record<string, string>): Fetcher => {
+    const pages: Record<string, string> = { [`${O}/stay`]: HOME, ...units };
+    return async (url) => {
+      if (url === `${O}/robots.txt`)
+        return {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+          body: `User-agent: *\nAllow: /\nSitemap: ${O}/sitemap.xml\n`,
+          finalUrl: null,
+        };
+      if (url === `${O}/sitemap.xml`)
+        return {
+          status: 200,
+          headers: { "content-type": "application/xml" },
+          body: `<urlset>${Object.keys(pages)
+            .map((u) => `<url><loc>${u}</loc></url>`)
+            .join("")}</urlset>`,
+          finalUrl: null,
+        };
+      if (url === `${O}/`)
+        return {
+          status: 200,
+          headers: { "content-type": "text/html" },
+          body: HOME,
+          finalUrl: `${O}/stay`,
+        };
+      const body = pages[url];
+      return body
+        ? { status: 200, headers: { "content-type": "text/html" }, body, finalUrl: null }
+        : { status: 404, headers: {}, body: null, finalUrl: null };
+    };
+  };
+  const opts = {
+    origin: O,
+    engine: "hospitality" as const,
+    startPaths: ["/"],
+    maxPages: 30,
+    kindOf: (p: string) => kindOfPath("hospitality", p),
+  };
+  const unit = (name: string, description: string) =>
+    pageHtml(`${name} | נופי דורית חוויה בכפר`, description, `${O}/stay/units/${name}`);
+
+  it("the home page is audited once: no 'same title / description on 2 pages', nothing 'missing from the sitemap'", async () => {
+    const r = await crawlSite(
+      opts,
+      site({
+        [`${O}/stay/units/moria`]: unit(
+          "מוריה",
+          "מוריה בנופי דורית, ישעי: צימר זוגי עם ג׳קוזי בחדר, עד 2 אורחים. בודקים תאריכים ומזמינים באתר.",
+        ),
+      }),
+    );
+    const codes = r.issues.map((i) => i.code);
+    expect(codes).not.toContain("title.duplicate");
+    expect(codes).not.toContain("description.duplicate");
+    expect(codes).not.toContain("sitemap.missing_pages");
+    expect(r.pages.map((p) => p.url)).toEqual([`${O}/stay`, `${O}/stay/units/moria`]);
+    expect(r.pagesAudited).toBe(2);
+  });
+
+  it("without the page in the sitemap, the redirect is reported under the address it lands on", async () => {
+    const lone: Fetcher = async (url, o) => {
+      if (url === `${O}/sitemap.xml`)
+        return { status: 200, headers: {}, body: "<urlset></urlset>", finalUrl: null };
+      return site({})(url, o);
+    };
+    const r = await crawlSite(opts, lone);
+    expect(r.pages.map((p) => [p.url, p.kind])).toEqual([[`${O}/stay`, "home"]]);
+  });
+
+  it("real duplicates are still found — and the finding lists every page, so each one can be fixed", async () => {
+    const same = "מזמינים אתכם להנות מנופש חלומי במתחם האירוח נופי דורית חוויה בכפר בישוב ישעי.";
+    const r = await crawlSite(
+      opts,
+      site({
+        [`${O}/stay/units/adir`]: unit("אדיר", same),
+        [`${O}/stay/units/moria`]: unit("מוריה", same),
+        [`${O}/stay/units/eden`]: unit("גן עדן", same),
+      }),
+    );
+    const dup = r.issues.find((i) => i.code === "description.duplicate");
+    expect(dup?.count).toBe(3);
+    expect(dup?.urls).toEqual([
+      `${O}/stay/units/adir`,
+      `${O}/stay/units/moria`,
+      `${O}/stay/units/eden`,
+    ]);
+    expect(r.issues.map((i) => i.code)).not.toContain("title.duplicate");
+  });
+
+  it("a sitemap URL that redirects to another sitemap page: one finding for the redirect, no duplicate", () => {
+    const s = extractSignals(GOOD);
+    const target = page();
+    const moved = page({
+      url: "https://nofi-dorit.nuri1.fit/stay/units/old",
+      finalUrl: target.url,
+    });
+    const issues = auditSite(
+      [
+        { page: moved, signals: s },
+        { page: target, signals: s },
+      ],
+      {
+        origin: ctx.origin,
+        robotsStatus: 200,
+        robots: parseRobots(`Sitemap: ${ctx.origin}/sitemap.xml\n`),
+        sitemapStatus: 200,
+        sitemapUrls: [moved.url, target.url],
+      },
+    );
+    expect(issues.map((i) => i.code)).not.toContain("title.duplicate");
+    expect(auditPage(moved, s, ctx).map((i) => i.code)).toContain("page.redirect_in_sitemap");
   });
 });
