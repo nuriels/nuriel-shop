@@ -224,7 +224,9 @@ describe("Search Console connect ticket", () => {
       JSON.stringify({ ...JSON.parse(Buffer.from(p!, "base64url").toString()), t: U }),
     ).toString("base64url");
     expect(verifyTicket(`${forged}.${s}`)).toBeNull();
-    expect(verifyTicket(`${p}.x${s!.slice(1)}`)).toBeNull();
+    // one character of the signature changed — to one it is not already (a random signature can start with "x")
+    const other = s![0] === "x" ? "y" : "x";
+    expect(verifyTicket(`${p}.${other}${s!.slice(1)}`)).toBeNull();
     expect(verifyTicket(`${p}`)).toBeNull();
     expect(verifyTicket(null)).toBeNull();
   });
