@@ -1,10 +1,12 @@
 // מיילים ולוח בקרה (Stage 2k): המיילים של העסק ושליחה חוזרת של מייל שנכשל; המספרים של
 // לוח הבקרה. השליחה עצמה — תהליך הרקע (outbox/worker.server.ts).
+// מיגרציה 206: ההתראה על מייל שנכשל — "נקרא" / "טופל" / "להחזיר להתראות". רק מה שמוצג לבעל העסק
+// משתנה; המייל עצמו (סטטוס, ניסיונות, שגיאה, היסטוריה) נשאר כמו שהוא, וכל סימון נרשם ביומן הפעולות.
 import { createServerFn } from "@tanstack/react-start";
 import type { DashboardNumbers, EmailFilter, EmailList } from "../types/emails";
-import { InputError, uuid } from "../validation/input";
+import { InputError, parseEmailAlertMark, parseEmailAlertMarkAll, uuid } from "../validation/input";
 
-const FILTERS: EmailFilter[] = ["all", "failed", "waiting", "sent"];
+const FILTERS: EmailFilter[] = ["all", "failed", "handled", "waiting", "sent"];
 
 export const hospitalityEmails = createServerFn({ method: "POST" })
   .inputValidator((input: Record<string, unknown>) => {
@@ -29,6 +31,25 @@ export const hospitalityRequeueEmail = createServerFn({ method: "POST" })
     });
     kickOutbox();
     return r;
+  });
+
+/** סימון של מיילים מסוימים (עד 200): נקרא / טופל / להחזיר להתראות */
+export const hospitalityEmailAlertsMark = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseEmailAlertMark(input))
+  .handler(async ({ data }): Promise<{ updated: number }> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<{ updated: number }>("email_alerts_mark", {
+      _ids: data.ids,
+      _action: data.action,
+    });
+  });
+
+/** "סימון הכול כנקרא" / "סימון הכול כטופל" — כל ההתראות הפתוחות של העסק (גם מעבר ל-100 שברשימה) */
+export const hospitalityEmailAlertsMarkAll = createServerFn({ method: "POST" })
+  .inputValidator((input: Record<string, unknown>) => parseEmailAlertMarkAll(input))
+  .handler(async ({ data }): Promise<{ updated: number }> => {
+    const { manageRpc } = await import("../server/manage.server");
+    return manageRpc<{ updated: number }>("email_alerts_mark_all", { _action: data.action });
   });
 
 export const hospitalityDashboard = createServerFn({ method: "GET" }).handler(

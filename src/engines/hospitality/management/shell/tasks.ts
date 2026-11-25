@@ -6,7 +6,7 @@ import { hospitalityDashboardTasks } from "../../api/dashboard.functions";
 import { hospitalitySupportUnread } from "../../api/support.functions";
 import type { DashboardTasks } from "../../types/dashboard";
 import { contractsUnseenKey } from "../client-documents/model";
-import { dashboardKeys } from "../dashboard/model";
+import { dashboardKeys, unseenAlerts } from "../dashboard/model";
 import type { NavBadges } from "../lib/nav";
 import { supportKeys } from "../support/keys";
 
@@ -20,14 +20,17 @@ export function useDashboardTasks(enabled: boolean) {
   });
 }
 
-/** הזמנות: בקשות לאישור + בקשות ביטול; ערוצים: התנגשויות / יומן שלא מסתנכרן; מיילים שנכשלו */
+/**
+ * הזמנות: בקשות לאישור + בקשות ביטול; ערוצים: התנגשויות / יומן שלא מסתנכרן; מיילים: התראות על מיילים
+ * שנכשלו שעוד לא נקראו (מיגרציה 206 — "סימון כנקרא" מוריד את המספר, "טופל" מסיר את ההתראה)
+ */
 export function navBadges(data: DashboardTasks | undefined): NavBadges {
   const out: NavBadges = {};
   for (const t of data?.items ?? []) {
     if (t.kind === "pending" || t.kind === "cancel_requests")
       out.bookings = (out.bookings ?? 0) + t.count;
     if (t.kind === "channels") out.channels = (t.conflicts ?? 0) + (t.failing ?? 0) || t.count;
-    if (t.kind === "emails") out.emails = t.count;
+    if (t.kind === "emails" && unseenAlerts(t) > 0) out.emails = unseenAlerts(t);
   }
   return out;
 }

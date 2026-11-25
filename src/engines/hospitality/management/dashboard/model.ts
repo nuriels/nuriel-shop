@@ -304,14 +304,23 @@ export function taskView(task: DashboardTask, now: number = Date.now()): TaskVie
         link: { to: "/manage/channels" },
         tone: task.conflicts ? "danger" : "warning",
       };
-    case "emails":
+    case "emails": {
+      // מיגרציה 206: נקרא ≠ טופל. כשהכול נקרא — שורה שקטה (לא נספרת בפעמון) עד שמסמנים "טופל"
+      const unseen = unseenAlerts(task);
+      const what = "אפשר לשלוח שוב או לסמן כטופל";
       return {
         title: plural(task.count, "מייל שלא נשלח", "מיילים שלא נשלחו"),
-        detail: "אפשר לשלוח שוב מהמסך",
+        detail:
+          unseen === 0
+            ? `${task.count === 1 ? "נקרא" : "נקראו"} · ${what}`
+            : unseen < task.count
+              ? `${unseen === 1 ? "אחד חדש" : `${unseen} חדשים`} · ${what}`
+              : what,
         cta: "לבדיקה",
         link: { to: "/manage/emails", search: { filter: "failed" } },
-        tone: "warning",
+        tone: unseen === 0 ? "info" : "warning",
       };
+    }
     case "prices":
       return {
         title: plural(task.count, "יחידה בלי מחיר", "יחידות בלי מחיר"),
@@ -381,10 +390,26 @@ export function taskView(task: DashboardTask, now: number = Date.now()): TaskVie
   }
 }
 
-/** סדר התצוגה: דחוף קודם */
+/** מיגרציה 206: כמה התראות על מיילים שנכשלו עוד לא נקראו (שרת ישן בלי unseen — כולן) */
+export function unseenAlerts(task: DashboardTask): number {
+  return task.unseen ?? task.count;
+}
+
+/** משימה "שקטה": מיילים שנכשלו שכולם כבר נקראו — מופיעה ברשימה, אבל לא נספרת במספר שבפעמון ובכותרת */
+export function isQuietTask(task: DashboardTask): boolean {
+  return task.kind === "emails" && unseenAlerts(task) === 0;
+}
+
+/** המספר שבפעמון ובכותרת "דורש טיפול": המשימות שעדיין מבקשות תשומת לב */
+export function attentionCount(tasks: DashboardTask[]): number {
+  return tasks.filter((t) => !isQuietTask(t)).length;
+}
+
+/** סדר התצוגה: דחוף קודם; משימה שקטה — בסוף */
 export function sortTasks(tasks: DashboardTask[]): DashboardTask[] {
   const rank = { high: 0, medium: 1, low: 2 } as const;
-  return [...tasks].sort((a, b) => rank[a.severity] - rank[b.severity]);
+  const weight = (t: DashboardTask) => (isQuietTask(t) ? 3 : rank[t.severity]);
+  return [...tasks].sort((a, b) => weight(a) - weight(b));
 }
 
 /** ראשי תיבות לאווטאר: "נועה ל." → "נל" */

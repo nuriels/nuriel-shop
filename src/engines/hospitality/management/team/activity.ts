@@ -28,6 +28,13 @@ const setupStep = (entry: ActivityEntry) => {
   return SETUP_STEP_DEFS.find((d) => d.key === key)?.title ?? "צעד";
 };
 
+/** "התראה על מייל שנכשל" / "3 התראות על מיילים שנכשלו" / "את כל ההתראות על מיילים שנכשלו (5)" */
+const alertsText = (entry: ActivityEntry) => {
+  const n = Number(entry.changes["count"]) || 0;
+  if (entry.changes["all"] === true) return `את כל ההתראות על מיילים שנכשלו (${n})`;
+  return n > 1 ? `${n} התראות על מיילים שנכשלו` : "התראה על מייל שנכשל";
+};
+
 const ROLE_FALLBACK: Record<ActivityEntry["actor_role"], string> = {
   owner: "בעל/ת העסק",
   manager: "מנהל/ת",
@@ -211,6 +218,13 @@ export function activityText(entry: ActivityEntry): string {
       return `התנגשות תאריכים מיומן חיצוני ב${target}`;
     case "emails.requeued":
       return `${actor} שלח/ה שוב מייל: ${EMAIL_EVENT[target] ?? "מייל"}`;
+    // מיגרציה 206: סימון ההתראות על מיילים שנכשלו (המיילים עצמם לא השתנו)
+    case "emails.alert_seen":
+      return `${actor} סימן/ה כנקרא ${alertsText(entry)}`;
+    case "emails.alert_handled":
+      return `${actor} סימן/ה כטופל ${alertsText(entry)}`;
+    case "emails.alert_reopened":
+      return `${actor} החזיר/ה להתראות ${alertsText(entry)}`;
     case "site.published":
       return `${actor} פרסם/ה את האתר (${target})`;
     case "site.restored":

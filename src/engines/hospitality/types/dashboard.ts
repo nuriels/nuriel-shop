@@ -115,6 +115,8 @@ export interface DashboardTask {
   ending?: number;
   /** הלילה האחרון הפתוח הקרוב ביותר */
   until?: string | null;
+  /** מיגרציה 206 (emails): כמה מההתראות הפתוחות עוד לא סומנו "נקרא" — המספר בפעמון ובתפריט */
+  unseen?: number;
 }
 
 export interface DashboardTasks {

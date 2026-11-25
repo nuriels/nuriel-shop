@@ -1,6 +1,7 @@
 // בדיקת הקלט של פונקציות השרת של Hospitality — לפני הפנייה למסד.
 // משקף את הבדיקות של המסד (המסד נשאר הסמכות הסופית); הודעות בעברית למשתמש.
 import type { ManualBookingSource, StayStatus } from "../types/domain";
+import type { EmailAlertAction } from "../types/emails";
 import { CARD_IN_GUEST_TEXT, looksLikeCardNumber } from "../payments/phone";
 
 export class InputError extends Error {
@@ -317,4 +318,29 @@ export function parseStayStatus(input: Raw) {
 
 export function parseGuestId(input: Raw) {
   return { guestId: uuid(field(input, "guestId"), "האורח") };
+}
+
+// ---------- ההתראות על מיילים שנכשלו (מיגרציה 206) ----------
+
+/** כמה מיילים אפשר לסמן בבת אחת — כמו המסד (email_alerts_mark) */
+export const EMAIL_ALERT_MAX_IDS = 200;
+
+/** "נקרא" / "טופל" / "להחזיר להתראות" לרשימת מיילים של העסק (המסד בודק שהם של העסק ושנכשלו) */
+export function parseEmailAlertMark(input: Raw): { ids: string[]; action: EmailAlertAction } {
+  const raw = field(input, "ids");
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > EMAIL_ALERT_MAX_IDS)
+    throw new InputError(`אפשר לסמן בין 1 ל-${EMAIL_ALERT_MAX_IDS} מיילים בפעם`);
+  return {
+    ids: [...new Set(raw.map((x) => uuid(x, "המייל")))],
+    action: oneOf<EmailAlertAction>(
+      field(input, "action"),
+      ["seen", "handled", "reopen"],
+      "הפעולה",
+    ),
+  };
+}
+
+/** "סימון הכול כנקרא" / "סימון הכול כטופל" — כל ההתראות הפתוחות של העסק */
+export function parseEmailAlertMarkAll(input: Raw): { action: "seen" | "handled" } {
+  return { action: oneOf(field(input, "action"), ["seen", "handled"] as const, "הפעולה") };
 }

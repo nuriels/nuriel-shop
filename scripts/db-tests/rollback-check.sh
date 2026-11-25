@@ -193,8 +193,10 @@ M86=20261121100000_hosp_package_addon_rooms
 # NURIEL AI SEO ENGINE — the core (203) and Hospitality on it (204); 204 rolls back first
 M87=20261122100000_seo_engine
 M88=20261122110000_hosp_seo_engine
-# safe unit delete (205): functions only — the newest, rolled back first
+# safe unit delete (205): functions only
 M89=20261123100000_hosp_unit_delete_safe
+# failed-email alerts can be marked read / handled (206) — the newest, rolled back first
+M90=20261125100000_hosp_email_alerts
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -238,7 +240,26 @@ same_as_ref() {
   fi
 }
 
-# ---------- safe unit delete (migration 205) — the newest, rolled back first ----------
+# ---------- failed-email alerts: read / handled (migration 206) — the newest, rolled back first ----------
+expect "before the rollback: the alert columns, the mark functions, the cancelled-email helper, the open-alerts index" \
+  "SELECT (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'notifications'
+            AND column_name IN ('alert_seen_at', 'alert_handled_at', 'alert_handled_by')) = 3
+      AND to_regprocedure('hospitality.email_alerts_mark(uuid[],text)') IS NOT NULL
+      AND to_regprocedure('hospitality.email_alerts_mark_all(text)') IS NOT NULL
+      AND to_regprocedure('hospitality._email_cancelled(text,text)') IS NOT NULL
+      AND to_regclass('hospitality.notifications_open_alerts_idx') IS NOT NULL"
+ref_upto "$M90"
+echo "rollback: $M90"
+down "$M90"
+expect "the alerts count every failed email again (migration 43 / 21 functions); the columns, functions and index are gone" \
+  "SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'notifications'
+                        AND column_name LIKE 'alert\\_%')
+      AND to_regprocedure('hospitality.email_alerts_mark(uuid[],text)') IS NULL
+      AND to_regprocedure('hospitality._email_cancelled(text,text)') IS NULL
+      AND to_regclass('hospitality.notifications_open_alerts_idx') IS NULL"
+same_as_ref "migration 205"
+
+# ---------- safe unit delete (migration 205) ----------
 expect "before the rollback: the delete preview, the shared block helper, unit_delete returns jsonb (the files for the bucket)" \
   "SELECT to_regprocedure('hospitality.unit_delete_preview(uuid)') IS NOT NULL
       AND to_regprocedure('hospitality._unit_delete_block(uuid,uuid)') IS NOT NULL
@@ -2837,6 +2858,10 @@ up "$M89"
 expect "safe unit delete back: the preview, the helper, unit_delete returns jsonb" \
   "SELECT to_regprocedure('hospitality.unit_delete_preview(uuid)') IS NOT NULL
       AND pg_get_function_result('hospitality.unit_delete(uuid)'::regprocedure) = 'jsonb'"
+up "$M90"
+expect "failed-email alerts back: the columns, the mark functions, the helper" \
+  "SELECT to_regprocedure('hospitality.email_alerts_mark(uuid[],text)') IS NOT NULL
+      AND to_regprocedure('hospitality._email_cancelled(text,text)') IS NOT NULL"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')

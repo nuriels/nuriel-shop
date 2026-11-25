@@ -30,7 +30,7 @@ import { manageKeys } from "../lib/query-keys";
 import { ErrorState, IconTile, SectionCard, SkeletonBlock } from "../ui/kit";
 import { TONES } from "../ui/tones";
 import { channelAlerts } from "./channel-alerts";
-import { dashboardKeys, shortDate, sortTasks, taskView } from "./model";
+import { attentionCount, dashboardKeys, shortDate, sortTasks, taskView } from "./model";
 
 const ICONS: Record<DashboardTaskKind, LucideIcon> = {
   pending: Clock,
@@ -71,7 +71,8 @@ export function TasksCard({ canBookings }: { canBookings: boolean }) {
   const items = query.data
     ? sortTasks(proofTask ? [proofTask, ...query.data.items] : query.data.items)
     : [];
-  const taskCount = (query.data?.count ?? 0) + (proofTask ? 1 : 0);
+  // מיגרציה 206: מיילים שנכשלו וכבר נקראו — נשארים ברשימה (עד "טופל"), לא נספרים במספר
+  const taskCount = attentionCount(items);
   const hasConflicts = items.some((t) => t.kind === "channels" && (t.conflicts ?? 0) > 0);
   // פירוט ההתנגשות הראשונה (יחידה · ערוץ · תאריכים) — רק כשיש כזו
   const channels = useQuery({

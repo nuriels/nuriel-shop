@@ -29,7 +29,7 @@ import {
   PopoverTrigger,
   cn,
 } from "@/platform/ui";
-import { sortTasks, taskView } from "../dashboard/model";
+import { attentionCount, sortTasks, taskView } from "../dashboard/model";
 import { currentNav, type NavItem } from "../lib/nav";
 import { useManagement } from "./management-context";
 import { useDashboardTasks } from "./tasks";
@@ -195,7 +195,8 @@ function TasksBell() {
   const [open, setOpen] = useState(false);
   const query = useDashboardTasks(true);
   const tasks = query.data ? sortTasks(query.data.items) : [];
-  const count = query.data?.count ?? 0;
+  // מיגרציה 206: מיילים שנכשלו וכבר נקראו — ברשימה, לא במספר
+  const count = attentionCount(tasks);
   const urgent = tasks.some((t) => t.severity === "high");
   const now = Date.now();
   return (
@@ -206,7 +207,13 @@ function TasksBell() {
           variant="ghost"
           size="icon"
           className="relative size-11"
-          aria-label={count ? `דורש טיפול: ${count}` : "דורש טיפול — אין משימות"}
+          aria-label={
+            count
+              ? `דורש טיפול: ${count}`
+              : tasks.length
+                ? "דורש טיפול — אין חדש"
+                : "דורש טיפול — אין משימות"
+          }
         >
           <Bell className="size-5" aria-hidden="true" />
           {count > 0 && (

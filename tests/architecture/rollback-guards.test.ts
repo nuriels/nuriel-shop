@@ -40,6 +40,8 @@ const ALLOWED_WITHOUT_GUARD: Record<string, string> = {
     "מוחק מינויי 'מנהל/ת עסק' (staff_grants) — הרשאות בלבד; הבעלים נשארים, וניתן למנות מחדש",
   "20261118110000_order_guard.down.sql":
     "מוחק coupon_grants — אישורי קופון זמניים (שעה); לא נתוני לקוח",
+  "20261125100000_hosp_email_alerts.down.sql":
+    "מוחק את סימוני ההתראה על מייל שנכשל (alert_seen_at / alert_handled_at / alert_handled_by) — מצב תצוגה בלבד; המיילים, הסטטוס וההיסטוריה שלהם נשארים, וההתראות פשוט חוזרות להופיע",
 };
 
 const files = readdirSync(ROLLBACKS).filter((f) => f.endsWith(".down.sql"));
