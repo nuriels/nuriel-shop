@@ -11,6 +11,7 @@ import type { PublicSite } from "../types/website";
 import { GOOGLE_TOKEN, normalizeDesign, type SiteSeo } from "./design/schema";
 import { firstSentence } from "./lib/format";
 import { siteListing } from "./lib/listing";
+import { sitePackages } from "./lib/packages";
 
 export interface SiteAddresses {
   /** הכתובת הראשית של העסק (דומיין משלו, אם יש) */
@@ -68,8 +69,9 @@ export function sitemapEntries(site: PublicSite): SitemapEntry[] {
           : `${SITE_PATH}/rooms/${seg(item.type.type.slug)}`,
     });
   }
-  // שלב א' 7: עמודי החבילות שמוצגות באתר
-  for (const p of site.packages ?? []) out.push({ path: `${SITE_PATH}/packages/${seg(p.slug)}` });
+  // שלב א' 7: עמודי החבילות שמוצגות באתר — רק חבילה שהיחידה שלה באתר (כמו בדף הבית; חבילה של יחידה
+  // מוסתרת היא 404, ולא נכנסת למפת האתר)
+  for (const p of sitePackages(site)) out.push({ path: `${SITE_PATH}/packages/${seg(p.slug)}` });
   const seen = new Set<string>();
   return out.filter((e) => !seen.has(e.path) && seen.add(e.path) && e.path.startsWith(SITE_PATH));
 }

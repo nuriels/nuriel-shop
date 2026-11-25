@@ -317,15 +317,22 @@ describe("page head: title, description, share image, canonical, Open Graph, Twi
 // ---------- פרויקט Google SEO, שלב 2 ----------
 describe("SEO stage 2: robots.txt opens what Google needs, nothing private", () => {
   const robots = parseRobots(robotsTxt(true, "https://galil.example"));
+  // a package is in the sitemap only when its unit is on the site (its page is 404 otherwise)
   const withPackages = site({
-    packages: [{ slug: "חבילת-כלה" }, { slug: "vip-2-nights" }] as unknown as NonNullable<
-      PublicSite["packages"]
-    >,
+    packages: [
+      { slug: "חבילת-כלה", unit_id: "u1" },
+      { slug: "vip-2-nights", unit_id: "u2" },
+      { slug: "hidden-unit", unit_id: "gone" },
+    ] as unknown as NonNullable<PublicSite["packages"]>,
   });
 
   it("every URL in the sitemap — home, units, room types and packages — is allowed by robots.txt", () => {
+    expect(
+      sitemapEntries(withPackages)
+        .map((e) => e.path)
+        .filter((p) => p.startsWith("/stay/packages/")),
+    ).toEqual([`/stay/packages/${encodeURIComponent("חבילת-כלה")}`, "/stay/packages/vip-2-nights"]);
     const paths = sitemapEntries(withPackages).map((e) => encodeURI(e.path));
-    expect(paths.some((p) => p.startsWith("/stay/packages/"))).toBe(true);
     expect(paths.some((p) => p.startsWith("/stay/rooms/"))).toBe(true);
     for (const path of paths) expect(robotsAllows(robots, path), path).toBe(true);
   });

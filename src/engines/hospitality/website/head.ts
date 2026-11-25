@@ -144,8 +144,26 @@ export function siteHomeHead(site: PublicSite | undefined): PageHead {
       // אימות Search Console: רק קוד תקין (נבדק ב-normalizeDesign), כ-content של תגית שנבנית כאן
       ...(seo.google ? [{ name: "google-site-verification", content: seo.google }] : []),
       { "script:ld+json": ld } as unknown as Meta,
+      // שם האתר בתוצאות של גוגל: "To indicate your site name preference, add WebSite structured data to your
+      // home page" (Google Search Central — site names). השם — אותו שם שב-og:site_name; שם חלופי — שם המתחם
+      // כשהוא שונה משם העסק (למשל "נופי דורית" ו"נופי דורית חוויה בכפר")
+      ...(url ? [{ "script:ld+json": websiteLd(site, url) } as unknown as Meta] : []),
     ],
     links: canonical(url),
+  };
+}
+
+/** WebSite structured data for the home page: the site name (+ the property's name as an alternative) */
+export function websiteLd(site: PublicSite, url: string) {
+  const name = site.business.name.trim();
+  const alternate = site.properties.map((x) => x.name?.trim() ?? "").find((n) => n && n !== name);
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name,
+    ...(alternate ? { alternateName: alternate } : {}),
+    url,
+    inLanguage: "he-IL",
   };
 }
 

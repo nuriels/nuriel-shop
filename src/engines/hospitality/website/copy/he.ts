@@ -7,6 +7,7 @@ export const he = {
   nav: {
     home: "בית",
     units: "היחידות",
+    packages: "חבילות",
     gallery: "גלריה",
     amenities: "מתקנים",
     terms: "תנאי שהייה",

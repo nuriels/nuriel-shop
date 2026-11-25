@@ -28,6 +28,7 @@ import { normalizeDesign, type SiteDesign } from "./design/schema";
 import { fontHref } from "./theme/fonts";
 import { themeFor, themeStyle } from "./theme/themes";
 import { SIGNATURE_CSS } from "./theme/signature";
+import { sitePackages } from "./lib/packages";
 
 export type SitePage = "home" | "unit" | "other";
 
@@ -137,9 +138,11 @@ function useScrolled(threshold = 24): boolean {
   return scrolled;
 }
 
-function navItems(t: ReturnType<typeof useCopy>) {
+/** the site's sections in the menu — "חבילות" only when the site has packages to show */
+function navItems(t: ReturnType<typeof useCopy>, hasPackages: boolean) {
   return [
     { hash: "units", label: t.nav.units },
+    ...(hasPackages ? [{ hash: "packages", label: t.nav.packages }] : []),
     { hash: "gallery", label: t.nav.gallery },
     { hash: "amenities", label: t.nav.amenities },
     { hash: "terms", label: t.nav.terms },
@@ -153,7 +156,7 @@ function SiteHeader() {
   const { site, theme, design, heroPage } = useSite();
   const scrolled = useScrolled();
   const overlay = theme.layout.overlayHeader && heroPage && !scrolled;
-  const items = navItems(t);
+  const items = navItems(t, sitePackages(site).length > 0);
   const logo = mediaById(site, design.logo);
   return (
     <header
@@ -396,7 +399,7 @@ function SiteFooter() {
           )}
         </div>
         <nav aria-label={t.nav.menu} className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          {navItems(t).map((i) => (
+          {navItems(t, sitePackages(site).length > 0).map((i) => (
             <Link key={i.hash} to="/stay" hash={i.hash} className="opacity-75 hover:opacity-100">
               {i.label}
             </Link>

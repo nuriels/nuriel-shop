@@ -106,11 +106,13 @@ function UnitCard({ unit, roomType }: { unit: PublicUnit; roomType?: TypeListing
   const landscape = variant === "landscape";
   const minimal = variant === "minimal";
   const soft = variant === "soft";
+  // the link wraps the unit's NAME and stretches over the whole card (after:inset-0): the card stays one click
+  // target, and the link text is the name — not the whole card. Google: "Ensure that your internal links' anchor
+  // text is concise and relevant to the page they're pointing to" (sitelinks best practices)
   return (
-    <Link
-      {...linkProps}
+    <article
       className={cn(
-        "group block h-full overflow-hidden transition-transform duration-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring",
+        "group relative block h-full overflow-hidden transition-transform duration-500 focus-within:outline-2 focus-within:outline-offset-4 focus-within:outline-ring",
         minimal
           ? ""
           : "rounded-[var(--radius)] bg-card shadow-[var(--site-shadow)] hover:-translate-y-1",
@@ -139,7 +141,14 @@ function UnitCard({ unit, roomType }: { unit: PublicUnit; roomType?: TypeListing
       />
       <div className={cn("flex flex-col gap-3", minimal ? "pt-5" : "px-6 pt-6 pb-7")}>
         {type && <p className="text-xs font-medium text-[var(--site-gold-ink)]">{type}</p>}
-        <h3 className="font-display text-2xl leading-snug">{name}</h3>
+        <h3 className="font-display text-2xl leading-snug">
+          <Link
+            {...linkProps}
+            className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+          >
+            {name}
+          </Link>
+        </h3>
         <p className="text-sm text-muted-foreground">{facts.join(" · ")}</p>
         {beds && <p className="text-sm text-muted-foreground">{beds}</p>}
         {highlights.length > 0 && (
@@ -181,6 +190,6 @@ function UnitCard({ unit, roomType }: { unit: PublicUnit; roomType?: TypeListing
           </span>
         </div>
       </div>
-    </Link>
+    </article>
   );
 }

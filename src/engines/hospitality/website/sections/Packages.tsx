@@ -52,11 +52,10 @@ function PackageCard({ pkg }: { pkg: PublicPackage }) {
   const { site } = useSite();
   const unit = packageUnit(pkg, site);
   const special = pkg.kind === "special";
+  // the link wraps the package's name and stretches over the card — concise link text (see Units.tsx)
   return (
-    <Link
-      to="/stay/packages/$packageSlug"
-      params={{ packageSlug: pkg.slug }}
-      className="group block h-full overflow-hidden rounded-[var(--radius)] bg-card shadow-[var(--site-shadow)] transition-transform duration-500 hover:-translate-y-1 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+    <article
+      className="group relative block h-full overflow-hidden rounded-[var(--radius)] bg-card shadow-[var(--site-shadow)] transition-transform duration-500 hover:-translate-y-1 focus-within:outline-2 focus-within:outline-offset-4 focus-within:outline-ring"
       data-package={pkg.name}
     >
       <div className="relative">
@@ -79,7 +78,15 @@ function PackageCard({ pkg }: { pkg: PublicPackage }) {
         </span>
       </div>
       <div className="flex flex-col gap-3 px-6 pt-6 pb-7">
-        <h3 className="font-display text-2xl leading-snug">{pkg.name}</h3>
+        <h3 className="font-display text-2xl leading-snug">
+          <Link
+            to="/stay/packages/$packageSlug"
+            params={{ packageSlug: pkg.slug }}
+            className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+          >
+            {pkg.name}
+          </Link>
+        </h3>
         <p className="text-sm text-muted-foreground">
           {[t.packages.nights(pkg.nights), t.packages.guests(pkg.max_guests)].join(" · ")}
           {unit && <span className="block">{t.packages.in(unit.name)}</span>}
@@ -103,6 +110,6 @@ function PackageCard({ pkg }: { pkg: PublicPackage }) {
           </span>
         </div>
       </div>
-    </Link>
+    </article>
   );
 }
