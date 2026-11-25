@@ -159,7 +159,7 @@ function setup() {
     mkdirSync(join(app, d), { recursive: true });
   writeFileSync(join(app, "supabase/migrations/001_a.sql"), "-- a\n");
   writeFileSync(join(app, "supabase/migrations/002_b.sql"), "-- b\n");
-  writeFileSync(join(app, "deploy/seo-engine/guard.sql"), "-- guard\nSELECT md5('customers');\n");
+  writeFileSync(join(app, "deploy/seo-engine/guard-tx.sql"), "-- guard\nSELECT md5('customers');\n");
   writeFileSync(
     join(app, "deploy/seo-engine/nofi-snapshot.sql"),
     "SELECT representative_signature FROM x;\n",

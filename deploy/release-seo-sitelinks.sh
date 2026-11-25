@@ -16,9 +16,9 @@
 #     the release files, the Nofi Dorit snapshot and the titles / descriptions of the sites.
 #   • build while the site keeps running the previous version.
 #   • 206 in ONE transaction (REPEATABLE READ — a single snapshot): gate (205 applied, 206 not) → the migration →
-#     its registration → checks: the customers' data and the email history are identical inside the same snapshot
-#     (so a guest booking at that second cannot fail the check), the new columns are empty, the permissions are
-#     right. Anything wrong → the transaction is rolled back and NOTHING changed. lock_timeout 10s: if the emails
+#     its registration → checks: whole rows of every business table (deploy/seo-engine/guard-tx.sql) and the email
+#     history are identical inside the same snapshot (so a guest booking at that second cannot fail the check), the
+#     new columns are empty, the permissions are right. Anything wrong → the transaction is rolled back and NOTHING changed. lock_timeout 10s: if the emails
 #     table is busy, it gives up instead of blocking the site.
 #   • restart → healthy → checks (sites, titles, Nofi Dorit, the new structured data and links). A failure after the
 #     restart puts the previous image and code back automatically. The database is never rolled back automatically
@@ -105,9 +105,10 @@ usage() {
 # the release's own files, from the target commit (never from the working tree)
 release_file() { git -C "$APP_DIR" show "$TARGET_SHA:$1"; }
 
-# the customers' data that no step may change (units, packages, bookings, site versions, image texts, amenities incl.
-# the Moriah jacuzzi note, SEO proposals, store products / categories / settings, orders, businesses) — one SELECT
-guard_select() { release_file deploy/seo-engine/guard.sql | grep -v '^[[:space:]]*--' | sed 's/;[[:space:]]*$//'; }
+# the business data that no step may change — whole rows of every table a business owns (deploy/seo-engine/guard-tx.sql:
+# 61 tables — stores, billing, business sites, zimmer units / packages / policies / prices / bookings / payments /
+# signature / site / documents …), one SELECT; compared inside the migration's own snapshot
+guard_select() { release_file deploy/seo-engine/guard-tx.sql | grep -v '^[[:space:]]*--' | sed 's/;[[:space:]]*$//'; }
 
 # the file's body inside its transaction: everything after the line "BEGIN;", without the last line "COMMIT;"
 tx_body() { sed -n '/^BEGIN;$/,$p' | sed '1d;$d'; }
