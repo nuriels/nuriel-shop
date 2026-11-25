@@ -358,3 +358,124 @@ describe("the score follows real fixes, not weights", () => {
     expect(healthScore(after).score - healthScore(before).score).toBe(8); // one "high" finding
   });
 });
+
+describe("what the owner reads next to the new findings", () => {
+  it("every new structure finding says who fixes it and why it matters, in plain Hebrew", async () => {
+    const { issueHint, issueOwner } = await import("@/platform/seo/issue-help");
+    // the platform's templates — nothing for the owner to do
+    for (const code of [
+      "structure.category_no_product_links",
+      "links.anchor_long",
+      "schema.website_missing",
+    ])
+      expect(issueOwner(code), code).toBe("system");
+    // the owner's choices: a section hidden from the home page, titles written by hand
+    expect(issueOwner("structure.home_links")).toBe("you");
+    expect(issueOwner("title.brand_inconsistent")).toBe("you");
+    for (const code of [
+      "structure.home_links",
+      "structure.category_no_product_links",
+      "links.anchor_long",
+      "title.brand_inconsistent",
+      "schema.website_missing",
+    ])
+      expect(issueHint(code), code).toMatch(/[א-ת]/);
+  });
+});
+
+describe("the worker's own audits (what runs in production, weekly and on 'check now')", () => {
+  type Deps = import("@/platform/seo/worker.server").WorkerDeps;
+  type Basics = import("@/platform/seo/worker.server").TenantBasics;
+  const basics = (site_type: string): Basics => ({
+    id: "44444444-4444-4444-8444-444444444444",
+    slug: "site",
+    name: "העסק",
+    site_type,
+    status: "active",
+    domain: null,
+    custom_domain: null,
+    custom_domain_status: null,
+    settings: null,
+  });
+  const html = (title: string, body: string) =>
+    doc({ title, head: websiteLd("החנות", `${STORE}/`), body: `<main>${body}</main>` });
+  const deps = (b: Basics, pages: Record<string, string>) => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const d: Deps = {
+      rpc: async <T>(fn: string, args: Record<string, unknown>) => {
+        calls.push({ fn, args });
+        if (fn === "seo_tenant_basics") return b as T;
+        return { added: 0 } as T;
+      },
+      fetcherFor: () => async (url) => {
+        const u = new URL(url);
+        const key = decodeURIComponent(u.pathname + u.search);
+        if (key === "/robots.txt")
+          return {
+            status: 200,
+            headers: { "content-type": "text/plain" },
+            body: `User-agent: *\nAllow: /\nSitemap: ${STORE}/sitemap.xml\n`,
+            finalUrl: url,
+          };
+        if (key === "/sitemap.xml")
+          return {
+            status: 200,
+            headers: { "content-type": "application/xml" },
+            body: `<urlset>${Object.keys(pages)
+              .map((p) => `<url><loc>${STORE}${p.replace(/ /g, "%20")}</loc></url>`)
+              .join("")}</urlset>`,
+            finalUrl: url,
+          };
+        const body = pages[key];
+        return body
+          ? { status: 200, headers: { "content-type": "text/html" }, body, finalUrl: url }
+          : { status: 404, headers: {}, body: null, finalUrl: url };
+      },
+      originsOf: async () => ({ origin: STORE, hosts: [new URL(STORE).host] }),
+      backgroundAi: () => false,
+    };
+    return { d, calls };
+  };
+  const job = (kind: "audit" | "initial") => ({
+    id: 1,
+    tenant_id: "44444444-4444-4444-8444-444444444444",
+    kind,
+    entity_type: null,
+    attempts: 1,
+  });
+
+  it("a store's category page (/?category=) is audited as a category, not as a second home page", async () => {
+    const { handleJob } = await import("@/platform/seo/worker.server");
+    const { d, calls } = deps(basics("ecommerce"), {
+      "/": html("החנות — מחשבים", `<a href="/?category=${encodeURIComponent("מסכים")}">מסכים</a>`),
+      "/?category=מסכים": html("מסכים | החנות", `<h1>מסכים</h1><a href="/product/1">מסך</a>`),
+    });
+    const out = await handleJob(job("audit"), d);
+    expect(out.status).toBe("done");
+    const saved = calls.find((c) => c.fn === "seo_audit_save")?.args["_result"] as {
+      pages: { url: string; kind: string }[];
+      issues: { code: string; url: string | null }[];
+    };
+    const cat = saved.pages.find((p) => p.url.includes("?category="));
+    expect(cat?.kind).toBe("category");
+    // the home-page-only checks are not asked of the category page (before: "no business data" on every category);
+    // what IS asked of an inner page — breadcrumbs — is (this fixture has none)
+    const onCategory = saved.issues.filter((x) => x.url?.includes("?category=")).map((x) => x.code);
+    expect(onCategory).not.toContain("schema.business_missing");
+    expect(onCategory).not.toContain("schema.website_missing");
+    expect(onCategory).toContain("schema.breadcrumbs_missing");
+  });
+
+  it("a business site is audited and scored too — no proposals (that engine has no writer yet)", async () => {
+    const { handleJob } = await import("@/platform/seo/worker.server");
+    const { d, calls } = deps(basics("business_profile"), {
+      "/": html("העסק", "<h1>העסק</h1><p>ברוכים הבאים</p>"),
+    });
+    expect((await handleJob(job("audit"), d)).status).toBe("done");
+    expect(calls.some((c) => c.fn === "seo_audit_save")).toBe(true);
+    const initial = await handleJob(job("initial"), d);
+    expect(initial.status).toBe("done");
+    expect(initial.result["proposals"]).toEqual({ skipped: "engine" });
+    expect(calls.some((c) => c.fn === "seo_mark_initial_done")).toBe(true);
+  });
+});

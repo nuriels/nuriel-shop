@@ -14,6 +14,7 @@
  * Switches: SEO_WORKER=off stops the worker; SEO_BACKGROUND_AI=on lets background runs call AI (default off).
  */
 import { crawlSite, kindOfPath, type CrawlResult } from "./audit/crawl";
+import type { SiteEngine } from "./audit/rules";
 import { makeSafeFetcher, type Fetcher } from "./audit/fetch.server";
 import { seoServiceRpc } from "./db.server";
 import { seoEngineFor } from "./engines";
@@ -62,7 +63,17 @@ const JOBS_PER_TICK = 3;
 /** a capped sample — enough to find template-wide problems, light on the site */
 export const AUDIT_MAX_PAGES = 30;
 
-const ENGINES = new Set(["ecommerce", "hospitality"]);
+/** every site type is audited and scored (one mechanism for the whole platform) */
+const ENGINES = new Set(["ecommerce", "hospitality", "business_profile"]);
+/** the engines that also write proposals — a missing handler there is a start-up race (retry), not "none" */
+const PROPOSAL_ENGINES = new Set(["ecommerce", "hospitality"]);
+
+const engineOf = (siteType: string): SiteEngine =>
+  siteType === "hospitality"
+    ? "hospitality"
+    : siteType === "business_profile"
+      ? "business_profile"
+      : "ecommerce";
 
 async function defaultOrigins(
   b: TenantBasics,
@@ -99,14 +110,15 @@ export async function auditTenant(
 ): Promise<CrawlResult | null> {
   const { origin, hosts } = await deps.originsOf(b);
   if (!origin || !hosts.length) return null;
-  const engine = b.site_type === "hospitality" ? "hospitality" : "ecommerce";
+  const engine = engineOf(b.site_type);
   const result = await crawlSite(
     {
       origin,
       engine,
       startPaths: ["/"],
       maxPages: AUDIT_MAX_PAGES,
-      kindOf: (p) => kindOfPath(engine, p),
+      // the query string too: a store category is "/?category=…" — by the path alone it would be the home page
+      kindOf: (p, search) => kindOfPath(engine, p, search ?? ""),
       concurrency: 2,
     },
     deps.fetcherFor(hosts),
@@ -162,20 +174,20 @@ export async function handleJob(job: SeoJob, deps: WorkerDeps = defaultDeps): Pr
     const r = await syncSearchConsole(b, deps);
     return { status: r.synced ? "done" : "skipped", result: r };
   }
-  if (!handler) throw new Error(`engine ${b.site_type} not registered yet`);
+  if (!handler && PROPOSAL_ENGINES.has(b.site_type))
+    throw new Error(`engine ${b.site_type} not registered yet`);
   const ai = deps.backgroundAi();
   if (job.kind === "initial") {
     const audit = await auditAndSave(b, "auto", deps);
     const ideas = await seedIdeas(b, deps);
-    const proposals = await handler.proposals({
-      tenantId: b.id,
-      scope: "initial",
-      entityType: null,
-      ai,
-    });
+    // a business site (no proposal writer yet): audited and scored, no proposals
+    const proposals = handler
+      ? await handler.proposals({ tenantId: b.id, scope: "initial", entityType: null, ai })
+      : { skipped: "engine" };
     await deps.rpc("seo_mark_initial_done", { _tenant: b.id });
     return { status: "done", result: { audit, ideas, proposals } };
   }
+  if (!handler) return { status: "skipped", result: { reason: "engine" } };
   // entity: the new items of one type
   const proposals = await handler.proposals({
     tenantId: b.id,
