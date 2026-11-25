@@ -119,19 +119,47 @@ export function linkKey(href: string, origin: string): string | null {
 
 /** the site name the home page declares — WebSite structured data first, then og:site_name */
 export function declaredSiteName(s: PageSignals | null): string | null {
-  if (!s) return null;
-  for (const b of s.jsonLd) {
-    const found = findWebSiteName(b.parsed);
-    if (found) return found;
-  }
-  return s.og["og:site_name"]?.trim() || null;
+  return declaredSiteNames(s)[0] ?? null;
 }
 
-function findWebSiteName(value: unknown, depth = 0): string | null {
+/**
+ * every name the home page declares for the site: WebSite name, then its alternateName(s) (Google: "alternateName: an
+ * alternate name … such as an acronym or a shorter name"), then og:site_name — a title with any of them is branded
+ */
+export function declaredSiteNames(s: PageSignals | null): string[] {
+  if (!s) return [];
+  const names: string[] = [];
+  for (const b of s.jsonLd) {
+    const found = findWebSite(b.parsed);
+    if (found) {
+      names.push(found.name, ...found.alternate);
+      break;
+    }
+  }
+  const og = s.og["og:site_name"]?.trim();
+  if (og) names.push(og);
+  return [...new Set(names.filter(Boolean))];
+}
+
+/**
+ * the forms of the brand a title may use: every declared name, and — for a name of three words or more — its first two
+ * words (a shortened brand keeps the leading words: "נופי דורית" for "נופי דורית חוויה בכפר")
+ */
+export function brandForms(names: string[]): string[] {
+  const out = [...names];
+  for (const n of names) {
+    const words = n.split(/\s+/).filter(Boolean);
+    const short = words.slice(0, 2).join(" ");
+    if (words.length >= 3 && short.length >= 5) out.push(short);
+  }
+  return [...new Set(out)];
+}
+
+function findWebSite(value: unknown, depth = 0): { name: string; alternate: string[] } | null {
   if (!value || typeof value !== "object" || depth > 4) return null;
   if (Array.isArray(value)) {
     for (const v of value) {
-      const n = findWebSiteName(v, depth + 1);
+      const n = findWebSite(v, depth + 1);
       if (n) return n;
     }
     return null;
@@ -139,9 +167,15 @@ function findWebSiteName(value: unknown, depth = 0): string | null {
   const o = value as Record<string, unknown>;
   const t = o["@type"];
   const types = Array.isArray(t) ? t : [t];
-  if (types.includes("WebSite") && typeof o["name"] === "string" && o["name"].trim())
-    return o["name"].trim();
-  return findWebSiteName(o["@graph"], depth + 1);
+  if (types.includes("WebSite") && typeof o["name"] === "string" && o["name"].trim()) {
+    const alt = o["alternateName"];
+    const alternate = (Array.isArray(alt) ? alt : [alt])
+      .filter((a): a is string => typeof a === "string")
+      .map((a) => a.trim())
+      .filter(Boolean);
+    return { name: o["name"].trim(), alternate };
+  }
+  return findWebSite(o["@graph"], depth + 1);
 }
 
 function sameOriginPath(url: string, origin: string): string | null {
@@ -645,11 +679,16 @@ function structureIssues(
       );
   }
 
-  // the site name in the titles: in all of them (concisely) or in none — not in some
-  const name = declaredSiteName(home?.signals ?? null);
+  // the site name in the titles: in all of them (concisely) or in none — not in some. Any declared name counts
+  // (the full name or its alternateName / og:site_name — "נופי דורית" is as branded as "נופי דורית חוויה בכפר")
+  const names = brandForms(declaredSiteNames(home?.signals ?? null));
+  const name = names[0];
   if (name) {
     const inner = indexable.filter((p) => p.page.kind !== "home" && p.signals?.titles[0]);
-    const without = inner.filter((p) => !(p.signals?.titles[0] ?? "").includes(name));
+    const without = inner.filter((p) => {
+      const title = p.signals?.titles[0] ?? "";
+      return !names.some((n) => title.includes(n));
+    });
     if (without.length > 0 && without.length < inner.length)
       out.push(
         issue(

@@ -479,3 +479,57 @@ describe("the worker's own audits (what runs in production, weekly and on 'check
     expect(calls.some((c) => c.fn === "seo_mark_initial_done")).toBe(true);
   });
 });
+
+describe("the brand in the titles counts every declared site name", () => {
+  it("a title with the short name (alternateName) is branded too — no finding for a full / short mix", () => {
+    const zSitemap = [`${ZIMMER}/stay`, `${ZIMMER}/stay/units/a`, `${ZIMMER}/stay/units/b`];
+    const ld = `<script type="application/ld+json">${JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "נופי דורית חוויה בכפר",
+      alternateName: "נופי דורית",
+      url: `${ZIMMER}/stay`,
+    })}</script>`;
+    const home = fetched(
+      `${ZIMMER}/stay`,
+      "home",
+      doc({
+        title: "צימר נופי דורית",
+        head: ld,
+        body: `<main><a href="/stay/units/a">אדיר</a><a href="/stay/units/b">מוריה</a></main>`,
+      }),
+    );
+    const unit = (path: string, title: string) =>
+      fetched(`${ZIMMER}${path}`, "unit", doc({ title, body: "<main><h1>x</h1></main>" }));
+    const mixed = auditSite(
+      [
+        home,
+        unit("/stay/units/a", "אדיר | נופי דורית חוויה בכפר"),
+        unit("/stay/units/b", "מוריה | נופי דורית"),
+      ],
+      site("hospitality", ZIMMER, zSitemap),
+    );
+    expect(codes(mixed)).not.toContain("title.brand_inconsistent");
+    // a title without any of the names is still found
+    const missing = auditSite(
+      [
+        home,
+        unit("/stay/units/a", "אדיר | נופי דורית"),
+        unit("/stay/units/b", "מוריה — צימר זוגי"),
+      ],
+      site("hospitality", ZIMMER, zSitemap),
+    );
+    expect(missing.find((i) => i.code === "title.brand_inconsistent")?.urls).toEqual([
+      `${ZIMMER}/stay/units/b`,
+    ]);
+  });
+});
+
+describe("brand forms", () => {
+  it("the leading two words of a long name count as the brand; short names stay whole", async () => {
+    const { brandForms } = await import("@/platform/seo/audit/rules");
+    expect(brandForms(["נופי דורית חוויה בכפר"])).toEqual(["נופי דורית חוויה בכפר", "נופי דורית"]);
+    expect(brandForms(["נוריאל שופ"])).toEqual(["נוריאל שופ"]);
+    expect(brandForms(["א ב ג"])).toEqual(["א ב ג"]); // "א ב" is too short to be a brand
+  });
+});
