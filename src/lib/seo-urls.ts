@@ -20,6 +20,7 @@ export const STATIC_PUBLIC_PATHS: readonly string[] = [
   "/privacy",
   "/cancellations",
   "/sitemap",
+  "/accessibility",
 ];
 
 const PRODUCT_PATH = /^\/product\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

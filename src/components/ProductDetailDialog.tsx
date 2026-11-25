@@ -29,6 +29,7 @@ import { ProductSticker } from "@/components/products/ProductSticker";
 import { RatingInline } from "@/components/reviews/RatingInline";
 import { useRatingSummaries } from "@/hooks/useRatingSummaries";
 import { usePriceAttr } from "@/lib/price-hold";
+import { categoryHref } from "@/components/CrawlableLink";
 
 /** הכתובת הקבועה של עמוד המוצר (SEO, שיתוף, זאפ) */
 function productPath(productId: string): string {
@@ -289,7 +290,26 @@ export function ProductDetailView({
         <div className="flex min-w-0 max-w-full flex-col gap-4 overflow-hidden whitespace-normal break-words p-5 sm:p-6">
           <div className="space-y-1.5">
             <div className="flex items-start justify-between gap-2">
-              <p className="text-xs text-muted-foreground">{categoryPath.join(" › ")}</p>
+              {isPage ? (
+                // בעמוד המוצר: פירורי לחם שהם קישורים אמיתיים לקטגוריות (מוצר → קטגוריה → קטגוריית-על)
+                <nav aria-label="מיקום בקטלוג" className="min-w-0">
+                  <ol className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                    {categoryPath.map((name, index) => (
+                      <li key={name} className="flex items-center gap-1">
+                        {index > 0 && <span aria-hidden>›</span>}
+                        <a
+                          href={categoryHref(name)}
+                          className="hover:text-foreground hover:underline"
+                        >
+                          {name}
+                        </a>
+                      </li>
+                    ))}
+                  </ol>
+                </nav>
+              ) : (
+                <p className="text-xs text-muted-foreground">{categoryPath.join(" › ")}</p>
+              )}
               <button
                 type="button"
                 onClick={() => void shareProduct(product)}

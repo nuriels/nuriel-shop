@@ -39,7 +39,7 @@ export const Route = createFileRoute("/cancellations")({
     isServerRender() && context.hostMode.siteType === "ecommerce"
       ? getStorefrontSeed({ data: {} })
       : null,
-  head: () => ({ meta: [{ title: "ביטול עסקה" }] }),
+  // הכותרת והתיאור לגוגל — ב-root (static-pages-seo.ts): "שם העמוד | שם החנות" ותיאור משלו
   validateSearch: (search: Record<string, unknown>): Search => {
     const order = search["order"];
     return typeof order === "string" && /^[A-Za-z0-9_/#\s-]{1,40}$/.test(order) ? { order } : {};

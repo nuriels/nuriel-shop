@@ -19,7 +19,7 @@ export const Route = createFileRoute("/sitemap")({
     isServerRender() && context.hostMode.siteType === "ecommerce"
       ? getStorefrontSeed({ data: {} })
       : null,
-  head: () => ({ meta: [{ title: "מפת האתר" }] }),
+  // הכותרת והתיאור לגוגל — ב-root (static-pages-seo.ts): "שם העמוד | שם החנות" ותיאור משלו
   component: SeededSitemapPage,
 });
 
@@ -132,9 +132,7 @@ function SitemapPage() {
                 <Link to="/cancellations">ביטול עסקה</Link>
               </PageLink>
               <PageLink>
-                <Link to="/about" hash="accessibility">
-                  הצהרת נגישות
-                </Link>
+                <Link to="/accessibility">הצהרת נגישות</Link>
               </PageLink>
               {/* חלק 30: עמודי התוכן שבעל החנות פרסם */}
               {(pages ?? []).map((page) => (

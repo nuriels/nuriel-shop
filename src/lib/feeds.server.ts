@@ -257,6 +257,7 @@ async function sitemapEntries(origin: string): Promise<SitemapEntry[]> {
     { loc: `${origin}/terms`, priority: "0.2" },
     { loc: `${origin}/privacy`, priority: "0.2" },
     { loc: `${origin}/cancellations`, priority: "0.2" },
+    { loc: `${origin}/accessibility`, priority: "0.2" },
     ...(pages ?? []).map((page) => ({
       loc: `${origin}/pages/${encodeURIComponent(page.slug)}`,
       lastmod: page.updated_at,

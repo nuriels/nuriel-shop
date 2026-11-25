@@ -21,6 +21,7 @@ import { FeaturedProducts } from "@/components/FeaturedProducts";
 import { HomeBanner } from "@/components/BannerCarousel";
 import { CategoryBrowser, CategorySidebar } from "@/components/CategoryBrowser";
 import { CategoryLanding } from "@/components/CategoryLanding";
+import { categoryHref } from "@/components/CrawlableLink";
 import { OrderCartDrawer, type CartMode } from "@/components/OrderCartDrawer";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -707,6 +708,7 @@ function StoreCatalog() {
               tree={categoryTree}
               value={category}
               onChange={pickFromSidebar}
+              hrefFor={categoryHref}
               counts={categoryCounts}
               totalCount={products.length}
               hideEmpty={role?.role !== "admin" && role?.role !== "agent"}
@@ -797,6 +799,7 @@ function StoreCatalog() {
                   tree={categoryTree}
                   value={category}
                   onChange={setCategory}
+                  hrefFor={categoryHref}
                   counts={categoryCounts}
                   totalCount={products.length}
                   hideEmpty={role?.role !== "admin" && role?.role !== "agent"}
@@ -807,6 +810,7 @@ function StoreCatalog() {
                       categories={landingCategories}
                       counts={categoryCounts}
                       onSelect={setCategory}
+                      hrefFor={categoryHref}
                       usingFallback={usingFallbackCategories && isStaffRole}
                     />
                   ) : (

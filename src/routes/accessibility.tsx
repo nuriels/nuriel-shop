@@ -15,7 +15,7 @@ import { loadStorePage } from "@/lib/pages-data";
  * הצהרה בסיסית עם פרטי העסק ודרכי הפנייה בנושא נגישות.
  */
 export const Route = createFileRoute("/accessibility")({
-  head: () => ({ meta: [{ title: "הצהרת נגישות" }] }),
+  // הכותרת והתיאור לגוגל — ב-root (static-pages-seo.ts): "שם העמוד | שם החנות" ותיאור משלו
   component: AccessibilityStatementPage,
 });
 

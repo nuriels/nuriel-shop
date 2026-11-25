@@ -1,4 +1,5 @@
 import { CatalogGrid } from "@/components/CatalogGrid";
+import { CrawlableLink, categoryHref } from "@/components/CrawlableLink";
 import type { CatalogItem } from "@/lib/catalog";
 import type { AddToCart } from "@/lib/cart";
 import type { CatalogSection } from "@/lib/catalog-sections";
@@ -51,13 +52,14 @@ export function CatalogSections({
               </span>
             </h3>
             {section.isChild && section.category && onOpenCategory && (
-              <button
-                type="button"
-                onClick={() => onOpenCategory(section.category!)}
+              // קישור אמיתי לקטגוריה (גוגל סורק — Google: "links from category pages to sub-category pages")
+              <CrawlableLink
+                href={categoryHref(section.category)}
+                onNavigate={() => onOpenCategory(section.category!)}
                 className="text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 לכל המוצרים של {section.title} ←
-              </button>
+              </CrawlableLink>
             )}
           </div>
           <CatalogGrid products={section.items} {...grid} />

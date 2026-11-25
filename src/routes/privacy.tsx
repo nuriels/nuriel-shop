@@ -16,7 +16,7 @@ export const Route = createFileRoute("/privacy")({
     isServerRender() && context.hostMode.siteType === "ecommerce"
       ? getStorefrontSeed({ data: {} })
       : null,
-  head: () => ({ meta: [{ title: "מדיניות פרטיות" }] }),
+  // הכותרת והתיאור לגוגל — ב-root (static-pages-seo.ts): "שם העמוד | שם החנות" ותיאור משלו
   component: SeededPrivacyPage,
 });
 

@@ -16,6 +16,7 @@ import { ProductSticker } from "@/components/products/ProductSticker";
 import { useStorefrontWide } from "@/components/layout/storefront-frame";
 import { cn } from "@/lib/utils";
 import { usePriceAttr } from "@/lib/price-hold";
+import { CrawlableLink, productHref } from "@/components/CrawlableLink";
 
 /**
  * רוחב כרטיס ברירת מחדל (w-44) — עד שנמדד הרוחב האמיתי (במסך רחב הכרטיס גדל ל-w-52);
@@ -105,10 +106,11 @@ export function HotDealsStrip({
           wide && "2xl:w-52",
         )}
       >
-        <button
-          type="button"
-          onClick={() => openProduct(item)}
-          tabIndex={decorative ? -1 : undefined}
+        <CrawlableLink
+          href={productHref(item.id)}
+          onNavigate={() => openProduct(item)}
+          // one tab stop per card (the name below); the image link is for the mouse and for Google
+          tabIndex={-1}
           aria-label={`פרטים על ${item.name}`}
           className={cn(
             "relative flex h-28 cursor-pointer items-center justify-center bg-secondary/60 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
@@ -119,6 +121,8 @@ export function HotDealsStrip({
             <img
               src={item.image_url}
               alt={item.name}
+              width={208}
+              height={144}
               loading="lazy"
               decoding="async"
               className="h-full w-full object-contain mix-blend-multiply"
@@ -130,17 +134,17 @@ export function HotDealsStrip({
             sticker={item.sticker}
             className="left-1.5 top-1.5 sm:left-1.5 sm:top-1.5"
           />
-        </button>
+        </CrawlableLink>
         <div className="flex flex-1 flex-col gap-1.5 p-3">
-          <button
-            type="button"
-            onClick={() => openProduct(item)}
+          <CrawlableLink
+            href={productHref(item.id)}
+            onNavigate={() => openProduct(item)}
             tabIndex={decorative ? -1 : undefined}
             title={item.name}
             className="line-clamp-2 min-h-10 break-words rounded text-start text-sm font-bold leading-snug text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {item.name}
-          </button>
+          </CrawlableLink>
           {item.price !== null ? (
             <p data-price={priceAttr} className="flex flex-wrap items-baseline gap-1.5">
               <span className="numeric font-bold text-accent">{formatIls(item.price)}</span>

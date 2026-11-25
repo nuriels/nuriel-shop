@@ -46,7 +46,7 @@ export const Route = createFileRoute("/contact")({
     isServerRender() && context.hostMode.siteType === "ecommerce"
       ? getStorefrontSeed({ data: {} })
       : null,
-  head: () => ({ meta: [{ title: "צור קשר" }] }),
+  // הכותרת והתיאור לגוגל — ב-root (static-pages-seo.ts): "שם העמוד | שם החנות" ותיאור משלו
   component: SeededContactPage,
 });
 

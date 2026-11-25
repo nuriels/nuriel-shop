@@ -19,7 +19,7 @@ export const Route = createFileRoute("/about")({
     isServerRender() && context.hostMode.siteType === "ecommerce"
       ? getStorefrontSeed({ data: {} })
       : null,
-  head: () => ({ meta: [{ title: "אודות" }] }),
+  // הכותרת והתיאור לגוגל — ב-root (static-pages-seo.ts): "שם העמוד | שם החנות" ותיאור משלו
   component: SeededAboutPage,
 });
 

@@ -13,6 +13,7 @@ import {
 import type { CategoryNode, CategoryTree } from "@/lib/category-tree";
 import { cn } from "@/lib/utils";
 import { useBackToClose } from "@/hooks/useBackToClose";
+import { CrawlableLink } from "@/components/CrawlableLink";
 
 type NavProps = {
   tree: CategoryTree;
@@ -23,7 +24,48 @@ type NavProps = {
   totalCount: number;
   /** לקוחות ואורחים: לא מציגים קטגוריות בלי מוצרים */
   hideEmpty: boolean;
+  /**
+   * בחנות עצמה: הכתובת של כל קטגוריה — הפריטים נהיים קישורים אמיתיים (<a href>) שגוגל סורק, ובלחיצה
+   * רגילה מתנהגים כמו קודם. בלי זה (פאנל הניהול, חלון יצירת הזמנה) — כפתורים, כמו תמיד
+   */
+  hrefFor?: ((category: string | null) => string) | undefined;
 };
+
+/** פריט ניווט: קישור לסריקה בחנות, כפתור בכל מקום אחר — באותה התנהגות בלחיצה */
+function NavTarget({
+  hrefFor,
+  category,
+  onActivate,
+  className,
+  children,
+  ...aria
+}: {
+  hrefFor?: ((category: string | null) => string) | undefined;
+  category: string | null;
+  onActivate: () => void;
+  className?: string | undefined;
+  children: React.ReactNode;
+  "aria-current"?: "true" | undefined;
+  "aria-label"?: string | undefined;
+  tabIndex?: number | undefined;
+}) {
+  if (hrefFor)
+    return (
+      <CrawlableLink
+        href={hrefFor(category)}
+        onNavigate={onActivate}
+        className={className}
+        {...aria}
+      >
+        {children}
+      </CrawlableLink>
+    );
+  return (
+    <button type="button" onClick={onActivate} className={className} {...aria}>
+      {children}
+    </button>
+  );
+}
 
 function isVisible(node: CategoryNode, props: Pick<NavProps, "counts" | "hideEmpty" | "value">) {
   if (!props.hideEmpty) return true;
@@ -45,7 +87,15 @@ function Count({ value, active }: { value: number; active?: boolean }) {
 }
 
 /** עץ הקטגוריות עצמו — משותף לסרגל הצד, למגירה בטלפון ולחלון הקופץ */
-function CategoryTreeNav({ tree, value, onChange, counts, totalCount, hideEmpty }: NavProps) {
+function CategoryTreeNav({
+  tree,
+  value,
+  onChange,
+  counts,
+  totalCount,
+  hideEmpty,
+  hrefFor,
+}: NavProps) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   // הקטגוריה שנבחרה תמיד גלויה: כל האבות שלה נפתחים אוטומטית
@@ -107,9 +157,10 @@ function CategoryTreeNav({ tree, value, onChange, counts, totalCount, hideEmpty 
                 ) : (
                   <span className="size-7 shrink-0" aria-hidden />
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
+                <NavTarget
+                  hrefFor={hrefFor}
+                  category={node.name}
+                  onActivate={() => {
                     onChange(node.name);
                     if (hasChildren && !isOpen) toggle(node.name);
                   }}
@@ -118,7 +169,7 @@ function CategoryTreeNav({ tree, value, onChange, counts, totalCount, hideEmpty 
                 >
                   <span className="truncate">{node.name}</span>
                   <Count value={counts.get(node.name) ?? 0} active={active} />
-                </button>
+                </NavTarget>
               </div>
               {hasChildren && isOpen && (
                 <div className="ms-3.5 mt-0.5 border-s border-border ps-1">
@@ -133,9 +184,10 @@ function CategoryTreeNav({ tree, value, onChange, counts, totalCount, hideEmpty 
 
   return (
     <nav aria-label="קטגוריות" className="space-y-1">
-      <button
-        type="button"
-        onClick={() => onChange(null)}
+      <NavTarget
+        hrefFor={hrefFor}
+        category={null}
+        onActivate={() => onChange(null)}
         aria-current={value === null ? "true" : undefined}
         className={cn(
           "flex w-full items-center justify-between gap-2 rounded-md border-s-[3px] py-1.5 pe-2 ps-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -149,7 +201,7 @@ function CategoryTreeNav({ tree, value, onChange, counts, totalCount, hideEmpty 
           כל המוצרים
         </span>
         <Count value={totalCount} active={value === null} />
-      </button>
+      </NavTarget>
       {tree.roots.length === 0 ? (
         <p className="px-2 py-3 text-xs leading-5 text-muted-foreground">עוד לא הוגדרו קטגוריות.</p>
       ) : (
@@ -160,20 +212,26 @@ function CategoryTreeNav({ tree, value, onChange, counts, totalCount, hideEmpty 
 }
 
 /** "כל המוצרים › אלכוהול › וויסקי" — כל חלק לחיץ לחזרה אחורה */
-function CategoryTrail({ tree, value, onChange }: Pick<NavProps, "tree" | "value" | "onChange">) {
+function CategoryTrail({
+  tree,
+  value,
+  onChange,
+  hrefFor,
+}: Pick<NavProps, "tree" | "value" | "onChange" | "hrefFor">) {
   const node = value !== null ? tree.byName.get(value) : undefined;
   if (!node) return null;
   return (
     <nav aria-label="מיקום בקטלוג">
       <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
         <li>
-          <button
-            type="button"
-            onClick={() => onChange(null)}
+          <NavTarget
+            hrefFor={hrefFor}
+            category={null}
+            onActivate={() => onChange(null)}
             className="rounded hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             כל המוצרים
-          </button>
+          </NavTarget>
         </li>
         {node.path.map((name, index) => {
           const last = index === node.path.length - 1;
@@ -185,13 +243,14 @@ function CategoryTrail({ tree, value, onChange }: Pick<NavProps, "tree" | "value
                   {name}
                 </span>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => onChange(name)}
+                <NavTarget
+                  hrefFor={hrefFor}
+                  category={name}
+                  onActivate={() => onChange(name)}
                   className="rounded hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {name}
-                </button>
+                </NavTarget>
               )}
             </li>
           );
@@ -206,11 +265,13 @@ function Chips({
   counts,
   onChange,
   className,
+  hrefFor,
 }: {
   nodes: CategoryNode[];
   counts: Map<string, number>;
   onChange: (next: string) => void;
   className?: string | undefined;
+  hrefFor?: ((category: string | null) => string) | undefined;
 }) {
   if (nodes.length === 0) return null;
   return (
@@ -218,17 +279,18 @@ function Chips({
       className={cn("flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible", className)}
     >
       {nodes.map((node) => (
-        <button
+        <NavTarget
           key={node.name}
-          type="button"
-          onClick={() => onChange(node.name)}
+          hrefFor={hrefFor}
+          category={node.name}
+          onActivate={() => onChange(node.name)}
           className="inline-flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-sm text-foreground shadow-card transition-colors hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {node.name}
           <span className="numeric text-xs text-muted-foreground">
             {counts.get(node.name) ?? 0}
           </span>
-        </button>
+        </NavTarget>
       ))}
     </div>
   );
@@ -239,18 +301,21 @@ function RootTiles({
   nodes,
   counts,
   onChange,
+  hrefFor,
 }: {
   nodes: CategoryNode[];
   counts: Map<string, number>;
   onChange: (next: string) => void;
+  hrefFor?: ((category: string | null) => string) | undefined;
 }) {
   return (
     <div className="flex gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] sm:overflow-visible">
       {nodes.map((node) => (
-        <button
+        <NavTarget
           key={node.name}
-          type="button"
-          onClick={() => onChange(node.name)}
+          hrefFor={hrefFor}
+          category={node.name}
+          onActivate={() => onChange(node.name)}
           className="group flex w-36 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-start shadow-card transition-shadow hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-auto"
         >
           <div className="flex h-24 items-center justify-center bg-secondary/60">
@@ -258,6 +323,8 @@ function RootTiles({
               <img
                 src={node.image_url}
                 alt=""
+                width={160}
+                height={96}
                 loading="lazy"
                 decoding="async"
                 className="h-full w-full object-cover"
@@ -276,7 +343,7 @@ function RootTiles({
               {counts.get(node.name) ?? 0} מוצרים
             </span>
           </div>
-        </button>
+        </NavTarget>
       ))}
     </div>
   );
@@ -302,7 +369,7 @@ export function CategorySidebar({
     >
       <div className="max-h-[calc(100vh-var(--site-header-h,4.5rem)-2rem)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-3 shadow-card">
         <div className="mb-2 flex items-center justify-between gap-2 px-2">
-          <h3 className="font-display text-lg text-foreground">קטגוריות</h3>
+          <h2 className="font-display text-lg text-foreground">קטגוריות</h2>
           {toolbar}
         </div>
         <CategoryTreeNav {...nav} />
@@ -336,7 +403,7 @@ export function CategoryBrowser({
   toolbar?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const { tree, value, onChange, counts, hideEmpty } = nav;
+  const { tree, value, onChange, counts, hideEmpty, hrefFor } = nav;
   const [sheetOpen, setSheetOpen] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   // בטלפון: "חזור" סוגר את מגירת הקטגוריות במקום לצאת מהעמוד
@@ -429,16 +496,16 @@ export function CategoryBrowser({
         {toolbar}
       </div>
 
-      <CategoryTrail tree={tree} value={value} onChange={onChange} />
+      <CategoryTrail tree={tree} value={value} onChange={onChange} hrefFor={hrefFor} />
 
       {selected ? (
-        <Chips nodes={subcategories} counts={counts} onChange={onChange} />
+        <Chips nodes={subcategories} counts={counts} onChange={onChange} hrefFor={hrefFor} />
       ) : variant === "compact" ? (
-        <Chips nodes={visibleRoots} counts={counts} onChange={onChange} />
+        <Chips nodes={visibleRoots} counts={counts} onChange={onChange} hrefFor={hrefFor} />
       ) : showTiles && hasRootImages ? (
         // אריחי תמונה רק מטאבלט ומעלה — בטלפון סרגל ה-☰ מספיק ונקי יותר
         <div className="hidden sm:block">
-          <RootTiles nodes={visibleRoots} counts={counts} onChange={onChange} />
+          <RootTiles nodes={visibleRoots} counts={counts} onChange={onChange} hrefFor={hrefFor} />
         </div>
       ) : null}
     </div>

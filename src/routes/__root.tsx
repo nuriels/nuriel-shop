@@ -30,6 +30,7 @@ import { EngineSiteShell } from "@/app/site-shell";
 import { engineRouteRedirect } from "@/app/site-routes";
 import { engineSiteData, engineSiteLinks, engineSiteMeta } from "@/app/site-head";
 import { SIGNED_IN_HINT_SCRIPT } from "@/lib/price-hold";
+import { STATIC_PAGE_SEO, staticPageTitle } from "@/lib/static-pages-seo";
 
 // גופני אתרי המנוע (Hospitality): Heebo + Frank Ruhl Libre, משתנים, עברית ולטינית — public/fonts/hosp
 const ENGINE_FONT_LINKS = [
@@ -148,8 +149,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     // חנות בלי שם עסק מוגדר → "החנות שלי"; דומיין הניהול → שם קבוע (מהשרת)
     const siteName = loaderData?.siteName || DEFAULT_STORE_NAME;
     // SEO (חלק 14): הכותרת והתיאור מ"שיווק ואינטגרציות" — ואם ריקים, שם העסק
-    const title = loaderData?.seoTitle || siteName;
-    const description = loaderData?.seoDescription || siteName;
+    // עמודי המידע הקבועים (אודות, תקנון…): הכותרת "שם העמוד | שם החנות" והתיאור שלהם — לא של דף הבית
+    const fixedPage =
+      STATIC_PAGE_SEO[(matches[matches.length - 1]?.pathname ?? "/").replace(/\/+$/, "")];
+    const title = fixedPage
+      ? staticPageTitle(fixedPage, siteName)
+      : loaderData?.seoTitle || siteName;
+    const description = fixedPage
+      ? fixedPage.describe(siteName)
+      : loaderData?.seoDescription || siteName;
     // צבע המותג של החנות → משתני העיצוב (כותרת, פוטר, כפתורים ראשיים)
     const brandColor = normalizeBrandColor(loaderData?.brandColor);
     const brandCss = brandThemeCss(brandColor);

@@ -25,6 +25,7 @@ import type { RatingSummary } from "@/lib/reviews";
 import { cn } from "@/lib/utils";
 import { useStorefrontWide } from "@/components/layout/storefront-frame";
 import { usePriceAttr } from "@/lib/price-hold";
+import { CrawlableLink, productHref } from "@/components/CrawlableLink";
 
 function ProductImage({ item }: { item: CatalogItem }) {
   const priceAttr = usePriceAttr();
@@ -42,6 +43,8 @@ function ProductImage({ item }: { item: CatalogItem }) {
         <img
           src={item.image_url}
           alt={item.name}
+          width={400}
+          height={300}
           loading="lazy"
           decoding="async"
           className="h-full w-full object-contain mix-blend-multiply transition-transform duration-200 motion-safe:group-hover:scale-[1.03]"
@@ -86,6 +89,35 @@ function ProductImage({ item }: { item: CatalogItem }) {
 }
 
 /** כרטיס מוצר בקטלוג — עם בחירת וריאציה (צבע / מידה) כשיש למוצר */
+/** פתיחת מוצר: קישור לעמוד המוצר כשיש כזה (גוגל סורק), כפתור כשהפתיחה היא חלון — באותה התנהגות */
+function OpenTarget({
+  href,
+  onOpen,
+  className,
+  children,
+  ...aria
+}: {
+  href: string | undefined;
+  onOpen: () => void;
+  className: string;
+  children: React.ReactNode;
+  "aria-label"?: string | undefined;
+  tabIndex?: number | undefined;
+}) {
+  if (href)
+    return (
+      <CrawlableLink href={href} onNavigate={onOpen} className={className} {...aria}>
+        {children}
+      </CrawlableLink>
+    );
+  const { tabIndex: _tabIndex, ...rest } = aria;
+  return (
+    <button type="button" onClick={onOpen} className={className} {...rest}>
+      {children}
+    </button>
+  );
+}
+
 function CatalogCard({
   product,
   canAdd,
@@ -94,6 +126,7 @@ function CatalogCard({
   onOpen,
   onPick,
   rating,
+  href,
 }: {
   product: CatalogItem;
   canAdd: boolean;
@@ -103,6 +136,8 @@ function CatalogCard({
   onPick: (variant: CatalogVariant | null) => void;
   /** חלק 34: דירוג הלקוחות (ממוצע + מספר ביקורות מאושרות) */
   rating?: RatingSummary | undefined;
+  /** כשהלחיצה עוברת לעמוד המוצר — הכתובת שלו: התמונה והשם נהיים קישורים שגוגל סורק */
+  href?: string | undefined;
 }) {
   const priceAttr = usePriceAttr();
   const choice = useVariantSelection(product);
@@ -116,19 +151,22 @@ function CatalogCard({
 
   return (
     <Card className="group gap-0 overflow-hidden py-0 shadow-card transition-shadow duration-200 hover:shadow-lift">
-      <button
-        type="button"
-        onClick={onOpen}
+      <OpenTarget
+        href={href}
+        onOpen={onOpen}
         aria-label={`פרטים על ${product.name}`}
+        // a link wrapping only an image: its alt (the product name) is the link text for Google; the image is
+        // decorative for screen readers here (the aria-label names the link), so the alt stays as it is
         className="block w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        tabIndex={href ? -1 : undefined}
       >
         <ProductImage item={product} />
-      </button>
+      </OpenTarget>
       <CardContent className="flex flex-1 flex-col gap-1.5 p-3 sm:gap-2 sm:p-4">
         <p className="truncate text-[11px] text-muted-foreground sm:text-xs">{product.category}</p>
-        <button
-          type="button"
-          onClick={onOpen}
+        <OpenTarget
+          href={href}
+          onOpen={onOpen}
           className="rounded text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <h3
@@ -137,7 +175,7 @@ function CatalogCard({
           >
             {product.name}
           </h3>
-        </button>
+        </OpenTarget>
         <RatingInline rating={rating} />
         {snippet && (
           <p className="line-clamp-1 text-xs leading-5 text-muted-foreground sm:line-clamp-2">
@@ -303,6 +341,7 @@ export function CatalogGrid({
                   ? setDetails(product)
                   : void navigate({ to: "/product/$productId", params: { productId: product.id } })
             }
+            href={onOpenProduct || productDialog ? undefined : productHref(product.id)}
             onPick={(variant) => setPicking({ item: product, variant })}
             rating={ratings.get(product.id)}
           />

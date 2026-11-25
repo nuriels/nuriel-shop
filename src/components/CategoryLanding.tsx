@@ -1,5 +1,6 @@
 import { Package } from "lucide-react";
 import type { CategoryNode } from "@/lib/category-tree";
+import { CrawlableLink } from "@/components/CrawlableLink";
 
 /**
  * מסך הכניסה לקטלוג: ריבועי קטגוריות במקום בליל כל המוצרים. לחיצה על ריבוע
@@ -11,6 +12,7 @@ export function CategoryLanding({
   counts,
   onSelect,
   usingFallback,
+  hrefFor,
 }: {
   categories: CategoryNode[];
   /** מספר המוצרים לכל קטגוריה, כולל תת-הקטגוריות */
@@ -18,6 +20,8 @@ export function CategoryLanding({
   onSelect: (name: string) => void;
   /** true = המנהל עוד לא בחר קטגוריות ל"הצג קטגוריה במסך הבית" — מוצגות 5 הראשונות */
   usingFallback?: boolean;
+  /** בחנות: הכתובת של כל קטגוריה — האריחים נהיים קישורים שגוגל סורק (בלחיצה — כמו קודם) */
+  hrefFor?: ((category: string) => string) | undefined;
 }) {
   if (categories.length === 0) {
     return (
@@ -32,10 +36,10 @@ export function CategoryLanding({
       {/* מסך רחב (2xl+): 5 ריבועים בשורה — במסגרת הרחבה ריבוע ב-4 עמודות כבר ענק */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
         {categories.map((node) => (
-          <button
+          <LandingTile
             key={node.name}
-            type="button"
-            onClick={() => onSelect(node.name)}
+            href={hrefFor?.(node.name)}
+            onSelect={() => onSelect(node.name)}
             className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card text-start shadow-card transition-shadow duration-200 hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <div className="flex aspect-square items-center justify-center overflow-hidden bg-secondary/60">
@@ -43,6 +47,8 @@ export function CategoryLanding({
                 <img
                   src={node.image_url}
                   alt=""
+                  width={300}
+                  height={300}
                   loading="lazy"
                   decoding="async"
                   className="h-full w-full object-cover transition-transform duration-200 motion-safe:group-hover:scale-[1.03]"
@@ -61,7 +67,7 @@ export function CategoryLanding({
                 {counts.get(node.name) ?? 0} מוצרים
               </span>
             </div>
-          </button>
+          </LandingTile>
         ))}
       </div>
       {usingFallback && (
@@ -72,5 +78,30 @@ export function CategoryLanding({
         </p>
       )}
     </div>
+  );
+}
+
+/** אריח: קישור לסריקה בחנות, כפתור בלי כתובת — באותה התנהגות בלחיצה */
+function LandingTile({
+  href,
+  onSelect,
+  className,
+  children,
+}: {
+  href: string | undefined;
+  onSelect: () => void;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (href)
+    return (
+      <CrawlableLink href={href} onNavigate={onSelect} className={className}>
+        {children}
+      </CrawlableLink>
+    );
+  return (
+    <button type="button" onClick={onSelect} className={className}>
+      {children}
+    </button>
   );
 }
