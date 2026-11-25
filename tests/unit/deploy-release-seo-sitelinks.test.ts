@@ -80,7 +80,7 @@ case "$cmd" in
         fi
         case "$sql" in
           *"SELECT filename FROM public._migrations_applied"*) cat "$S/ledger" ;;
-          *"SELECT CASE WHEN is_default"*) printf 'store kobi\nhospitality nofi-dorit\nbusiness_profile efrat\n' ;;
+          *"SELECT CASE WHEN is_default"*) printf 'store kobi\nhospitality nofi-dorit\nhospitality closed\nhospitality draft\nbusiness_profile efrat\n' ;;
           *"hospitality.notifications n JOIN public.tenants"*) echo "nofi-dorit: 2" ;;
           *"alert\\_%"*) [[ -f "$S/migrated" ]] && echo f || echo t ;;
           *"information_schema.columns"*) [[ -f "$S/migrated" && ! -f "$S/post_check_fail" ]] && echo t || echo f ;;
@@ -103,11 +103,16 @@ while (($#)); do
   esac
   shift
 done
-if [[ "$code" == yes ]]; then
-  [[ -f "$S/broken_@{id#sha256:}" ]] && { printf 502; exit 0; }; printf 200; exit 0
-fi
 path="/@{url#http://*/}"; [[ "$url" == */ ]] && path=/
 [[ "$path" == "/http"* ]] && path=/
+if [[ "$code" == yes ]]; then
+  [[ -f "$S/broken_@{id#sha256:}" ]] && { printf 502; exit 0; }
+  # a zimmer site that is not open yet: its home page is not there
+  [[ "$host" == closed.* && "$path" == /stay ]] && { printf 404; exit 0; }
+  printf 200; exit 0
+fi
+# a zimmer site that is open but not public yet: a gate page, noindex, no structured data
+[[ "$host" == draft.* && "$path" == /stay ]] && { printf '<title>בקרוב</title><meta name="robots" content="noindex, nofollow">'; exit 0; }
 case "$path" in
   /stay)
     printf '<title>נופי דורית</title><meta name="description" content="צימרים">'
@@ -289,6 +294,9 @@ describe("deploy/release-seo-sitelinks.sh", () => {
     expect(r.out).toContain("kobi.example.test/: 200");
     expect(r.out).toContain("nofi-dorit.example.test/manage/login: 200");
     expect(r.out).toContain("nofi-dorit.example.test/stay: WebSite structured data");
+    // a zimmer site that is not open / not public is not a failure (it has no public home page yet)
+    expect(r.out).toContain("closed.example.test/stay: 404 — not open, nothing to check");
+    expect(r.out).toContain("draft.example.test/stay: not public (noindex) — nothing to check");
     expect(r.out).toContain("kobi.example.test/: 1 categories are real links in the server HTML");
     expect(r.out).toContain('kobi.example.test/about: "page | store name" title');
     expect(r.out).toContain("Nofi Dorit unchanged");

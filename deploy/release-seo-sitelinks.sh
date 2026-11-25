@@ -270,17 +270,24 @@ health_checks() { # robots, liveness, readiness, every site answers below 500
 
 # what this release changes, as Google sees it (the HTML the server sends)
 release_checks() {
-  local kind host html fails=0 links
+  local kind host html fails=0 links code
   while read -r kind host; do
     case "$kind" in
       hospitality)
+        # only a site that is open and public: a closed / unpublished one answers 404 or a noindex gate page
+        code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' -H "Host: $host" -H 'X-Forwarded-Proto: https' "http://127.0.0.1:$PORT/stay") || true
+        if [[ "$code" != 200 ]]; then ok "$host/stay: $code — not open, nothing to check"; continue; fi
         html=$(page "$host" /stay)
+        if grep -aqiE '<meta name="robots" content="[^"]*noindex' <<<"$html"; then ok "$host/stay: not public (noindex) — nothing to check"; continue; fi
         if grep -aq '"@type":"WebSite"' <<<"$html"; then ok "$host/stay: WebSite structured data (the site name for Google)"; else
           say "  ✗ $host/stay: no WebSite structured data"; fails=1; fi
         ;;
       store)
+        html=$(page "$host" /)
+        # a store in maintenance mode shows only the maintenance screen (noindex) — nothing to check
+        if grep -aqiE '<meta name="robots" content="[^"]*noindex' <<<"$html"; then ok "$host/: not public (noindex) — nothing to check"; continue; fi
         if page "$host" /sitemap.xml | grep -aq '?category='; then
-          links=$(page "$host" / | grep -aoE 'href="/\?category=[^"]+"' | sort -u | wc -l)
+          links=$(grep -aoE 'href="/\?category=[^"]+"' <<<"$html" | sort -u | wc -l)
           if ((links > 0)); then ok "$host/: $links categories are real links in the server HTML"; else
             say "  ✗ $host/: the sitemap has categories but the home page has no category link"; fails=1; fi
         else
