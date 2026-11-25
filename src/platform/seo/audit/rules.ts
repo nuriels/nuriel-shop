@@ -70,6 +70,80 @@ const BUSINESS_TYPES: Record<SiteEngine, string[]> = {
   business_profile: ["LocalBusiness", "ProfessionalService", "Organization", "Person", "WebSite"],
 };
 
+/**
+ * How a URL maps to a page kind, per engine (used by the crawler, the site rules and the reports). The query string
+ * matters: a store's category page is "/?category=<name>" — the path alone ("/") would make it the home page.
+ */
+export function kindOfPath(engine: SiteEngine, path: string, search = ""): PageKind {
+  const p = path.replace(/\/+$/, "") || "/";
+  if (engine === "hospitality") {
+    if (p === "/stay" || p === "/") return "home";
+    // a unit and a room type are both a place to stay, with its own page
+    if (p.startsWith("/stay/units/") || p.startsWith("/stay/rooms/")) return "unit";
+    if (p.startsWith("/stay/packages/")) return "package";
+    if (/^\/stay\/(book|my|manage|booking|account)/.test(p)) return "other";
+    if (p.startsWith("/stay/")) return "content";
+    return "other";
+  }
+  if (engine === "ecommerce") {
+    const q = new URLSearchParams(search);
+    if (p === "/" && q.get("category")) return "category";
+    if (p === "/") return "home";
+    if (p.startsWith("/product/") || p.startsWith("/products/")) return "product";
+    if (p.startsWith("/category/") || p.startsWith("/categories/") || p.startsWith("/c/"))
+      return "category";
+    if (/^\/(cart|checkout|account|login|admin|orders|search)/.test(p)) return "other";
+    return "content";
+  }
+  return p === "/" ? "home" : "content";
+}
+
+/** the sections a site is built of — the pages Google may show as sitelinks under the home page */
+export const KEY_KINDS: Record<SiteEngine, PageKind[]> = {
+  ecommerce: ["category"],
+  hospitality: ["unit", "package"],
+  business_profile: ["content"],
+};
+
+/** a link / sitemap address on this site, normalised for comparison (decoded, no fragment, no trailing slash) */
+export function linkKey(href: string, origin: string): string | null {
+  try {
+    const u = new URL(href, origin + "/");
+    if (u.host !== new URL(origin).host) return null;
+    const path = u.pathname.replace(/\/+$/, "") || "/";
+    return decodeURIComponent(path + u.search.replace(/\+/g, " "));
+  } catch {
+    return null;
+  }
+}
+
+/** the site name the home page declares — WebSite structured data first, then og:site_name */
+export function declaredSiteName(s: PageSignals | null): string | null {
+  if (!s) return null;
+  for (const b of s.jsonLd) {
+    const found = findWebSiteName(b.parsed);
+    if (found) return found;
+  }
+  return s.og["og:site_name"]?.trim() || null;
+}
+
+function findWebSiteName(value: unknown, depth = 0): string | null {
+  if (!value || typeof value !== "object" || depth > 4) return null;
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const n = findWebSiteName(v, depth + 1);
+      if (n) return n;
+    }
+    return null;
+  }
+  const o = value as Record<string, unknown>;
+  const t = o["@type"];
+  const types = Array.isArray(t) ? t : [t];
+  if (types.includes("WebSite") && typeof o["name"] === "string" && o["name"].trim())
+    return o["name"].trim();
+  return findWebSiteName(o["@graph"], depth + 1);
+}
+
 function sameOriginPath(url: string, origin: string): string | null {
   try {
     const u = new URL(url, origin);
@@ -293,6 +367,15 @@ export function auditPage(
         "אין בעמוד הבית נתונים מובנים שמתארים את העסק",
       ),
     );
+  if (page.kind === "home" && !types.has("WebSite"))
+    out.push(
+      issue(
+        "schema.website_missing",
+        "medium",
+        url,
+        "בעמוד הבית אין נתונים מובנים מסוג WebSite — מהם גוגל לוקח את שם האתר שמופיע בתוצאות",
+      ),
+    );
   if (page.kind === "product") {
     if (!types.has("Product"))
       out.push(
@@ -339,12 +422,16 @@ export function auditPage(
       page.kind === "unit" ||
       page.kind === "package" ||
       page.kind === "category") &&
-    s.wordCount < 60
+    s.mainWordCount < 60
   )
     out.push(
-      issue("content.thin", "medium", url, `מעט מאוד תוכן בעמוד (${s.wordCount} מילים)`, {
-        count: s.wordCount,
-      }),
+      issue(
+        "content.thin",
+        "medium",
+        url,
+        `מעט מאוד תוכן בעמוד (${s.mainWordCount} מילים, בלי התפריט והתחתית)`,
+        { count: s.mainWordCount },
+      ),
     );
   return out;
 }
@@ -355,6 +442,8 @@ export interface SiteFacts {
   robots: RobotsRules | null;
   sitemapStatus: number;
   sitemapUrls: string[];
+  /** the engine — for the structure rules (which pages are the site's sections); without it they don't run */
+  engine?: SiteEngine;
 }
 
 export function auditSite(
@@ -448,6 +537,7 @@ export function auditSite(
         `${missing.length} עמודים חשובים לא מופיעים במפת האתר`,
         {
           count: missing.length,
+          urls: missing.slice(0, 20).map((p) => p.page.url),
           detail: missing
             .slice(0, 5)
             .map((p) => p.page.url)
@@ -455,6 +545,122 @@ export function auditSite(
         },
       ),
     );
+  if (site.engine) out.push(...structureIssues(indexable, site, site.engine));
+  return out;
+}
+
+/** links longer than this are a whole card wrapped in a link, not a name — Google reads the link text */
+export const ANCHOR_MAX = 60;
+const SECTION_LABEL: Record<SiteEngine, string> = {
+  ecommerce: "הקטגוריות",
+  hospitality: "היחידות והחבילות",
+  business_profile: "העמודים",
+};
+
+/**
+ * Site structure (Google: sitelinks come from "the link structure of your site" — link your important pages from
+ * other relevant pages with concise anchor text; a store links menu → categories → products with <a href>).
+ * Measured only on what the crawler really fetched, so nothing is guessed about pages it did not see:
+ * - the home page links to the site's sections (categories / units and packages / pages);
+ * - a store's category pages link to products;
+ * - the links to the sections carry a name, not a whole card;
+ * - the site name is in every title, or in none (not in some).
+ */
+function structureIssues(
+  indexable: { page: FetchedPage; signals: PageSignals | null }[],
+  site: SiteFacts,
+  engine: SiteEngine,
+): AuditIssue[] {
+  const out: AuditIssue[] = [];
+  const kindOfUrl = (u: string): PageKind | null => {
+    try {
+      const x = new URL(u, site.origin + "/");
+      return kindOfPath(engine, x.pathname, x.search);
+    } catch {
+      return null;
+    }
+  };
+  const home = indexable.find((p) => p.page.kind === "home" && p.signals);
+  const sections = new Map<string, string>(); // key → sitemap url
+  for (const u of site.sitemapUrls) {
+    const k = kindOfUrl(u);
+    const key = linkKey(u, site.origin);
+    if (k && key && KEY_KINDS[engine].includes(k) && key !== "/") sections.set(key, u);
+  }
+
+  if (home?.signals && sections.size > 0) {
+    const fromHome = new Map<string, string>(); // key → the link text
+    for (const l of home.signals.links) {
+      const key = linkKey(l.href, site.origin);
+      if (key && !fromHome.has(key)) fromHome.set(key, l.text);
+    }
+    const linked = [...sections.keys()].filter((k) => fromHome.has(k));
+    const unlinked = [...sections.entries()].filter(([k]) => !fromHome.has(k)).map(([, u]) => u);
+    if (linked.length === 0 || linked.length < sections.size / 2)
+      out.push(
+        issue(
+          "structure.home_links",
+          linked.length === 0 ? "high" : "medium",
+          home.page.url,
+          linked.length === 0
+            ? `דף הבית לא מקשר לאף אחד מ${SECTION_LABEL[engine]} (${sections.size}) בקישור שגוגל יכול לסרוק`
+            : `דף הבית מקשר רק ל-${linked.length} מתוך ${sections.size} ${SECTION_LABEL[engine]}`,
+          { count: unlinked.length, urls: unlinked.slice(0, 20) },
+        ),
+      );
+    const long = linked.filter((k) => (fromHome.get(k) ?? "").length > ANCHOR_MAX);
+    if (long.length > 0)
+      out.push(
+        issue(
+          "links.anchor_long",
+          "low",
+          home.page.url,
+          `${long.length} קישורים מדף הבית ל${SECTION_LABEL[engine]} עוטפים כרטיס שלם — טקסט הקישור ארוך מ-${ANCHOR_MAX} תווים`,
+          {
+            count: long.length,
+            urls: long.map((k) => sections.get(k) ?? k).slice(0, 20),
+            detail: (fromHome.get(long[0] ?? "") ?? "").slice(0, 160),
+          },
+        ),
+      );
+  }
+
+  // a store: from a category page Google must reach the products by links (not only through the sitemap)
+  if (engine === "ecommerce" && site.sitemapUrls.some((u) => kindOfUrl(u) === "product")) {
+    const noProducts = indexable.filter(
+      (p) =>
+        p.page.kind === "category" &&
+        p.signals &&
+        !p.signals.links.some((l) => kindOfUrl(l.href) === "product"),
+    );
+    if (noProducts.length > 0)
+      out.push(
+        issue(
+          "structure.category_no_product_links",
+          "high",
+          noProducts[0]?.page.url ?? null,
+          `${noProducts.length} עמודי קטגוריה בלי קישורים למוצרים — גוגל מגיע למוצרים רק דרך מפת האתר`,
+          { count: noProducts.length, urls: noProducts.slice(0, 20).map((p) => p.page.url) },
+        ),
+      );
+  }
+
+  // the site name in the titles: in all of them (concisely) or in none — not in some
+  const name = declaredSiteName(home?.signals ?? null);
+  if (name) {
+    const inner = indexable.filter((p) => p.page.kind !== "home" && p.signals?.titles[0]);
+    const without = inner.filter((p) => !(p.signals?.titles[0] ?? "").includes(name));
+    if (without.length > 0 && without.length < inner.length)
+      out.push(
+        issue(
+          "title.brand_inconsistent",
+          "low",
+          without[0]?.page.url ?? null,
+          `ב-${without.length} עמודים שם האתר ("${name}") חסר בכותרת, ובשאר הוא מופיע`,
+          { count: without.length, urls: without.slice(0, 20).map((p) => p.page.url) },
+        ),
+      );
+  }
   return out;
 }
 

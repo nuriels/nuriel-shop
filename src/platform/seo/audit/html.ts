@@ -42,6 +42,9 @@ export interface PageSignals {
   jsonLd: JsonLdBlock[];
   hreflang: { lang: string; href: string }[];
   wordCount: number;
+  /** words of the page's own content: inside <main> when there is one, else the body without its header, nav,
+   *  footer and aside — the menu and the footer repeat on every page and are not the page's content */
+  mainWordCount: number;
 }
 
 const ENTITIES: Record<string, string> = {
@@ -234,6 +237,7 @@ export function extractSignals(html: string): PageSignals {
     jsonLd: [],
     hreflang: [],
     wordCount: 0,
+    mainWordCount: 0,
   };
   const source = stripComments(html);
 
@@ -337,9 +341,33 @@ export function extractSignals(html: string): PageSignals {
   const bodyOpen = openTag("body", "i").exec(content);
   const bodyFrom = bodyOpen ? bodyOpen.index + bodyOpen[0].length : -1;
   const bodyTo = bodyOpen ? findLastClose(content, "body", bodyFrom) : -1;
-  const text = cleanText(stripTags(bodyTo === -1 ? content : content.slice(bodyFrom, bodyTo)));
-  signals.wordCount = text ? text.split(" ").filter((w) => /[\p{L}\p{N}]/u.test(w)).length : 0;
+  const body = bodyTo === -1 ? content : content.slice(bodyFrom, bodyTo);
+  signals.wordCount = countWords(cleanText(stripTags(body)));
+  const main = pairedTags(body, "main").next();
+  signals.mainWordCount = countWords(
+    cleanText(stripTags(main.done ? withoutChrome(body) : main.value.inner)),
+  );
   return signals;
+}
+
+const countWords = (text: string) =>
+  text ? text.split(" ").filter((w) => /[\p{L}\p{N}]/u.test(w)).length : 0;
+
+/** the body without the parts every page repeats (header, nav, footer, aside) */
+function withoutChrome(html: string): string {
+  const re = /<(header|nav|footer|aside)(?=[\s/>])[^<>]*>/gi;
+  const parts: string[] = [];
+  let i = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const close = findClose(html, (m[1] ?? "").toLowerCase(), re.lastIndex);
+    if (!close) break;
+    parts.push(html.slice(i, m.index), " ");
+    i = close.end;
+    re.lastIndex = close.end;
+  }
+  parts.push(html.slice(i));
+  return parts.join("");
 }
 
 /** robots.txt → the rules that apply to Googlebot (or *), and the declared sitemaps */

@@ -14,6 +14,7 @@ import {
   auditPage,
   auditSite,
   healthScore,
+  kindOfPath,
   landedAt,
   sortIssues,
   type AuditIssue,
@@ -29,7 +30,8 @@ export interface CrawlOptions {
   /** always audited, in this order (e.g. the home page), before sitemap URLs */
   startPaths: string[];
   maxPages: number;
-  kindOf: (path: string) => PageKind;
+  /** the page kind of a URL — the path, and the query string (a store's "/?category=…" is a category) */
+  kindOf: (path: string, search?: string) => PageKind;
   timeoutMs?: number;
   concurrency?: number;
   userAgent?: string;
@@ -142,7 +144,9 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
     for (const s of parsed.sitemaps) queue.push(s);
   }
 
-  // the pages to audit: start paths first, then the sitemap, deduplicated, capped
+  // the pages to audit: start paths first, then a fair sample of the sitemap — one page of each kind in turn
+  // (categories, products, units, packages, content…), so a long list of one kind (a store's categories come
+  // before its products in the sitemap) never leaves another kind out of the audit
   const inSitemap = new Set(sitemapUrls.map((u) => u.replace(/\/$/, "")));
   const targets: string[] = [];
   const add = (u: string) => {
@@ -150,18 +154,18 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
     if (!targets.includes(clean) && targets.length < opts.maxPages) targets.push(clean);
   };
   for (const p of opts.startPaths) add(new URL(p, origin + "/").toString());
-  for (const u of sitemapUrls) add(u);
+  for (const u of fairSample(sitemapUrls, opts.kindOf)) add(u);
 
   const results = await pool(targets, opts.concurrency ?? 3, async (url) => {
     if (!timeLeft()) return null; // out of budget: not fetched, not reported as broken
     const r = await safeGet(fetcher, url, timeoutMs, userAgent);
-    const path = new URL(url).pathname;
+    const at = new URL(url);
     const page: FetchedPage = {
       url,
       status: r.status,
       headers: r.headers,
       html: r.body,
-      kind: opts.kindOf(path),
+      kind: opts.kindOf(at.pathname, at.search),
       inSitemap: inSitemap.has(url.replace(/\/$/, "")),
       finalUrl: r.finalUrl,
     };
@@ -191,6 +195,7 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
     robots,
     sitemapStatus,
     sitemapUrls,
+    engine: opts.engine,
   });
   const issues = sortIssues([...pages.flatMap((p) => p.issues), ...siteIssues]);
   const { score, counts } = healthScore(issues);
@@ -219,7 +224,11 @@ export async function crawlSite(opts: CrawlOptions, fetcher: Fetcher): Promise<C
  */
 export function onePagePerAddress<T extends { page: FetchedPage }>(
   fetched: T[],
-  site: { host: string; inSitemap: Set<string>; kindOf: (path: string) => PageKind },
+  site: {
+    host: string;
+    inSitemap: Set<string>;
+    kindOf: (path: string, search?: string) => PageKind;
+  },
 ): T[] {
   const direct = new Set(
     fetched.filter((f) => !landedAt(f.page)).map((f) => addressKey(f.page.url)),
@@ -248,7 +257,7 @@ export function onePagePerAddress<T extends { page: FetchedPage }>(
       page: {
         ...f.page,
         url: to,
-        kind: site.kindOf(target.pathname),
+        kind: site.kindOf(target.pathname, target.search),
         inSitemap: site.inSitemap.has(addressKey(to)),
         finalUrl: null,
       },
@@ -258,24 +267,46 @@ export function onePagePerAddress<T extends { page: FetchedPage }>(
   return out;
 }
 
-/** how a URL path maps to a page kind, per engine (used by the crawler and the reports) */
-export function kindOfPath(engine: SiteEngine, path: string): PageKind {
-  const p = path.replace(/\/+$/, "") || "/";
-  if (engine === "hospitality") {
-    if (p === "/stay" || p === "/") return "home";
-    if (p.startsWith("/stay/units/")) return "unit";
-    if (p.startsWith("/stay/packages/")) return "package";
-    if (/^\/stay\/(book|my|manage|booking)/.test(p)) return "other";
-    if (p.startsWith("/stay/")) return "content";
-    return "other";
+/** kept here for the callers that import it from the crawler */
+export { kindOfPath };
+
+const SAMPLE_ORDER: PageKind[] = [
+  "home",
+  "category",
+  "product",
+  "unit",
+  "package",
+  "content",
+  "other",
+];
+
+/** the sitemap's URLs in audit order: one URL of each kind in turn, each kind in its sitemap order */
+export function fairSample(
+  urls: string[],
+  kindOf: (path: string, search?: string) => PageKind,
+): string[] {
+  const byKind = new Map<PageKind, string[]>();
+  for (const u of urls) {
+    let kind: PageKind = "other";
+    try {
+      const x = new URL(u);
+      kind = kindOf(x.pathname, x.search);
+    } catch {
+      /* not a URL: last */
+    }
+    byKind.set(kind, [...(byKind.get(kind) ?? []), u]);
   }
-  if (engine === "ecommerce") {
-    if (p === "/") return "home";
-    if (p.startsWith("/product/") || p.startsWith("/products/")) return "product";
-    if (p.startsWith("/category/") || p.startsWith("/categories/") || p.startsWith("/c/"))
-      return "category";
-    if (/^\/(cart|checkout|account|login|admin|orders|search)/.test(p)) return "other";
-    return "content";
+  const out: string[] = [];
+  for (let round = 0; out.length < urls.length; round++) {
+    let any = false;
+    for (const k of SAMPLE_ORDER) {
+      const u = byKind.get(k)?.[round];
+      if (u !== undefined) {
+        out.push(u);
+        any = true;
+      }
+    }
+    if (!any) break;
   }
-  return p === "/" ? "home" : "content";
+  return out;
 }
