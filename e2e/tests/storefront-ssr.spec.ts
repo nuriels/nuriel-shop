@@ -48,6 +48,10 @@ test.describe("store pages are rendered on the server (what Google gets without 
     expect(home.text).toContain(PRODUCTS.a1.name);
     expect(home.text).toMatch(/50\.00/);
     expect(home.ldTypes).toContain('"WebSite"');
+    // Google crawls only <a href> ("links-crawlable", ecommerce site structure): the categories and the products
+    // are real links in the HTML the server sends — not buttons that work only with JavaScript
+    expect(home.visible).toContain(`href="/?category=${encodeURIComponent(category)}"`);
+    expect(home.visible).toContain(`href="/product/${PRODUCTS.a1.id}"`);
 
     const cat = await serverHtml(request, KOBI, `/?category=${encodeURIComponent(category)}`);
     expect(cat.h1).toEqual([category]);
@@ -70,11 +74,16 @@ test.describe("store pages are rendered on the server (what Google gets without 
   });
 
   test("the other public pages: H1 and their text in the HTML", async ({ request }) => {
+    const descriptions = new Set<string>();
     for (const path of ["/about", "/terms", "/privacy", "/contact", "/cancellations", "/sitemap"]) {
       const page = await serverHtml(request, KOBI, path);
       expect(page.h1, path).toHaveLength(1);
       expect(page.text.length, path).toBeGreaterThan(150);
+      // "page | store name", and a description of its own (they all had the home page's description)
+      expect(page.html, path).toMatch(/<title>[^<|]+ \| [^<]+<\/title>/);
+      descriptions.add(/<meta name="description" content="([^"]*)"/.exec(page.html)?.[1] ?? "");
     }
+    expect(descriptions.size).toBe(6);
   });
 
   test("tenant isolation: each store's HTML has only its own products", async ({ request }) => {
