@@ -3,6 +3,8 @@ import type { SiteRef } from "@/platform/engines/contract";
 import { renderLlms } from "@/platform/seo/llms";
 import { hospitalityGate } from "@/engines/hospitality/edge/gate";
 import { siteLlmsTxt } from "@/engines/hospitality/website/llms";
+import { robotsTxt } from "@/engines/hospitality/website/seo";
+import { parseRobots, robotsAllows } from "../../scripts/seo/lib.mjs";
 import type { PublicSite, PublicUnit } from "@/engines/hospitality/types/website";
 import { defaultDesign } from "@/engines/hospitality/website/design/schema";
 import { businessLlmsTxt } from "@/engines/business-profile/data/seo.server";
@@ -143,14 +145,24 @@ describe("zimmer site llms.txt (public site data only)", () => {
       expect(out).toContain(line);
   });
 
-  it("units, packages and the published documents — as real links on the canonical origin", () => {
+  it("units and packages — as real links on the canonical origin; only pages a crawler may read", () => {
     expect(out).toContain(
       '- [סוויטת moriah](https://nofi.example/stay/units/moriah): עד 2 אורחים, 1 חדרי שינה, 45 מ"ר',
     );
     expect(out).toContain("- [חבילת כלה](https://nofi.example/stay/packages/bride): 2 לילות");
-    expect(out).toContain("- [מדיניות ביטולים](https://nofi.example/stay/docs/cancellation)");
-    expect(out).toContain("- [מדיניות פרטיות](https://nofi.example/stay/privacy)");
     expect(out).toContain("מפת האתר: https://nofi.example/sitemap.xml");
+    // the documents are private pages on purpose (noindex + Disallow in robots.txt) — not listed
+    expect(out).not.toContain("/stay/docs/");
+    expect(out).not.toContain("/stay/privacy");
+    expect(out).not.toContain("מדיניות ביטולים");
+    // every link in the file is one robots.txt lets a crawler read — and the file itself too
+    const robots = parseRobots(robotsTxt(true, "https://nofi.example"));
+    expect(robotsAllows(robots, "/llms.txt")).toBe(true);
+    for (const [, url] of out.matchAll(/\]\((https:\/\/nofi\.example[^)]*)\)/g)) {
+      expect(robotsAllows(robots, new URL(url!).pathname), url).toBe(true);
+    }
+    // closed site: robots.txt blocks everything (and the gate answers 404 for llms.txt)
+    expect(robotsAllows(parseRobots(robotsTxt(false, null)), "/llms.txt")).toBe(false);
   });
 
   it("never a price, never the package's price, never the management area", () => {

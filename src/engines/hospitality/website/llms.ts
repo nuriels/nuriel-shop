@@ -1,9 +1,10 @@
 // llms.txt של אתר אירוח — טהור (נבדק ביחידה). רק מה שהאתר עצמו מציג לכל גולש (public_site): שם, תיאור,
-// כתובת ודרכי קשר, שעות כניסה ויציאה, היחידות, החבילות והמסמכים שפורסמו. בלי מחירים (משתנים), בלי זמינות,
-// בלי שום דבר מהניהול. מוגש רק כשהאתר פתוח לציבור (השער, כמו מפת האתר).
+// כתובת ודרכי קשר, שעות כניסה ויציאה, היחידות והחבילות. בלי מחירים (משתנים), בלי זמינות, בלי שום דבר
+// מהניהול. מוגש רק כשהאתר פתוח לציבור (השער, כמו מפת האתר).
+// רק עמודים שסורק רשאי לקרוא: המסמכים (/stay/docs, פרטיות, נגישות) הם עמודים פרטיים בכוונה (noindex +
+// חסומים ב-robots.txt, seo.ts) — לכן הם לא ברשימה; העובדות שהאורח צריך (שעות, אופן ההזמנה, שבת) כן.
 import { renderLlms, type LlmsLink } from "@/platform/seo/llms";
 import { SITE_PATH } from "../config";
-import { docPath, isDocKind } from "../documents/kinds";
 import type { PublicSite, PublicUnit } from "../types/website";
 import { siteListing } from "./lib/listing";
 import { sitePackages } from "./lib/packages";
@@ -43,9 +44,6 @@ export function siteLlmsTxt(site: PublicSite, origin: string): string {
     url: `${base}${SITE_PATH}/packages/${seg(p.slug)}`,
     note: p.nights > 0 ? `${p.nights} לילות` : null,
   }));
-  const docs: LlmsLink[] = (site.documents ?? [])
-    .filter((d) => isDocKind(d.kind))
-    .map((d) => ({ title: d.title, url: `${base}${docPath(d.kind)}` }));
   return renderLlms({
     name: b.name,
     summary: siteSeo(site).description || property?.description,
@@ -70,7 +68,6 @@ export function siteLlmsTxt(site: PublicSite, origin: string): string {
       { title: "דף הבית", links: [{ title: b.name, url: `${base}${SITE_PATH}` }] },
       { title: "יחידות האירוח", links: units },
       { title: "חבילות", links: packages },
-      { title: "מדיניות ומסמכים", links: docs },
     ],
     sitemap: `${base}/sitemap.xml`,
   });

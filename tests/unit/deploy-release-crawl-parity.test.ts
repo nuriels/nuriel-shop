@@ -81,8 +81,8 @@ case "$cmd" in
         fi
         case "$sql" in
           *"SELECT filename FROM public._migrations_applied"*) cat "$S/ledger" ;;
-          *"SELECT CASE WHEN coalesce(site_type"*) printf 'store kobi\nstore second-shop\nhospitality nofi-dorit\nhospitality closed\nhospitality draft\nbusiness_profile efrat\nbusiness_profile unpublished\n' ;;
-          *"SELECT coalesce(t.site_type"*) printf 'ecommerce kobi active 148 products\necommerce second-shop active 3 products\nhospitality nofi-dorit active\n' ;;
+          *"SELECT CASE WHEN coalesce(site_type"*) printf 'store kobi\nstore second-shop\nstore locked-shop\nhospitality nofi-dorit\nhospitality closed\nhospitality draft\nbusiness_profile efrat\nbusiness_profile unpublished\n' ;;
+          *"SELECT coalesce(t.site_type"*) printf 'ecommerce kobi active 148 products\necommerce locked-shop active 2 products\necommerce second-shop active 3 products\nhospitality nofi-dorit active\n' ;;
           *"NOT LIKE '%facts%'"*) [[ -f "$S/migrated" ]] && echo f || echo t ;;
           *"information_schema.columns"*) [[ -f "$S/migrated" && ! -f "$S/post_check_fail" ]] && echo t || echo f ;;
           *) echo "unexpected sql" >&2; exit 9 ;;
@@ -112,6 +112,8 @@ status() {
   [[ -f "$S/broken_@{id#sha256:}" ]] && { echo 502; return; }
   [[ "$host" == closed.* && "$path" == /stay ]] && { echo 404; return; }
   [[ "$host" == unpublished.* ]] && { echo 404; return; }
+  # a store whose subscription ended / was suspended: the lock page (403, noindex) on every public path
+  [[ "$host" == locked-shop.* ]] && { echo 403; return; }
   if [[ "$new" == yes ]]; then
     [[ "$path" == /product/00000000-0000-4000-8000-0000000000ff && ! -f "$S/soft_404" ]] && { echo 404; return; }
     [[ ( "$path" == /about/ || "$path" == /stay/ ) && ! -f "$S/no_308" ]] && { echo 308; return; }
@@ -127,6 +129,8 @@ if [[ "$headers" == yes ]]; then
   printf '\r\n'; exit 0
 fi
 if [[ "$code" == yes ]]; then printf '%s' "$(status)"; exit 0; fi
+# a locked store (src/lib/blocked-pages.ts): the same lock page on every path, in both images
+[[ "$host" == locked-shop.* ]] && { printf '<!doctype html><html lang="he" dir="rtl"><head><meta name="robots" content="noindex" /><title>האתר אינו זמין כרגע</title></head><body><h1>האתר אינו זמין כרגע</h1></body></html>'; exit 0; }
 # a zimmer site that is open but not public yet: a gate page, noindex, no structured data
 [[ "$host" == draft.* && "$path" == /stay ]] && { printf '<title>בקרוב</title><meta name="robots" content="noindex, nofollow">'; exit 0; }
 case "$path" in
@@ -343,6 +347,10 @@ describe("deploy/release-crawl-parity.sh", () => {
     expect(r.out).toContain("unpublished.example.test/: 404 — not published, nothing to check");
     expect(r.out).toContain("closed.example.test/stay: 404 — not open, nothing to check");
     expect(r.out).toContain("draft.example.test/stay: not public (noindex) — nothing to check");
+    // a locked store answers (403) and is skipped — not a failure, not a rollback
+    expect(r.out).toContain("locked-shop.example.test/: 403");
+    expect(r.out).toContain("locked-shop.example.test/: not public (noindex) — nothing to check");
+    expect(r.out).not.toContain("locked-shop.example.test/product");
     // release 206's checks keep running
     expect(r.out).toContain("nofi-dorit.example.test/stay: WebSite structured data");
     expect(r.out).toContain("kobi.example.test/: 1 categories are real links in the server HTML");

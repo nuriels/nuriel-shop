@@ -211,7 +211,7 @@ describe("robots.txt and the gate", () => {
     expect(robotsTxt(false, "https://galil.example")).toBe("User-agent: *\nDisallow: /\n");
     const open = robotsTxt(true, "https://galil.example");
     expect(open).toContain(
-      "User-agent: *\nAllow: /$\nAllow: /stay$\nAllow: /stay/units/\nAllow: /stay/rooms/\nAllow: /stay/packages/\nAllow: /stay/brand/\nAllow: /assets/\nAllow: /fonts/\nAllow: /sitemap.xml\nDisallow: /\n",
+      "User-agent: *\nAllow: /$\nAllow: /stay$\nAllow: /stay/units/\nAllow: /stay/rooms/\nAllow: /stay/packages/\nAllow: /stay/brand/\nAllow: /assets/\nAllow: /fonts/\nAllow: /sitemap.xml\nAllow: /llms.txt\nDisallow: /\n",
     );
     expect(open).toContain("\nSitemap: https://galil.example/sitemap.xml\n");
     expect(open).not.toContain("/manage");

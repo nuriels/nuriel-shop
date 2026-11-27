@@ -120,6 +120,9 @@ export function robotsTxt(open: boolean, origin: string | null): string {
     "Allow: /assets/",
     "Allow: /fonts/",
     "Allow: /sitemap.xml",
+    // התקציר לכלי AI (llms.ts) — השער מגיש אותו רק כשהאתר פתוח, כמו את מפת האתר; בלי השורה הזו
+    // "Disallow: /" חסם אותו בדיוק לסורקים שמכבדים robots.txt
+    "Allow: /llms.txt",
     "Disallow: /",
     ...(base ? ["", `Sitemap: ${base}/sitemap.xml`] : []),
     "",
