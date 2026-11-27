@@ -17,7 +17,7 @@ const base: ProductSchemaInput = {
   price: 1490,
   inStock: true,
 };
-const offer = (ld: Record<string, unknown>) => ld.offers as Record<string, unknown>;
+const offer = (ld: Record<string, unknown>) => ld["offers"] as Record<string, unknown>;
 
 describe("Product JSON-LD: brand, condition, GTIN", () => {
   it("never uses the store's name as the product's brand; no brand → no brand property", () => {
@@ -25,39 +25,41 @@ describe("Product JSON-LD: brand, condition, GTIN", () => {
     expect(ld).not.toHaveProperty("brand");
     expect(JSON.stringify(ld)).not.toContain('"Brand","name":"נוריאל מחשבים"');
     // the store is still the seller
-    expect(offer(ld).seller).toEqual({ "@type": "Organization", name: "נוריאל מחשבים" });
+    expect(offer(ld)["seller"]).toEqual({ "@type": "Organization", name: "נוריאל מחשבים" });
   });
 
   it("the brand the owner saved (or approved) is the brand", () => {
-    expect(productJsonLd({ ...base, brand: " Lenovo " }).brand).toEqual({
+    expect(productJsonLd({ ...base, brand: " Lenovo " })["brand"]).toEqual({
       "@type": "Brand",
       name: "Lenovo",
     });
   });
 
   it("condition: what the owner set wins; else the owner's own words (name / category); else new", () => {
-    expect(offer(productJsonLd(base)).itemCondition).toBe("https://schema.org/NewCondition");
-    expect(offer(productJsonLd({ ...base, name: `${base.name} מחודש` })).itemCondition).toBe(
+    expect(offer(productJsonLd(base))["itemCondition"]).toBe("https://schema.org/NewCondition");
+    expect(offer(productJsonLd({ ...base, name: `${base.name} מחודש` }))["itemCondition"]).toBe(
       "https://schema.org/RefurbishedCondition",
     );
-    expect(offer(productJsonLd({ ...base, category: "מחשבים ניידים מחודשים" })).itemCondition).toBe(
-      "https://schema.org/RefurbishedCondition",
-    );
-    expect(offer(productJsonLd({ ...base, name: "מסך 24 יד שנייה" })).itemCondition).toBe(
+    expect(
+      offer(productJsonLd({ ...base, category: "מחשבים ניידים מחודשים" }))["itemCondition"],
+    ).toBe("https://schema.org/RefurbishedCondition");
+    expect(offer(productJsonLd({ ...base, name: "מסך 24 יד שנייה" }))["itemCondition"]).toBe(
       "https://schema.org/UsedCondition",
     );
     expect(
-      offer(productJsonLd({ ...base, name: `${base.name} מחודש`, condition: "new" })).itemCondition,
+      offer(productJsonLd({ ...base, name: `${base.name} מחודש`, condition: "new" }))[
+        "itemCondition"
+      ],
     ).toBe("https://schema.org/NewCondition");
-    expect(offer(productJsonLd({ ...base, condition: "used" })).itemCondition).toBe(
+    expect(offer(productJsonLd({ ...base, condition: "used" }))["itemCondition"]).toBe(
       "https://schema.org/UsedCondition",
     );
   });
 
   it("GTIN only for a real GS1 number: valid check digit, not an in-store code", () => {
-    expect(productJsonLd({ ...base, barcode: "4006381333931" }).gtin13).toBe("4006381333931");
-    expect(productJsonLd({ ...base, barcode: "036000291452" }).gtin12).toBe("036000291452");
-    expect(productJsonLd({ ...base, barcode: "96385074" }).gtin8).toBe("96385074");
+    expect(productJsonLd({ ...base, barcode: "4006381333931" })["gtin13"]).toBe("4006381333931");
+    expect(productJsonLd({ ...base, barcode: "036000291452" })["gtin12"]).toBe("036000291452");
+    expect(productJsonLd({ ...base, barcode: "96385074" })["gtin8"]).toBe("96385074");
     // wrong check digit, in-store (2xx) code, an internal SKU, all zeros — no GTIN at all
     for (const barcode of ["4006381333932", "2000000000008", "1001", "0000000000000", "ABC123"]) {
       const ld = productJsonLd({ ...base, barcode });

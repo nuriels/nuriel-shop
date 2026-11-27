@@ -6,6 +6,7 @@ import { siteLlmsTxt } from "@/engines/hospitality/website/llms";
 import type { PublicSite, PublicUnit } from "@/engines/hospitality/types/website";
 import { defaultDesign } from "@/engines/hospitality/website/design/schema";
 import { businessLlmsTxt } from "@/engines/business-profile/data/seo.server";
+import { businessProfileGate, hostRedirect } from "@/engines/business-profile/edge/gate";
 import { initialDocument } from "@/engines/business-profile/document/defaults";
 import { normalizeDocument } from "@/engines/business-profile/document/normalize";
 import { renderLlmsTxt } from "@/lib/feeds.server";
@@ -224,6 +225,52 @@ describe("business site llms.txt (the published version only)", () => {
     expect(out).toContain("- [אודות](https://efrat.example/about)");
     expect(out).toContain("- [הצהרת נגישות](https://efrat.example/accessibility)");
     expect(out).not.toContain("/studio");
+  });
+
+  it("the gate serves it only for a published, active site (GET); otherwise 404 noindex — like sitemap.xml", async () => {
+    const SITE: SiteRef = {
+      id: "22222222-2222-4222-8222-222222222222",
+      siteType: "business_profile",
+      status: "active",
+    };
+    let calls = 0;
+    const opts = (open: boolean) => ({
+      studioOpen: async () => true,
+      siteOpen: async () => open,
+      llms: async () => {
+        calls += 1;
+        return new Response("# אפרת אדיר\n", { status: 200 });
+      },
+    });
+    const at = (site: SiteRef, open: boolean, method = "GET") =>
+      businessProfileGate(site, { pathname: "/llms.txt", method }, opts(open));
+
+    const published = await at(SITE, true);
+    expect(published?.status).toBe(200);
+    expect(await published?.text()).toBe("# אפרת אדיר\n");
+    expect(calls).toBe(1);
+    for (const res of [
+      await at(SITE, false), // not published yet
+      await at({ ...SITE, status: "suspended" }, true), // suspended
+      await at(SITE, true, "HEAD"), // the file itself only on GET, as sitemap.xml
+    ]) {
+      expect(res?.status).toBe(404);
+      expect(res?.headers.get("x-robots-tag")).toBe("noindex");
+    }
+    expect(calls).toBe(1); // never built for a site that is not open
+  });
+
+  it("with an active custom domain, the slug host sends llms.txt there (301) — one address per file", () => {
+    const hosts = {
+      requestHost: "efrat.nuri1.fit",
+      slugHost: "efrat.nuri1.fit",
+      canonicalOrigin: "https://www.efratadir.com",
+      customDomain: "www.efratadir.com",
+    };
+    expect(hostRedirect("/llms.txt", "", hosts)).toBe("https://www.efratadir.com/llms.txt");
+    expect(
+      hostRedirect("/llms.txt", "", { ...hosts, requestHost: "www.efratadir.com" }),
+    ).toBeNull();
   });
 });
 
