@@ -1,0 +1,1129 @@
+-- PROPOSAL ONLY — NOT A MIGRATION. Never executed (not even in a rolled-back transaction) and not machine-parsed.
+-- Written by the DB & RLS agent on 2026-11-27 for owner review (MAX-HYP-REPORT.md §6.3). Lead's adjustments are listed in the report.
+
+-- ============================================================
+-- PROPOSAL ONLY — NOT EXECUTED, NOT PARSED BY A SQL PARSER. Migration 208 (name e.g.
+-- supabase/migrations/2026120X000000_max_payments_foundation.sql). One transaction, idempotent.
+-- ============================================================
+BEGIN;
+SET LOCAL client_min_messages = warning;
+
+-- ------------------------------------------------------------
+-- 0. Global kill switch (default OFF) — reuses platform_feature_flags (20261101090000:115)
+-- ------------------------------------------------------------
+INSERT INTO public.platform_feature_flags (key, enabled, description)
+VALUES ('max_payments', false, 'MAX card payments (Hyp Pay hosted page): global switch')
+ON CONFLICT (key) DO NOTHING;
+
+-- ------------------------------------------------------------
+-- 1. Per-store provider account (platform-admin controlled; secrets write-only)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.payment_provider_accounts (
+  id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id                 uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  provider                  text NOT NULL CHECK (provider IN ('max')),
+  mode                      text NOT NULL DEFAULT 'test' CHECK (mode IN ('test', 'live')),
+  enabled                   boolean NOT NULL DEFAULT false,
+  terminal_number           text CHECK (terminal_number IS NULL OR terminal_number ~ '^[0-9]{10}$'),
+  -- AES-256-GCM in the app: 'v<key_version>:' || base64(iv12 || tag16 || ct); AAD = tenant_id + field
+  api_key_enc               text CHECK (api_key_enc IS NULL OR api_key_enc ~ '^v[1-9][0-9]{0,3}:[A-Za-z0-9+/]{40,2000}={0,2}$'),
+  api_password_enc          text CHECK (api_password_enc IS NULL OR api_password_enc ~ '^v[1-9][0-9]{0,3}:[A-Za-z0-9+/]{40,2000}={0,2}$'),
+  key_version               smallint NOT NULL DEFAULT 1 CHECK (key_version BETWEEN 1 AND 9999),
+  status                    text NOT NULL DEFAULT 'unverified' CHECK (status IN ('unverified', 'verified', 'failed')),
+  last_verified_at          timestamptz,
+  last_verify_code          text CHECK (last_verify_code IS NULL OR last_verify_code ~ '^[0-9A-Za-z_-]{1,16}$'),
+  terminal_max_installments smallint NOT NULL DEFAULT 1 CHECK (terminal_max_installments BETWEEN 1 AND 36),
+  verified_methods          text[] NOT NULL DEFAULT ARRAY['card']::text[]
+                            CHECK (cardinality(verified_methods) >= 1
+                                   AND verified_methods <@ ARRAY['card', 'bit', 'apple_pay', 'google_pay']::text[]),
+  verified_brands           text[] NOT NULL DEFAULT '{}'::text[]
+                            CHECK (verified_brands <@ ARRAY['visa', 'mastercard', 'isracard', 'amex', 'diners']::text[]),
+  created_at                timestamptz NOT NULL DEFAULT now(),
+  created_by                uuid,
+  updated_at                timestamptz NOT NULL DEFAULT now(),
+  updated_by                uuid,
+  CONSTRAINT payment_provider_accounts_one_per_store UNIQUE (tenant_id, provider),
+  CONSTRAINT payment_provider_accounts_tenant_id_key UNIQUE (tenant_id, id),
+  -- Hyp docs: test terminals "always start with 00100" → a live account can never carry a test terminal
+  CONSTRAINT payment_provider_accounts_mode_terminal CHECK (
+    terminal_number IS NULL OR ((mode = 'test') = (terminal_number LIKE '00100%'))),
+  CONSTRAINT payment_provider_accounts_key_version CHECK (
+    (api_key_enc IS NULL OR split_part(api_key_enc, ':', 1) = 'v' || key_version::text)
+    AND (api_password_enc IS NULL OR split_part(api_password_enc, ':', 1) = 'v' || key_version::text)),
+  CONSTRAINT payment_provider_accounts_enabled_needs_creds CHECK (
+    NOT enabled OR (terminal_number IS NOT NULL AND api_key_enc IS NOT NULL AND api_password_enc IS NOT NULL)),
+  CONSTRAINT payment_provider_accounts_verified_at CHECK (status <> 'verified' OR last_verified_at IS NOT NULL)
+);
+-- one terminal = one store (the success URL is configured per terminal in the Hyp portal)
+CREATE UNIQUE INDEX IF NOT EXISTS payment_provider_accounts_terminal_idx
+  ON public.payment_provider_accounts (provider, terminal_number) WHERE terminal_number IS NOT NULL;
+
+-- ------------------------------------------------------------
+-- 2. Per-store payment settings (store-owner controlled, bounded by what is verified for the terminal)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.payment_store_settings (
+  tenant_id                     uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  provider                      text NOT NULL CHECK (provider IN ('max')),
+  max_installments              smallint NOT NULL DEFAULT 1 CHECK (max_installments BETWEEN 1 AND 36),
+  min_installments_amount_minor bigint NOT NULL DEFAULT 0 CHECK (min_installments_amount_minor BETWEEN 0 AND 100000000),
+  allowed_methods               text[] NOT NULL DEFAULT ARRAY['card']::text[]
+                                CHECK (cardinality(allowed_methods) >= 1
+                                       AND allowed_methods <@ ARRAY['card', 'bit', 'apple_pay', 'google_pay']::text[]),
+  allowed_brands                text[] NOT NULL DEFAULT '{}'::text[]
+                                CHECK (allowed_brands <@ ARRAY['visa', 'mastercard', 'isracard', 'amex', 'diners']::text[]),
+  updated_at                    timestamptz NOT NULL DEFAULT now(),
+  updated_by                    uuid,
+  PRIMARY KEY (tenant_id, provider),
+  FOREIGN KEY (tenant_id, provider) REFERENCES public.payment_provider_accounts (tenant_id, provider) ON DELETE CASCADE
+);
+
+-- ------------------------------------------------------------
+-- 3. Payment attempts (one row per redirect to the hosted page)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.payment_attempts (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id          uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  order_id           uuid NOT NULL,
+  attempt_no         smallint NOT NULL CHECK (attempt_no BETWEEN 1 AND 5),
+  provider           text NOT NULL CHECK (provider IN ('max')),
+  mode               text NOT NULL CHECK (mode IN ('test', 'live')),
+  terminal_number    text NOT NULL CHECK (terminal_number ~ '^[0-9]{10}$'),
+  key_version        smallint NOT NULL,
+  amount_minor       bigint NOT NULL CHECK (amount_minor > 0 AND amount_minor <= 100000000),
+  currency           text NOT NULL DEFAULT 'ILS' CHECK (currency IN ('ILS')),
+  max_installments   smallint NOT NULL DEFAULT 1 CHECK (max_installments BETWEEN 1 AND 36),
+  reference          text NOT NULL CHECK (reference ~ '^[0-9a-f]{32}$'),
+  customer_id        uuid,
+  state              text NOT NULL DEFAULT 'created'
+                     CHECK (state IN ('created', 'redirected', 'returned', 'paid', 'failed', 'expired',
+                                      'cancelled', 'needs_review')),
+  expires_at         timestamptz NOT NULL,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  signed_at          timestamptz,
+  returned_at        timestamptz,
+  verified_at        timestamptz,
+  paid_at            timestamptz,
+  provider_txn_id    text CHECK (provider_txn_id IS NULL OR provider_txn_id ~ '^[0-9A-Za-z-]{1,40}$'),
+  approval_code      text CHECK (approval_code IS NULL OR approval_code ~ '^[0-9A-Za-z]{1,16}$'),
+  installments       smallint CHECK (installments IS NULL OR installments BETWEEN 1 AND 36),
+  card_brand         text CHECK (card_brand IS NULL OR card_brand ~ '^[a-z_]{2,20}$'),
+  card_last4         text CHECK (card_last4 IS NULL OR card_last4 ~ '^[0-9]{4}$'),
+  failure_code       text CHECK (failure_code IS NULL OR failure_code ~ '^[0-9A-Za-z_-]{1,16}$'),
+  verification       jsonb NOT NULL DEFAULT '{}'::jsonb
+                     CHECK (jsonb_typeof(verification) = 'object'
+                            AND (verification - ARRAY['ccode', 'verify_ccode', 'txn_id', 'amount_minor', 'currency',
+                                                      'installments', 'approval_code']::text[]) = '{}'::jsonb
+                            AND octet_length(verification::text) <= 1024),
+  review_reason      text CHECK (review_reason IS NULL OR review_reason IN (
+                       'amount_mismatch', 'currency_mismatch', 'terminal_mismatch', 'installments_exceeded',
+                       'duplicate_txn', 'order_not_awaiting', 'late', 'duplicate_charge')),
+  review_resolved_at timestamptz,
+  review_resolved_by uuid,
+  CONSTRAINT payment_attempts_reference_key UNIQUE (reference),
+  CONSTRAINT payment_attempts_tenant_id_key UNIQUE (tenant_id, id),
+  CONSTRAINT payment_attempts_order_no_key UNIQUE (order_id, attempt_no),
+  -- the attempt pins the order and its store; a store admin cannot delete an order that has attempts
+  CONSTRAINT payment_attempts_order_fkey FOREIGN KEY (tenant_id, order_id)
+    REFERENCES public.orders (tenant_id, id) ON DELETE RESTRICT,
+  CONSTRAINT payment_attempts_expiry CHECK (expires_at > created_at),
+  CONSTRAINT payment_attempts_paid_fields CHECK (
+    state <> 'paid' OR (provider_txn_id IS NOT NULL AND paid_at IS NOT NULL AND verified_at IS NOT NULL)),
+  CONSTRAINT payment_attempts_review_fields CHECK (state <> 'needs_review' OR review_reason IS NOT NULL),
+  CONSTRAINT payment_attempts_resolved_pair CHECK ((review_resolved_at IS NULL) = (review_resolved_by IS NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS payment_attempts_one_active_idx
+  ON public.payment_attempts (order_id) WHERE state IN ('created', 'redirected', 'returned');
+CREATE UNIQUE INDEX IF NOT EXISTS payment_attempts_provider_txn_idx
+  ON public.payment_attempts (provider, terminal_number, provider_txn_id) WHERE provider_txn_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS payment_attempts_expiry_idx
+  ON public.payment_attempts (expires_at) WHERE state IN ('created', 'redirected', 'returned');
+CREATE INDEX IF NOT EXISTS payment_attempts_tenant_idx
+  ON public.payment_attempts (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS payment_attempts_review_idx
+  ON public.payment_attempts (tenant_id, created_at DESC)
+  WHERE state = 'needs_review' OR (review_reason IS NOT NULL AND review_resolved_at IS NULL);
+
+-- ------------------------------------------------------------
+-- 4. Payment events (append-only; no card data, no secrets: closed key list, values built in SQL)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.payment_events (
+  id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  tenant_id      uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  attempt_id     uuid NOT NULL,
+  source         text NOT NULL CHECK (source IN ('open', 'sign', 'return', 'notify', 'verify', 'expire',
+                                                 'cancel', 'review')),
+  payload_sha256 text CHECK (payload_sha256 IS NULL OR payload_sha256 ~ '^[0-9a-f]{64}$'),
+  verification   text NOT NULL DEFAULT 'not_applicable'
+                 CHECK (verification IN ('not_applicable', 'pending', 'verified', 'rejected', 'error')),
+  result         text NOT NULL CHECK (result ~ '^[a-z0-9_]{2,40}$'),
+  summary        jsonb NOT NULL DEFAULT '{}'::jsonb
+                 CHECK (jsonb_typeof(summary) = 'object'
+                        AND (summary - ARRAY['ccode', 'verify_ccode', 'txn_id', 'amount_minor', 'currency',
+                                             'installments', 'approval_code']::text[]) = '{}'::jsonb
+                        AND octet_length(summary::text) <= 1024),
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT payment_events_attempt_fkey FOREIGN KEY (tenant_id, attempt_id)
+    REFERENCES public.payment_attempts (tenant_id, id) ON DELETE CASCADE,
+  CONSTRAINT payment_events_payload_rule CHECK ((source IN ('return', 'notify', 'verify')) = (payload_sha256 IS NOT NULL))
+);
+-- the same provider payload is recorded once per entry point (replay = duplicate insert, ignored);
+-- 'verify' rows are not deduplicated, so every VERIFY call (error, then success on retry) stays visible
+CREATE UNIQUE INDEX IF NOT EXISTS payment_events_replay_idx
+  ON public.payment_events (attempt_id, source, payload_sha256)
+  WHERE payload_sha256 IS NOT NULL AND source IN ('return', 'notify');
+CREATE INDEX IF NOT EXISTS payment_events_attempt_idx ON public.payment_events (attempt_id, created_at);
+CREATE INDEX IF NOT EXISTS payment_events_tenant_idx ON public.payment_events (tenant_id, created_at DESC);
+
+-- ------------------------------------------------------------
+-- 5. Credential / settings audit (append-only; field NAMES only — there is no value column)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.payment_config_audit (
+  id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  tenant_id      uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  provider       text NOT NULL CHECK (provider IN ('max')),
+  actor_id       uuid,
+  actor_role     text NOT NULL CHECK (actor_role IN ('platform_admin', 'store_owner', 'system')),
+  action         text NOT NULL CHECK (action IN ('account_created', 'credentials_replaced', 'credentials_cleared',
+                   'terminal_changed', 'mode_changed', 'enabled', 'disabled', 'verified', 'verify_failed',
+                   'capabilities_changed', 'store_settings_changed', 'store_settings_clamped')),
+  changed_fields text[] NOT NULL DEFAULT '{}'::text[]
+                 CHECK (changed_fields <@ ARRAY['mode', 'terminal_number', 'api_key', 'api_password', 'key_version',
+                   'enabled', 'status', 'terminal_max_installments', 'verified_methods', 'verified_brands',
+                   'max_installments', 'min_installments_amount_minor', 'allowed_methods', 'allowed_brands']::text[]),
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT payment_config_audit_actor CHECK ((actor_role = 'system') = (actor_id IS NULL))
+);
+CREATE INDEX IF NOT EXISTS payment_config_audit_tenant_idx ON public.payment_config_audit (tenant_id, created_at DESC);
+
+-- ------------------------------------------------------------
+-- 6. RLS + grants: no API role reads or writes any of these tables; writes only via the functions below
+-- ------------------------------------------------------------
+DO $$
+DECLARE _t text;
+BEGIN
+  FOREACH _t IN ARRAY ARRAY['payment_provider_accounts', 'payment_store_settings', 'payment_attempts',
+                            'payment_events', 'payment_config_audit'] LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', _t);
+    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON public.%I', _t);
+    EXECUTE format('CREATE POLICY tenant_isolation ON public.%I AS RESTRICTIVE FOR ALL TO public '
+                   'USING (tenant_id = (SELECT public.current_tenant_id())) '
+                   'WITH CHECK (tenant_id = (SELECT public.current_tenant_id()))', _t);
+    EXECUTE format('REVOKE ALL ON public.%I FROM PUBLIC, anon, authenticated, service_role', _t);
+  END LOOP;
+END $$;
+REVOKE ALL ON SEQUENCE public.payment_events_id_seq, public.payment_config_audit_id_seq
+  FROM PUBLIC, anon, authenticated, service_role;
+-- the server may read (reports / admin lists); ciphertext columns are not readable by any API role
+GRANT SELECT (id, tenant_id, provider, mode, enabled, terminal_number, key_version, status, last_verified_at,
+              last_verify_code, terminal_max_installments, verified_methods, verified_brands,
+              created_at, created_by, updated_at, updated_by)
+  ON public.payment_provider_accounts TO service_role;
+GRANT SELECT ON public.payment_store_settings, public.payment_attempts, public.payment_events,
+                public.payment_config_audit TO service_role;
+
+-- ------------------------------------------------------------
+-- 7. Guard triggers
+-- ------------------------------------------------------------
+-- 7a. attempts: snapshot immutable, state machine, paid is final, kept (only removed with the store)
+CREATE OR REPLACE FUNCTION public.payment_attempts_guard()
+RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF COALESCE(current_setting('nuriel.deleting_tenant', true), '') = OLD.tenant_id::text THEN
+      RETURN OLD;
+    END IF;
+    RAISE EXCEPTION 'payment attempts are kept; they are removed only with the store'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF (NEW.id, NEW.tenant_id, NEW.order_id, NEW.attempt_no, NEW.provider, NEW.mode, NEW.terminal_number,
+      NEW.key_version, NEW.amount_minor, NEW.currency, NEW.max_installments, NEW.reference, NEW.customer_id,
+      NEW.expires_at, NEW.created_at)
+     IS DISTINCT FROM
+     (OLD.id, OLD.tenant_id, OLD.order_id, OLD.attempt_no, OLD.provider, OLD.mode, OLD.terminal_number,
+      OLD.key_version, OLD.amount_minor, OLD.currency, OLD.max_installments, OLD.reference, OLD.customer_id,
+      OLD.expires_at, OLD.created_at) THEN
+    RAISE EXCEPTION 'payment attempt: the snapshot cannot change' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.provider_txn_id IS NOT NULL AND NEW.provider_txn_id IS DISTINCT FROM OLD.provider_txn_id THEN
+    RAISE EXCEPTION 'payment attempt: the provider transaction id cannot change' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.state = 'paid'
+     AND (to_jsonb(NEW) - ARRAY['review_reason', 'review_resolved_at', 'review_resolved_by', 'updated_at']::text[])
+         IS DISTINCT FROM
+         (to_jsonb(OLD) - ARRAY['review_reason', 'review_resolved_at', 'review_resolved_by', 'updated_at']::text[]) THEN
+    RAISE EXCEPTION 'payment attempt: a paid attempt is final' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NEW.state IS DISTINCT FROM OLD.state AND (OLD.state, NEW.state) NOT IN (
+       ('created', 'redirected'), ('created', 'returned'), ('created', 'paid'), ('created', 'failed'),
+       ('created', 'expired'), ('created', 'cancelled'), ('created', 'needs_review'),
+       ('redirected', 'returned'), ('redirected', 'paid'), ('redirected', 'failed'), ('redirected', 'expired'),
+       ('redirected', 'cancelled'), ('redirected', 'needs_review'),
+       ('returned', 'paid'), ('returned', 'failed'), ('returned', 'expired'), ('returned', 'cancelled'),
+       ('returned', 'needs_review'),
+       ('failed', 'paid'), ('failed', 'needs_review'),
+       ('expired', 'paid'), ('expired', 'needs_review'),
+       ('cancelled', 'paid'), ('cancelled', 'needs_review')) THEN
+    RAISE EXCEPTION 'payment attempt: % -> % is not allowed', OLD.state, NEW.state USING ERRCODE = 'check_violation';
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS payment_attempts_guard ON public.payment_attempts;
+CREATE TRIGGER payment_attempts_guard BEFORE UPDATE OR DELETE ON public.payment_attempts
+  FOR EACH ROW EXECUTE FUNCTION public.payment_attempts_guard();
+
+-- 7b. events + audit: append-only (delete only while platform_delete_tenant removes that store)
+CREATE OR REPLACE FUNCTION public.payment_rows_append_only()
+RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  IF TG_OP = 'DELETE' AND COALESCE(current_setting('nuriel.deleting_tenant', true), '') = OLD.tenant_id::text THEN
+    RETURN OLD;
+  END IF;
+  RAISE EXCEPTION '% is append-only', TG_TABLE_NAME USING ERRCODE = 'insufficient_privilege';
+END $$;
+DROP TRIGGER IF EXISTS payment_events_append_only ON public.payment_events;
+CREATE TRIGGER payment_events_append_only BEFORE UPDATE OR DELETE ON public.payment_events
+  FOR EACH ROW EXECUTE FUNCTION public.payment_rows_append_only();
+DROP TRIGGER IF EXISTS payment_config_audit_append_only ON public.payment_config_audit;
+CREATE TRIGGER payment_config_audit_append_only BEFORE UPDATE OR DELETE ON public.payment_config_audit
+  FOR EACH ROW EXECUTE FUNCTION public.payment_rows_append_only();
+
+-- 7c. store settings ⊆ what is verified for the terminal
+CREATE OR REPLACE FUNCTION public.payment_store_settings_guard()
+RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE acc public.payment_provider_accounts;
+BEGIN
+  SELECT * INTO acc FROM public.payment_provider_accounts a
+   WHERE a.tenant_id = NEW.tenant_id AND a.provider = NEW.provider;
+  IF NOT (NEW.allowed_methods <@ acc.verified_methods) OR NOT (NEW.allowed_brands <@ acc.verified_brands)
+     OR NEW.max_installments > acc.terminal_max_installments THEN
+    RAISE EXCEPTION 'only methods, brands and installments verified for the terminal can be offered'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS payment_store_settings_guard ON public.payment_store_settings;
+CREATE TRIGGER payment_store_settings_guard BEFORE INSERT OR UPDATE ON public.payment_store_settings
+  FOR EACH ROW EXECUTE FUNCTION public.payment_store_settings_guard();
+
+-- 7d. amount lock (1/2): while a MAX attempt is active the order total cannot change, whatever path changed it
+CREATE OR REPLACE FUNCTION public.orders_payment_amount_lock()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.payment_attempts a
+              WHERE a.order_id = NEW.id AND a.state IN ('created', 'redirected', 'returned')) THEN
+    RAISE EXCEPTION 'order % is being paid by card: its amount cannot change; cancel the payment attempt first',
+      NEW.order_number USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NULL;
+END $$;
+DROP TRIGGER IF EXISTS orders_payment_amount_lock ON public.orders;
+CREATE TRIGGER orders_payment_amount_lock AFTER UPDATE ON public.orders
+  FOR EACH ROW WHEN (NEW.payment_method = 'max' AND OLD.total IS DISTINCT FROM NEW.total)
+  EXECUTE FUNCTION public.orders_payment_amount_lock();
+
+-- 7e. amount lock (2/2) on the lines:
+--     rule 1 — nobody changes the lines (even zero-priced ones) while a MAX attempt is active;
+--     rule 2 — a non-staff caller (customer via PostgREST, server without a user) cannot add or change lines of a
+--              MAX order after the transaction that created it (place_order / place_guest_order insert their lines
+--              in that same transaction, so now() = orders.created_at there). This also closes the "add lines to a
+--              PAID order" drift that the probe showed for Grow (evidence/probe-amount-drift.txt) — for MAX only.
+CREATE OR REPLACE FUNCTION public.order_items_payment_lock()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _row    public.order_items;
+  _method text;
+  _born   timestamptz;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    _row := OLD;
+  ELSE
+    _row := NEW;
+  END IF;
+  IF COALESCE(current_setting('kobi.stock_sync', true), '') = 'on'
+     OR COALESCE(current_setting('nuriel.deleting_tenant', true), '') = _row.tenant_id::text
+     OR (TG_OP = 'UPDATE'
+         AND (NEW.order_id, NEW.product_id, NEW.variant_id, NEW.quantity, NEW.unit_price, NEW.is_deposit, NEW.is_gift)
+             IS NOT DISTINCT FROM
+             (OLD.order_id, OLD.product_id, OLD.variant_id, OLD.quantity, OLD.unit_price, OLD.is_deposit, OLD.is_gift)) THEN
+    IF TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.payment_attempts a
+              WHERE a.order_id = _row.order_id AND a.state IN ('created', 'redirected', 'returned'))
+     OR (TG_OP = 'UPDATE' AND EXISTS (SELECT 1 FROM public.payment_attempts a
+              WHERE a.order_id = OLD.order_id AND a.state IN ('created', 'redirected', 'returned'))) THEN
+    RAISE EXCEPTION 'the order is being paid by card: its lines cannot change; cancel the payment attempt first'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  SELECT o.payment_method, o.created_at INTO _method, _born FROM public.orders o WHERE o.id = _row.order_id;
+  IF _method = 'max' AND _born IS DISTINCT FROM now() AND NOT public.is_staff(auth.uid()) THEN
+    RAISE EXCEPTION 'lines of a card-paid order are changed only by the store' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS order_items_a_payment_lock ON public.order_items;
+CREATE TRIGGER order_items_a_payment_lock BEFORE INSERT OR UPDATE OR DELETE ON public.order_items
+  FOR EACH ROW EXECUTE FUNCTION public.order_items_payment_lock();
+
+-- ------------------------------------------------------------
+-- 8. Helpers (no role may call them directly)
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.max_actor_role(_actor uuid, _tenant uuid)
+RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT CASE
+    WHEN _actor IS NULL OR _tenant IS NULL THEN NULL
+    WHEN public.is_platform_admin(_actor) THEN 'platform_admin'
+    WHEN EXISTS (SELECT 1 FROM public.user_roles ur
+                  WHERE ur.tenant_id = _tenant AND ur.user_id = _actor
+                    AND ur.role = 'admin' AND ur.is_protected AND NOT ur.is_blocked) THEN 'store_owner'
+  END;
+$$;
+
+-- values are rebuilt from validated scalars: nothing free-form from the app reaches the events table
+CREATE OR REPLACE FUNCTION public.max_event_summary(_ccode text, _verify_ccode text, _txn_id text,
+  _amount_minor bigint, _currency text, _installments integer, _approval_code text)
+RETURNS jsonb LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
+  SELECT jsonb_strip_nulls(jsonb_build_object(
+    'ccode',         CASE WHEN _ccode ~ '^[0-9]{1,4}$' THEN _ccode END,
+    'verify_ccode',  CASE WHEN _verify_ccode ~ '^[0-9]{1,4}$' THEN _verify_ccode END,
+    'txn_id',        CASE WHEN _txn_id ~ '^[0-9A-Za-z-]{1,40}$' THEN _txn_id END,
+    'amount_minor',  CASE WHEN _amount_minor BETWEEN 0 AND 100000000 THEN _amount_minor END,
+    'currency',      CASE WHEN _currency IN ('ILS', 'USD', 'EUR', 'GBP') THEN _currency END,
+    'installments',  CASE WHEN _installments BETWEEN 1 AND 99 THEN _installments END,
+    'approval_code', CASE WHEN _approval_code ~ '^[0-9A-Za-z]{1,16}$' THEN _approval_code END));
+$$;
+
+-- ------------------------------------------------------------
+-- 9. Availability (checkout + orders_default_payment). Test mode only for a platform admin.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.max_payments_active(_tenant uuid, _actor uuid DEFAULT NULL)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT COALESCE((SELECT f.enabled FROM public.platform_feature_flags f WHERE f.key = 'max_payments'), false)
+     AND EXISTS (
+       SELECT 1 FROM public.payment_provider_accounts a
+         JOIN public.tenants t ON t.id = a.tenant_id
+        WHERE a.tenant_id = _tenant AND a.provider = 'max' AND a.enabled AND a.status = 'verified'
+          AND t.site_type = 'ecommerce'
+          AND (a.mode = 'live' OR public.is_platform_admin(_actor)));
+$$;
+
+-- ------------------------------------------------------------
+-- 10. Open (or reuse) an attempt — the server calls it before SIGN
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.max_attempt_open(_tenant uuid, _order uuid, _customer uuid)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  o       public.orders;
+  acc     public.payment_provider_accounts;
+  st      public.payment_store_settings;
+  a       public.payment_attempts;
+  _amount bigint;
+  _expires timestamptz;
+  _n      integer;
+  _tash   smallint;
+BEGIN
+  IF _tenant IS NULL OR _order IS NULL THEN
+    RAISE EXCEPTION 'max: store and order are required' USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  -- lock order: orders row first, then attempts (same order in every function)
+  SELECT * INTO o FROM public.orders WHERE id = _order AND tenant_id = _tenant FOR UPDATE;
+  IF NOT FOUND OR (o.customer_id IS NOT NULL AND o.customer_id IS DISTINCT FROM _customer) THEN
+    RAISE EXCEPTION 'order not found' USING ERRCODE = 'no_data_found';
+  END IF;
+  IF o.kind <> 'order' OR o.payment_method <> 'max' OR o.payment_status <> 'awaiting' OR o.status <> 'pending' THEN
+    RAISE EXCEPTION 'order % is not awaiting a card payment', o.order_number USING ERRCODE = 'check_violation';
+  END IF;
+  IF NOT public.max_payments_active(_tenant, _customer) THEN
+    RAISE EXCEPTION 'card payment is not available in this store right now' USING ERRCODE = 'check_violation';
+  END IF;
+  SELECT * INTO acc FROM public.payment_provider_accounts
+   WHERE tenant_id = _tenant AND provider = 'max' FOR SHARE;
+  _amount := round(public.order_amount_due(o.total, o.prices_include_vat, o.vat_rate) * 100)::bigint;
+  IF _amount IS NULL OR _amount <= 0 THEN
+    RAISE EXCEPTION 'order % has nothing to pay', o.order_number USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT * INTO a FROM public.payment_attempts
+   WHERE order_id = o.id AND state IN ('created', 'redirected', 'returned') FOR UPDATE;
+  IF FOUND THEN
+    -- back from the payment page and not verified yet: a new page now could charge twice
+    IF a.state = 'returned' THEN
+      RAISE EXCEPTION 'the payment of order % is being verified', o.order_number USING ERRCODE = 'check_violation';
+    END IF;
+    IF a.expires_at > now() + interval '5 minutes' AND a.amount_minor = _amount
+       AND a.terminal_number = acc.terminal_number AND a.mode = acc.mode THEN
+      RETURN jsonb_build_object('attempt_id', a.id, 'reference', a.reference, 'amount_minor', a.amount_minor,
+        'currency', a.currency, 'terminal_number', a.terminal_number, 'mode', a.mode,
+        'max_installments', a.max_installments, 'expires_at', a.expires_at, 'reused', true);
+    END IF;
+    UPDATE public.payment_attempts SET state = 'expired' WHERE id = a.id;
+    INSERT INTO public.payment_events (tenant_id, attempt_id, source, result)
+    VALUES (a.tenant_id, a.id, 'open', 'superseded');
+  END IF;
+
+  SELECT count(*) INTO _n FROM public.payment_attempts WHERE order_id = o.id;
+  IF _n >= 5 THEN
+    RAISE EXCEPTION 'too many payment attempts for order %', o.order_number USING ERRCODE = 'check_violation';
+  END IF;
+  -- each attempt ends at least 15 minutes before the order expires (grace for a late return + VERIFY)
+  _expires := LEAST(now() + interval '30 minutes', o.payment_due_at - interval '15 minutes');
+  IF _expires IS NULL OR _expires < now() + interval '5 minutes' THEN
+    RAISE EXCEPTION 'the payment window of order % is closing; place the order again', o.order_number
+      USING ERRCODE = 'check_violation';
+  END IF;
+  SELECT * INTO st FROM public.payment_store_settings WHERE tenant_id = _tenant AND provider = 'max';
+  _tash := CASE WHEN st.tenant_id IS NOT NULL AND _amount >= st.min_installments_amount_minor
+                THEN LEAST(st.max_installments, acc.terminal_max_installments) ELSE 1 END;
+
+  INSERT INTO public.payment_attempts (tenant_id, order_id, attempt_no, provider, mode, terminal_number,
+         key_version, amount_minor, currency, max_installments, reference, customer_id, expires_at)
+  VALUES (o.tenant_id, o.id, _n + 1, 'max', acc.mode, acc.terminal_number, acc.key_version, _amount, 'ILS',
+          _tash, replace(gen_random_uuid()::text, '-', ''), o.customer_id, _expires)
+  RETURNING * INTO a;
+  INSERT INTO public.payment_events (tenant_id, attempt_id, source, result)
+  VALUES (a.tenant_id, a.id, 'open', 'created');
+  RETURN jsonb_build_object('attempt_id', a.id, 'reference', a.reference, 'amount_minor', a.amount_minor,
+    'currency', a.currency, 'terminal_number', a.terminal_number, 'mode', a.mode,
+    'max_installments', a.max_installments, 'expires_at', a.expires_at, 'reused', false);
+END $$;
+
+-- ------------------------------------------------------------
+-- 11. Ciphertext for SIGN / VERIFY of ONE attempt of ONE store (the app decrypts with its key)
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.max_account_secrets(_tenant uuid, _attempt uuid, _purpose text)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  a   public.payment_attempts;
+  acc public.payment_provider_accounts;
+BEGIN
+  IF _purpose IS NULL OR _purpose NOT IN ('sign', 'verify') THEN
+    RAISE EXCEPTION 'max: unknown purpose' USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  SELECT * INTO a FROM public.payment_attempts x WHERE x.id = _attempt AND x.tenant_id = _tenant;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'max: unknown attempt' USING ERRCODE = 'no_data_found';
+  END IF;
+  SELECT * INTO acc FROM public.payment_provider_accounts x WHERE x.tenant_id = _tenant AND x.provider = a.provider;
+  IF NOT FOUND OR acc.terminal_number IS DISTINCT FROM a.terminal_number OR acc.mode IS DISTINCT FROM a.mode
+     OR acc.api_key_enc IS NULL OR acc.api_password_enc IS NULL THEN
+    RAISE EXCEPTION 'max: the terminal of this attempt is no longer configured' USING ERRCODE = 'check_violation';
+  END IF;
+  IF _purpose = 'sign' AND (a.state NOT IN ('created', 'redirected') OR a.expires_at <= now()
+                            OR NOT public.max_payments_active(_tenant, a.customer_id)) THEN
+    RAISE EXCEPTION 'max: this attempt cannot be signed' USING ERRCODE = 'check_violation';
+  END IF;
+  IF _purpose = 'verify' AND a.created_at < now() - interval '7 days' THEN
+    RAISE EXCEPTION 'max: this attempt is too old to verify' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN jsonb_build_object('terminal_number', acc.terminal_number, 'mode', acc.mode, 'key_version', acc.key_version,
+                            'api_key_enc', acc.api_key_enc, 'api_password_enc', acc.api_password_enc);
+END $$;
+
+-- the platform admin's free connection check (SIGN only, nothing charged, no attempt row)
+CREATE OR REPLACE FUNCTION public.platform_max_check_secrets(_actor uuid, _tenant uuid)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE acc public.payment_provider_accounts;
+BEGIN
+  IF public.max_actor_role(_actor, _tenant) IS DISTINCT FROM 'platform_admin' THEN
+    RAISE EXCEPTION 'only the platform admin checks a terminal' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  SELECT * INTO acc FROM public.payment_provider_accounts x WHERE x.tenant_id = _tenant AND x.provider = 'max';
+  IF NOT FOUND OR acc.terminal_number IS NULL OR acc.api_key_enc IS NULL OR acc.api_password_enc IS NULL THEN
+    RAISE EXCEPTION 'the terminal is not fully configured' USING ERRCODE = 'no_data_found';
+  END IF;
+  RETURN jsonb_build_object('terminal_number', acc.terminal_number, 'mode', acc.mode, 'key_version', acc.key_version,
+                            'api_key_enc', acc.api_key_enc, 'api_password_enc', acc.api_password_enc);
+END $$;
+
+-- ------------------------------------------------------------
+-- 12. SIGN result (created → redirected | failed). Credential errors switch the account off (fail closed).
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.max_attempt_signed(_tenant uuid, _attempt uuid, _ok boolean, _code text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  a public.payment_attempts;
+  _c text := CASE WHEN _code ~ '^[0-9]{1,4}$' THEN _code END;
+BEGIN
+  SELECT * INTO a FROM public.payment_attempts WHERE id = _attempt AND tenant_id = _tenant FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'max: unknown attempt' USING ERRCODE = 'no_data_found';
+  END IF;
+  IF a.state <> 'created' THEN
+    RETURN jsonb_build_object('result', 'ignored', 'state', a.state);
+  END IF;
+  IF _ok THEN
+    UPDATE public.payment_attempts SET state = 'redirected', signed_at = now() WHERE id = a.id;
+  ELSE
+    UPDATE public.payment_attempts SET state = 'failed', failure_code = _c WHERE id = a.id;
+    IF _c IN ('901', '902') THEN
+      UPDATE public.payment_provider_accounts SET status = 'failed', last_verify_code = _c, updated_at = now()
+       WHERE tenant_id = _tenant AND provider = 'max' AND terminal_number = a.terminal_number AND status <> 'failed';
+      IF FOUND THEN
+        INSERT INTO public.payment_config_audit (tenant_id, provider, actor_id, actor_role, action, changed_fields)
+        VALUES (_tenant, 'max', NULL, 'system', 'verify_failed', ARRAY['status']);
+      END IF;
+    END IF;
+  END IF;
+  INSERT INTO public.payment_events (tenant_id, attempt_id, source, result, summary)
+  VALUES (a.tenant_id, a.id, 'sign', CASE WHEN _ok THEN 'ok' ELSE 'error' END,
+          public.max_event_summary(_c, NULL, NULL, NULL, NULL, NULL, NULL));
+  RETURN jsonb_build_object('result', CASE WHEN _ok THEN 'redirected' ELSE 'failed' END);
+END $$;
+
+-- ------------------------------------------------------------
+-- 13. Browser return: record only (never pays). The store of the Host must be the store of the attempt.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.max_attempt_record_return(_host_tenant uuid, _reference text,
+  _payload_sha256 text, _ccode text, _txn_id text, _amount_minor bigint, _installments integer)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  a  public.payment_attempts;
+  _n integer;
+BEGIN
+  IF _host_tenant IS NULL OR _reference IS NULL OR _reference !~ '^[0-9a-f]{32}$'
+     OR _payload_sha256 IS NULL OR _payload_sha256 !~ '^[0-9a-f]{64}$' THEN
+    RETURN jsonb_build_object('result', 'malformed');
+  END IF;
+  SELECT * INTO a FROM public.payment_attempts WHERE reference = _reference FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('result', 'unknown');
+  END IF;
+  -- another store's host: answer exactly like an unknown reference and record nothing (a row here would let a
+  -- wrong-host submission pre-empt the replay slot of the genuine return); the server logs it
+  IF a.tenant_id IS DISTINCT FROM _host_tenant THEN
+    RETURN jsonb_build_object('result', 'unknown');
+  END IF;
+  INSERT INTO public.payment_events (tenant_id, attempt_id, source, payload_sha256, verification, result, summary)
+  VALUES (a.tenant_id, a.id, 'return', _payload_sha256, 'pending', 'received',
+          public.max_event_summary(_ccode, NULL, _txn_id, _amount_minor, NULL, _installments, NULL))
+  ON CONFLICT DO NOTHING;
+  GET DIAGNOSTICS _n = ROW_COUNT;
+  IF a.state IN ('created', 'redirected') THEN
+    UPDATE public.payment_attempts SET state = 'returned', returned_at = now() WHERE id = a.id;
+  END IF;
+  RETURN jsonb_build_object('result', CASE WHEN _n = 0 THEN 'replay' ELSE 'received' END,
+    'attempt_id', a.id, 'tenant_id', a.tenant_id, 'order_id', a.order_id,
+    'state', CASE WHEN a.state IN ('created', 'redirected') THEN 'returned' ELSE a.state END,
+    'terminal_number', a.terminal_number, 'mode', a.mode);
+END $$;
+
+-- ------------------------------------------------------------
+-- 14. Settle after server-to-server VERIFY — the ONLY path that marks an order paid by MAX
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.max_attempt_mark_paid(_tenant uuid, _reference text, _payload_sha256 text,
+  _verify_ccode text, _ccode text, _terminal text, _txn_id text, _amount_minor bigint, _currency text,
+  _installments integer, _approval_code text, _card_brand text, _card_last4 text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _id      uuid;
+  _order   uuid;
+  o        public.orders;
+  a        public.payment_attempts;
+  _reason  text;
+  _due     bigint;
+  _summary jsonb := public.max_event_summary(_ccode, _verify_ccode, _txn_id, _amount_minor, _currency,
+                                             _installments, _approval_code);
+BEGIN
+  IF _tenant IS NULL OR _reference IS NULL OR _reference !~ '^[0-9a-f]{32}$'
+     OR _payload_sha256 IS NULL OR _payload_sha256 !~ '^[0-9a-f]{64}$' THEN
+    RETURN jsonb_build_object('result', 'malformed');
+  END IF;
+  SELECT x.id, x.order_id INTO _id, _order FROM public.payment_attempts x
+   WHERE x.reference = _reference AND x.tenant_id = _tenant;
+  IF _id IS NULL THEN
+    RETURN jsonb_build_object('result', 'unknown');
+  END IF;
+  SELECT * INTO o FROM public.orders WHERE id = _order AND tenant_id = _tenant FOR UPDATE;
+  SELECT * INTO a FROM public.payment_attempts WHERE id = _id FOR UPDATE;
+  -- the verified payload must be one that actually arrived for this attempt
+  IF NOT EXISTS (SELECT 1 FROM public.payment_events e
+                  WHERE e.attempt_id = a.id AND e.source IN ('return', 'notify')
+                    AND e.payload_sha256 = _payload_sha256 AND e.result = 'received') THEN
+    RETURN jsonb_build_object('result', 'unknown_payload');
+  END IF;
+  INSERT INTO public.payment_events (tenant_id, attempt_id, source, payload_sha256, verification, result, summary)
+  VALUES (a.tenant_id, a.id, 'verify', _payload_sha256,
+          CASE WHEN _verify_ccode = '0' THEN 'verified' WHEN _verify_ccode IS NULL THEN 'error' ELSE 'rejected' END,
+          'checked', _summary)
+  ON CONFLICT DO NOTHING;
+  -- a payload the provider did not confirm changes nothing (a forged redirect can neither pay nor fail an attempt)
+  IF _verify_ccode IS DISTINCT FROM '0' THEN
+    RETURN jsonb_build_object('result', 'unverified', 'attempt_id', a.id);
+  END IF;
+  IF _txn_id IS NULL OR _txn_id !~ '^[0-9A-Za-z-]{1,40}$' THEN
+    RETURN jsonb_build_object('result', 'malformed', 'attempt_id', a.id);
+  END IF;
+  IF a.state = 'needs_review' THEN
+    RETURN jsonb_build_object('result', 'needs_review', 'reason', a.review_reason, 'attempt_id', a.id,
+                              'order_id', a.order_id, 'tenant_id', a.tenant_id);
+  END IF;
+  IF a.state = 'paid' THEN
+    IF a.provider_txn_id = _txn_id OR _ccode IS DISTINCT FROM '0' THEN
+      RETURN jsonb_build_object('result', 'already_paid', 'attempt_id', a.id, 'order_id', a.order_id,
+                                'tenant_id', a.tenant_id);
+    END IF;
+    -- a second, different approved charge for an attempt that is already paid → must be refunded
+    UPDATE public.payment_attempts SET review_reason = 'duplicate_charge' WHERE id = a.id AND review_reason IS NULL;
+    RETURN jsonb_build_object('result', 'duplicate_charge', 'attempt_id', a.id, 'order_id', a.order_id,
+                              'tenant_id', a.tenant_id);
+  END IF;
+  IF _ccode IS DISTINCT FROM '0' THEN
+    IF a.state IN ('created', 'redirected', 'returned') THEN
+      UPDATE public.payment_attempts
+         SET state = 'failed', verified_at = now(), verification = _summary,
+             failure_code = CASE WHEN _ccode ~ '^[0-9A-Za-z_-]{1,16}$' THEN _ccode END
+       WHERE id = a.id;
+    END IF;
+    RETURN jsonb_build_object('result', 'not_paid', 'attempt_id', a.id, 'order_id', a.order_id,
+                              'tenant_id', a.tenant_id);
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM public.payment_attempts x
+              WHERE x.provider = a.provider AND x.terminal_number = a.terminal_number
+                AND x.provider_txn_id = _txn_id AND x.id <> a.id) THEN
+    _reason := 'duplicate_txn';
+  ELSIF _terminal IS DISTINCT FROM a.terminal_number THEN
+    _reason := 'terminal_mismatch';
+  ELSIF _currency IS DISTINCT FROM a.currency THEN
+    _reason := 'currency_mismatch';
+  ELSIF _amount_minor IS DISTINCT FROM a.amount_minor THEN
+    _reason := 'amount_mismatch';
+  ELSIF COALESCE(_installments, 1) NOT BETWEEN 1 AND a.max_installments THEN
+    _reason := 'installments_exceeded';
+  ELSIF o.id IS NULL OR o.kind <> 'order' OR o.payment_method <> 'max' OR o.payment_status <> 'awaiting'
+        OR o.status <> 'pending' THEN
+    -- an expired / superseded / staff-cancelled attempt is still accepted below while the order itself is still
+    -- awaiting with the same amount; only when the order moved on is it a late payment for a person to decide
+    _reason := CASE WHEN a.state IN ('expired', 'cancelled') THEN 'late' ELSE 'order_not_awaiting' END;
+  ELSE
+    _due := round(public.order_amount_due(o.total, o.prices_include_vat, o.vat_rate) * 100)::bigint;
+    IF _due IS DISTINCT FROM a.amount_minor THEN
+      _reason := 'amount_mismatch';
+    END IF;
+  END IF;
+
+  IF _reason IS NOT NULL THEN
+    UPDATE public.payment_attempts
+       SET state = 'needs_review', review_reason = _reason, verified_at = now(), verification = _summary,
+           provider_txn_id = CASE WHEN _reason = 'duplicate_txn' THEN NULL ELSE _txn_id END,
+           approval_code = CASE WHEN _approval_code ~ '^[0-9A-Za-z]{1,16}$' THEN _approval_code END
+     WHERE id = a.id;
+    RETURN jsonb_build_object('result', 'needs_review', 'reason', _reason, 'attempt_id', a.id,
+                              'order_id', a.order_id, 'tenant_id', a.tenant_id);
+  END IF;
+
+  PERFORM set_config('kobi.payment_update', 'on', true);
+  UPDATE public.orders SET payment_status = 'paid', paid_at = now(), payment_due_at = NULL WHERE id = o.id;
+  PERFORM set_config('kobi.payment_update', 'off', true);
+  UPDATE public.payment_attempts
+     SET state = 'paid', paid_at = now(), verified_at = now(), provider_txn_id = _txn_id,
+         verification = _summary, installments = GREATEST(COALESCE(_installments, 1), 1),
+         approval_code = CASE WHEN _approval_code ~ '^[0-9A-Za-z]{1,16}$' THEN _approval_code END,
+         card_brand = CASE WHEN _card_brand ~ '^[a-z_]{2,20}$' THEN _card_brand END,
+         card_last4 = CASE WHEN _card_last4 ~ '^[0-9]{4}$' THEN _card_last4 END
+   WHERE id = a.id;
+  UPDATE public.payment_attempts SET state = 'cancelled'
+   WHERE order_id = o.id AND id <> a.id AND state IN ('created', 'redirected', 'returned');
+  RETURN jsonb_build_object('result', 'paid', 'attempt_id', a.id, 'order_id', a.order_id, 'tenant_id', a.tenant_id);
+END $$;
+
+-- ------------------------------------------------------------
+-- 15. Expiry sweep (same 5-minute job as expire_unpaid_orders; never blocks a settling attempt)
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.max_attempts_expire()
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE _n integer;
+BEGIN
+  WITH due AS (
+    SELECT a.id, a.expires_at < now() AS timed_out
+      FROM public.payment_attempts a
+     WHERE a.state IN ('created', 'redirected', 'returned')
+       AND (a.expires_at < now()
+            OR NOT EXISTS (SELECT 1 FROM public.orders o
+                            WHERE o.id = a.order_id AND o.status = 'pending' AND o.payment_status = 'awaiting'))
+     ORDER BY a.expires_at
+     LIMIT 500
+     FOR UPDATE OF a SKIP LOCKED
+  ), done AS (
+    UPDATE public.payment_attempts a
+       SET state = CASE WHEN due.timed_out THEN 'expired' ELSE 'cancelled' END
+      FROM due WHERE a.id = due.id
+    RETURNING a.id, a.tenant_id, a.state
+  )
+  INSERT INTO public.payment_events (tenant_id, attempt_id, source, result)
+  SELECT d.tenant_id, d.id, 'expire', d.state FROM done d;
+  GET DIAGNOSTICS _n = ROW_COUNT;
+  RETURN _n;
+END $$;
+
+-- ------------------------------------------------------------
+-- 16. Staff unlock (cancel the active attempt so the order can be edited) / review resolution
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.max_attempt_cancel(_actor uuid, _tenant uuid, _order uuid)
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE _n integer;
+BEGIN
+  IF _actor IS NULL OR NOT (public.is_platform_admin(_actor) OR EXISTS (
+       SELECT 1 FROM public.user_roles ur WHERE ur.tenant_id = _tenant AND ur.user_id = _actor
+          AND ur.role = 'admin' AND NOT ur.is_blocked)) THEN
+    RAISE EXCEPTION 'only a store admin can cancel a payment attempt' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  PERFORM 1 FROM public.orders WHERE id = _order AND tenant_id = _tenant FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'order not found' USING ERRCODE = 'no_data_found';
+  END IF;
+  WITH done AS (
+    UPDATE public.payment_attempts SET state = 'cancelled'
+     WHERE order_id = _order AND tenant_id = _tenant AND state IN ('created', 'redirected', 'returned')
+    RETURNING id, tenant_id
+  )
+  INSERT INTO public.payment_events (tenant_id, attempt_id, source, result)
+  SELECT d.tenant_id, d.id, 'cancel', 'staff' FROM done d;
+  GET DIAGNOSTICS _n = ROW_COUNT;
+  RETURN _n;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.max_review_resolve(_actor uuid, _tenant uuid, _attempt uuid)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF public.max_actor_role(_actor, _tenant) IS NULL THEN
+    RAISE EXCEPTION 'only the store owner or the platform admin can resolve' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  UPDATE public.payment_attempts SET review_resolved_at = now(), review_resolved_by = _actor
+   WHERE id = _attempt AND tenant_id = _tenant AND review_resolved_at IS NULL
+     AND (state = 'needs_review' OR review_reason IS NOT NULL);
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+  INSERT INTO public.payment_events (tenant_id, attempt_id, source, result) VALUES (_tenant, _attempt, 'review', 'resolved');
+  RETURN true;
+END $$;
+
+-- ------------------------------------------------------------
+-- 17. Read without secrets
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.max_order_payment_status(_tenant uuid, _order uuid)
+RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT jsonb_build_object(
+    'order_number', o.order_number, 'status', o.status, 'payment_method', o.payment_method,
+    'payment_status', o.payment_status, 'payment_due_at', o.payment_due_at,
+    'attempt', (SELECT jsonb_build_object('state', a.state, 'expires_at', a.expires_at,
+                  'amount_minor', a.amount_minor, 'currency', a.currency, 'paid_at', a.paid_at,
+                  'installments', a.installments, 'card_brand', a.card_brand, 'card_last4', a.card_last4,
+                  'approval_code', a.approval_code, 'mode', a.mode)
+                  FROM public.payment_attempts a WHERE a.order_id = o.id
+                 ORDER BY a.attempt_no DESC LIMIT 1))
+    FROM public.orders o WHERE o.id = _order AND o.tenant_id = _tenant;
+$$;
+
+CREATE OR REPLACE FUNCTION public.max_account_status(_actor uuid, _tenant uuid)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  a public.payment_provider_accounts;
+  s public.payment_store_settings;
+BEGIN
+  IF public.max_actor_role(_actor, _tenant) IS NULL THEN
+    RAISE EXCEPTION 'not allowed' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  SELECT * INTO a FROM public.payment_provider_accounts x WHERE x.tenant_id = _tenant AND x.provider = 'max';
+  SELECT * INTO s FROM public.payment_store_settings x WHERE x.tenant_id = _tenant AND x.provider = 'max';
+  RETURN jsonb_build_object(
+    'configured', a.id IS NOT NULL, 'active', public.max_payments_active(_tenant, _actor),
+    'enabled', COALESCE(a.enabled, false), 'mode', a.mode, 'status', a.status,
+    'last_verified_at', a.last_verified_at,
+    'terminal_hint', CASE WHEN a.terminal_number IS NOT NULL THEN '******' || right(a.terminal_number, 4) END,
+    'has_api_key', a.api_key_enc IS NOT NULL, 'has_api_password', a.api_password_enc IS NOT NULL,
+    'terminal_max_installments', a.terminal_max_installments,
+    'verified_methods', to_jsonb(a.verified_methods), 'verified_brands', to_jsonb(a.verified_brands),
+    'store', jsonb_build_object(
+      'max_installments', COALESCE(s.max_installments, 1),
+      'min_installments_amount_minor', COALESCE(s.min_installments_amount_minor, 0),
+      'allowed_methods', to_jsonb(COALESCE(s.allowed_methods, ARRAY['card']::text[])),
+      'allowed_brands', to_jsonb(COALESCE(s.allowed_brands, '{}'::text[]))),
+    'updated_at', a.updated_at);
+END $$;
+
+-- ------------------------------------------------------------
+-- 18. Store owner: installments / minimum / methods (bounded by the terminal)
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.max_store_settings_save(_actor uuid, _tenant uuid, _max_installments integer,
+  _min_installments_amount_minor bigint, _allowed_methods text[], _allowed_brands text[])
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _role    text := public.max_actor_role(_actor, _tenant);
+  old      public.payment_store_settings;
+  cur      public.payment_store_settings;
+  _changed text[];
+BEGIN
+  IF _role IS NULL THEN
+    RAISE EXCEPTION 'only the store owner sets card-payment options' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.payment_provider_accounts x WHERE x.tenant_id = _tenant AND x.provider = 'max') THEN
+    RAISE EXCEPTION 'card payments are not set up for this store' USING ERRCODE = 'no_data_found';
+  END IF;
+  SELECT * INTO old FROM public.payment_store_settings x WHERE x.tenant_id = _tenant AND x.provider = 'max' FOR UPDATE;
+  INSERT INTO public.payment_store_settings AS s (tenant_id, provider, max_installments,
+         min_installments_amount_minor, allowed_methods, allowed_brands, updated_by)
+  VALUES (_tenant, 'max', COALESCE(_max_installments, 1), COALESCE(_min_installments_amount_minor, 0),
+          COALESCE(_allowed_methods, ARRAY['card']::text[]), COALESCE(_allowed_brands, '{}'::text[]), _actor)
+  ON CONFLICT (tenant_id, provider) DO UPDATE
+     SET max_installments = EXCLUDED.max_installments,
+         min_installments_amount_minor = EXCLUDED.min_installments_amount_minor,
+         allowed_methods = EXCLUDED.allowed_methods, allowed_brands = EXCLUDED.allowed_brands,
+         updated_by = EXCLUDED.updated_by
+  RETURNING * INTO cur;
+  _changed := array_remove(ARRAY[
+    CASE WHEN cur.max_installments IS DISTINCT FROM old.max_installments THEN 'max_installments' END,
+    CASE WHEN cur.min_installments_amount_minor IS DISTINCT FROM old.min_installments_amount_minor
+         THEN 'min_installments_amount_minor' END,
+    CASE WHEN cur.allowed_methods IS DISTINCT FROM old.allowed_methods THEN 'allowed_methods' END,
+    CASE WHEN cur.allowed_brands IS DISTINCT FROM old.allowed_brands THEN 'allowed_brands' END], NULL);
+  IF cardinality(_changed) > 0 THEN
+    INSERT INTO public.payment_config_audit (tenant_id, provider, actor_id, actor_role, action, changed_fields)
+    VALUES (_tenant, 'max', _actor, _role, 'store_settings_changed', _changed);
+  END IF;
+  RETURN public.max_account_status(_actor, _tenant);
+END $$;
+
+-- ------------------------------------------------------------
+-- 19. Platform admin: terminal + credentials (write-only) + enable/disable + verified capabilities
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.platform_max_account_save(_actor uuid, _tenant uuid, _patch jsonb)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _keys    constant text[] := ARRAY['mode', 'terminal_number', 'api_key_enc', 'api_password_enc', 'key_version',
+                                    'enabled', 'terminal_max_installments', 'verified_methods', 'verified_brands',
+                                    'clear_credentials'];
+  _clear   boolean := COALESCE((_patch ->> 'clear_credentials')::boolean, false);
+  _created boolean;
+  old      public.payment_provider_accounts;
+  cur      public.payment_provider_accounts;
+  _changed text[];
+BEGIN
+  IF public.max_actor_role(_actor, _tenant) IS DISTINCT FROM 'platform_admin' THEN
+    RAISE EXCEPTION 'only the platform admin sets up a payment terminal' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.tenants t WHERE t.id = _tenant AND t.site_type = 'ecommerce') THEN
+    RAISE EXCEPTION 'store not found' USING ERRCODE = 'no_data_found';
+  END IF;
+  IF _patch IS NULL OR jsonb_typeof(_patch) <> 'object'
+     OR EXISTS (SELECT 1 FROM jsonb_object_keys(_patch) k WHERE k <> ALL (_keys))
+     OR (_patch ? 'verified_methods' AND jsonb_typeof(_patch -> 'verified_methods') <> 'array')
+     OR (_patch ? 'verified_brands' AND jsonb_typeof(_patch -> 'verified_brands') <> 'array')
+     OR (_clear AND (_patch ? 'api_key_enc' OR _patch ? 'api_password_enc')) THEN
+    RAISE EXCEPTION 'max: invalid settings' USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  INSERT INTO public.payment_provider_accounts (tenant_id, provider, created_by, updated_by)
+  VALUES (_tenant, 'max', _actor, _actor) ON CONFLICT (tenant_id, provider) DO NOTHING;
+  _created := FOUND;
+  SELECT * INTO old FROM public.payment_provider_accounts x WHERE x.tenant_id = _tenant AND x.provider = 'max' FOR UPDATE;
+
+  UPDATE public.payment_provider_accounts x SET
+    mode = COALESCE(_patch ->> 'mode', x.mode),
+    terminal_number = CASE WHEN _patch ? 'terminal_number' THEN NULLIF(btrim(_patch ->> 'terminal_number'), '')
+                           ELSE x.terminal_number END,
+    api_key_enc = CASE WHEN _clear THEN NULL ELSE COALESCE(_patch ->> 'api_key_enc', x.api_key_enc) END,
+    api_password_enc = CASE WHEN _clear THEN NULL ELSE COALESCE(_patch ->> 'api_password_enc', x.api_password_enc) END,
+    key_version = COALESCE((_patch ->> 'key_version')::smallint, x.key_version),
+    enabled = CASE WHEN _clear THEN false ELSE COALESCE((_patch ->> 'enabled')::boolean, x.enabled) END,
+    terminal_max_installments = COALESCE((_patch ->> 'terminal_max_installments')::smallint,
+                                         x.terminal_max_installments),
+    verified_methods = CASE WHEN _patch ? 'verified_methods'
+      THEN ARRAY(SELECT DISTINCT m FROM jsonb_array_elements_text(_patch -> 'verified_methods') m ORDER BY m)
+      ELSE x.verified_methods END,
+    verified_brands = CASE WHEN _patch ? 'verified_brands'
+      THEN ARRAY(SELECT DISTINCT b FROM jsonb_array_elements_text(_patch -> 'verified_brands') b ORDER BY b)
+      ELSE x.verified_brands END,
+    updated_at = now(), updated_by = _actor
+  WHERE x.tenant_id = _tenant AND x.provider = 'max'
+  RETURNING * INTO cur;
+
+  -- anything that changes WHICH terminal / WHICH credentials → must be verified again before it is offered
+  IF cur.terminal_number IS DISTINCT FROM old.terminal_number OR cur.mode IS DISTINCT FROM old.mode
+     OR cur.api_key_enc IS DISTINCT FROM old.api_key_enc OR cur.api_password_enc IS DISTINCT FROM old.api_password_enc THEN
+    UPDATE public.payment_provider_accounts x
+       SET status = 'unverified', last_verified_at = NULL, last_verify_code = NULL
+     WHERE x.tenant_id = _tenant AND x.provider = 'max'
+    RETURNING * INTO cur;
+  END IF;
+
+  -- the store owner's choices shrink with what is verified for the terminal
+  UPDATE public.payment_store_settings s
+     SET allowed_methods = COALESCE(NULLIF(ARRAY(SELECT m FROM unnest(s.allowed_methods) m
+                                                  WHERE m = ANY (cur.verified_methods)), '{}'::text[]),
+                                    cur.verified_methods[1:1]),
+         allowed_brands = ARRAY(SELECT b FROM unnest(s.allowed_brands) b WHERE b = ANY (cur.verified_brands)),
+         max_installments = LEAST(s.max_installments, cur.terminal_max_installments),
+         updated_by = _actor
+   WHERE s.tenant_id = _tenant AND s.provider = 'max'
+     AND (NOT s.allowed_methods <@ cur.verified_methods OR NOT s.allowed_brands <@ cur.verified_brands
+          OR s.max_installments > cur.terminal_max_installments);
+  IF FOUND THEN
+    INSERT INTO public.payment_config_audit (tenant_id, provider, actor_id, actor_role, action, changed_fields)
+    VALUES (_tenant, 'max', _actor, 'platform_admin', 'store_settings_clamped',
+            ARRAY['allowed_methods', 'allowed_brands', 'max_installments']);
+  END IF;
+
+  _changed := array_remove(ARRAY[
+    CASE WHEN cur.mode IS DISTINCT FROM old.mode THEN 'mode' END,
+    CASE WHEN cur.terminal_number IS DISTINCT FROM old.terminal_number THEN 'terminal_number' END,
+    CASE WHEN cur.api_key_enc IS DISTINCT FROM old.api_key_enc THEN 'api_key' END,
+    CASE WHEN cur.api_password_enc IS DISTINCT FROM old.api_password_enc THEN 'api_password' END,
+    CASE WHEN cur.key_version IS DISTINCT FROM old.key_version THEN 'key_version' END,
+    CASE WHEN cur.status IS DISTINCT FROM old.status THEN 'status' END,
+    CASE WHEN cur.terminal_max_installments IS DISTINCT FROM old.terminal_max_installments
+         THEN 'terminal_max_installments' END,
+    CASE WHEN cur.verified_methods IS DISTINCT FROM old.verified_methods THEN 'verified_methods' END,
+    CASE WHEN cur.verified_brands IS DISTINCT FROM old.verified_brands THEN 'verified_brands' END], NULL);
+  IF _created OR cardinality(_changed) > 0 THEN
+    INSERT INTO public.payment_config_audit (tenant_id, provider, actor_id, actor_role, action, changed_fields)
+    VALUES (_tenant, 'max', _actor, 'platform_admin',
+            CASE WHEN _created THEN 'account_created'
+                 WHEN _clear THEN 'credentials_cleared'
+                 WHEN 'api_key' = ANY (_changed) OR 'api_password' = ANY (_changed) THEN 'credentials_replaced'
+                 WHEN 'terminal_number' = ANY (_changed) THEN 'terminal_changed'
+                 WHEN 'mode' = ANY (_changed) THEN 'mode_changed'
+                 ELSE 'capabilities_changed' END,
+            _changed);
+  END IF;
+  IF cur.enabled IS DISTINCT FROM old.enabled THEN
+    INSERT INTO public.payment_config_audit (tenant_id, provider, actor_id, actor_role, action, changed_fields)
+    VALUES (_tenant, 'max', _actor, 'platform_admin', CASE WHEN cur.enabled THEN 'enabled' ELSE 'disabled' END,
+            ARRAY['enabled']);
+  END IF;
+  RETURN public.max_account_status(_actor, _tenant);
+END $$;
+
+-- result of the free connection check (SIGN only, nothing charged) run by the server for the platform admin
+CREATE OR REPLACE FUNCTION public.platform_max_account_verified(_actor uuid, _tenant uuid, _ok boolean, _code text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF public.max_actor_role(_actor, _tenant) IS DISTINCT FROM 'platform_admin' THEN
+    RAISE EXCEPTION 'only the platform admin verifies a terminal' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  UPDATE public.payment_provider_accounts x
+     SET status = CASE WHEN _ok THEN 'verified' ELSE 'failed' END,
+         last_verified_at = CASE WHEN _ok THEN now() ELSE x.last_verified_at END,
+         last_verify_code = CASE WHEN _code ~ '^[0-9A-Za-z_-]{1,16}$' THEN _code END,
+         updated_at = now(), updated_by = _actor
+   WHERE x.tenant_id = _tenant AND x.provider = 'max'
+     AND x.terminal_number IS NOT NULL AND x.api_key_enc IS NOT NULL AND x.api_password_enc IS NOT NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'the terminal is not fully configured' USING ERRCODE = 'no_data_found';
+  END IF;
+  INSERT INTO public.payment_config_audit (tenant_id, provider, actor_id, actor_role, action, changed_fields)
+  VALUES (_tenant, 'max', _actor, 'platform_admin', CASE WHEN _ok THEN 'verified' ELSE 'verify_failed' END,
+          ARRAY['status']);
+  RETURN public.max_account_status(_actor, _tenant);
+END $$;
+
+-- ------------------------------------------------------------
+-- 20. Function privileges: server only; helpers and triggers for nobody
+-- ------------------------------------------------------------
+REVOKE ALL ON FUNCTION public.payment_attempts_guard(), public.payment_rows_append_only(),
+  public.payment_store_settings_guard(), public.orders_payment_amount_lock(), public.order_items_payment_lock(),
+  public.max_actor_role(uuid, uuid),
+  public.max_event_summary(text, text, text, bigint, text, integer, text)
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.max_payments_active(uuid, uuid), public.max_attempt_open(uuid, uuid, uuid),
+  public.max_account_secrets(uuid, uuid, text), public.max_attempt_signed(uuid, uuid, boolean, text),
+  public.max_attempt_record_return(uuid, text, text, text, text, bigint, integer),
+  public.max_attempt_mark_paid(uuid, text, text, text, text, text, text, bigint, text, integer, text, text, text),
+  public.max_attempts_expire(), public.max_attempt_cancel(uuid, uuid, uuid),
+  public.max_review_resolve(uuid, uuid, uuid), public.max_order_payment_status(uuid, uuid),
+  public.max_account_status(uuid, uuid),
+  public.max_store_settings_save(uuid, uuid, integer, bigint, text[], text[]),
+  public.platform_max_account_save(uuid, uuid, jsonb), public.platform_max_account_verified(uuid, uuid, boolean, text),
+  public.platform_max_check_secrets(uuid, uuid)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.max_payments_active(uuid, uuid), public.max_attempt_open(uuid, uuid, uuid),
+  public.max_account_secrets(uuid, uuid, text), public.max_attempt_signed(uuid, uuid, boolean, text),
+  public.max_attempt_record_return(uuid, text, text, text, text, bigint, integer),
+  public.max_attempt_mark_paid(uuid, text, text, text, text, text, text, bigint, text, integer, text, text, text),
+  public.max_attempts_expire(), public.max_attempt_cancel(uuid, uuid, uuid),
+  public.max_review_resolve(uuid, uuid, uuid), public.max_order_payment_status(uuid, uuid),
+  public.max_account_status(uuid, uuid),
+  public.max_store_settings_save(uuid, uuid, integer, bigint, text[], text[]),
+  public.platform_max_account_save(uuid, uuid, jsonb), public.platform_max_account_verified(uuid, uuid, boolean, text),
+  public.platform_max_check_secrets(uuid, uuid)
+  TO service_role;
+
+-- ------------------------------------------------------------
+-- 21. orders: accept 'max' (Grow / Bit clauses byte-for-byte as in 20261019520000:96-110)
+-- ------------------------------------------------------------
+ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_payment_check;
+ALTER TABLE public.orders
+  ADD CONSTRAINT orders_payment_check CHECK (
+    payment_method IN ('offline', 'credit_card', 'bit', 'grow', 'max')
+    AND payment_status IN ('not_required', 'awaiting', 'awaiting_verification', 'paid',
+                           'expired', 'rejected')
+    AND (payment_status <> 'paid' OR paid_at IS NOT NULL)
+    AND (payment_method = 'bit' OR (bit_transaction_id IS NULL AND bit_receipt_url IS NULL))
+    AND (bit_transaction_id IS NULL OR char_length(bit_transaction_id) BETWEEN 2 AND 64)
+    AND (bit_receipt_url IS NULL OR char_length(bit_receipt_url) <= 300)
+    AND (payment_method = 'grow' OR (grow_asmachta IS NULL AND grow_transaction_id IS NULL
+                                     AND grow_card IS NULL AND grow_installments IS NULL))
+    AND (grow_asmachta IS NULL OR char_length(grow_asmachta) <= 64)
+    AND (grow_transaction_id IS NULL OR char_length(grow_transaction_id) <= 64)
+    AND (grow_card IS NULL OR char_length(grow_card) <= 40));
+
+-- ------------------------------------------------------------
+-- 22. String patches of the LIVE definitions (fail loudly if the anchor text is missing; idempotent)
+-- ------------------------------------------------------------
+DO $$
+DECLARE
+  _def   text;
+  _fixed text;
+BEGIN
+  -- 22a. orders_default_payment: a 'max' branch, before the phone-payment block (same anchor Grow used)
+  SELECT pg_get_functiondef('public.orders_default_payment()'::regprocedure) INTO _def;
+  IF position('max_payments_active' IN _def) = 0 THEN
+    _fixed := replace(_def,
+      '  -- "תשלום טלפוני מול נציג" — רק אם החנות מאפשרת',
+      '  -- תשלום בכרטיס דרך MAX: ההזמנה נשמרת "ממתינה לתשלום" לפני המעבר לדף התשלום
+  IF _requested = ''max'' THEN
+    IF NOT public.max_payments_active(NEW.tenant_id, auth.uid()) THEN
+      RAISE EXCEPTION ''התשלום בכרטיס אינו זמין כרגע בחנות — בחרו אמצעי תשלום אחר''
+        USING ERRCODE = ''check_violation'';
+    END IF;
+    NEW.payment_method := ''max'';
+    NEW.payment_status := ''awaiting'';
+    NEW.payment_due_at := now() + interval ''2 hours'';
+    RETURN NEW;
+  END IF;
+
+  -- "תשלום טלפוני מול נציג" — רק אם החנות מאפשרת');
+    IF _fixed = _def THEN
+      RAISE EXCEPTION 'max: orders_default_payment — the phone-payment block was not found';
+    END IF;
+    EXECUTE _fixed;
+  END IF;
+
+  -- 22b. place_order / place_guest_order: the request 'max' is passed on (the 'bit' / 'grow' lines stay)
+  FOR _def IN
+    SELECT pg_get_functiondef(f::regprocedure)
+      FROM unnest(ARRAY['public.place_order(text, jsonb, numeric, boolean, jsonb)',
+                        'public.place_guest_order(text, jsonb, jsonb)']) AS f
+  LOOP
+    CONTINUE WHEN position('= ''max''' IN _def) > 0;
+    _fixed := replace(_def,
+      $r$WHEN _details ->> 'payment_method' = 'grow' THEN 'grow'$r$,
+      $r$WHEN _details ->> 'payment_method' = 'grow' THEN 'grow'
+           WHEN _details ->> 'payment_method' = 'max' THEN 'max'$r$);
+    IF _fixed = _def THEN
+      RAISE EXCEPTION 'max: place_order / place_guest_order — the payment mapping was not found';
+    END IF;
+    EXECUTE _fixed;
+  END LOOP;
+END $$;
+
+NOTIFY pgrst, 'reload schema';
+COMMIT;

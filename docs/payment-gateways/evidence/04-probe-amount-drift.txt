@@ -1,0 +1,87 @@
+# Probe: order amount changes after an online payment starts (local test DB shop_test, BEGIN…ROLLBACK)
+# Run: 2026-11-27T14:00:44Z  repo HEAD: 910b1f9  branch: payments/max-hyp
+# tests.run executes the SQL as role 'authenticated' with request.jwt.claim.sub = the customer (RLS applies).
+
+## SQL
+-- read-only probe (BEGIN … ROLLBACK): can a customer add lines to an order that is awaiting online payment?
+\set CE '''a0000000-0000-0000-0000-0000000000e1'''
+BEGIN;
+SELECT set_config('request.headers', json_build_object('x-tenant-id', '70000000-0000-0000-0000-00000000000a')::text, true);
+INSERT INTO auth.users (id, email) VALUES ('a0000000-0000-0000-0000-0000000000e1', 'cust.e@test.local') ON CONFLICT DO NOTHING;
+INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_approved)
+VALUES ('70000000-0000-0000-0000-00000000000a', 'a0000000-0000-0000-0000-0000000000e1', 'cust.e@test.local', 'cust_e', 'customer', true)
+ON CONFLICT DO NOTHING;
+INSERT INTO public.customer_profiles (user_id, business_name, age_confirmed, profile_completed)
+VALUES ('a0000000-0000-0000-0000-0000000000e1', 'לקוח תשלום', true, true) ON CONFLICT DO NOTHING;
+INSERT INTO public.shipping_methods (id, tenant_id, name, kind, price, is_active)
+VALUES ('5e000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-00000000000a', 'איסוף עצמי (בדיקה)', 'pickup', 0, true)
+ON CONFLICT (id) DO UPDATE SET is_active = true;
+INSERT INTO public.categories (tenant_id, name) VALUES ('70000000-0000-0000-0000-00000000000a', 'בדיקת תשלום') ON CONFLICT DO NOTHING;
+INSERT INTO public.global_products (id, tenant_id, sku, name, category, created_by, price_tier1, stock_quantity)
+VALUES ('9e000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-00000000000a', '93000001', 'מוצר תשלום', 'בדיקת תשלום',
+        'a0000000-0000-0000-0000-0000000000a1', 100, 100) ON CONFLICT DO NOTHING;
+INSERT INTO public.tenant_grow_credentials (tenant_id, user_id_enc, page_code_enc, enabled, max_payments)
+VALUES ('70000000-0000-0000-0000-00000000000a', 'aaaaaaaaaaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbbbbbbbbbb', true, 1)
+ON CONFLICT (tenant_id) DO UPDATE SET enabled = true;
+SELECT public.grow_payments_active('70000000-0000-0000-0000-00000000000a') AS grow_active;
+SELECT tests.run('probe: customer places a grow order',
+  $q$SELECT * FROM public.place_order('order', tests.grow_items(), 18, true, tests.grow_details('grow'))$q$, :CE);
+SELECT name, ok, detail FROM tests.results WHERE name LIKE 'probe:%' ORDER BY id;
+SELECT id AS oid FROM public.orders WHERE customer_id = :CE AND payment_method = 'grow'
+ ORDER BY created_at DESC LIMIT 1 \gset
+SELECT 'before' AS at, total, payment_status, status,
+       public.order_amount_due(total, prices_include_vat, vat_rate) AS amount_due
+  FROM public.orders WHERE id = :'oid';
+SELECT tests.run('probe: the customer adds a line to the awaiting order',
+  format($q$INSERT INTO public.order_items (order_id, product_id, quantity, unit_price)
+            VALUES (%L, '9e000000-0000-0000-0000-000000000001', 2, 1)$q$, :'oid'), :CE);
+SELECT 'after' AS at, total, payment_status, status,
+       public.order_amount_due(total, prices_include_vat, vat_rate) AS amount_due
+  FROM public.orders WHERE id = :'oid';
+
+-- simulate the state grow_mark_paid leaves (same flag + columns), then try to add another line as the customer
+SELECT set_config('kobi.payment_update', 'on', true);
+UPDATE public.orders SET payment_status = 'paid', paid_at = now(), payment_due_at = NULL WHERE id = :'oid';
+SELECT set_config('kobi.payment_update', 'off', true);
+SELECT tests.run('probe: the customer adds a line to the PAID order',
+  format($q$INSERT INTO public.order_items (order_id, product_id, quantity, unit_price)
+            VALUES (%L, '9e000000-0000-0000-0000-000000000001', 1, 1)$q$, :'oid'), :CE);
+SELECT 'after-paid' AS at, total, payment_status, status,
+       public.order_amount_due(total, prices_include_vat, vat_rate) AS amount_due
+  FROM public.orders WHERE id = :'oid';
+SELECT name, ok, detail FROM tests.results WHERE name LIKE 'probe:%' ORDER BY id;
+ROLLBACK;
+
+## Output
+----------------------------------------------------------
+ grow_active 
+-------------
+ t
+-----
+ 
+                name                 | ok | detail 
+-------------------------------------+----+--------
+ probe: customer places a grow order | t  | rows=1
+   at   | total  | payment_status | status  | amount_due 
+--------+--------+----------------+---------+------------
+ before | 100.00 | awaiting       | pending |     100.00
+-----
+ 
+  at   | total  | payment_status | status  | amount_due 
+-------+--------+----------------+---------+------------
+ after | 300.00 | awaiting       | pending |     300.00
+------------
+------------
+-----
+ 
+     at     | total  | payment_status | status  | amount_due 
+------------+--------+----------------+---------+------------
+ after-paid | 400.00 | paid           | pending |     400.00
+                         name                          | ok | detail 
+-------------------------------------------------------+----+--------
+ probe: customer places a grow order                   | t  | rows=1
+ probe: the customer adds a line to the awaiting order | t  | rows=1
+ probe: the customer adds a line to the PAID order     | t  | rows=1
+
+## Rows left after the run (must be 0)
+0
