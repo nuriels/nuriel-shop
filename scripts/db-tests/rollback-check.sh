@@ -195,8 +195,10 @@ M87=20261122100000_seo_engine
 M88=20261122110000_hosp_seo_engine
 # safe unit delete (205): functions only
 M89=20261123100000_hosp_unit_delete_safe
-# failed-email alerts can be marked read / handled (206) — the newest, rolled back first
+# failed-email alerts can be marked read / handled (206)
 M90=20261125100000_hosp_email_alerts
+# product brand + condition (207) — the newest, rolled back first
+M91=20261127100000_product_brand_condition
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -240,7 +242,25 @@ same_as_ref() {
   fi
 }
 
-# ---------- failed-email alerts: read / handled (migration 206) — the newest, rolled back first ----------
+# ---------- product brand + condition (migration 207) — the newest, rolled back first ----------
+expect "before the rollback: the brand / condition columns and their rules, the product-only proposal rule" \
+  "SELECT (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'global_products'
+            AND column_name IN ('brand', 'item_condition')) = 2
+      AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'global_products_item_condition_check')
+      AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'store_seo_proposals_product_fields')
+      AND pg_get_functiondef('public.store_seo_snapshot(uuid,boolean,integer)'::regprocedure) LIKE '%facts%'"
+ref_upto "$M91"
+echo "rollback: $M91"
+down "$M91"
+expect "the columns and the product-only rule are gone; the proposals take the three Google fields again; the snapshot has no facts" \
+  "SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'global_products'
+                        AND column_name IN ('brand', 'item_condition'))
+      AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'store_seo_proposals_product_fields')
+      AND pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'store_seo_proposals_field_check')) NOT LIKE '%brand%'
+      AND pg_get_functiondef('public.store_seo_snapshot(uuid,boolean,integer)'::regprocedure) NOT LIKE '%facts%'"
+same_as_ref "migration 206"
+
+# ---------- failed-email alerts: read / handled (migration 206) ----------
 expect "before the rollback: the alert columns, the mark functions, the cancelled-email helper, the open-alerts index" \
   "SELECT (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'notifications'
             AND column_name IN ('alert_seen_at', 'alert_handled_at', 'alert_handled_by')) = 3
@@ -2862,6 +2882,12 @@ up "$M90"
 expect "failed-email alerts back: the columns, the mark functions, the helper" \
   "SELECT to_regprocedure('hospitality.email_alerts_mark(uuid[],text)') IS NOT NULL
       AND to_regprocedure('hospitality._email_cancelled(text,text)') IS NOT NULL"
+up "$M91"
+expect "product brand + condition back: the columns, the product-only rule, the facts in the snapshot" \
+  "SELECT (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'global_products'
+            AND column_name IN ('brand', 'item_condition')) = 2
+      AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'store_seo_proposals_product_fields')
+      AND pg_get_functiondef('public.store_seo_snapshot(uuid,boolean,integer)'::regprocedure) LIKE '%facts%'"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')

@@ -15,14 +15,26 @@ import {
   revertStoreSeoProposalFn,
   type StoreSeoProposal,
 } from "@/lib/seo/store-seo.functions";
+import { CONDITION_LABEL, isItemCondition, ITEM_CONDITIONS } from "@/lib/product-facts";
 
 const KEY = ["seo", "store-proposals"] as const;
 const FIELD: Record<string, string> = {
   seo_title: "הכותרת בגוגל",
   seo_description: "התיאור בגוגל",
   seo_keywords: "ביטויי חיפוש",
+  // migration 207: facts about the product (Google's product data) — approved by the owner, never automatically
+  brand: "מותג / יצרן",
+  item_condition: "מצב המוצר",
 };
-const LIMIT: Record<string, number> = { seo_title: 60, seo_description: 155, seo_keywords: 500 };
+const LIMIT: Record<string, number> = {
+  seo_title: 60,
+  seo_description: 155,
+  seo_keywords: 500,
+  brand: 80,
+};
+/** the condition is a choice (the DB takes only these three), shown in Hebrew */
+const conditionText = (v: string | null | undefined) =>
+  isItemCondition(v) ? CONDITION_LABEL[v] : (v ?? "");
 const HISTORY: Record<string, string> = {
   approved: "אושר ונשמר",
   rejected: "בוטל",
@@ -167,7 +179,10 @@ export function StoreSeoProposals() {
                     p={p}
                     sibling={
                       items.find(
-                        (x) => x.id !== p.id && x.field !== p.field && x.field !== "seo_keywords",
+                        (x) =>
+                          x.id !== p.id &&
+                          x.field !== p.field &&
+                          (x.field === "seo_title" || x.field === "seo_description"),
                       ) ?? null
                     }
                     url={`${origin}${p.path}`}
@@ -203,7 +218,7 @@ export function StoreSeoProposals() {
                     {FIELD[p.field]} · {groupTitle(p)} — {HISTORY[p.status] ?? p.status}
                     {p.applied ? (
                       <span className="block truncate text-xs text-muted-foreground">
-                        "{p.applied}"
+                        "{p.field === "item_condition" ? conditionText(p.applied) : p.applied}"
                       </span>
                     ) : null}
                   </span>
@@ -244,8 +259,10 @@ function ProposalCard(props: {
   const stale = (p.current ?? "") !== (p.base ?? "");
   const limit = LIMIT[p.field] ?? 500;
   const edited = text !== p.proposed;
+  const isCondition = p.field === "item_condition";
+  // the Google result preview only for Google texts (title / description)
   const preview =
-    p.field === "seo_keywords"
+    p.field !== "seo_title" && p.field !== "seo_description"
       ? null
       : {
           title: p.field === "seo_title" ? text : (props.sibling?.proposed ?? null),
@@ -273,7 +290,21 @@ function ProposalCard(props: {
       {p.reason && <p className="text-xs text-muted-foreground">למה: {p.reason}</p>}
       <p className="text-xs text-muted-foreground">
         <span className="font-medium">עכשיו: </span>
-        {p.current ? p.current : <span className="italic">ריק — מוצג טקסט ברירת מחדל</span>}
+        {p.current ? (
+          isCondition ? (
+            conditionText(p.current)
+          ) : (
+            p.current
+          )
+        ) : (
+          <span className="italic">
+            {p.field === "brand"
+              ? "ריק — אין מותג בנתונים לגוגל"
+              : isCondition
+                ? "לא נקבע — לפי המילים בשם המוצר, אחרת חדש"
+                : "ריק — מוצג טקסט ברירת מחדל"}
+          </span>
+        )}
       </p>
       {stale ? (
         <p className="text-xs text-amber-800" role="status">
@@ -282,26 +313,44 @@ function ProposalCard(props: {
       ) : (
         <div className="flex flex-col gap-1">
           <label htmlFor={id} className="text-xs font-medium">
-            מוצע (אפשר לערוך)
+            {isCondition ? "מוצע (אפשר לבחור אחרת)" : "מוצע (אפשר לערוך)"}
           </label>
-          <textarea
-            id={id}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={p.field === "seo_title" ? 2 : 3}
-            dir="rtl"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-base"
-            data-testid="store-seo-text"
-          />
-          <span
-            dir="ltr"
-            className={cn(
-              "self-end text-xs",
-              text.length > limit ? "font-semibold text-amber-800" : "text-muted-foreground",
-            )}
-          >
-            {text.length}/{limit}
-          </span>
+          {isCondition ? (
+            <select
+              id={id}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base"
+              data-testid="store-seo-condition"
+            >
+              {ITEM_CONDITIONS.map((c) => (
+                <option key={c} value={c}>
+                  {CONDITION_LABEL[c]}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <textarea
+              id={id}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={p.field === "seo_title" || p.field === "brand" ? 2 : 3}
+              dir={p.field === "brand" ? "auto" : "rtl"}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-base"
+              data-testid="store-seo-text"
+            />
+          )}
+          {!isCondition && (
+            <span
+              dir="ltr"
+              className={cn(
+                "self-end text-xs",
+                text.length > limit ? "font-semibold text-amber-800" : "text-muted-foreground",
+              )}
+            >
+              {text.length}/{limit}
+            </span>
+          )}
           {preview && (
             <GoogleSnippet
               title={preview.title}

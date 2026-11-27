@@ -341,7 +341,10 @@ export function CatalogGrid({
                   ? setDetails(product)
                   : void navigate({ to: "/product/$productId", params: { productId: product.id } })
             }
-            href={onOpenProduct || productDialog ? undefined : productHref(product.id)}
+            // a real <a href> whenever the click lands on the product page (the catalog and the related /
+            // alternative products on a product page alike) — Google follows only <a href> links. Only the
+            // floating details dialog (the order dialog in the admin panel) stays a button
+            href={productDialog ? undefined : productHref(product.id)}
             onPick={(variant) => setPicking({ item: product, variant })}
             rating={ratings.get(product.id)}
           />

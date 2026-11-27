@@ -8,6 +8,7 @@
  *    (בית ← קטגוריה ← מוצר) — "תוצאה עשירה" עם מחיר וזמינות בחיפוש.
  *  • עמודי קטלוג / קטגוריה: כותרת ותיאור דינאמיים.
  */
+import { CONDITION_SCHEMA, gtinOf, resolveCondition } from "@/lib/product-facts";
 
 /** הפרטים של החנות לסכמה (מהגדרות האתר) */
 export type StoreSchemaInput = {
@@ -40,6 +41,10 @@ export type ProductSchemaInput = {
   saleEndsAt?: string | null;
   /** חלק 34: דירוג הלקוחות — aggregateRating (כוכבים בתוצאות החיפוש) */
   rating?: { average: number; count: number } | null;
+  /** מיגרציה 207: המותג של המוצר (לא שם החנות) — בלי מותג אין brand */
+  brand?: string | null;
+  /** מיגרציה 207: מצב המוצר כפי שבעל החנות קבע; בלי — לפי המילים בשם / בקטגוריה, אחרת חדש */
+  condition?: string | null;
 };
 
 export type BreadcrumbItem = { name: string; url: string | null };
@@ -148,17 +153,17 @@ export function storeJsonLd(store: StoreSchemaInput): Record<string, unknown> {
   return { "@context": "https://schema.org", "@graph": [website, organization] };
 }
 
-/** עמוד מוצר: Product + Offer — מחיר, מטבע וזמינות במלאי בתוצאות החיפוש */
+/**
+ * עמוד מוצר: Product + Offer — מחיר, מטבע וזמינות במלאי בתוצאות החיפוש.
+ * brand — רק המותג של המוצר כשהוא ידוע (קודם: שם החנות בכל מוצר — "המותג" של כל המוצרים היה החנות);
+ * itemCondition — המצב האמיתי (קודם: חדש לכל מוצר, גם מחודש); GTIN — רק ברקוד GS1 תקין (product-facts.ts)
+ */
 export function productJsonLd(product: ProductSchemaInput): Record<string, unknown> {
   const images = product.images.filter(isHttpUrl);
-  const barcode = (product.barcode ?? "").trim();
-  const gtin = /^\d{13}$/.test(barcode)
-    ? { gtin13: barcode }
-    : /^\d{12}$/.test(barcode)
-      ? { gtin12: barcode }
-      : /^\d{8}$/.test(barcode)
-        ? { gtin8: barcode }
-        : {};
+  const code = gtinOf(product.barcode);
+  const gtin = code ? { [code.key]: code.value } : {};
+  const brand = (product.brand ?? "").trim();
+  const condition = resolveCondition(product.condition, product.name, product.category);
   const saleEnds =
     product.saleEndsAt && !Number.isNaN(Date.parse(product.saleEndsAt))
       ? new Date(product.saleEndsAt).toISOString().slice(0, 10)
@@ -170,7 +175,7 @@ export function productJsonLd(product: ProductSchemaInput): Record<string, unkno
     description: product.description,
     sku: product.sku,
     category: product.category,
-    brand: { "@type": "Brand", name: product.storeName },
+    ...(brand ? { brand: { "@type": "Brand", name: brand } } : {}),
     ...(images.length > 0 ? { image: images } : {}),
     ...(product.url ? { url: product.url } : {}),
     ...gtin,
@@ -192,7 +197,7 @@ export function productJsonLd(product: ProductSchemaInput): Record<string, unkno
       availability: product.inStock
         ? "https://schema.org/InStock"
         : "https://schema.org/OutOfStock",
-      itemCondition: "https://schema.org/NewCondition",
+      itemCondition: CONDITION_SCHEMA[condition],
       seller: { "@type": "Organization", name: product.storeName },
       ...(saleEnds ? { priceValidUntil: saleEnds } : {}),
       ...(product.url ? { url: product.url } : {}),

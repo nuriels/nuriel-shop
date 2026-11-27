@@ -47,6 +47,7 @@ import {
   type StoreAiRef,
 } from "./store-ai";
 import {
+  catalogFactProposals,
   storeTemplateProposals,
   type StoreProposalItem,
   type StoreSnapshot,
@@ -65,17 +66,30 @@ const snapshot = (tenantId: string, limit: number) =>
     _limit: limit,
   });
 
+/** up to 300 items per call (the DB function's limit) — a big store's facts go in a few calls */
 async function addProposals(tenantId: string, items: StoreProposalItem[]) {
-  if (!items.length) return { added: 0, auto_applied: 0, skipped: 0 };
-  return seoServiceRpc<{ added: number; auto_applied: number; skipped: number }>(
-    "store_seo_proposals_add",
-    {
-      _tenant: tenantId,
-      _items: items.slice(0, 300),
-      _only_empty: true,
-    },
-  );
+  const total = { added: 0, auto_applied: 0, skipped: 0 };
+  for (let i = 0; i < Math.min(items.length, 1200); i += 300) {
+    const r = await seoServiceRpc<{ added: number; auto_applied: number; skipped: number }>(
+      "store_seo_proposals_add",
+      {
+        _tenant: tenantId,
+        _items: items.slice(i, i + 300),
+        _only_empty: true,
+      },
+    );
+    total.added += r.added;
+    total.auto_applied += r.auto_applied;
+    total.skipped += r.skipped;
+  }
+  return total;
 }
+
+/** everything the free (no-AI) rules propose: Google texts + the product facts (brand / condition) */
+const templateItems = (snap: StoreSnapshot) => [
+  ...storeTemplateProposals(snap),
+  ...catalogFactProposals(snap.facts),
+];
 
 function params(
   model: Parameters<typeof thinkingFor>[0],
@@ -205,7 +219,7 @@ const ENTITY: Record<string, StoreProposalItem["target_kind"]> = {
 
 async function proposals(input: SeoProposalsInput): Promise<Record<string, unknown>> {
   const snap = await snapshot(input.tenantId, input.scope === "initial" ? 100 : 60);
-  let items = storeTemplateProposals(snap);
+  let items = templateItems(snap);
   const only = input.scope === "entity" && input.entityType ? ENTITY[input.entityType] : undefined;
   if (only) items = items.filter((i) => i.target_kind === only);
   const template = await addProposals(input.tenantId, items);
@@ -264,7 +278,7 @@ export async function handleStoreSeoGenerate(
   if (!caller) throw new SafeError(FORBIDDEN_MESSAGE);
   if (kind === "template") {
     const snap = await snapshot(caller.tenantId, 200);
-    const r = await addProposals(caller.tenantId, storeTemplateProposals(snap));
+    const r = await addProposals(caller.tenantId, templateItems(snap));
     return { status: "ok", ...r, calls: 0 };
   }
   return runStoreAi(

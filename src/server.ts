@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { normalizedPathRedirect, normalizedPathResponse } from "./lib/url-normalize";
 import { withSecurityHeaders } from "./lib/security-headers";
 import { handleHealthRequest } from "./server/health.server";
 import {
@@ -147,7 +148,11 @@ async function route(request: Request, env: unknown, ctx: unknown): Promise<Resp
     const health = await handleHealthRequest(request);
     if (health) return health;
     const host = requestHost(request);
-    const pathname = new URL(request.url).pathname;
+    const requestUrl = new URL(request.url);
+    const pathname = requestUrl.pathname;
+    // "/" בסוף ו-"//" כפול → 308 לכתובת הנקייה, בכל אתר — לפני כל השאר (קודם: 307 זמני מהנתב)
+    const normalized = normalizedPathRedirect(request.method, requestUrl);
+    if (normalized) return normalizedPathResponse(normalized);
     // NURIEL AI SEO ENGINE: חיבור Google Search Console של בעל העסק (קריאה בלבד) — בכתובת הפלטפורמה בלבד,
     // לפני זיהוי האתר (הכתובת הרשומה ב-Google אחת לכל הפלטפורמה)
     if (pathname.startsWith("/api/seo/gsc/")) {

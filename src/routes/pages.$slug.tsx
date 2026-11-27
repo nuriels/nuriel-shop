@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { isServerRender, StorefrontSeedProvider } from "@/lib/storefront-seed";
 import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { EyeOff, FileQuestion, FileText } from "lucide-react";
@@ -32,6 +32,9 @@ export const Route = createFileRoute("/pages/$slug")({
         ? getStorefrontSeed({ data: {} })
         : Promise.resolve(null),
     ]);
+    // לא פורסם / לא קיים — 404 אמיתי (לא 200 עם noindex). טיוטה שמנהל מסתכל עליה נטענת בדפדפן
+    // (StorePageNotFound), כמו קודם — אבל לגוגל ולכל אורח הכתובת היא 404
+    if (!page) throw notFound();
     return { page, seed };
   },
   head: ({ loaderData }) => {
@@ -68,52 +71,47 @@ export const Route = createFileRoute("/pages/$slug")({
     };
   },
   component: SeededStorePageView,
+  notFoundComponent: StorePageNotFound,
 });
 
 type ViewPage = { title: string; content_html: string; is_published: boolean; updated_at: string };
 
-function StorePageView() {
+/**
+ * עמוד שלא פורסם / לא קיים (404 מהשרת): אולי טיוטה שמנהל החנות מסתכל עליה — ההרשאות במסד (RLS) קובעות
+ * מה חוזר; לאורח לא חוזר כלום. ב-HTML מהשרת ובטעינה — "העמוד לא נמצא" (כמו שגוגל רואה); טיוטה שנמצאה
+ * מחליפה אותו.
+ */
+function StorePageNotFound() {
   const { slug } = Route.useParams();
-  const { page: published } = Route.useLoaderData();
-  // לא פורסם / לא קיים — אולי טיוטה שהמנהל מסתכל עליה (ההרשאות במסד)
-  const [draft, setDraft] = useState<ViewPage | null | undefined>(published ? null : undefined);
+  const [draft, setDraft] = useState<ViewPage | null>(null);
 
   useEffect(() => {
-    if (published) return;
     let alive = true;
-    setDraft(undefined);
+    setDraft(null);
     loadStorePage(slug)
       .then((page) => alive && setDraft(page))
       .catch(() => alive && setDraft(null));
     return () => {
       alive = false;
     };
-  }, [published, slug]);
+  }, [slug]);
 
-  const page: ViewPage | null = published ?? draft ?? null;
+  if (draft) return <StorePageBody page={draft} />;
+  return (
+    <InfoPage title="העמוד לא נמצא" icon={<FileQuestion aria-hidden="true" />}>
+      <Card className="shadow-card">
+        <CardContent className="space-y-4 pt-5 text-sm text-muted-foreground">
+          <p>העמוד שחיפשתם לא קיים או שהוסר מהאתר.</p>
+          <Button asChild>
+            <Link to="/">חזרה לחנות</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    </InfoPage>
+  );
+}
 
-  if (!page) {
-    if (draft === undefined) {
-      return (
-        <InfoPage title="טוען…" icon={<FileText aria-hidden="true" />}>
-          <LoadingLine />
-        </InfoPage>
-      );
-    }
-    return (
-      <InfoPage title="העמוד לא נמצא" icon={<FileQuestion aria-hidden="true" />}>
-        <Card className="shadow-card">
-          <CardContent className="space-y-4 pt-5 text-sm text-muted-foreground">
-            <p>העמוד שחיפשתם לא קיים או שהוסר מהאתר.</p>
-            <Button asChild>
-              <Link to="/">חזרה לחנות</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </InfoPage>
-    );
-  }
-
+function StorePageBody({ page }: { page: ViewPage }) {
   const updated = new Date(page.updated_at).toLocaleDateString("he-IL", {
     day: "numeric",
     month: "long",
@@ -146,9 +144,10 @@ function StorePageView() {
 }
 
 function SeededStorePageView() {
+  const { page, seed } = Route.useLoaderData();
   return (
-    <StorefrontSeedProvider seed={Route.useLoaderData().seed}>
-      <StorePageView />
+    <StorefrontSeedProvider seed={seed}>
+      <StorePageBody page={page} />
     </StorefrontSeedProvider>
   );
 }

@@ -30,6 +30,7 @@ import { RatingInline } from "@/components/reviews/RatingInline";
 import { useRatingSummaries } from "@/hooks/useRatingSummaries";
 import { usePriceAttr } from "@/lib/price-hold";
 import { categoryHref } from "@/components/CrawlableLink";
+import { CONDITION_LABEL, isItemCondition } from "@/lib/product-facts";
 
 /** הכתובת הקבועה של עמוד המוצר (SEO, שיתוף, זאפ) */
 function productPath(productId: string): string {
@@ -124,9 +125,15 @@ export function ProductDetailView({
   onShowProduct,
   onAdded,
   showRecommendations = true,
+  facts,
 }: {
   product: CatalogItem;
   mode: "dialog" | "page";
+  /**
+   * מיגרציה 207: המותג והמצב (מהשרת, בעמוד המוצר) — מוצגים בעמוד כמו בנתונים המובנים לגוגל. מצב "חדש"
+   * מוצג רק כשבעל החנות קבע אותו (ברירת המחדל לא צריכה שורה)
+   */
+  facts?: { brand: string | null; condition: string | null } | undefined;
   canAdd: boolean;
   addLabel?: string;
   onAddToCart?: AddToCart | undefined;
@@ -413,6 +420,22 @@ export function ProductDetailView({
           )}
 
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {facts?.brand && (
+              <>
+                <dt>מותג</dt>
+                <dd dir="auto" className="min-w-0 break-words text-right" data-product-brand>
+                  {facts.brand}
+                </dd>
+              </>
+            )}
+            {isItemCondition(facts?.condition) && (
+              <>
+                <dt>מצב</dt>
+                <dd className="min-w-0 text-right" data-product-condition={facts.condition}>
+                  {CONDITION_LABEL[facts.condition]}
+                </dd>
+              </>
+            )}
             <dt>מק"ט</dt>
             <dd dir="ltr" className="numeric min-w-0 break-all text-right">
               {choice.variant?.sku ?? product.sku}

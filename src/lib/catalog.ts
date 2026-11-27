@@ -20,6 +20,10 @@ export type GlobalProduct = {
   images?: string[] | null;
   colors?: string[] | null;
   barcode?: string | null;
+  /** מיגרציה 207: המותג / היצרן (לא שם החנות) — לגוגל ולעמוד המוצר */
+  brand?: string | null;
+  /** מיגרציה 207: מצב המוצר — new / refurbished / used; ריק = לא נקבע */
+  item_condition?: string | null;
   /** איתור במחסן (מדף/שורה) — פנימי, מופיע בבון הליקוט בלבד */
   shelf_location?: string | null;
   /** מחיר מבצע יחיד לכל הדרגים, בתוקף בין sale_starts_at ל-sale_ends_at */
@@ -78,7 +82,7 @@ export type GlobalProduct = {
 };
 
 export const PRODUCT_ADMIN_COLUMNS =
-  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto, is_order_bump, order_bump_text, is_digital, variant_attributes, seo_title, seo_description, seo_keywords, show_in_zap, is_featured, sticker_id, sticker_size, sticker_opacity, requires_serial, warranty_months" as const;
+  "id, sku, name, category, description, image_url, images, colors, barcode, shelf_location, sale_price, sale_starts_at, sale_ends_at, uniform_price, stock_quantity, is_out_of_stock, is_promo, price_tier1, price_tier2, price_tier3, cost_price, has_deposit, deposit_price, deposit_units, pack_size, min_order_quantity, sort_order, is_hidden, out_of_stock_auto, is_order_bump, order_bump_text, is_digital, variant_attributes, seo_title, seo_description, seo_keywords, show_in_zap, is_featured, sticker_id, sticker_size, sticker_opacity, requires_serial, warranty_months, brand, item_condition" as const;
 
 /** לסוכן שבונה הזמנה ללקוח: כל דרגי המחיר, בלי מחיר עלות (ניהולי בלבד) */
 export const STAFF_CATALOG_COLUMNS =

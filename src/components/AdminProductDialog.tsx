@@ -66,6 +66,12 @@ import {
   clampStickerSize,
 } from "@/lib/stickers";
 import { richTextIsEmpty, sanitizeRichHtml } from "@/lib/rich-text";
+import {
+  CONDITION_LABEL,
+  isItemCondition,
+  ITEM_CONDITIONS,
+  type ItemCondition,
+} from "@/lib/product-facts";
 import type { ProductPrefill } from "@/lib/url-import";
 import {
   Select,
@@ -125,6 +131,10 @@ type FormState = {
   name: string;
   category: string;
   barcode: string;
+  /** מיגרציה 207: המותג / היצרן (לא שם החנות) — לגוגל ולעמוד המוצר; ריק = לא ידוע */
+  brand: string;
+  /** מיגרציה 207: מצב המוצר; "" = לא נקבע (לפי המילים בשם / בקטגוריה, אחרת חדש) */
+  itemCondition: "" | ItemCondition;
   shelfLocation: string;
   description: string;
   salePrice: string;
@@ -190,6 +200,8 @@ function emptyForm(defaultCategory: string): FormState {
     name: "",
     category: defaultCategory,
     barcode: "",
+    brand: "",
+    itemCondition: "",
     shelfLocation: "",
     description: "",
     salePrice: "",
@@ -239,6 +251,8 @@ function fromProduct(product: GlobalProduct): FormState {
     name: product.name,
     category: product.category,
     barcode: product.barcode ?? "",
+    brand: product.brand ?? "",
+    itemCondition: isItemCondition(product.item_condition) ? product.item_condition : "",
     shelfLocation: product.shelf_location ?? "",
     description: product.description ?? "",
     salePrice: product.sale_price != null ? String(product.sale_price) : "",
@@ -741,6 +755,8 @@ export function AdminProductDialog({
 
   const validate = (): string | null => {
     if (form.name.trim() === "") return "נדרש שם מוצר";
+    if (form.brand.trim().length > 80) return "שם המותג ארוך מדי (עד 80 תווים)";
+    if (/[<>]/.test(form.brand)) return "שם המותג לא יכול לכלול את התווים < >";
     if ((descriptionForSave(form.description) ?? "").length > DESCRIPTION_MAX) {
       return "התיאור ארוך מדי — קצרו אותו מעט (או הסירו עיצוב מיותר)";
     }
@@ -843,6 +859,8 @@ export function AdminProductDialog({
       name: form.name.trim(),
       category: form.category,
       barcode: form.barcode.trim() || null,
+      brand: form.brand.trim().replace(/\s+/g, " ") || null,
+      item_condition: form.itemCondition || null,
       // ברירת מחדל "A0A" אם לא הוזן איתור, כדי שבון הליקוט תמיד יציג משהו
       shelf_location: form.shelfLocation.trim() || "A0A",
       // חלק 19: HTML מעורך הטקסט העשיר (מנוקה — וגם בכל הצגה באתר)
@@ -1343,6 +1361,43 @@ export function AdminProductDialog({
               <p className="text-xs text-muted-foreground sm:col-span-2">
                 שני השדות אופציונליים וניתנים לשינוי בכל שלב. הברקוד מופיע בפירוט ההזמנה ובמסמכים,
                 והאיתור מופיע בבון הליקוט למחסן.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2" data-testid="product-facts">
+              <div className="space-y-2">
+                <Label htmlFor="p-brand">מותג / יצרן (אופציונלי)</Label>
+                <Input
+                  id="p-brand"
+                  dir="auto"
+                  maxLength={80}
+                  value={form.brand}
+                  onChange={(e) => patch({ brand: e.target.value })}
+                  placeholder="למשל Lenovo"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="p-condition">מצב המוצר</Label>
+                <Select
+                  value={form.itemCondition || "unset"}
+                  onValueChange={(v) => patch({ itemCondition: isItemCondition(v) ? v : "" })}
+                >
+                  <SelectTrigger id="p-condition" dir="rtl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent dir="rtl">
+                    <SelectItem value="unset">לא צוין (לפי שם המוצר, אחרת חדש)</SelectItem>
+                    {ITEM_CONDITIONS.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {CONDITION_LABEL[c]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                המותג והמצב מוצגים בעמוד המוצר ונשלחים לגוגל בנתוני המוצר. המותג הוא של היצרן — לא
+                שם החנות; אם לא ידוע, השאירו ריק.
               </p>
             </div>
 

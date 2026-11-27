@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { normalizeKeywords, plainText } from "@/lib/marketing";
 import { categoryParentsFrom, categoryTrail, type CategoryParents } from "@/lib/seo-urls";
+import { isItemCondition, type ItemCondition } from "@/lib/product-facts";
 
 /**
  * SEO לעמוד מוצר (חלק 14): נטען בשרת (SSR) לפני שהעמוד נשלח, כך שגוגל,
@@ -38,6 +39,10 @@ export type ProductSeo = {
   origin: string | null;
   /** חלק 34: דירוג הלקוחות (ביקורות מאושרות) — aggregateRating לגוגל; null בלי ביקורות */
   rating: { average: number; count: number } | null;
+  /** מיגרציה 207: המותג / היצרן (לא שם החנות); null = לא ידוע — אין brand בנתונים המובנים */
+  brand: string | null;
+  /** מיגרציה 207: מצב המוצר כפי שבעל החנות קבע; null = לא נקבע (לפי המילים בשם / בקטגוריה, אחרת חדש) */
+  condition: ItemCondition | null;
 };
 
 export const getProductSeo = createServerFn({ method: "GET" })
@@ -70,7 +75,7 @@ export const getProductSeo = createServerFn({ method: "GET" })
       // תמונות נוספות ותוקף המבצע — לסכמת המוצר (המוצר עצמו כבר נבדק ב-RPC)
       supabaseAdmin
         .from("global_products")
-        .select("images, sale_ends_at, seo_keywords")
+        .select("images, sale_ends_at, seo_keywords, brand, item_condition")
         .eq("id", data.id)
         .maybeSingle(),
       // חלק 31: קטגוריות האב — לפירורי לחם היררכיים (בית ← ראשית ← משנה ← מוצר)
@@ -79,8 +84,10 @@ export const getProductSeo = createServerFn({ method: "GET" })
       supabaseAdmin.rpc("product_review_summary", { _product_id: data.id }),
     ]);
     if (error) {
+      // תקלה במסד ≠ "המוצר לא קיים": שגיאה (500 — גוגל ינסה שוב מאוחר יותר), לא null (שהיה הופך ל-404
+      // ומוציא מוצר קיים מהאינדקס בגלל תקלה רגעית)
       console.error("[seo] product lookup failed", error.message);
-      return null;
+      throw new Error("product lookup failed");
     }
     const product = rows?.[0];
     if (!product) return null;
@@ -132,6 +139,8 @@ export const getProductSeo = createServerFn({ method: "GET" })
       url,
       origin,
       rating: ratingOf(reviewSummary),
+      brand: extra?.brand?.trim() || null,
+      condition: isItemCondition(extra?.item_condition) ? extra.item_condition : null,
     };
   });
 

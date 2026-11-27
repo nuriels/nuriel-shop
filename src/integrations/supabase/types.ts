@@ -1776,6 +1776,7 @@ export type Database = {
         Row: {
           tenant_id: string;
           barcode: string | null;
+          brand: string | null;
           category: string;
           colors: string[];
           cost_price: number | null;
@@ -1788,6 +1789,7 @@ export type Database = {
           id: string;
           image_url: string | null;
           images: string[];
+          item_condition: string | null;
           is_out_of_stock: boolean;
           is_order_bump: boolean;
           order_bump_text: string | null;
@@ -1826,6 +1828,7 @@ export type Database = {
         Insert: {
           tenant_id?: string;
           barcode?: string | null;
+          brand?: string | null;
           category: string;
           colors?: string[];
           cost_price?: number | null;
@@ -1838,6 +1841,7 @@ export type Database = {
           id?: string;
           image_url?: string | null;
           images?: string[];
+          item_condition?: string | null;
           is_out_of_stock?: boolean;
           is_order_bump?: boolean;
           order_bump_text?: string | null;
@@ -1876,6 +1880,7 @@ export type Database = {
         Update: {
           tenant_id?: string;
           barcode?: string | null;
+          brand?: string | null;
           category?: string;
           colors?: string[];
           cost_price?: number | null;
@@ -1888,6 +1893,7 @@ export type Database = {
           id?: string;
           image_url?: string | null;
           images?: string[];
+          item_condition?: string | null;
           is_out_of_stock?: boolean;
           is_order_bump?: boolean;
           order_bump_text?: string | null;

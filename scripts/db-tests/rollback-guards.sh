@@ -135,6 +135,8 @@ check_guard 20261106150000_sec_h5_double_opt_in public.marketing_consent_events 
 check_guard 20261106170000_sec_m5_keep_platform_records public.billing_history "$(S public.billing_history)"
 check_guard 20261106170000_sec_m5_keep_platform_records public.platform_audit_log "$(S public.platform_audit_log '{"tenant_id":"gen_random_uuid()"}')"
 check_guard 20261117090000_bp_site_address business_profile.domain_settings "$(S business_profile.domain_settings)"
+check_guard 20261127100000_product_brand_condition public.global_products "$(S public.global_products '{"brand":"'"'"'Lenovo'"'"'","created_by":"gen_random_uuid()"}')"
+check_guard 20261127100000_product_brand_condition public.store_seo_proposals "$(S public.store_seo_proposals '{"field":"'"'"'item_condition'"'"'","target_kind":"'"'"'product'"'"'"}')"
 
 "${PG[@]}" -d postgres -c "DROP DATABASE IF EXISTS $WORK" -c "DROP DATABASE IF EXISTS $TMPL" >/dev/null 2>&1
 echo

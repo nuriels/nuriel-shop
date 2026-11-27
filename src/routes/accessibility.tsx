@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Accessibility } from "lucide-react";
-import { InfoPage, LoadingLine } from "@/components/legal/InfoPage";
+import { InfoPage } from "@/components/legal/InfoPage";
 import { RichContent } from "@/components/legal/RichContent";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { loadStorePage } from "@/lib/pages-data";
+import { getStorePageSeo } from "@/lib/pages.functions";
+import { isServerRender, StorefrontSeedProvider } from "@/lib/storefront-seed";
+import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 
 /**
  * חלק 40: הצהרת נגישות — תקנות שוויון זכויות לאנשים עם מוגבלות (התאמות
@@ -14,30 +15,37 @@ import { loadStorePage } from "@/lib/pages-data";
  * אם החנות כתבה עמוד משלה ב"עמודים" (כתובת accessibility) — הוא מוצג. אחרת —
  * הצהרה בסיסית עם פרטי העסק ודרכי הפנייה בנושא נגישות.
  */
+const SLUG = "accessibility";
+
 export const Route = createFileRoute("/accessibility")({
+  // נבנה בשרת: ההצהרה (העמוד שהחנות כתבה, או ההצהרה הבסיסית עם פרטי העסק) כבר ב-HTML — לגוגל,
+  // לכלי AI ולקוראי מסך בלי JavaScript. קודם היה ב-HTML רק "טוען…" (ההצהרה נטענה בדפדפן).
   // הכותרת והתיאור לגוגל — ב-root (static-pages-seo.ts): "שם העמוד | שם החנות" ותיאור משלו
-  component: AccessibilityStatementPage,
+  ssr: true,
+  loader: async ({ context }) => {
+    const store = context.hostMode.siteType === "ecommerce";
+    const [page, seed] = await Promise.all([
+      // רק עמוד שפורסם (טיוטה לא מחליפה את ההצהרה). תקלה — ההצהרה הבסיסית, כמו קודם בדפדפן
+      store ? getStorePageSeo({ data: { slug: SLUG } }).catch(() => null) : Promise.resolve(null),
+      isServerRender() && store ? getStorefrontSeed({ data: {} }) : Promise.resolve(null),
+    ]);
+    return { custom: page?.content_html?.trim() ? page.content_html : null, seed };
+  },
+  component: SeededAccessibilityStatementPage,
 });
 
-const SLUG = "accessibility";
+function SeededAccessibilityStatementPage() {
+  const { seed } = Route.useLoaderData();
+  return (
+    <StorefrontSeedProvider seed={seed}>
+      <AccessibilityStatementPage />
+    </StorefrontSeedProvider>
+  );
+}
 
 function AccessibilityStatementPage() {
   const { settings } = useSiteSettings();
-  const [custom, setCustom] = useState<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    let alive = true;
-    loadStorePage(SLUG)
-      .then(
-        (page) =>
-          alive &&
-          setCustom(page?.is_published && page.content_html.trim() ? page.content_html : null),
-      )
-      .catch(() => alive && setCustom(null));
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const { custom } = Route.useLoaderData();
 
   const store = settings?.business_name?.trim() || settings?.site_title?.trim() || "החנות";
   const phone = settings?.support_phone?.trim() || settings?.business_phone?.trim() || "";
@@ -50,9 +58,7 @@ function AccessibilityStatementPage() {
           className="space-y-3 pt-5 text-sm leading-7"
           data-testid="accessibility-statement"
         >
-          {custom === undefined ? (
-            <LoadingLine />
-          ) : custom ? (
+          {custom ? (
             <RichContent content={custom} />
           ) : (
             <>

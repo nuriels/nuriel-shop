@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRestState } from "@/hooks/useRestState";
 import { REST_CHECKOUT_MESSAGE } from "@/lib/rest-window";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { ArrowRight, Loader2, PackageX, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +11,7 @@ import { StorefrontMain } from "@/components/layout/StorefrontMain";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { ProductDetailView } from "@/components/ProductDetailDialog";
 import { RelatedProductsSection } from "@/components/RelatedProductsSection";
+import { OutOfStockHelp } from "@/components/products/OutOfStockHelp";
 import { ProductReviews } from "@/components/reviews/ProductReviews";
 import {
   StorefrontSalesProvider,
@@ -36,6 +37,7 @@ import { PriceHoldProvider } from "@/lib/price-hold";
 import { getStorefrontSeed } from "@/lib/storefront-seed.functions";
 import { breadcrumbJsonLd, jsonLdText, productJsonLd } from "@/lib/structured-data";
 import { breadcrumbTrail } from "@/lib/seo-urls";
+import { resolveCondition } from "@/lib/product-facts";
 
 /**
  * חלק 21: JSON-LD לעמוד מוצר — Product + Offer (מחיר, זמינות במלאי, תמונות)
@@ -56,6 +58,9 @@ function productStructuredData(seo: ProductSeo): { type: string; children: strin
     barcode: seo.barcode,
     saleEndsAt: seo.saleEndsAt,
     rating: seo.rating,
+    // מיגרציה 207: המותג של המוצר (לא שם החנות) והמצב (מה שנקבע, אחרת לפי המילים בשם / בקטגוריה)
+    brand: seo.brand,
+    condition: seo.condition,
   });
   const scripts = [{ type: "application/ld+json", children: jsonLdText(product) }];
   if (seo.origin) {
@@ -87,9 +92,28 @@ import { attributeNames, hasVariants, variantAttributesOf, variantLabel } from "
  */
 type ProductRouteData = ProductSeo & { seed: StorefrontSeed | null };
 
+/**
+ * המותג והמצב שמוצגים בעמוד — אותו מקור כמו הנתונים המובנים: המותג רק כשנשמר; המצב — מה שבעל החנות קבע,
+ * או "מחודש" / "משומש" כשכתוב כך בשם / בקטגוריה (חדש כברירת מחדל לא מקבל שורה)
+ */
+function productFacts(seo: ProductSeo | undefined): {
+  brand: string | null;
+  condition: string | null;
+} {
+  if (!seo) return { brand: null, condition: null };
+  const inferred = resolveCondition(seo.condition, seo.name, seo.category);
+  return {
+    brand: seo.brand,
+    condition: seo.condition ?? (inferred === "new" ? null : inferred),
+  };
+}
+
+/** חלופות למוצר שאזל — בלי הקישורים הידניים (רק אותה קטגוריה, במלאי) */
+const NO_LINKS = new Map<string, string[]>();
+
 export const Route = createFileRoute("/product/$productId")({
   ssr: true,
-  loader: async ({ params, context }): Promise<ProductRouteData | null> => {
+  loader: async ({ params, context }): Promise<ProductRouteData> => {
     const [seo, seed] = await Promise.all([
       getProductSeo({ data: { id: params.productId } }),
       // רק בטעינה הראשונה (בשרת), רק בחנות; בניווט בתוך האתר — הדפדפן טוען בעצמו, כמו קודם
@@ -97,7 +121,11 @@ export const Route = createFileRoute("/product/$productId")({
         ? getStorefrontSeed({ data: { productId: params.productId } })
         : Promise.resolve(null),
     ]);
-    return seo ? { ...seo, seed } : null;
+    // מוצר שלא קיים / הוסתר / נמחק — 404 אמיתי (לא "soft 404": 200 עם noindex). גוגל מוציא כתובת
+    // כזו מהאינדקס בלי לבזבז עליה סריקות. מוצר שאזל מהמלאי — קיים (200), ראו OutOfStockHelp.
+    // תקלה במסד — שגיאה (500, גוגל ינסה שוב), לא 404 (getProductSeo זורק)
+    if (!seo) throw notFound();
+    return { ...seo, seed };
   },
   head: ({ loaderData }) => {
     if (!loaderData) {
@@ -132,6 +160,7 @@ export const Route = createFileRoute("/product/$productId")({
     };
   },
   component: ProductPage,
+  notFoundComponent: ProductNotFound,
 });
 
 function ProductPage() {
@@ -222,9 +251,21 @@ function ProductPageBody() {
     });
   };
 
-  // חלק 34: מוצרים נלווים — מה שהמנהל קישר (ואם לא — מאותה קטגוריה)
+  // חלק 34: מוצרים נלווים — מה שהמנהל קישר (ואם לא — מאותה קטגוריה).
+  // מוצר שאזל: קודם חלופות שיש במלאי מאותה קטגוריה (אביזרים למוצר שאי אפשר לקנות פחות עוזרים) —
+  // אותה רשימה כמו ב-HTML מהשרת (הזרע: אותה קטגוריה, במלאי), כך שהאזור לא קופץ כשהקטלוג נטען
   const related = useMemo(() => {
-    if (!product) return { items: [] as CatalogItem[], linked: false };
+    if (!product) return { items: [] as CatalogItem[], linked: false, alternatives: false };
+    if (product.is_out_of_stock) {
+      const alternatives = recommendForProduct(product, {
+        catalog: products,
+        catalogById,
+        related: NO_LINKS,
+        limit: RELATED_GRID_LIMIT,
+      });
+      if (alternatives.length > 0)
+        return { items: alternatives, linked: false, alternatives: true };
+    }
     const items = recommendForProduct(product, {
       catalog: products,
       catalogById,
@@ -234,7 +275,7 @@ function ProductPageBody() {
     const linked = (sales.related.get(product.id) ?? []).some((id) =>
       items.some((item) => item.id === id),
     );
-    return { items, linked };
+    return { items, linked, alternatives: false };
   }, [product, products, catalogById, sales.related]);
 
   const subtree = useCallback((name: string) => subtreeNames(categoryTree, name), [categoryTree]);
@@ -331,11 +372,20 @@ function ProductPageBody() {
                   }
                   // בעמוד: רשת מלאה של מוצרים נלווים מתחת לפרטים (במקום השורה הקטנה)
                   showRecommendations={false}
+                  facts={productFacts(seo)}
                 />
+                {/* מוצר שאזל — לא מבוי סתום: חלופות, הקטגוריה, ולשאול את החנות */}
+                {product.is_out_of_stock && (
+                  <OutOfStockHelp
+                    category={product.category}
+                    hasAlternatives={related.alternatives}
+                  />
+                )}
                 {/* חלק 34: מוצרים נלווים (Upsell) */}
                 <RelatedProductsSection
                   items={related.items}
                   linked={related.linked}
+                  alternatives={related.alternatives}
                   category={product.category}
                   canAdd={canAddToCart}
                   addLabel={addLabel}
@@ -349,22 +399,51 @@ function ProductPageBody() {
               </div>
             </StorefrontSalesProvider>
           ) : (
-            <Card className="mx-auto max-w-xl border-dashed">
-              <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
-                <PackageX className="size-10 text-muted-foreground" aria-hidden="true" />
-                <p className="text-lg font-semibold text-foreground">המוצר לא נמצא</p>
-                <p className="text-sm text-muted-foreground">
-                  ייתכן שהמוצר הוסר מהחנות או שאינו זמין כרגע.
-                </p>
-                <Button asChild>
-                  <Link to="/">לכל המוצרים</Link>
-                </Button>
-              </CardContent>
-            </Card>
+            <ProductMissingCard />
           )}
         </StorefrontMain>
         <AppFooter wide />
       </div>
     </PriceHoldProvider>
+  );
+}
+
+/** "המוצר לא נמצא" — הכרטיס (גם כשהמוצר נעלם אחרי שהעמוד נטען, למשל הוסתר בינתיים) */
+function ProductMissingCard({ heading = false }: { heading?: boolean }) {
+  const Title = heading ? "h1" : "p";
+  return (
+    <Card className="mx-auto max-w-xl border-dashed">
+      <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+        <PackageX className="size-10 text-muted-foreground" aria-hidden="true" />
+        <Title className="text-lg font-semibold text-foreground">המוצר לא נמצא</Title>
+        <p className="text-sm text-muted-foreground">
+          ייתכן שהמוצר הוסר מהחנות או שאינו זמין כרגע.
+        </p>
+        <Button asChild>
+          <Link to="/">לכל המוצרים</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * 404 של עמוד מוצר — בתוך המסגרת של החנות (כותרת, חיפוש, תחתית), כמו קודם, רק שהשרת מחזיר
+ * עכשיו סטטוס 404. מוצרים מוסתרים לא מוצגים לאף אחד (get_catalog מסנן is_hidden גם למנהלים),
+ * כך שאין כאן מה לטעון בדפדפן.
+ */
+function ProductNotFound() {
+  const { session, role } = useAuthState();
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
+  return (
+    <div className="flex min-h-screen flex-col bg-background">
+      <SiteHeader role={role} email={session?.user.email ?? null} onSignOut={signOut} wide search />
+      <StorefrontMain width="wide" className="py-5 sm:py-8" contentClassName="space-y-4">
+        <ProductMissingCard heading />
+      </StorefrontMain>
+      <AppFooter wide />
+    </div>
   );
 }

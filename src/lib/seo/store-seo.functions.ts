@@ -32,7 +32,7 @@ export interface StoreSeoProposal {
   id: string;
   target_kind: "store" | "product" | "category";
   target_id: string | null;
-  field: "seo_title" | "seo_description" | "seo_keywords";
+  field: "seo_title" | "seo_description" | "seo_keywords" | "brand" | "item_condition";
   proposed: string;
   base: string;
   reason: string | null;

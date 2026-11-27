@@ -6,6 +6,8 @@
 // a PENDING proposal (public.store_seo_proposals_add, only for empty fields in the automatic runs): nothing is
 // written to the store without the owner's approval (or the owner's own auto switch, empty fields only).
 
+import { brandFromName, conditionFromWords } from "@/lib/product-facts";
+
 export interface StoreSnapshot {
   store: {
     name: string | null;
@@ -32,12 +34,21 @@ export interface StoreSnapshot {
     seo_description: string | null;
     seo_keywords: string | null;
   }[];
+  /** migration 207: products missing a brand or a condition; `blocked` = fields with an open / rejected proposal */
+  facts?: {
+    id: string;
+    name: string;
+    category: string | null;
+    brand: string | null;
+    item_condition: string | null;
+    blocked?: string[];
+  }[];
 }
 
 export interface StoreProposalItem {
   target_kind: "store" | "product" | "category";
   target_id: string | null;
-  field: "seo_title" | "seo_description" | "seo_keywords";
+  field: "seo_title" | "seo_description" | "seo_keywords" | "brand" | "item_condition";
   text: string;
   reason: string;
   source: "template" | "ai";
@@ -215,6 +226,46 @@ export function storeTemplateProposals(snap: StoreSnapshot): StoreProposalItem[]
           reason: own
             ? "המשפט הראשון מתיאור המוצר שכתבתם"
             : "שם המוצר, הקטגוריה והחנות (אין תיאור למוצר)",
+        });
+    }
+  }
+  return out;
+}
+
+/**
+ * Migration 207: the product's brand and condition — facts, so only from what the owner already wrote: a known brand
+ * in the product's own name (not the store's name, not a guess), and "מחודש" / "משומש" / "יד שנייה" in the product's
+ * name or its category. Pending proposals only (never applied automatically); the owner approves, edits or rejects.
+ */
+export function catalogFactProposals(facts: StoreSnapshot["facts"]): StoreProposalItem[] {
+  const out: StoreProposalItem[] = [];
+  for (const f of facts ?? []) {
+    const blocked = new Set(f.blocked ?? []);
+    if (!clean(f.brand) && !blocked.has("brand")) {
+      const hit = brandFromName(f.name);
+      if (hit)
+        out.push({
+          target_kind: "product",
+          target_id: f.id,
+          field: "brand",
+          text: hit.brand,
+          source: "template",
+          reason: `המותג «${clean(hit.matched)}» כתוב בשם המוצר. אם המוצר הוא של יצרן אחר (למשל אביזר תואם) — לדחות או לתקן`,
+        });
+    }
+    if (!clean(f.item_condition) && !blocked.has("item_condition")) {
+      const condition = conditionFromWords(f.name, f.category);
+      if (condition)
+        out.push({
+          target_kind: "product",
+          target_id: f.id,
+          field: "item_condition",
+          text: condition,
+          source: "template",
+          reason:
+            condition === "refurbished"
+              ? "כתוב «מחודש» בשם המוצר או בקטגוריה — בגוגל המוצר יסומן כמחודש (ולא כחדש)"
+              : "כתוב «משומש» / «יד שנייה» בשם המוצר או בקטגוריה — בגוגל המוצר יסומן כמשומש (ולא כחדש)",
         });
     }
   }

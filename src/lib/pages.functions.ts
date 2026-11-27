@@ -49,8 +49,9 @@ export const getStorePageSeo = createServerFn({ method: "GET" })
         .maybeSingle(),
     ]);
     if (error) {
+      // תקלה במסד ≠ "העמוד לא קיים": שגיאה (500), לא null (404)
       console.error("[pages] lookup failed", error.message);
-      return null;
+      throw new Error("page lookup failed");
     }
     if (!page) return null;
 
