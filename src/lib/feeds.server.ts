@@ -398,6 +398,8 @@ export type LlmsInput = {
   name: string;
   description: string;
   keywords: string;
+  /** פרטי הקשר שהחנות כבר מציגה לכל גולש (תחתית האתר, צור קשר): [תווית, ערך]; ריק — לא נכתב */
+  facts?: [string, string | null | undefined][];
   pages: { slug: string; title: string }[];
   categories: string[];
   products: { id: string; name: string; category: string }[];
@@ -422,6 +424,14 @@ export function renderLlmsTxt(input: LlmsInput): string {
   const lines = [`# ${mdText(input.name)}`, ""];
   if (input.description) lines.push(`> ${mdText(input.description)}`, "");
   if (input.keywords) lines.push(`מילות מפתח: ${mdText(input.keywords)}`, "");
+  const facts = (input.facts ?? [])
+    .map(([label, value]) => [label, mdText(value ?? "")] as const)
+    .filter(([, value]) => value !== "");
+  if (facts.length > 0) {
+    lines.push("## פרטי העסק");
+    for (const [label, value] of facts) lines.push(`- ${label}: ${value}`);
+    lines.push("");
+  }
   lines.push("## עמודי האתר");
   lines.push(`- [דף הבית](${input.origin}/)`);
   for (const [path, title] of LLMS_FIXED_PAGES) lines.push(`- [${title}](${input.origin}${path})`);
@@ -456,7 +466,9 @@ async function llmsTxt(origin: string): Promise<string | null> {
     await Promise.all([
       supabaseAdmin
         .from("site_settings")
-        .select("business_name, seo_title, seo_description, seo_keywords, llms_txt_enabled")
+        .select(
+          "business_name, seo_title, seo_description, seo_keywords, llms_txt_enabled, business_address, business_phone, support_phone, business_email, business_hours",
+        )
         .eq("id", true)
         .maybeSingle(),
       supabaseAdmin.from("categories").select("name, parent_name"),
@@ -495,6 +507,13 @@ async function llmsTxt(origin: string): Promise<string | null> {
       DEFAULT_STORE_NAME,
     description: settings.seo_description?.trim() ?? "",
     keywords: settings.seo_keywords?.trim() ?? "",
+    // אותם פרטים כמו בתחתית האתר ובעמוד צור קשר (כבר ציבוריים) — כדי שכלי AI יענו נכון "איך יוצרים קשר"
+    facts: [
+      ["כתובת", settings.business_address],
+      ["טלפון", settings.support_phone?.trim() || settings.business_phone],
+      ["אימייל", settings.business_email],
+      ["שעות פעילות", settings.business_hours],
+    ],
     pages: pages ?? [],
     categories: [...withProducts].sort((a, b) => a.localeCompare(b, "he")),
     products: list,

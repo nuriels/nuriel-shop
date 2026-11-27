@@ -1,7 +1,7 @@
 // שער הבקשות לאתר עסק (Nuriel Websites, Stage 1):
 //   • פונקציות שרת → ממשיכות (המתג engine-guard מחליט לכל קריאה);
 //   • robots.txt → Disallow: / כל עוד האתר לא פורסם; אחרי הפרסום — האתר פתוח, בלי /studio, עם Sitemap;
-//   • sitemap.xml → רק כשהאתר פורסם (העמודים של הגרסה המפורסמת); אחרת 404. llms.txt / קבצי אימות — 404
+//   • sitemap.xml ו-llms.txt → רק כשהאתר פורסם (הגרסה המפורסמת); אחרת 404. קבצי אימות — 404
 //     (SEO מלא — Stage 4);
 //   • ממשק הניהול (/studio/**) והכניסה (/admin-handoff) → ממשיכים, רק כשהמנוע פעיל לאתר;
 //     /admin (הנחיתה של ה-handoff) → 302 ל-/studio; אתר מושעה → "האתר מושעה" (403);
@@ -103,6 +103,7 @@ export function hostRedirect(
     (isPublicPagePath(pathname) && !isInternalSitePath(pathname)) ||
     pathname === "/robots.txt" ||
     pathname === "/sitemap.xml" ||
+    pathname === "/llms.txt" ||
     pathname === "/accessibility";
   return isPage ? `${canonicalOrigin.replace(/\/+$/, "")}${pathname}${search}` : null;
 }
@@ -118,6 +119,8 @@ export interface GateOptions {
   siteOrigin?: () => Promise<string | null>;
   /** מפת האתר; null — לא זמינה */
   sitemap?: () => Promise<Response | null>;
+  /** llms.txt מהגרסה המפורסמת; null — לא זמין */
+  llms?: () => Promise<Response | null>;
 }
 
 export async function businessProfileGate(
@@ -151,6 +154,11 @@ export async function businessProfileGate(
     const open = site.status === "active" && (await opts.siteOpen());
     const map = open && request.method === "GET" && opts.sitemap ? await opts.sitemap() : null;
     return map ?? html(open ? NOT_FOUND_HTML : NOT_OPEN_HTML, 404);
+  }
+  if (pathname === "/llms.txt") {
+    const open = site.status === "active" && (await opts.siteOpen());
+    const body = open && request.method === "GET" && opts.llms ? await opts.llms() : null;
+    return body ?? html(open ? NOT_FOUND_HTML : NOT_OPEN_HTML, 404);
   }
 
   if (isStudioPath(pathname) || ADMIN_LANDING.test(pathname)) {

@@ -89,3 +89,24 @@ export async function sitemapResponse(siteId: string): Promise<Response | null> 
     return null;
   }
 }
+
+/** llms.txt של האתר (רק מה שמוצג באתר לכל גולש); null — לא ניתן לבנות (אין כתובת / שגיאה) */
+export async function llmsResponse(siteId: string): Promise<Response | null> {
+  try {
+    const site = await publicSite(siteId);
+    const origin = canonicalOrigin(await currentSiteAddresses(), siteSeo(site));
+    if (!origin) return null;
+    const { siteLlmsTxt } = await import("./llms");
+    return new Response(siteLlmsTxt(site, origin), {
+      status: 200,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "public, max-age=300",
+        "x-robots-tag": "noindex",
+      },
+    });
+  } catch (error) {
+    console.error("[hospitality/seo] llms.txt failed", error);
+    return null;
+  }
+}

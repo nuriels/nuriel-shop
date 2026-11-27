@@ -32,6 +32,7 @@ export const businessProfileEngine: Engine = {
       siteOpen: () => siteEnabled(site.id),
       siteOrigin: async () => (await import("./data/seo.server")).canonicalSiteOrigin(),
       sitemap: async () => (await import("./data/seo.server")).sitemapResponse(site.id),
+      llms: async () => (await import("./data/seo.server")).llmsResponse(site.id),
     });
   },
 };

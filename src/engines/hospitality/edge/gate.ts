@@ -68,6 +68,8 @@ export interface GateOptions {
   siteOrigin?: () => Promise<string | null>;
   /** E5: מפת האתר; null — לא זמינה (404) */
   sitemap?: () => Promise<Response | null>;
+  /** llms.txt — תקציר ציבורי לכלי AI (כמו מפת האתר: רק כשהאתר פתוח); null — לא זמין (404) */
+  llms?: () => Promise<Response | null>;
 }
 
 export async function hospitalityGate(
@@ -102,6 +104,15 @@ export async function hospitalityGate(
     const map = open && request.method === "GET" && opts.sitemap ? await opts.sitemap() : null;
     if (map) return map;
     return html(open ? NOT_FOUND_HTML : NOT_OPEN_HTML, 404);
+  }
+  if (request.pathname === "/llms.txt") {
+    const open = site.status === "active" && (await siteOpen());
+    const body = open && request.method === "GET" && opts.llms ? await opts.llms() : null;
+    if (body) return body;
+    return new Response("Not found\n", {
+      status: 404,
+      headers: { "content-type": "text/plain; charset=utf-8", "x-robots-tag": "noindex" },
+    });
   }
   // A1: האייקונים, תמונת השיתוף והמניפסט מהלוגו (/stay/brand/…) — באתר פעיל שהאתר הציבורי או אזור
   // הניהול שלו פתוחים (גם מסך הבית של הניהול). אחרת — 404 כמו כל קובץ, בלי לחשוף כלום.

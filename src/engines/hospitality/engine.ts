@@ -47,6 +47,7 @@ export const hospitalityEngine: Engine = {
       // E5: מפת האתר והכתובת הקנונית (robots.txt) — רק כשהאתר פתוח (השער בודק)
       siteOrigin: async () => (await import("./website/seo.server")).canonicalSiteOrigin(site.id),
       sitemap: async () => (await import("./website/seo.server")).sitemapResponse(site.id),
+      llms: async () => (await import("./website/seo.server")).llmsResponse(site.id),
     });
   },
 };
