@@ -229,7 +229,8 @@ test("stores and zimmer sites are unchanged: no rewrite, no studio, the store ho
   expect(storeHome.status()).toBe(200);
   expect(await storeHome.text()).not.toContain("bps-");
   await page.goto(A("/studio"));
-  await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
+  // the root 404 page — in Hebrew now (crawl parity: it was "Page not found")
+  await expect(page.getByRole("heading", { name: "העמוד לא נמצא" })).toBeVisible();
   await page.goto(A("/"));
   await expect(page.locator('meta[name="nuriel-site-type"]')).toHaveCount(0);
   // the business site's public read never answers on a store address

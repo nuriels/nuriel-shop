@@ -87,20 +87,27 @@ test.describe("store pages are rendered on the server (what Google gets without 
   });
 
   test("tenant isolation: each store's HTML has only its own products", async ({ request }) => {
-    for (const path of ["/", `/product/${PRODUCTS.a1.id}`, `/product/${PRODUCTS.b1.id}`]) {
+    for (const path of ["/", `/product/${PRODUCTS.a1.id}`]) {
       const { html } = await serverHtml(request, KOBI, path);
       expect(html, path).not.toContain(PRODUCTS.b1.name);
       expect(html, path).not.toContain(PRODUCTS.b1.sku);
     }
-    for (const path of ["/", `/product/${PRODUCTS.b1.id}`, `/product/${PRODUCTS.a1.id}`]) {
+    for (const path of ["/", `/product/${PRODUCTS.b1.id}`]) {
       const { html } = await serverHtml(request, STOREB, path);
       expect(html, path).not.toContain(PRODUCTS.a1.name);
       expect(html, path).not.toContain(PRODUCTS.a2.name);
     }
-    // מוצר של חנות אחרת — "לא נמצא" (noindex), בלי שום פרט שלו
-    const cross = await serverHtml(request, KOBI, `/product/${PRODUCTS.b1.id}`);
-    expect(cross.html).toContain('<meta name="robots" content="noindex"/>');
-    expect(cross.h1).toHaveLength(0);
+    // מוצר של חנות אחרת — 404 אמיתי (השוואת iStores: היה 200 + noindex), "המוצר לא נמצא", בלי שום פרט שלו
+    for (const [host, other, hidden] of [
+      [KOBI, PRODUCTS.b1.id, [PRODUCTS.b1.name, PRODUCTS.b1.sku]],
+      [STOREB, PRODUCTS.a1.id, [PRODUCTS.a1.name, PRODUCTS.a2.name]],
+    ] as const) {
+      const res = await hostGet(request, host, `/product/${other}`);
+      expect(res.status(), `${host} /product/${other}`).toBe(404);
+      const html = await res.text();
+      expect(html).toContain("המוצר לא נמצא");
+      for (const text of hidden) expect(html).not.toContain(text);
+    }
   });
 
   test("maintenance mode: only the maintenance screen — no products in the HTML", async ({
