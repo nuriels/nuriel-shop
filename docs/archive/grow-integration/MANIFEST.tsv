@@ -1,0 +1,45 @@
+# Grow integration archive manifest — base commit 910b1f9
+# category	path	git-blob-sha1
+# A=Grow-only code  H=history display (keep in active)  S=shared touch point  G=generated  D=migration  T=test/tooling  E=env/deploy  X=doc
+A	src/lib/grow.server.ts	5087275dea84e5aa9cdb39560391c8e9fe3d512d
+A	src/lib/grow-payments.functions.ts	55b4f740e1910b78079c7e2935cdb9af3cc48342
+A	src/lib/grow-webhook.server.ts	fe8cfd09c29b49f8b27f04222270a8c07437bde9
+A	src/lib/grow-crypto.server.ts	9e25cdf227f01a693c7c84ca405458dbf2580b0a
+A	src/lib/platform-grow.functions.ts	ad06884252770d72131c64ad49763542692b58c1
+A	src/routes/api.webhooks.grow.ts	845a7ee2da4248f24acdb51e0c70983dd3083a7c
+A	src/routes/checkout_.grow.$orderId.tsx	c1c5be00d450bdc8dab61a79b117ef23d7dd1861
+A	src/components/checkout/GrowPaymentPage.tsx	d25da6ef1f88710355ad3e0470d33c20e92ce40a
+H	src/components/orders/GrowPaymentInfo.tsx	1ec4d692573249520e8dd760e4f642373f643443
+S	src/routes/checkout.tsx	045a6a5c550b5f19e12c5091f6e1fcf5982e0f73
+S	src/components/platform/CustomerFile.tsx	a8a54c56058c4ed74c5031152680493afa3313f7
+S	src/lib/checkout.functions.ts	d1104cf01b6af78ea513405393d738fa7d10fc2b
+S	src/lib/checkout.ts	1765e427bc325b3b02b9cf779e38266564635f2d
+S	src/platform/engines/shared-functions.ts	71c7d45a8a2d436639ba1017fc8076fa43e9182f
+H	src/components/OrderManagementPanel.tsx	00d6066135e05fe3a0031842e8e80b5ec3e5efff
+H	src/lib/bit-payments.ts	526f53c9a24f519f7b4ff756f76d749916632e02
+H	src/lib/orders.ts	b36c45984b6c26e5d8eaca2e53243c125dc73cf4
+H	src/lib/order-email-data.server.ts	c94580befafd5545537dfd6b055b95b6848ab263
+H	src/lib/order-emails.server.ts	a25537c919a4c7d547503da26ac4a49191b5768a
+H	src/server/services/notifications.ts	42f14ca87a419c2f8b746adbe4a794f2ef027316
+H	src/platform/analytics/gtm.ts	c45bbdda4d15a0664a3437705d03f29e44f65903
+G	src/routeTree.gen.ts	737b0d2af60c0c69aa4b3ab35b217c574907cdf7
+G	src/integrations/supabase/types.ts	51b424fcdf553598c8a5776e7900827d70bef48f
+D	supabase/migrations/20261019520000_grow_payments.sql	e7abc64c6181757628a5ad0889e97a8dfaff2793
+D	supabase/migrations/20261101100000_ecommerce_engine_guard.sql	58ad1cd1dcdca79cc302609b6b99097494ac4e9b
+T	tests/unit/grow-webhook-failure.test.ts	0721f7bee6eb92655dbe737a3ee0e5455b5d3da0
+T	tests/unit/grow-paid-late-alert.test.ts	d86f8be6a50d8acb741c5618cc0afc0502b527fb
+T	tests/unit/gtm.test.ts	2fcc0861efe008f0af7e0fc9af97ed43ba7d0c01
+T	tests/unit/env-forwarding.test.ts	fd7a5693f732df44d29d568036a576da93522f17
+T	scripts/db-tests/grow-payments.test.sql	4365ab0a2d40e3ebaeafc14d2e0f2b4c46a5ce8c
+T	scripts/db-tests/ecommerce-engine-guard.test.sql	83462d289d3aad489443c22ed9386b245546c633
+T	scripts/db-tests/db-classification.test.sql	b43c6d12b54ee1c05127eccccfc9dba5dc0e24dc
+T	scripts/db-classification.mjs	a617dc614f9c7e024caf26a488903ff138f3b846
+T	e2e/scripts/mock-services.mjs	597dbbe311e30d219c4de056995f812207efdc2c
+T	e2e/scripts/app-up.sh	a6df2f113eeed4f7868876c9982c76016ff5654c
+T	e2e/tests/cart-checkout.spec.ts	8f8a10c98b24b1b734d7505efba87d458027603d
+E	docker-compose.yml	1146f8904fe60b4ceb2dad6472859439537e058e
+E	.env.example	270ed4dfe72a59c9dcdb0f3fa0edc491a2ceed02
+E	deploy/backup-daily.sh	2063ae4e50c5123400620e24336a3c58910e2a66
+X	docs/audit/GROW-VERIFICATION.md	24850fea075b6cc0ca54f5817eeab99ecd278c48
+X	docs/audit/SECURITY-FINDINGS.md	089116c822686396dbde352aec94f3f57961f449
+E	deploy/setup-selfhost.sh	(not hashed here: generates GROW_SECRETS_KEY once; see README)
