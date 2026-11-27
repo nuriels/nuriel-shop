@@ -32,19 +32,19 @@
 ### ב. הצגת היסטוריה (קטגוריה H) — נשארים גם בענף הפעיל
 
 הם מציגים הזמנות Grow ישנות, ולכן **לא מוציאים אותם:**
-- `src/components/orders/GrowPaymentInfo.tsx`, ושימוש בו ב-`src/components/OrderManagementPanel.tsx:36,783`;
+- `src/components/orders/GrowPaymentInfo.tsx`, ושימוש בו ב-`src/components/OrderManagementPanel.tsx:36,782-783`;
 - תוויות: `src/lib/bit-payments.ts:17,30,52`;
-- טיפוסים ועמודות: `src/lib/orders.ts:314,324-327,338`;
-- מיילים: `src/lib/order-email-data.server.ts:99,293-295`, ‏`src/lib/order-emails.server.ts:82`, ‏`src/server/services/notifications.ts:396`;
+- טיפוסים ועמודות: `src/lib/orders.ts:314,323-327,338`;
+- מיילים: `src/lib/order-email-data.server.ts:64-67,99,184,266,293-295`, ‏`src/lib/order-emails.server.ts:82-97`, ‏`src/server/services/notifications.ts:341-343,396-401`;
 - Analytics: `src/platform/analytics/gtm.ts:92,99`, שמנקה כתובות `/checkout/grow/...`.
 
 ### ג. נקודות חיבור בקבצים משותפים (קטגוריה S)
 
 | קובץ | שורות |
 | --- | --- |
-| `src/routes/checkout.tsx` | 91, ‏237–243 (טעינת הזמינות), ‏340, ‏348 (כפתור הבחירה), ‏783, ‏816, ‏828 (מעבר לעמוד התשלום), ‏913, ‏1475–1546 (טקסטים) |
-| `src/components/platform/CustomerFile.tsx` | 36–40, ‏102–110 (תוויות יומן), ‏185, ‏278–279 (הלשונית), ‏821–1019 (תוכן הלשונית) |
-| `src/lib/checkout.functions.ts` | 51, ‏141, ‏144, ‏154 |
+| `src/routes/checkout.tsx` | 91, ‏236–243 (טעינת הזמינות), ‏340–349 (הבחירה), ‏783, ‏816–828, ‏853, ‏867, ‏913–914 (מעבר לעמוד התשלום), ‏1475–1546 ו-1662–1685 (טקסטים וכפתורים) |
+| `src/components/platform/CustomerFile.tsx` | 36–40, ‏102–110 (תוויות יומן), ‏185, ‏278–279 (הלשונית), ‏820–1029 (תוכן הלשונית: `GROW_TYPES` ו-`GrowTab`) |
+| `src/lib/checkout.functions.ts` | 51, ‏140–144, ‏154 |
 | `src/lib/checkout.ts` | 157 (`PaymentMethodChoice`) |
 | `src/platform/engines/shared-functions.ts` | 22 (רשימת הפונקציות המשותפות) |
 
