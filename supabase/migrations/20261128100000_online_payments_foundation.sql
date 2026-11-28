@@ -724,9 +724,11 @@ BEGIN
   IF _terminal IS NULL THEN
     RETURN;
   END IF;
+  -- no conflict target: a racing registration of the same number may hit any of the three unique keys first
+  -- (online-payments-concurrency.sh C9); the loser then reads the winner's row below and gets the clear message
   INSERT INTO payments.terminal_registry (provider, terminal_number, scope, tenant_id, registered_by)
   VALUES (_provider, _terminal, _scope, CASE WHEN _scope = 'tenant' THEN _tenant END, _actor)
-  ON CONFLICT (provider, terminal_number) DO NOTHING;
+  ON CONFLICT DO NOTHING;
   SELECT * INTO r FROM payments.terminal_registry x WHERE x.provider = _provider AND x.terminal_number = _terminal;
   IF r.scope IS DISTINCT FROM _scope OR r.tenant_id IS DISTINCT FROM (CASE WHEN _scope = 'tenant' THEN _tenant END) THEN
     RAISE EXCEPTION 'this terminal number is already registered to %',
