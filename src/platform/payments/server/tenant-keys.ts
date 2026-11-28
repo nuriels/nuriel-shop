@@ -4,8 +4,9 @@
  * • Root: PAYMENTS_SECRETS_KEY, read in this file and nowhere else (U17-B6). No fallback to any other secret:
  *   without it (or with fewer than 32 characters) nothing can be sealed or opened.
  * • HKDF info "nuriel/payments/v1/<env>/tenant/<mode>"; AAD
- *   "<env>|tenant|<tenantId>|max|<mode>|<accountId>|<field>|<kid>". A token copied to another store, account,
- *   field, mode, scope or environment does not open.
+ *   "<env>|tenant|<tenantId>|max|<mode>|<accountId>|<field>|<kid>". accountId is a UUID: the store's id for its
+ *   terminal credentials (one terminal per store), the attempt id for an encrypted raw return. A token copied
+ *   to another store, account, field, mode, scope or environment does not open.
  * • DEMO works only with `test`, production only with `live` (decision ה-4, DM-ENV-3): any other pair is refused
  *   here too, so a DEMO instance cannot even build a key for live credentials.
  * • Callers check paymentsReady("tenant") (env.ts) first: it adds the checks that need the other secrets

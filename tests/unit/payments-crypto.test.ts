@@ -11,10 +11,15 @@ import {
   safeEqual,
   seal,
 } from "@/platform/payments/server/crypto";
-import { platformSecretCipher, stepupKey } from "@/platform/payments/server/platform-keys";
+import {
+  PLATFORM_ACCOUNT_ID,
+  platformSecretCipher,
+  stepupKey,
+} from "@/platform/payments/server/platform-keys";
 import { tenantSecretCipher } from "@/platform/payments/server/tenant-keys";
 
 const root = () => randomBytes(32).toString("hex");
+/** exactly the CHECK of migration 208 on every *_enc column (and key_id = split_part(token, ':', 2)) */
 const TOKEN = /^v1:[0-9a-f]{8}:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:[A-Za-z0-9_-]+$/;
 const DECRYPT_FAILED = "payments: decrypt failed";
 
@@ -67,7 +72,7 @@ describe("crypto primitives", () => {
     expect(a.split(":")[1]).toBe("0a1b2c3d");
     expect(open(key, a, "aad")).toBe("fake-terminal-password");
     expect(open(key, b, "aad")).toBe("fake-terminal-password");
-    expect(open(key, seal(key, "שלום ✓", "aad", "k1"), "aad")).toBe("שלום ✓");
+    expect(open(key, seal(key, "שלום ✓", "aad", "ffff0000"), "aad")).toBe("שלום ✓");
     expect(a).not.toContain("fake-terminal-password");
   });
 
@@ -108,11 +113,16 @@ describe("crypto primitives", () => {
   it("DM-ENV-4: seal refuses a bad key, kid or empty / oversized plaintext (fixed message)", () => {
     const key = randomBytes(32);
     for (const call of [
-      () => seal(randomBytes(31), "x", "a", "k"),
+      () => seal(randomBytes(31), "x", "a", "0a1b2c3d"),
       () => seal(key, "x", "a", "bad:kid"),
       () => seal(key, "x", "a", ""),
-      () => seal(key, "", "a", "k"),
-      () => seal(key, "x".repeat(64 * 1024 + 1), "a", "k"),
+      // the kid is exactly 8 lower-case hex (the DB key_id CHECK)
+      () => seal(key, "x", "a", "0A1B2C3D"),
+      () => seal(key, "x", "a", "0a1b2c3"),
+      () => seal(key, "x", "a", "0a1b2c3d4"),
+      () => seal(key, "x", "a", "kid-0001"),
+      () => seal(key, "", "a", "0a1b2c3d"),
+      () => seal(key, "x".repeat(64 * 1024 + 1), "a", "0a1b2c3d"),
     ]) {
       expect(call).toThrowError(/^payments: encrypt failed$/);
     }
@@ -128,10 +138,14 @@ describe("crypto primitives", () => {
     expect(safeEqual("short", "a much longer value")).toBe(false);
   });
 
-  it("DM-ENV-4: kid = the first 8 hex of HMAC-SHA256(root, 'kid')", () => {
+  it("DM-ENV-4: kid = the first 8 hex of HMAC-SHA256(root, 'kid'), always 8 lower-case hex", () => {
     const r = root();
     expect(keyIdOf(r)).toBe(createHmac("sha256", r).update("kid").digest("hex").slice(0, 8));
     expect(keyIdOf(r)).not.toBe(keyIdOf(root()));
+    for (let i = 0; i < 300; i++) {
+      const any = randomBytes(24 + (i % 40)).toString(i % 2 ? "base64" : "latin1");
+      expect(keyIdOf(any)).toMatch(/^[0-9a-f]{8}$/);
+    }
   });
 });
 
@@ -290,6 +304,97 @@ describe("DM-ENV-4: ciphertext is bound to environment, scope, store, mode, acco
         accountId: account,
       }),
     ).toBe("fake-key-6");
+  });
+
+  it("DM-ENV-4: every token of both ciphers matches the DB CHECK; key_id = part 2 = cipher.kid", () => {
+    const tenant = tenantSecretCipher("demo", "test");
+    const platform = platformSecretCipher("demo", "test");
+    expect(tenant.kid).toBe(keyIdOf(tenantRoot));
+    expect(platform.kid).toBe(keyIdOf(platformRoot));
+    for (let length = 1; length <= 400; length += 7) {
+      const value = randomBytes(length).toString("latin1").slice(0, length) || "x";
+      const t = tenant.seal("api_key", value, { tenantId: tenantA, accountId: tenantA });
+      const p = platform.seal("api_password", value, { accountId: "platform" });
+      for (const [token, kid] of [
+        [t, tenant.kid],
+        [p, platform.kid],
+      ] as const) {
+        expect(token).toMatch(TOKEN);
+        expect(token.split(":")[1]).toBe(kid);
+      }
+      expect(tenant.open("api_key", t, { tenantId: tenantA, accountId: tenantA })).toBe(value);
+      expect(platform.open("api_password", p, { accountId: "platform" })).toBe(value);
+    }
+  });
+
+  it("DM-ENV-4: accountId — the store id (store terminal), 'platform' (NURIEL's terminal), the attempt id (raw return)", () => {
+    const tenant = tenantSecretCipher("demo", "test");
+    const platform = platformSecretCipher("demo", "test");
+    const attempt = randomUUID();
+    // store terminal: accountId = the store's id; a raw return: accountId = the attempt's id
+    const terminal = tenant.seal("api_key", "fake-key-7", {
+      tenantId: tenantA,
+      accountId: tenantA,
+    });
+    const raw = tenant.seal("raw_return", "Id=1&CCode=0", {
+      tenantId: tenantA,
+      accountId: attempt,
+    });
+    expectDecryptFailure(() =>
+      tenant.open("api_key", terminal, { tenantId: tenantA, accountId: attempt }),
+    );
+    expectDecryptFailure(() =>
+      tenant.open("raw_return", raw, { tenantId: tenantA, accountId: tenantA }),
+    );
+    expect(tenant.open("raw_return", raw, { tenantId: tenantA, accountId: attempt })).toBe(
+      "Id=1&CCode=0",
+    );
+    // the tenant scope never takes the literal "platform"
+    expect(() =>
+      tenant.seal("api_key", "x", { tenantId: tenantA, accountId: "platform" }),
+    ).toThrowError("payments: encrypt failed");
+    // NURIEL's terminal: accountId = PLATFORM_ACCOUNT_ID ("platform", exactly), raw returns: the attempt id
+    expect(PLATFORM_ACCOUNT_ID).toBe("platform");
+    const own = platform.seal("api_key", "fake-key-8", { accountId: PLATFORM_ACCOUNT_ID });
+    expect(platform.open("api_key", own, { accountId: "platform" })).toBe("fake-key-8");
+    expect(own).toMatch(TOKEN);
+    // a token sealed for "platform" does not open for an attempt UUID, and the reverse
+    expectDecryptFailure(() => platform.open("api_key", own, { accountId: attempt }));
+    const platformRaw = platform.seal("raw_return", "Id=2&CCode=0", { accountId: attempt });
+    expectDecryptFailure(() =>
+      platform.open("raw_return", platformRaw, { accountId: PLATFORM_ACCOUNT_ID }),
+    );
+    expectDecryptFailure(() =>
+      platform.open("raw_return", platformRaw, { accountId: randomUUID() }),
+    );
+    expect(platform.open("raw_return", platformRaw, { accountId: attempt.toUpperCase() })).toBe(
+      "Id=2&CCode=0",
+    );
+    // exactly "platform" or a UUID: any other value is refused (seal: encrypt failed; open: decrypt failed)
+    const others: unknown[] = [
+      "PLATFORM",
+      "Platform",
+      " platform",
+      "platform ",
+      "platform\n",
+      "platforms",
+      "tenant",
+      "nuriel",
+      "",
+      randomBytes(16).toString("hex"),
+      `{${attempt}}`,
+      attempt.replace(/-/g, ""),
+      42,
+      null,
+      undefined,
+    ];
+    for (const bad of others) {
+      const ctx = { accountId: bad as string };
+      expect(() => platform.seal("api_key", "x", ctx), String(bad)).toThrowError(
+        "payments: encrypt failed",
+      );
+      expectDecryptFailure(() => platform.open("api_key", own, ctx));
+    }
   });
 
   it("DM-ENV-4: no root, a short root or another app secret never stand in (no fallback)", () => {

@@ -4,8 +4,10 @@
  * • hkdfKey: HKDF-SHA256, salt "nuriel-payments", 32 bytes. The root secret and the label are passed in by
  *   tenant-keys.ts / platform-keys.ts; nothing in this file reads the environment.
  * • seal / open: AES-256-GCM, a random 12-byte IV and a 16-byte tag. Token
- *   "v1:<kid>:<iv>:<tag>:<ciphertext>" (base64url, no padding). The header "v1:<kid>" is authenticated together
- *   with the caller's AAD, so a token whose kid was edited fails exactly like any other tampering.
+ *   "v1:<kid>:<iv>:<tag>:<ciphertext>" (base64url, no padding), always matching the DB CHECK
+ *   ^v1:[0-9a-f]{8}:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:[A-Za-z0-9_-]+$ (kid = 8 lower-case hex, non-empty
+ *   plaintext). The header "v1:<kid>" is authenticated together with the caller's AAD, so a token whose kid was
+ *   edited fails exactly like any other tampering.
  * • open never says why: every failure (format, kid, key, tag, AAD) throws the same fixed Error, with no cause.
  * • Nothing here logs. No error message carries a key, a plaintext, an AAD or a token.
  */
@@ -27,7 +29,8 @@ const TAG_BYTES = 16;
 /** terminal credentials and raw returns are small; this only bounds misuse */
 const MAX_PLAINTEXT_BYTES = 64 * 1024;
 const MAX_TOKEN_CHARS = 90_000;
-const KID_FORMAT = /^[A-Za-z0-9_-]{1,32}$/;
+/** = keyIdOf(): 8 lower-case hex, the DB's key_id CHECK (^[0-9a-f]{8}$ = split_part(token, ':', 2)) */
+const KID_FORMAT = /^[0-9a-f]{8}$/;
 const B64URL_FORMAT = /^[A-Za-z0-9_-]+$/;
 /** one AAD part: no separator, no whitespace (UUIDs, env, scope, mode, field names, kid) */
 const AAD_PART = /^[A-Za-z0-9._-]{1,128}$/;
