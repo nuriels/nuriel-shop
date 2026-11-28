@@ -39,7 +39,7 @@ async function allow(key: string, limit: number): Promise<boolean> {
 
 export const getOnlinePaymentOptions = createServerFn({ method: "POST" }).handler(
   async (): Promise<OnlinePaymentOptions> => {
-    const off: OnlinePaymentOptions = { available: false, demo: false };
+    const off: OnlinePaymentOptions = { available: false, demo: false, maxAmountMinor: null };
     if (!(await allow("pay-options", 120))) return off;
     const helpers = await import("@/lib/online-payments.server");
     try {

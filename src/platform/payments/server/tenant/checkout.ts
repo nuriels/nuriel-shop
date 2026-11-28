@@ -15,9 +15,16 @@ import {
   type SignResult,
 } from "@/platform/payments/max/protocol";
 import { paymentsRpc } from "@/platform/payments/server/db";
-import { hypEndpoint, paymentsEnv, paymentsReady } from "@/platform/payments/server/env";
+import {
+  hypEndpoint,
+  modeAllowed,
+  paymentsEnv,
+  paymentsReady,
+  terminalAllowed,
+} from "@/platform/payments/server/env";
 import { hypRequest } from "@/platform/payments/server/http";
 import {
+  DEMO_MAX_AMOUNT_MINOR,
   attemptStateOf,
   type OnlinePaymentOptions,
   type OnlinePaymentView,
@@ -49,9 +56,15 @@ export async function tenantPaymentOptions(
   actorId: string | null,
 ): Promise<OnlinePaymentOptions> {
   const ready = paymentsReady("tenant");
-  if (!ready.ok) return { available: false, demo: false };
+  if (!ready.ok) return { available: false, demo: false, maxAmountMinor: null };
   const answer = await paymentsRpc("max_payments_active", { _tenant: tenantId, _actor: actorId });
-  return { available: answer.error === null && answer.data === true, demo: ready.env === "demo" };
+  const demo = ready.env === "demo";
+  return {
+    available: answer.error === null && answer.data === true,
+    demo,
+    // DEMO = test mode only, and the DB refuses a test payment above ₪50 (L9: never offered above it)
+    maxAmountMinor: demo ? DEMO_MAX_AMOUNT_MINOR : null,
+  };
 }
 
 /**
@@ -127,13 +140,30 @@ export async function startTenantPayment(
   }
 
   let creds;
+  let mode;
   try {
-    ({ creds } = await signCredentials(env, input.tenantId, attemptId));
+    ({ creds, mode } = await signCredentials(env, input.tenantId, attemptId));
   } catch (error) {
     // a payer never sees a terminal-credentials problem (payerMessageKey): it reads "unavailable"
     if (error instanceof TenantPaymentError && error.kind === "credentials")
       throw new TenantPaymentError(UNAVAILABLE, "unavailable");
     throw error;
+  }
+  // tripwires (never proof; the DB enforces): the attempt's own terminal, the environment's prefix and mode
+  // (DM-ENV-3) — as on the platform side (L8)
+  if (
+    creds.masof !== str(opened?.["terminal_number"]) ||
+    !terminalAllowed(env, creds.masof) ||
+    !modeAllowed(env, mode)
+  ) {
+    await paymentsRpc("max_attempt_signed", {
+      _tenant: input.tenantId,
+      _attempt: attemptId,
+      _ok: false,
+      _code: null,
+    });
+    tenantLog.alert("terminal_not_allowed", { attempt: shortId(attemptId), mode });
+    throw new TenantPaymentError(UNAVAILABLE, "unavailable");
   }
   const endpoint = hypEndpoint();
   let sign: SignResult | { ok: false; code: string; ccode?: string };

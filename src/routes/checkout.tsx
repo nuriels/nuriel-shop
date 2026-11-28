@@ -91,7 +91,11 @@ import { getBitPayment } from "@/lib/bit-payments.functions";
 import { getGrowAvailability } from "@/lib/grow-payments.functions";
 import { getOnlinePaymentOptions } from "@/lib/online-payments.functions";
 import { rememberGuestPaymentToken } from "@/lib/online-payments";
-import type { OnlinePaymentOptions } from "@/platform/payments/tenant-views";
+import {
+  ONLINE_OVER_DEMO_CAP,
+  onlineAmountOverCap,
+  type OnlinePaymentOptions,
+} from "@/platform/payments/tenant-views";
 import { DemoBanner } from "@/platform/payments/ui/DemoBanner";
 import {
   bitPageStage,
@@ -250,13 +254,16 @@ function CheckoutPage() {
   const [onlineOptions, setOnlineOptions] = useState<OnlinePaymentOptions>({
     available: false,
     demo: false,
+    maxAmountMinor: null,
   });
   useEffect(() => {
     void getOnlinePaymentOptionsFn()
       .then(setOnlineOptions)
-      .catch(() => setOnlineOptions({ available: false, demo: false }));
+      .catch(() => setOnlineOptions({ available: false, demo: false, maxAmountMinor: null }));
   }, [getOnlinePaymentOptionsFn]);
-  const onlineAvailable = onlineOptions.available;
+  // מעל התקרה של תשלומי בדיקה (DEMO: ₪50) האפשרות מוצגת כלא זמינה, עם הסבר קבוע (נקבע אחרי חישוב הסכום)
+  const [onlineOverCap, setOnlineOverCap] = useState(false);
+  const onlineAvailable = onlineOptions.available && !onlineOverCap;
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
@@ -356,7 +363,10 @@ function CheckoutPage() {
   const payByGrow = kind === "order" && growAvailable && paymentMethod === "grow";
   const payByOnline = kind === "order" && onlineAvailable && paymentMethod === "online";
   const offlineMethodCount =
-    Number(phoneEnabled) + Number(bitEnabled) + Number(growAvailable) + Number(onlineAvailable);
+    Number(phoneEnabled) +
+    Number(bitEnabled) +
+    Number(growAvailable) +
+    Number(onlineOptions.available);
 
   // הבחירה תמיד באחד מהאמצעים הזמינים (למשל: טלפוני כבוי → ביט)
   useEffect(() => {
@@ -483,6 +493,8 @@ function CheckoutPage() {
     vatRate: Number(settings?.vat_rate ?? DEFAULT_VAT_RATE),
   });
   const grandTotal = vat.gross;
+  const onlineCapExceeded = kind === "order" && onlineAmountOverCap(onlineOptions, grandTotal);
+  useEffect(() => setOnlineOverCap(onlineCapExceeded), [onlineCapExceeded]);
   const promotions = useMemo(
     () =>
       kind === "order"
@@ -1611,17 +1623,24 @@ function CheckoutPage() {
                             </span>
                           </label>
                         )}
-                        {onlineAvailable && (
+                        {onlineOptions.available && (
                           <label
-                            className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 transition-colors ${
-                              payByOnline
-                                ? "border-primary bg-primary/5"
-                                : "border-border hover:border-primary/40"
+                            className={`flex items-start gap-3 rounded-xl border-2 p-3 transition-colors ${
+                              onlineOverCap
+                                ? "cursor-not-allowed border-border opacity-80"
+                                : payByOnline
+                                  ? "cursor-pointer border-primary bg-primary/5"
+                                  : "cursor-pointer border-border hover:border-primary/40"
                             }`}
                             data-testid="pay-online-option"
                             data-demo={onlineOptions.demo ? "true" : "false"}
+                            data-available={onlineOverCap ? "false" : "true"}
                           >
-                            <RadioGroupItem value="online" className="mt-1" />
+                            <RadioGroupItem
+                              value="online"
+                              className="mt-1"
+                              disabled={onlineOverCap}
+                            />
                             <CreditCard
                               className="mt-0.5 size-5 shrink-0 text-muted-foreground"
                               aria-hidden="true"
@@ -1633,6 +1652,14 @@ function CheckoutPage() {
                               <span className="block text-xs leading-5 text-muted-foreground">
                                 מעבר לדף תשלום מאובטח. ההזמנה נשמרת וממתינה לתשלום עד שעתיים.
                               </span>
+                              {onlineOverCap && (
+                                <span
+                                  className="block text-xs leading-5 font-medium text-foreground"
+                                  data-testid="pay-online-over-cap"
+                                >
+                                  {ONLINE_OVER_DEMO_CAP}
+                                </span>
+                              )}
                               {onlineOptions.demo && <DemoBanner />}
                             </span>
                           </label>

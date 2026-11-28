@@ -9,10 +9,19 @@
  */
 import type { MaxCredentials, PaymentMode } from "@/platform/payments/provider";
 import { paymentsRpc } from "@/platform/payments/server/db";
-import type { PaymentsEnv } from "@/platform/payments/server/env";
+import { modeAllowed, terminalAllowed, type PaymentsEnv } from "@/platform/payments/server/env";
 import { tenantSecretCipher } from "@/platform/payments/server/tenant-keys";
-import { TenantPaymentError, UNAVAILABLE, asRecord, int, modeOf, str, unwrap } from "./db";
-import { tenantLog } from "./log";
+import {
+  TenantPaymentError,
+  UNAVAILABLE,
+  asRecord,
+  dbUnreachable,
+  int,
+  modeOf,
+  str,
+  unwrap,
+} from "./db";
+import { shortId, tenantLog } from "./log";
 
 const MASOF = /^[0-9]{10}$/;
 export const CREDENTIALS_REFUSED = "יש להזין מחדש את פרטי המסוף של החנות";
@@ -20,7 +29,20 @@ export const CREDENTIALS_REFUSED = "יש להזין מחדש את פרטי המ�
 export type VerifyCredentials =
   | { result: "ok"; creds: MaxCredentials; mode: PaymentMode }
   | { result: "busy"; retryAfterSeconds: number }
-  | { result: "exhausted" };
+  /** 6 VERIFY calls used: the DB parked the attempt in needs_review 'verify_exhausted' */
+  | { result: "exhausted" }
+  /**
+   * the attempt can never be verified as it is: its terminal changed or is no longer configured, the DB refused,
+   * the ciphertext does not open, or a tripwire fired (mode / terminal not for this environment)
+   */
+  | { result: "refused"; reason: "credentials_changed" | "mode_not_allowed" }
+  /** the DB could not be reached: nothing was decided, a later try may succeed */
+  | { result: "unavailable" };
+
+/** the DM-ENV-3 tripwires (never proof; the DB enforces): DEMO = test mode and a 00100… terminal */
+export function envTripwire(env: PaymentsEnv, masof: string, mode: PaymentMode): boolean {
+  return modeAllowed(env, mode) && terminalAllowed(env, masof);
+}
 
 /** ciphertext row → credentials; any problem (format, mode, key, AAD) is one fixed error */
 function decrypt(
@@ -76,27 +98,59 @@ export async function signCredentials(
 
 /**
  * VERIFY credentials of one attempt: the attempt's OWN terminal (the DB refuses when the account moved on).
- * "busy" = another VERIFY holds the 45-second lease; "exhausted" = 6 calls used, the DB parked it for review.
+ * Never throws. "busy" = another VERIFY holds the 45-second lease; "exhausted" = 6 calls used, the DB parked it
+ * for review; "refused" = it can never be verified as it is (the caller puts it in front of a person: M1);
+ * "unavailable" = the DB could not be reached. `terminal` is the attempt's terminal as the DB recorded it (a
+ * tripwire: the credentials must belong to it), null when the caller does not have it.
  */
 export async function verifyCredentials(
   env: PaymentsEnv,
   tenantId: string,
   attemptId: string,
+  terminal: string | null = null,
 ): Promise<VerifyCredentials> {
+  const attempt = shortId(attemptId);
   const answer = await paymentsRpc("max_attempt_secrets", {
     _tenant: tenantId,
     _attempt: attemptId,
     _purpose: "verify",
   });
-  const row = unwrap("max_attempt_secrets", answer);
-  const r = asRecord(row);
+  if (answer.error) {
+    if (dbUnreachable(answer.error)) {
+      tenantLog.error("verify_credentials_unavailable", { attempt, code: answer.error.code });
+      return { result: "unavailable" };
+    }
+    if (/environments differ/i.test(answer.error.message))
+      tenantLog.alert("environment_mismatch", { fn: "max_attempt_secrets" });
+    tenantLog.warn("verify_credentials_refused", { attempt, code: answer.error.code });
+    return { result: "refused", reason: "credentials_changed" };
+  }
+  const r = asRecord(answer.data);
   const result = str(r?.["result"]);
   if (result === "busy")
     return { result: "busy", retryAfterSeconds: int(r?.["retry_after_seconds"]) ?? 45 };
   if (result === "exhausted") return { result: "exhausted" };
-  if (result !== "ok") throw new TenantPaymentError(UNAVAILABLE, "unavailable");
-  const { creds, mode } = decrypt(env, tenantId, row);
-  return { result: "ok", creds, mode };
+  if (result !== "ok") {
+    tenantLog.warn("verify_credentials_refused", { attempt, why: "result" });
+    return { result: "refused", reason: "credentials_changed" };
+  }
+  const masof = str(r?.["terminal_number"]);
+  const mode = modeOf(r?.["mode"]);
+  if (masof && mode && MASOF.test(masof) && !envTripwire(env, masof, mode)) {
+    tenantLog.alert("terminal_not_allowed", { attempt, mode });
+    return { result: "refused", reason: "mode_not_allowed" };
+  }
+  if (terminal !== null && masof !== terminal) {
+    tenantLog.warn("verify_credentials_refused", { attempt, why: "terminal" });
+    return { result: "refused", reason: "credentials_changed" };
+  }
+  try {
+    const { creds, mode: openedMode } = decrypt(env, tenantId, r);
+    return { result: "ok", creds, mode: openedMode };
+  } catch {
+    // decrypt already logged why (shape, or a token that does not open: DM-ENV-4)
+    return { result: "refused", reason: "credentials_changed" };
+  }
 }
 
 /** the platform admin's free connection check of a store terminal (no attempt row; the DB checks the admin) */
@@ -112,5 +166,10 @@ export async function connectionCheckCredentials(
       _tenant: tenantId,
     }),
   );
-  return decrypt(env, tenantId, row);
+  const opened = decrypt(env, tenantId, row);
+  if (!envTripwire(env, opened.creds.masof, opened.mode)) {
+    tenantLog.alert("terminal_not_allowed", { mode: opened.mode });
+    throw new TenantPaymentError(UNAVAILABLE, "unavailable");
+  }
+  return opened;
 }

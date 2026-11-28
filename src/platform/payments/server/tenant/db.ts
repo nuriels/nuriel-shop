@@ -6,6 +6,7 @@
  * one error type for the scope, and small readers for the jsonb answers (Json → typed values, nothing trusted).
  */
 import { PAYMENT_MESSAGES } from "@/platform/payments/max/messages";
+import { ONLINE_OVER_DEMO_CAP, TERMINAL_SAVE_NEEDS_FORCE } from "@/platform/payments/tenant-views";
 import type { PaymentsDbError, PaymentsRpcResult } from "@/platform/payments/server/db";
 import { tenantLog } from "./log";
 
@@ -25,15 +26,13 @@ export class TenantPaymentError extends Error {
 /** DB text (migration 208 RAISE messages) → fixed Hebrew; first match wins */
 const DB_MESSAGES: readonly (readonly [RegExp, string])[] = [
   [/environments differ/i, UNAVAILABLE],
+  [/limited to 50 ILS/i, ONLINE_OVER_DEMO_CAP],
   [/not available (?:in this store )?right now/i, UNAVAILABLE],
   [/order not found/i, "ההזמנה לא נמצאה"],
   [/store not found/i, "החנות לא נמצאה"],
   [/too many payment attempts/i, "נעשו יותר מדי ניסיונות תשלום להזמנה הזו. כדאי לפנות לחנות."],
   [/payment window .* is closing/i, "הזמן לתשלום ההזמנה מסתיים. אפשר לבצע הזמנה חדשה."],
-  [
-    /save again with force/i,
-    "תשלום של החנות נמצא עכשיו באימות. כדי לשמור בכל זאת יש לסמן שמירה בכוח.",
-  ],
+  [/with force/i, TERMINAL_SAVE_NEEDS_FORCE],
   [/is being verified/i, "התשלום נמצא בבדיקה. אפשר לרענן את העמוד בעוד רגע."],
   [/not awaiting an online payment/i, "ההזמנה כבר לא ממתינה לתשלום"],
   [/no payable amount/i, "לא נמצא סכום לתשלום בהזמנה"],
@@ -57,6 +56,16 @@ const DB_MESSAGES: readonly (readonly [RegExp, string])[] = [
 export function tenantDbMessage(error: PaymentsDbError): string {
   for (const [pattern, text] of DB_MESSAGES) if (pattern.test(error.message)) return text;
   return GENERIC_FAILURE;
+}
+
+/**
+ * A transport or transient failure, where no function decided anything: no SQLSTATE (network, the adapter's own
+ * "database unavailable"), a PostgREST code, or the connection / serialization / resources / shutdown classes.
+ * Every other error is the database's answer — a refusal the caller must act on, never retry silently.
+ */
+export function dbUnreachable(error: PaymentsDbError): boolean {
+  const code = error.code ?? "";
+  return !/^[0-9A-Z]{5}$/.test(code) || /^(?:08|40|53|57)/.test(code);
 }
 
 /** the data of a call, or a TenantPaymentError with the fixed text (logged with the function name and SQLSTATE) */

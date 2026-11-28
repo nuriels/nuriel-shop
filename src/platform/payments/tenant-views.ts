@@ -38,6 +38,27 @@ export function attemptStateOf(value: unknown): AttemptState | null {
 export interface OnlinePaymentOptions {
   available: boolean;
   demo: boolean;
+  /** the highest order total (agorot) that can be paid online here; null = no cap on the app side */
+  maxAmountMinor: number | null;
+}
+
+/** DEMO: test payments are capped at ₪50 by the DB (migration 208: max_attempt_open and the CHECKs) */
+export const DEMO_MAX_AMOUNT_MINOR = 5000;
+
+/** the fixed reason shown instead of the online option (and for a refused start) above the DEMO cap (L9) */
+export const ONLINE_OVER_DEMO_CAP =
+  "בסביבת DEMO אפשר לשלם באופן מקוון רק על הזמנה של עד ₪50. אפשר לבחור אמצעי תשלום אחר.";
+
+/** true when an order of `totalIls` (shekels, as the checkout shows it) is above the online cap */
+export function onlineAmountOverCap(
+  options: Pick<OnlinePaymentOptions, "maxAmountMinor">,
+  totalIls: number,
+): boolean {
+  return (
+    options.maxAmountMinor !== null &&
+    Number.isFinite(totalIls) &&
+    Math.round(totalIls * 100) > options.maxAmountMinor
+  );
 }
 
 export interface OnlinePaymentAttemptView {
@@ -113,6 +134,7 @@ const REVIEW_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
   verify_exhausted: "האימות מול ספק התשלומים נכשל שוב ושוב",
   credentials_changed: "פרטי המסוף שונו בזמן האימות",
   mode_not_allowed: "מצב המסוף לא מותר בסביבה הזו",
+  payments_off: "התשלום חזר כשהתשלום המקוון היה כבוי, ולכן לא אומת",
 });
 
 export function reviewReasonLabel(reason: string | null): string {
@@ -167,6 +189,14 @@ export interface StoreOnlinePaymentsView {
   /** NURIEL's own shop: its terminal is a store terminal, never the platform one */
   defaultStore: boolean;
 }
+
+/**
+ * The store terminal save was refused because a payment of the store is in progress (a payer on Hyp's page, or a
+ * return being verified): saving anyway ("force") parks those payments for a manual review ('credentials_changed').
+ * The MAX tab recognises this exact text and asks for a confirmation.
+ */
+export const TERMINAL_SAVE_NEEDS_FORCE =
+  "תשלום של החנות נמצא עכשיו בתהליך (בדף התשלום או באימות). שמירה בכל זאת תעביר אותו לבדיקה ידנית.";
 
 /** "••12" — only the last 2 digits are ever shown */
 export function terminalHintText(hint: string | null): string {
