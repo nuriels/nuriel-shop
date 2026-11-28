@@ -5,7 +5,9 @@
 //   • Resend: GET /emails/:id → { last_event } (delivered, או bounced לפי הנמען) — לבדיקת
 //     הסטטוס האמיתי ("התקבל לשליחה" → "נמסר" רק אחרי אישור מסירה)
 //   • Grow (GROW_SANDBOX_URL): כל בקשה → 503 (אין סליקה בבדיקות; תשלום = mock)
-//   • GET /__calls → כל הבקשות שהתקבלו (לבדיקה שמייל "נשלח")
+//   • MAX/Hyp (MAX_PAY_TEST_URL = /hyp/p/): Hyp Pay מדומה — SIGN, דף תשלום בלי שדות כרטיס, חזרה, VERIFY,
+//     ומתגי תקלות; בקרה ב-/__hyp/… (mock-hyp.mjs). נבדק לפני ה-503, כך שהנתיב של Grow לא השתנה
+//   • GET /__calls → כל הבקשות שהתקבלו (לבדיקה שמייל "נשלח"); בקשות Hyp — בלי ערכי KEY / PassP
 //   • NURIEL AI (AI_ASSISTANT_TEST_API_URL): POST /v1/messages → "דגם" דטרמיניסטי שמסווג לפי רשימת
 //     המדריכים שבבקשה: המדריך הראשון שאחד הניסוחים שלו מופיע בשאלה; שאלה עם "מזג האוויר" → off_topic;
 //     שאלה עם "תקלה בשירות" → 529. בלי מפתח אמיתי ובלי קריאה החוצה.
@@ -14,6 +16,7 @@
 //     בקשת הצעות SEO של אתר אירוח (סכמה עם home / units, alts או text) → טקסטים דטרמיניסטיים בעברית מתוך
 //     <business_data> (שם העסק ושמות היחידות), כך שהבדיקה רואה מה נשלח ומה חזר.
 import { createServer } from "node:http";
+import { createHypMock } from "./mock-hyp.mjs";
 
 /** "דגם" מדומה להצעות כפילויות: אותן מילים בסדר אחר = אותו מוצר */
 function duplicatesMock(request) {
@@ -152,6 +155,11 @@ function anthropicMock(body) {
 
 const port = Number(process.env.MOCK_PORT ?? 4010);
 const calls = [];
+// Hyp מדומה: מזהה הריצה (app-up.sh) הופך את KEY / PassP המזויפים לייחודיים לכל ריצה
+const hyp = createHypMock({
+  runId: process.env.HYP_MOCK_RUN_ID || "localrun",
+  externalCalls: calls,
+});
 /** מזהה מייל → האירוע האחרון שהספק "מדווח" עליו */
 const emailEvents = new Map();
 const json = (res, status, value) => {
@@ -181,6 +189,8 @@ createServer((req, res) => {
       if (!event) return json(res, 404, { name: "not_found", message: "Email not found" });
       return json(res, 200, { object: "email", id, last_event: event });
     }
+    // /hyp/… ו-/__hyp/… — לפני הרישום הכללי (Hyp רושם בעצמו, בלי סודות) ולפני ה-503
+    if (hyp.handle(req, res, body)) return;
     // גוף מלא (מיילים עם קבצים מצורפים) — עד 5MB
     calls.push({
       method: req.method,

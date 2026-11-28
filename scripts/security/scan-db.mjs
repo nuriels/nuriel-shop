@@ -49,9 +49,8 @@ import {
 
 const DEFAULT_SCHEMAS = ["public", "billing", "payments"];
 const SCHEMA_NAME = /^[A-Za-z_][A-Za-z0-9_$]{0,62}$/;
-/** the token format of src/platform/payments/server/crypto.ts (kid = 8 hex from the key modules) */
-const CONTRACT_TOKEN =
-  /^v1:[A-Za-z0-9_-]{1,32}:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:[A-Za-z0-9_-]{2,}$/;
+/** the token of src/platform/payments/server/crypto.ts, exactly as the migration 208 CHECK accepts it */
+const CONTRACT_TOKEN = /^v1:[0-9a-f]{8}:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:[A-Za-z0-9_-]+$/;
 const TERMINAL_CANARY = /^[0-9]{10}$/;
 
 const hex = (s) => Buffer.from(String(s), "utf8").toString("hex");

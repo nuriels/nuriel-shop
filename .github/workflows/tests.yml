@@ -8,7 +8,7 @@ name: tests
 
 on:
   push:
-    branches: ["hospitality/**"]
+    branches: ["hospitality/**", "payments/**"]
   pull_request:
   workflow_dispatch:
 
@@ -49,6 +49,10 @@ jobs:
           VITE_SUPABASE_URL: http://127.0.0.1:54321
           VITE_SUPABASE_PUBLISHABLE_KEY: ci-build-only-placeholder
         run: bun run build
+      # MAX/Hyp DEMO (DM-SEC-1): nothing payment-secret in the browser bundle (KEY/PassP, APISign, VERIFY,
+      # the payment env names, *.server-* chunks of the payment modules)
+      - name: leak scan — browser bundle
+        run: node scripts/security/scan-secrets.mjs --mode bundle .output/public
 
   db:
     name: SQL tests (local Postgres 16)
@@ -81,6 +85,8 @@ jobs:
         run: bash scripts/db-tests/ai-concurrency.sh
       - name: order guard concurrency — rate guard, single-use coupon, coupon grant, stock holds (parallel sessions)
         run: bash scripts/db-tests/order-guard-concurrency.sh
+      - name: online payments concurrency (MAX/Hyp DEMO, DM-PAY-9) — double open, double settle, settle vs expiry (parallel sessions)
+        run: bash scripts/db-tests/online-payments-concurrency.sh
 
   e2e:
     name: E2E regression (Playwright + local Supabase)
@@ -106,12 +112,42 @@ jobs:
         run: |
           set -a; . e2e/.env.e2e; set +a
           bun run build
+      # MAX/Hyp DEMO (plan §7.8, DM-ENV-8): the real Hyp host resolves to loopback, where nothing listens on
+      # 443, so a stray request from the server or the browser fails at once instead of leaving the runner.
+      # Only name resolution is checked here — no request is sent to the host.
+      - name: block the real Hyp host (pay.hyp.co.il → 127.0.0.1)
+        run: |
+          printf '127.0.0.1 pay.hyp.co.il\n::1 pay.hyp.co.il\n' | sudo tee -a /etc/hosts >/dev/null
+          addrs=$(getent ahosts pay.hyp.co.il | awk '{print $1}' | sort -u)
+          echo "pay.hyp.co.il resolves to: $addrs"
+          [ -n "$addrs" ] && ! printf '%s\n' "$addrs" | grep -qvxE '127\.0\.0\.1|::1'
       - name: E2E tests
+        id: e2e
         env:
           E2E_SKIP_BUILD: "1"
         run: bun run test:e2e
+      # Leak scans (DM-SEC-2/3/5). app-up.sh writes the run's canaries (two random root secrets + the mock's
+      # fake KEY/PassP) to e2e/test-results/hyp-canaries.txt and the server output to server.log
+      - name: leak scan — server log
+        if: ${{ !cancelled() && steps.e2e.outcome != 'skipped' }}
+        run: node scripts/security/scan-secrets.mjs --mode logs --canaries e2e/test-results/hyp-canaries.txt e2e/test-results/server.log
+      - name: leak scan — database (every text / jsonb column, payments schema included)
+        if: ${{ !cancelled() && steps.e2e.outcome != 'skipped' }}
+        run: node scripts/security/scan-db.mjs --psql "docker exec -i supabase_db_nuriel-e2e psql -U postgres -d postgres" --canaries e2e/test-results/hyp-canaries.txt
+      # the canary list itself is never uploaded
+      - name: move the canary list out of the upload folder
+        if: ${{ !cancelled() }}
+        run: if [ -f e2e/test-results/hyp-canaries.txt ]; then mv e2e/test-results/hyp-canaries.txt "$RUNNER_TEMP/hyp-canaries.txt"; fi
+      - name: leak scan — files that would be uploaded (traces, screenshots, server log, report)
+        id: artifact_scan
+        if: ${{ !cancelled() && steps.e2e.outcome != 'skipped' }}
+        run: |
+          dirs=()
+          for d in e2e/test-results e2e/playwright-report; do [ -d "$d" ] && dirs+=("$d"); done
+          node scripts/security/scan-secrets.mjs --mode artifacts --canaries "$RUNNER_TEMP/hyp-canaries.txt" "${dirs[@]}"
+      # uploaded only after a clean artifact scan
       - name: upload report
-        if: failure()
+        if: ${{ failure() && steps.artifact_scan.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report

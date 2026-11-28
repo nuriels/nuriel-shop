@@ -80,12 +80,12 @@ const change = {
 
 describe("stepupPurposeHash: one code approves exactly one change", () => {
   it("DM-SEP-6: hex HMAC, independent of key order, different for any other actor, purpose or value", () => {
-    const h = stepupPurposeHash(actor, "platform_terminal_save", change);
+    const h = stepupPurposeHash(actor, "platform_terminal_change", change);
     expect(h).toMatch(HEX64);
     const reordered = Object.fromEntries(Object.entries(change).reverse());
-    expect(stepupPurposeHash(actor, "platform_terminal_save", reordered)).toBe(h);
-    expect(stepupPurposeHash(actor.toUpperCase(), "platform_terminal_save", change)).toBe(h);
-    expect(stepupPurposeHash(randomUUID(), "platform_terminal_save", change)).not.toBe(h);
+    expect(stepupPurposeHash(actor, "platform_terminal_change", reordered)).toBe(h);
+    expect(stepupPurposeHash(actor.toUpperCase(), "platform_terminal_change", change)).toBe(h);
+    expect(stepupPurposeHash(randomUUID(), "platform_terminal_change", change)).not.toBe(h);
     for (const variant of [
       { ...change, apiPassword: "fake-q" },
       { ...change, enabled: false },
@@ -94,14 +94,14 @@ describe("stepupPurposeHash: one code approves exactly one change", () => {
       { terminal: change.terminal },
       { ...change, nested: { a: [1, 2] } },
     ]) {
-      expect(stepupPurposeHash(actor, "platform_terminal_save", variant)).not.toBe(h);
+      expect(stepupPurposeHash(actor, "platform_terminal_change", variant)).not.toBe(h);
     }
-    const arr = stepupPurposeHash(actor, "platform_terminal_save", { a: [1, 2] });
-    expect(stepupPurposeHash(actor, "platform_terminal_save", { a: [2, 1] })).not.toBe(arr);
+    const arr = stepupPurposeHash(actor, "platform_terminal_change", { a: [1, 2] });
+    expect(stepupPurposeHash(actor, "platform_terminal_change", { a: [2, 1] })).not.toBe(arr);
     // undefined properties are dropped, as in JSON
-    expect(stepupPurposeHash(actor, "platform_terminal_save", { ...change, gone: undefined })).toBe(
-      h,
-    );
+    expect(
+      stepupPurposeHash(actor, "platform_terminal_change", { ...change, gone: undefined }),
+    ).toBe(h);
   });
 
   it("DM-SEP-6: refuses what is not plain JSON, an unknown purpose and a non-UUID actor", () => {
@@ -121,14 +121,14 @@ describe("stepupPurposeHash: one code approves exactly one change", () => {
       { big: "x".repeat(300 * 1024) },
     ];
     for (const payload of bad) {
-      expect(() => stepupPurposeHash(actor, "platform_terminal_save", payload)).toThrowError(
+      expect(() => stepupPurposeHash(actor, "platform_terminal_change", payload)).toThrowError(
         "payments: step-up input refused",
       );
     }
     expect(() =>
-      stepupPurposeHash(actor, "refund" as unknown as "platform_terminal_save", change),
+      stepupPurposeHash(actor, "refund" as unknown as "platform_terminal_change", change),
     ).toThrowError("payments: step-up input refused");
-    expect(() => stepupPurposeHash("admin", "platform_terminal_save", change)).toThrowError(
+    expect(() => stepupPurposeHash("admin", "platform_terminal_change", change)).toThrowError(
       "payments: step-up input refused",
     );
   });
@@ -162,7 +162,7 @@ describe("createStepupService through a fake DB caller", () => {
   it("DM-SEP-6: issue — a 6-digit code; the DB receives only keyed HMACs (never the code or the raw hash)", async () => {
     const db = fakeDb();
     const service = createStepupService(db.rpc, key());
-    const purpose = stepupPurposeHash(actor, "platform_terminal_save", change);
+    const purpose = stepupPurposeHash(actor, "platform_terminal_change", change);
     const issued = await service.issue(actor, purpose);
     expect(issued.code).toMatch(/^[0-9]{6}$/);
     expect(issued.challengeId).toMatch(/^[0-9a-f-]{36}$/);
@@ -184,7 +184,7 @@ describe("createStepupService through a fake DB caller", () => {
   it("DM-SEP-6: the right code approves once; a second use is refused (single use)", async () => {
     const db = fakeDb();
     const service = createStepupService(db.rpc, key());
-    const purpose = stepupPurposeHash(actor, "platform_terminal_save", change);
+    const purpose = stepupPurposeHash(actor, "platform_terminal_change", change);
     const { challengeId, code } = await service.issue(actor, purpose);
     expect(await service.consume(actor, challengeId, purpose, code)).toEqual({ ok: true });
     expect(await service.consume(actor, challengeId, purpose, code)).toEqual({
@@ -197,9 +197,9 @@ describe("createStepupService through a fake DB caller", () => {
     const db = fakeDb();
     const k = key();
     const service = createStepupService(db.rpc, k);
-    const purpose = stepupPurposeHash(actor, "platform_terminal_save", change);
+    const purpose = stepupPurposeHash(actor, "platform_terminal_change", change);
     const { challengeId, code } = await service.issue(actor, purpose);
-    const otherChange = stepupPurposeHash(actor, "platform_terminal_save", {
+    const otherChange = stepupPurposeHash(actor, "platform_terminal_change", {
       ...change,
       apiKey: "fake-x",
     });
@@ -212,7 +212,7 @@ describe("createStepupService through a fake DB caller", () => {
       await service.consume(
         otherAdmin,
         challengeId,
-        stepupPurposeHash(otherAdmin, "platform_terminal_save", change),
+        stepupPurposeHash(otherAdmin, "platform_terminal_change", change),
         code,
       ),
     ).toEqual({ ok: false, reason: "not_found" });
@@ -230,7 +230,7 @@ describe("createStepupService through a fake DB caller", () => {
   it("DM-SEP-6: wrong codes count as tries; after 5 the right code is refused too", async () => {
     const db = fakeDb();
     const service = createStepupService(db.rpc, key());
-    const purpose = stepupPurposeHash(actor, "platform_terminal_save", change);
+    const purpose = stepupPurposeHash(actor, "platform_terminal_change", change);
     const { challengeId, code } = await service.issue(actor, purpose);
     const wrong = String((Number(code) + 1) % 1_000_000).padStart(6, "0");
     for (let i = 0; i < 5; i++) {
@@ -249,7 +249,7 @@ describe("createStepupService through a fake DB caller", () => {
     let clock = Date.now();
     const db = fakeDb(() => clock);
     const service = createStepupService(db.rpc, key());
-    const purpose = stepupPurposeHash(actor, "platform_terminal_save", change);
+    const purpose = stepupPurposeHash(actor, "platform_terminal_change", change);
     const { challengeId, code } = await service.issue(actor, purpose);
     clock += 10 * 60 * 1000 + 1;
     expect(await service.consume(actor, challengeId, purpose, code)).toEqual({
@@ -261,7 +261,7 @@ describe("createStepupService through a fake DB caller", () => {
   it("DM-SEP-6: malformed input is refused without calling the DB", async () => {
     const db = fakeDb();
     const service = createStepupService(db.rpc, key());
-    const purpose = stepupPurposeHash(actor, "platform_terminal_save", change);
+    const purpose = stepupPurposeHash(actor, "platform_terminal_change", change);
     const challenge = randomUUID();
     for (const [a, c, p, code] of [
       ["admin", challenge, purpose, "123456"],
@@ -286,7 +286,7 @@ describe("createStepupService through a fake DB caller", () => {
   });
 
   it("DM-SEP-6: DB errors — issue throws one fixed error (no cause, no code); consume fails closed", async () => {
-    const purpose = stepupPurposeHash(actor, "platform_terminal_save", change);
+    const purpose = stepupPurposeHash(actor, "platform_terminal_change", change);
     const failing: StepupRpc[] = [
       async () => ({ data: null, error: { message: "permission denied for function" } }),
       async () => {
@@ -325,7 +325,7 @@ describe("createStepupService through a fake DB caller", () => {
   it("DM-SEP-6: codes are uniform 6-digit strings (randomInt, leading zeros kept)", async () => {
     const db = fakeDb();
     const service = createStepupService(db.rpc, key());
-    const purpose = stepupPurposeHash(actor, "platform_terminal_save", change);
+    const purpose = stepupPurposeHash(actor, "platform_terminal_change", change);
     const codes: string[] = [];
     for (let i = 0; i < 300; i++) codes.push((await service.issue(actor, purpose)).code);
     for (const c of codes) expect(c).toMatch(/^[0-9]{6}$/);
@@ -354,6 +354,6 @@ describe("constant-time comparisons only", () => {
     expect(crypto).toMatch(/export function safeEqual[\s\S]*?timingSafeEqual\(left, right\)/);
     // the roots are compared with the other secrets only through safeEqual
     expect(strip(SERVER[0]!)).toMatch(/safeEqual\(own, other\)/);
-    expect(strip(SERVER[0]!)).toMatch(/safeEqual\(own, value\)/);
+    expect(strip(SERVER[0]!)).toMatch(/safeEqual\(root, value\)/);
   });
 });
