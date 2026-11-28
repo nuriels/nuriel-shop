@@ -260,6 +260,16 @@ signature mismatch (S1), and which fields `Sign` covers (S2).
 | X-24 | DB parking passes (sweep and purge), both scopes | the passes also park a `failed` attempt — every non-applied attempt with an unverified return older than 90 minutes and no resolved review, whether or not the raw return was kept | R3-2 / N4: a return recorded on an already failed attempt held the order for ever with no alert |
 | X-25 | DB `max_order_payment_status`; store order panel; server start | staff get `review_outcome` and `review_resolved_at`; the panel shows the decision and hides the resolve buttons once resolved. `PAYMENTS_JOBS=off` while payments are configured writes one `ALERT jobs_off` line at server start: with the jobs off nothing parks or alerts, so the switch is for tests and emergencies only (runbooks: never off on a server that takes payments) | R3-4; second half of R3-2 |
 
+Owner's acceptance criteria for round 4 (2026-11-28), each proven by a named automated test:
+A. "not charged" is never proof that no late charge will come — a later payload or verified charge reopens the review.
+B. every late return that confirms a charge is detected and alerts exactly once.
+C. no new attempt and no second charge before the earlier attempt is fully clarified.
+D. a decision on one attempt is never changed by an answer of another attempt.
+E. every held order has an alert and a clear handling route — DB backstop: the sweep parks the latest returned
+   attempt of an order held over 90 minutes with no unresolved review and no `charged` decision, reason
+   `held_unexplained`; an invariant check runs after all SQL scenarios.
+F. the repros of both independent reviewers are permanent tests (SQL in `scripts/db-tests`, vitest in `tests/unit`).
+
 ### 7.2 Production pilot (owner decision 2026-11-28: DEMO payments on the live site, one store only)
 
 The owner approved running the MAX/Hyp integration on the production site with a Hyp **test** terminal, in the
