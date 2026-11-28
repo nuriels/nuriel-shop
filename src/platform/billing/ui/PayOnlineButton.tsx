@@ -16,6 +16,7 @@ import {
   myBillingPayStart,
   myBillingPayments,
   payChargeOffer,
+  PAYMENTS_SOON_TEXT,
   type MyCardPayment,
   type MyCardPaymentState,
   type PayCharge,
@@ -158,6 +159,21 @@ export function PayOnlineSection({ onChanged }: { onChanged?: () => Promise<void
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- poll once per availability, not on every render
   }, [options?.available]);
+
+  if (options?.soon) {
+    // P-5: the production pilot — manual billing as always, card payment "soon" (no button)
+    return (
+      <p
+        className="text-xs text-muted-foreground"
+        data-testid="my-billing-pay"
+        data-available="false"
+        data-soon="true"
+      >
+        {NO_CLEARING}{" "}
+        <span data-testid="my-billing-pay-soon">תשלום בכרטיס אשראי: {PAYMENTS_SOON_TEXT}</span>
+      </p>
+    );
+  }
 
   if (!options?.available) {
     return (

@@ -16,9 +16,17 @@ export interface PayCharge {
   paidOnline: boolean;
 }
 
+/**
+ * The pilot's fixed note (contract §7.2 P-5): NURIEL's own terminal is off there, so the owner's "pay by card" entry
+ * and the platform terminal screen show only this. Equal to PLATFORM_ERROR_TEXT.soon (server, db.ts) — unit-tested.
+ */
+export const PAYMENTS_SOON_TEXT = "הסליקה בקרוב";
+
 export interface PayOptions {
   /** NURIEL's terminal is on, this server is ready, and the caller is this store's owner (never a platform admin) */
   available: boolean;
+  /** P-5: this server runs the production pilot — the card shows PAYMENTS_SOON_TEXT (present only then) */
+  soon?: true;
   /** NURIEL's terminal is a test terminal (DEMO) */
   test: boolean;
   demo: boolean;
@@ -68,8 +76,18 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const pay = () => import("@/platform/payments/server/platform/pay");
 
-/** lets out only the payment code's own error (fixed Hebrew text, no stack) or a generic one */
-async function guarded<T>(run: () => Promise<T>): Promise<T> {
+/**
+ * Every server function of this file runs through here (tests/architecture/platform-pilot-gate.test.ts): first the
+ * pilot gate (P-5, platformPilotOff — before any DB or Hyp call; `whenPilot` is the answer then, else the "soon"
+ * error), then the call; it lets out only the payment code's own error (fixed Hebrew text, no stack) or a generic one.
+ */
+async function guarded<T>(run: () => Promise<T>, whenPilot?: T): Promise<T> {
+  const { platformPilotOff } = await import("@/platform/payments/server/platform/pilot");
+  if (platformPilotOff()) {
+    if (whenPilot !== undefined) return whenPilot;
+    const { PlatformPaymentError } = await import("@/platform/payments/server/platform/db");
+    throw new PlatformPaymentError("soon");
+  }
   try {
     return await run();
   } catch (error) {
@@ -80,7 +98,15 @@ async function guarded<T>(run: () => Promise<T>): Promise<T> {
 
 /** what the owner can pay online now (the button appears only when `available`) */
 export const myBillingPayOptions = createServerFn({ method: "POST" }).handler(
-  async (): Promise<PayOptions> => guarded(async () => (await pay()).platformPayOptions()),
+  async (): Promise<PayOptions> =>
+    guarded(async () => (await pay()).platformPayOptions(), {
+      available: false,
+      soon: true,
+      test: false,
+      demo: false,
+      testCapMinor: null,
+      charges: [],
+    }),
 );
 
 /** the owner's card payments to NURIEL (also the result after the return from the payment page) */

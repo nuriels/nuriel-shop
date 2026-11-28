@@ -135,7 +135,16 @@ const INVALID = "הפרטים שהוזנו אינם תקינים";
 
 const terminal = () => import("@/platform/payments/server/platform/terminal");
 
+/**
+ * Every server function of this file runs through here (tests/architecture/platform-pilot-gate.test.ts): first the
+ * pilot gate (P-5, platformPilotOff — before any DB or Hyp call: the "soon" error), then the call.
+ */
 async function guarded<T>(run: () => Promise<T>): Promise<T> {
+  const { platformPilotOff } = await import("@/platform/payments/server/platform/pilot");
+  if (platformPilotOff()) {
+    const { PlatformPaymentError } = await import("@/platform/payments/server/platform/db");
+    throw new PlatformPaymentError("soon");
+  }
   try {
     return await run();
   } catch (error) {

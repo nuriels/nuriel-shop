@@ -53,6 +53,7 @@ import {
   type PlatformRpc,
 } from "./db";
 import { platformLog, shortId, type PlatformLogger } from "./log";
+import { platformPilotOff } from "./pilot";
 
 type Ready = { ok: true; env: PaymentsEnv } | { ok: false; reason: string };
 
@@ -69,6 +70,8 @@ export interface PlatformReturnDeps {
   /** X-17: ring for every review the DB has not alerted yet (the only path for reviews) */
   claimAlerts(): Promise<number>;
   log: PlatformLogger;
+  /** the environment marker (P-5 pilot gate); default: paymentsEnv() */
+  paymentsEnv?: () => string | null;
 }
 
 export const defaultReturnDeps: PlatformReturnDeps = {
@@ -255,10 +258,18 @@ async function purge(deps: PlatformReturnDeps): Promise<void> {
   if (purged.error) deps.log.error("purge", {});
 }
 
+const pilotRefused = (): PlatformReturnOutcome => ({
+  location: PLATFORM_RETURN_FALLBACK,
+  result: "refused",
+  attemptId: null,
+});
+
 export async function handlePlatformReturn(
   input: { provider: string; raw: string; host: string },
   deps: PlatformReturnDeps = defaultReturnDeps,
 ): Promise<PlatformReturnOutcome> {
+  // P-5: in the pilot NURIEL's terminal never opened a page — refused like a return on a non-platform host
+  if (platformPilotOff(deps.paymentsEnv)) return pilotRefused();
   const refused = (result: PlatformReturnOutcome["result"]): PlatformReturnOutcome => ({
     location: PLATFORM_RETURN_FALLBACK,
     result,
@@ -374,6 +385,7 @@ export async function reverifyPlatformReturn(
   item: { attemptId: string; reference: string; sha: string; mode: PaymentMode },
   deps: PlatformReturnDeps = defaultReturnDeps,
 ): Promise<{ result: SettleResult | "gone" | "off"; reason?: string }> {
+  if (platformPilotOff(deps.paymentsEnv)) return { result: "off" }; // P-5: no VERIFY in the pilot
   const ready = deps.ready();
   if (!ready.ok) return { result: "off" };
   const attempt = shortId(item.attemptId);

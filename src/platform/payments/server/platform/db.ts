@@ -139,6 +139,7 @@ export type PlatformErrorCode =
   | "force_needed"
   | "invalid"
   | "rate_limited"
+  | "soon"
   | "generic";
 
 export const PLATFORM_ERROR_TEXT: Readonly<Record<PlatformErrorCode, string>> = Object.freeze({
@@ -169,6 +170,8 @@ export const PLATFORM_ERROR_TEXT: Readonly<Record<PlatformErrorCode, string>> = 
     "יש תשלום לפלטפורמה שעדיין בתהליך (דף תשלום שנפתח וטרם הסתיים, או תשלום שממתין לאימות). שמירה עכשיו תעביר אותו לבדיקה ידנית.",
   invalid: "הפרטים שהוזנו אינם תקינים",
   rate_limited: "יותר מדי ניסיונות. אפשר לנסות שוב בעוד כמה דקות.",
+  // = PAYMENTS_SOON_TEXT (pay.functions.ts): the pilot keeps the platform scope off (P-5); the pages show it as is
+  soon: "הסליקה בקרוב",
   generic: "הפעולה לא הושלמה. אפשר לנסות שוב בעוד כמה דקות.",
 });
 

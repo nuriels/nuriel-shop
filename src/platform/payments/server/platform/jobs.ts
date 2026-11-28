@@ -16,6 +16,7 @@ import { paymentsReady, type PaymentsEnv } from "@/platform/payments/server/env"
 import { claimPlatformReviewAlerts } from "./alerts";
 import { asRows, int, platformCall, platformPaymentsRpc, text, uuid, type PlatformRpc } from "./db";
 import { platformLog, type PlatformLogger } from "./log";
+import { PILOT_ENV, platformPilotOff } from "./pilot";
 import { reverifyPlatformReturn, type SettleResult } from "./return";
 
 const FIVE_MINUTES = 5 * 60_000;
@@ -39,6 +40,8 @@ export interface PlatformJobDeps {
   /** X-17: claim the not-yet-alerted reviews and ring once for each → rows claimed */
   claimAlerts(): Promise<number>;
   log: PlatformLogger;
+  /** the environment marker (P-5 pilot gate); default: paymentsEnv() */
+  paymentsEnv?: () => string | null;
 }
 
 /** PAYMENTS_JOBS ∈ { on (default), off } — any other value counts as on (contract §2) */
@@ -91,6 +94,8 @@ async function reverifyPending(deps: PlatformJobDeps, summary: PlatformJobsSumma
 export async function runPlatformPaymentJobs(
   deps: PlatformJobDeps = defaultJobDeps,
 ): Promise<PlatformJobsSummary> {
+  // P-5: in the pilot no VERIFY; the DB-only steps (sweep, purge, claim) still run
+  const pilot = platformPilotOff(deps.paymentsEnv);
   const summary: PlatformJobsSummary = {
     pending: 0,
     paid: 0,
@@ -102,7 +107,8 @@ export async function runPlatformPaymentJobs(
   if (!deps.jobsOn()) return summary;
   // X-19: not ready → no VERIFY, but the DB-only steps still run (sweep, purge, alert claim)
   const ready = deps.ready();
-  if (ready.ok) await reverifyPending(deps, summary);
+  if (pilot) deps.log.info("jobs_verify_skipped", { reason: PILOT_ENV });
+  else if (ready.ok) await reverifyPending(deps, summary);
   else deps.log.warn("jobs_verify_skipped", { reason: ready.reason });
 
   const expired = await platformCall(deps.rpc, "platform_attempts_expire", {});

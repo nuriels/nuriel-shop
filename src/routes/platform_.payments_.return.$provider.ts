@@ -40,6 +40,10 @@ export const Route = createFileRoute("/platform_/payments_/return/$provider")({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
+        // P-5: in the production pilot NURIEL's terminal is off — answered like a non-platform host, before
+        // any DB call (nothing can have been opened there)
+        const { platformPilotOff } = await import("@/platform/payments/server/platform/pilot");
+        if (platformPilotOff()) return notFound();
         const { isPlatformHost } = await import("@/platform/tenancy/current-site.server");
         if (params.provider !== "max" || !(await isPlatformHost())) return notFound();
         const { allowAction, requestIp } = await import("@/platform/security/rate-limit.server");

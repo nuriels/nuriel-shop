@@ -76,6 +76,7 @@ import {
   type Row,
 } from "./db";
 import { platformLog, type PlatformLogger } from "./log";
+import { platformPilotOff } from "./pilot";
 
 type Ready = { ok: true; env: PaymentsEnv } | { ok: false; reason: string };
 type StepupService = ReturnType<typeof createStepupService>;
@@ -282,6 +283,7 @@ async function statusRow(actorId: string, deps: TerminalDeps): Promise<Row | nul
 export async function platformTerminalStatus(
   deps: TerminalDeps = defaultTerminalDeps,
 ): Promise<TerminalView> {
+  if (platformPilotOff(deps.paymentsEnv)) throw new PlatformPaymentError("soon"); // P-5: first
   if (!(await deps.isPlatformHost())) throw new PlatformPaymentError("platform_only");
   const session = await deps.session();
   if (!session) throw new PlatformPaymentError("login");
@@ -380,6 +382,7 @@ export async function requestTerminalSaveCode(
   request: TerminalCodeRequest,
   deps: TerminalDeps = defaultTerminalDeps,
 ): Promise<CodeSent> {
+  if (platformPilotOff(deps.paymentsEnv)) throw new PlatformPaymentError("soon"); // P-5: first
   const { actorId, env } = await admin(deps, ["code", 5]);
   // a secret is "set" exactly when its new value is given (the value is bound into the code: X-20)
   const change: TerminalChange = {
@@ -434,6 +437,7 @@ export async function savePlatformTerminal(
   input: TerminalSave,
   deps: TerminalDeps = defaultTerminalDeps,
 ): Promise<TerminalView> {
+  if (platformPilotOff(deps.paymentsEnv)) throw new PlatformPaymentError("soon"); // P-5: first
   const { actorId, env } = await admin(deps, ["save", 10]);
   const change: TerminalChange = {
     terminalNumber: input.terminalNumber,
@@ -503,6 +507,7 @@ const TEST_AMOUNT_MINOR = 100;
 export async function testPlatformTerminal(
   deps: TerminalDeps = defaultTerminalDeps,
 ): Promise<TerminalTest> {
+  if (platformPilotOff(deps.paymentsEnv)) throw new PlatformPaymentError("soon"); // P-5: first
   const { actorId, env } = await admin(deps, ["test", 10]);
   const secrets = await deps.checkCredentials(actorId, env);
   let ok = false;
@@ -566,6 +571,7 @@ export async function platformCardPaymentsList(
   input: { tenantId: string | null },
   deps: TerminalDeps = defaultTerminalDeps,
 ): Promise<CardPaymentRow[]> {
+  if (platformPilotOff(deps.paymentsEnv)) throw new PlatformPaymentError("soon"); // P-5: first
   const { actorId } = await admin(deps, ["list", 60]);
   const answer = await platformCall(deps.rpc, "platform_card_payments", {
     _actor: actorId,
@@ -608,6 +614,7 @@ export async function platformCardPaymentsList(
 export async function platformUnreturnedList(
   deps: TerminalDeps = defaultTerminalDeps,
 ): Promise<UnreturnedRow[]> {
+  if (platformPilotOff(deps.paymentsEnv)) throw new PlatformPaymentError("soon"); // P-5: first
   const { actorId } = await admin(deps, ["list", 60]);
   const answer = await platformCall(deps.rpc, "platform_unreturned_attempts", {
     _actor: actorId,
@@ -640,6 +647,7 @@ export async function resolvePlatformCardPayment(
   input: { attemptId: string; note: string | null },
   deps: TerminalDeps = defaultTerminalDeps,
 ): Promise<{ resolved: boolean }> {
+  if (platformPilotOff(deps.paymentsEnv)) throw new PlatformPaymentError("soon"); // P-5: first
   const { actorId } = await admin(deps, ["resolve", 20]);
   if (!UUID.test(input.attemptId)) throw new PlatformPaymentError("invalid");
   const answer = await platformCall(deps.rpc, "platform_card_payment_resolve", {
