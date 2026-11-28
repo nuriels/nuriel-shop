@@ -50,6 +50,7 @@ import {
   type PlatformRpc,
 } from "./db";
 import { platformLog, shortId, type PlatformLogger } from "./log";
+import { platformPilotOff } from "./pilot";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const REFERENCE = /^[0-9a-f]{32}$/;
@@ -182,6 +183,7 @@ export async function startPlatformPayment(
   input: { chargeId: string },
   deps: PayDeps = defaultPayDeps,
 ): Promise<PayStartResult> {
+  if (platformPilotOff(deps.paymentsEnv)) throw new PlatformPaymentError("soon"); // P-5: before any DB / Hyp call
   const chargeId = typeof input?.chargeId === "string" ? input.chargeId.toLowerCase() : "";
   if (!UUID.test(chargeId)) throw new PlatformPaymentError("invalid");
   const ready = deps.ready();
@@ -273,7 +275,18 @@ export async function startPlatformPayment(
 
 // ------------------------------------------------------------------------------------------ owner views
 
+/** P-5: what the owner's billing card gets in the pilot — nothing to pay, the "soon" note */
+const PILOT_OPTIONS: PayOptions = Object.freeze({
+  available: false,
+  soon: true,
+  test: false,
+  demo: false,
+  testCapMinor: null,
+  charges: [],
+}) as PayOptions;
+
 export async function platformPayOptions(deps: PayDeps = defaultPayDeps): Promise<PayOptions> {
+  if (platformPilotOff(deps.paymentsEnv)) return { ...PILOT_OPTIONS, charges: [] }; // P-5: no DB call
   const ready = deps.ready();
   const row = asRow(await deps.ownerRpc<unknown>("platform_card_my_options"));
   const available = ready.ok && flag(row, "available");
@@ -313,6 +326,7 @@ const PAYMENT_STATES: readonly string[] = [
 ];
 
 export async function myPlatformPayments(deps: PayDeps = defaultPayDeps): Promise<MyCardPayment[]> {
+  if (platformPilotOff(deps.paymentsEnv)) throw new PlatformPaymentError("soon"); // P-5: no DB call
   const rows = asRows(await deps.ownerRpc<unknown>("platform_card_my_payments"));
   return rows.flatMap((p) => {
     const id = uuid(p, "id");
