@@ -246,8 +246,8 @@ same_as_ref() {
 }
 
 # ---------- online card payments, MAX / Hyp DEMO (migration 208) — the newest, rolled back first ----------
-expect "before the rollback: the closed payments schema (17 tables, RLS on all, no API-role access), 44 server functions, the 3 order triggers, online in orders_payment_check, both switches off" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'payments'::regnamespace AND relkind = 'r' AND relrowsecurity) = 17
+expect "before the rollback: the closed payments schema (18 tables, RLS on all, no API-role access), 44 server functions, the 3 order triggers, online in orders_payment_check, both switches off" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'payments'::regnamespace AND relkind = 'r' AND relrowsecurity) = 18
       AND NOT has_schema_privilege('service_role', 'payments', 'USAGE') AND NOT has_schema_privilege('authenticated', 'payments', 'USAGE')
       AND has_function_privilege('service_role', 'public.max_attempt_mark_paid(uuid,text,text,text,text,text,text,bigint,text,integer,text,text,text,text[],text)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'public.max_attempt_mark_paid(uuid,text,text,text,text,text,text,bigint,text,integer,text,text,text,text[],text)', 'EXECUTE')
@@ -2913,8 +2913,8 @@ expect "product brand + condition back: the columns, the product-only rule, the 
       AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'store_seo_proposals_product_fields')
       AND pg_get_functiondef('public.store_seo_snapshot(uuid,boolean,integer)'::regprocedure) LIKE '%facts%'"
 up "$M92"
-expect "online card payments back: the closed schema (17 tables), the server functions, the 3 order triggers, both switches off, the database unmarked" \
-  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'payments'::regnamespace AND relkind = 'r' AND relrowsecurity) = 17
+expect "online card payments back: the closed schema (18 tables), the server functions, the 3 order triggers, both switches off, the database unmarked" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'payments'::regnamespace AND relkind = 'r' AND relrowsecurity) = 18
       AND has_function_privilege('service_role', 'public.max_attempt_mark_paid(uuid,text,text,text,text,text,text,bigint,text,integer,text,text,text,text[],text)', 'EXECUTE')
       AND (SELECT count(*) FROM pg_trigger WHERE tgname IN ('orders_online_payment_keep', 'orders_payment_amount_lock', 'order_items_a_payment_lock')) = 3
       AND (SELECT name IS NULL FROM payments.environment)

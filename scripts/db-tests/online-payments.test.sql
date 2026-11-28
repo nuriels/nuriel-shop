@@ -317,8 +317,8 @@ SELECT tests.check('online payments structure: the closed schema payments — no
        AND NOT has_schema_privilege('anon', 'payments', 'USAGE')
        AND NOT has_schema_privilege('authenticated', 'payments', 'USAGE')
        AND NOT has_schema_privilege('service_role', 'payments', 'USAGE')$$);
-SELECT tests.check('online payments structure: 17 tables (pilot_stores included, P-2), RLS on all; the 7 store tables RESTRICTIVE tenant_isolation, the 10 platform / cross-scope tables RESTRICTIVE deny-all',
-  $$SELECT (SELECT count(*) FROM pg_class c WHERE c.relnamespace = 'payments'::regnamespace AND c.relkind = 'r') = 17
+SELECT tests.check('online payments structure: 18 tables (pilot_stores and pilot_testers included, P-2 / P-4), RLS on all; the 7 store tables RESTRICTIVE tenant_isolation, the 11 platform / cross-scope tables RESTRICTIVE deny-all',
+  $$SELECT (SELECT count(*) FROM pg_class c WHERE c.relnamespace = 'payments'::regnamespace AND c.relkind = 'r') = 18
        AND NOT EXISTS (SELECT 1 FROM pg_class c WHERE c.relnamespace = 'payments'::regnamespace AND c.relkind = 'r' AND NOT c.relrowsecurity)
        AND (SELECT array_agg(tablename::text ORDER BY tablename) FROM pg_policies
              WHERE schemaname = 'payments' AND policyname = 'tenant_isolation' AND permissive = 'RESTRICTIVE'
@@ -327,7 +327,7 @@ SELECT tests.check('online payments structure: 17 tables (pilot_stores included,
                    'tenant_returns', 'tenant_store_settings']
        AND (SELECT array_agg(tablename::text ORDER BY tablename) FROM pg_policies
              WHERE schemaname = 'payments' AND policyname = 'platform_only' AND permissive = 'RESTRICTIVE' AND qual = 'false')
-           = ARRAY['environment', 'pilot_stores', 'platform_accounts', 'platform_attempts', 'platform_config_audit',
+           = ARRAY['environment', 'pilot_stores', 'pilot_testers', 'platform_accounts', 'platform_attempts', 'platform_config_audit',
                    'platform_events', 'platform_returns', 'platform_stepup_challenges', 'terminal_registry', 'unknown_returns']$$);
 SELECT tests.check('online payments structure: no table or sequence privilege for any API role',
   $$SELECT NOT EXISTS (SELECT 1 FROM pg_class c, unnest(ARRAY['anon', 'authenticated', 'service_role']) r(role)
@@ -608,6 +608,271 @@ SELECT tests.check('the production rehearsal left nothing behind (rolled back: u
        AND NOT EXISTS (SELECT 1 FROM payments.platform_stepup_challenges)$$);
 
 -- ============================================================
+-- 3b. The production pilot rehearsal (contract §7.2 P-1 … P-6), always rolled back: a database that was never DEMO is
+--     marked 'pilot', store B goes into the pilot list, customer C3 is its named test customer (P-4, revised). It runs before section 4 because a
+--     database that was ever DEMO can never become a pilot. Each step has a name; the checks read the results by name.
+-- ============================================================
+CREATE TEMP TABLE op_pilot_kv (k text PRIMARY KEY, v text);
+CREATE OR REPLACE FUNCTION pg_temp.pset(_k text, _v text) RETURNS text LANGUAGE sql AS $f$
+  INSERT INTO op_pilot_kv VALUES (_k, _v) ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v RETURNING v;
+$f$;
+CREATE OR REPLACE FUNCTION pg_temp.pv(_k text) RETURNS text LANGUAGE sql AS $f$
+  SELECT v FROM op_pilot_kv WHERE k = _k;
+$f$;
+-- the shape of an online order awaiting payment, made by the database owner from an offline order (triggers off): the
+-- open must refuse it for a non-tester or a guest whatever the order path did
+CREATE OR REPLACE FUNCTION pg_temp.forced_online(_tenant uuid, _cust uuid, _guest boolean) RETURNS uuid LANGUAGE plpgsql AS $f$
+DECLARE o uuid := pg_temp.order_of(_tenant, _cust,
+          CASE WHEN _tenant = 'c2080000-0000-4000-8000-00000000000a' THEN 'c2080000-0000-4000-8000-00000000a010'::uuid
+               ELSE 'c2080000-0000-4000-8000-00000000b010'::uuid END,
+          CASE WHEN _tenant = 'c2080000-0000-4000-8000-00000000000a' THEN 'c2080000-0000-4000-8000-00000000500a'::uuid
+               ELSE 'c2080000-0000-4000-8000-00000000500b'::uuid END, 1, 'offline');
+BEGIN
+  PERFORM set_config('session_replication_role', 'replica', true);
+  UPDATE public.orders SET payment_method = 'online', payment_status = 'awaiting', payment_due_at = now() + interval '2 hours',
+         customer_id = CASE WHEN _guest THEN NULL ELSE customer_id END
+   WHERE id = o;
+  PERFORM set_config('session_replication_role', 'origin', true);
+  RETURN o;
+END $f$;
+-- store B: open → SIGN ok → browser return (app marker 'pilot'); the result of the open
+CREATE OR REPLACE FUNCTION pg_temp.pilot_returned(_order uuid, _cust uuid, _label text) RETURNS jsonb LANGUAGE plpgsql AS $f$
+DECLARE o jsonb;
+BEGIN
+  o := pg_temp.t_open('c2080000-0000-4000-8000-00000000000b', _order, _cust, 'pilot');
+  PERFORM pg_temp.t_sign('c2080000-0000-4000-8000-00000000000b', o ->> 'attempt_id');
+  PERFORM pg_temp.t_ret('c2080000-0000-4000-8000-00000000000b', o ->> 'reference', pg_temp.h('pilot|' || _label), '0',
+                        'fake-pilot-' || _label, (o ->> 'amount_minor')::bigint);
+  RETURN o;
+END $f$;
+CREATE OR REPLACE FUNCTION pg_temp.pilot_settle(_o jsonb, _label text) RETURNS jsonb LANGUAGE sql AS $f$
+  SELECT pg_temp.t_settle('c2080000-0000-4000-8000-00000000000b', _o ->> 'reference', pg_temp.h('pilot|' || _label), '0', '0',
+                          _o ->> 'terminal_number', 'fake-pilot-' || _label, (_o ->> 'amount_minor')::bigint, 'ILS', 1, '{}', 'pilot');
+$f$;
+CREATE TEMP TABLE op_pilot_steps (n serial PRIMARY KEY, k text UNIQUE NOT NULL, q text NOT NULL);
+INSERT INTO op_pilot_steps (k, q) VALUES
+  -- P-1: an unmarked database that was never DEMO and never live becomes a pilot
+  ('mark', $q$UPDATE payments.environment SET name = 'pilot', note = 'pilot rehearsal (rolled back)' RETURNING name || '/' || (pilot_since IS NOT NULL)$q$),
+  -- P-2: before B is in the list, the platform admin's save is refused
+  ('b_unlisted', format($q$SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           jsonb_build_object('terminal_number', %L, 'api_key_enc', pg_temp.tok('pk'), 'api_password_enc', pg_temp.tok('pp')), 'pilot'))::text$q$,
+         :PLAT, :SB, :'t_b')),
+  ('b_add', format($q$INSERT INTO payments.pilot_stores (tenant_id, note) VALUES (%L, 'the owner''s store') RETURNING 'added'$q$, :SB)),
+  ('b_add_audit', format($q$SELECT action || '/' || actor_role || '/' || (actor_id IS NULL) || '/' || changed_fields::text
+           FROM payments.tenant_config_audit WHERE tenant_id = %L ORDER BY id DESC LIMIT 1$q$, :SB)),
+  -- P-4: a person lists the named test customers: C3 for B; C4 for A only; CA for A, which is not (yet) a pilot store;
+  -- B's owner (a staff user) for B
+  ('testers_add', format($q$WITH i AS (INSERT INTO payments.pilot_testers (tenant_id, user_id, note)
+           VALUES (%1$L, %3$L, 'tester'), (%2$L, %4$L, 'tester of A'), (%2$L, %5$L, 'tester of A'), (%1$L, %6$L, 'staff, listed') RETURNING 1)
+           SELECT count(*)::text FROM i$q$, :SB, :SA, :C3, :C4, :CA, :B_OWNER)),
+  ('testers_audit', format($q$SELECT string_agg(DISTINCT action || '/' || actor_role || '/' || (actor_id IS NULL) || '/' || changed_fields::text, ',')
+           || '/' || count(*) FROM payments.tenant_config_audit WHERE action = 'pilot_tester_added' AND tenant_id IN (%L, %L)$q$, :SB, :SA)),
+  ('owner_status_before', format($q$SELECT pg_temp.svc(format('SELECT public.max_account_status(%%L, %%L)', %L, %L))::text$q$, :B_OWNER, :SB)),
+  ('flag', format($q$SELECT pg_temp.call(NULL, %L, 'SELECT to_jsonb(public.platform_set_flag(''max_payments'', true))')::text$q$, :PLAT)),
+  -- P-1 / P-3: the app must say pilot; mode live and a non-00100 number are refused
+  ('save_app_demo', format($q$SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           jsonb_build_object('terminal_number', %L), 'demo'))::text$q$, :PLAT, :SB, :'t_b')),
+  ('save_live_mode', format($q$SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           jsonb_build_object('mode', 'live', 'terminal_number', %L), 'pilot'))::text$q$, :PLAT, :SB, :'t_b')),
+  ('save_live_number', format($q$SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           jsonb_build_object('terminal_number', %L), 'pilot'))::text$q$, :PLAT, :SB, :'t_live')),
+  -- P-6: the platform admin saves B's test terminal, verifies and enables it
+  ('b_save', format($q$SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           jsonb_build_object('terminal_number', %L, 'api_key_enc', pg_temp.tok('pilot-key'), 'api_password_enc', pg_temp.tok('pilot-pass'),
+                              'verified_brands', jsonb_build_array('visa', 'mastercard')), 'pilot')) ->> 'mode'$q$, :PLAT, :SB, :'t_b')),
+  ('b_verified', format($q$SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_verified(%%L, %%L, true, %%L)', %L, %L, '0')) ->> 'status'$q$, :PLAT, :SB)),
+  ('b_enable', format($q$SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L, '{"enabled": true}', 'pilot')) ->> 'enabled'$q$, :PLAT, :SB)),
+  -- P-2: store A, not in the list: the admin's save, and even the table owner's direct insert, are refused
+  ('a_save', format($q$SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           jsonb_build_object('terminal_number', %L), 'pilot'))::text$q$, :PLAT, :SA, :'t_a')),
+  ('a_insert', format($q$INSERT INTO payments.tenant_accounts (tenant_id, provider, mode) VALUES (%L, 'max', 'test') RETURNING 'inserted'$q$, :SA)),
+  -- P-4: active only for B's named test customer — not another customer, a guest, A's tester, B's (unlisted) staff;
+  -- P-2: never in A (not in the list), even for its listed tester
+  ('active', format($q$SELECT format('%%s/%%s/%%s/%%s/%%s/%%s/%%s', public.max_payments_active(%1$L, %2$L), public.max_payments_active(%1$L, %3$L),
+           public.max_payments_active(%1$L, NULL), public.max_payments_active(%1$L, %4$L), public.max_payments_active(%1$L, %5$L),
+           public.max_payments_active(%1$L, %6$L), public.max_payments_active(%7$L, %8$L))$q$, :SB, :C3, :C1, :C4, :B_MGR, :B_AGENT, :SA, :CA)),
+  -- P-4: an ordinary customer's and a guest's online order are refused at the order already
+  ('c1_order', format($q$SELECT COALESCE(pg_temp.db_err(format('SELECT pg_temp.order_of(%%L, %%L, %%L, %%L, 1, %%L)', %L, %L, %L, %L, 'online')), 'placed')$q$,
+         :SB, :C1, :P10, :SHIP_B)),
+  ('guest_order', format($q$SELECT COALESCE(pg_temp.svc_err(format($g$SELECT to_jsonb(x) FROM (SELECT set_config('request.headers', %%L, true)) s,
+           public.place_guest_order('order', jsonb_build_array(jsonb_build_object('product_id', %%L, 'quantity', 1, 'unit_price', 10)),
+             jsonb_build_object('customer_name', 'אורח פיילוט', 'customer_tax_id', '123456782', 'customer_phone', '0501234567',
+               'customer_email', 'op.pilot.guest@test.local', 'billing_city', 'תל אביב', 'billing_address', 'הרצל 1',
+               'billing_zip', '6100001', 'accepted_terms', true, 'shipping_method_id', %%L, 'payment_method', 'online')) x$g$,
+           json_build_object('x-tenant-id', %L)::text, %L, %L)), 'placed')$q$, :SB, :P10, :SHIP_B)),
+  -- P-4: the store's owner, even listed as a tester, gets no online order: staff orders stay offline (unchanged)
+  -- (a statement does not see rows its own functions wrote: placing and reading are separate steps)
+  ('owner_order_place', format($q$SELECT pg_temp.pset('o0', pg_temp.order_of(%L, %L, %L, %L, 1, 'online')::text)$q$, :SB, :B_OWNER, :P10, :SHIP_B)),
+  ('owner_order', $q$SELECT payment_method || '/' || payment_status FROM public.orders WHERE id = pg_temp.pv('o0')::uuid$q$),
+  -- P-4: the named test customer places an online order (place_order) and pays: open → SIGN → return → VERIFY 0 →
+  -- settle, app marker 'pilot'
+  ('tester_order_place', format($q$SELECT pg_temp.pset('o1', pg_temp.order_of(%L, %L, %L, %L, 1, 'online')::text)$q$, :SB, :C3, :P10, :SHIP_B)),
+  ('tester_order', format($q$SELECT payment_method || '/' || payment_status || '/' || (customer_id = %L)
+           FROM public.orders WHERE id = pg_temp.pv('o1')::uuid$q$, :C3)),
+  ('tester_open', format($q$SELECT (o ->> 'mode') || '/' || (o ->> 'amount_minor') || '/' || (o ->> 'terminal_number' = %L)
+           FROM (SELECT pg_temp.pset('a1', pg_temp.pilot_returned(pg_temp.pv('o1')::uuid, %L, 'o1')::text)::jsonb AS o) x$q$, :'t_b', :C3)),
+  ('tester_pay', $q$SELECT (s ->> 'result') || '/' || (s ->> 'applied') FROM (SELECT pg_temp.pilot_settle(pg_temp.pv('a1')::jsonb, 'o1') AS s) x$q$),
+  ('tester_paid', $q$SELECT payment_status FROM public.orders WHERE id = pg_temp.pv('o1')::uuid$q$),
+  -- P-3: the ₪50 cap (a forced order of ₪60 for the tester)
+  ('tester_cap', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.max_attempt_open(%%L, %%L, %%L, NULL, %%L)', %1$L,
+           (SELECT o FROM (SELECT pg_temp.call(%1$L, %2$L, format($o$SELECT to_jsonb(x) FROM public.place_order('order',
+              jsonb_build_array(jsonb_build_object('product_id', %%L, 'quantity', 6, 'unit_price', 10)), 18, true,
+              jsonb_build_object('customer_name', 'בודק פיילוט', 'customer_tax_id', '123456782', 'customer_phone', '0501234567',
+                'billing_city', 'תל אביב', 'billing_address', 'הרצל 1', 'billing_zip', '6100001', 'accepted_terms', true,
+                'shipping_method_id', %%L, 'payment_method', 'online')) x$o$, %3$L, %4$L)) ->> 'id' AS o) z), %2$L, 'pilot')), 'opened')$q$,
+         :SB, :C3, :P10, :SHIP_B)),
+  -- P-4: A's tester on B, and a tester of A (not a pilot store) in A: refused
+  ('c4_on_b', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.max_attempt_open(%%L, %%L, %%L, NULL, %%L)', %1$L,
+           pg_temp.forced_online(%1$L, %2$L, false), %2$L, 'pilot')), 'opened')$q$, :SB, :C4)),
+  ('ca_on_a', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.max_attempt_open(%%L, %%L, %%L, NULL, %%L)', %1$L,
+           pg_temp.forced_online(%1$L, %2$L, false), %2$L, 'pilot')), 'opened')$q$, :SA, :CA)),
+  -- P-4: the open refuses an ordinary customer's and a guest's online order (forced shapes)
+  ('c1_open', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.max_attempt_open(%%L, %%L, %%L, NULL, %%L)', %1$L,
+           pg_temp.forced_online(%1$L, %2$L, false), %2$L, 'pilot')), 'opened')$q$, :SB, :C1)),
+  ('guest_token', format($q$SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_order_access_issue(%%L, %%L, %%L))', %1$L,
+           pg_temp.pset('g', pg_temp.forced_online(%1$L, %2$L, true)::text), pg_temp.h('pilot-guest')))::text$q$, :SB, :C2)),
+  ('guest_open', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.max_attempt_open(%%L, %%L, NULL, %%L, %%L)', %L,
+           pg_temp.pv('g'), pg_temp.h('pilot-guest'), 'pilot')), 'opened')$q$, :SB)),
+  -- P-6: the store owner reads only whether online payment is active; the platform admin reads the full status
+  ('owner_status', format($q$SELECT pg_temp.svc(format('SELECT public.max_account_status(%%L, %%L)', %L, %L))::text$q$, :B_OWNER, :SB)),
+  ('plat_status', format($q$SELECT pg_temp.svc(format('SELECT public.max_account_status(%%L, %%L)', %L, %L)) ->> 'terminal_hint'$q$, :PLAT, :SB)),
+  -- P-6: no store-owner path saves, clears or changes the terminal (the terminal functions are the platform admin's)
+  ('owner_term_save', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           jsonb_build_object('terminal_number', %L), 'pilot')), 'saved')$q$, :B_OWNER, :SB, :'t_spare')),
+  ('owner_term_clear', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           '{"clear_credentials": true}', 'pilot')), 'saved')$q$, :B_OWNER, :SB)),
+  ('owner_term_off', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           '{"enabled": false}', 'pilot')), 'saved')$q$, :B_OWNER, :SB)),
+  ('owner_term_verified', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_store_terminal_verified(%%L, %%L, false, %%L)', %L, %L, '1')), 'saved')$q$, :B_OWNER, :SB)),
+  ('owner_term_secrets', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_store_terminal_check_secrets(%%L, %%L)', %L, %L)), 'read')$q$, :B_OWNER, :SB)),
+  ('owner_settings', format($q$SELECT pg_temp.svc(format('SELECT public.max_store_settings_save(%%L, %%L, 1, 0, NULL, NULL)', %L, %L))::text$q$, :B_OWNER, :SB)),
+  -- P-5: NURIEL's terminal is not saved, no platform attempt, nothing payable; the jobs still run
+  ('plat_save', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%%L, %%L, %%L, %%L, %%L)', %1$L,
+           jsonb_build_object('terminal_number', %2$L), 'pilot', (pg_temp.stepup(%1$L) ->> 'challenge_id'), repeat('p', 64))), 'saved')$q$, :PLAT, :'t_plat')),
+  ('plat_verified', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_verified(%%L, true, %%L)', %L, '0')), 'verified')$q$, :PLAT)),
+  ('plat_open', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%%L, %%L, %%L, %%L, NULL, %%L)', %L, %L,
+           'ledger_charge', gen_random_uuid(), 'pilot')), 'opened')$q$, :B_OWNER, :SB)),
+  ('plat_options', format($q$SELECT pg_temp.call(%L, %L, 'SELECT public.platform_card_my_options()') ->> 'available'$q$, :SB, :B_OWNER)),
+  ('jobs', $q$SELECT format('%s/%s/%s/%s/%s', pg_temp.svc('SELECT to_jsonb(public.max_attempts_expire())') IS NOT NULL,
+           pg_temp.svc('SELECT to_jsonb(public.platform_attempts_expire())') IS NOT NULL,
+           pg_temp.svc('SELECT to_jsonb(public.platform_payment_returns_purge())') IS NOT NULL,
+           jsonb_typeof(pg_temp.svc('SELECT to_jsonb(public.max_review_alerts_claim(200))')),
+           jsonb_typeof(pg_temp.svc('SELECT to_jsonb(public.platform_attempt_review_alerts_claim(200))')))$q$),
+  -- P-3: one terminal is one store, in either order (A joins the pilot for this)
+  ('a_add', format($q$INSERT INTO payments.pilot_stores (tenant_id) VALUES (%L) RETURNING 'added'$q$, :SA)),
+  ('a_takes_b', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           jsonb_build_object('terminal_number', %L), 'pilot')), 'saved')$q$, :PLAT, :SA, :'t_b')),
+  ('a_save_own', format($q$SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           jsonb_build_object('terminal_number', %L), 'pilot')) ->> 'mode'$q$, :PLAT, :SA, :'t_a')),
+  ('b_takes_a', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           jsonb_build_object('terminal_number', %L), 'pilot')), 'saved')$q$, :PLAT, :SB, :'t_a')),
+  -- P-2: a payment is on its way (returned) when a person removes B from the list
+  ('o3_returned', format($q$SELECT pg_temp.pset('a3', pg_temp.pilot_returned(pg_temp.forced_online(%1$L, %2$L, false), %2$L, 'o3')::text)::jsonb ->> 'reference' IS NOT NULL$q$,
+         :SB, :C3)),
+  ('b_remove', format($q$DELETE FROM payments.pilot_stores WHERE tenant_id = %L RETURNING 'removed'$q$, :SB)),
+  ('b_remove_audit', format($q$SELECT action FROM payments.tenant_config_audit WHERE tenant_id = %L ORDER BY id DESC LIMIT 1$q$, :SB)),
+  ('b_gone_active', format($q$SELECT public.max_payments_active(%L, %L)::text$q$, :SB, :C3)),
+  ('b_gone_open', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.max_attempt_open(%%L, %%L, %%L, NULL, %%L)', %1$L,
+           pg_temp.forced_online(%1$L, %2$L, false), %2$L, 'pilot')), 'opened')$q$, :SB, :C3)),
+  ('tester_remove', format($q$DELETE FROM payments.pilot_testers WHERE tenant_id = %L AND user_id = %L RETURNING 'removed'$q$, :SA, :C4)),
+  ('tester_remove_audit', format($q$SELECT action || '/' || changed_fields::text FROM payments.tenant_config_audit WHERE tenant_id = %L ORDER BY id DESC LIMIT 1$q$, :SA)),
+  ('b_gone_save', format($q$SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_store_terminal_save(%%L, %%L, %%L, %%L)', %L, %L,
+           '{"enabled": false}', 'pilot')), 'saved')$q$, :PLAT, :SB)),
+  ('o3_settles', $q$SELECT (s ->> 'result') || '/' || (s ->> 'applied') FROM (SELECT pg_temp.pilot_settle(pg_temp.pv('a3')::jsonb, 'o3') AS s) x$q$),
+  ('truncate', $q$TRUNCATE payments.pilot_stores$q$),
+  ('truncate_testers', $q$TRUNCATE payments.pilot_testers$q$),
+  -- P-1: the marker transitions
+  ('to_demo', $q$UPDATE payments.environment SET name = 'demo' RETURNING name$q$),
+  ('to_production', $q$UPDATE payments.environment SET name = 'production' RETURNING name$q$),
+  ('to_off', $q$UPDATE payments.environment SET name = NULL RETURNING COALESCE(name, 'off') || '/' || (pilot_since IS NOT NULL)$q$),
+  ('to_pilot_again', $q$UPDATE payments.environment SET name = 'pilot' RETURNING name$q$),
+  ('to_off_again', $q$UPDATE payments.environment SET name = NULL RETURNING COALESCE(name, 'off')$q$),
+  ('off_to_demo', $q$UPDATE payments.environment SET name = 'demo' RETURNING name$q$),
+  ('off_to_production', $q$UPDATE payments.environment SET name = 'production' RETURNING name$q$),
+  ('clear_stamp', $q$UPDATE payments.environment SET pilot_since = NULL RETURNING 'cleared'$q$);
+CREATE TEMP TABLE op_pilot AS
+SELECT s.k, u.r FROM unnest(pg_temp.probe((SELECT array_agg(q ORDER BY n) FROM op_pilot_steps))) WITH ORDINALITY AS u(r, n)
+  JOIN op_pilot_steps s USING (n);
+CREATE OR REPLACE FUNCTION pg_temp.pr(_k text) RETURNS text LANGUAGE sql AS $f$
+  SELECT COALESCE((SELECT r FROM op_pilot WHERE k = _k), 'missing:' || _k);
+$f$;
+SELECT tests.check('P-1 (pilot): an unmarked database that was never DEMO and never live becomes a pilot; pilot_since is stamped',
+  $$SELECT pg_temp.pr('mark') = 'ok:pilot/true'$$);
+SELECT tests.check('P-2 (pilot): a store outside the list gets no terminal — the platform admin''s save (before B joins; store A; B after it left) and the table owner''s direct insert are refused',
+  $$SELECT pg_temp.pr('b_unlisted') LIKE 'error:%this store is not in the pilot%' AND pg_temp.pr('a_save') LIKE 'error:%this store is not in the pilot%'
+       AND pg_temp.pr('a_insert') LIKE 'error:%this store is not in the pilot%' AND pg_temp.pr('b_gone_save') LIKE 'ok:%this store is not in the pilot%'$$);
+SELECT tests.check('P-2 (pilot): a person adds and removes a store with SQL; each change is audited (system actor, no user, field name only); the list is never truncated',
+  $$SELECT pg_temp.pr('b_add') = 'ok:added' AND pg_temp.pr('b_add_audit') = 'ok:pilot_store_added/system/true/{pilot_store}'
+       AND pg_temp.pr('b_remove') = 'ok:removed' AND pg_temp.pr('b_remove_audit') = 'ok:pilot_store_removed'
+       AND pg_temp.pr('truncate') LIKE 'error:%pilot_stores is never truncated%'$$);
+SELECT tests.check('P-2 / P-4 (pilot): no grants on payments.pilot_stores and payments.pilot_testers — anon, authenticated and service_role cannot read or write them; no API function writes them',
+  $$SELECT NOT EXISTS (SELECT 1 FROM unnest(ARRAY['anon', 'authenticated', 'service_role']) r(role),
+                              unnest(ARRAY['payments.pilot_stores', 'payments.pilot_testers']) t(tbl)
+                        WHERE has_table_privilege(r.role, t.tbl, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE'))
+       AND NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
+                        AND (p.prosrc LIKE '%pilot_stores%' OR p.prosrc LIKE '%pilot_testers%')
+                        AND p.prosrc ~* '(insert|update|delete)[^;]*payments\.pilot_(stores|testers)')$$);
+SELECT tests.check('P-4 (pilot): a person lists the named test customers with SQL; each listing and removal is audited (system actor, field name only — the tester''s user id is not copied); the list is never truncated',
+  $$SELECT pg_temp.pr('testers_add') = 'ok:4' AND pg_temp.pr('testers_audit') = 'ok:pilot_tester_added/system/true/{pilot_tester}/4'
+       AND pg_temp.pr('tester_remove') = 'ok:removed' AND pg_temp.pr('tester_remove_audit') = 'ok:pilot_tester_removed/{pilot_tester}'
+       AND pg_temp.pr('truncate_testers') LIKE 'error:%pilot_testers is never truncated%'$$);
+SELECT tests.check('P-1 / P-3 / P-6 (pilot): the platform admin saves the pilot store''s test terminal (verified, enabled); an app not marked pilot, mode live and a non-00100 number are refused',
+  $$SELECT pg_temp.pr('save_app_demo') LIKE 'error:%environments differ%' AND pg_temp.pr('save_live_mode') LIKE 'error:%only test terminals%'
+       AND pg_temp.pr('save_live_number') LIKE 'error:%only test terminals%'
+       AND pg_temp.pr('b_save') = 'ok:test' AND pg_temp.pr('b_verified') = 'ok:verified' AND pg_temp.pr('b_enable') = 'ok:true'$$);
+SELECT tests.check('P-3 (pilot): one terminal number is one store, in either order — B''s number refused for A, A''s own saved, A''s number refused for B',
+  $$SELECT pg_temp.pr('a_add') = 'ok:added' AND pg_temp.pr('a_takes_b') LIKE 'ok:%already registered to another store%'
+       AND pg_temp.pr('a_save_own') = 'ok:test' AND pg_temp.pr('b_takes_a') LIKE 'ok:%already registered to another store%'$$);
+SELECT tests.check('P-4 (pilot): online payment is active only for the store''s named test customer — not another customer, a guest, a tester of another store, or unlisted staff; never in a store outside the list, even for its listed tester',
+  $$SELECT pg_temp.pr('active') = 'ok:t/f/f/f/f/f/f'$$);
+SELECT tests.check('P-4 (pilot): an ordinary customer and a guest cannot place an online order, and the open refuses their online orders',
+  $$SELECT pg_temp.pr('c1_order') LIKE 'ok:%אינו זמין%' AND pg_temp.pr('guest_order') LIKE 'ok:%אינו זמין%'
+       AND pg_temp.pr('c1_open') LIKE 'ok:%named test customers only%'
+       AND pg_temp.pr('guest_token') = 'ok:true' AND pg_temp.pr('guest_open') LIKE 'ok:%named test customers only%'$$);
+SELECT tests.check('P-4 (pilot): a tester of store A is refused on store B; a tester row for a store outside pilot_stores has no effect (refused)',
+  $$SELECT pg_temp.pr('c4_on_b') LIKE 'ok:%named test customers only%' AND pg_temp.pr('ca_on_a') LIKE 'ok:%not available in this store (pilot)%'$$);
+SELECT tests.check('P-4 (pilot): a store admin listed in pilot_testers still gets no online order — staff orders stay offline (orders_default_payment unchanged)',
+  $$SELECT pg_temp.pr('owner_order') = 'ok:offline/not_required'$$);
+SELECT tests.check('P-3 / P-4 (pilot): the named test customer places an online order and pays — test mode, B''s terminal; test_paid, applied, the order paid; above ₪50 refused',
+  $$SELECT pg_temp.pr('tester_order') = 'ok:online/awaiting/true' AND pg_temp.pr('tester_open') LIKE 'ok:test/%/true'
+       AND pg_temp.pr('tester_pay') = 'ok:test_paid/true' AND pg_temp.pr('tester_paid') = 'ok:paid' AND pg_temp.pr('tester_cap') LIKE 'ok:%limited to 50 ILS%'$$);
+SELECT tests.check('P-6 (pilot): the store owner reads only {"active": …} (active = for at least one named tester) — no terminal, hint, mode or key metadata; the platform admin reads the full status; the owner''s settings save is kept, its answer trimmed the same way',
+  format($$SELECT pg_temp.pr('owner_status_before') = 'ok:{"active": false}' AND pg_temp.pr('owner_status') = 'ok:{"active": true}'
+             AND pg_temp.pr('plat_status') = 'ok:********' || right(%L, 2) AND pg_temp.pr('owner_settings') = 'ok:{"active": true}'$$, :'t_b'));
+SELECT tests.check('P-6 (pilot): every store-owner attempt to save, clear, switch off, mark verified or inspect the terminal is refused in the database',
+  $$SELECT pg_temp.pr('owner_term_save') LIKE 'ok:%only the platform admin sets up a payment terminal%'
+       AND pg_temp.pr('owner_term_clear') LIKE 'ok:%only the platform admin sets up a payment terminal%'
+       AND pg_temp.pr('owner_term_off') LIKE 'ok:%only the platform admin sets up a payment terminal%'
+       AND pg_temp.pr('owner_term_verified') LIKE 'ok:%only the platform admin verifies a terminal%'
+       AND pg_temp.pr('owner_term_secrets') LIKE 'ok:%only the platform admin checks a terminal%'$$);
+SELECT tests.check('P-5 (pilot): the platform scope is off — NURIEL''s terminal not saved or verified, no platform attempt, nothing available; the sweeps, the purge and the alert claims still run',
+  $$SELECT pg_temp.pr('plat_save') LIKE 'ok:%the platform terminal is off%' AND pg_temp.pr('plat_verified') LIKE 'ok:%the platform terminal is off%'
+       AND pg_temp.pr('plat_open') LIKE 'ok:%not available in the pilot%'
+       AND pg_temp.pr('plat_options') = 'ok:false' AND pg_temp.pr('jobs') = 'ok:t/t/t/array/array'$$);
+SELECT tests.check('P-2 (pilot): a store that left the list is no longer active and opens no new attempt, but a payment already on its way still settles',
+  $$SELECT pg_temp.pr('o3_returned') = 'ok:true' AND pg_temp.pr('b_gone_active') = 'ok:false'
+       AND pg_temp.pr('b_gone_open') LIKE 'ok:%not available in this store (pilot)%' AND pg_temp.pr('o3_settles') = 'ok:test_paid/true'$$);
+SELECT tests.check('P-1 (pilot): pilot → demo and pilot → production refused; pilot → off and back allowed; once a pilot, never DEMO or production; pilot_since is never cleared',
+  $$SELECT pg_temp.pr('to_demo') LIKE 'error:%was a pilot%' AND pg_temp.pr('to_production') LIKE 'error:%was a pilot%'
+       AND pg_temp.pr('to_off') = 'ok:off/true' AND pg_temp.pr('to_pilot_again') = 'ok:pilot' AND pg_temp.pr('to_off_again') = 'ok:off'
+       AND pg_temp.pr('off_to_demo') LIKE 'error:%was a pilot%' AND pg_temp.pr('off_to_production') LIKE 'error:%was a pilot%'
+       AND pg_temp.pr('clear_stamp') LIKE 'error:%pilot_since is never cleared%'$$);
+SELECT tests.check('the pilot rehearsal left nothing behind (rolled back: unmarked, no pilot store, no terminal, no attempt, no pilot audit)',
+  $$SELECT (SELECT name IS NULL AND demo_since IS NULL AND pilot_since IS NULL FROM payments.environment)
+       AND NOT EXISTS (SELECT 1 FROM payments.pilot_stores) AND NOT EXISTS (SELECT 1 FROM payments.pilot_testers)
+       AND NOT EXISTS (SELECT 1 FROM payments.tenant_accounts)
+       AND NOT EXISTS (SELECT 1 FROM payments.tenant_attempts) AND NOT EXISTS (SELECT 1 FROM payments.terminal_registry)
+       AND NOT EXISTS (SELECT 1 FROM payments.tenant_config_audit)$$);
+CREATE TEMP TABLE op_prod_pilot AS
+SELECT n, r FROM unnest(pg_temp.probe(ARRAY[
+  $q$UPDATE payments.environment SET name = 'production' RETURNING name$q$,
+  $q$UPDATE payments.environment SET name = 'pilot' RETURNING name$q$
+])) WITH ORDINALITY AS t(r, n);
+SELECT tests.check('P-1 (pilot): production → pilot is refused (rehearsal, rolled back)',
+  $$SELECT (SELECT r = 'ok:production' FROM op_prod_pilot WHERE n = 1)
+       AND (SELECT r LIKE 'error:%only an unmarked database%' FROM op_prod_pilot WHERE n = 2)$$);
+
+-- ============================================================
 -- 4. The DB owner marks this database DEMO (DM-ENV-2 / DM-ENV-3)
 -- ============================================================
 UPDATE payments.environment SET name = 'demo', note = 'local test DB (online-payments.test.sql)';
@@ -620,6 +885,11 @@ SELECT tests.check('DM-ENV-2 (M5): a DEMO database never becomes production — 
        AND pg_temp.db_err($q$UPDATE payments.environment SET name = NULL; UPDATE payments.environment SET name = 'production'$q$)
              LIKE '%can never become production%'
        AND (SELECT name = 'demo' FROM payments.environment)$$);
+SELECT tests.check('P-1 (pilot): a database that was DEMO never becomes a pilot — not directly, not after being switched off',
+  $$SELECT pg_temp.db_err($q$UPDATE payments.environment SET name = 'pilot'$q$) LIKE '%only an unmarked database that was never DEMO%'
+       AND pg_temp.db_err($q$UPDATE payments.environment SET name = NULL; UPDATE payments.environment SET name = 'pilot'$q$)
+             LIKE '%only an unmarked database that was never DEMO%'
+       AND (SELECT name = 'demo' AND pilot_since IS NULL FROM payments.environment)$$);
 SELECT tests.check('DM-ENV-2 (M5): demo_since can never be cleared (it is what keeps a DEMO database out of production)',
   $$SELECT pg_temp.db_err('UPDATE payments.environment SET demo_since = NULL') LIKE '%demo_since is never cleared%'
        AND (SELECT demo_since IS NOT NULL FROM payments.environment)$$);
@@ -1605,7 +1875,7 @@ SELECT tests.check('RLS / grants: a signed-in store owner, anon and service_role
   format($$SELECT %L LIKE '%%permission denied%%' AND %L LIKE '%%permission denied%%' AND %L LIKE '%%permission denied%%'
              AND %L LIKE '%%permission denied%%' AND %L LIKE '%%permission denied%%'$$, :'rl1', :'rl2', :'rl3', :'rl4', :'rl5'));
 SELECT tests.check('RLS (second layer): every payments table carries its RESTRICTIVE policy for all roles',
-  $$SELECT (SELECT count(*) FROM pg_policies WHERE schemaname = 'payments' AND roles = '{public}' AND permissive = 'RESTRICTIVE') = 17$$);
+  $$SELECT (SELECT count(*) FROM pg_policies WHERE schemaname = 'payments' AND roles = '{public}' AND permissive = 'RESTRICTIVE') = 18$$);
 
 -- ============================================================
 -- 17. Store deletion (decision 15): payment records outlive the store; its credentials go with it

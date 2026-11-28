@@ -152,6 +152,11 @@ check_guard $M92 payments.environment "UPDATE payments.environment SET name = 'd
 # the system's environment_changed audit row
 check_guard $M92 payments.environment "UPDATE payments.environment SET name = NULL, demo_since = now() - interval '1 day';"
 check_guard $M92 payments.platform_config_audit "$(S payments.platform_config_audit '{"action":"'"'"'environment_changed'"'"'"}')"
+# pilot (contract §7.2 P-1, P-2, P-4): a database that was ever a pilot (pilot_since stays when switched off), a pilot
+# store, a pilot tester
+check_guard $M92 payments.environment "UPDATE payments.environment SET name = NULL, pilot_since = now() - interval '1 day';"
+check_guard $M92 payments.pilot_stores "$(S payments.pilot_stores)"
+check_guard $M92 payments.pilot_testers "$(S payments.pilot_testers)"
 check_guard $M92 public.orders "$(S public.orders '{"payment_method":"'"'"'online'"'"'"}')"
 check_guard $M92 billing.ledger "$(S billing.ledger '{"source":"'"'"'provider'"'"'"}')"
 

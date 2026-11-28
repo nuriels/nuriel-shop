@@ -130,6 +130,16 @@ CREATE TABLE IF NOT EXISTS payments.pilot_stores (
   added_at  timestamptz NOT NULL DEFAULT now(),
   note      text CHECK (note IS NULL OR char_length(note) <= 200)
 );
+-- 3a3. Production pilot (contract §7.2 P-4, revised): the named test customers of a pilot store — signed-in customer
+--      accounts (auth user id = orders.customer_id). Written only by a person with SQL; every change audited. A row
+--      for a store that is not in pilot_stores has no effect. Staff orders stay offline (orders_default_payment).
+CREATE TABLE IF NOT EXISTS payments.pilot_testers (
+  tenant_id uuid NOT NULL REFERENCES public.tenants (id) ON DELETE CASCADE,
+  user_id   uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  added_at  timestamptz NOT NULL DEFAULT now(),
+  note      text CHECK (note IS NULL OR char_length(note) <= 200),
+  PRIMARY KEY (tenant_id, user_id)
+);
 INSERT INTO payments.environment (id, name, note)
 VALUES (true, NULL, 'created unset by migration 208: online payments are off until the DB owner marks this database')
 ON CONFLICT (id) DO NOTHING;
@@ -587,12 +597,13 @@ CREATE TABLE IF NOT EXISTS payments.tenant_config_audit (
   action         text NOT NULL CHECK (action IN ('account_created', 'credentials_replaced', 'credentials_cleared',
                    'terminal_changed', 'mode_changed', 'enabled', 'disabled', 'verified', 'verify_failed',
                    'capabilities_changed', 'store_settings_changed', 'store_settings_clamped', 'review_resolved',
-                   'pilot_store_added', 'pilot_store_removed', 'pilot_store_changed')),
+                   'pilot_store_added', 'pilot_store_removed', 'pilot_store_changed',
+                   'pilot_tester_added', 'pilot_tester_removed', 'pilot_tester_changed')),
   changed_fields text[] NOT NULL DEFAULT '{}'::text[]
                  CHECK (changed_fields <@ ARRAY['mode', 'terminal_number', 'api_key', 'api_password', 'key_id',
                    'enabled', 'status', 'terminal_max_installments', 'verified_methods', 'verified_brands',
                    'max_installments', 'min_installments_amount_minor', 'allowed_methods', 'allowed_brands',
-                   'review', 'review_outcome', 'payment_due_at', 'pilot_store']::text[]),
+                   'review', 'review_outcome', 'payment_due_at', 'pilot_store', 'pilot_tester']::text[]),
   created_at     timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_config_audit_actor CHECK ((actor_role = 'system') = (actor_id IS NULL))
 );
@@ -665,7 +676,7 @@ BEGIN
                    'WITH CHECK (tenant_id = (SELECT public.current_tenant_id()))', _t);
     EXECUTE format('REVOKE ALL ON payments.%I FROM PUBLIC, anon, authenticated, service_role', _t);
   END LOOP;
-  FOREACH _t IN ARRAY ARRAY['environment', 'pilot_stores', 'terminal_registry', 'unknown_returns', 'platform_accounts',
+  FOREACH _t IN ARRAY ARRAY['environment', 'pilot_stores', 'pilot_testers', 'terminal_registry', 'unknown_returns', 'platform_accounts',
                             'platform_attempts', 'platform_events', 'platform_config_audit',
                             'platform_stepup_challenges', 'platform_returns'] LOOP
     EXECUTE format('ALTER TABLE payments.%I ENABLE ROW LEVEL SECURITY', _t);
@@ -713,12 +724,12 @@ RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
   SELECT payments.env() IS DISTINCT FROM 'pilot'
       OR EXISTS (SELECT 1 FROM payments.pilot_stores p WHERE p.tenant_id = _tenant);
 $$;
--- P-4: a pilot tester = a signed-in user with a staff role in that store: admin (owner or manager) or agent, not blocked
+-- P-4 (revised): a pilot tester = a signed-in user listed in payments.pilot_testers for that store (the auth user id;
+-- for an order it is orders.customer_id — the same id max_attempt_open already requires the payer to be)
 CREATE OR REPLACE FUNCTION payments.pilot_tester(_tenant uuid, _user uuid)
 RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
   SELECT _user IS NOT NULL AND EXISTS (
-    SELECT 1 FROM public.user_roles ur
-     WHERE ur.tenant_id = _tenant AND ur.user_id = _user AND ur.role IN ('admin', 'agent') AND NOT ur.is_blocked);
+    SELECT 1 FROM payments.pilot_testers p WHERE p.tenant_id = _tenant AND p.user_id = _user);
 $$;
 
 -- The store owner = the protected, unblocked admin of that store (store_staff_role 'owner' without its platform-admin
@@ -956,20 +967,21 @@ DROP TRIGGER IF EXISTS environment_no_truncate ON payments.environment;
 CREATE TRIGGER environment_no_truncate BEFORE TRUNCATE ON payments.environment
   FOR EACH STATEMENT EXECUTE FUNCTION payments.environment_guard();
 
--- 8a2. P-2: every change of the pilot list is audited in the store's audit (system actor: a person with SQL); the
---      list is never truncated (a TRUNCATE would bypass the audit)
+-- 8a2. P-2 / P-4: every change of the pilot lists (stores, testers) is audited in the store's audit (system actor: a
+--      person with SQL); the lists are never truncated (a TRUNCATE would bypass the audit)
 CREATE OR REPLACE FUNCTION payments.pilot_stores_audit()
 RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
   IF TG_OP = 'TRUNCATE' THEN
-    RAISE EXCEPTION 'payments.pilot_stores is never truncated: delete the rows (each removal is audited)'
+    RAISE EXCEPTION 'payments.% is never truncated: delete the rows (each removal is audited)', TG_TABLE_NAME
       USING ERRCODE = 'insufficient_privilege';
   END IF;
+  -- the field name only: which store changed is the audit row's tenant_id; a tester's user id is not copied
   INSERT INTO payments.tenant_config_audit (tenant_id, provider, actor_id, actor_role, action, changed_fields)
   VALUES (CASE WHEN TG_OP = 'DELETE' THEN OLD.tenant_id ELSE NEW.tenant_id END, 'max', NULL, 'system',
-          CASE TG_OP WHEN 'INSERT' THEN 'pilot_store_added' WHEN 'DELETE' THEN 'pilot_store_removed'
-                     ELSE 'pilot_store_changed' END,
-          ARRAY['pilot_store']);
+          CASE WHEN TG_TABLE_NAME = 'pilot_testers' THEN 'pilot_tester_' ELSE 'pilot_store_' END
+            || CASE TG_OP WHEN 'INSERT' THEN 'added' WHEN 'DELETE' THEN 'removed' ELSE 'changed' END,
+          ARRAY[CASE WHEN TG_TABLE_NAME = 'pilot_testers' THEN 'pilot_tester' ELSE 'pilot_store' END]);
   IF TG_OP = 'DELETE' THEN
     RETURN OLD;
   END IF;
@@ -980,6 +992,12 @@ CREATE TRIGGER pilot_stores_audit AFTER INSERT OR UPDATE OR DELETE ON payments.p
   FOR EACH ROW EXECUTE FUNCTION payments.pilot_stores_audit();
 DROP TRIGGER IF EXISTS pilot_stores_no_truncate ON payments.pilot_stores;
 CREATE TRIGGER pilot_stores_no_truncate BEFORE TRUNCATE ON payments.pilot_stores
+  FOR EACH STATEMENT EXECUTE FUNCTION payments.pilot_stores_audit();
+DROP TRIGGER IF EXISTS pilot_testers_audit ON payments.pilot_testers;
+CREATE TRIGGER pilot_testers_audit AFTER INSERT OR UPDATE OR DELETE ON payments.pilot_testers
+  FOR EACH ROW EXECUTE FUNCTION payments.pilot_stores_audit();
+DROP TRIGGER IF EXISTS pilot_testers_no_truncate ON payments.pilot_testers;
+CREATE TRIGGER pilot_testers_no_truncate BEFORE TRUNCATE ON payments.pilot_testers
   FOR EACH STATEMENT EXECUTE FUNCTION payments.pilot_stores_audit();
 
 -- 8b. Accounts (both scopes), decision ה-4. A DEMO database holds only test terminals (mode 'test', Hyp's documented
@@ -1534,7 +1552,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.max_payments_active(_tenant uuid, _actor uuid DEFAULT NULL)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT payments.flag('max_payments')
-     -- P-2 / P-4: in a pilot, only a store in the list, and only for its staff (testers)
+     -- P-2 / P-4: in a pilot, only a store in the list, and only for its named test customers (pilot_testers)
      AND (payments.env() IS DISTINCT FROM 'pilot'
           OR (payments.pilot_store_ok(_tenant) AND payments.pilot_tester(_tenant, _actor)))
      AND EXISTS (
@@ -1614,12 +1632,12 @@ BEGIN
     RAISE EXCEPTION 'the payment of order % is held for the store (a review found it charged)', o.order_number
       USING ERRCODE = 'check_violation';
   END IF;
-  -- P-2 / P-4: in a pilot, a store outside the list, a guest or an ordinary customer never opens a payment
+  -- P-2 / P-4: in a pilot, a store outside the list, a guest or a customer not listed as its tester never opens a payment
   IF payments.env() = 'pilot' AND NOT payments.pilot_store_ok(_tenant) THEN
     RAISE EXCEPTION 'online payment is not available in this store (pilot)' USING ERRCODE = 'check_violation';
   END IF;
   IF payments.env() = 'pilot' AND NOT payments.pilot_tester(_tenant, o.customer_id) THEN
-    RAISE EXCEPTION 'pilot: online payment is open to the store''s staff only' USING ERRCODE = 'check_violation';
+    RAISE EXCEPTION 'pilot: online payment is open to the store''s named test customers only' USING ERRCODE = 'check_violation';
   END IF;
   IF NOT public.max_payments_active(_tenant, o.customer_id) THEN
     RAISE EXCEPTION 'online payment is not available in this store right now' USING ERRCODE = 'check_violation';
@@ -2327,10 +2345,12 @@ BEGIN
   IF payments.actor_role(_actor, _tenant) IS NULL THEN
     RAISE EXCEPTION 'not allowed' USING ERRCODE = 'insufficient_privilege';
   END IF;
-  -- P-6: in a pilot the store owner learns only whether online payment is active — no terminal number or hint, no
-  -- key metadata, no capabilities (the platform admin still gets the full status)
+  -- P-6: in a pilot the store owner learns only whether online payment is active in the store — that is, for at
+  -- least one of its named test customers (P-4) — no terminal number or hint, no key metadata, no capabilities (the
+  -- platform admin still gets the full status)
   IF payments.env() = 'pilot' AND payments.actor_role(_actor, _tenant) = 'store_owner' THEN
-    RETURN jsonb_build_object('active', public.max_payments_active(_tenant, _actor));
+    RETURN jsonb_build_object('active', EXISTS (
+      SELECT 1 FROM payments.pilot_testers p WHERE p.tenant_id = _tenant AND public.max_payments_active(_tenant, p.user_id)));
   END IF;
   SELECT * INTO a FROM payments.tenant_accounts x WHERE x.tenant_id = _tenant AND x.provider = 'max';
   SELECT * INTO s FROM payments.tenant_store_settings x WHERE x.tenant_id = _tenant AND x.provider = 'max';
