@@ -4,6 +4,7 @@
  * authorizes the actor (the store's owner or a platform admin). DEMO: the owner changes nothing (one payment only).
  */
 import { paymentsRpc } from "@/platform/payments/server/db";
+import { paymentsEnv } from "@/platform/payments/server/env";
 import type { StoreTerminalView } from "@/platform/payments/tenant-views";
 import { asRecord, bool, modeOf, str, unwrap } from "./db";
 
@@ -16,6 +17,7 @@ export function storeTerminalViewOf(data: unknown): StoreTerminalView {
   const status = str(r?.["status"]);
   const hint = (str(r?.["terminal_hint"]) ?? "").replace(/[^0-9]/g, "").slice(-2);
   return {
+    demo: paymentsEnv() === "demo",
     configured: bool(r?.["configured"]),
     active: bool(r?.["active"]),
     environment: ENVIRONMENTS.find((e) => e === environment) ?? null,

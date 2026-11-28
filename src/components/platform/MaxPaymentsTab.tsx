@@ -19,6 +19,7 @@ import {
   terminalHintText,
   type StoreOnlinePaymentsView,
 } from "@/platform/payments/tenant-views";
+import { DemoBanner } from "@/platform/payments/ui/DemoBanner";
 
 /**
  * MAX/Hyp DEMO — the platform admin's "MAX" tab in a store's customer file: the STORE's own terminal (the store is
@@ -112,6 +113,7 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
         <CardTitle className="text-base">MAX — המסוף של החנות</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4" data-testid="max-tab">
+        {s.demo && <DemoBanner />}
         <p className="text-xs text-muted-foreground">
           החנות היא בית העסק: התשלומים של הלקוחות שלה עוברים במסוף שלה בלבד. KEY ו-PassP נשמרים
           מוצפנים בשרת ואינם מוצגים שוב לאף אחד. להחלפה יש להקליד אותם מחדש.

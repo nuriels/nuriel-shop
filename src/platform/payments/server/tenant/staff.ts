@@ -5,6 +5,7 @@
  * a payment being verified is never cancelled) and closing a review for the store's admins.
  */
 import { paymentsRpc } from "@/platform/payments/server/db";
+import { paymentsEnv } from "@/platform/payments/server/env";
 import type { OnlinePaymentView } from "@/platform/payments/tenant-views";
 import { orderPaymentView } from "./checkout";
 import { int, unwrap } from "./db";
@@ -21,7 +22,7 @@ export async function staffOrderPayment(
     _viewer: actorId,
     _guest_token_sha256: null,
   });
-  return orderPaymentView(unwrap("max_order_payment_status", answer));
+  return orderPaymentView(unwrap("max_order_payment_status", answer), paymentsEnv() === "demo");
 }
 
 export async function cancelOrderAttempt(

@@ -25,6 +25,7 @@ import {
   onlinePaymentStage,
   type OnlinePaymentView,
 } from "@/platform/payments/tenant-views";
+import { DemoBanner } from "@/platform/payments/ui/DemoBanner";
 
 type Stage =
   | "loading"
@@ -176,6 +177,7 @@ export function OnlinePaymentPage({
       <main className="mx-auto w-full max-w-xl flex-1 px-4 py-8">
         <Card data-testid="online-pay-page" data-stage={stage}>
           <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+            {view?.demo && <DemoBanner />}
             {testBadge}
             {stage === "loading" || stage === "redirecting" || stage === "checking" ? (
               <>

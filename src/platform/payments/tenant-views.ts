@@ -58,6 +58,8 @@ export interface OnlinePaymentAttemptView {
 
 /** one order's online payment (max_order_payment_status): null when the viewer may not see the order */
 export interface OnlinePaymentView {
+  /** the server runs the DEMO payments environment (paymentsEnv): the screen shows the DEMO notice */
+  demo: boolean;
   orderNumber: string | null;
   orderStatus: string | null;
   paymentMethod: string | null;
@@ -122,6 +124,8 @@ export function reviewReasonLabel(reason: string | null): string {
 
 /** a store's terminal as the store owner and the platform admin see it (max_account_status) — never secrets */
 export interface StoreTerminalView {
+  /** the server runs the DEMO payments environment (paymentsEnv): the screen shows the DEMO notice */
+  demo: boolean;
   configured: boolean;
   active: boolean;
   environment: "demo" | "production" | null;

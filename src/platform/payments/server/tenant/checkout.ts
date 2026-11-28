@@ -15,7 +15,7 @@ import {
   type SignResult,
 } from "@/platform/payments/max/protocol";
 import { paymentsRpc } from "@/platform/payments/server/db";
-import { hypEndpoint, paymentsReady } from "@/platform/payments/server/env";
+import { hypEndpoint, paymentsEnv, paymentsReady } from "@/platform/payments/server/env";
 import { hypRequest } from "@/platform/payments/server/http";
 import {
   attemptStateOf,
@@ -181,11 +181,12 @@ export async function startTenantPayment(
 }
 
 /** max_order_payment_status → the view (null when this viewer may not see the order) */
-export function orderPaymentView(data: unknown): OnlinePaymentView | null {
+export function orderPaymentView(data: unknown, demo: boolean): OnlinePaymentView | null {
   const r = asRecord(data);
   if (!r) return null;
   const a = asRecord(r["attempt"]);
   return {
+    demo,
     orderNumber: str(r["order_number"]),
     orderStatus: str(r["status"]),
     paymentMethod: str(r["payment_method"]),
@@ -235,7 +236,7 @@ export async function customerOrderPayment(input: {
     tenantLog.warn("status_failed", { code: answer.error.code });
     return null;
   }
-  const view = orderPaymentView(answer.data);
+  const view = orderPaymentView(answer.data, paymentsEnv() === "demo");
   if (view?.attempt) view.attempt = { ...view.attempt, id: null, reviewReason: null };
   return view;
 }
