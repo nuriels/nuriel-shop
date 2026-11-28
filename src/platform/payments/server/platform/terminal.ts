@@ -33,6 +33,7 @@ import { accountEmail, stepupRpc } from "@/platform/payments/server/db";
 import {
   hypEndpoint,
   modeAllowed,
+  paymentsEnv,
   paymentsReady,
   terminalAllowed,
   type PaymentsEnv,
@@ -91,6 +92,8 @@ export interface TerminalDeps {
   session(): Promise<{ userId: string } | null>;
   platformOrigin(): Promise<string | null>;
   ready(): Ready;
+  /** the environment marker alone (the DEMO notice), whether or not the root key is ready */
+  paymentsEnv(): PaymentsEnv | null;
   endpoint(): string;
   allow(key: string, limit: number, windowMs: number): boolean;
   rpc: PlatformRpc;
@@ -142,6 +145,7 @@ export const defaultTerminalDeps: TerminalDeps = {
   },
   platformOrigin: requestPlatformOrigin,
   ready: () => paymentsReady("platform"),
+  paymentsEnv,
   endpoint: hypEndpoint,
   allow: allowAction,
   rpc: platformPaymentsRpc,
@@ -192,7 +196,11 @@ const hint = (value: string | null) => {
   return digits.length >= 2 ? `••${digits.slice(-2)}` : null;
 };
 
-function viewOf(row: Row | null, origin: string | null, env: PaymentsEnv | null): TerminalView {
+function viewOf(
+  row: Row | null,
+  origin: string | null,
+  server: { demo: boolean; ready: boolean },
+): TerminalView {
   const status = text(row, "status");
   const mode = text(row, "mode");
   const environment = text(row, "environment");
@@ -200,8 +208,8 @@ function viewOf(row: Row | null, origin: string | null, env: PaymentsEnv | null)
   return {
     configured: flag(row, "configured"),
     environment: environment === "demo" || environment === "production" ? environment : null,
-    demo: env === "demo",
-    paymentsReady: env !== null,
+    demo: server.demo,
+    paymentsReady: server.ready,
     flagOn: flag(row, "flag"),
     enabled: flag(row, "enabled"),
     mode: mode === "test" || mode === "live" ? mode : null,
@@ -222,6 +230,11 @@ function viewOf(row: Row | null, origin: string | null, env: PaymentsEnv | null)
   };
 }
 
+const serverOf = (deps: TerminalDeps, ready: boolean) => ({
+  demo: deps.paymentsEnv() === "demo",
+  ready,
+});
+
 async function statusRow(actorId: string, deps: TerminalDeps): Promise<Row | null> {
   const answer = await platformCall(deps.rpc, "platform_terminal_status", { _actor: actorId });
   if (answer.error) throw dbFailure(answer.error, "platform_terminal_status", deps.log);
@@ -239,7 +252,7 @@ export async function platformTerminalStatus(
   // the status is readable even when payments are off on this server (the page says why)
   const ready = deps.ready();
   const row = await statusRow(session.userId, deps);
-  return viewOf(row, await deps.platformOrigin(), ready.ok ? ready.env : null);
+  return viewOf(row, await deps.platformOrigin(), serverOf(deps, ready.ok));
 }
 
 // ------------------------------------------------------------------------------------------ step-up + save
@@ -402,7 +415,7 @@ export async function savePlatformTerminal(
     cleared: change.clearCredentials,
     forced: change.force,
   });
-  return viewOf(asRow(saved.data), await deps.platformOrigin(), env);
+  return viewOf(asRow(saved.data), await deps.platformOrigin(), serverOf(deps, true));
 }
 
 // ------------------------------------------------------------------------------------------ test connection
@@ -448,7 +461,7 @@ export async function testPlatformTerminal(
   return {
     ok,
     code: safeCode,
-    status: viewOf(asRow(verified.data), await deps.platformOrigin(), env),
+    status: viewOf(asRow(verified.data), await deps.platformOrigin(), serverOf(deps, true)),
   };
 }
 

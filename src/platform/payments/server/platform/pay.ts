@@ -26,6 +26,7 @@ import {
 import {
   hypEndpoint,
   modeAllowed,
+  paymentsEnv,
   paymentsReady,
   terminalAllowed,
   type PaymentsEnv,
@@ -59,6 +60,8 @@ type Ready = { ok: true; env: PaymentsEnv } | { ok: false; reason: string };
 
 export interface PayDeps {
   ready(): Ready;
+  /** the environment marker alone (the DEMO notice), whether or not the root key is ready */
+  paymentsEnv(): PaymentsEnv | null;
   endpoint(): string;
   session(): Promise<{ userId: string } | null>;
   site(): Promise<{ id: string } | null>;
@@ -144,6 +147,7 @@ async function requestStoreOrigin(): Promise<string | null> {
 
 export const defaultPayDeps: PayDeps = {
   ready: () => paymentsReady("platform"),
+  paymentsEnv,
   endpoint: hypEndpoint,
   session: async () => {
     try {
@@ -292,7 +296,7 @@ export async function platformPayOptions(deps: PayDeps = defaultPayDeps): Promis
   return {
     available,
     test: flag(row, "test"),
-    demo: ready.ok && ready.env === "demo",
+    demo: deps.paymentsEnv() === "demo",
     testCapMinor: int(row, "test_amount_cap_minor"),
     charges,
   };

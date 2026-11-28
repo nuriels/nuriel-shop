@@ -174,6 +174,7 @@ function payDeps(
   const alerts: [string, string | null][] = [];
   const deps: PayDeps = {
     ready: () => ({ ok: true, env: "demo" }),
+    paymentsEnv: () => "demo",
     endpoint: () => ENDPOINT,
     session: async () => ({ userId: ACTOR }),
     site: async () => ({ id: STORE }),
@@ -390,6 +391,8 @@ describe("D5 start — the store owner opens a payment of one open charge (DM-PL
     const offOptions = await platformPayOptions(off.deps);
     expect(offOptions.available).toBe(false);
     expect(offOptions.charges.every((c) => !c.payable)).toBe(true);
+    // the DEMO notice follows the environment marker, not the key check
+    expect(offOptions.demo).toBe(true);
 
     const payments = payDeps({
       ownerRpc: (async () => [
@@ -970,6 +973,7 @@ function terminalDeps(
     session: async () => ({ userId: ACTOR }),
     platformOrigin: async () => "https://platform.example.invalid",
     ready: () => ({ ok: true, env: "demo" }),
+    paymentsEnv: () => "demo",
     endpoint: () => ENDPOINT,
     allow: () => true,
     rpc: db.rpc,
@@ -1251,6 +1255,13 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
       reference: REFERENCE,
       state: "expired",
     });
+    // a DEMO server whose root key is missing: the page still loads, says DEMO, and says it cannot save or test
+    const noKey = terminalDeps({ ready: () => ({ ok: false, reason: "root_missing" }) });
+    expect(await platformTerminalStatus(noKey.deps)).toMatchObject({
+      demo: true,
+      paymentsReady: false,
+    });
+    expect(await codeOf(() => testPlatformTerminal(noKey.deps))).toBe("unavailable");
     expect(await resolvePlatformCardPayment({ attemptId: ATTEMPT, note: "נבדק" }, t.deps)).toEqual({
       resolved: true,
     });
