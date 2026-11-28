@@ -5,7 +5,8 @@
  *   secret: without it (or with fewer than 32 characters) nothing can be sealed, opened or step-up signed.
  * • HKDF info "nuriel/payments/v1/<env>/platform/<mode>"; AAD
  *   "<env>|platform|platform|max|<mode>|<accountId>|<field>|<kid>" (the third part is the owner: always
- *   "platform" in this scope, a store id in the tenant scope).
+ *   "platform" in this scope, a store id in the tenant scope). accountId is "platform" for the terminal
+ *   credentials themselves and the attempt id (a UUID) for an encrypted raw return.
  * • stepupKey(env): HKDF(root, "nuriel/payments/v1/<env>/platform/stepup") — the HMAC key of the one-time codes
  *   that approve a change of the platform terminal (stepup.ts). It never equals a cipher key (other label).
  * • DEMO works only with `test`, production only with `live` (decision ה-4, DM-ENV-3).
@@ -32,7 +33,9 @@ function usableRoot(): string {
   return root;
 }
 
-const uuidOrNull = (value: unknown): string | null => {
+/** "platform" (the terminal's own credentials) or a UUID (an attempt: its raw return), lower-case */
+const accountOrNull = (value: unknown): string | null => {
+  if (value === "platform") return "platform";
   const text = typeof value === "string" ? value.toLowerCase() : "";
   return UUID.test(text) ? text : null;
 };
@@ -52,7 +55,7 @@ export function platformSecretCipher(
   const kid = keyIdOf(root);
   const key = hkdfKey(root, `nuriel/payments/v1/${env}/platform/${mode}`);
   const aad = (field: unknown, ctx: PlatformContext | undefined): string | null => {
-    const accountId = uuidOrNull(ctx?.accountId);
+    const accountId = accountOrNull(ctx?.accountId);
     if (!accountId || typeof field !== "string" || !FIELD.test(field)) return null;
     return joinAad([env, "platform", "platform", "max", mode, accountId, field, kid]);
   };
