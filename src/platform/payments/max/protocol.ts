@@ -1,6 +1,6 @@
 /**
  * MAX/Hyp Pay protocol: SIGN / VERIFY builders and parsers for the one-time hosted payment page.
- * Pure: no I/O, no `process.env`, no module state; credentials pass through the builders and are never kept.
+ * Pure: no I/O, no environment access, no module state; credentials pass through the builders and are never kept.
  *
  * Every behaviour below comes from docs/payment-gateways/evidence/demo/01-hyp-protocol.md (§1.2–§1.7, §4, §7)
  * and the official pages it quotes (pay/reference/actions, pay/getting-started/creating-a-payment-page,
