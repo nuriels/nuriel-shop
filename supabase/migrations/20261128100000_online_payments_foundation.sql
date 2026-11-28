@@ -112,12 +112,33 @@ ON CONFLICT (key) DO NOTHING;
 --     production (M5). The app sends its own marker (PAYMENTS_ENV) to every start, terminal save and settle.
 CREATE TABLE IF NOT EXISTS payments.environment (
   id         boolean PRIMARY KEY DEFAULT true CHECK (id),
-  name       text CHECK (name IS NULL OR name IN ('demo', 'production')),
+  name       text CHECK (name IS NULL OR name IN ('demo', 'production', 'pilot')),
   demo_since timestamptz,
+  -- contract §7.2 P-1: the database was ever a production pilot (never cleared)
+  pilot_since timestamptz,
   changed_at timestamptz NOT NULL DEFAULT now(),
   changed_by text NOT NULL DEFAULT session_user::text,
   note       text CHECK (note IS NULL OR char_length(note) <= 200),
-  CONSTRAINT environment_demo_stamped CHECK (name IS DISTINCT FROM 'demo' OR demo_since IS NOT NULL)
+  CONSTRAINT environment_demo_stamped CHECK (name IS DISTINCT FROM 'demo' OR demo_since IS NOT NULL),
+  CONSTRAINT environment_pilot_stamped CHECK (name IS DISTINCT FROM 'pilot' OR pilot_since IS NOT NULL)
+);
+
+-- 3a2. Production pilot (contract §7.2 P-2): the stores allowed to take test card payments while the database is
+--      'pilot'. Written only by a person with SQL (no grant, no API function); every change audited (system actor).
+CREATE TABLE IF NOT EXISTS payments.pilot_stores (
+  tenant_id uuid PRIMARY KEY REFERENCES public.tenants (id) ON DELETE CASCADE,
+  added_at  timestamptz NOT NULL DEFAULT now(),
+  note      text CHECK (note IS NULL OR char_length(note) <= 200)
+);
+-- 3a3. Production pilot (contract §7.2 P-4, revised): the named test customers of a pilot store — signed-in customer
+--      accounts (auth user id = orders.customer_id). Written only by a person with SQL; every change audited. A row
+--      for a store that is not in pilot_stores has no effect. Staff orders stay offline (orders_default_payment).
+CREATE TABLE IF NOT EXISTS payments.pilot_testers (
+  tenant_id uuid NOT NULL REFERENCES public.tenants (id) ON DELETE CASCADE,
+  user_id   uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  added_at  timestamptz NOT NULL DEFAULT now(),
+  note      text CHECK (note IS NULL OR char_length(note) <= 200),
+  PRIMARY KEY (tenant_id, user_id)
 );
 INSERT INTO payments.environment (id, name, note)
 VALUES (true, NULL, 'created unset by migration 208: online payments are off until the DB owner marks this database')
@@ -575,12 +596,14 @@ CREATE TABLE IF NOT EXISTS payments.tenant_config_audit (
   actor_role     text NOT NULL CHECK (actor_role IN ('platform_admin', 'store_owner', 'system')),
   action         text NOT NULL CHECK (action IN ('account_created', 'credentials_replaced', 'credentials_cleared',
                    'terminal_changed', 'mode_changed', 'enabled', 'disabled', 'verified', 'verify_failed',
-                   'capabilities_changed', 'store_settings_changed', 'store_settings_clamped', 'review_resolved')),
+                   'capabilities_changed', 'store_settings_changed', 'store_settings_clamped', 'review_resolved',
+                   'pilot_store_added', 'pilot_store_removed', 'pilot_store_changed',
+                   'pilot_tester_added', 'pilot_tester_removed', 'pilot_tester_changed')),
   changed_fields text[] NOT NULL DEFAULT '{}'::text[]
                  CHECK (changed_fields <@ ARRAY['mode', 'terminal_number', 'api_key', 'api_password', 'key_id',
                    'enabled', 'status', 'terminal_max_installments', 'verified_methods', 'verified_brands',
                    'max_installments', 'min_installments_amount_minor', 'allowed_methods', 'allowed_brands',
-                   'review', 'review_outcome', 'payment_due_at']::text[]),
+                   'review', 'review_outcome', 'payment_due_at', 'pilot_store', 'pilot_tester']::text[]),
   created_at     timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_config_audit_actor CHECK ((actor_role = 'system') = (actor_id IS NULL))
 );
@@ -653,7 +676,7 @@ BEGIN
                    'WITH CHECK (tenant_id = (SELECT public.current_tenant_id()))', _t);
     EXECUTE format('REVOKE ALL ON payments.%I FROM PUBLIC, anon, authenticated, service_role', _t);
   END LOOP;
-  FOREACH _t IN ARRAY ARRAY['environment', 'terminal_registry', 'unknown_returns', 'platform_accounts',
+  FOREACH _t IN ARRAY ARRAY['environment', 'pilot_stores', 'pilot_testers', 'terminal_registry', 'unknown_returns', 'platform_accounts',
                             'platform_attempts', 'platform_events', 'platform_config_audit',
                             'platform_stepup_challenges', 'platform_returns'] LOOP
     EXECUTE format('ALTER TABLE payments.%I ENABLE ROW LEVEL SECURITY', _t);
@@ -680,7 +703,7 @@ $$;
 -- the application's marker (PAYMENTS_ENV) must equal the database marker; an unmarked database matches nothing
 CREATE OR REPLACE FUNCTION payments.app_env_ok(_app_environment text)
 RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
-  SELECT COALESCE(_app_environment IN ('demo', 'production') AND _app_environment = payments.env(), false);
+  SELECT COALESCE(_app_environment IN ('demo', 'production', 'pilot') AND _app_environment = payments.env(), false);
 $$;
 
 CREATE OR REPLACE FUNCTION payments.flag(_key text)
@@ -692,8 +715,21 @@ $$;
 -- test mode in production and no allow-list of test users.
 CREATE OR REPLACE FUNCTION payments.mode_allowed(_mode text)
 RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
-  SELECT COALESCE(CASE _mode WHEN 'test' THEN payments.env() = 'demo'
+  SELECT COALESCE(CASE _mode WHEN 'test' THEN payments.env() IN ('demo', 'pilot')
                              WHEN 'live' THEN payments.env() = 'production' END, false);
+$$;
+-- P-2: outside a pilot every store passes; in a pilot only a store in payments.pilot_stores
+CREATE OR REPLACE FUNCTION payments.pilot_store_ok(_tenant uuid)
+RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT payments.env() IS DISTINCT FROM 'pilot'
+      OR EXISTS (SELECT 1 FROM payments.pilot_stores p WHERE p.tenant_id = _tenant);
+$$;
+-- P-4 (revised): a pilot tester = a signed-in user listed in payments.pilot_testers for that store (the auth user id;
+-- for an order it is orders.customer_id — the same id max_attempt_open already requires the payer to be)
+CREATE OR REPLACE FUNCTION payments.pilot_tester(_tenant uuid, _user uuid)
+RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT _user IS NOT NULL AND EXISTS (
+    SELECT 1 FROM payments.pilot_testers p WHERE p.tenant_id = _tenant AND p.user_id = _user);
 $$;
 
 -- The store owner = the protected, unblocked admin of that store (store_staff_role 'owner' without its platform-admin
@@ -867,7 +903,26 @@ BEGIN
     RAISE EXCEPTION 'a database that was DEMO stays marked as such (demo_since is never cleared)'
       USING ERRCODE = 'insufficient_privilege';
   END IF;
+  IF OLD.pilot_since IS NOT NULL AND NEW.pilot_since IS DISTINCT FROM OLD.pilot_since THEN
+    RAISE EXCEPTION 'a database that was a pilot stays marked as such (pilot_since is never cleared)'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
   IF NEW.name IS DISTINCT FROM OLD.name THEN
+    -- → pilot (P-1): only from unmarked, on a database that was never DEMO and never held a live terminal or payment
+    IF NEW.name = 'pilot' AND (OLD.name IS NOT NULL OR OLD.demo_since IS NOT NULL
+         OR EXISTS (SELECT 1 FROM payments.platform_accounts x WHERE x.mode = 'live')
+         OR EXISTS (SELECT 1 FROM payments.tenant_accounts x WHERE x.mode = 'live')
+         OR EXISTS (SELECT 1 FROM payments.terminal_registry x WHERE x.terminal_number NOT LIKE '00100%')
+         OR EXISTS (SELECT 1 FROM payments.platform_attempts x WHERE x.mode = 'live')
+         OR EXISTS (SELECT 1 FROM payments.tenant_attempts x WHERE x.mode = 'live')) THEN
+      RAISE EXCEPTION 'pilot: only an unmarked database that was never DEMO and never held a live terminal or payment can become a pilot'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    -- a pilot never becomes DEMO or production in this release (go-live is its own approved change)
+    IF NEW.name IN ('demo', 'production') AND (OLD.pilot_since IS NOT NULL OR OLD.name = 'pilot') THEN
+      RAISE EXCEPTION 'this database was a pilot: it cannot become DEMO or production in this release'
+        USING ERRCODE = 'check_violation';
+    END IF;
     -- → demo: only a database that never held a live terminal or a live payment
     IF NEW.name = 'demo' AND (
          EXISTS (SELECT 1 FROM payments.platform_accounts x WHERE x.mode = 'live')
@@ -895,6 +950,9 @@ BEGIN
     IF NEW.name = 'demo' AND NEW.demo_since IS NULL THEN
       NEW.demo_since := now();
     END IF;
+    IF NEW.name = 'pilot' AND NEW.pilot_since IS NULL THEN
+      NEW.pilot_since := now();
+    END IF;
     INSERT INTO payments.platform_config_audit (provider, actor_id, actor_role, action, changed_fields)
     VALUES (NULL, NULL, 'system', 'environment_changed', ARRAY['environment']);
   END IF;
@@ -908,6 +966,39 @@ CREATE TRIGGER environment_guard BEFORE UPDATE OR DELETE ON payments.environment
 DROP TRIGGER IF EXISTS environment_no_truncate ON payments.environment;
 CREATE TRIGGER environment_no_truncate BEFORE TRUNCATE ON payments.environment
   FOR EACH STATEMENT EXECUTE FUNCTION payments.environment_guard();
+
+-- 8a2. P-2 / P-4: every change of the pilot lists (stores, testers) is audited in the store's audit (system actor: a
+--      person with SQL); the lists are never truncated (a TRUNCATE would bypass the audit)
+CREATE OR REPLACE FUNCTION payments.pilot_stores_audit()
+RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  IF TG_OP = 'TRUNCATE' THEN
+    RAISE EXCEPTION 'payments.% is never truncated: delete the rows (each removal is audited)', TG_TABLE_NAME
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  -- the field name only: which store changed is the audit row's tenant_id; a tester's user id is not copied
+  INSERT INTO payments.tenant_config_audit (tenant_id, provider, actor_id, actor_role, action, changed_fields)
+  VALUES (CASE WHEN TG_OP = 'DELETE' THEN OLD.tenant_id ELSE NEW.tenant_id END, 'max', NULL, 'system',
+          CASE WHEN TG_TABLE_NAME = 'pilot_testers' THEN 'pilot_tester_' ELSE 'pilot_store_' END
+            || CASE TG_OP WHEN 'INSERT' THEN 'added' WHEN 'DELETE' THEN 'removed' ELSE 'changed' END,
+          ARRAY[CASE WHEN TG_TABLE_NAME = 'pilot_testers' THEN 'pilot_tester' ELSE 'pilot_store' END]);
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS pilot_stores_audit ON payments.pilot_stores;
+CREATE TRIGGER pilot_stores_audit AFTER INSERT OR UPDATE OR DELETE ON payments.pilot_stores
+  FOR EACH ROW EXECUTE FUNCTION payments.pilot_stores_audit();
+DROP TRIGGER IF EXISTS pilot_stores_no_truncate ON payments.pilot_stores;
+CREATE TRIGGER pilot_stores_no_truncate BEFORE TRUNCATE ON payments.pilot_stores
+  FOR EACH STATEMENT EXECUTE FUNCTION payments.pilot_stores_audit();
+DROP TRIGGER IF EXISTS pilot_testers_audit ON payments.pilot_testers;
+CREATE TRIGGER pilot_testers_audit AFTER INSERT OR UPDATE OR DELETE ON payments.pilot_testers
+  FOR EACH ROW EXECUTE FUNCTION payments.pilot_stores_audit();
+DROP TRIGGER IF EXISTS pilot_testers_no_truncate ON payments.pilot_testers;
+CREATE TRIGGER pilot_testers_no_truncate BEFORE TRUNCATE ON payments.pilot_testers
+  FOR EACH STATEMENT EXECUTE FUNCTION payments.pilot_stores_audit();
 
 -- 8b. Accounts (both scopes), decision ה-4. A DEMO database holds only test terminals (mode 'test', Hyp's documented
 --     test prefix 00100…); a production database only live ones (00100… refused); an unmarked database takes no new
@@ -940,6 +1031,14 @@ BEGIN
     ELSIF _env = 'demo' AND (NEW.mode <> 'test'
                              OR (NEW.terminal_number IS NOT NULL AND NEW.terminal_number NOT LIKE '00100%')) THEN
       RAISE EXCEPTION 'DEMO database: only test terminals (mode test, terminal number 00100…) can be saved'
+        USING ERRCODE = 'check_violation';
+    ELSIF _env = 'pilot' AND TG_TABLE_NAME = 'platform_accounts' THEN
+      RAISE EXCEPTION 'pilot database: the platform terminal is off' USING ERRCODE = 'check_violation';
+    ELSIF _env = 'pilot' AND NOT payments.pilot_store_ok((to_jsonb(NEW) ->> 'tenant_id')::uuid) THEN
+      RAISE EXCEPTION 'pilot database: this store is not in the pilot' USING ERRCODE = 'check_violation';
+    ELSIF _env = 'pilot' AND (NEW.mode <> 'test'
+                              OR (NEW.terminal_number IS NOT NULL AND NEW.terminal_number NOT LIKE '00100%')) THEN
+      RAISE EXCEPTION 'pilot database: only test terminals (mode test, terminal number 00100…) can be saved'
         USING ERRCODE = 'check_violation';
     ELSIF _env = 'production' AND (NEW.mode <> 'live'
                                    OR (NEW.terminal_number IS NOT NULL AND NEW.terminal_number LIKE '00100%')) THEN
@@ -1008,8 +1107,12 @@ BEGIN
     IF NEW.mode = 'live' AND payments.env() IS DISTINCT FROM 'production' THEN
       RAISE EXCEPTION 'a live payment can start only in a production database' USING ERRCODE = 'check_violation';
     END IF;
-    IF NEW.mode = 'test' AND payments.env() IS DISTINCT FROM 'demo' THEN
+    IF NEW.mode = 'test' AND payments.env() IS DISTINCT FROM 'demo' AND payments.env() IS DISTINCT FROM 'pilot' THEN
       RAISE EXCEPTION 'a test payment can start only in a DEMO database' USING ERRCODE = 'check_violation';
+    END IF;
+    IF payments.env() = 'pilot' AND (TG_TABLE_NAME = 'platform_attempts'
+                                     OR NOT payments.pilot_store_ok((to_jsonb(NEW) ->> 'tenant_id')::uuid)) THEN
+      RAISE EXCEPTION 'pilot database: no payment of this kind can start here' USING ERRCODE = 'check_violation';
     END IF;
     IF NEW.state <> 'created' OR NEW.applied THEN
       RAISE EXCEPTION 'a payment attempt starts as created' USING ERRCODE = 'check_violation';
@@ -1449,6 +1552,9 @@ END $$;
 CREATE OR REPLACE FUNCTION public.max_payments_active(_tenant uuid, _actor uuid DEFAULT NULL)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT payments.flag('max_payments')
+     -- P-2 / P-4: in a pilot, only a store in the list, and only for its named test customers (pilot_testers)
+     AND (payments.env() IS DISTINCT FROM 'pilot'
+          OR (payments.pilot_store_ok(_tenant) AND payments.pilot_tester(_tenant, _actor)))
      AND EXISTS (
        SELECT 1 FROM payments.tenant_accounts a
          JOIN public.tenants t ON t.id = a.tenant_id
@@ -1525,6 +1631,13 @@ BEGIN
   IF o.payment_due_at IS NULL THEN
     RAISE EXCEPTION 'the payment of order % is held for the store (a review found it charged)', o.order_number
       USING ERRCODE = 'check_violation';
+  END IF;
+  -- P-2 / P-4: in a pilot, a store outside the list, a guest or a customer not listed as its tester never opens a payment
+  IF payments.env() = 'pilot' AND NOT payments.pilot_store_ok(_tenant) THEN
+    RAISE EXCEPTION 'online payment is not available in this store (pilot)' USING ERRCODE = 'check_violation';
+  END IF;
+  IF payments.env() = 'pilot' AND NOT payments.pilot_tester(_tenant, o.customer_id) THEN
+    RAISE EXCEPTION 'pilot: online payment is open to the store''s named test customers only' USING ERRCODE = 'check_violation';
   END IF;
   IF NOT public.max_payments_active(_tenant, o.customer_id) THEN
     RAISE EXCEPTION 'online payment is not available in this store right now' USING ERRCODE = 'check_violation';
@@ -2209,6 +2322,10 @@ BEGIN
     -- X-14: a return is being verified or reviewed — the order has no due time and cannot expire meanwhile
     'payment_held', (o.payment_method = 'online' AND o.status = 'pending' AND o.payment_status = 'awaiting'
                      AND o.payment_due_at IS NULL),
+    -- E2E finding: not payable right now — a payment of this order is being verified, waits for a person, or was
+    -- decided charged (tenant_order_busy, the open's own refusal); the pay page offers no Pay button meanwhile
+    'busy', (o.payment_method = 'online' AND o.status = 'pending' AND o.payment_status = 'awaiting'
+             AND payments.tenant_order_busy(o.id)),
     'attempt', CASE WHEN a.id IS NOT NULL THEN
                  jsonb_build_object('state', a.state, 'mode', a.mode, 'applied', a.applied,
                    'expires_at', a.expires_at, 'amount_minor', a.amount_minor, 'currency', a.currency,
@@ -2231,6 +2348,13 @@ DECLARE
 BEGIN
   IF payments.actor_role(_actor, _tenant) IS NULL THEN
     RAISE EXCEPTION 'not allowed' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  -- P-6: in a pilot the store owner learns only whether online payment is active in the store — that is, for at
+  -- least one of its named test customers (P-4) — no terminal number or hint, no key metadata, no capabilities (the
+  -- platform admin still gets the full status)
+  IF payments.env() = 'pilot' AND payments.actor_role(_actor, _tenant) = 'store_owner' THEN
+    RETURN jsonb_build_object('active', EXISTS (
+      SELECT 1 FROM payments.pilot_testers p WHERE p.tenant_id = _tenant AND public.max_payments_active(_tenant, p.user_id)));
   END IF;
   SELECT * INTO a FROM payments.tenant_accounts x WHERE x.tenant_id = _tenant AND x.provider = 'max';
   SELECT * INTO s FROM payments.tenant_store_settings x WHERE x.tenant_id = _tenant AND x.provider = 'max';
@@ -2269,7 +2393,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM payments.tenant_accounts x WHERE x.tenant_id = _tenant AND x.provider = 'max') THEN
     RAISE EXCEPTION 'online payments are not set up for this store' USING ERRCODE = 'no_data_found';
   END IF;
-  IF payments.env() = 'demo' AND COALESCE(_max_installments, 1) <> 1 THEN
+  IF payments.env() IN ('demo', 'pilot') AND COALESCE(_max_installments, 1) <> 1 THEN
     RAISE EXCEPTION 'DEMO: card payments are one payment only (max installments 1)' USING ERRCODE = 'check_violation';
   END IF;
   SELECT * INTO old FROM payments.tenant_store_settings x WHERE x.tenant_id = _tenant AND x.provider = 'max' FOR UPDATE;
@@ -2348,13 +2472,17 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.tenants t WHERE t.id = _tenant AND t.site_type = 'ecommerce') THEN
     RAISE EXCEPTION 'store not found' USING ERRCODE = 'no_data_found';
   END IF;
+  -- P-6: in a pilot the platform admin saves the terminal of a store in the pilot list only
+  IF NOT payments.pilot_store_ok(_tenant) THEN
+    RAISE EXCEPTION 'pilot database: this store is not in the pilot' USING ERRCODE = 'check_violation';
+  END IF;
   IF _patch IS NULL OR jsonb_typeof(_patch) <> 'object'
      OR EXISTS (SELECT 1 FROM jsonb_object_keys(_patch) k WHERE k <> ALL (_keys))
      OR (_patch ? 'verified_methods' AND jsonb_typeof(_patch -> 'verified_methods') <> 'array')
      OR (_patch ? 'verified_brands' AND jsonb_typeof(_patch -> 'verified_brands') <> 'array') THEN
     RAISE EXCEPTION 'online payment: invalid settings' USING ERRCODE = 'invalid_parameter_value';
   END IF;
-  IF payments.env() = 'demo' AND COALESCE((_patch ->> 'terminal_max_installments')::integer, 1) <> 1 THEN
+  IF payments.env() IN ('demo', 'pilot') AND COALESCE((_patch ->> 'terminal_max_installments')::integer, 1) <> 1 THEN
     RAISE EXCEPTION 'DEMO: card payments are one payment only (max installments 1)' USING ERRCODE = 'check_violation';
   END IF;
   _clear := COALESCE((_patch ->> 'clear_credentials')::boolean, false);
@@ -2586,6 +2714,10 @@ DECLARE
   _tash   smallint;
   _origin text;
 BEGIN
+  -- P-5: the platform scope is off in a pilot
+  IF payments.env() = 'pilot' THEN
+    RAISE EXCEPTION 'online payment to NURIEL is not available in the pilot' USING ERRCODE = 'check_violation';
+  END IF;
   IF NOT payments.app_env_ok(_app_environment) THEN
     RAISE EXCEPTION 'online payment: application and database environments differ' USING ERRCODE = 'check_violation';
   END IF;
@@ -3203,7 +3335,8 @@ DECLARE
   _avail boolean;
 BEGIN
   SELECT * INTO acc FROM payments.platform_accounts x WHERE x.provider = 'max';
-  _avail := COALESCE(payments.flag('platform_terminal_payments') AND acc.id IS NOT NULL AND acc.enabled
+  _avail := COALESCE(payments.env() IS DISTINCT FROM 'pilot' AND payments.flag('platform_terminal_payments')
+                     AND acc.id IS NOT NULL AND acc.enabled
                      AND acc.status = 'verified' AND payments.mode_allowed(acc.mode)
                      AND payments.store_owner(auth.uid(), _t) AND NOT public.is_platform_admin(auth.uid())
                      AND billing.engine_of(_t) = 'ecommerce', false);
@@ -3258,6 +3391,10 @@ BEGIN
   IF _actor IS NULL OR NOT public.is_platform_admin(_actor) THEN
     RAISE EXCEPTION 'only the platform admin sets up NURIEL''s terminal' USING ERRCODE = 'insufficient_privilege';
   END IF;
+  -- P-5: the platform scope is off in a pilot
+  IF payments.env() = 'pilot' THEN
+    RAISE EXCEPTION 'pilot database: the platform terminal is off' USING ERRCODE = 'check_violation';
+  END IF;
   IF NOT payments.app_env_ok(_app_environment) THEN
     RAISE EXCEPTION 'online payment: application and database environments differ' USING ERRCODE = 'check_violation';
   END IF;
@@ -3265,7 +3402,7 @@ BEGIN
      OR EXISTS (SELECT 1 FROM jsonb_object_keys(_patch) k WHERE k <> ALL (_keys)) THEN
     RAISE EXCEPTION 'online payment: invalid settings' USING ERRCODE = 'invalid_parameter_value';
   END IF;
-  IF payments.env() = 'demo' AND (COALESCE((_patch ->> 'terminal_max_installments')::integer, 1) <> 1
+  IF payments.env() IN ('demo', 'pilot') AND (COALESCE((_patch ->> 'terminal_max_installments')::integer, 1) <> 1
                                   OR COALESCE((_patch ->> 'max_installments')::integer, 1) <> 1) THEN
     RAISE EXCEPTION 'DEMO: card payments are one payment only (max installments 1)' USING ERRCODE = 'check_violation';
   END IF;
@@ -3404,6 +3541,9 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   IF NOT public.is_platform_admin(_actor) THEN
     RAISE EXCEPTION 'only the platform admin verifies NURIEL''s terminal' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF payments.env() = 'pilot' THEN
+    RAISE EXCEPTION 'pilot database: the platform terminal is off' USING ERRCODE = 'check_violation';
   END IF;
   UPDATE payments.platform_accounts x
      SET status = CASE WHEN _ok THEN 'verified' ELSE 'failed' END,

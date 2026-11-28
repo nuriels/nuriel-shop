@@ -32,7 +32,7 @@ BEGIN
     IF to_regclass('payments.environment') IS NOT NULL THEN
       -- review L5: a database that was ever marked (demo_since, or any environment_changed audit row — counted in the
       -- loop above) keeps its history: a rollback + re-apply would make an ex-DEMO database eligible for production
-      SELECT count(*) INTO _n FROM payments.environment WHERE name IS NOT NULL OR demo_since IS NOT NULL;
+      SELECT count(*) INTO _n FROM payments.environment WHERE name IS NOT NULL OR demo_since IS NOT NULL OR pilot_since IS NOT NULL;
       IF _n > 0 THEN
         RAISE EXCEPTION 'rollback stopped: יש % שורות בסימון הסביבה (payments.environment סומן demo / production, גם אם בוטל) — מסד שסומן פעם לא חוזר אחורה',
           _n;
