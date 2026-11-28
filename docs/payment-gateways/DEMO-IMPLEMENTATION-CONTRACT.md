@@ -250,3 +250,23 @@ Accepted and documented, not changed: R2-5 (the DB `store_origin` slug rule foll
 ignores the base domain; the application allow-list `storeOriginOf` is the guard) — LOW, go-live item.
 Open with Hyp (request draft, question 7): what VERIFY answers for an authentic **declined** transaction and for a
 signature mismatch (S1), and which fields `Sign` covers (S2).
+
+### 7.2 Production pilot (owner decision 2026-11-28: DEMO payments on the live site, one store only)
+
+The owner approved running the MAX/Hyp integration on the production site with a Hyp **test** terminal, in the
+owner's own store only. Everything above assumed a separate DEMO server and refuses this on purpose (`demo` is
+refused on the production host; a production database refuses test terminals; a database marked `demo` can never
+become production). The pilot is therefore a third, explicit state — not a relaxation of the two others.
+
+| # | Where | Decision |
+| --- | --- | --- |
+| P-1 | DB `payments.environment` | new value **`pilot`** + `pilot_since`. Set by a person with SQL, like `demo` (no API role, no function writes it). `NULL → pilot` only on a database that never held a live terminal or a live payment and was never `demo`. `pilot → NULL` allowed (switch off; rows stay). `pilot → production`, `pilot ↔ demo`: refused in this release (go-live gets its own approved change). The rollback guard of 208 also stops once `pilot_since` is set |
+| P-2 | DB new `payments.pilot_stores (tenant_id PK, added_at, note)` | the allow-list, by store id. Written only by a person with SQL (no grant, no API function). In `pilot`, a store **not** in the list cannot save a terminal account, is never "active" (`max_payments_active` false) and cannot open an attempt — refused in the database, not only hidden. A recorded attempt of a store that left the list still records its return and settles (no new payment) |
+| P-3 | DB guards | `pilot` accepts **test** accounts only: mode `test`, terminal `00100…`, the ₪50 cap; `live` is refused exactly as in `demo`. One terminal belongs to one store (`terminal_registry`, unchanged) |
+| P-4 | DB `max_payments_active(_tenant, _actor)`, `max_attempt_open` | in `pilot`, card payment exists only for **testers**: a signed-in user who has a staff role in that store (owner / admin / agent). Guests and ordinary customers: not offered, and refused by the database. A real customer of the live store can never reach the test terminal and "pay" without money moving |
+| P-5 | DB platform functions, `paymentsReady('platform')` | the platform scope is **off** in `pilot`: saving the platform terminal, opening a platform attempt and `payable` are refused / false in the database; the application reports the platform side not ready (`pilot`) and its screens show "בקרוב" |
+| P-6 | server only | in `pilot` the terminal number, KEY and PassP come **only from server environment variables** (`MAX_PILOT_TENANT_ID`, `MAX_PILOT_TERMINAL`, `MAX_PILOT_API_KEY`, `MAX_PILOT_PASSP`). At start the server provisions the store's account through a service-role DB function that exists only for this (`max_pilot_terminal_provision`): the two secrets are sealed with the tenant root key exactly as the admin save does, and stored as tokens. Every browser path that saves or clears a terminal is refused in `pilot` (server and DB). Nothing is logged but codes and short ids; the redactor masks the four names |
+| P-7 | `server/env.ts` | `PAYMENTS_ENV=pilot` is accepted only on the production platform host, or on a `*.localhost` platform host (tests, with the loopback mock). `demo` stays refused on the production host; `production` unchanged. The endpoint in `pilot` on the production host is Hyp's; mode allowed: `test` only; the terminal-prefix tripwire requires `00100…`. Startup line: `env=pilot` |
+| P-8 | stores outside the list | checkout: no card option. Store admin: the online-payment screen shows "הסליקה בקרוב" and no input; the server functions refuse. Same for every store while the database is unmarked |
+| P-9 | switch off | removing `PAYMENTS_ENV` (application) or setting the marker to NULL (database) turns everything off at once; existing Bit / Grow / POS / manual flows do not depend on either |
+| P-10 | out of scope | 3DS, refunds, recurring charges, tokens, invoices, SmartBee: no code path, unchanged |
