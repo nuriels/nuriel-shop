@@ -29,6 +29,22 @@ export interface TerminalView {
   successUrl: string | null;
 }
 
+/**
+ * The form's change (arch §3.2 `patch`). For the code request the secrets may be given as values or only as
+ * `setApiKey` / `setApiPassword`: either way only WHICH secrets change is used there (values are dropped, never
+ * stored or logged); the save needs the values. The UI sends the booleans, so each secret travels once.
+ */
+export interface TerminalPatch {
+  terminalNumber?: string | null;
+  enabled?: boolean | null;
+  apiKey?: string | null;
+  apiPassword?: string | null;
+  setApiKey?: boolean;
+  setApiPassword?: boolean;
+  clearCredentials?: boolean;
+  force?: boolean;
+}
+
 /** what a step-up code approves: which fields change, and WHICH secrets change (never their values) */
 export interface TerminalChange {
   terminalNumber: string | null;
@@ -135,24 +151,32 @@ function secretOf(value: unknown): string | null {
   return text;
 }
 
+const patchOf = (input: unknown): Record<string, unknown> => {
+  const patch = (input as { patch?: unknown } | null)?.patch;
+  return patch !== null && typeof patch === "object" ? (patch as Record<string, unknown>) : {};
+};
+
+/** `{ patch }` → the change a code is bound to (secret values, if sent, only say "this secret changes") */
 export function parseTerminalChange(input: unknown): TerminalChange {
-  const i = (input ?? {}) as Record<string, unknown>;
+  const i = patchOf(input);
   return {
     terminalNumber: terminalNumberOf(i["terminalNumber"]),
     enabled: optionalBool(i["enabled"]),
-    setApiKey: bool(i["setApiKey"]),
-    setApiPassword: bool(i["setApiPassword"]),
+    setApiKey: bool(i["setApiKey"]) || secretOf(i["apiKey"]) !== null,
+    setApiPassword: bool(i["setApiPassword"]) || secretOf(i["apiPassword"]) !== null,
     clearCredentials: bool(i["clearCredentials"]),
     force: bool(i["force"]),
   };
 }
 
+/** `{ patch, challengeId, code }` → the save (the same change + the secret values + the code) */
 export function parseTerminalSave(input: unknown): TerminalSave {
-  const i = (input ?? {}) as Record<string, unknown>;
-  const challengeId = String(i["challengeId"] ?? "")
+  const outer = (input ?? {}) as Record<string, unknown>;
+  const i = patchOf(input);
+  const challengeId = String(outer["challengeId"] ?? "")
     .trim()
     .toLowerCase();
-  const code = String(i["code"] ?? "").replace(/\s/g, "");
+  const code = String(outer["code"] ?? "").replace(/\s/g, "");
   if (!UUID.test(challengeId) || !/^[0-9]{6}$/.test(code))
     throw new Error("יש להזין את קוד האימות בן 6 הספרות שנשלח למייל");
   return {
@@ -174,14 +198,16 @@ export const platformTerminalStatus = createServerFn({ method: "POST" }).handler
 
 /** step 1 of a save: e-mails a code bound to this change (no secret value is sent here) */
 export const platformTerminalRequestCode = createServerFn({ method: "POST" })
-  .inputValidator((input: TerminalChange) => parseTerminalChange(input))
+  .inputValidator((input: { patch: TerminalPatch }) => parseTerminalChange(input))
   .handler(async ({ data }): Promise<CodeSent> =>
     guarded(async () => (await terminal()).requestTerminalSaveCode(data)),
   );
 
 /** step 2: the same change + the secrets + the code (consumed before the save, DM-SEP-6) */
 export const platformTerminalSave = createServerFn({ method: "POST" })
-  .inputValidator((input: TerminalSave) => parseTerminalSave(input))
+  .inputValidator((input: { patch: TerminalPatch; challengeId: string; code: string }) =>
+    parseTerminalSave(input),
+  )
   .handler(async ({ data }): Promise<TerminalView> =>
     guarded(async () => (await terminal()).savePlatformTerminal(data)),
   );

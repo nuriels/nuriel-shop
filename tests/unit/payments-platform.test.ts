@@ -3,6 +3,14 @@
 // Hyp (built from the protocol module itself), a fake cipher and a fake step-up service. No network, no DB, no
 // Docker. Every value is an obvious fake (declared fake terminal numbers, placeholder credentials).
 import { describe, expect, it, vi } from "vitest";
+
+// the server-function files are imported only for their pure input parsers
+vi.mock("@tanstack/react-start", () => ({
+  createServerFn: () => ({
+    inputValidator: () => ({ handler: (h: unknown) => h }),
+    handler: (h: unknown) => h,
+  }),
+}));
 import type { HypHttpResult } from "@/platform/payments/server/http";
 import type { PaymentMode } from "@/platform/payments/provider";
 import { buildVerifyQuery, encodeParams, parseReturnQuery } from "@/platform/payments/max/protocol";
@@ -48,6 +56,7 @@ import {
   type TerminalDeps,
 } from "@/platform/payments/server/platform/terminal";
 import { alertPlatformAdmins } from "@/platform/payments/server/platform/alerts";
+import { parseTerminalChange, parseTerminalSave } from "@/platform/billing/pay-terminal.functions";
 
 // ------------------------------------------------------------------------------------------ fixtures
 
@@ -1390,4 +1399,77 @@ describe("D5 log, alerts and DB errors (DM-SEC-7)", () => {
 // sanity: the protocol module parses the fixture return (keeps the tests honest)
 it("fixture return parses", () => {
   expect(parseReturnQuery(RAW).ok).toBe(true);
+});
+
+describe("D5 terminal wire shapes (arch §3.2: { patch } and { patch, challengeId, code })", () => {
+  const patch = {
+    terminalNumber: "0010-090 001",
+    apiKey: FAKE_KEY,
+    apiPassword: FAKE_PASSWORD,
+    enabled: true,
+  };
+
+  it("DM-SEP-6: the same patch in both calls gives the same step-up intent; secret values in a code request are only flags", () => {
+    const change = parseTerminalChange({ patch });
+    expect(change).toEqual({
+      terminalNumber: TERMINAL,
+      enabled: true,
+      setApiKey: true,
+      setApiPassword: true,
+      clearCredentials: false,
+      force: false,
+    });
+    expect(JSON.stringify(change)).not.toMatch(/FAKE_/);
+    const save = parseTerminalSave({
+      patch,
+      challengeId: CHALLENGE.toUpperCase(),
+      code: " 246 813 ",
+    });
+    expect(save).toMatchObject({
+      apiKey: FAKE_KEY,
+      apiPassword: FAKE_PASSWORD,
+      challengeId: CHALLENGE,
+      code: "246813",
+    });
+    const fromSave = {
+      terminalNumber: save.terminalNumber,
+      enabled: save.enabled,
+      setApiKey: save.apiKey !== null,
+      setApiPassword: save.apiPassword !== null,
+      clearCredentials: save.clearCredentials,
+      force: save.force,
+    };
+    expect(intentOf(fromSave, "demo")).toEqual(intentOf(change, "demo"));
+    // the UI's own shape: flags only
+    expect(parseTerminalChange({ patch: { setApiKey: true, enabled: false } })).toMatchObject({
+      setApiKey: true,
+      setApiPassword: false,
+      enabled: false,
+    });
+  });
+
+  it("bad input is refused before any server call (fixed texts, no value echoed)", () => {
+    for (const bad of [{ patch: { terminalNumber: "123" } }, { patch: { apiKey: "a\u0000b" } }])
+      expect(() => parseTerminalChange(bad)).toThrow();
+    for (const bad of [
+      { patch, challengeId: "x", code: "246813" },
+      { patch, challengeId: CHALLENGE, code: "12345" },
+      { patch: { ...patch, apiPassword: "x".repeat(257) }, challengeId: CHALLENGE, code: "246813" },
+    ]) {
+      let message = "";
+      try {
+        parseTerminalSave(bad);
+      } catch (e) {
+        message = String((e as Error).message);
+      }
+      expect(message).not.toBe("");
+      expect(message).not.toContain("FAKE_");
+    }
+    // empty fields mean "no change"
+    expect(parseTerminalChange({ patch: { terminalNumber: "", apiKey: "  " } })).toMatchObject({
+      terminalNumber: null,
+      setApiKey: false,
+    });
+    expect(parseTerminalChange(undefined)).toMatchObject({ terminalNumber: null, enabled: null });
+  });
 });

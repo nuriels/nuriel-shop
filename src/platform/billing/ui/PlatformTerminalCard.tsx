@@ -161,7 +161,7 @@ export function PlatformTerminalCard() {
     setBusy("code");
     setError(null);
     try {
-      setChallenge(await platformTerminalRequestCode({ data: changeOf(form, view) }));
+      setChallenge(await platformTerminalRequestCode({ data: { patch: changeOf(form, view) } }));
       setCode("");
     } catch (e) {
       setError(errorMessage(e));
@@ -178,12 +178,14 @@ export function PlatformTerminalCard() {
       const change = changeOf(form, view);
       const next = await platformTerminalSave({
         data: {
-          terminalNumber: change.terminalNumber,
-          enabled: change.enabled,
-          apiKey: form.apiKey.trim() === "" ? null : form.apiKey,
-          apiPassword: form.apiPassword.trim() === "" ? null : form.apiPassword,
-          clearCredentials: change.clearCredentials,
-          force: change.force,
+          patch: {
+            terminalNumber: change.terminalNumber,
+            enabled: change.enabled,
+            apiKey: form.apiKey.trim() === "" ? null : form.apiKey,
+            apiPassword: form.apiPassword.trim() === "" ? null : form.apiPassword,
+            clearCredentials: change.clearCredentials,
+            force: change.force,
+          },
           challengeId: challenge.challengeId,
           code,
         },
