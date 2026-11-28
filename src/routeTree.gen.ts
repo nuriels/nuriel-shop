@@ -75,6 +75,7 @@ import { Route as OwnerAgreementTokenRouteImport } from './routes/owner-agreemen
 import { Route as PagesSlugRouteImport } from './routes/pages.$slug'
 import { Route as PlatformAiRouteImport } from './routes/platform_.ai'
 import { Route as PlatformHospitalityRouteImport } from './routes/platform_.hospitality'
+import { Route as PlatformPaymentsRouteImport } from './routes/platform_.payments'
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
 import { Route as PlatformSeoRouteImport } from './routes/platform_.seo'
 import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
@@ -130,6 +131,7 @@ import { Route as StayDocsDocSlugRouteImport } from './routes/stay.docs.$docSlug
 import { Route as StayPackagesPackageSlugRouteImport } from './routes/stay.packages.$packageSlug'
 import { Route as StayRoomsTypeSlugRouteImport } from './routes/stay.rooms.$typeSlug'
 import { Route as StayUnitsUnitSlugRouteImport } from './routes/stay.units.$unitSlug'
+import { Route as PlatformPaymentsReturnProviderRouteImport } from './routes/platform_.payments_.return.$provider'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -461,6 +463,11 @@ const PlatformHospitalityRoute = PlatformHospitalityRouteImport.update({
   path: '/platform/hospitality',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlatformPaymentsRoute = PlatformPaymentsRouteImport.update({
+  id: '/platform_/payments',
+  path: '/platform/payments',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlatformPlansRoute = PlatformPlansRouteImport.update({
   id: '/platform_/plans',
   path: '/platform/plans',
@@ -741,6 +748,12 @@ const StayUnitsUnitSlugRoute = StayUnitsUnitSlugRouteImport.update({
   path: '/units/$unitSlug',
   getParentRoute: () => StayRoute,
 } as any)
+const PlatformPaymentsReturnProviderRoute =
+  PlatformPaymentsReturnProviderRouteImport.update({
+    id: '/platform_/payments_/return/$provider',
+    path: '/platform/payments/return/$provider',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -807,6 +820,7 @@ export interface FileRoutesByFullPath {
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/ai': typeof PlatformAiRoute
   '/platform/hospitality': typeof PlatformHospitalityRoute
+  '/platform/payments': typeof PlatformPaymentsRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/seo': typeof PlatformSeoRoute
   '/platform/support': typeof PlatformSupportRoute
@@ -864,6 +878,7 @@ export interface FileRoutesByFullPath {
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
+  '/platform/payments/return/$provider': typeof PlatformPaymentsReturnProviderRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -926,6 +941,7 @@ export interface FileRoutesByTo {
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/ai': typeof PlatformAiRoute
   '/platform/hospitality': typeof PlatformHospitalityRoute
+  '/platform/payments': typeof PlatformPaymentsRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/seo': typeof PlatformSeoRoute
   '/platform/support': typeof PlatformSupportRoute
@@ -983,6 +999,7 @@ export interface FileRoutesByTo {
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
+  '/platform/payments/return/$provider': typeof PlatformPaymentsReturnProviderRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -1050,6 +1067,7 @@ export interface FileRoutesById {
   '/pages/$slug': typeof PagesSlugRoute
   '/platform_/ai': typeof PlatformAiRoute
   '/platform_/hospitality': typeof PlatformHospitalityRoute
+  '/platform_/payments': typeof PlatformPaymentsRoute
   '/platform_/plans': typeof PlatformPlansRoute
   '/platform_/seo': typeof PlatformSeoRoute
   '/platform_/support': typeof PlatformSupportRoute
@@ -1107,6 +1125,7 @@ export interface FileRoutesById {
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
+  '/platform_/payments_/return/$provider': typeof PlatformPaymentsReturnProviderRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1175,6 +1194,7 @@ export interface FileRouteTypes {
     | '/pages/$slug'
     | '/platform/ai'
     | '/platform/hospitality'
+    | '/platform/payments'
     | '/platform/plans'
     | '/platform/seo'
     | '/platform/support'
@@ -1232,6 +1252,7 @@ export interface FileRouteTypes {
     | '/stay/packages/$packageSlug'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
+    | '/platform/payments/return/$provider'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1294,6 +1315,7 @@ export interface FileRouteTypes {
     | '/pages/$slug'
     | '/platform/ai'
     | '/platform/hospitality'
+    | '/platform/payments'
     | '/platform/plans'
     | '/platform/seo'
     | '/platform/support'
@@ -1351,6 +1373,7 @@ export interface FileRouteTypes {
     | '/stay/packages/$packageSlug'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
+    | '/platform/payments/return/$provider'
   id:
     | '__root__'
     | '/'
@@ -1417,6 +1440,7 @@ export interface FileRouteTypes {
     | '/pages/$slug'
     | '/platform_/ai'
     | '/platform_/hospitality'
+    | '/platform_/payments'
     | '/platform_/plans'
     | '/platform_/seo'
     | '/platform_/support'
@@ -1474,6 +1498,7 @@ export interface FileRouteTypes {
     | '/stay/packages/$packageSlug'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
+    | '/platform_/payments_/return/$provider'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1519,6 +1544,7 @@ export interface RootRouteChildren {
   PagesSlugRoute: typeof PagesSlugRoute
   PlatformAiRoute: typeof PlatformAiRoute
   PlatformHospitalityRoute: typeof PlatformHospitalityRoute
+  PlatformPaymentsRoute: typeof PlatformPaymentsRoute
   PlatformPlansRoute: typeof PlatformPlansRoute
   PlatformSeoRoute: typeof PlatformSeoRoute
   PlatformSupportRoute: typeof PlatformSupportRoute
@@ -1548,6 +1574,7 @@ export interface RootRouteChildren {
   MarketingConfirmTokenRoute: typeof MarketingConfirmTokenRoute
   PlatformCustomersTenantIdRoute: typeof PlatformCustomersTenantIdRoute
   PlatformWebsitesTenantIdRoute: typeof PlatformWebsitesTenantIdRoute
+  PlatformPaymentsReturnProviderRoute: typeof PlatformPaymentsReturnProviderRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -2014,6 +2041,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformHospitalityRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/platform_/payments': {
+      id: '/platform_/payments'
+      path: '/platform/payments'
+      fullPath: '/platform/payments'
+      preLoaderRoute: typeof PlatformPaymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/platform_/plans': {
       id: '/platform_/plans'
       path: '/platform/plans'
@@ -2399,6 +2433,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StayUnitsUnitSlugRouteImport
       parentRoute: typeof StayRoute
     }
+    '/platform_/payments_/return/$provider': {
+      id: '/platform_/payments_/return/$provider'
+      path: '/platform/payments/return/$provider'
+      fullPath: '/platform/payments/return/$provider'
+      preLoaderRoute: typeof PlatformPaymentsReturnProviderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -2580,6 +2621,7 @@ const rootRouteChildren: RootRouteChildren = {
   PagesSlugRoute: PagesSlugRoute,
   PlatformAiRoute: PlatformAiRoute,
   PlatformHospitalityRoute: PlatformHospitalityRoute,
+  PlatformPaymentsRoute: PlatformPaymentsRoute,
   PlatformPlansRoute: PlatformPlansRoute,
   PlatformSeoRoute: PlatformSeoRoute,
   PlatformSupportRoute: PlatformSupportRoute,
@@ -2609,6 +2651,7 @@ const rootRouteChildren: RootRouteChildren = {
   MarketingConfirmTokenRoute: MarketingConfirmTokenRoute,
   PlatformCustomersTenantIdRoute: PlatformCustomersTenantIdRoute,
   PlatformWebsitesTenantIdRoute: PlatformWebsitesTenantIdRoute,
+  PlatformPaymentsReturnProviderRoute: PlatformPaymentsReturnProviderRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

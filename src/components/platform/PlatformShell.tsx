@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   BedDouble,
+  CreditCard,
   Gem,
   Globe,
   LifeBuoy,
@@ -26,7 +27,7 @@ export function PlatformShell({
   active,
   children,
 }: {
-  active: "stores" | "support" | "plans" | "upgrades" | "ai" | "seo";
+  active: "stores" | "support" | "plans" | "upgrades" | "ai" | "seo" | "payments";
   children: (props: { userId: string }) => ReactNode;
 }) {
   const { session, loading } = useAuthState();
@@ -97,6 +98,14 @@ export function PlatformShell({
                   icon={<SearchCheck className="size-4" />}
                 >
                   SEO
+                </NavLink>
+                {/* MAX/Hyp DEMO (D5): המסוף של NURIEL — תשלומים מבעלי העסקים על חיובים פתוחים */}
+                <NavLink
+                  to="/platform/payments"
+                  active={active === "payments"}
+                  icon={<CreditCard className="size-4" />}
+                >
+                  מסוף הפלטפורמה
                 </NavLink>
                 {/* מסך של מנוע האירוח — רק קישור (הקוד שלו לא מיובא לכאן). שלב א' 4: אתרי האירוח והחבילות
                     שלהם — רק שם (לא ברשימת החנויות ולא בחבילות של החנויות) */}
@@ -173,6 +182,7 @@ function NavLink({
     | "/platform/upgrades"
     | "/platform/ai"
     | "/platform/seo"
+    | "/platform/payments"
     | "/platform/hospitality"
     | "/platform/websites";
   active: boolean;
