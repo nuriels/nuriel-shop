@@ -35,6 +35,7 @@ import {
 } from "@/lib/order-email-data.server";
 import { formatUnitIls } from "@/lib/catalog";
 import { POS_PAYMENT_LABEL, isPosPaymentMethod } from "@/lib/pos";
+import { paymentsEnv } from "@/platform/payments/server/env";
 
 export type NotificationTemplate = "order_confirmation" | "order_staff" | "order_shipped" | "test";
 export type NotificationProvider = "tenant" | "platform";
@@ -406,6 +407,20 @@ function customerPaymentHtml(prepared: PreparedOrderEmail): string {
       "💳 שולם באמצעות תשלום מקוון",
       `<p style="margin:0 0 4px;">התשלום התקבל — תודה! ${details}</p>
        <p style="margin:0;color:#6b7280;font-size:13px;">חשבונית / קבלה על התשלום נשלחת אליכם מחברת הסליקה.</p>`,
+      "#86efac",
+      "#f0fdf4",
+    );
+  }
+  if (method === "online" && status === "paid") {
+    // MAX/Hyp DEMO: תשלום מקוון בכרטיס — המייל יוצא רק אחרי שהשרת אימת את התשלום (אין מסמך חשבונאי ב-DEMO)
+    const demo = paymentsEnv() === "demo";
+    return box(
+      "💳 שולם בכרטיס אשראי",
+      `<p style="margin:0;">התשלום התקבל — תודה!</p>${
+        demo
+          ? `<p style="margin:4px 0 0;color:#6b7280;font-size:13px;">סביבת DEMO — אין חיובים אמיתיים.</p>`
+          : ""
+      }`,
       "#86efac",
       "#f0fdf4",
     );

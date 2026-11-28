@@ -48,7 +48,14 @@ function cleanPayload(input: unknown): CheckoutPayload {
       result[key] = typeof value === "string" && UUID.test(value) ? value : "";
     } else if (key === "payment_method") {
       // חלק 16ב / 17ב: בקשה בלבד — המסד מחליט לפי מה שזמין בחנות
-      result[key] = value === "bit" ? "bit" : value === "grow" ? "grow" : "offline";
+      result[key] =
+        value === "bit"
+          ? "bit"
+          : value === "grow"
+            ? "grow"
+            : value === "online"
+              ? "online"
+              : "offline";
     } else if (key === "coupon_code") {
       // קוד הקופון — רק התווים המותרים; התנאים וההנחה נקבעים במסד
       result[key] =
@@ -139,9 +146,19 @@ export const placeGuestOrder = createServerFn({ method: "POST" })
     const bit = paymentRow?.payment_method === "bit" && paymentRow.payment_status === "awaiting";
     // חלק 43: תשלום מקוון דרך Grow — המיילים יוצאים אחרי שההתראה מ-Grow מאשרת את התשלום
     const grow = paymentRow?.payment_method === "grow" && paymentRow.payment_status === "awaiting";
+    // MAX/Hyp DEMO: תשלום מקוון בכרטיס — לאורח אסימון חד-פעמי (במסד רק הגיבוב שלו) שמאפשר לדפדפן הזה בלבד
+    // לשלם ולראות את מצב התשלום; המיילים יוצאים רק אחרי שהשרת אימת את התשלום מול ספק התשלומים
+    const online =
+      paymentRow?.payment_method === "online" && paymentRow.payment_status === "awaiting";
+    let guestPaymentToken: string | null = null;
+    if (online) {
+      const { currentTenantId } = await import("@/integrations/supabase/tenant.server");
+      const { issueGuestPaymentToken } = await import("@/platform/payments/server/tenant/checkout");
+      guestPaymentToken = await issueGuestPaymentToken(currentTenantId(), created.id);
+    }
 
     // מיילים ברקע — האורח מקבל את מסך האישור מיד, בלי לחכות להפקת ה-PDF
-    if (!bit && !grow) {
+    if (!bit && !grow && !online) {
       const { sendOrderEmailsInternal } = await import("@/lib/order-emails.server");
       void sendOrderEmailsInternal(created.id, null).catch((emailError: unknown) => {
         console.error("[checkout] guest order emails failed", created.order_number, emailError);
@@ -152,6 +169,9 @@ export const placeGuestOrder = createServerFn({ method: "POST" })
       /** חלק 17ב: ההזמנה ממתינה לתשלום בביט → /checkout/bit/<orderId> */
       bit,
       grow,
+      /** MAX/Hyp DEMO: ההזמנה ממתינה לתשלום מקוון → /checkout/pay/<orderId>, עם האסימון של האורח */
+      online,
+      guestPaymentToken,
       orderId: created.id,
       orderNumber: created.order_number,
       kind: created.kind as "order" | "quote",

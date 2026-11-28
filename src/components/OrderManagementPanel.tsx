@@ -34,6 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { PaymentBadge } from "@/components/orders/PaymentBadge";
 import { BitPaymentReview } from "@/components/orders/BitPaymentReview";
 import { GrowPaymentInfo } from "@/components/orders/GrowPaymentInfo";
+import { OnlinePaymentInfo } from "@/components/orders/OnlinePaymentInfo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -781,6 +782,9 @@ export function OrderManagementPanel({
 
                         {/* חלק 43: תשלום מקוון (Grow) — אישור התשלום */}
                         <GrowPaymentInfo order={order} />
+
+                        {/* MAX/Hyp DEMO: תשלום מקוון בכרטיס אשראי — המצב מהמסד, "שולם" רק אחרי האימות בשרת */}
+                        <OnlinePaymentInfo order={order} canManage={isAdminScope} />
 
                         <OrderContactBlock order={order} />
 

@@ -193,9 +193,10 @@ export function trackingHeadScripts(
 /**
  * עמודים שבהם לא טוענים מעקב ולא פופ-אפ: אזורי הצוות, החשבון והקופה הפנימית, וקישורים עם
  * אסימון בכתובת (marketing/confirm). מעבר לעמוד כזה כשהמעקב כבר נטען — טעינה מלאה (TrackingConsent).
+ * payments: החזרה מדף התשלום (/payments/return/…) — הגנה נוספת; הנתיב לעולם לא מציג עמוד (הפניה 303)
  */
 export const NO_MARKETING_PATHS =
-  /^\/(admin|admin-handoff|agent|warehouse|courier|platform|login|register|reset-password|locked|forbidden|account|orders|agreement|owner-agreement|unsubscribe|marketing)(\/|$)/;
+  /^\/(admin|admin-handoff|agent|warehouse|courier|platform|login|register|reset-password|locked|forbidden|account|orders|agreement|owner-agreement|unsubscribe|marketing|payments)(\/|$)/;
 
 type TrackWindow = Window & {
   fbq?: (...args: unknown[]) => void;

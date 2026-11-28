@@ -89,7 +89,7 @@ export const UTM_PARAMS = [
  * הקישורים האישיים של האורחים בצימרים יושבים אחרי ה-# (#t=…), שלא נשלח בכלל.
  */
 const PERSONAL_PATHS: [RegExp, string][] = [
-  [/^\/checkout\/(grow|bit)\/[^/]+/, "/checkout/$1/:id"],
+  [/^\/checkout\/(grow|bit|pay)\/[^/]+/, "/checkout/$1/:id"],
   [/^\/cart\/[^/]+/, "/cart/:code"],
   [/^\/order\/[^/]+/, "/order/:id"],
   [/^\/license\/[^/]+/, "/license/:token"],

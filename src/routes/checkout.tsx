@@ -89,6 +89,10 @@ import { formatAddress } from "@/lib/order-details";
 import { placeGuestOrder, updateMyDetails } from "@/lib/checkout.functions";
 import { getBitPayment } from "@/lib/bit-payments.functions";
 import { getGrowAvailability } from "@/lib/grow-payments.functions";
+import { getOnlinePaymentOptions } from "@/lib/online-payments.functions";
+import { rememberGuestPaymentToken } from "@/lib/online-payments";
+import type { OnlinePaymentOptions } from "@/platform/payments/tenant-views";
+import { DemoBanner } from "@/platform/payments/ui/DemoBanner";
 import {
   bitPageStage,
   clearPendingBitOrder,
@@ -241,6 +245,18 @@ function CheckoutPage() {
       .then((result) => setGrowAvailable(result.available))
       .catch(() => setGrowAvailable(false));
   }, [getGrowAvailabilityFn]);
+  // MAX/Hyp DEMO: תשלום מקוון בכרטיס אשראי — רק כשלחנות יש מסוף פעיל והמתג פועל (השרת והמסד מחליטים)
+  const getOnlinePaymentOptionsFn = useServerFn(getOnlinePaymentOptions);
+  const [onlineOptions, setOnlineOptions] = useState<OnlinePaymentOptions>({
+    available: false,
+    demo: false,
+  });
+  useEffect(() => {
+    void getOnlinePaymentOptionsFn()
+      .then(setOnlineOptions)
+      .catch(() => setOnlineOptions({ available: false, demo: false }));
+  }, [getOnlinePaymentOptionsFn]);
+  const onlineAvailable = onlineOptions.available;
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
@@ -338,7 +354,9 @@ function CheckoutPage() {
   const bitEnabled = settings?.payment_bit_enabled === true && Boolean(bitPhone);
   const payByBit = kind === "order" && bitEnabled && paymentMethod === "bit";
   const payByGrow = kind === "order" && growAvailable && paymentMethod === "grow";
-  const offlineMethodCount = Number(phoneEnabled) + Number(bitEnabled) + Number(growAvailable);
+  const payByOnline = kind === "order" && onlineAvailable && paymentMethod === "online";
+  const offlineMethodCount =
+    Number(phoneEnabled) + Number(bitEnabled) + Number(growAvailable) + Number(onlineAvailable);
 
   // הבחירה תמיד באחד מהאמצעים הזמינים (למשל: טלפוני כבוי → ביט)
   useEffect(() => {
@@ -346,7 +364,10 @@ function CheckoutPage() {
     if (paymentMethod === "offline" && !phoneEnabled && bitEnabled) setPaymentMethod("bit");
     if (paymentMethod === "bit" && !bitEnabled) setPaymentMethod("offline");
     if (paymentMethod === "grow" && !growAvailable) setPaymentMethod("offline");
-  }, [settings, paymentMethod, phoneEnabled, bitEnabled, growAvailable]);
+    if (paymentMethod === "online" && !onlineAvailable) setPaymentMethod("offline");
+    if (paymentMethod === "offline" && !phoneEnabled && !bitEnabled && onlineAvailable)
+      setPaymentMethod("online");
+  }, [settings, paymentMethod, phoneEnabled, bitEnabled, growAvailable, onlineAvailable]);
 
   // ---------- חזרה לקופה אחרי מעבר לביט: הזמנה שעוד ממתינה לתשלום ----------
   // ההזמנה נשמרה לפני המעבר לאפליקציה, והסימון בדפדפן מחזיר את הלקוח לעמוד
@@ -780,7 +801,7 @@ function CheckoutPage() {
         requireAddress,
       },
       kind === "order" && coupon ? coupon.code : null,
-      payByGrow ? "grow" : payByBit ? "bit" : "offline",
+      payByOnline ? "online" : payByGrow ? "grow" : payByBit ? "bit" : "offline",
     );
     const alternate = requireAddress && form.shipToDifferent;
     const delivery = alternate
@@ -830,6 +851,24 @@ function CheckoutPage() {
         search: { start: 1 },
       });
     };
+    // MAX/Hyp DEMO: תשלום מקוון בכרטיס — ההזמנה נשמרה "ממתינה לתשלום"; עמוד /checkout/pay פותח את דף התשלום
+    // המאובטח (לאורח — עם האסימון החד-פעמי שלו, שנשמר רק בלשונית הזו)
+    const goToOnline = async (orderId: string, guestToken: string | null = null) => {
+      if (guestToken) rememberGuestPaymentToken(orderId, guestToken);
+      if (role) await clearStoredCart(role.user_id).catch(() => undefined);
+      const fresh = randomUuid();
+      cartSession.current = fresh;
+      writeCartSession(fresh);
+      lastSavedCart.current = "";
+      setCoupon(null);
+      setCart([]);
+      clearStoredCartNow();
+      await navigate({
+        to: "/checkout/pay/$orderId",
+        params: { orderId },
+        search: { start: 1 },
+      });
+    };
     // SEC-H5: אישור דיוור נרשם רק אחרי שההזמנה נשלחה (לא בהקלדה), באישור כפול — מייל אישור
     // אחד לכתובת של ההזמנה; עד הלחיצה עליו לא נשלח דיוור (גם לא תזכורת עגלה).
     const requestMarketingConsentFor = (orderId: string) => {
@@ -850,7 +889,7 @@ function CheckoutPage() {
         if (error || !order) throw new Error(error?.message ?? "שליחת ההזמנה נכשלה");
         requestMarketingConsentFor(order.id);
 
-        if ((payByBit || payByGrow) && order.kind === "order") {
+        if ((payByBit || payByGrow || payByOnline) && order.kind === "order") {
           if (saveToProfile) {
             void saveDetails({
               data: {
@@ -864,7 +903,8 @@ function CheckoutPage() {
               },
             }).catch(() => undefined);
           }
-          if (payByGrow) await goToGrow(order.id);
+          if (payByOnline) await goToOnline(order.id);
+          else if (payByGrow) await goToGrow(order.id);
           else await goToBit(order.id, order.order_number);
           return;
         }
@@ -910,6 +950,10 @@ function CheckoutPage() {
         // אורח: בלי חשבון — ההזמנה נוצרת בשרת (הגבלת קצב + בדיקות במסד)
         const order = await placeGuest({ data: { kind, items: lines, details } });
         requestMarketingConsentFor(order.orderId);
+        if (order.online) {
+          await goToOnline(order.orderId, order.guestPaymentToken);
+          return;
+        }
         if (order.grow) {
           await goToGrow(order.orderId);
           return;
@@ -1472,15 +1516,23 @@ function CheckoutPage() {
                       <RadioGroup
                         dir="rtl"
                         value={
-                          paymentMethod === "grow" && growAvailable
-                            ? "grow"
-                            : paymentMethod === "bit" && bitEnabled
-                              ? "bit"
-                              : "offline"
+                          paymentMethod === "online" && onlineAvailable
+                            ? "online"
+                            : paymentMethod === "grow" && growAvailable
+                              ? "grow"
+                              : paymentMethod === "bit" && bitEnabled
+                                ? "bit"
+                                : "offline"
                         }
                         onValueChange={(value) =>
                           setPaymentMethod(
-                            value === "grow" ? "grow" : value === "bit" ? "bit" : "offline",
+                            value === "online"
+                              ? "online"
+                              : value === "grow"
+                                ? "grow"
+                                : value === "bit"
+                                  ? "bit"
+                                  : "offline",
                           )
                         }
                         className="gap-2"
@@ -1489,7 +1541,7 @@ function CheckoutPage() {
                         {phoneEnabled && (
                           <label
                             className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 transition-colors ${
-                              !payByBit && !payByGrow
+                              !payByBit && !payByGrow && !payByOnline
                                 ? "border-primary bg-primary/5"
                                 : "border-border hover:border-primary/40"
                             }`}
@@ -1556,6 +1608,32 @@ function CheckoutPage() {
                                 ההזמנה נשמרת, ואז עוברים לדף תשלום מאובטח. אחרי התשלום מתקבל אישור
                                 הזמנה במייל.
                               </span>
+                            </span>
+                          </label>
+                        )}
+                        {onlineAvailable && (
+                          <label
+                            className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 transition-colors ${
+                              payByOnline
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:border-primary/40"
+                            }`}
+                            data-testid="pay-online-option"
+                            data-demo={onlineOptions.demo ? "true" : "false"}
+                          >
+                            <RadioGroupItem value="online" className="mt-1" />
+                            <CreditCard
+                              className="mt-0.5 size-5 shrink-0 text-muted-foreground"
+                              aria-hidden="true"
+                            />
+                            <span className="min-w-0 flex-1 space-y-1.5">
+                              <span className="block font-bold text-foreground">
+                                תשלום מקוון בכרטיס אשראי
+                              </span>
+                              <span className="block text-xs leading-5 text-muted-foreground">
+                                מעבר לדף תשלום מאובטח. ההזמנה נשמרת וממתינה לתשלום עד שעתיים.
+                              </span>
+                              {onlineOptions.demo && <DemoBanner />}
                             </span>
                           </label>
                         )}
@@ -1659,6 +1737,8 @@ function CheckoutPage() {
                   >
                     {busy ? (
                       <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+                    ) : payByOnline ? (
+                      <CreditCard className="size-5" aria-hidden="true" />
                     ) : payByGrow ? (
                       <CreditCard className="size-5" aria-hidden="true" />
                     ) : payByBit ? (
@@ -1667,26 +1747,30 @@ function CheckoutPage() {
                       <PackageCheck className="size-5" aria-hidden="true" />
                     )}
                     {busy
-                      ? payByBit || payByGrow
+                      ? payByBit || payByGrow || payByOnline
                         ? "שומרים את ההזמנה…"
                         : "שולח…"
                       : kind === "quote"
                         ? "שליחת הבקשה להצעת מחיר"
-                        : payByGrow
-                          ? `המשך לתשלום · ${formatIls(grandTotal)}`
-                          : payByBit
-                            ? `המשך לתשלום בביט · ${formatIls(grandTotal)}`
-                            : `אישור ושליחת ההזמנה · ${formatIls(grandTotal)}`}
+                        : payByOnline
+                          ? `לתשלום מאובטח · ${formatIls(grandTotal)}`
+                          : payByGrow
+                            ? `המשך לתשלום · ${formatIls(grandTotal)}`
+                            : payByBit
+                              ? `המשך לתשלום בביט · ${formatIls(grandTotal)}`
+                              : `אישור ושליחת ההזמנה · ${formatIls(grandTotal)}`}
                   </Button>
                   <p className="flex items-start justify-center gap-1.5 text-center text-xs leading-5 text-muted-foreground">
                     <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                     {kind === "quote"
                       ? "הבקשה לא מחייבת — נחזור אליכם עם הצעת מחיר."
-                      : payByGrow
-                        ? "ההזמנה נשמרת עכשיו, ואז עוברים לדף תשלום מאובטח."
-                        : payByBit
-                          ? "ההזמנה נשמרת עכשיו, ואז עוברים לעמוד התשלום בביט — גם אם הדפדפן ייסגר במעבר לאפליקציה, ההזמנה לא תאבד."
-                          : "אין חיוב באתר — נציג ייצור קשר לאישור ההזמנה ולסידור התשלום."}
+                      : payByOnline
+                        ? "ההזמנה נשמרת עכשיו, ואז עוברים לדף תשלום מאובטח בכרטיס אשראי."
+                        : payByGrow
+                          ? "ההזמנה נשמרת עכשיו, ואז עוברים לדף תשלום מאובטח."
+                          : payByBit
+                            ? "ההזמנה נשמרת עכשיו, ואז עוברים לעמוד התשלום בביט — גם אם הדפדפן ייסגר במעבר לאפליקציה, ההזמנה לא תאבד."
+                            : "אין חיוב באתר — נציג ייצור קשר לאישור ההזמנה ולסידור התשלום."}
                   </p>
                 </div>
               </form>
