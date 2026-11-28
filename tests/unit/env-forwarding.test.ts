@@ -15,9 +15,22 @@ const walk = (dir: string): string[] =>
 const TEST_ONLY = new Set([
   "DNS_TEST_FIXTURES",
   "GROW_SANDBOX_URL",
+  // MAX/Hyp DEMO: the mock Hyp base URL (honoured only for loopback + a *.localhost platform host)
+  "MAX_PAY_TEST_URL",
   "RESEND_API_URL",
   "SITEMAP_TTL_MS",
 ]);
+
+/**
+ * MAX/Hyp DEMO operator settings (DEMO-IMPLEMENTATION-CONTRACT.md §2). Listed explicitly: the payments
+ * env guard may read them through an injected `env["…"]`, which the process.env scan below does not see.
+ */
+const PAYMENTS_SETTINGS = [
+  "PAYMENTS_ENV",
+  "PAYMENTS_SECRETS_KEY",
+  "PLATFORM_TERMINAL_SECRETS_KEY",
+  "PAYMENTS_JOBS",
+];
 
 const used = new Set<string>();
 for (const file of walk(join(process.cwd(), "src"))) {
@@ -46,5 +59,14 @@ describe("environment variables reach the container", () => {
 
   it("test-only hooks are not forwarded to production", () => {
     for (const name of TEST_ONLY) expect(inCompose(name), name).toBe(false);
+  });
+
+  it("DM-ENV-7: the payment settings reach the container and are explained; the mock URL stays test-only", () => {
+    for (const name of PAYMENTS_SETTINGS) {
+      expect(inCompose(name), name).toBe(true);
+      expect(inExample(name), name).toBe(true);
+    }
+    expect(TEST_ONLY.has("MAX_PAY_TEST_URL")).toBe(true);
+    expect(inCompose("MAX_PAY_TEST_URL")).toBe(false);
   });
 });
