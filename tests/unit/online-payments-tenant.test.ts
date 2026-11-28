@@ -489,8 +489,7 @@ describe("tenant return (record → VERIFY → settle)", () => {
   });
 
   it("a return without a non-empty Sign is refused before any DB write or VERIFY", async () => {
-    const { handleTenantReturn, returnSigned } =
-      await import("@/platform/payments/server/tenant/return");
+    const { handleTenantReturn } = await import("@/platform/payments/server/tenant/return");
     const unsigned = returnQuery().replace(/&Sign=[^&]*$/, "");
     const empty = returnQuery().replace(/&Sign=[^&]*$/, "&Sign=");
     const otherCase = returnQuery().replace(/&Sign=/, "&sign=");
@@ -505,9 +504,15 @@ describe("tenant return (record → VERIFY → settle)", () => {
     }
     expect(h.calls).toHaveLength(0);
     expect(h.hyp).toHaveLength(0);
-    const { parseReturnQuery } = await import("@/platform/payments/max/protocol");
-    const parsed = parseReturnQuery(returnQuery());
-    expect(parsed.ok && returnSigned(parsed)).toBe(true);
+    // the same rule as the protocol helper (X-11): the signed fixture passes it, the three variants do not
+    const { parseReturnQuery, returnHasSignature } =
+      await import("@/platform/payments/max/protocol");
+    const signedOk = (raw: string) => {
+      const parsed = parseReturnQuery(raw);
+      return parsed.ok && returnHasSignature(parsed);
+    };
+    expect(signedOk(returnQuery())).toBe(true);
+    expect([unsigned, empty, otherCase].map(signedOk)).toEqual([false, false, false]);
   });
 
   it("a replay of a return that was not verified yet is verified (the browser can retry), without keeping it twice", async () => {

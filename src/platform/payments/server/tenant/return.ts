@@ -5,12 +5,13 @@
  * handleTenantReturn (GET /payments/return/max, store hosts only):
  *   refuse the platform host (no DB call, no VERIFY: DM-SEP-4) → parse the query exactly as received
  *   (parseReturnQuery: duplicate and reserved names refused, DM-PAY-3) → refuse a return without a non-empty `Sign`
- *   (before any DB write or VERIFY) → max_attempt_record_return with the HOST's store (an attempt of another store
- *   or of the platform is "unknown": recorded in unknown_returns, no VERIFY, DM-SEP-5 / DM-PAY-10) → keep the raw
+ *   (returnHasSignature, X-11: before any DB write or VERIFY) → max_attempt_record_return with the HOST's store
+ *   (an attempt of another store or of the platform is "unknown": recorded in unknown_returns, no VERIFY,
+ *   DM-SEP-5 / DM-PAY-10) → keep the raw
  *   return encrypted (decision 14) → VERIFY with THIS attempt's own terminal (max_attempt_secrets 'verify') →
  *   max_attempt_mark_paid with the return's flags (Hesh/HKId/MULTI → review, DM-PAY-6/7) → purge → a clean 303
- *   target. Only an EXACT replay (same payload) of a concluded payment skips VERIFY (M06/M08: idempotent); a
- *   different return for a concluded attempt is verified and settled (an approved one → 'duplicate_charge').
+ *   target. Only an EXACT replay (same payload hash) of a concluded payment skips VERIFY (X-10, M08: idempotent); a
+ *   different return for a concluded attempt is verified and settled (an approved one → 'duplicate_charge', M06).
  * reverifyTenantReturn: the 5-minute job's retry of a return that arrived but could not be verified.
  * Only CCode exactly "0" in VERIFY counts (X-2): a timeout, HTML or any other answer reaches the DB as "not
  * verified", which can neither pay nor fail the attempt. Every match check (amount, currency, installments,
@@ -21,6 +22,7 @@ import {
   buildVerifyQuery,
   classifyVerifyResponse,
   parseReturnQuery,
+  returnHasSignature,
   type ParsedReturn,
 } from "@/platform/payments/max/protocol";
 import type { PaymentMode } from "@/platform/payments/provider";
@@ -41,15 +43,6 @@ const resultLocation = (orderId: string | null) =>
 
 /** attempts whose payment is concluded: an EXACT replay of their recorded return is never verified again */
 const CONCLUDED: readonly string[] = ["paid", "test_paid", "failed", "needs_review"];
-
-/**
- * A return must carry Hyp's signature: the exact name `Sign` with a non-empty value (lead rule, also binding D5).
- * Without it the return is refused before any DB write or VERIFY. Inline until max/protocol.ts exports
- * returnHasSignature(parsed) — then this becomes that helper.
- */
-export function returnSigned(parsed: Extract<ParsedReturn, { ok: true }>): boolean {
-  return parsed.pairs.some(([name, value]) => name === "Sign" && value !== "");
-}
 
 export type PaidOrder = { tenantId: string; orderId: string };
 export type ReviewItem = { tenantId: string; orderId: string | null; reason: string };
@@ -219,7 +212,7 @@ export async function handleTenantReturn(input: {
     tenantLog.warn("return_refused", { why: "no_order" });
     return base;
   }
-  if (!returnSigned(parsed)) {
+  if (!returnHasSignature(parsed)) {
     // refused and recorded (the scope log; no DB write: an unsigned return must not touch an attempt)
     tenantLog.warn("return_refused", { why: "no_signature" });
     return base;
@@ -365,7 +358,7 @@ export async function reverifyTenantReturn(
   if (
     !parsed.ok ||
     parsed.order !== item.reference ||
-    !returnSigned(parsed) ||
+    !returnHasSignature(parsed) ||
     sha256Hex(raw) !== item.payloadSha256
   ) {
     tenantLog.alert("return_unreadable", { attempt: shortId(item.attemptId), why: "mismatch" });
