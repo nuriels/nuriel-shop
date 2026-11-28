@@ -1248,6 +1248,31 @@ describe("review decisions and held orders (X-14 / X-15 / X-16)", () => {
     );
   });
 
+  it("E2E BUG-B: after 'not charged' released the order, the pay page offers payment again; while held it says review", async () => {
+    const { orderPaymentView } = await import("@/platform/payments/server/tenant/checkout");
+    const { onlinePaymentStage } = await import("@/platform/payments/tenant-views");
+    const base = {
+      order_number: "1043",
+      status: "pending",
+      payment_method: "online",
+      payment_status: "awaiting",
+    };
+    const parked = { attempt_id: ATTEMPT, state: "needs_review", mode: "test" };
+    const open = orderPaymentView({ ...base, payment_due_at: null, attempt: parked }, true);
+    expect(onlinePaymentStage(open!)).toBe("review");
+    const busy = orderPaymentView(
+      { ...base, payment_due_at: "2026-11-28T12:00:00Z", busy: true, attempt: parked },
+      true,
+    );
+    expect(onlinePaymentStage(busy!)).toBe("review");
+    const released = orderPaymentView(
+      { ...base, payment_due_at: "2026-11-28T12:00:00Z", busy: false, attempt: parked },
+      true,
+    );
+    expect(released?.held).toBe(false);
+    expect(onlinePaymentStage(released!)).toBe("ready");
+  });
+
   it("X-14 / X-15: a held or busy order is shown as held and the pay page offers no new payment", async () => {
     const { orderPaymentView } = await import("@/platform/payments/server/tenant/checkout");
     const { onlinePaymentStage } = await import("@/platform/payments/tenant-views");
@@ -1408,7 +1433,9 @@ describe("round 4: the order panel shows the decision, every held order has a ro
       "ההזמנה מוחזקת בלי בדיקה פתוחה — לא ידוע אם בוצע חיוב",
     );
     expect(reviewReasonLabel("charge_after_resolution")).toBe("התקבל חיוב אחרי ההחלטה הקודמת");
-    expect(reviewReasonLabel("late_paid")).toBe("התשלום אושר באיחור ונרשם — יש לוודא שלא בוצע חיוב נוסף");
+    expect(reviewReasonLabel("late_paid")).toBe(
+      "התשלום אושר באיחור ונרשם — יש לוודא שלא בוצע חיוב נוסף",
+    );
     expect(reviewReasonLabel("a_reason_from_a_newer_db")).toBe("נדרשת בדיקה");
     expect(reviewReasonLabel(null)).toBe("נדרשת בדיקה");
     expect(reviewReasonLabel("toString")).toBe("נדרשת בדיקה");

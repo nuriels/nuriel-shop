@@ -106,7 +106,6 @@ export type OnlinePaymentStage = "ready" | "checking" | "paid" | "review" | "fai
 export function onlinePaymentStage(view: OnlinePaymentView): OnlinePaymentStage {
   const state = view.attempt?.state ?? null;
   if (view.paymentStatus === "paid") return "paid";
-  if (state === "needs_review") return "review";
   if (state === "returned" || state === "paid" || state === "test_paid") return "checking";
   if (
     view.paymentStatus === "expired" ||
@@ -114,8 +113,11 @@ export function onlinePaymentStage(view: OnlinePaymentView): OnlinePaymentStage 
     view.orderStatus === "cancelled"
   )
     return "expired";
-  // held / busy (X-14, X-15): a return of this order is unverified or in review — no new payment page
+  // held / busy (X-14, X-15): a return of this order is unverified or in review — no new payment page.
+  // An attempt in review whose order the DB released (a person decided "not charged") is not held: the payer may
+  // pay again (E2E BUG-B); while the review is open the DB keeps the order held or busy, so this still says review
   if (view.held) return "review";
+  if (state === "needs_review") return "ready";
   if (state === "failed") return "failed";
   return "ready";
 }

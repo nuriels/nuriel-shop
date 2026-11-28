@@ -25,9 +25,11 @@ function uuidOf(value: unknown, notFound: string): string {
 }
 
 /** the store of the host + the caller's role there (platform admins: "admin" in every store) */
-async function staffContext(userId: string, limit: number) {
+async function staffContext(userId: string, limit: number, kind: "read" | "write") {
   const { allowAction } = await import("@/lib/rate-limit.server");
-  if (!allowAction(`pay-staff:${userId}`, limit, 15 * 60 * 1000)) throw new Error(TOO_MANY);
+  // reads and actions have separate buckets: an orders screen with many online orders must not use up the
+  // budget for cancel / resolve (E2E BUG-A)
+  if (!allowAction(`pay-staff-${kind}:${userId}`, limit, 15 * 60 * 1000)) throw new Error(TOO_MANY);
   const { currentTenantId, isPlatformRequest } =
     await import("@/integrations/supabase/tenant.server");
   if (isPlatformRequest()) throw new Error(NO_PERMISSION);
@@ -44,7 +46,7 @@ export const getOrderOnlinePayment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<OnlinePaymentView | null> => {
     const helpers = await import("@/lib/online-payments.server");
     try {
-      const { tenantId, role } = await staffContext(context.userId, 240);
+      const { tenantId, role } = await staffContext(context.userId, 240, "read");
       if (role !== "admin" && role !== "agent") throw new Error(NO_PERMISSION);
       const { staffOrderPayment } = await import("@/platform/payments/server/tenant/staff");
       return await staffOrderPayment(context.userId, tenantId, data.orderId);
@@ -61,7 +63,7 @@ export const cancelOrderOnlinePayment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ cancelled: number }> => {
     const helpers = await import("@/lib/online-payments.server");
     try {
-      const { tenantId, role } = await staffContext(context.userId, 30);
+      const { tenantId, role } = await staffContext(context.userId, 30, "write");
       if (role !== "admin") throw new Error(NO_PERMISSION);
       const { cancelOrderAttempt } = await import("@/platform/payments/server/tenant/staff");
       return { cancelled: await cancelOrderAttempt(context.userId, tenantId, data.orderId) };
@@ -100,7 +102,7 @@ export const resolveOrderOnlinePayment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ resolved: boolean }> => {
     const helpers = await import("@/lib/online-payments.server");
     try {
-      const { tenantId, role } = await staffContext(context.userId, 30);
+      const { tenantId, role } = await staffContext(context.userId, 30, "write");
       if (role !== "admin") throw new Error(NO_PERMISSION);
       const { resolveOrderReview } = await import("@/platform/payments/server/tenant/staff");
       return {
