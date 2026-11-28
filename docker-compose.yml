@@ -51,6 +51,16 @@ services:
       GROW_SECRETS_KEY: ${GROW_SECRETS_KEY:-}
       # כתובת ה-API של Grow בייצור (נמסרת ע"י Grow ביום המעבר; סנדבוקס מובנה בקוד)
       GROW_API_URL: ${GROW_API_URL:-}
+      # --- תשלומים אונליין (MAX/Hyp) — docs/payment-gateways/DEMO-IMPLEMENTATION-CONTRACT.md §2 ---
+      # הסביבה: demo בשרת ה-DEMO, production רק בשרת הייצור. ריק = התשלומים אונליין כבויים
+      PAYMENTS_ENV: ${PAYMENTS_ENV:-}
+      # סוד! מפתח השורש להצפנת פרטי המסופים של החנויות: 32 תווים אקראיים לפחות, שונה מכל סוד אחר
+      # ולעולם לא אותו ערך בשתי סביבות. אם יאבד — צריך להזין מחדש את פרטי המסופים
+      PAYMENTS_SECRETS_KEY: ${PAYMENTS_SECRETS_KEY:-}
+      # סוד! מפתח השורש להצפנת פרטי מסוף הפלטפורמה (NURIEL) — אותם כללים, ושונה מ-PAYMENTS_SECRETS_KEY
+      PLATFORM_TERMINAL_SECRETS_KEY: ${PLATFORM_TERMINAL_SECRETS_KEY:-}
+      # "off" עוצר את עבודות התשלום ברקע (פקיעה, VERIFY חוזר) בתהליך הזה. ריק = פועל (on)
+      PAYMENTS_JOBS: ${PAYMENTS_JOBS:-}
       # כתובת חנות ברירת המחדל — לקישורים במיילים (איפוס סיסמה, הזמנות)
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
       # דומיין בסיס לחנויות בתת-דומיין: shop2.<TENANT_BASE_DOMAIN>
