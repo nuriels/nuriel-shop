@@ -3,7 +3,8 @@
 -- Test names carry the DM-* IDs of MAX-DEMO-PLAN.md Appendix D.
 -- Rules of this file (plan §7.3):
 --   • store B is the main actor everywhere — a NON-default store (the default store would hide a fallback to it);
---     store A is "the other store"; store D is deleted at the end (decision 15); every store here is this file's own.
+--     store A is "the other store"; store D is deleted at the end (decision 15); store E's owner is also a platform
+--     admin, store F's owner is blocked (each store keeps exactly one owner); every store here is this file's own.
 --   • every server call runs as service_role with no signed-in user and NO store header (like the app's server);
 --     the owner's two reads run as the signed-in user with the store header (like my_billing_summary).
 --   • billing.ledger cannot be cleaned (append-only) and billing-agreements.test.sql — which runs before this file —
@@ -21,6 +22,8 @@
 \set SA '''c2080000-0000-4000-8000-00000000000a'''
 \set SB '''c2080000-0000-4000-8000-00000000000b'''
 \set SD '''c2080000-0000-4000-8000-00000000000d'''
+\set SE '''c2080000-0000-4000-8000-00000000000e'''
+\set SF '''c2080000-0000-4000-8000-00000000000f'''
 \set SH '''c2080000-0000-4000-8000-0000000000e0'''
 \set DEFAULT_STORE '''00000000-0000-0000-0000-000000000001'''
 \set A_OWNER '''c2080000-0000-4000-8000-0000000000a1'''
@@ -236,7 +239,9 @@ ON CONFLICT DO NOTHING;
 INSERT INTO public.tenants (id, slug, name, owner_email) VALUES
   (:SA, 'op-store-a', 'חנות תשלומים A', 'op.a.owner@test.local'),
   (:SB, 'op-store-b', 'חנות תשלומים B', 'op.b.owner@test.local'),
-  (:SD, 'op-store-d', 'חנות תשלומים D', 'op.d.owner@test.local')
+  (:SD, 'op-store-d', 'חנות תשלומים D', 'op.d.owner@test.local'),
+  (:SE, 'op-store-e', 'חנות תשלומים E', 'op.plat2@test.local'),
+  (:SF, 'op-store-f', 'חנות תשלומים F', 'op.a.blocked@test.local')
 ON CONFLICT DO NOTHING;
 INSERT INTO public.tenants (id, slug, name, site_type) VALUES (:SH, 'op-zimmer', 'צימר תשלומים', 'hospitality')
 ON CONFLICT DO NOTHING;
@@ -246,7 +251,7 @@ INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_app
   (:SB, :B_OWNER, 'op.b.owner@test.local', 'op_b_owner', 'admin', true, true),
   (:SB, :B_MGR, 'op.b.mgr@test.local', 'op_b_mgr', 'admin', true, false),
   (:SB, :B_AGENT, 'op.b.agent@test.local', 'op_b_agent', 'agent', true, false),
-  (:SB, :PLAT2, 'op.plat2@test.local', 'op_plat2', 'admin', true, true),
+  (:SE, :PLAT2, 'op.plat2@test.local', 'op_plat2', 'admin', true, true),
   (:SD, :D_OWNER, 'op.d.owner@test.local', 'op_d_owner', 'admin', true, true),
   (:SH, :H_OWNER, 'op.h.owner@test.local', 'op_h_owner', 'admin', true, true),
   (:SB, :C1, 'op.b.c1@test.local', 'op_b_c1', 'customer', true, false),
@@ -257,7 +262,7 @@ INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_app
 ON CONFLICT DO NOTHING;
 -- a protected admin cannot be blocked afterwards (guard_protected_admin_update): this one is created blocked
 INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_approved, is_protected, is_blocked)
-VALUES (:SA, :A_BLOCKED, 'op.a.blocked@test.local', 'op_a_blocked', 'admin', true, true, true)
+VALUES (:SF, :A_BLOCKED, 'op.a.blocked@test.local', 'op_a_blocked', 'admin', true, true, true)
 ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_profiles (user_id, tenant_id, business_name, age_confirmed, profile_completed)
 SELECT u.user_id, u.tenant_id, 'לקוח תשלום מקוון', true, true
@@ -268,9 +273,7 @@ INSERT INTO public.shipping_methods (id, tenant_id, name, kind, price, is_active
   (:SHIP_B, :SB, 'איסוף (תשלום מקוון)', 'pickup', 0, true),
   (:SHIP_D, :SD, 'איסוף (תשלום מקוון)', 'pickup', 0, true)
 ON CONFLICT DO NOTHING;
--- store D's product has no category row: platform_delete_tenant (unchanged here) cannot remove a product's primary
--- category while the product still has order lines (product_categories_keep_primary, check_violation)
-INSERT INTO public.categories (tenant_id, name) VALUES (:SA, 'תשלום מקוון'), (:SB, 'תשלום מקוון')
+INSERT INTO public.categories (tenant_id, name) VALUES (:SA, 'תשלום מקוון'), (:SB, 'תשלום מקוון'), (:SD, 'תשלום מקוון')
 ON CONFLICT DO NOTHING;
 INSERT INTO public.global_products (id, tenant_id, sku, name, category, created_by, price_tier1, stock_quantity) VALUES
   (:P10, :SB, '20800010', 'מוצר בדיקה 10', 'תשלום מקוון', :B_OWNER, 10, 100000),
@@ -280,13 +283,15 @@ INSERT INTO public.global_products (id, tenant_id, sku, name, category, created_
 ON CONFLICT DO NOTHING;
 UPDATE public.site_settings SET payment_phone_enabled = true WHERE tenant_id IN (:SA, :SB, :SD);
 
-SELECT tests.check('online payments fixtures: stores A / B / D are ordinary, non-default stores; B has an owner, a manager, an agent and three customers',
-  format($$SELECT NOT EXISTS (SELECT 1 FROM public.tenants WHERE id IN (%1$L, %2$L, %3$L) AND (is_default OR site_type <> 'ecommerce'))
+SELECT tests.check('online payments fixtures: stores A / B / D / E / F are ordinary, non-default stores with exactly one owner each; B has an owner, a manager, an agent and three customers',
+  format($$SELECT NOT EXISTS (SELECT 1 FROM public.tenants WHERE id IN (%1$L, %2$L, %3$L, %7$L, %8$L) AND (is_default OR site_type <> 'ecommerce'))
              AND (SELECT count(*) FROM public.user_roles WHERE tenant_id = %2$L AND role = 'customer') = 3
              AND (SELECT is_protected FROM public.user_roles WHERE tenant_id = %2$L AND user_id = %4$L)
              AND NOT (SELECT is_protected FROM public.user_roles WHERE tenant_id = %2$L AND user_id = %5$L)
-             AND (SELECT is_blocked AND is_protected FROM public.user_roles WHERE tenant_id = %1$L AND user_id = %6$L)$$,
-         :SA, :SB, :SD, :B_OWNER, :B_MGR, :A_BLOCKED));
+             AND (SELECT is_blocked AND is_protected FROM public.user_roles WHERE tenant_id = %8$L AND user_id = %6$L)
+             AND (SELECT bool_and(n = 1) FROM (SELECT count(*) FILTER (WHERE is_protected) AS n FROM public.user_roles
+                   WHERE role = 'admin' AND tenant_id IN (%1$L, %2$L, %3$L, %7$L, %8$L, %9$L) GROUP BY tenant_id) o)$$,
+         :SA, :SB, :SD, :B_OWNER, :B_MGR, :A_BLOCKED, :SE, :SF, :SH));
 
 -- ============================================================
 -- 1. Structure, grants, naming (static)
@@ -773,8 +778,10 @@ SELECT tests.check('DM-SEP-1: a store terminal never becomes the platform termin
   format($$SELECT %L LIKE '%%already registered to another store%%' AND %L LIKE '%%already registered to the NURIEL platform terminal%%'
              AND (SELECT terminal_number = %L FROM payments.platform_accounts)$$,
          :'reg_b_for_plat', :'reg_plat_for_b', :'t_plat'));
+SET client_min_messages = warning;  -- TRUNCATE … CASCADE lists the tables it would reach
 SELECT COALESCE(pg_temp.db_err(format('UPDATE payments.terminal_registry SET tenant_id = %L WHERE terminal_number = %L', :SA, :'t_b')), '') AS reg_move,
        COALESCE(pg_temp.db_err('TRUNCATE payments.terminal_registry CASCADE'), '') AS reg_trunc \gset
+RESET client_min_messages;
 SELECT tests.check('DM-SEP-1: a registered terminal is never moved to another owner, nor truncated',
   format($$SELECT %L LIKE '%%cannot be moved%%' AND %L LIKE '%%never truncated%%'$$, :'reg_move', :'reg_trunc'));
 SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_store_terminal_save(%L, %L, %L, %L)', :B_OWNER, :SB, '{"enabled": true}', 'demo')), '') AS st1,
@@ -816,11 +823,13 @@ SELECT tests.check('max_store_settings_save (M10): DEMO — more than one paymen
              AND (SELECT changed_fields @> ARRAY['allowed_brands'] AND actor_role = 'store_owner' FROM payments.tenant_config_audit
                    WHERE tenant_id = %6$L AND action = 'store_settings_changed' ORDER BY id DESC LIMIT 1)$$,
          :'ss1', :'ss2', :'ss3', :'ss4', :'ss5', :SB));
+SET client_min_messages = warning;  -- TRUNCATE … CASCADE lists the tables it would reach
 SELECT COALESCE(pg_temp.db_err('UPDATE payments.tenant_config_audit SET action = action'), '') AS ao1,
        COALESCE(pg_temp.db_err('DELETE FROM payments.platform_config_audit'), '') AS ao2,
        COALESCE(pg_temp.db_err('TRUNCATE payments.tenant_config_audit'), '') AS ao3,
        COALESCE(pg_temp.db_err('TRUNCATE payments.tenant_attempts CASCADE'), '') AS ao4,
        COALESCE(pg_temp.db_err('UPDATE payments.tenant_events SET result = result'), '') AS ao5 \gset
+RESET client_min_messages;
 SELECT tests.check('audit: events and config audit are append-only — UPDATE, DELETE and TRUNCATE are refused, even for the database owner',
   format($$SELECT %L LIKE '%%append-only%%' AND %L LIKE '%%append-only%%' AND %L LIKE '%%append-only%%' AND %L LIKE '%%append-only%%'
              AND (%L LIKE '%%append-only%%' OR NOT EXISTS (SELECT 1 FROM payments.tenant_events))$$,
@@ -1133,6 +1142,15 @@ SELECT tests.check('lead decision (re-VERIFY job): max_attempts_pending_verify l
                       AND e ->> 'payload_sha256' = %5$L AND e ->> 'mode' = 'test')
              AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(%1$L::jsonb) e WHERE e ? 'return_enc' OR position('FAKE-' IN e::text) > 0)$$,
          :'pv1', :'al1b'::jsonb ->> 'attempt_id', :SB, :'al1b'::jsonb ->> 'reference', :'pll1'));
+SELECT pg_temp.svc(format('SELECT public.max_attempt_secrets(%L, %L, %L)', :SB, :'al1b'::jsonb ->> 'attempt_id', 'verify')) AS al1b_lease \gset
+SELECT pg_temp.svc('SELECT public.max_attempts_pending_verify()') AS pv1b,
+       pg_temp.svc('SELECT public.max_attempts_pending_verify(0)') AS pv1c,
+       COALESCE(pg_temp.err(:SB, :B_OWNER, 'SELECT public.max_attempts_pending_verify()'), '') AS pv_user \gset
+SELECT tests.check('lead decision (re-VERIFY job): an attempt whose VERIFY holds the lease is not listed (the job never races a live VERIFY); the list is bounded; a user cannot call it',
+  format($$SELECT %1$L::jsonb ->> 'result' = 'ok'
+             AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(%2$L::jsonb) e WHERE e ->> 'attempt_id' = %3$L)
+             AND jsonb_array_length(%4$L::jsonb) <= 1 AND %5$L LIKE '%%permission denied%%'$$,
+         :'al1b_lease', :'pv1b', :'al1b'::jsonb ->> 'attempt_id', :'pv1c', :'pv_user'));
 SELECT pg_temp.t_settle(:SB, :'al1b'::jsonb ->> 'reference', :'pll1', '0', '0', :'t_b', 'fake-l-0001', 2000) AS sl1 \gset
 SELECT pg_temp.svc('SELECT public.max_attempts_pending_verify()') AS pv2 \gset
 SELECT tests.check('settle after a staff edit: the new attempt carries the new amount (₪20) and settles; it leaves the re-VERIFY list',
@@ -1256,6 +1274,10 @@ SELECT pg_temp.call(NULL, :PLAT, format($q$SELECT public.platform_billing_record
          '{"kind":"charge","category":"other","amount":12,"description":"חיוב בדיקה 12 (יבוטל)"}')) IS NOT NULL AS ok \gset
 SELECT pg_temp.call(NULL, :PLAT, format($q$SELECT public.platform_billing_record_entry(%L, %L)$q$, :SA,
          '{"kind":"charge","category":"other","amount":15,"description":"חיוב בדיקה של A"}')) IS NOT NULL AS ok \gset
+SELECT pg_temp.call(NULL, :PLAT, format($q$SELECT public.platform_billing_record_entry(%L, %L)$q$, :SE,
+         '{"kind":"charge","category":"other","amount":15,"description":"חיוב בדיקה של E"}')) IS NOT NULL AS ok \gset
+SELECT pg_temp.call(NULL, :PLAT, format($q$SELECT public.platform_billing_record_entry(%L, %L)$q$, :SF,
+         '{"kind":"charge","category":"other","amount":15,"description":"חיוב בדיקה של F"}')) IS NOT NULL AS ok \gset
 -- an authorized-dealer charge with 18% VAT (a snapshot row, as an agreement of an authorized dealer would have written it)
 INSERT INTO billing.ledger (tenant_id, tenant_label, engine, kind, category, amount, vat_business_type, vat_rate, vat_amount,
                             net_amount, occurred_on, description, source)
@@ -1265,23 +1287,25 @@ SELECT (SELECT id FROM billing.ledger WHERE tenant_id = :SB AND description = '�
        (SELECT id FROM billing.ledger WHERE tenant_id = :SB AND description = 'חיוב בדיקה 60 (מעל התקרה)') AS ch60,
        (SELECT id FROM billing.ledger WHERE tenant_id = :SB AND description = 'חיוב בדיקה 12 (יבוטל)') AS ch12,
        (SELECT id FROM billing.ledger WHERE tenant_id = :SA AND description = 'חיוב בדיקה של A') AS cha,
+       (SELECT id FROM billing.ledger WHERE tenant_id = :SE AND description = 'חיוב בדיקה של E') AS che,
+       (SELECT id FROM billing.ledger WHERE tenant_id = :SF AND description = 'חיוב בדיקה של F') AS chf,
        (SELECT id FROM billing.ledger WHERE tenant_id = :SB AND description = 'מנוי בדיקה (מע"מ 18%)') AS chv \gset
 SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :B_OWNER, :SB, 'ledger_charge', :'ch30', 'demo')), '') AS pf_off \gset
 SELECT tests.check('DM-PLAT-*: with platform_terminal_payments off nobody can open a payment to NURIEL',
   format($$SELECT %L LIKE '%%not available right now%%'$$, :'pf_off'));
 SELECT pg_temp.call(NULL, :PLAT, $$SELECT to_jsonb(public.platform_set_flag('platform_terminal_payments', true))$$) AS ok \gset
 SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :PLAT, :SB, 'ledger_charge', :'ch30', 'demo')), '') AS py1,
-       COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :PLAT2, :SB, 'ledger_charge', :'ch30', 'demo')), '') AS py2,
+       COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :PLAT2, :SE, 'ledger_charge', :'che', 'demo')), '') AS py2,
        COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :B_MGR, :SB, 'ledger_charge', :'ch30', 'demo')), '') AS py3,
        COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :B_AGENT, :SB, 'ledger_charge', :'ch30', 'demo')), '') AS py4,
        COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :A_OWNER, :SB, 'ledger_charge', :'ch30', 'demo')), '') AS py5,
-       COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :A_BLOCKED, :SA, 'ledger_charge', :'cha', 'demo')), '') AS py6,
+       COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :A_BLOCKED, :SF, 'ledger_charge', :'chf', 'demo')), '') AS py6,
        COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :H_OWNER, :SH, 'ledger_charge', :'ch30', 'demo')), '') AS py7,
        COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :A_OWNER, :SA, 'ledger_charge', :'ch30', 'demo')), '') AS py8 \gset
-SELECT tests.check('DM-PLAT-1: a platform admin never pays NURIEL — not even one who is also the protected admin of the store (ה-8)',
+SELECT tests.check('DM-PLAT-1: a platform admin never pays NURIEL — not even one who is also the owner (protected admin) of store E (ה-8)',
   format($$SELECT %L LIKE '%%only the owner%%' AND %L LIKE '%%only the owner%%'
-             AND (SELECT is_protected FROM public.user_roles WHERE tenant_id = %L AND user_id = %L)$$, :'py1', :'py2', :SB, :PLAT2));
-SELECT tests.check('DM-PLAT-1: a manager (unprotected admin), an agent and another store''s owner are refused for B; a blocked protected admin is refused for its own store A',
+             AND (SELECT is_protected FROM public.user_roles WHERE tenant_id = %L AND user_id = %L)$$, :'py1', :'py2', :SE, :PLAT2));
+SELECT tests.check('DM-PLAT-1: a manager (unprotected admin), an agent and another store''s owner are refused for B; a blocked owner is refused for its own store F',
   format($$SELECT %L LIKE '%%only the owner%%' AND %L LIKE '%%only the owner%%' AND %L LIKE '%%only the owner%%' AND %L LIKE '%%only the owner%%'$$,
          :'py3', :'py4', :'py5', :'py6'));
 SELECT tests.check('DM-PLAT-1: the owner of a hospitality business is refused (DEMO: stores only); A''s owner cannot pay B''s charge as A',
@@ -1366,6 +1390,10 @@ SELECT tests.check('DM-PLAT-3: settle → test_paid, applied; exactly one provid
                     FROM payments.platform_attempts WHERE id = (%5$L)::uuid)$$,
          :'ps1', :SB, :'pa2'::jsonb ->> 'reference', :'ch30', :'pa2'::jsonb ->> 'attempt_id'));
 SELECT (pg_temp.call(:SB, :B_OWNER, 'SELECT public.my_billing_summary()') -> 'other' ->> 'balance') AS other_balance_after \gset
+SELECT pg_temp.svc('SELECT public.platform_attempts_pending_verify()') AS ppv2 \gset
+SELECT tests.check('re-VERIFY list (platform): a concluded VERIFY leaves the list',
+  format($$SELECT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(%L::jsonb) e WHERE e ->> 'attempt_id' = %L)$$,
+         :'ppv2', :'pa2'::jsonb ->> 'attempt_id'));
 SELECT tests.check('DM-PLAT-3: the owner''s balance for the category drops by exactly the charge; nothing is renewed, activated or copied (subscriptions, add-ons, billing_history unchanged)',
   format($$SELECT %1$L::numeric = %2$L::numeric - 30
              AND (SELECT md5(string_agg(to_jsonb(s)::text, ',' ORDER BY s.tenant_id)) FROM public.tenant_subscriptions s WHERE s.tenant_id IN (%3$L, %4$L)) = %5$L
@@ -1553,7 +1581,12 @@ SELECT pg_temp.t_pay(:SD, :'od', :CD, 'fake-dd-0001') AS pd \gset
 SELECT COALESCE(pg_temp.db_err(format('DELETE FROM payments.terminal_registry WHERE terminal_number = %L', :'t_d')), '') AS reg_used \gset
 SELECT tests.check('decision 15: store D paid online; a terminal that took an attempt cannot be removed from the registry',
   format($$SELECT %L::jsonb ->> 'result' = 'test_paid' AND %L <> ''$$, :'pd', :'reg_used'));
+-- pre-existing, not part of 208: platform_delete_tenant stops on any store whose product has order lines (its delete
+-- loop reaches product_categories while the product still exists, and product_categories_keep_primary raises a
+-- check_violation the loop does not catch — the same without 208). The category sync switch lets this one call through.
+SELECT set_config('kobi.product_category_sync', 'on', false) AS ok \gset
 SELECT pg_temp.call(NULL, :PLAT, format($q$SELECT public.platform_delete_tenant(%L, 'op-store-d')$q$, :SD)) AS del \gset
+SELECT set_config('kobi.product_category_sync', '', false) AS ok \gset
 SELECT tests.check('decision 15: deleting store D keeps its attempts, events and audit (order link NULL, snapshots intact) and the registry row; its credentials are gone',
   format($$SELECT NOT EXISTS (SELECT 1 FROM public.tenants WHERE id = %1$L)
              AND (SELECT count(*) = 1 AND bool_and(order_id IS NULL AND state = 'test_paid' AND store_label LIKE '%%op-store-d%%' AND order_number IS NOT NULL)

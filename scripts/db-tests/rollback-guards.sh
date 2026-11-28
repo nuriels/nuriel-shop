@@ -137,6 +137,18 @@ check_guard 20261106170000_sec_m5_keep_platform_records public.platform_audit_lo
 check_guard 20261117090000_bp_site_address business_profile.domain_settings "$(S business_profile.domain_settings)"
 check_guard 20261127100000_product_brand_condition public.global_products "$(S public.global_products '{"brand":"'"'"'Lenovo'"'"'","created_by":"gen_random_uuid()"}')"
 check_guard 20261127100000_product_brand_condition public.store_seo_proposals "$(S public.store_seo_proposals '{"field":"'"'"'item_condition'"'"'","target_kind":"'"'"'product'"'"'"}')"
+M92=20261128100000_online_payments_foundation
+check_guard $M92 payments.tenant_attempts "$(S payments.tenant_attempts)"
+check_guard $M92 payments.platform_attempts "$(S payments.platform_attempts)"
+check_guard $M92 payments.tenant_accounts "$(S payments.tenant_accounts)"
+check_guard $M92 payments.platform_accounts "$(S payments.platform_accounts)"
+check_guard $M92 payments.terminal_registry "$(S payments.terminal_registry)"
+check_guard $M92 payments.tenant_config_audit "$(S payments.tenant_config_audit)"
+check_guard $M92 payments.platform_config_audit "$(S payments.platform_config_audit '{"action":"'"'"'credentials_replaced'"'"'"}')"
+check_guard $M92 payments.unknown_returns "$(S payments.unknown_returns)"
+check_guard $M92 payments.environment "UPDATE payments.environment SET name = 'demo', demo_since = now();"
+check_guard $M92 public.orders "$(S public.orders '{"payment_method":"'"'"'online'"'"'"}')"
+check_guard $M92 billing.ledger "$(S billing.ledger '{"source":"'"'"'provider'"'"'"}')"
 
 "${PG[@]}" -d postgres -c "DROP DATABASE IF EXISTS $WORK" -c "DROP DATABASE IF EXISTS $TMPL" >/dev/null 2>&1
 echo
