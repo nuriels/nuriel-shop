@@ -317,8 +317,8 @@ SELECT tests.check('online payments structure: the closed schema payments — no
        AND NOT has_schema_privilege('anon', 'payments', 'USAGE')
        AND NOT has_schema_privilege('authenticated', 'payments', 'USAGE')
        AND NOT has_schema_privilege('service_role', 'payments', 'USAGE')$$);
-SELECT tests.check('online payments structure: 16 tables, RLS on all; the 7 store tables RESTRICTIVE tenant_isolation, the 9 platform / cross-scope tables RESTRICTIVE deny-all',
-  $$SELECT (SELECT count(*) FROM pg_class c WHERE c.relnamespace = 'payments'::regnamespace AND c.relkind = 'r') = 16
+SELECT tests.check('online payments structure: 17 tables (pilot_stores included, P-2), RLS on all; the 7 store tables RESTRICTIVE tenant_isolation, the 10 platform / cross-scope tables RESTRICTIVE deny-all',
+  $$SELECT (SELECT count(*) FROM pg_class c WHERE c.relnamespace = 'payments'::regnamespace AND c.relkind = 'r') = 17
        AND NOT EXISTS (SELECT 1 FROM pg_class c WHERE c.relnamespace = 'payments'::regnamespace AND c.relkind = 'r' AND NOT c.relrowsecurity)
        AND (SELECT array_agg(tablename::text ORDER BY tablename) FROM pg_policies
              WHERE schemaname = 'payments' AND policyname = 'tenant_isolation' AND permissive = 'RESTRICTIVE'
@@ -327,8 +327,8 @@ SELECT tests.check('online payments structure: 16 tables, RLS on all; the 7 stor
                    'tenant_returns', 'tenant_store_settings']
        AND (SELECT array_agg(tablename::text ORDER BY tablename) FROM pg_policies
              WHERE schemaname = 'payments' AND policyname = 'platform_only' AND permissive = 'RESTRICTIVE' AND qual = 'false')
-           = ARRAY['environment', 'platform_accounts', 'platform_attempts', 'platform_config_audit', 'platform_events',
-                   'platform_returns', 'platform_stepup_challenges', 'terminal_registry', 'unknown_returns']$$);
+           = ARRAY['environment', 'pilot_stores', 'platform_accounts', 'platform_attempts', 'platform_config_audit',
+                   'platform_events', 'platform_returns', 'platform_stepup_challenges', 'terminal_registry', 'unknown_returns']$$);
 SELECT tests.check('online payments structure: no table or sequence privilege for any API role',
   $$SELECT NOT EXISTS (SELECT 1 FROM pg_class c, unnest(ARRAY['anon', 'authenticated', 'service_role']) r(role)
                         WHERE c.relnamespace = 'payments'::regnamespace AND c.relkind = 'r'
@@ -1605,7 +1605,7 @@ SELECT tests.check('RLS / grants: a signed-in store owner, anon and service_role
   format($$SELECT %L LIKE '%%permission denied%%' AND %L LIKE '%%permission denied%%' AND %L LIKE '%%permission denied%%'
              AND %L LIKE '%%permission denied%%' AND %L LIKE '%%permission denied%%'$$, :'rl1', :'rl2', :'rl3', :'rl4', :'rl5'));
 SELECT tests.check('RLS (second layer): every payments table carries its RESTRICTIVE policy for all roles',
-  $$SELECT (SELECT count(*) FROM pg_policies WHERE schemaname = 'payments' AND roles = '{public}' AND permissive = 'RESTRICTIVE') = 16$$);
+  $$SELECT (SELECT count(*) FROM pg_policies WHERE schemaname = 'payments' AND roles = '{public}' AND permissive = 'RESTRICTIVE') = 17$$);
 
 -- ============================================================
 -- 17. Store deletion (decision 15): payment records outlive the store; its credentials go with it
