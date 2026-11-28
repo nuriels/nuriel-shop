@@ -21,6 +21,7 @@ import {
 } from "@/platform/ui";
 import { DemoBanner } from "@/platform/payments/ui/DemoBanner";
 import { errorMessage, formatDate, formatMoney } from "../logic";
+import { PAYMENTS_SOON_TEXT } from "../pay.functions";
 import {
   platformCardPaymentResolve,
   platformCardPayments,
@@ -260,6 +261,24 @@ export function PlatformTerminalCard() {
     change.clearCredentials;
   const enabledNow = form.enabled ?? view?.enabled ?? false;
   const forceNeeded = error === TERMINAL_FORCE_NEEDED_TEXT;
+
+  // P-5: the production pilot keeps NURIEL's terminal off — the screen says so, with no input and no list
+  if (!view && error === PAYMENTS_SOON_TEXT) {
+    return (
+      <div className="flex flex-col gap-6" data-testid="platform-terminal-page">
+        <Card data-testid="platform-terminal" data-soon="true">
+          <CardHeader className="gap-2">
+            <CardTitle className="text-lg">מסוף הפלטפורמה (MAX)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground" data-testid="platform-terminal-soon">
+              {PAYMENTS_SOON_TEXT}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6" data-testid="platform-terminal-page">
