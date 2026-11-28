@@ -15,6 +15,7 @@ import type { HypHttpResult } from "@/platform/payments/server/http";
 import type { PaymentMode } from "@/platform/payments/provider";
 import { buildVerifyQuery, encodeParams, parseReturnQuery } from "@/platform/payments/max/protocol";
 import {
+  PLATFORM_ERROR_TEXT,
   PlatformPaymentError,
   dbFailure,
   type PlatformRpc,
@@ -56,7 +57,21 @@ import {
   type TerminalDeps,
 } from "@/platform/payments/server/platform/terminal";
 import { alertPlatformAdmins } from "@/platform/payments/server/platform/alerts";
-import { parseTerminalChange, parseTerminalSave } from "@/platform/billing/pay-terminal.functions";
+import {
+  payChargeOffer,
+  type MyCardPayment,
+  type PayCharge,
+} from "@/platform/billing/pay.functions";
+import {
+  parseTerminalChange,
+  parseTerminalSave,
+  TERMINAL_FORCE_NEEDED_TEXT,
+} from "@/platform/billing/pay-terminal.functions";
+import {
+  createStepupService,
+  stepupDbPurposeHash,
+  type StepupRpc,
+} from "@/platform/payments/server/stepup";
 
 // ------------------------------------------------------------------------------------------ fixtures
 
@@ -626,22 +641,20 @@ describe("D5 return — platform host only, unknown references never verified (D
     }
   });
 
-  it("a return without a non-empty Sign is recorded but never verified (no secrets, no VERIFY, no settle)", async () => {
+  it("L3: a return without a non-empty Sign is refused before any DB write (no record, no secrets, no VERIFY, no alert)", async () => {
     for (const raw of [
       rawOf(RETURN_PAIRS.filter(([k]) => k !== "Sign")),
       rawOf(RETURN_PAIRS.map(([k, v]): [string, string] => [k, k === "Sign" ? "" : v])),
     ]) {
-      const { deps, db, hyp, alerts, secretsCalls } = returnDeps();
+      const { deps, db, hyp, alerts, secretsCalls, lines } = returnDeps();
       const out = await handlePlatformReturn(input(raw), deps);
-      expect(out).toEqual({
-        location: `${ORIGIN}/admin?tab=billing&pay=return`,
-        result: "refused",
-        attemptId: ATTEMPT,
-      });
-      expect(db.names()).toEqual(["platform_attempt_record_return"]);
+      expect(out).toEqual({ location: "/", result: "refused", attemptId: null });
+      expect(db.calls).toEqual([]);
       expect(secretsCalls).toEqual([]);
       expect(hyp.http).not.toHaveBeenCalled();
-      expect(alerts).toEqual([["unsigned_return", ATTEMPT]]);
+      expect(alerts).toEqual([]);
+      expect(lines.some((line) => line.includes("ALERT"))).toBe(false);
+      expect(lines.some((line) => line.includes("return_refused reason=unsigned"))).toBe(true);
     }
   });
 });
@@ -772,6 +785,45 @@ describe("D5 return — VERIFY with NURIEL's terminal of that attempt, then the 
     expect((await handlePlatformReturn(input(), exhausted.deps)).result).toBe("review");
     expect(exhausted.alerts).toEqual([["verify_exhausted", ATTEMPT]]);
     expect(exhausted.hyp.http).not.toHaveBeenCalled();
+  });
+
+  it("M1 (R-P1): VERIFY credentials refused (terminal changed while the owner was on Hyp's page) → the platform team is alerted, nothing settles", async () => {
+    for (const thrown of [
+      new PlatformPaymentError("credentials"),
+      new PlatformPaymentError("unavailable"),
+      new Error("x"),
+    ]) {
+      const refused = returnDeps(
+        {},
+        {
+          credentials: async () => {
+            throw thrown;
+          },
+        },
+      );
+      expect((await handlePlatformReturn(input(), refused.deps)).result).toBe("error");
+      expect(refused.alerts).toEqual([["verify_credentials", ATTEMPT]]);
+      expect(refused.hyp.http).not.toHaveBeenCalled();
+      expect(refused.db.names()).not.toContain("platform_attempt_mark_paid");
+    }
+
+    // the job's re-VERIFY takes the same path
+    const token = sealed(ATTEMPT, "raw_return", RAW);
+    const again = returnDeps(
+      { platform_return_get: () => ({ data: token }) },
+      {
+        credentials: async () => {
+          throw new PlatformPaymentError("credentials");
+        },
+      },
+    );
+    const out = await reverifyPlatformReturn(
+      { attemptId: ATTEMPT, reference: REFERENCE, sha: sha256Hex(RAW), mode: "test" },
+      again.deps,
+    );
+    expect(out.result).toBe("error");
+    expect(again.alerts).toEqual([["verify_credentials", ATTEMPT]]);
+    expect(again.hyp.http).not.toHaveBeenCalled();
   });
 
   it("a soft state (failed / expired / cancelled) is still verified: money may have moved", async () => {
@@ -910,6 +962,50 @@ describe("D5 re-VERIFY job (platform_attempts_pending_verify)", () => {
   });
 });
 
+// ------------------------------------------------------------------------------------------ the Pay button (H2)
+
+describe("D5 page — a charge whose payment is in review or being verified offers no Pay button (review H2)", () => {
+  const charge = (payable: boolean, id = CHARGE): PayCharge => ({
+    id,
+    no: 7,
+    amountMinor: 1000,
+    description: null,
+    occurredOn: null,
+    payable,
+    paidOnline: false,
+  });
+  const payment = (
+    state: MyCardPayment["state"],
+    targetId: string | null = CHARGE,
+  ): MyCardPayment => ({
+    id: ATTEMPT,
+    targetId,
+    targetLabel: null,
+    amountMinor: 1000,
+    state,
+    test: true,
+    cardBrand: null,
+    cardLast4: null,
+    approvalCode: null,
+    createdAt: null,
+    paidAt: null,
+  });
+
+  it("H2: the button follows the DB's payable; not payable + latest payment in review / in progress → the note only", () => {
+    expect(payChargeOffer(charge(true), [])).toBe("pay");
+    expect(payChargeOffer(charge(true), [payment("failed")])).toBe("pay");
+    for (const state of ["needs_review", "in_progress"] as const) {
+      expect(payChargeOffer(charge(false), [payment(state)])).toBe("checking");
+      // only the latest payment of THIS charge counts (the list is newest first)
+      expect(payChargeOffer(charge(false), [payment(state, ATTEMPT)])).toBeNull();
+      expect(payChargeOffer(charge(false), [payment("failed"), payment(state)])).toBeNull();
+    }
+    for (const state of ["paid", "test_paid", "failed", "expired", "cancelled"] as const)
+      expect(payChargeOffer(charge(false), [payment(state)])).toBeNull();
+    expect(payChargeOffer(charge(false), [])).toBeNull();
+  });
+});
+
 // ------------------------------------------------------------------------------------------ credentials
 
 describe("D5 credentials — NURIEL's terminal opens only under PLATFORM_ACCOUNT_ID and its field names", () => {
@@ -1032,6 +1128,7 @@ function terminalDeps(
     rpc: db.rpc,
     stepup,
     purposeHash: (actor, intent) => sha256Hex(`${actor}|${JSON.stringify(intent)}`),
+    dbPurposeHash: (env, actor, hash) => `db:${env}:${actor}:${hash}`,
     cipher: fakeCipher,
     checkCredentials: async () => terminalSecrets(),
     accountEmail: async () => "admin@example.invalid",
@@ -1130,6 +1227,11 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
     const saved = t.db.args("platform_terminal_save")!;
     expect(saved["_actor"]).toBe(ACTOR);
     expect(saved["_app_environment"]).toBe("demo");
+    // L7: the save names exactly the consumed challenge and its purpose (as the DB stored it)
+    expect(t.consumed).toHaveLength(1);
+    expect(saved["_challenge"]).toBe(CHALLENGE);
+    expect(saved["_challenge"]).toBe(t.consumed[0]!.challenge);
+    expect(saved["_purpose_hash"]).toBe(`db:demo:${ACTOR}:${t.consumed[0]!.hash}`);
     expect(saved["_patch"]).toEqual({
       mode: "test",
       terminal_max_installments: 1,
@@ -1150,6 +1252,27 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
     });
     for (const line of t.lines)
       for (const leak of [FAKE_KEY, FAKE_PASSWORD, "246813"]) expect(line).not.toContain(leak);
+  });
+
+  it("L7: the purpose hash the save passes is the one the step-up service stored for the challenge", async () => {
+    const key = Buffer.alloc(32, 7);
+    const seen: Record<string, unknown>[] = [];
+    const rpc: StepupRpc = async (fn, args) => {
+      seen.push(args);
+      return fn === "platform_stepup_issue"
+        ? { data: { challenge_id: CHALLENGE, expires_at: "2026-11-28T10:10:00Z" }, error: null }
+        : { data: { ok: true }, error: null };
+    };
+    const service = createStepupService(rpc, key);
+    const hash = sha256Hex("the change set");
+    const issued = await service.issue(ACTOR.toUpperCase(), hash);
+    await service.consume(ACTOR, issued.challengeId, hash, issued.code);
+    const db = stepupDbPurposeHash(key, ACTOR, hash);
+    expect(seen.map((a) => a["_purpose_hash"])).toEqual([db, db]);
+    expect(stepupDbPurposeHash(key, ACTOR.toUpperCase(), hash)).toBe(db);
+    expect(db).not.toBe(hash);
+    expect(() => stepupDbPurposeHash(key, "not-a-uuid", hash)).toThrow();
+    expect(() => stepupDbPurposeHash(Buffer.alloc(4), ACTOR, hash)).toThrow();
   });
 
   it("DM-SEP-6: a wrong code, a code for another change, or no code → no save at all", async () => {
@@ -1210,6 +1333,11 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
         "a payment to NURIEL is being verified; save again with force to park it for review",
         "force_needed",
       ],
+      // M1: the DB also asks for force while a payment is redirected (the owner is on Hyp's page)
+      [
+        "a payment to NURIEL is in progress (redirected); save again with force to park it for review",
+        "force_needed",
+      ],
       ["this terminal number is already registered to tenant", "terminal_taken"],
       ["confirm with the verification code sent by email first (step-up)", "stepup_required"],
       [
@@ -1224,6 +1352,16 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
       await requestTerminalSaveCode(CHANGE, t.deps);
       expect(await codeOf(() => savePlatformTerminal(SAVE, t.deps)), message).toBe(code);
     }
+  });
+
+  it("M1: the page recognises the force refusal by its exact text (shared with the server's fixed text)", () => {
+    expect(TERMINAL_FORCE_NEEDED_TEXT).toBe(PLATFORM_ERROR_TEXT.force_needed);
+    expect(new PlatformPaymentError("force_needed").message).toBe(TERMINAL_FORCE_NEEDED_TEXT);
+    expect(
+      Object.entries(PLATFORM_ERROR_TEXT).filter(
+        ([, value]) => value === TERMINAL_FORCE_NEEDED_TEXT,
+      ),
+    ).toHaveLength(1);
   });
 
   it("test connection: SIGN of ₪1 with a random reference, recorded as verified / failed; a non-00100 terminal is never sent", async () => {

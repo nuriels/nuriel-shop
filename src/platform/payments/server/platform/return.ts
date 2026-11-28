@@ -134,7 +134,19 @@ async function verifyAndSettle(
   deps: PlatformReturnDeps,
 ): Promise<{ result: SettleResult; reason?: string }> {
   const attempt = shortId(item.attemptId);
-  const secrets = await deps.credentials(item.attemptId, "verify", env);
+  let secrets: Awaited<ReturnType<PlatformReturnDeps["credentials"]>>;
+  try {
+    secrets = await deps.credentials(item.attemptId, "verify", env);
+  } catch (error) {
+    // review M1: the terminal or its credentials changed (or cannot be opened) after the payer was sent to Hyp —
+    // this return cannot be verified now, so the platform team is told (one e-mail per attempt)
+    deps.log.error("verify_credentials", {
+      attempt,
+      code: error instanceof PlatformPaymentError ? error.code : "internal",
+    });
+    await deps.alert("verify_credentials", item.attemptId);
+    return { result: "error" };
+  }
   if (secrets.result === "busy") {
     deps.log.info("verify_busy", { attempt });
     return { result: "pending" };
@@ -256,6 +268,12 @@ export async function handlePlatformReturn(
     deps.log.warn("return_refused", { reason: parsed.ok ? "no_order" : parsed.reason });
     return refused("refused");
   }
+  // without Hyp's transaction signature VERIFY cannot succeed: refused before any DB write, like the tenant side
+  // (review L3: nothing recorded, the attempt is not moved to returned, no alert per forged request)
+  if (!returnHasSignature(parsed)) {
+    deps.log.warn("return_refused", { reason: "unsigned" });
+    return refused("refused");
+  }
   const sha = sha256Hex(input.raw);
   const recorded = await platformCall(deps.rpc, "platform_attempt_record_return", {
     _reference: parsed.order,
@@ -294,12 +312,6 @@ export async function handlePlatformReturn(
   if (result === "replay" && CONCLUDED.includes(state)) {
     deps.log.info("return_replay", { attempt: shortId(attemptId), state });
     return { location, result: "concluded", attemptId };
-  }
-  // without Hyp's transaction signature VERIFY cannot succeed: recorded above, never verified (lead rule)
-  if (!returnHasSignature(parsed)) {
-    deps.log.warn("return_unsigned", { attempt: shortId(attemptId) });
-    await deps.alert("unsigned_return", attemptId);
-    return { location, result: "refused", attemptId };
   }
   if (result === "received") await keepRaw(attemptId, sha, input.raw, env, mode, deps);
   let settled: { result: SettleResult };

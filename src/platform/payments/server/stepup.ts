@@ -123,6 +123,19 @@ function asRecord(data: unknown): Record<string, unknown> | null {
     : null;
 }
 
+/**
+ * The purpose hash as the DB stores it for a challenge (keyed with the step-up key, so a DB reader cannot test guesses
+ * of the change against it). The service sends exactly this to platform_stepup_issue / _consume; the terminal save
+ * passes it again so the DB can require the very challenge that was consumed (review L7).
+ */
+export function stepupDbPurposeHash(key: Buffer, actorId: string, purposeHash: string): string {
+  const actor = uuidOrNull(actorId) ?? refuse();
+  if (!usableKey(key) || typeof purposeHash !== "string" || !HEX64.test(purposeHash)) refuse();
+  return createHmac("sha256", key)
+    .update(`${DB_PURPOSE_LABEL}\n${actor}\n${purposeHash}`, "utf8")
+    .digest("hex");
+}
+
 export function createStepupService(
   rpc: StepupRpc,
   key: Buffer,
@@ -145,9 +158,7 @@ export function createStepupService(
   const seedOf = (actor: string, purposeHash: string) => `${actor}|${purposeHash}`;
   /** the purpose hash as the DB sees it (keyed, so it cannot be checked against guessed payloads) */
   const dbPurposeOf = (actor: string, purposeHash: string) =>
-    createHmac("sha256", hmacKey)
-      .update(`${DB_PURPOSE_LABEL}\n${actor}\n${purposeHash}`, "utf8")
-      .digest("hex");
+    stepupDbPurposeHash(hmacKey, actor, purposeHash);
 
   return {
     async issue(actorId, purposeHash) {

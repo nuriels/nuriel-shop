@@ -49,6 +49,21 @@ export interface PayStartResult {
   demo: boolean;
 }
 
+/**
+ * What the section offers for one charge (review H2; pure, no server code). The Pay button only when the DB says the
+ * charge is payable — the DB keeps it unpayable while a payment for it is in review or being verified. A charge that
+ * is not payable and whose latest card payment (the list is newest first) is in review or still in progress gets the
+ * fixed note "התשלום בבדיקה" instead; any other charge that is not payable is not listed (as before).
+ */
+export function payChargeOffer(
+  charge: PayCharge,
+  payments: readonly MyCardPayment[],
+): "pay" | "checking" | null {
+  if (charge.payable) return "pay";
+  const latest = payments.find((payment) => payment.targetId === charge.id);
+  return latest?.state === "needs_review" || latest?.state === "in_progress" ? "checking" : null;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const pay = () => import("@/platform/payments/server/platform/pay");

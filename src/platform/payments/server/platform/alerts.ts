@@ -33,7 +33,8 @@ export const ALERT_REASON_TEXT: Readonly<Record<string, string>> = Object.freeze
   payer_gone: "העסק נמחק",
   environment_mismatch: "הסביבה של האפליקציה ושל המסד אינן תואמות — שום תשלום לא נסגר",
   credentials: "ספק התשלומים דחה את פרטי המסוף",
-  unsigned_return: "חזרה מדף התשלום הגיעה בלי חתימה — ייתכן שהאימות לפי חתימה כבוי בפורטל של Hyp",
+  verify_credentials:
+    "אי אפשר לאמת חזרה מדף התשלום: פרטי המסוף אינם זמינים — ייתכן שהמסוף שונה בזמן התשלום",
 });
 
 const REASON = /^[a-z][a-z_]{1,39}$/;
