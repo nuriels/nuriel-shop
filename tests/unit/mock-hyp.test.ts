@@ -15,6 +15,7 @@ import {
   HYP_PAGE_TESTIDS,
   HYP_SENTINELS,
   HYP_TEST_PREFIX,
+  HYP_UNKNOWN_MASOF,
   hypCanaries,
   hypFakeCredentials,
 } from "../../e2e/fixtures/hyp-fake.mjs";
@@ -216,7 +217,9 @@ describe("mock Hyp — SIGN", () => {
       enc(signPairs(storeB, order).map(([k, v]) => [k, k === key ? value : v]));
     expect(await (await fetch(`${base}?${wrong("PassP", "nope")}`)).text()).toBe("CCode=902");
     expect(await (await fetch(`${base}?${wrong("KEY", storeA.key)}`)).text()).toBe("CCode=902");
-    expect(await (await fetch(`${base}?${wrong("Masof", "0010099999")}`)).text()).toBe("CCode=902");
+    expect(await (await fetch(`${base}?${wrong("Masof", HYP_UNKNOWN_MASOF)}`)).text()).toBe(
+      "CCode=902",
+    );
     const noWhat = enc(signPairs(storeB, order).filter(([k]) => k !== "What"));
     expect(await (await fetch(`${base}?${noWhat}`)).text()).toBe("CCode=904");
   });
@@ -632,7 +635,9 @@ describe("mock Hyp — transport faults and scenario rules", () => {
     expect((await scenario({ sign: "nope" })).status).toBe(400);
     expect((await scenario({ verify: "flaky:x" })).status).toBe(400);
     expect((await scenario({ page: "approve,nope" })).status).toBe(400);
-    expect((await scenario({ target: "terminal:0010099999", sign: "ok" })).status).toBe(400);
+    expect((await scenario({ target: `terminal:${HYP_UNKNOWN_MASOF}`, sign: "ok" })).status).toBe(
+      400,
+    );
     expect((await scenario({ target: "elsewhere", sign: "ok" })).status).toBe(400);
     expect((await scenario({ sign: "ok", times: 0 })).status).toBe(400);
     expect((await scenario({})).status).toBe(400);

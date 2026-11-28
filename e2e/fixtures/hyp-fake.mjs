@@ -67,6 +67,9 @@ export const HYP_FAKE_TERMINALS = Object.freeze({
 /** The documented test-terminal prefix ("their numbers always start with 00100") */
 export const HYP_TEST_PREFIX = "00100";
 
+/** FAKE: a test-shaped terminal number the mock does not know (for "unknown Masof" cases) */
+export const HYP_UNKNOWN_MASOF = "0010099999";
+
 const RUN_ID = /^[0-9a-z]{6,32}$/;
 
 /**
