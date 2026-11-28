@@ -81,8 +81,16 @@ export function OnlinePaymentPage({
     } catch (e) {
       const message = e instanceof Error ? e.message : PAYMENT_MESSAGES.unavailable;
       setError(message);
-      // above the DEMO cap a retry cannot succeed: no "try again" button (L9)
-      setStage(message === ONLINE_OVER_DEMO_CAP ? "unavailable" : "failed");
+      // above the DEMO cap a retry cannot succeed: no "try again" button (L9); a busy order (a return being
+      // verified or in review, X-15) shows the "pending / in review" message and no Pay button
+      setStage(
+        message === ONLINE_OVER_DEMO_CAP
+          ? "unavailable"
+          : message === PAYMENT_MESSAGES.needs_review ||
+              message === PAYMENT_MESSAGES.verification_pending
+            ? "review"
+            : "failed",
+      );
     }
   }, [start, orderId]);
 
@@ -221,7 +229,9 @@ export function OnlinePaymentPage({
                 <h1 className="text-xl font-bold">התשלום בבדיקה</h1>
                 {orderLine}
                 <p className="text-sm text-muted-foreground" data-testid="online-pay-message">
-                  {PAYMENT_MESSAGES.needs_review}
+                  {error === PAYMENT_MESSAGES.verification_pending
+                    ? PAYMENT_MESSAGES.verification_pending
+                    : PAYMENT_MESSAGES.needs_review}
                 </p>
                 {backHome}
               </>

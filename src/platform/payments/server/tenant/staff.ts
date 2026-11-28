@@ -6,9 +6,13 @@
  */
 import { paymentsRpc } from "@/platform/payments/server/db";
 import { paymentsEnv } from "@/platform/payments/server/env";
-import type { OnlinePaymentView } from "@/platform/payments/tenant-views";
+import {
+  REVIEW_OUTCOMES,
+  type OnlinePaymentView,
+  type ReviewOutcome,
+} from "@/platform/payments/tenant-views";
 import { orderPaymentView } from "./checkout";
-import { int, unwrap } from "./db";
+import { TenantPaymentError, int, unwrap } from "./db";
 import { shortId, tenantLog } from "./log";
 
 export async function staffOrderPayment(
@@ -44,12 +48,18 @@ export async function cancelOrderAttempt(
   return cancelled ?? 0;
 }
 
+/**
+ * A person's review decision (X-16). not_charged → the DB resolves it and releases the order (payable again, or it
+ * expires normally); charged → resolved, the order stays held for good (the store cancels and refunds in Hyp's portal).
+ */
 export async function resolveOrderReview(
   actorId: string,
   tenantId: string,
   attemptId: string,
   note: string | null,
+  outcome: ReviewOutcome,
 ): Promise<boolean> {
+  if (!REVIEW_OUTCOMES.includes(outcome)) throw new TenantPaymentError("יש לבחור אם בוצע חיוב");
   const resolved = unwrap(
     "max_review_resolve",
     await paymentsRpc("max_review_resolve", {
@@ -57,8 +67,13 @@ export async function resolveOrderReview(
       _tenant: tenantId,
       _attempt: attemptId,
       _note: note,
+      _outcome: outcome,
     }),
   );
-  tenantLog.info("review_resolved", { attempt: shortId(attemptId), resolved: resolved === true });
+  tenantLog.info("review_resolved", {
+    attempt: shortId(attemptId),
+    outcome,
+    resolved: resolved === true,
+  });
   return resolved === true;
 }

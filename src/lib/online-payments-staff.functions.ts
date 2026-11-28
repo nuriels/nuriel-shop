@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { OnlinePaymentView } from "@/platform/payments/tenant-views";
@@ -8,7 +9,7 @@ import type { OnlinePaymentView } from "@/platform/payments/tenant-views";
  *                              platform admins act as admins of every store)
  *  cancelOrderOnlinePayment  — cancels the live attempt so the order can be edited (a payment being verified is
  *                              never cancelled; the customer then opens a new attempt) — store admins
- *  resolveOrderOnlinePayment — marks a payment that waited for review as handled, with a note — store admins
+ *  resolveOrderOnlinePayment — closes a review with the person's decision (not_charged | charged, X-16) and a note — store admins
  * requireSupabaseAuth (store membership, not blocked), POST + CSRF, rate-limited per user. The store is the
  * request's host; the DB authorizes the actor again.
  */
@@ -69,16 +70,33 @@ export const cancelOrderOnlinePayment = createServerFn({ method: "POST" })
     }
   });
 
+/** X-16: the person's decision is one of two explicit values, nothing else reaches the DB */
+const REVIEW_OUTCOME = z.enum(["not_charged", "charged"], {
+  errorMap: () => ({ message: "יש לבחור אם בוצע חיוב" }),
+});
+
 export const resolveOrderOnlinePayment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { orderId: string; attemptId: string; note?: string | null }) => ({
-    orderId: uuidOf(input?.orderId, "ההזמנה לא נמצאה"),
-    attemptId: uuidOf(input?.attemptId, "התשלום לא נמצא"),
-    note:
-      String(input?.note ?? "")
-        .trim()
-        .slice(0, 500) || null,
-  }))
+  .inputValidator(
+    (input: {
+      orderId: string;
+      attemptId: string;
+      outcome: "not_charged" | "charged";
+      note?: string | null;
+    }) => {
+      const outcome = REVIEW_OUTCOME.safeParse(input?.outcome);
+      if (!outcome.success) throw new Error("יש לבחור אם בוצע חיוב");
+      return {
+        orderId: uuidOf(input?.orderId, "ההזמנה לא נמצאה"),
+        attemptId: uuidOf(input?.attemptId, "התשלום לא נמצא"),
+        outcome: outcome.data,
+        note:
+          String(input?.note ?? "")
+            .trim()
+            .slice(0, 500) || null,
+      };
+    },
+  )
   .handler(async ({ data, context }): Promise<{ resolved: boolean }> => {
     const helpers = await import("@/lib/online-payments.server");
     try {
@@ -86,7 +104,13 @@ export const resolveOrderOnlinePayment = createServerFn({ method: "POST" })
       if (role !== "admin") throw new Error(NO_PERMISSION);
       const { resolveOrderReview } = await import("@/platform/payments/server/tenant/staff");
       return {
-        resolved: await resolveOrderReview(context.userId, tenantId, data.attemptId, data.note),
+        resolved: await resolveOrderReview(
+          context.userId,
+          tenantId,
+          data.attemptId,
+          data.note,
+          data.outcome,
+        ),
       };
     } catch (error) {
       throw helpers.paymentFnError(error);

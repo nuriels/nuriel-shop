@@ -229,6 +229,8 @@ const SOLE_CALLER: readonly (readonly [fn: string, file: string])[] = [
   ["platform_terminal_save", PLATFORM_TERMINAL],
   ["platform_stepup_issue", `${PAY_SERVER}stepup.ts`],
   ["platform_stepup_consume", `${PAY_SERVER}stepup.ts`],
+  // X-17: the one source of store review alerts
+  ["max_review_alerts_claim", `${PAY_SERVER}tenant/alerts.ts`],
 ];
 function ruleB4(t: Tree): string[] {
   const bad: string[] = [];
@@ -465,6 +467,53 @@ function ruleB12(t: Tree): string[] {
   return bad;
 }
 
+/**
+ * U17-B13 (contract §7.1 X-17, X-19): store review notifications come only from the alert claim, and the 5-minute
+ * tick expires unpaid orders before (never after) the online-payment jobs.
+ *  - tenant scope: a `review` value is [] or the claim's answer — a settle result never becomes a notification;
+ *  - the store bell for payments (staff_notifications) is written only by src/lib/online-payments.server.ts, by one
+ *    non-exported sender that is called exactly once (from actOnTenantOutcomes, which gets the claimed rows);
+ *  - payment-expiry.ts: in paymentsTick, expireUnpaidOrders() comes before runTenantPaymentJobs(.
+ */
+const TICK_FILE = "src/server/services/payment-expiry.ts";
+const STORE_ALERT_SENDER = "src/lib/online-payments.server.ts";
+const REVIEW_VALUE = /\breview\s*[:=]\s*([^,;\n}]+)/g;
+const REVIEW_VALUE_OK = /^(?:\[\]|await claimTenantReviewAlerts\(\)|ReviewItem\b.*)$/;
+function ruleB13(t: Tree): string[] {
+  const bad: string[] = [];
+  for (const [f, src] of each(t, (f) => f.startsWith(`${PAY_SERVER}tenant/`))) {
+    for (const m of stripComments(src).matchAll(REVIEW_VALUE)) {
+      const value = (m[1] ?? "").trim();
+      if (!REVIEW_VALUE_OK.test(value))
+        bad.push(
+          `${f}: a review notification from ${value} (only the alert claim may produce one)`,
+        );
+    }
+  }
+  for (const [f, src] of each(
+    t,
+    (f) => isPaymentsFile(f) || f.startsWith("src/lib/online-payments"),
+  ))
+    if (f !== STORE_ALERT_SENDER && /staff_notifications/.test(stripComments(src)))
+      bad.push(`${f}: writes the store bell (only ${STORE_ALERT_SENDER} may, for claimed reviews)`);
+  const sender = code(t, STORE_ALERT_SENDER);
+  if (/staff_notifications/.test(sender)) {
+    if (/export\s+(?:async\s+)?function\s+sendStoreReviewAlert\b/.test(sender))
+      bad.push(`${STORE_ALERT_SENDER}: exports the review sender`);
+    if ((sender.match(/\bsendStoreReviewAlert\s*\(/g) ?? []).length !== 2)
+      bad.push(`${STORE_ALERT_SENDER}: the review sender must be defined once and called once`);
+  }
+  const tick = code(t, TICK_FILE);
+  const body = tick.slice(tick.search(/function\s+paymentsTick\b/));
+  if (tick !== "") {
+    const expire = body.search(/\bexpireUnpaidOrders\s*\(/);
+    const jobs = body.search(/\brunTenantPaymentJobs\s*\(/);
+    if (expire < 0 || (jobs >= 0 && jobs < expire))
+      bad.push(`${TICK_FILE}: expireUnpaidOrders() must run first, before the payment jobs`);
+  }
+  return bad;
+}
+
 /** DM-SEC-7 (app side): the scope code logs only through its scope logger, and that logger redacts */
 const SCOPE_LOGGERS: readonly string[] = [
   `${PAY_SERVER}tenant/log.ts`,
@@ -666,6 +715,12 @@ describe("U17 / DM-SEP-3: platform ⟷ tenant separation (real tree)", () => {
 
   it("DM-SEP-3 / U17-B11: browser-reachable payment files never statically import server code", () => {
     expect(ruleB11(CODE)).toEqual([]);
+  });
+
+  it("U17-B13 (X-17, X-19): review notifications only from the alert claim; expiry first in the tick", () => {
+    expect(code(CODE, TICK_FILE)).toMatch(/\bexpireUnpaidOrders\s*\(/);
+    expect(code(CODE, STORE_ALERT_SENDER)).toMatch(/staff_notifications/);
+    expect(ruleB13(CODE)).toEqual([]);
   });
 
   it("U17-B12 (X-11): every module that parses a Hyp return refuses an unsigned one", () => {
@@ -972,6 +1027,41 @@ describe("U17: every rule bites (synthetic trees)", () => {
       "src/components/checkout/OnlinePaymentPage.tsx: static import of server code src/platform/payments/server/tenant/checkout",
       "src/platform/billing/pay.functions.ts: static import of server code src/platform/billing/billing.server",
     ]);
+  });
+
+  it("U17-B13 bites: a settle result as a notification, a second bell writer, an exported sender, expiry after the jobs", () => {
+    expect(
+      ruleB13(
+        tree({
+          [TENANT_RETURN]:
+            "return { ...base, review: { tenantId, orderId, reason } };\nreturn { ...base, review: [] };",
+          [`${PAY_SERVER}tenant/jobs.ts`]:
+            "result.review = await claimTenantReviewAlerts();\nexport interface R { review: ReviewItem[] }",
+          "src/lib/online-payments-staff.functions.ts":
+            'await db.from("staff_notifications").insert(rows);',
+          [STORE_ALERT_SENDER]:
+            'export async function sendStoreReviewAlert(i) { await db.from("staff_notifications").insert(r); }\nsendStoreReviewAlert(a); sendStoreReviewAlert(b);',
+          [TICK_FILE]:
+            "export async function paymentsTick() { const o = await runTenantPaymentJobs(); await expireUnpaidOrders(); }",
+        }),
+      ),
+    ).toEqual([
+      `${TENANT_RETURN}: a review notification from { tenantId (only the alert claim may produce one)`,
+      "src/lib/online-payments-staff.functions.ts: writes the store bell (only src/lib/online-payments.server.ts may, for claimed reviews)",
+      `${STORE_ALERT_SENDER}: exports the review sender`,
+      `${STORE_ALERT_SENDER}: the review sender must be defined once and called once`,
+      `${TICK_FILE}: expireUnpaidOrders() must run first, before the payment jobs`,
+    ]);
+    expect(
+      ruleB13(
+        tree({
+          [TICK_FILE]:
+            "export async function paymentsTick() { await expireUnpaidOrders(); await runTenantPaymentJobs(); }",
+          [STORE_ALERT_SENDER]:
+            'async function sendStoreReviewAlert(i) { await db.from("staff_notifications").insert(r); }\nawait sendStoreReviewAlert(item);',
+        }),
+      ),
+    ).toEqual([]);
   });
 
   it("U17-B12 bites: a return parser without the signature check (a comment does not count)", () => {

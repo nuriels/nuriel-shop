@@ -71,7 +71,7 @@ export interface PayDeps {
   rpc: PlatformRpc;
   credentials(attemptId: string, purpose: "sign", env: PaymentsEnv): Promise<AttemptSecrets>;
   http: typeof hypRequest;
-  alert(reason: string, attemptId: string | null): Promise<void>;
+  alert(reason: string, attemptId: string | null): Promise<unknown>;
   ownerRpc<T>(fn: "platform_card_my_options" | "platform_card_my_payments"): Promise<T>;
   log: PlatformLogger;
 }

@@ -76,6 +76,19 @@ afterAll(() => {
 });
 
 const ok = (data: unknown) => () => ({ data, error: null });
+/** one row of max_review_alerts_claim (X-17) and the review item it becomes */
+const claimRow = (reason: string, order: string | null = ORDER) => ({
+  attempt_id: ATTEMPT,
+  tenant_id: STORE_B,
+  order_id: order,
+  review_reason: reason,
+});
+const claimedItem = (reason: string, order: string | null = ORDER) => ({
+  tenantId: STORE_B,
+  attemptId: ATTEMPT,
+  orderId: order,
+  reason,
+});
 const refused = (message: string) => () => ({ data: null, error: { message, code: "P0001" } });
 const callsOf = (fn: string) => h.calls.filter((c) => c.fn === fn);
 const sha256 = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
@@ -105,6 +118,8 @@ beforeEach(() => {
   h.calls.length = 0;
   h.hyp.length = 0;
   h.answers.clear();
+  // X-17: the alert claim answers "nothing to alert" unless a test says otherwise
+  h.answers.set("max_review_alerts_claim", ok([]));
   h.platformHost = false;
   h.hypAnswer = () => ({ ok: false, error: "network" });
 });
@@ -427,7 +442,7 @@ describe("tenant return (record → VERIFY → settle)", () => {
       hostTenantId: STORE_B,
       host: "store-b.shop.localhost",
     });
-    expect(out).toMatchObject({ location: "/checkout/pay/unknown", paid: null, review: null });
+    expect(out).toMatchObject({ location: "/checkout/pay/unknown", paid: null, review: [] });
     expect(callsOf("platform_payment_unknown_return")[0]?.args).toEqual({
       _scope: "tenant",
       _host: "store-b.shop.localhost",
@@ -465,7 +480,7 @@ describe("tenant return (record → VERIFY → settle)", () => {
       location: `/checkout/pay/${ORDER}?r=1`,
       refused: false,
       paid: { tenantId: STORE_B, orderId: ORDER },
-      review: null,
+      review: [],
     });
     expect(callsOf("max_attempt_record_return")[0]?.args).toEqual({
       _host_tenant: STORE_B,
@@ -511,9 +526,11 @@ describe("tenant return (record → VERIFY → settle)", () => {
       _app_environment: "demo",
     });
     expect(callsOf("platform_payment_returns_purge")).toHaveLength(1);
+    // X-17: the alert claim runs after every handled return, last
+    expect(h.calls.at(-1)?.fn).toBe("max_review_alerts_claim");
   });
 
-  it("DM-PAY-7 / DM-PAY-6: Hesh, HKId and MULTI reach the settle as flags; a review is reported for the bell", async () => {
+  it("DM-PAY-7 / DM-PAY-6: Hesh, HKId and MULTI reach the settle as flags; the review rings through the claim", async () => {
     const { handleTenantReturn } = await import("@/platform/payments/server/tenant/return");
     h.answers.set("max_attempt_record_return", received());
     await verifiable();
@@ -534,7 +551,16 @@ describe("tenant return (record → VERIFY → settle)", () => {
       "multi",
     ]);
     expect(out.paid).toBeNull();
-    expect(out.review).toEqual({ tenantId: STORE_B, orderId: ORDER, reason: "document_issued" });
+    // the settle result itself rings nothing (X-17): with nothing claimed there is nothing to send
+    expect(out.review).toEqual([]);
+    h.answers.set("max_review_alerts_claim", ok([claimRow("document_issued")]));
+    const again = await handleTenantReturn({
+      provider: "max",
+      raw: returnQuery("&Hesh=4711&HKId=9&MULTI=1"),
+      hostTenantId: STORE_B,
+      host: "store-b.shop.localhost",
+    });
+    expect(again.review).toEqual([claimedItem("document_issued")]);
   });
 
   it("M08: a payment that is already concluded is never verified again (refresh, replay)", async () => {
@@ -587,11 +613,7 @@ describe("tenant return (record → VERIFY → settle)", () => {
       expect(h.hyp, state).toHaveLength(1);
       expect(callsOf("max_attempt_mark_paid"), state).toHaveLength(1);
       expect(out.paid, state).toBeNull();
-      expect(out.review, state).toEqual({
-        tenantId: STORE_B,
-        orderId: ORDER,
-        reason: "duplicate_charge",
-      });
+      expect(callsOf("max_review_alerts_claim"), state).toHaveLength(1);
     }
   });
 
@@ -654,7 +676,7 @@ describe("tenant return (record → VERIFY → settle)", () => {
       host: "store-b.shop.localhost",
     });
     expect(callsOf("max_attempt_mark_paid")[0]?.args?.["_verify_ccode"]).toBeNull();
-    expect(out).toMatchObject({ paid: null, review: null, location: `/checkout/pay/${ORDER}?r=1` });
+    expect(out).toMatchObject({ paid: null, review: [], location: `/checkout/pay/${ORDER}?r=1` });
 
     h.calls.length = 0;
     h.hyp.length = 0;
@@ -705,36 +727,44 @@ describe("tenant return (record → VERIFY → settle)", () => {
     });
   };
 
-  it("R-T1 / M2: VERIFY exhausted (the DB parked the attempt) → a review item for the store's bell + an ALERT line", async () => {
+  it("X-17 / N1: a review rings only through the claim — never from the settle result, so never twice", async () => {
+    // the DB parked the attempt (settle needs_review); the claim hands it out once, then never again
+    let claims = 0;
+    h.answers.set("max_attempt_record_return", received());
+    await verifiable();
+    h.answers.set(
+      "max_attempt_mark_paid",
+      ok({ result: "needs_review", reason: "amount_mismatch", order_id: ORDER }),
+    );
+    h.answers.set("max_review_alerts_claim", () => ({
+      data: claims++ === 0 ? [claimRow("amount_mismatch")] : [],
+      error: null,
+    }));
+    h.hypAnswer = () => ({ ok: true, status: 200, body: "CCode=0", html: false });
+    let first: Awaited<ReturnType<typeof storeReturn>> | undefined;
+    const alerts = await alertsDuring(async () => (first = await storeReturn()));
+    expect(first?.review).toEqual([claimedItem("amount_mismatch")]);
+    // one ALERT line per claimed row, none from the settle itself
+    expect(alerts.filter((line) => line.includes("ALERT needs_review"))).toHaveLength(1);
+    const second = await storeReturn();
+    expect(second.review).toEqual([]);
+    expect(callsOf("max_review_alerts_claim")).toHaveLength(2);
+  });
+
+  it("R-T1 / M2: VERIFY exhausted → no VERIFY, the DB's park is alerted through the claim", async () => {
     h.answers.set("max_attempt_record_return", received());
     await verifiable();
     h.answers.set("max_attempt_secrets", ok({ result: "exhausted" }));
+    h.answers.set("max_review_alerts_claim", ok([claimRow("verify_exhausted")]));
     let out: Awaited<ReturnType<typeof storeReturn>> | undefined;
     const alerts = await alertsDuring(async () => (out = await storeReturn()));
-    expect(out?.review).toEqual({ tenantId: STORE_B, orderId: ORDER, reason: "verify_exhausted" });
-    expect(alerts.some((line) => line.includes("ALERT verify_exhausted"))).toBe(true);
+    expect(out?.review).toEqual([claimedItem("verify_exhausted")]);
+    expect(alerts.some((line) => line.includes("ALERT needs_review attempt=aaaaaaaa"))).toBe(true);
     expect(h.hyp).toHaveLength(0);
     expect(callsOf("max_attempt_mark_paid")).toHaveLength(0);
   });
 
-  it("M2: the settle answering exhausted / verify_exhausted is a review item too", async () => {
-    for (const result of ["exhausted", "verify_exhausted"]) {
-      h.answers.set("max_attempt_record_return", received());
-      await verifiable();
-      h.answers.set("max_attempt_mark_paid", ok({ result, order_id: ORDER }));
-      h.hypAnswer = () => ({ ok: false, error: "timeout" });
-      let out: Awaited<ReturnType<typeof storeReturn>> | undefined;
-      const alerts = await alertsDuring(async () => (out = await storeReturn()));
-      expect(out?.review, result).toEqual({
-        tenantId: STORE_B,
-        orderId: ORDER,
-        reason: "verify_exhausted",
-      });
-      expect(alerts.length, result).toBeGreaterThan(0);
-    }
-  });
-
-  it("R-T2 / M1: VERIFY credentials refused (terminal changed / no longer configured) → review + ALERT, no VERIFY", async () => {
+  it("R-T2 / M1: VERIFY credentials refused (terminal changed / no longer configured) → ALERT, no VERIFY, the claim runs", async () => {
     h.answers.set("max_attempt_record_return", received());
     await verifiable();
     h.answers.set("max_attempt_secrets", () => ({
@@ -747,11 +777,8 @@ describe("tenant return (record → VERIFY → settle)", () => {
     let out: Awaited<ReturnType<typeof storeReturn>> | undefined;
     const alerts = await alertsDuring(async () => (out = await storeReturn()));
     expect(h.hyp).toHaveLength(0);
-    expect(out?.review).toEqual({
-      tenantId: STORE_B,
-      orderId: ORDER,
-      reason: "credentials_changed",
-    });
+    expect(out?.review).toEqual([]);
+    expect(callsOf("max_review_alerts_claim")).toHaveLength(1);
     expect(alerts.some((line) => line.includes("ALERT verify_credentials_refused"))).toBe(true);
   });
 
@@ -786,15 +813,19 @@ describe("tenant return (record → VERIFY → settle)", () => {
       h.answers.set("max_attempt_record_return", received());
       await verifiable();
       h.answers.set("max_attempt_secrets", answer as never);
-      let out: Awaited<ReturnType<typeof storeReturn>> | undefined;
-      const alerts = await alertsDuring(async () => (out = await storeReturn()));
+      const alerts = await alertsDuring(storeReturn);
       expect(h.hyp, name).toHaveLength(0);
-      expect(out?.review, name).toEqual({ tenantId: STORE_B, orderId: ORDER, reason });
-      expect(alerts.length, name).toBeGreaterThan(0);
+      expect(callsOf("max_attempt_mark_paid"), name).toHaveLength(0);
+      expect(
+        alerts.some(
+          (line) => line.includes("ALERT verify_credentials_refused") && line.includes(reason),
+        ),
+        name,
+      ).toBe(true);
     }
   });
 
-  it("M1: a DB that cannot be reached is not a refusal — no review, an error line, the kept return stays for the job", async () => {
+  it("M1: a DB that cannot be reached is not a refusal — an error line, no ALERT, the kept return stays for the job", async () => {
     h.answers.set("max_attempt_record_return", received());
     await verifiable();
     h.answers.set("max_attempt_secrets", () => ({
@@ -812,12 +843,40 @@ describe("tenant return (record → VERIFY → settle)", () => {
     } finally {
       errors.mockRestore();
     }
-    expect(out?.review).toBeNull();
+    expect(out?.review).toEqual([]);
     expect(callsOf("max_return_keep")).toHaveLength(1);
     expect(h.hyp).toHaveLength(0);
   });
 
-  it("L6: a return while payments are off is recorded, cannot be kept or verified → review item + ALERT", async () => {
+  it("X-19: a settle result 'unverified' writes one ALERT line (codes and short ids only)", async () => {
+    h.answers.set("max_attempt_record_return", received());
+    await verifiable();
+    h.answers.set("max_attempt_mark_paid", ok({ result: "unverified" }));
+    h.hypAnswer = () => ({ ok: false, error: "timeout" });
+    const alerts = await alertsDuring(storeReturn);
+    const lines = alerts.filter((line) => line.includes("ALERT verify_unverified"));
+    expect(lines).toEqual(["[pay:tenant] ALERT verify_unverified attempt=aaaaaaaa verify=timeout"]);
+  });
+
+  it("X-20: the card brand reaches the settle in lower case", async () => {
+    h.answers.set("max_attempt_record_return", received());
+    await verifiable();
+    h.answers.set(
+      "max_attempt_mark_paid",
+      ok({ result: "test_paid", applied: true, order_id: ORDER }),
+    );
+    h.hypAnswer = () => ({ ok: true, status: 200, body: "CCode=0", html: false });
+    const { handleTenantReturn } = await import("@/platform/payments/server/tenant/return");
+    await handleTenantReturn({
+      provider: "max",
+      raw: returnQuery().replace("&Brand=2", "&Brand=VisaCAL"),
+      hostTenantId: STORE_B,
+      host: "store-b.shop.localhost",
+    });
+    expect(callsOf("max_attempt_mark_paid")[0]?.args?.["_card_brand"]).toBe("visacal");
+  });
+
+  it("L6: a return while payments are off is recorded (the DB holds the order), not kept or verified → ALERT + claim", async () => {
     h.answers.set("max_attempt_record_return", received());
     await verifiable();
     process.env["PAYMENTS_SECRETS_KEY"] = "";
@@ -831,9 +890,21 @@ describe("tenant return (record → VERIFY → settle)", () => {
     expect(callsOf("max_attempt_record_return")).toHaveLength(1);
     expect(callsOf("max_return_keep")).toHaveLength(0);
     expect(callsOf("max_attempt_secrets")).toHaveLength(0);
+    expect(callsOf("max_review_alerts_claim")).toHaveLength(1);
     expect(h.hyp).toHaveLength(0);
-    expect(out?.review).toEqual({ tenantId: STORE_B, orderId: ORDER, reason: "payments_off" });
+    expect(out?.review).toEqual([]);
     expect(alerts.some((line) => line.includes("ALERT return_not_verified"))).toBe(true);
+  });
+
+  it("a refused return (nothing recorded) claims nothing", async () => {
+    const { handleTenantReturn } = await import("@/platform/payments/server/tenant/return");
+    await handleTenantReturn({
+      provider: "max",
+      raw: returnQuery().replace(/&Sign=[^&]*$/, ""),
+      hostTenantId: STORE_B,
+      host: "store-b.shop.localhost",
+    });
+    expect(h.calls).toHaveLength(0);
   });
 
   it("a return that is neither settled nor kept (the DB refused to keep it) → an ALERT line", async () => {
@@ -909,8 +980,49 @@ describe("tenant jobs", () => {
       "max_attempt_mark_paid",
       "max_attempts_expire",
       "platform_payment_returns_purge",
+      "max_review_alerts_claim",
     ]);
     expect(h.hyp[0]?.query.endsWith(`&${raw}`)).toBe(true);
+  });
+
+  it("X-19 / R2-2: payments not ready → no VERIFY, but the sweep, the purge and the alert claim still run", async () => {
+    const { runTenantPaymentJobs } = await import("@/platform/payments/server/tenant/jobs");
+    h.answers.set("max_attempts_expire", ok(1));
+    h.answers.set("platform_payment_returns_purge", ok(0));
+    h.answers.set("max_review_alerts_claim", ok([claimRow("verify_exhausted")]));
+    process.env["PAYMENTS_SECRETS_KEY"] = "";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(await runTenantPaymentJobs()).toEqual({
+        paid: [],
+        review: [claimedItem("verify_exhausted")],
+      });
+    } finally {
+      process.env["PAYMENTS_SECRETS_KEY"] = randomBytes(32).toString("hex");
+      warn.mockRestore();
+      errors.mockRestore();
+    }
+    expect(h.calls.map((c) => c.fn)).toEqual([
+      "max_attempts_expire",
+      "platform_payment_returns_purge",
+      "max_review_alerts_claim",
+    ]);
+    expect(h.hyp).toHaveLength(0);
+  });
+
+  it("X-17: a failing sweep or purge does not stop the alert claim", async () => {
+    const { runTenantPaymentJobs } = await import("@/platform/payments/server/tenant/jobs");
+    h.answers.set("max_attempts_pending_verify", ok([]));
+    h.answers.set("max_attempts_expire", refused("boom"));
+    h.answers.set("platform_payment_returns_purge", refused("boom"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await runTenantPaymentJobs();
+    } finally {
+      warn.mockRestore();
+    }
+    expect(h.calls.at(-1)?.fn).toBe("max_review_alerts_claim");
   });
 
   it("a kept return that does not match its record is not verified", async () => {
@@ -940,7 +1052,7 @@ describe("tenant jobs", () => {
     expect(callsOf("max_attempt_mark_paid")).toHaveLength(0);
   });
 
-  it("R-T3 / M2: the job's re-VERIFY hitting 'exhausted' or refused credentials reports a review item", async () => {
+  it("R-T3 / M2: the job's re-VERIFY hitting 'exhausted' or refused credentials: no VERIFY, the tick's claim alerts it", async () => {
     const { runTenantPaymentJobs } = await import("@/platform/payments/server/tenant/jobs");
     const { reverifyTenantReturn } = await import("@/platform/payments/server/tenant/return");
     const { tenantSecretCipher } = await import("@/platform/payments/server/tenant-keys");
@@ -958,18 +1070,18 @@ describe("tenant jobs", () => {
     };
     h.answers.set("max_return_get", ok(sealed));
     const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     try {
       h.answers.set("max_attempt_secrets", ok({ result: "exhausted" }));
-      expect((await reverifyTenantReturn(item))?.review).toEqual({
-        tenantId: STORE_B,
-        orderId: null,
-        reason: "verify_exhausted",
-      });
+      expect(await reverifyTenantReturn(item)).toEqual({ paid: null });
       h.answers.set(
         "max_attempt_secrets",
         refused("online payment: the terminal of this attempt is no longer configured"),
       );
-      expect((await reverifyTenantReturn(item))?.review?.reason).toBe("credentials_changed");
+      expect(await reverifyTenantReturn(item)).toEqual({ paid: null });
+      expect(
+        errors.mock.calls.some((c) => String(c[0]).includes("ALERT verify_credentials_refused")),
+      ).toBe(true);
 
       h.answers.set(
         "max_attempts_pending_verify",
@@ -986,12 +1098,14 @@ describe("tenant jobs", () => {
       h.answers.set("max_attempt_secrets", ok({ result: "exhausted" }));
       h.answers.set("max_attempts_expire", ok(0));
       h.answers.set("platform_payment_returns_purge", ok(0));
+      h.answers.set("max_review_alerts_claim", ok([claimRow("verify_exhausted", null)]));
       expect(await runTenantPaymentJobs()).toEqual({
         paid: [],
-        review: [{ tenantId: STORE_B, orderId: null, reason: "verify_exhausted" }],
+        review: [claimedItem("verify_exhausted", null)],
       });
     } finally {
       errors.mockRestore();
+      warn.mockRestore();
     }
     expect(h.hyp).toHaveLength(0);
   });
@@ -1097,6 +1211,107 @@ describe("store terminal admin (platform admin)", () => {
       _ok: true,
       _code: "0",
     });
+  });
+});
+
+describe("review decisions and held orders (X-14 / X-15 / X-16)", () => {
+  const STAFF = "e2e00000-0000-0000-0000-0000000000f1";
+
+  it("X-16: resolveOrderReview sends the person's outcome to max_review_resolve; anything else is refused first", async () => {
+    const { resolveOrderReview } = await import("@/platform/payments/server/tenant/staff");
+    h.answers.set("max_review_resolve", ok(true));
+    for (const outcome of ["not_charged", "charged"] as const) {
+      h.calls.length = 0;
+      expect(await resolveOrderReview(STAFF, STORE_B, ATTEMPT, "בדקנו בפורטל", outcome)).toBe(true);
+      expect(callsOf("max_review_resolve")[0]?.args).toEqual({
+        _actor: STAFF,
+        _tenant: STORE_B,
+        _attempt: ATTEMPT,
+        _note: "בדקנו בפורטל",
+        _outcome: outcome,
+      });
+    }
+    h.calls.length = 0;
+    await expect(
+      resolveOrderReview(STAFF, STORE_B, ATTEMPT, null, "maybe" as never),
+    ).rejects.toThrow("יש לבחור אם בוצע חיוב");
+    expect(h.calls).toHaveLength(0);
+  });
+
+  it("X-16: the two choices say what happens (gender-neutral fixed texts)", async () => {
+    const { REVIEW_OUTCOME_LABELS, REVIEW_OUTCOMES } =
+      await import("@/platform/payments/tenant-views");
+    expect(REVIEW_OUTCOMES).toEqual(["not_charged", "charged"]);
+    expect(REVIEW_OUTCOME_LABELS.not_charged).toBe("לא בוצע חיוב — ההזמנה חוזרת להמתין לתשלום");
+    expect(REVIEW_OUTCOME_LABELS.charged).toBe(
+      "בוצע חיוב — ההזמנה נשארת בהמתנה לטיפול ידני: ביטול וזיכוי בפורטל Hyp",
+    );
+  });
+
+  it("X-14 / X-15: a held or busy order is shown as held and the pay page offers no new payment", async () => {
+    const { orderPaymentView } = await import("@/platform/payments/server/tenant/checkout");
+    const { onlinePaymentStage } = await import("@/platform/payments/tenant-views");
+    const base = {
+      order_number: "1042",
+      status: "pending",
+      payment_method: "online",
+      payment_status: "awaiting",
+    };
+    const failedAttempt = { attempt_id: ATTEMPT, state: "failed", mode: "test" };
+    // held by the DB: no due time since the return came back
+    const held = orderPaymentView({ ...base, payment_due_at: null, attempt: failedAttempt }, true);
+    expect(held?.held).toBe(true);
+    expect(onlinePaymentStage(held!)).toBe("review");
+    // the DB's own word wins
+    const busy = orderPaymentView(
+      { ...base, payment_due_at: "2026-11-28T12:00:00Z", payable: false, attempt: failedAttempt },
+      true,
+    );
+    expect(busy?.held).toBe(true);
+    // a fresh order (due time set, no attempt) is payable
+    const fresh = orderPaymentView({ ...base, payment_due_at: "2026-11-28T12:00:00Z" }, true);
+    expect(fresh?.held).toBe(false);
+    expect(onlinePaymentStage(fresh!)).toBe("ready");
+    // a declined return released by the DB (due set again) → the payer may try again
+    const released = orderPaymentView(
+      { ...base, payment_due_at: "2026-11-28T12:00:00Z", attempt: failedAttempt },
+      true,
+    );
+    expect(released?.held).toBe(false);
+    expect(onlinePaymentStage(released!)).toBe("failed");
+    // a charged decision stays held; the outcome reaches staff
+    const charged = orderPaymentView(
+      {
+        ...base,
+        payment_due_at: null,
+        attempt: { ...failedAttempt, state: "needs_review", review_outcome: "charged" },
+      },
+      true,
+    );
+    expect(charged?.held).toBe(true);
+    expect(charged?.attempt?.reviewOutcome).toBe("charged");
+  });
+
+  it("X-15: a start refused because the order is busy answers the fixed pending / in-review text", async () => {
+    const { startTenantPayment } = await import("@/platform/payments/server/tenant/checkout");
+    const { PAYMENT_MESSAGES } = await import("@/platform/payments/max/messages");
+    for (const [message, text] of [
+      ["the payment of order 1042 is being verified", PAYMENT_MESSAGES.verification_pending],
+      ["the payment of order 1042 is being reviewed", PAYMENT_MESSAGES.needs_review],
+    ] as const) {
+      h.calls.length = 0;
+      h.answers.set("max_attempt_open", refused(message));
+      await expect(
+        startTenantPayment({
+          tenantId: STORE_B,
+          orderId: ORDER,
+          customerId: CUSTOMER,
+          guestToken: null,
+        }),
+      ).rejects.toThrow(text);
+      expect(callsOf("max_attempt_secrets")).toHaveLength(0);
+    }
+    expect(h.hyp).toHaveLength(0);
   });
 });
 

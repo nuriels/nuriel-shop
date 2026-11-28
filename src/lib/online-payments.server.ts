@@ -7,7 +7,7 @@
  * return outcomes and this module acts on them:
  *   • sendOnlinePaidEmails — the order e-mails, only for an order the settle just marked paid (never at order time,
  *     never from a browser, never twice: a replayed return is not verified again);
- *   • alertStoreStaffReview — the store admins' bell when a payment waits for a person (review, double charge).
+ *   • actOnTenantOutcomes — paid e-mails, and the bell + e-mail for each review claimed by max_review_alerts_claim (X-17).
  * Logging goes through the scope's redacting logger only (DM-SEC-7).
  */
 import { supabaseAdminUnscoped } from "@/integrations/supabase/client.server";
@@ -88,44 +88,86 @@ export async function sendOnlinePaidEmails(tenantId: string, orderId: string): P
   }
 }
 
-/** the store admins' bell: a payment of this store waits for a person (fixed text, no amounts, no card data) */
-export async function alertStoreStaffReview(item: ReviewItem): Promise<void> {
-  try {
-    const { data: admins } = await supabaseAdminUnscoped
-      .from("user_roles")
-      .select("user_id")
-      .eq("tenant_id", item.tenantId)
-      .eq("role", "admin")
-      .eq("is_blocked", false);
-    let label = "";
-    if (item.orderId) {
-      const { data: order } = await supabaseAdminUnscoped
-        .from("orders")
-        .select("order_number")
-        .eq("id", item.orderId)
-        .eq("tenant_id", item.tenantId)
-        .maybeSingle();
-      label = order?.order_number ? ` ${String(order.order_number)}` : "";
-    }
-    const rows = (admins ?? []).map((admin: { user_id: string }) => ({
-      tenant_id: item.tenantId,
-      user_id: admin.user_id,
-      kind: "system",
-      title: "תשלום מקוון לבדיקה",
-      body: `התשלום המקוון של הזמנה${label} ממתין לבדיקה ידנית: ${reviewReasonLabel(item.reason)}. אין לשלוח את ההזמנה לפני הבדיקה.`,
-      link: "/admin?tab=orders",
-    }));
-    if (rows.length > 0) await supabaseAdminUnscoped.from("staff_notifications").insert(rows);
-  } catch {
-    tenantLog.error("review_alert_failed", { order: shortId(item.orderId) });
-  }
+/** runs `work` in the store's context (the 5-minute tick has no request; e-mail logs are store-scoped) */
+async function inStoreContext(tenantId: string, work: () => Promise<void>): Promise<void> {
+  const { loadTenantById, maybeCurrentTenant, runWithTenant } =
+    await import("@/integrations/supabase/tenant.server");
+  if (maybeCurrentTenant()?.id === tenantId) return work();
+  const tenant = await loadTenantById(tenantId);
+  if (!tenant) throw new Error("store not found");
+  await runWithTenant(tenant.domain ?? tenant.slug, tenant, work);
 }
 
-/** after a return or a job run: e-mails for paid orders, the bell for reviews */
+/**
+ * One claimed review (X-17): the store admins' bell and an e-mail to them (fixed text, no amounts, no card data).
+ * Only actOnTenantOutcomes calls it, only with rows max_review_alerts_claim returned (U17-B13). Throws when the
+ * bell could not be written; a failed e-mail is logged by the e-mail service.
+ */
+async function sendStoreReviewAlert(item: ReviewItem): Promise<void> {
+  const { data: admins, error } = await supabaseAdminUnscoped
+    .from("user_roles")
+    .select("user_id, email")
+    .eq("tenant_id", item.tenantId)
+    .eq("role", "admin")
+    .eq("is_blocked", false);
+  if (error) throw new Error("admins not loaded");
+  let label = "";
+  if (item.orderId) {
+    const { data: order } = await supabaseAdminUnscoped
+      .from("orders")
+      .select("order_number")
+      .eq("id", item.orderId)
+      .eq("tenant_id", item.tenantId)
+      .maybeSingle();
+    label = order?.order_number ? ` ${String(order.order_number)}` : "";
+  }
+  const title = "תשלום מקוון לבדיקה";
+  const body = `התשלום המקוון של הזמנה${label} ממתין לבדיקה ידנית: ${reviewReasonLabel(item.reason)}. אין לשלוח את ההזמנה לפני הבדיקה.`;
+  const list = (admins ?? []) as { user_id: string; email: string | null }[];
+  const rows = list.map((admin) => ({
+    tenant_id: item.tenantId,
+    user_id: admin.user_id,
+    kind: "system",
+    title,
+    body,
+    link: "/admin?tab=orders",
+  }));
+  if (rows.length > 0) {
+    const inserted = await supabaseAdminUnscoped.from("staff_notifications").insert(rows);
+    if (inserted.error) throw new Error("bell not written");
+  }
+  const to = [...new Set(list.map((admin) => admin.email?.trim() ?? "").filter((e) => e !== ""))];
+  if (to.length === 0) return;
+  await inStoreContext(item.tenantId, async () => {
+    const [{ sendNotificationEmail }, { renderEmailHtml, escapeHtml }] = await Promise.all([
+      import("@/server/services/notifications"),
+      import("@/lib/email.server"),
+    ]);
+    await sendNotificationEmail({
+      template: "order_staff",
+      orderId: item.orderId,
+      to,
+      subject: `${title}${label ? ` —${label}` : ""}`,
+      html: await renderEmailHtml(title, `<p>${escapeHtml(body)}</p>`),
+      useStoreKey: false,
+    });
+  });
+}
+
+/**
+ * After a return or a tick: e-mails for paid orders; for each CLAIMED review (X-17) the bell + the e-mail. The claim
+ * stamped the row before this runs, so a failure is never retried: it is logged as an ALERT with the attempt id.
+ */
 export async function actOnTenantOutcomes(outcomes: {
   paid: readonly PaidOrder[];
   review: readonly ReviewItem[];
 }): Promise<void> {
   for (const paid of outcomes.paid) await sendOnlinePaidEmails(paid.tenantId, paid.orderId);
-  for (const item of outcomes.review) await alertStoreStaffReview(item);
+  for (const item of outcomes.review) {
+    try {
+      await sendStoreReviewAlert(item);
+    } catch {
+      tenantLog.alert("review_alert_failed", { attempt: shortId(item.attemptId) });
+    }
+  }
 }

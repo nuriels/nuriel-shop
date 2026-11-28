@@ -241,8 +241,20 @@ if [[ "$PROOFS" == yes ]]; then
   }
   if [[ "$(psql_q "SELECT to_regclass('payments.environment') IS NOT NULL")" == t ]]; then
     db_refuses "marking the DEMO database production" "UPDATE payments.environment SET name = 'production' WHERE id;"
-    # @@LIVE_AND_PREFIX_PROOFS@@ — filled in from the final DB API of migration 208 (the terminal save function)
-    fail "live-mode and test-prefix proofs: not wired yet"
+    db_accepts() { # db_accepts <name> <sql> → the statement must succeed inside a transaction that is rolled back
+      local out
+      out=$(printf 'BEGIN;\n%s\nROLLBACK;\n' "$2" | docker exec -i "$DB" psql -U postgres -d postgres -X -q -v ON_ERROR_STOP=1 2>&1)
+      if [[ $? -eq 0 ]] && ! grep -q 'ERROR' <<<"$out"; then pass "$1: accepted (positive control)"; else fail "$1: refused — the proofs below would prove nothing"; fi
+    }
+    if [[ "$(psql_q "SELECT coalesce(name, 'unset') FROM payments.environment")" != demo ]]; then
+      fail "the database is not marked demo yet — mark it first (§8), then run the proofs"
+    else
+      # a store that has no terminal account yet; every row is rolled back
+      pick="FROM public.tenants t WHERE NOT t.is_default AND NOT EXISTS (SELECT 1 FROM payments.tenant_accounts a WHERE a.tenant_id = t.id) ORDER BY t.created_at LIMIT 1"
+      db_accepts "a store test account with a 00100 terminal" "INSERT INTO payments.tenant_accounts (tenant_id, provider, mode, terminal_number) SELECT t.id, 'max', 'test', '0010000001' $pick; SELECT CASE WHEN EXISTS (SELECT 1 FROM payments.tenant_accounts WHERE terminal_number = '0010000001') THEN 1 ELSE 1 / 0 END;" # scan-secrets:allow (obviously fake 00100 test number; the row is rolled back)
+      db_refuses "a store terminal account in live mode" "INSERT INTO payments.tenant_accounts (tenant_id, provider, mode, terminal_number) SELECT t.id, 'max', 'live', '0010000001' $pick;" # scan-secrets:allow (obviously fake number; the insert must be refused)
+      db_refuses "a store terminal number without the test prefix" "INSERT INTO payments.tenant_accounts (tenant_id, provider, mode, terminal_number) SELECT t.id, 'max', 'test', '1234567890' $pick;"
+    fi
   else
     fail "migration 208 is not applied — the database proofs cannot run"
   fi

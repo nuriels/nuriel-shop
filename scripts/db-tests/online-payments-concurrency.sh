@@ -6,7 +6,7 @@
 # is assembled at run time and every credential is an obviously fake sealed token.
 #   C1  two parallel opens of one order → one attempt (the second reuses it)
 #   C2  two parallel settles of the same return → one test_paid, one already_paid
-#   C3  two returns with different payloads racing → both recorded, the order window extended once (+2 h, not +4 h)
+#   C3  two returns with different payloads racing → both recorded, the order held (X-14: no due time)
 #   C4  settle vs expire_unpaid_orders → never "paid and cancelled"; the attempt is applied only if the order is paid
 #   C5  settle vs max_attempts_expire (SKIP LOCKED) → paid either way
 #   C6  one transaction id on two orders → one paid, one needs_review duplicate_txn
@@ -20,6 +20,7 @@
 #   C13 eight parallel step-up requests of one admin → exactly five codes (5 per 10 minutes)
 #   C14 settle vs a forced credential change of the store's terminal → no deadlock; paid, or parked credentials_changed
 #       with the charge kept and the order held (review M1)
+#   C15 two review-alert claimers at once (X-17) → every alert claimed exactly once, never by both
 # Usage:  bash scripts/db-tests/online-payments-concurrency.sh   (after run.sh — the same local Postgres)
 # ============================================================
 set -uo pipefail
@@ -27,7 +28,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 PORT=${PGPORT:-5499}
 DB=conc_payments
-PG=(psql -X -q -h /tmp/pg -p "$PORT" -U postgres)
+SOCK=${KOBI_PGSOCKET:-/tmp/pg}
+PG=(psql -X -q -h "$SOCK" -p "$PORT" -U postgres)
 Q=("${PG[@]}" -d "$DB" -tA -v ON_ERROR_STOP=1)
 TMP=$(mktemp -d)
 FAILED=0
@@ -246,12 +248,11 @@ parallel c3 "$(svc "public.max_attempt_record_return('$X', '$REF3', '$PL3A', '0'
             "$(svc "public.max_attempt_record_return('$X', '$REF3', '$PL3B', '0', 'fake-c3-0001', 1000, NULL)")"
 expect_eq "both sessions succeeded" "$(rc_ok c3)" "2"
 expect_eq "both returns were received" "$(outs c3 '"result": "received"')" "2"
-expect_t "two return events, the attempt returned, the window extended once (+2 h, not +4 h)" \
+expect_t "two return events, the attempt returned, the order held once (X-14: no due time)" \
   "SELECT (SELECT count(*) FROM payments.tenant_events e JOIN payments.tenant_attempts a ON a.id = e.attempt_id
             WHERE a.reference = '$REF3' AND e.source = 'return') = 2
       AND (SELECT state = 'returned' FROM payments.tenant_attempts WHERE reference = '$REF3')
-      AND (SELECT payment_due_at BETWEEN now() + interval '1 hour 58 minutes' AND now() + interval '2 hours 1 minute'
-             FROM public.orders WHERE id = '$O3')"
+      AND (SELECT payment_due_at IS NULL AND status = 'pending' FROM public.orders WHERE id = '$O3')"
 
 echo "C4. settle vs expire_unpaid_orders"
 A4=$(q "SELECT cpt.returned('$X', '$(u 4)', '$PRODUCT', '$SHIP', cpt.h('c4'), 'fake-c4-0001')")
@@ -384,6 +385,23 @@ expect_t "consistent: paid and applied, or parked credentials_changed with the c
            AND NOT a.applied AND o.payment_status = 'awaiting' AND o.status = 'pending' AND o.payment_due_at IS NULL)
      FROM public.orders o JOIN payments.tenant_attempts a ON a.order_id = o.id WHERE o.id = '$O14'"
 echo "     (outcome: $(q "SELECT a.state || COALESCE(' ' || a.review_reason, '') FROM payments.tenant_attempts a WHERE a.reference = '$REF14'"))"
+
+echo "C15. two review-alert claimers at once"
+q "SELECT cpt.svc(format('SELECT public.platform_store_terminal_verified(%L, %L, true, %L)', '$PLAT', '$X', '0'))" >/dev/null
+q "DO \$\$ BEGIN WHILE jsonb_array_length(cpt.svc('SELECT public.max_review_alerts_claim(200)')) > 0 LOOP END LOOP; END \$\$" >/dev/null
+for i in $(seq 15 24); do
+  A=$(q "SELECT cpt.returned('$X', '$(u "$i")', '$PRODUCT', '$SHIP', cpt.h('c15-$i'), 'fake-c15-$i')")
+  q "SELECT cpt.svc(format('SELECT public.max_attempt_mark_paid(%L, %L, %L, %L, %L, %L, %L, %s, %L, 1, NULL, NULL, NULL, %L, %L)',
+       '$X', '$A'::jsonb ->> 'reference', cpt.h('c15-$i'), '0', '0', '$T_X', 'fake-c15-$i', 1001, 'ILS', '{}', 'demo'))" >/dev/null
+done
+expect_eq "ten new review alerts waiting" \
+  "$(q "SELECT count(*) FROM payments.tenant_attempts WHERE review_reason IS NOT NULL AND review_alerted_at IS NULL")" "10"
+CLAIM="$(svc "public.max_review_alerts_claim(200)")"
+parallel c15 "$CLAIM" "$CLAIM"
+expect_eq "both claimers succeeded" "$(rc_ok c15)" "2"
+expect_eq "ten alerts claimed in all" "$(cat "$TMP"/c15/*.out | grep -o '"attempt_id": "[^"]*"' | wc -l | tr -d ' ')" "10"
+expect_eq "no alert claimed twice" "$(cat "$TMP"/c15/*.out | grep -o '"attempt_id": "[^"]*"' | sort -u | wc -l | tr -d ' ')" "10"
+expect_eq "nothing left to claim" "$(q "SELECT jsonb_array_length(cpt.svc('SELECT public.max_review_alerts_claim(200)'))")" "0"
 
 rm -rf "$TMP"
 "${PG[@]}" -d postgres -c "DROP DATABASE IF EXISTS $DB" >/dev/null 2>&1
