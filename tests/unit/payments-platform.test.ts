@@ -58,6 +58,11 @@ import {
 } from "@/platform/payments/server/platform/terminal";
 import { alertPlatformAdmins } from "@/platform/payments/server/platform/alerts";
 import {
+  payChargeOffer,
+  type MyCardPayment,
+  type PayCharge,
+} from "@/platform/billing/pay.functions";
+import {
   parseTerminalChange,
   parseTerminalSave,
   TERMINAL_FORCE_NEEDED_TEXT,
@@ -954,6 +959,50 @@ describe("D5 re-VERIFY job (platform_attempts_pending_verify)", () => {
       ).toBe("error");
       expect(r.hyp.http).not.toHaveBeenCalled();
     }
+  });
+});
+
+// ------------------------------------------------------------------------------------------ the Pay button (H2)
+
+describe("D5 page — a charge whose payment is in review or being verified offers no Pay button (review H2)", () => {
+  const charge = (payable: boolean, id = CHARGE): PayCharge => ({
+    id,
+    no: 7,
+    amountMinor: 1000,
+    description: null,
+    occurredOn: null,
+    payable,
+    paidOnline: false,
+  });
+  const payment = (
+    state: MyCardPayment["state"],
+    targetId: string | null = CHARGE,
+  ): MyCardPayment => ({
+    id: ATTEMPT,
+    targetId,
+    targetLabel: null,
+    amountMinor: 1000,
+    state,
+    test: true,
+    cardBrand: null,
+    cardLast4: null,
+    approvalCode: null,
+    createdAt: null,
+    paidAt: null,
+  });
+
+  it("H2: the button follows the DB's payable; not payable + latest payment in review / in progress → the note only", () => {
+    expect(payChargeOffer(charge(true), [])).toBe("pay");
+    expect(payChargeOffer(charge(true), [payment("failed")])).toBe("pay");
+    for (const state of ["needs_review", "in_progress"] as const) {
+      expect(payChargeOffer(charge(false), [payment(state)])).toBe("checking");
+      // only the latest payment of THIS charge counts (the list is newest first)
+      expect(payChargeOffer(charge(false), [payment(state, ATTEMPT)])).toBeNull();
+      expect(payChargeOffer(charge(false), [payment("failed"), payment(state)])).toBeNull();
+    }
+    for (const state of ["paid", "test_paid", "failed", "expired", "cancelled"] as const)
+      expect(payChargeOffer(charge(false), [payment(state)])).toBeNull();
+    expect(payChargeOffer(charge(false), [])).toBeNull();
   });
 });
 

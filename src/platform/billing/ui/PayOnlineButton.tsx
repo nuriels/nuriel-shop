@@ -2,6 +2,7 @@
 // arch §8.8). Shown only when the server says online payment is available for this owner now; otherwise exactly the
 // line the card always had. A payable charge gets a button → the server opens the attempt and SIGNs → the browser
 // goes to Hyp's page. Back from Hyp (?pay=return): the result of the latest payment, polled for up to 30 seconds.
+// A charge whose payment is in review or being verified gets no button, only the note "התשלום בבדיקה" (review H2).
 // Nothing here knows a terminal, a credential or an amount the server did not send; the button sends only the
 // charge id (DM-PLAT-2). Gender-neutral texts.
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -14,6 +15,7 @@ import {
   myBillingPayOptions,
   myBillingPayStart,
   myBillingPayments,
+  payChargeOffer,
   type MyCardPayment,
   type MyCardPaymentState,
   type PayCharge,
@@ -23,6 +25,7 @@ import {
 /** the card's original line — unchanged whenever online payment is not available */
 const NO_CLEARING = "אין כאן סליקה: תשלום מופיע אחרי שצוות Nuriel רשם שהוא התקבל.";
 const CAN_PAY = "אפשר לשלם חיוב פתוח בכרטיס אשראי. התשלום נרשם אחרי אישור ספק התשלומים.";
+const CHECKING = "התשלום בבדיקה";
 
 const POLL_MS = 2_000;
 const POLL_FOR_MS = 30_000;
@@ -168,7 +171,11 @@ export function PayOnlineSection({ onChanged }: { onChanged?: () => Promise<void
     );
   }
 
-  const payable = options.charges.filter((c) => c.payable);
+  const listed = options.charges.flatMap((charge) => {
+    const offer = payChargeOffer(charge, payments);
+    return offer ? [{ charge, offer }] : [];
+  });
+  const payable = listed.filter((item) => item.offer === "pay");
   return (
     <div className="flex flex-col gap-3" data-testid="my-billing-pay" data-available="true">
       {payable.length > 0 && options.demo ? <DemoBanner /> : null}
@@ -183,15 +190,15 @@ export function PayOnlineSection({ onChanged }: { onChanged?: () => Promise<void
           {RESULT_TEXT[result]}
         </p>
       ) : null}
-      {payable.length > 0 ? (
+      {listed.length > 0 ? (
         <ul className="flex flex-col gap-2">
-          {payable.map((charge) => (
+          {listed.map(({ charge, offer }) => (
             <li
               key={charge.id}
               className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm"
               data-testid="my-billing-pay-charge"
               data-charge-id={charge.id}
-              data-payable="true"
+              data-payable={String(offer === "pay")}
             >
               <span className="flex flex-col">
                 <span className="font-medium">
@@ -204,7 +211,17 @@ export function PayOnlineSection({ onChanged }: { onChanged?: () => Promise<void
               </span>
               <span className="flex items-center gap-2">
                 {options.test ? <Badge variant="outline">בדיקה</Badge> : null}
-                <PayOnlineButton charge={charge} />
+                {offer === "pay" ? (
+                  <PayOnlineButton charge={charge} />
+                ) : (
+                  <span
+                    className="text-muted-foreground"
+                    role="status"
+                    data-testid="my-billing-pay-checking"
+                  >
+                    {CHECKING}
+                  </span>
+                )}
               </span>
             </li>
           ))}
