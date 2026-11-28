@@ -77,6 +77,10 @@ export interface OnlinePaymentAttemptView {
   reviewReason: string | null;
   /** staff only: the person's decision once the review was resolved (X-16), null while open */
   reviewOutcome: ReviewOutcome | null;
+  /** staff only: when the review was resolved; null while open (and again after a reopen, X-22) */
+  reviewResolvedAt: string | null;
+  /** staff only: the review was reopened by a new return or charge after a decision (X-22) */
+  reviewReopened: boolean;
 }
 
 /** one order's online payment (max_order_payment_status): null when the viewer may not see the order */
@@ -144,13 +148,18 @@ const REVIEW_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
   credentials_changed: "פרטי המסוף שונו בזמן האימות",
   mode_not_allowed: "מצב המסוף לא מותר בסביבה הזו",
   payments_off: "התשלום חזר כשהתשלום המקוון היה כבוי, ולכן לא אומת",
+  held_unexplained: "ההזמנה מוחזקת בלי בדיקה פתוחה — לא ידוע אם בוצע חיוב",
+  charge_after_resolution: "התקבל חיוב אחרי ההחלטה הקודמת",
 });
 
+/** a reason the map does not know (or none) still says something: never an empty text */
+export const REVIEW_REASON_FALLBACK = "נדרשת בדיקה";
+
 export function reviewReasonLabel(reason: string | null): string {
-  if (!reason) return "לבדיקה";
+  if (!reason) return REVIEW_REASON_FALLBACK;
   return Object.prototype.hasOwnProperty.call(REVIEW_REASON_LABELS, reason)
-    ? (REVIEW_REASON_LABELS[reason] ?? "לבדיקה")
-    : "לבדיקה";
+    ? (REVIEW_REASON_LABELS[reason] ?? REVIEW_REASON_FALLBACK)
+    : REVIEW_REASON_FALLBACK;
 }
 
 /** a store's terminal as the store owner and the platform admin see it (max_account_status) — never secrets */
@@ -215,6 +224,79 @@ export const REVIEW_OUTCOMES: readonly ReviewOutcome[] = ["not_charged", "charge
 export const REVIEW_OUTCOME_LABELS: Readonly<Record<ReviewOutcome, string>> = Object.freeze({
   not_charged: "לא בוצע חיוב — ההזמנה חוזרת להמתין לתשלום",
   charged: "בוצע חיוב — ההזמנה נשארת בהמתנה לטיפול ידני: ביטול וזיכוי בפורטל Hyp",
+});
+
+/** X-25: the decision as the order panel shows it once a review is resolved */
+export const REVIEW_DECISION_LABELS: Readonly<Record<ReviewOutcome, string>> = Object.freeze({
+  not_charged: "לא בוצע חיוב — ההזמנה חזרה להמתין לתשלום",
+  charged: "בוצע חיוב — ההזמנה מוחזקת לטיפול ידני",
+});
+const DECISION_WITHOUT_OUTCOME = "הבדיקה סומנה כטופלה";
+
+/**
+ * The order panel's state, derived from the DB's answer on every render (never cached): an open review shows the
+ * reason and the resolve choices; a resolved one shows the decision and no buttons; a reopened one (X-22: the DB
+ * cleared review_resolved_at / review_outcome) is open again.
+ */
+export function onlinePaymentPanelState(view: OnlinePaymentView | null): {
+  paid: boolean;
+  live: boolean;
+  held: boolean;
+  charged: boolean;
+  /** an open review: the reason and the resolve choices are shown */
+  openReview: boolean;
+  /** the decision text of a resolved review, null otherwise */
+  decision: string | null;
+  /** reopened after a decision by a new return / charge (X-22): the decision buttons are back */
+  reopened: boolean;
+  /** what the store does next — never null while the order is held (round 4: every held order has a route) */
+  guidance: string | null;
+} {
+  const attempt = view?.attempt ?? null;
+  const state = attempt?.state ?? null;
+  const paid = view?.paymentStatus === "paid";
+  const outcome = attempt?.reviewOutcome ?? null;
+  const resolved = attempt !== null && (attempt.reviewResolvedAt !== null || outcome !== null);
+  const held = view?.held === true && !paid;
+  const openReview = state === "needs_review" && !resolved;
+  const reopened = openReview && attempt?.reviewReopened === true;
+  const charged = resolved && outcome === "charged";
+  const guidance = !held
+    ? null
+    : reopened
+      ? HELD_GUIDANCE.reopened
+      : openReview
+        ? HELD_GUIDANCE.review
+        : charged
+          ? HELD_GUIDANCE.charged
+          : state === "returned"
+            ? HELD_GUIDANCE.verifying
+            : HELD_GUIDANCE.other;
+  return {
+    paid,
+    live: state === "created" || state === "redirected",
+    held,
+    charged,
+    openReview,
+    decision: resolved
+      ? outcome === null
+        ? DECISION_WITHOUT_OUTCOME
+        : REVIEW_DECISION_LABELS[outcome]
+      : null,
+    reopened,
+    guidance,
+  };
+}
+
+/** the next step for a held order, by its situation (fixed, gender-neutral) */
+export const HELD_GUIDANCE = Object.freeze({
+  review:
+    "ההזמנה מוחזקת עד להחלטה: יש לבדוק בפורטל Hyp ולבחור אם בוצע חיוב או לא. היא לא תבוטל אוטומטית ואי אפשר לשלם עליה שוב עד אז.",
+  reopened: "התקבלה חזרה חדשה אחרי ההחלטה — נדרשת בדיקה מחדש",
+  charged: "בוצע חיוב — יש לבטל ולזכות בפורטל Hyp, או לטפל בהזמנה ידנית. ההזמנה נשארת מוחזקת.",
+  verifying:
+    "התשלום באימות מול ספק התשלומים. אין צורך לעשות דבר כרגע; אם האימות לא יוכרע, תתקבל התראה לבדיקה.",
+  other: "ההזמנה מוחזקת — נדרשת בדיקה.",
 });
 
 /** "••12" — only the last 2 digits are ever shown */
