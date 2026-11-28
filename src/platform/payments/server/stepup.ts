@@ -21,9 +21,9 @@ export type StepupRpc = (
   args: Record<string, unknown>,
 ) => Promise<{ data: unknown; error: { message: string } | null }>;
 
-type StepupPurpose = "platform_terminal_save";
+type StepupPurpose = "platform_terminal_change";
 
-const PURPOSES: readonly string[] = ["platform_terminal_save"];
+const PURPOSES: readonly string[] = ["platform_terminal_change"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const SIX_DIGITS = /^[0-9]{6}$/;
