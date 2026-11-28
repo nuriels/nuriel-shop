@@ -161,7 +161,18 @@ export function PlatformTerminalCard() {
     setBusy("code");
     setError(null);
     try {
-      setChallenge(await platformTerminalRequestCode({ data: { patch: changeOf(current, view) } }));
+      // X-20: the new secret values go with the code request (the code is bound to them)
+      setChallenge(
+        await platformTerminalRequestCode({
+          data: {
+            patch: {
+              ...changeOf(current, view),
+              apiKey: current.apiKey.trim() === "" ? null : current.apiKey,
+              apiPassword: current.apiPassword.trim() === "" ? null : current.apiPassword,
+            },
+          },
+        }),
+      );
       setCode("");
     } catch (e) {
       setError(errorMessage(e));
