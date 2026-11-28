@@ -1408,6 +1408,7 @@ describe("round 4: the order panel shows the decision, every held order has a ro
       "ההזמנה מוחזקת בלי בדיקה פתוחה — לא ידוע אם בוצע חיוב",
     );
     expect(reviewReasonLabel("charge_after_resolution")).toBe("התקבל חיוב אחרי ההחלטה הקודמת");
+    expect(reviewReasonLabel("late_paid")).toBe("התשלום אושר באיחור ונרשם — יש לוודא שלא בוצע חיוב נוסף");
     expect(reviewReasonLabel("a_reason_from_a_newer_db")).toBe("נדרשת בדיקה");
     expect(reviewReasonLabel(null)).toBe("נדרשת בדיקה");
     expect(reviewReasonLabel("toString")).toBe("נדרשת בדיקה");

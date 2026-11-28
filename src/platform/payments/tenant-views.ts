@@ -150,6 +150,7 @@ const REVIEW_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
   payments_off: "התשלום חזר כשהתשלום המקוון היה כבוי, ולכן לא אומת",
   held_unexplained: "ההזמנה מוחזקת בלי בדיקה פתוחה — לא ידוע אם בוצע חיוב",
   charge_after_resolution: "התקבל חיוב אחרי ההחלטה הקודמת",
+  late_paid: "התשלום אושר באיחור ונרשם — יש לוודא שלא בוצע חיוב נוסף",
 });
 
 /** a reason the map does not know (or none) still says something: never an empty text */
