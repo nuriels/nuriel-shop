@@ -1393,6 +1393,12 @@ BEGIN
   IF o.kind <> 'order' OR o.payment_method <> 'online' OR o.payment_status <> 'awaiting' OR o.status <> 'pending' THEN
     RAISE EXCEPTION 'order % is not awaiting an online payment', o.order_number USING ERRCODE = 'check_violation';
   END IF;
+  -- held for a person (review M3): a payment of this order is in review — no second card payment meanwhile
+  IF o.payment_due_at IS NULL
+     OR EXISTS (SELECT 1 FROM payments.tenant_attempts x
+                 WHERE x.order_id = o.id AND x.state = 'needs_review' AND x.review_resolved_at IS NULL) THEN
+    RAISE EXCEPTION 'the payment of order % is being reviewed', o.order_number USING ERRCODE = 'check_violation';
+  END IF;
   IF NOT public.max_payments_active(_tenant, o.customer_id) THEN
     RAISE EXCEPTION 'online payment is not available in this store right now' USING ERRCODE = 'check_violation';
   END IF;

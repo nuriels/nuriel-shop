@@ -37,12 +37,18 @@
 \set C1 '''c2080000-0000-4000-8000-0000000000c1'''
 \set C2 '''c2080000-0000-4000-8000-0000000000c2'''
 \set C3 '''c2080000-0000-4000-8000-0000000000c3'''
+\set C4 '''c2080000-0000-4000-8000-0000000000c4'''
+\set C5 '''c2080000-0000-4000-8000-0000000000c5'''
 \set CA '''c2080000-0000-4000-8000-0000000000ca'''
 \set CD '''c2080000-0000-4000-8000-0000000000cd'''
 \set P10 '''c2080000-0000-4000-8000-00000000b010'''
 \set P60 '''c2080000-0000-4000-8000-00000000b060'''
 \set PA10 '''c2080000-0000-4000-8000-00000000a010'''
 \set PD10 '''c2080000-0000-4000-8000-00000000d010'''
+\set PM3 '''c2080000-0000-4000-8000-00000000b013'''
+\set PV '''c2080000-0000-4000-8000-00000000b014'''
+\set VR1 '''c2080000-0000-4000-8000-00000000f101'''
+\set VR2 '''c2080000-0000-4000-8000-00000000f102'''
 \set SHIP_B '''c2080000-0000-4000-8000-00000000500b'''
 \set SHIP_A '''c2080000-0000-4000-8000-00000000500a'''
 \set SHIP_D '''c2080000-0000-4000-8000-00000000500d'''
@@ -234,6 +240,8 @@ INSERT INTO auth.users (id, email, email_confirmed_at) VALUES
   ('c2080000-0000-4000-8000-0000000000c1', 'op.b.c1@test.local', now()),
   ('c2080000-0000-4000-8000-0000000000c2', 'op.b.c2@test.local', now()),
   ('c2080000-0000-4000-8000-0000000000c3', 'op.b.c3@test.local', now()),
+  ('c2080000-0000-4000-8000-0000000000c4', 'op.b.c4@test.local', now()),
+  ('c2080000-0000-4000-8000-0000000000c5', 'op.b.c5@test.local', now()),
   ('c2080000-0000-4000-8000-0000000000ca', 'op.a.c1@test.local', now()),
   ('c2080000-0000-4000-8000-0000000000cd', 'op.d.c1@test.local', now())
 ON CONFLICT DO NOTHING;
@@ -258,6 +266,8 @@ INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_app
   (:SB, :C1, 'op.b.c1@test.local', 'op_b_c1', 'customer', true, false),
   (:SB, :C2, 'op.b.c2@test.local', 'op_b_c2', 'customer', true, false),
   (:SB, :C3, 'op.b.c3@test.local', 'op_b_c3', 'customer', true, false),
+  (:SB, :C4, 'op.b.c4@test.local', 'op_b_c4', 'customer', true, false),
+  (:SB, :C5, 'op.b.c5@test.local', 'op_b_c5', 'customer', true, false),
   (:SA, :CA, 'op.a.c1@test.local', 'op_a_c1', 'customer', true, false),
   (:SD, :CD, 'op.d.c1@test.local', 'op_d_c1', 'customer', true, false)
 ON CONFLICT DO NOTHING;
@@ -267,7 +277,7 @@ VALUES (:SF, :A_BLOCKED, 'op.a.blocked@test.local', 'op_a_blocked', 'admin', tru
 ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_profiles (user_id, tenant_id, business_name, age_confirmed, profile_completed)
 SELECT u.user_id, u.tenant_id, 'לקוח תשלום מקוון', true, true
-  FROM (VALUES (:C1::uuid, :SB::uuid), (:C2, :SB), (:C3, :SB), (:CA, :SA), (:CD, :SD)) u(user_id, tenant_id)
+  FROM (VALUES (:C1::uuid, :SB::uuid), (:C2, :SB), (:C3, :SB), (:C4, :SB), (:C5, :SB), (:CA, :SA), (:CD, :SD)) u(user_id, tenant_id)
 ON CONFLICT DO NOTHING;
 INSERT INTO public.shipping_methods (id, tenant_id, name, kind, price, is_active) VALUES
   (:SHIP_A, :SA, 'איסוף (תשלום מקוון)', 'pickup', 0, true),
@@ -280,13 +290,18 @@ INSERT INTO public.global_products (id, tenant_id, sku, name, category, created_
   (:P10, :SB, '20800010', 'מוצר בדיקה 10', 'תשלום מקוון', :B_OWNER, 10, 100000),
   (:P60, :SB, '20800060', 'מוצר בדיקה 60', 'תשלום מקוון', :B_OWNER, 60, 100000),
   (:PA10, :SA, '20800110', 'מוצר בדיקה A', 'תשלום מקוון', :A_OWNER, 10, 100000),
-  (:PD10, :SD, '20800210', 'מוצר בדיקה D', 'תשלום מקוון', :D_OWNER, 10, 100000)
+  (:PD10, :SD, '20800210', 'מוצר בדיקה D', 'תשלום מקוון', :D_OWNER, 10, 100000),
+  (:PM3, :SB, '20800013', 'מוצר בדיקה (מלאי מוחזק)', 'תשלום מקוון', :B_OWNER, 10, 50),
+  (:PV, :SB, '20800014', 'מוצר בדיקה עם וריאנטים', 'תשלום מקוון', :B_OWNER, 10, 100000)
 ON CONFLICT DO NOTHING;
+INSERT INTO public.product_variants (id, tenant_id, product_id, options, sku, price, stock_quantity) VALUES
+  (:VR1, :SB, :PV, '{"color":"red"}', 'op-v-red', 10, 50),
+  (:VR2, :SB, :PV, '{"color":"blue"}', 'op-v-blue', 10, 50);
 UPDATE public.site_settings SET payment_phone_enabled = true WHERE tenant_id IN (:SA, :SB, :SD);
 
-SELECT tests.check('online payments fixtures: stores A / B / D / E / F are ordinary, non-default stores with exactly one owner each; B has an owner, a manager, an agent and three customers',
+SELECT tests.check('online payments fixtures: stores A / B / D / E / F are ordinary, non-default stores with exactly one owner each; B has an owner, a manager, an agent and five customers',
   format($$SELECT NOT EXISTS (SELECT 1 FROM public.tenants WHERE id IN (%1$L, %2$L, %3$L, %7$L, %8$L) AND (is_default OR site_type <> 'ecommerce'))
-             AND (SELECT count(*) FROM public.user_roles WHERE tenant_id = %2$L AND role = 'customer') = 3
+             AND (SELECT count(*) FROM public.user_roles WHERE tenant_id = %2$L AND role = 'customer') = 5
              AND (SELECT is_protected FROM public.user_roles WHERE tenant_id = %2$L AND user_id = %4$L)
              AND NOT (SELECT is_protected FROM public.user_roles WHERE tenant_id = %2$L AND user_id = %5$L)
              AND (SELECT is_blocked AND is_protected FROM public.user_roles WHERE tenant_id = %8$L AND user_id = %6$L)
@@ -658,7 +673,7 @@ SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L,
          NULL, repeat('a', 64))), '') AS l7_none,
        COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', :PLAT2, '{}', 'demo',
          gen_random_uuid(), repeat('a', 64))), '') AS l7_other \gset
-SELECT tests.check('step-up (review L7): the save names the exact challenge the admin consumed and its purpose — another purpose, no challenge or an unknown one is refused (and spends nothing)',
+SELECT tests.check('DM-SEP-6 (review L7): the save names the exact challenge the admin consumed and its purpose — another purpose, no challenge or an unknown one is refused (and spends nothing)',
   format($$SELECT %L LIKE '%%verification code%%' AND %L LIKE '%%verification code%%' AND %L LIKE '%%verification code%%'
              AND (SELECT spent_at IS NULL FROM payments.platform_stepup_challenges WHERE id = %L)
              AND (SELECT count(*) FROM pg_proc WHERE proname = 'platform_terminal_save') = 1
@@ -1619,7 +1634,312 @@ SELECT tests.check('decision 15: deleting store D keeps its attempts, events and
          :SD, :'t_d'));
 
 -- ============================================================
--- 18. Cleanup: the switches off, the database unmarked (later files see online payments off)
+-- 18. Independent review fix round (H1, H2, M1, M3, M4, M5, L4): each check failed before the fix
+-- ============================================================
+-- B's credentials were replaced in 16: verified again for the store payments below
+SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_verified(%L, %L, true, %L)', :PLAT, :SB, '0')) AS ok \gset
+-- open → SIGN ok → browser return (one payload), the attempt waiting for its VERIFY
+CREATE OR REPLACE FUNCTION pg_temp.t_returned(_tenant uuid, _order uuid, _cust uuid, _payload text, _txn text)
+RETURNS jsonb LANGUAGE plpgsql AS $f$
+DECLARE o jsonb;
+BEGIN
+  o := pg_temp.t_open(_tenant, _order, _cust);
+  PERFORM pg_temp.t_sign(_tenant, o ->> 'attempt_id');
+  PERFORM pg_temp.t_ret(_tenant, o ->> 'reference', _payload, '0', _txn, (o ->> 'amount_minor')::bigint);
+  RETURN o;
+END $f$;
+CREATE OR REPLACE FUNCTION pg_temp.p_returned(_actor uuid, _tenant uuid, _charge uuid, _origin text, _payload text, _txn text)
+RETURNS jsonb LANGUAGE plpgsql AS $f$
+DECLARE o jsonb;
+BEGIN
+  o := pg_temp.p_open(_actor, _tenant, _charge, _origin);
+  PERFORM pg_temp.svc(format('SELECT public.platform_attempt_signed(%L, true, NULL)', o ->> 'attempt_id'));
+  IF _payload IS NOT NULL THEN
+    PERFORM pg_temp.svc(format('SELECT public.platform_attempt_record_return(%L, %L, %L, %L, %L, NULL)',
+                               o ->> 'reference', _payload, '0', _txn, (o ->> 'amount_minor')::bigint));
+  END IF;
+  RETURN o;
+END $f$;
+CREATE OR REPLACE FUNCTION pg_temp.p_fail_verify(_o jsonb, _payload text, _terminal text, _n integer) RETURNS jsonb
+LANGUAGE plpgsql AS $f$
+DECLARE r jsonb;
+BEGIN
+  FOR i IN 1.._n LOOP
+    PERFORM pg_temp.svc(format('SELECT public.platform_attempt_secrets(%L, %L)', _o ->> 'attempt_id', 'verify'));
+    r := pg_temp.p_settle(_o ->> 'reference', _payload, NULL, '0', _terminal, 'fake-x-0001', (_o ->> 'amount_minor')::bigint);
+  END LOOP;
+  RETURN r;
+END $f$;
+-- n rounds of: VERIFY lease (max_attempt_secrets 'verify'), then a VERIFY that failed in transport (no CCode)
+CREATE OR REPLACE FUNCTION pg_temp.t_fail_verify(_tenant uuid, _o jsonb, _payload text, _n integer) RETURNS jsonb
+LANGUAGE plpgsql AS $f$
+DECLARE r jsonb;
+BEGIN
+  FOR i IN 1.._n LOOP
+    PERFORM pg_temp.svc(format('SELECT public.max_attempt_secrets(%L, %L, %L)', _tenant, _o ->> 'attempt_id', 'verify'));
+    r := pg_temp.t_settle(_tenant, _o ->> 'reference', _payload, NULL, '0', _o ->> 'terminal_number', 'fake-x-0001',
+                          (_o ->> 'amount_minor')::bigint);
+  END LOOP;
+  RETURN r;
+END $f$;
+
+-- H1 (tenant): the 6th failed VERIFY parks the attempt — no 7th call needed; the order is held
+SELECT pg_temp.order_of(:SB, :C4, :P10, :SHIP_B, 1, 'online') AS v1o \gset
+SELECT pg_temp.h('fake-return|review-h1-a') AS pv1 \gset
+SELECT pg_temp.t_returned(:SB, :'v1o', :C4, :'pv1', 'fake-v1-0001') AS v1 \gset
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_return_keep(%L, %L, %L, %L))', :SB, :'v1'::jsonb ->> 'attempt_id', :'pv1', pg_temp.tok('raw-v1'))) AS ok \gset
+SELECT pg_temp.t_fail_verify(:SB, :'v1'::jsonb, :'pv1', 5) AS v1_r5 \gset
+SELECT pg_temp.svc('SELECT public.max_attempts_pending_verify(200)') AS v1_list5 \gset
+SELECT pg_temp.t_fail_verify(:SB, :'v1'::jsonb, :'pv1', 1) AS v1_r6 \gset
+SELECT pg_temp.svc('SELECT public.max_attempts_pending_verify(200)') AS v1_list6,
+       pg_temp.svc(format('SELECT public.max_attempt_secrets(%L, %L, %L)', :SB, :'v1'::jsonb ->> 'attempt_id', 'verify')) AS v1_sec7 \gset
+SELECT tests.check('DM-PAY-4 (review H1): after 5 failed VERIFYs the return is still listed for the job; the 6th failed result parks it (needs_review verify_exhausted, a review event) — no 7th call',
+  format($$SELECT %1$L::jsonb ->> 'result' = 'unverified'
+             AND EXISTS (SELECT 1 FROM jsonb_array_elements(%2$L::jsonb) e WHERE e ->> 'attempt_id' = %5$L)
+             AND %3$L::jsonb ->> 'result' = 'needs_review' AND %3$L::jsonb ->> 'reason' = 'verify_exhausted'
+             AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(%4$L::jsonb) e WHERE e ->> 'attempt_id' = %5$L)
+             AND %6$L::jsonb ->> 'result' = 'exhausted'
+             AND (SELECT state = 'needs_review' AND review_reason = 'verify_exhausted' AND verify_attempts = 6
+                    FROM payments.tenant_attempts WHERE id = %5$L)
+             AND (SELECT count(*) FROM payments.tenant_events WHERE attempt_id = %5$L AND source = 'review'
+                    AND result = 'verify_exhausted') = 1$$,
+         :'v1_r5', :'v1_list5', :'v1_r6', :'v1_list6', :'v1'::jsonb ->> 'attempt_id', :'v1_sec7'));
+SELECT to_jsonb(public.expire_unpaid_orders()) AS ok \gset
+SELECT pg_temp.svc('SELECT to_jsonb(public.max_attempts_expire())') AS ok \gset
+SELECT tests.check('DM-PAY-4 (review H1, M3): the parked attempt''s order is held — no due time, so expire_unpaid_orders never cancels it; the sweep leaves it in review',
+  format($$SELECT (SELECT status = 'pending' AND payment_status = 'awaiting' AND payment_due_at IS NULL FROM public.orders WHERE id = %L)
+             AND (SELECT state = 'needs_review' FROM payments.tenant_attempts WHERE id = %L)$$,
+         :'v1o', :'v1'::jsonb ->> 'attempt_id'));
+-- M4 on an attempt parked before any verified charge: the charge is kept on it; a further one is duplicate_charge
+SELECT pg_temp.t_settle(:SB, :'v1'::jsonb ->> 'reference', :'pv1', '0', '0', :'t_b', 'fake-v1-0001', 1000) AS v1_late \gset
+SELECT pg_temp.t_settle(:SB, :'v1'::jsonb ->> 'reference', :'pv1', '0', '0', :'t_b', 'fake-v1-0002', 1000) AS v1_second \gset
+SELECT pg_temp.t_settle(:SB, :'v1'::jsonb ->> 'reference', :'pv1', '0', '0', :'t_b', 'fake-v1-0002', 1000) AS v1_second_again \gset
+SELECT tests.check('DM-PAY-5 (review M4): a verified charge for an attempt parked before any charge is kept on it (still in review); a second, different one → duplicate_charge, its transaction id kept; a replay adds nothing',
+  format($$SELECT %1$L::jsonb ->> 'result' = 'needs_review' AND %1$L::jsonb ->> 'reason' = 'verify_exhausted'
+             AND %2$L::jsonb ->> 'result' = 'duplicate_charge' AND %3$L::jsonb ->> 'result' = 'needs_review'
+             AND (SELECT state = 'needs_review' AND review_reason = 'duplicate_charge' AND provider_txn_id = 'fake-v1-0001'
+                         AND extra_txn_ids = '{fake-v1-0002}' AND NOT applied FROM payments.tenant_attempts WHERE id = %4$L)
+             AND (SELECT payment_status = 'awaiting' AND payment_due_at IS NULL FROM public.orders WHERE id = %5$L)$$,
+         :'v1_late', :'v1_second', :'v1_second_again', :'v1'::jsonb ->> 'attempt_id', :'v1o'));
+
+-- H1 (tenant): the sweep never expires a returned attempt; 90 minutes after an unverified return it parks it
+SELECT pg_temp.order_of(:SB, :C4, :P10, :SHIP_B, 1, 'online') AS v2o \gset
+SELECT pg_temp.h('fake-return|review-h1-b') AS pv2 \gset
+SELECT pg_temp.t_returned(:SB, :'v2o', :C4, :'pv2', 'fake-v2-0001') AS v2 \gset
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_return_keep(%L, %L, %L, %L))', :SB, :'v2'::jsonb ->> 'attempt_id', :'pv2', pg_temp.tok('raw-v2'))) AS ok \gset
+SET session_replication_role = replica;
+UPDATE payments.tenant_attempts SET created_at = now() - interval '40 minutes', expires_at = now() - interval '5 minutes'
+ WHERE id = (:'v2'::jsonb ->> 'attempt_id')::uuid;
+SET session_replication_role = origin;
+SELECT pg_temp.svc('SELECT to_jsonb(public.max_attempts_expire())') AS ok \gset
+SELECT (SELECT state FROM payments.tenant_attempts WHERE id = (:'v2'::jsonb ->> 'attempt_id')::uuid) AS v2_state_timed_out \gset
+SET session_replication_role = replica;
+UPDATE payments.tenant_attempts SET created_at = now() - interval '3 hours', expires_at = now() - interval '150 minutes',
+       returned_at = now() - interval '91 minutes'
+ WHERE id = (:'v2'::jsonb ->> 'attempt_id')::uuid;
+SET session_replication_role = origin;
+SELECT pg_temp.svc('SELECT to_jsonb(public.max_attempts_expire())') AS ok \gset
+SELECT pg_temp.svc('SELECT to_jsonb(public.platform_payment_returns_purge())') AS ok \gset
+SELECT tests.check('DM-PAY-4 (review H1): a timed-out returned attempt is not expired; 90 minutes after its unverified return the sweep parks it (verify_exhausted) and holds the order; its raw return stays until the 2-hour ceiling',
+  format($$SELECT %1$L = 'returned'
+             AND (SELECT state = 'needs_review' AND review_reason = 'verify_exhausted' FROM payments.tenant_attempts WHERE id = %2$L)
+             AND (SELECT payment_due_at IS NULL AND status = 'pending' FROM public.orders WHERE id = %3$L)
+             AND EXISTS (SELECT 1 FROM payments.tenant_returns WHERE attempt_id = %2$L)$$,
+         :'v2_state_timed_out', :'v2'::jsonb ->> 'attempt_id', :'v2o'));
+SET session_replication_role = replica;
+UPDATE payments.tenant_returns SET received_at = now() - interval '3 hours', purge_after = now() - interval '1 hour'
+ WHERE attempt_id = (:'v2'::jsonb ->> 'attempt_id')::uuid;
+SET session_replication_role = origin;
+SELECT pg_temp.svc('SELECT to_jsonb(public.platform_payment_returns_purge())') AS ok \gset
+SELECT tests.check('DM-PAY-4 (review H1): past its ceiling, the raw return of a parked attempt is purged',
+  format($$SELECT NOT EXISTS (SELECT 1 FROM payments.tenant_returns WHERE attempt_id = %L)$$, :'v2'::jsonb ->> 'attempt_id'));
+
+-- H1 (tenant): the purge parks an unverified kept return before it can delete it
+SELECT pg_temp.order_of(:SB, :C4, :P10, :SHIP_B, 1, 'online') AS v3o \gset
+SELECT pg_temp.h('fake-return|review-h1-c') AS pv3 \gset
+SELECT pg_temp.t_returned(:SB, :'v3o', :C4, :'pv3', 'fake-v3-0001') AS v3 \gset
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_return_keep(%L, %L, %L, %L))', :SB, :'v3'::jsonb ->> 'attempt_id', :'pv3', pg_temp.tok('raw-v3'))) AS ok \gset
+SET session_replication_role = replica;
+UPDATE payments.tenant_returns SET received_at = now() - interval '125 minutes', purge_after = now() - interval '5 minutes'
+ WHERE attempt_id = (:'v3'::jsonb ->> 'attempt_id')::uuid;
+SET session_replication_role = origin;
+SELECT pg_temp.svc('SELECT to_jsonb(public.platform_payment_returns_purge())') AS ok \gset
+SELECT tests.check('DM-PAY-4 (review H1): a raw return past its ceiling that no VERIFY confirmed parks its attempt (verify_exhausted, order held) in the same purge run, before it is deleted',
+  format($$SELECT (SELECT state = 'needs_review' AND review_reason = 'verify_exhausted' FROM payments.tenant_attempts WHERE id = %1$L)
+             AND (SELECT payment_due_at IS NULL FROM public.orders WHERE id = %2$L)
+             AND NOT EXISTS (SELECT 1 FROM payments.tenant_returns WHERE attempt_id = %1$L)$$,
+         :'v3'::jsonb ->> 'attempt_id', :'v3o'));
+
+-- M3: a verified, approved payment in review holds its order (not cancelled, stock kept); expire_unpaid_orders unchanged
+SELECT (SELECT stock_quantity FROM public.global_products WHERE id = :PM3) AS m3_stock0 \gset
+SELECT pg_temp.order_of(:SB, :C5, :PM3, :SHIP_B, 1, 'online') AS m3o \gset
+SELECT pg_temp.order_of(:SB, :C5, :PM3, :SHIP_B, 1, 'online') AS m3c \gset
+SELECT pg_temp.t_pay(:SB, :'m3o', :C5, 'fake-m3-0001', '0', NULL, 'ILS', 1, '{document}') AS m3r \gset
+SET session_replication_role = replica;
+UPDATE public.orders SET payment_due_at = now() - interval '1 minute' WHERE id = :'m3c';
+SET session_replication_role = origin;
+SELECT to_jsonb(public.expire_unpaid_orders()) AS ok \gset
+SELECT tests.check('DM-PAY-5 (review M3): an approved, verified payment that ends in needs_review holds its order — expire_unpaid_orders cancels an unpaid control order and returns its stock, never the held one',
+  format($$SELECT %1$L::jsonb ->> 'reason' = 'document_issued'
+             AND (SELECT status = 'pending' AND payment_status = 'awaiting' AND payment_due_at IS NULL FROM public.orders WHERE id = %2$L)
+             AND (SELECT status = 'cancelled' AND payment_status = 'expired' FROM public.orders WHERE id = %3$L)
+             AND (SELECT stock_quantity FROM public.global_products WHERE id = %4$L) = %5$s - 1$$,
+         :'m3r', :'m3o', :'m3c', :PM3, :m3_stock0));
+SELECT tests.check('DM-REG-1 (review M3): expire_unpaid_orders (Bit / phone / manual expiry) is byte-identical to migration 207 — not touched by 208',
+  $$SELECT md5(pg_get_functiondef('public.expire_unpaid_orders()'::regprocedure)) = '8fa6bc8d47665c1d802a01a6cacbb0a7'$$);
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.max_attempt_open(%L, %L, %L, NULL, %L)', :SB, :'m3o', :C5, 'demo')), '') AS m3_reopen \gset
+SELECT tests.check('DM-PAY-5 (review M3): a held order cannot start another card payment (no second charge while a person reviews the first)',
+  format($$SELECT %L <> '' AND (SELECT count(*) FROM payments.tenant_attempts WHERE order_id = %L) = 1$$, :'m3_reopen', :'m3o'));
+
+-- M4 (tenant): a second, different approved charge on an attempt in review → duplicate_charge, the transaction id kept
+SELECT pg_temp.order_of(:SB, :C5, :P10, :SHIP_B, 1, 'online') AS m4o \gset
+SELECT pg_temp.h('fake-return|review-m4-a') AS pm4a, pg_temp.h('fake-return|review-m4-b') AS pm4b \gset
+SELECT pg_temp.t_returned(:SB, :'m4o', :C5, :'pm4a', 'fake-m4-0001') AS m4 \gset
+SELECT pg_temp.t_settle(:SB, :'m4'::jsonb ->> 'reference', :'pm4a', '0', '0', :'t_b', 'fake-m4-0001', 1001) AS m4_first \gset
+SELECT pg_temp.t_ret(:SB, :'m4'::jsonb ->> 'reference', :'pm4b', '0', 'fake-m4-0002', 1000) AS ok \gset
+SELECT pg_temp.t_settle(:SB, :'m4'::jsonb ->> 'reference', :'pm4b', '0', '0', :'t_b', 'fake-m4-0002', 1000) AS m4_second \gset
+SELECT tests.check('DM-PAY-5 (review M4): first verified return amount_mismatch; a second, different approved charge → duplicate_charge, both transaction ids on the attempt, never applied',
+  format($$SELECT %1$L::jsonb ->> 'reason' = 'amount_mismatch' AND %2$L::jsonb ->> 'result' = 'duplicate_charge'
+             AND (SELECT review_reason = 'duplicate_charge' AND provider_txn_id = 'fake-m4-0001' AND extra_txn_ids = '{fake-m4-0002}'
+                         AND NOT applied FROM payments.tenant_attempts WHERE id = %3$L)
+             AND EXISTS (SELECT 1 FROM payments.tenant_events WHERE attempt_id = %3$L AND source = 'review' AND result = 'duplicate_charge')$$,
+         :'m4_first', :'m4_second', :'m4'::jsonb ->> 'attempt_id'));
+
+-- M1 (store): a terminal / credential change while a payer is on the payment page needs force, then parks the attempt
+SELECT pg_temp.order_of(:SB, :C5, :P10, :SHIP_B, 1, 'online') AS m1o \gset
+SELECT pg_temp.t_open(:SB, :'m1o', :C5) AS m1 \gset
+SELECT pg_temp.t_sign(:SB, :'m1'::jsonb ->> 'attempt_id') AS ok \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_store_terminal_save(%L, %L, %L, %L)', :PLAT, :SB,
+         jsonb_build_object('api_key_enc', pg_temp.tok('b-key-3', '0deadbee'), 'api_password_enc', pg_temp.tok('b-pass-3', '0deadbee')), 'demo')), '') AS m1_noforce \gset
+SELECT (SELECT state FROM payments.tenant_attempts WHERE id = (:'m1'::jsonb ->> 'attempt_id')::uuid) AS m1_state_noforce \gset
+SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_save(%L, %L, %L, %L)', :PLAT, :SB,
+         jsonb_build_object('api_key_enc', pg_temp.tok('b-key-3', '0deadbee'), 'api_password_enc', pg_temp.tok('b-pass-3', '0deadbee'), 'force', true), 'demo')) AS m1_force \gset
+SELECT pg_temp.h('fake-return|review-m1') AS pm1 \gset
+SELECT pg_temp.t_ret(:SB, :'m1'::jsonb ->> 'reference', :'pm1', '0', 'fake-m1-0001', 1000) AS m1_ret \gset
+SELECT tests.check('DM-SEP-1 (review M1): replacing a store''s credentials while a payer is on the payment page (redirected) needs force; with force the attempt is parked credentials_changed; its later return holds the order',
+  format($$SELECT %1$L LIKE '%%on the payment page%%' AND %2$L = 'redirected' AND %3$L::jsonb ->> 'status' = 'unverified'
+             AND (SELECT state = 'needs_review' AND review_reason = 'credentials_changed' FROM payments.tenant_attempts WHERE id = %4$L)
+             AND EXISTS (SELECT 1 FROM payments.tenant_events WHERE attempt_id = %4$L AND source = 'review' AND result = 'credentials_changed')
+             AND %5$L::jsonb ->> 'result' = 'received'
+             AND (SELECT payment_due_at IS NULL AND status = 'pending' FROM public.orders WHERE id = %6$L)$$,
+         :'m1_noforce', :'m1_state_noforce', :'m1_force', :'m1'::jsonb ->> 'attempt_id', :'m1_ret', :'m1o'));
+SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_verified(%L, %L, true, %L)', :PLAT, :SB, '0')) AS ok \gset
+
+-- M5: a variant sold in an online-paid order can still be removed from the product; the order's amounts do not move
+SELECT (pg_temp.call(:SB, :C5, format(
+    $q$SELECT to_jsonb(x) FROM public.place_order('order',
+         jsonb_build_array(jsonb_build_object('product_id', %L, 'variant_id', %L, 'quantity', 1, 'unit_price', 10)), 18, true,
+         jsonb_build_object('customer_name', 'לקוח תשלום מקוון', 'customer_tax_id', '123456782',
+           'customer_phone', '0501234567', 'billing_city', 'תל אביב', 'billing_address', 'הרצל 1',
+           'billing_zip', '6100001', 'accepted_terms', true, 'shipping_method_id', %L, 'payment_method', 'online')) x$q$,
+    :PV, :VR1, :SHIP_B)) ->> 'id') AS m5o \gset
+SELECT pg_temp.t_pay(:SB, :'m5o', :C5, 'fake-m5-0001') AS m5pay \gset
+SELECT (SELECT total FROM public.orders WHERE id = :'m5o') AS m5_total,
+       (SELECT string_agg(quantity || '/' || unit_price, ',') FROM public.order_items WHERE order_id = :'m5o') AS m5_lines \gset
+SELECT COALESCE(pg_temp.err(:SB, :B_OWNER, format('WITH u AS (UPDATE public.order_items SET variant_id = %L WHERE order_id = %L RETURNING 1) SELECT to_jsonb(count(*)) FROM u', :VR2, :'m5o')), '') AS m5_swap \gset
+SELECT COALESCE(pg_temp.err(:SB, :B_OWNER, format('SELECT to_jsonb(public.save_product_variants(%L, %L, %L))', :PV, '[]', '[]')), '') AS m5_save \gset
+SELECT tests.check('DM-REG-1 (review M5): the store owner removes a variant sold in an online-paid order (ON DELETE SET NULL passes the lock); the order''s total and lines are unchanged; swapping the variant is still refused',
+  format($$SELECT %1$L::jsonb ->> 'result' = 'test_paid' AND %2$L LIKE '%%paid online%%' AND %3$L = ''
+             AND NOT EXISTS (SELECT 1 FROM public.product_variants WHERE id IN (%4$L, %5$L))
+             AND (SELECT bool_and(variant_id IS NULL) FROM public.order_items WHERE order_id = %6$L)
+             AND (SELECT total FROM public.orders WHERE id = %6$L) = %7$L::numeric
+             AND (SELECT string_agg(quantity || '/' || unit_price, ',') FROM public.order_items WHERE order_id = %6$L) = %8$L$$,
+         :'m5pay', :'m5_swap', :'m5_save', :VR1, :VR2, :'m5o', :'m5_total', :'m5_lines'));
+
+-- L4: the guest's status view refuses an expired token, as max_attempt_open does
+SET session_replication_role = replica;
+UPDATE payments.tenant_order_access SET created_at = now() - interval '30 hours', expires_at = now() - interval '6 hours'
+ WHERE order_id = :'g1';
+SET session_replication_role = origin;
+SELECT COALESCE(pg_temp.svc(format('SELECT public.max_order_payment_status(%L, %L, NULL, %L)', :SB, :'g1', :'gt1'))::text, 'null') AS l4_status \gset
+SELECT tests.check('DM-SEP-5 (review L4): an expired guest token no longer opens the payment status',
+  format($$SELECT %L = 'null'$$, :'l4_status'));
+
+-- H1 (platform): the 6th failed VERIFY parks the platform attempt; the charge is not payable until the review is resolved
+SELECT pg_temp.call(NULL, :PLAT, format($q$SELECT public.platform_billing_record_entry(%L, %L)$q$, :SB,
+         '{"kind":"charge","category":"other","amount":8,"description":"חיוב בדיקה 8 (אימות נכשל)"}')) IS NOT NULL AS ok \gset
+SELECT pg_temp.call(NULL, :PLAT, format($q$SELECT public.platform_billing_record_entry(%L, %L)$q$, :SB,
+         '{"kind":"charge","category":"other","amount":9,"description":"חיוב בדיקה 9 (מסמך ואז ניסיון ישן)"}')) IS NOT NULL AS ok \gset
+SELECT pg_temp.call(NULL, :PLAT, format($q$SELECT public.platform_billing_record_entry(%L, %L)$q$, :SB,
+         '{"kind":"charge","category":"other","amount":7,"description":"חיוב בדיקה 7 (חיוב שני)"}')) IS NOT NULL AS ok \gset
+SELECT pg_temp.call(NULL, :PLAT, format($q$SELECT public.platform_billing_record_entry(%L, %L)$q$, :SB,
+         '{"kind":"charge","category":"other","amount":6,"description":"חיוב בדיקה 6 (מסוף הוחלף)"}')) IS NOT NULL AS ok \gset
+SELECT (SELECT id FROM billing.ledger WHERE tenant_id = :SB AND description = 'חיוב בדיקה 8 (אימות נכשל)') AS chv1,
+       (SELECT id FROM billing.ledger WHERE tenant_id = :SB AND description = 'חיוב בדיקה 9 (מסמך ואז ניסיון ישן)') AS chv2,
+       (SELECT id FROM billing.ledger WHERE tenant_id = :SB AND description = 'חיוב בדיקה 7 (חיוב שני)') AS chv3,
+       (SELECT id FROM billing.ledger WHERE tenant_id = :SB AND description = 'חיוב בדיקה 6 (מסוף הוחלף)') AS chv4 \gset
+SELECT pg_temp.h('fake-platform-return|review-h1') AS ppv1 \gset
+SELECT pg_temp.p_returned(:B_OWNER, :SB, :'chv1', NULL, :'ppv1', 'fake-pv-0001') AS pv1a \gset
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.platform_return_keep(%L, %L, %L))', :'pv1a'::jsonb ->> 'attempt_id', :'ppv1', pg_temp.tok('praw-v1'))) AS ok \gset
+SELECT pg_temp.p_fail_verify(:'pv1a'::jsonb, :'ppv1', :'t_plat', 5) AS ok \gset
+SELECT pg_temp.svc('SELECT public.platform_attempts_pending_verify(200)') AS ppv_list5 \gset
+SELECT pg_temp.svc(format('SELECT public.platform_attempt_secrets(%L, %L)', :'pv1a'::jsonb ->> 'attempt_id', 'verify')) AS ok \gset
+SELECT pg_temp.p_settle(:'pv1a'::jsonb ->> 'reference', :'ppv1', NULL, '0', :'t_plat', 'fake-pv-0001', 800) AS ppv_r6 \gset
+SELECT pg_temp.svc('SELECT public.platform_attempts_pending_verify(200)') AS ppv_list6 \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :B_OWNER, :SB, 'ledger_charge', :'chv1', 'demo')), '') AS ppv_reopen \gset
+SELECT pg_temp.call(:SB, :B_OWNER, 'SELECT public.platform_card_my_options()') AS ppv_opts \gset
+SELECT tests.check('DM-PAY-4 (review H1, platform): listed after 5 failed VERIFYs; the 6th parks it (verify_exhausted); the charge is not payable and cannot be opened again while the review is open',
+  format($$SELECT EXISTS (SELECT 1 FROM jsonb_array_elements(%1$L::jsonb) e WHERE e ->> 'attempt_id' = %2$L)
+             AND %3$L::jsonb ->> 'result' = 'needs_review' AND %3$L::jsonb ->> 'reason' = 'verify_exhausted'
+             AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(%4$L::jsonb) e WHERE e ->> 'attempt_id' = %2$L)
+             AND %5$L LIKE '%%being verified or reviewed%%'
+             AND EXISTS (SELECT 1 FROM jsonb_array_elements(%6$L::jsonb -> 'charges') e
+                          WHERE e ->> 'id' = %7$L AND NOT (e ->> 'payable')::boolean AND (e ->> 'in_review')::boolean)$$,
+         :'ppv_list5', :'pv1a'::jsonb ->> 'attempt_id', :'ppv_r6', :'ppv_list6', :'ppv_reopen', :'ppv_opts', :'chv1'));
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.platform_card_payment_resolve(%L, %L, %L))', :PLAT, :'pv1a'::jsonb ->> 'attempt_id', 'נבדק בפורטל: לא חויב')) AS ok \gset
+SELECT pg_temp.call(:SB, :B_OWNER, 'SELECT public.platform_card_my_options()') AS ppv_opts2 \gset
+SELECT tests.check('DM-PLAT-3 (review H2): once the platform admin resolved the review, the charge is payable again',
+  format($$SELECT EXISTS (SELECT 1 FROM jsonb_array_elements(%L::jsonb -> 'charges') e
+                           WHERE e ->> 'id' = %L AND (e ->> 'payable')::boolean AND NOT (e ->> 'in_review')::boolean)$$,
+         :'ppv_opts2', :'chv1'));
+
+-- H2: a charge whose payment is in review (approved, money moved) is not payable; a late approved sibling → duplicate_charge
+SELECT pg_temp.p_returned(:B_OWNER, :SB, :'chv2', NULL, NULL, NULL) AS h2a \gset
+SELECT pg_temp.h('fake-platform-return|review-h2-b') AS ph2b, pg_temp.h('fake-platform-return|review-h2-a') AS ph2a \gset
+SELECT pg_temp.p_returned(:B_OWNER, :SB, :'chv2', 'http://op-store-b.shop.localhost:3100', :'ph2b', 'fake-ph2-0002') AS h2b \gset
+SELECT pg_temp.p_settle(:'h2b'::jsonb ->> 'reference', :'ph2b', '0', '0', :'t_plat', 'fake-ph2-0002', 900, '{document}') AS h2b_settle \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :B_OWNER, :SB, 'ledger_charge', :'chv2', 'demo')), '') AS h2_reopen \gset
+SELECT pg_temp.call(:SB, :B_OWNER, 'SELECT public.platform_card_my_options()') AS h2_opts \gset
+SELECT pg_temp.svc(format('SELECT public.platform_attempt_record_return(%L, %L, %L, %L, %L, NULL)', :'h2a'::jsonb ->> 'reference', :'ph2a', '0', 'fake-ph2-0001', 900)) AS ok \gset
+SELECT pg_temp.p_settle(:'h2a'::jsonb ->> 'reference', :'ph2a', '0', '0', :'t_plat', 'fake-ph2-0001', 900) AS h2a_settle \gset
+SELECT tests.check('DM-PLAT-3 (review H2): with an approved payment in review (document_issued) the charge is not payable and not opened again; the superseded attempt''s late approved payment → duplicate_charge, no ledger row',
+  format($$SELECT %1$L::jsonb ->> 'reason' = 'document_issued' AND %2$L LIKE '%%being verified or reviewed%%'
+             AND EXISTS (SELECT 1 FROM jsonb_array_elements(%3$L::jsonb -> 'charges') e WHERE e ->> 'id' = %4$L AND NOT (e ->> 'payable')::boolean)
+             AND %5$L::jsonb ->> 'result' = 'needs_review' AND %5$L::jsonb ->> 'reason' = 'duplicate_charge'
+             AND NOT EXISTS (SELECT 1 FROM billing.ledger WHERE provider_ref IN ('max:test:fake-ph2-0001', 'max:test:fake-ph2-0002'))$$,
+         :'h2b_settle', :'h2_reopen', :'h2_opts', :'chv2', :'h2a_settle'));
+
+-- M4 (platform): a second, different approved charge on a platform attempt in review → duplicate_charge, id kept
+SELECT pg_temp.h('fake-platform-return|review-m4-a') AS ppm4a, pg_temp.h('fake-platform-return|review-m4-b') AS ppm4b \gset
+SELECT pg_temp.p_returned(:B_OWNER, :SB, :'chv3', NULL, :'ppm4a', 'fake-pm4-0001') AS pm4 \gset
+SELECT pg_temp.p_settle(:'pm4'::jsonb ->> 'reference', :'ppm4a', '0', '0', :'t_plat', 'fake-pm4-0001', 701) AS pm4_first \gset
+SELECT pg_temp.svc(format('SELECT public.platform_attempt_record_return(%L, %L, %L, %L, %L, NULL)', :'pm4'::jsonb ->> 'reference', :'ppm4b', '0', 'fake-pm4-0002', 700)) AS ok \gset
+SELECT pg_temp.p_settle(:'pm4'::jsonb ->> 'reference', :'ppm4b', '0', '0', :'t_plat', 'fake-pm4-0002', 700) AS pm4_second \gset
+SELECT tests.check('DM-PLAT-3 (review M4): platform — first verified return amount_mismatch, a second different approved charge → duplicate_charge with its transaction id kept; no ledger row',
+  format($$SELECT %1$L::jsonb ->> 'reason' = 'amount_mismatch' AND %2$L::jsonb ->> 'result' = 'duplicate_charge'
+             AND (SELECT review_reason = 'duplicate_charge' AND provider_txn_id = 'fake-pm4-0001' AND extra_txn_ids = '{fake-pm4-0002}'
+                    FROM payments.platform_attempts WHERE id = %3$L)
+             AND NOT EXISTS (SELECT 1 FROM billing.ledger WHERE provider_ref IN ('max:test:fake-pm4-0001', 'max:test:fake-pm4-0002'))$$,
+         :'pm4_first', :'pm4_second', :'pm4'::jsonb ->> 'attempt_id'));
+
+-- M1 (platform): NURIEL's terminal changed while a store owner is on the payment page: force, then parked
+SELECT pg_temp.p_returned(:B_OWNER, :SB, :'chv4', NULL, NULL, NULL) AS pm1 \gset
+SELECT pg_temp.stepup(:PLAT) AS su_m1 \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', :PLAT,
+         jsonb_build_object('api_key_enc', pg_temp.tok('plat-key-2'), 'api_password_enc', pg_temp.tok('plat-pass-2')), 'demo',
+         :'su_m1'::jsonb ->> 'challenge_id', repeat('p', 64))), '') AS pm1_noforce \gset
+SELECT pg_temp.svc(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', :PLAT,
+         jsonb_build_object('api_key_enc', pg_temp.tok('plat-key-2'), 'api_password_enc', pg_temp.tok('plat-pass-2'), 'force', true), 'demo',
+         :'su_m1'::jsonb ->> 'challenge_id', repeat('p', 64))) AS pm1_force \gset
+SELECT tests.check('DM-SEP-6 (review M1): replacing NURIEL''s credentials while a payer is on the payment page needs force (the code is not spent by the refusal); with force the attempt is parked credentials_changed',
+  format($$SELECT %1$L LIKE '%%on the payment page%%' AND %2$L::jsonb ->> 'status' = 'unverified'
+             AND (SELECT state = 'needs_review' AND review_reason = 'credentials_changed' FROM payments.platform_attempts WHERE id = %3$L)
+             AND (SELECT spent_at IS NOT NULL FROM payments.platform_stepup_challenges WHERE id = %4$L)$$,
+         :'pm1_noforce', :'pm1_force', :'pm1'::jsonb ->> 'attempt_id', :'su_m1'::jsonb ->> 'challenge_id'));
+SELECT pg_temp.svc(format('SELECT public.platform_terminal_verified(%L, true, %L)', :PLAT, '0')) AS ok \gset
+
+-- ============================================================
+-- 19. Cleanup: the switches off, the database unmarked (later files see online payments off)
 -- ============================================================
 SELECT pg_temp.call(NULL, :PLAT, $$SELECT to_jsonb(ARRAY[public.platform_set_flag('max_payments', false),
          public.platform_set_flag('platform_terminal_payments', false)])$$) AS ok \gset
