@@ -11,7 +11,11 @@ import {
   safeEqual,
   seal,
 } from "@/platform/payments/server/crypto";
-import { platformSecretCipher, stepupKey } from "@/platform/payments/server/platform-keys";
+import {
+  PLATFORM_ACCOUNT_ID,
+  platformSecretCipher,
+  stepupKey,
+} from "@/platform/payments/server/platform-keys";
 import { tenantSecretCipher } from "@/platform/payments/server/tenant-keys";
 
 const root = () => randomBytes(32).toString("hex");
@@ -349,19 +353,47 @@ describe("DM-ENV-4: ciphertext is bound to environment, scope, store, mode, acco
     expect(() =>
       tenant.seal("api_key", "x", { tenantId: tenantA, accountId: "platform" }),
     ).toThrowError("payments: encrypt failed");
-    // NURIEL's terminal: accountId = "platform" (exact), raw returns: the attempt id
-    const own = platform.seal("api_key", "fake-key-8", { accountId: "platform" });
+    // NURIEL's terminal: accountId = PLATFORM_ACCOUNT_ID ("platform", exactly), raw returns: the attempt id
+    expect(PLATFORM_ACCOUNT_ID).toBe("platform");
+    const own = platform.seal("api_key", "fake-key-8", { accountId: PLATFORM_ACCOUNT_ID });
     expect(platform.open("api_key", own, { accountId: "platform" })).toBe("fake-key-8");
+    expect(own).toMatch(TOKEN);
+    // a token sealed for "platform" does not open for an attempt UUID, and the reverse
     expectDecryptFailure(() => platform.open("api_key", own, { accountId: attempt }));
     const platformRaw = platform.seal("raw_return", "Id=2&CCode=0", { accountId: attempt });
-    expectDecryptFailure(() => platform.open("raw_return", platformRaw, { accountId: "platform" }));
+    expectDecryptFailure(() =>
+      platform.open("raw_return", platformRaw, { accountId: PLATFORM_ACCOUNT_ID }),
+    );
     expectDecryptFailure(() =>
       platform.open("raw_return", platformRaw, { accountId: randomUUID() }),
     );
-    for (const bad of ["PLATFORM", "Platform", " platform", "tenant", ""]) {
-      expect(() => platform.seal("api_key", "x", { accountId: bad }), bad).toThrowError(
+    expect(platform.open("raw_return", platformRaw, { accountId: attempt.toUpperCase() })).toBe(
+      "Id=2&CCode=0",
+    );
+    // exactly "platform" or a UUID: any other value is refused (seal: encrypt failed; open: decrypt failed)
+    const others: unknown[] = [
+      "PLATFORM",
+      "Platform",
+      " platform",
+      "platform ",
+      "platform\n",
+      "platforms",
+      "tenant",
+      "nuriel",
+      "",
+      randomBytes(16).toString("hex"),
+      `{${attempt}}`,
+      attempt.replace(/-/g, ""),
+      42,
+      null,
+      undefined,
+    ];
+    for (const bad of others) {
+      const ctx = { accountId: bad as string };
+      expect(() => platform.seal("api_key", "x", ctx), String(bad)).toThrowError(
         "payments: encrypt failed",
       );
+      expectDecryptFailure(() => platform.open("api_key", own, ctx));
     }
   });
 
