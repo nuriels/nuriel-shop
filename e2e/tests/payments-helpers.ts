@@ -629,8 +629,13 @@ export function freeStepupQuota() {
   );
 }
 
-export async function requestStepup(request: APIRequestContext, admin: string, patch: unknown) {
-  freeStepupQuota();
+export async function requestStepup(
+  request: APIRequestContext,
+  admin: string,
+  patch: unknown,
+  opts: { freeQuota?: boolean } = {},
+) {
+  if (opts.freeQuota !== false) freeStepupQuota();
   const since = Date.now();
   const issued = must(
     await call<{ challengeId: string; expiresAt: string; maskedEmail: string }>(
