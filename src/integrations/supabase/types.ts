@@ -3935,8 +3935,24 @@ export type Database = {
         Returns: number;
       };
       max_review_resolve: {
-        Args: { _actor: string; _tenant: string; _attempt: string; _note: string | null };
+        Args: {
+          _actor: string;
+          _tenant: string;
+          _attempt: string;
+          _note: string | null;
+          _outcome: "not_charged" | "charged" | null;
+        };
         Returns: boolean;
+      };
+      /** X-17: platform reviews not alerted yet, stamped as alerted (FOR UPDATE SKIP LOCKED) — service_role only */
+      platform_attempt_review_alerts_claim: {
+        Args: { _limit?: number };
+        Returns: Json;
+      };
+      /** X-17: store reviews not alerted yet, stamped as alerted (FOR UPDATE SKIP LOCKED) — service_role only */
+      max_review_alerts_claim: {
+        Args: { _limit?: number };
+        Returns: Json;
       };
       max_order_payment_status: {
         Args: {

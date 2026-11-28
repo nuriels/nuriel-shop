@@ -13,9 +13,12 @@
  *   target. Only an EXACT replay (same payload hash) of a concluded payment skips VERIFY (X-10, M08: idempotent); a
  *   different return for a concluded attempt is verified and settled (an approved one → 'duplicate_charge', M06).
  * reverifyTenantReturn: the 5-minute job's retry of a KEPT return that arrived but could not be verified.
- * Never silent (M1/M2/L6): VERIFY exhausted, VERIFY credentials refused (the attempt's terminal changed or is no
- * longer configured, a tripwire fired) and a return that arrived while payments were off all become review items
- * (store bell, by the caller) plus an ALERT line; a return that is neither settled nor kept gets an ALERT line.
+ * Reviews ring through ONE path (X-17): after every handled return the store reviews not alerted yet are claimed
+ * (alerts.ts) and returned for the caller to send — a settle result never rings by itself, so nothing rings twice or
+ * on every retry. The DB holds the order at the first recorded return (X-14) and parks what cannot be verified (the
+ * sweep); this file only writes ALERT lines for what a person must know now: VERIFY credentials refused (terminal
+ * changed / no longer configured / a tripwire), a settle result "unverified" (X-19), payments not ready (L6), a
+ * return that is neither settled nor kept.
  * Only CCode exactly "0" in VERIFY counts (X-2): a timeout, HTML or any other answer reaches the DB as "not
  * verified", which can neither pay nor fail the attempt. Every match check (amount, currency, installments,
  * transaction id, terminal, order still awaiting) is the DB's (DM-PAY-5).
@@ -36,6 +39,7 @@ import { hypRequest, type HypHttpResult } from "@/platform/payments/server/http"
 import { tenantSecretCipher } from "@/platform/payments/server/tenant-keys";
 import { isPlatformHost } from "@/platform/tenancy/current-site.server";
 import { verifyCredentials } from "./credentials";
+import { claimTenantReviewAlerts, type ReviewItem } from "./alerts";
 import { asRecord, bool, modeOf, reference, str, uuid } from "./db";
 import { shortId, tenantLog } from "./log";
 
@@ -48,7 +52,7 @@ const resultLocation = (orderId: string | null) =>
 const CONCLUDED: readonly string[] = ["paid", "test_paid", "failed", "needs_review"];
 
 export type PaidOrder = { tenantId: string; orderId: string };
-export type ReviewItem = { tenantId: string; orderId: string | null; reason: string };
+export type { ReviewItem } from "./alerts";
 
 export interface TenantReturnOutcome {
   /** relative 303 target on the same store host */
@@ -57,8 +61,8 @@ export interface TenantReturnOutcome {
   refused: boolean;
   /** settled as paid in this request: the caller sends the order e-mails */
   paid: PaidOrder | null;
-  /** went to review in this request: the caller alerts the store's admins */
-  review: ReviewItem | null;
+  /** store reviews claimed after this return (X-17; any store's): the caller sends bell + e-mail for each */
+  review: ReviewItem[];
 }
 
 type SettleOutcome = {
@@ -111,12 +115,6 @@ async function verifyAndSettle(input: {
     applied: false,
     orderId: null,
   });
-  const review = (reason: string): SettleOutcome => ({
-    result: "needs_review",
-    reason,
-    applied: false,
-    orderId: null,
-  });
   const secrets = await verifyCredentials(
     input.env,
     input.tenantId,
@@ -129,14 +127,15 @@ async function verifyAndSettle(input: {
   }
   if (secrets.result === "unavailable") return none("verify_unavailable");
   if (secrets.result === "exhausted") {
-    // M2: the DB just parked the attempt in needs_review 'verify_exhausted' — a person must look at it
-    tenantLog.alert("verify_exhausted", { attempt });
-    return review("verify_exhausted");
+    // M2: the DB parked the attempt in needs_review 'verify_exhausted'; its alert comes from the claim (X-17)
+    tenantLog.warn("verify_exhausted", { attempt });
+    return none("verify_exhausted");
   }
   if (secrets.result === "refused") {
-    // M1: this return can never be verified as it is (terminal changed / no longer configured / tripwire)
+    // M1: this return cannot be verified as it is (terminal changed / no longer configured / tripwire); the DB
+    // holds the order and the sweep parks it, the claim rings once — this line says why VERIFY did not happen
     tenantLog.alert("verify_credentials_refused", { attempt, reason: secrets.reason });
-    return review(secrets.reason);
+    return none("verify_refused");
   }
 
   let http: HypHttpResult;
@@ -161,7 +160,8 @@ async function verifyAndSettle(input: {
     _currency: parsed.coin === "1" ? "ILS" : null,
     _installments: parsed.payments,
     _approval_code: parsed.acode,
-    _card_brand: parsed.brand,
+    // X-20: the DB knows brands in lower case (as the platform side sends them)
+    _card_brand: parsed.brand === null ? null : parsed.brand.trim().toLowerCase() || null,
     _card_last4: parsed.last4,
     _return_flags: parsed.flags,
     _app_environment: input.env,
@@ -197,28 +197,25 @@ async function verifyAndSettle(input: {
   });
   if (outcome.result === "environment_mismatch")
     tenantLog.alert("environment_mismatch", { attempt: shortId(input.attemptId) });
-  if (outcome.result === "needs_review" || outcome.result === "duplicate_charge")
-    tenantLog.alert("needs_review", {
+  if (outcome.result === "unverified")
+    // X-19: VERIFY gave no clear answer (timeout, HTML, unclear): the order stays held, a person may need to know
+    tenantLog.alert("verify_unverified", {
       attempt: shortId(input.attemptId),
-      reason: outcome.reason ?? outcome.result,
+      verify: http.ok ? "unclear" : http.error,
     });
   return outcome;
 }
 
-function sideEffects(
+/** the order to e-mail when this settle paid it (reviews never ring from here: X-17) */
+function paidOf(
   tenantId: string,
   fallbackOrderId: string | null,
   settle: SettleOutcome,
-): { paid: PaidOrder | null; review: ReviewItem | null } {
+): PaidOrder | null {
   const orderId = settle.orderId ?? fallbackOrderId;
-  if ((settle.result === "paid" || settle.result === "test_paid") && settle.applied && orderId)
-    return { paid: { tenantId, orderId }, review: null };
-  if (settle.result === "needs_review" || settle.result === "duplicate_charge")
-    return {
-      paid: null,
-      review: { tenantId, orderId, reason: settle.reason ?? settle.result },
-    };
-  return { paid: null, review: null };
+  return (settle.result === "paid" || settle.result === "test_paid") && settle.applied && orderId
+    ? { tenantId, orderId }
+    : null;
 }
 
 async function purgeReturns(): Promise<void> {
@@ -226,7 +223,7 @@ async function purgeReturns(): Promise<void> {
   if (answer.error) tenantLog.warn("purge_failed", { code: answer.error.code });
 }
 
-export async function handleTenantReturn(input: {
+type ReturnInput = {
   provider: string;
   /** the query string exactly as received, without "?" */
   raw: string;
@@ -234,32 +231,44 @@ export async function handleTenantReturn(input: {
   hostTenantId: string | null;
   /** the request's host name (for the unknown-returns record) */
   host: string;
-}): Promise<TenantReturnOutcome> {
+};
+
+export async function handleTenantReturn(input: ReturnInput): Promise<TenantReturnOutcome> {
+  const { outcome, recorded } = await handleReturn(input);
+  // X-17: after every handled (recorded) return, the reviews not alerted yet — this one's and any parked meanwhile
+  return recorded ? { ...outcome, review: await claimTenantReviewAlerts() } : outcome;
+}
+
+async function handleReturn(
+  input: ReturnInput,
+): Promise<{ outcome: TenantReturnOutcome; recorded: boolean }> {
+  const done = (outcome: TenantReturnOutcome) => ({ outcome, recorded: false });
+  const handled = (outcome: TenantReturnOutcome) => ({ outcome, recorded: true });
   const base: TenantReturnOutcome = {
     location: UNKNOWN_RETURN_LOCATION,
     refused: false,
     paid: null,
-    review: null,
+    review: [],
   };
   // a store's return is never processed on the platform host (the platform has its own route)
   if (await isPlatformHost()) {
     tenantLog.warn("return_refused", { why: "platform_host" });
-    return { ...base, refused: true };
+    return done({ ...base, refused: true });
   }
-  if (!isProviderId(input.provider) || !input.hostTenantId) return base;
+  if (!isProviderId(input.provider) || !input.hostTenantId) return done(base);
   const parsed = parseReturnQuery(input.raw);
   if (!parsed.ok) {
     tenantLog.warn("return_refused", { why: parsed.reason });
-    return base;
+    return done(base);
   }
   if (!parsed.order) {
     tenantLog.warn("return_refused", { why: "no_order" });
-    return base;
+    return done(base);
   }
   if (!returnHasSignature(parsed)) {
     // refused and recorded (the scope log; no DB write: an unsigned return must not touch an attempt)
     tenantLog.warn("return_refused", { why: "no_signature" });
-    return base;
+    return done(base);
   }
   const sha = sha256Hex(input.raw);
   const recorded = await paymentsRpc("max_attempt_record_return", {
@@ -274,7 +283,7 @@ export async function handleTenantReturn(input: {
   if (recorded.error) {
     // nothing was recorded: the same return can simply arrive again
     tenantLog.error("record_failed", { code: recorded.error.code });
-    return base;
+    return done(base);
   }
   const rec = asRecord(recorded.data);
   const result = str(rec?.["result"]);
@@ -286,11 +295,11 @@ export async function handleTenantReturn(input: {
       _payload_sha256: sha,
     });
     tenantLog.warn("return_unknown", { recorded: unknown.error === null });
-    return base;
+    return handled(base);
   }
   if (result !== "received" && result !== "replay") {
     tenantLog.warn("return_refused", { why: result ?? "unreadable" });
-    return base;
+    return handled(base);
   }
   const attemptId = uuid(rec?.["attempt_id"]);
   const tenantId = uuid(rec?.["tenant_id"]);
@@ -300,22 +309,22 @@ export async function handleTenantReturn(input: {
   const location = resultLocation(orderId);
   if (!attemptId || !tenantId || tenantId !== input.hostTenantId || !mode) {
     tenantLog.error("record_unreadable");
-    return { ...base, location };
+    return handled({ ...base, location });
   }
   // M06: only an EXACT replay (the same payload, "replay") of a concluded payment is idempotent — no VERIFY, no
   // e-mail, the same result page. A DIFFERENT return for a paid / test_paid / needs_review / failed attempt is
   // verified with that attempt's own terminal and settled like any other: the DB turns an approved one into
-  // needs_review 'duplicate_charge' (and the caller alerts the store's admins)
+  // needs_review 'duplicate_charge' (alerted once through the claim, X-17)
   if (result === "replay" && state !== null && CONCLUDED.includes(state)) {
     tenantLog.info("return_replayed", { attempt: shortId(attemptId), state });
-    return { ...base, location };
+    return handled({ ...base, location });
   }
   const ready = paymentsReady("tenant");
   if (!ready.ok) {
-    // L6: recorded but neither verified nor kept (no usable key): the job cannot verify it later, so it goes in
-    // front of a person now — the store's bell (the caller) and an ALERT line
+    // L6 / X-14: recorded (the DB now holds the order) but neither kept nor verified — no usable key. The job
+    // cannot verify it later; the sweep parks it and the claim rings once. Now: one ALERT line
     tenantLog.alert("return_not_verified", { attempt: shortId(attemptId), why: ready.reason });
-    return { ...base, location, review: { tenantId, orderId, reason: "payments_off" } };
+    return handled({ ...base, location });
   }
   // a replay was kept when it first arrived (or that failure was alerted then)
   const kept =
@@ -335,7 +344,7 @@ export async function handleTenantReturn(input: {
     // not settled and nothing kept for the job: only this ALERT line (and the order panel) shows it
     tenantLog.alert("return_not_retryable", { attempt: shortId(attemptId), result: settle.result });
   await purgeReturns();
-  return { ...base, location, ...sideEffects(tenantId, orderId, settle) };
+  return handled({ ...base, location, paid: paidOf(tenantId, orderId, settle) });
 }
 
 /**
@@ -398,7 +407,7 @@ export function pendingVerifyItems(data: unknown): PendingVerify[] {
 /** The job's retry: the kept raw return → VERIFY → settle. null when there is nothing (left) to verify. */
 export async function reverifyTenantReturn(
   item: PendingVerify,
-): Promise<{ paid: PaidOrder | null; review: ReviewItem | null } | null> {
+): Promise<{ paid: PaidOrder | null } | null> {
   const ready = paymentsReady("tenant");
   if (!ready.ok) return null;
   const kept = await paymentsRpc("max_return_get", {
@@ -436,5 +445,5 @@ export async function reverifyTenantReturn(
     parsed,
     terminal: null,
   });
-  return sideEffects(item.tenantId, null, settle);
+  return { paid: paidOf(item.tenantId, null, settle) };
 }

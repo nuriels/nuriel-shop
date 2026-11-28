@@ -26,23 +26,23 @@ export async function expireUnpaidOrders(): Promise<number> {
 }
 
 /**
- * MAX/Hyp DEMO (צד החנות): עבודות התשלום המקוון באותו מחזור של 5 דקות — VERIFY חוזר לחזרות שהגיעו ולא אומתו
- * (Hyp לא ענה, timeout, הפעלה מחדש), פקיעת ניסיונות, מחיקת החזרות הגולמיות המוצפנות. קודם האימות, ואז ביטול
- * ההזמנות שלא שולמו — כך הזמנה ששולמה לא מתבטלת. PAYMENTS_JOBS=off עוצר רק את עבודות התשלום המקוון; הביטול של
- * הזמנות ביט ממשיך כמו היום. המיילים / ההתראה לצוות — רק להזמנות שהמחזור הזה סגר.
+ * MAX/Hyp DEMO (צד החנות, contract §7.1 X-19): קודם ביטול ההזמנות שלא שולמו — תמיד, ובלי לחכות לעבודות התשלום
+ * המקוון (ביט / Grow לא מחכים מאחורי VERIFY). זה בטוח: המסד מחזיק הזמנה שחזרה מדף התשלום (X-14), כך שהביטול לא
+ * נוגע בה. אחר כך עבודות התשלום המקוון: VERIFY חוזר (רק כשהתשלומים מוכנים), פקיעה וחניה, מחיקת החזרות גולמיות,
+ * ותביעת ההתראות לבדיקה (X-17). PAYMENTS_JOBS=off עוצר רק את עבודות התשלום המקוון. המיילים — להזמנות שהמחזור
+ * הזה סגר; הפעמון + המייל לחנות — לכל בדיקה שנתבעה.
  */
-async function paymentsTick(): Promise<void> {
-  let outcomes: TenantJobResult | null = null;
+export async function paymentsTick(): Promise<void> {
+  await expireUnpaidOrders();
   try {
     const { runTenantPaymentJobs } = await import("@/platform/payments/server/tenant/jobs");
-    outcomes = await runTenantPaymentJobs();
+    const outcomes: TenantJobResult = await runTenantPaymentJobs();
+    if (outcomes.paid.length > 0 || outcomes.review.length > 0) {
+      const { actOnTenantOutcomes } = await import("@/lib/online-payments.server");
+      await actOnTenantOutcomes(outcomes);
+    }
   } catch {
-    outcomes = null;
-  }
-  await expireUnpaidOrders();
-  if (outcomes && (outcomes.paid.length > 0 || outcomes.review.length > 0)) {
-    const { actOnTenantOutcomes } = await import("@/lib/online-payments.server");
-    await actOnTenantOutcomes(outcomes);
+    console.error("[payments] online-payment jobs failed");
   }
 }
 
