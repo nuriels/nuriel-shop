@@ -1,0 +1,11 @@
+{
+  "about": "Fake values that tracked files may contain on purpose (scan-secrets.mjs --mode repo, DM-SEC-6). terminals: the obviously fake 10-digit 00100… numbers of the mock and the tests (exact values). luhnPaths: files (globs, repository paths) whose card-like digit runs are not cards. luhnValues: exact fake card-like values. A single line can also carry the marker scan-secrets:allow. Never put a real terminal number, card number or credential here.",
+  "terminals": [],
+  "luhnPaths": [
+    {
+      "path": "tests/unit/product-facts.test.ts",
+      "why": "EAN-13 barcodes with a deliberately wrong check digit (structured-data tests); not card numbers"
+    }
+  ],
+  "luhnValues": []
+}
