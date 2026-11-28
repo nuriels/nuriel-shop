@@ -39,6 +39,8 @@ signatures, names and file ownership. Based on `MAX-DEMO-PLAN.md` v2 (approved d
 | Order payment method | `online` |
 | App environment marker | env `PAYMENTS_ENV` ∈ {`demo`,`production`}; DB `payments.environment.name` |
 | Root secrets | `PAYMENTS_SECRETS_KEY` (tenant), `PLATFORM_TERMINAL_SECRETS_KEY` (platform). ≥ 32 chars, different from each other and from other app secrets, no fallback |
+| Payment jobs switch | `PAYMENTS_JOBS` ∈ {`on` (default), `off`}: forwarded by compose (operational kill switch); E2E sets `off` and triggers jobs from the test |
+| Scan canaries | E2E writes the run's fake secrets (one per line) to `e2e/test-results/hyp-canaries.txt`; scanners take `--canaries <file>` |
 | Test-only hook | `MAX_PAY_TEST_URL` (mock base URL). Honoured only for `http://127.0.0.1…`/`http://localhost…` **and** `PLATFORM_ADMIN_HOST` = `localhost` or `*.localhost`. Listed in `TEST_ONLY` of `tests/unit/env-forwarding.test.ts`, never in `docker-compose.yml` |
 | Production platform host (code constant) | `nuriel.nuri1.fit` — `PAYMENTS_ENV=production` is refused unless `PLATFORM_ADMIN_HOST` equals it |
 | Hyp endpoint (code constant) | `https://pay.hyp.co.il/p/` |
@@ -116,8 +118,9 @@ export function minorToDecimal(v: number): string;                        // 105
 // src/platform/payments/server/http.ts
 export type HypHttpResult = { ok: true; status: number; body: string; html: boolean }
                           | { ok: false; error: "timeout" | "network" | "too_large" };
-export function hypRequest(query: string, opts?: { method?: "GET" | "POST"; timeoutMs?: number; maxBytes?: number }): Promise<HypHttpResult>;
-//  uses hypEndpoint() from env.ts; never logs/throws the URL or body; one retry is the caller's choice
+export function hypRequest(endpoint: string, query: string, opts?: { method?: "GET" | "POST"; timeoutMs?: number; maxBytes?: number }): Promise<HypHttpResult>;
+//  endpoint = hypEndpoint() from env.ts, passed in by the caller (no import between the two modules);
+//  never logs/throws the URL or body; no retry inside (the caller decides)
 
 // src/platform/payments/redact.ts
 export function redactPaymentText(s: string): string;  // masks KEY, PassP, zPass, Sign/signature, Masof→last 2, card-like fields
@@ -142,10 +145,14 @@ export function platformSecretCipher(env: PaymentsEnv, mode: PaymentMode): { kid
 //  HKDF info: "nuriel/payments/v1/<env>/<scope>/<mode>"; AAD: "<env>|<scope>|<tenant or 'platform'>|max|<mode>|<accountId>|<field>|<kid>"
 export function stepupKey(env: PaymentsEnv): Buffer;   // HKDF(PLATFORM_TERMINAL_SECRETS_KEY, "nuriel/payments/v1/<env>/platform/stepup")
 
-// src/platform/payments/server/stepup.ts
+// src/platform/payments/server/stepup.ts (pure helpers + a service that receives its DB caller)
 export function stepupPurposeHash(actorId: string, purpose: "platform_terminal_save", payload: unknown): string;
-export function stepupIssue(actorId: string, purposeHash: string): Promise<{ challengeId: string; code: string; expiresAt: string }>; // code: 6 digits; DB keeps only HMAC
-export function stepupConsume(actorId: string, challengeId: string, purposeHash: string, code: string): Promise<{ ok: boolean; reason?: string }>;
+export function stepupCodeHmac(key: Buffer, challengeSeed: string, code: string): string;
+export type StepupRpc = (fn: "platform_stepup_issue" | "platform_stepup_consume", args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
+export function createStepupService(rpc: StepupRpc, key: Buffer): {
+  issue(actorId: string, purposeHash: string): Promise<{ challengeId: string; code: string; expiresAt: string }>; // 6 digits; DB keeps only the HMAC
+  consume(actorId: string, challengeId: string, purposeHash: string, code: string): Promise<{ ok: boolean; reason?: string }>;
+};
 ```
 
 ## 5. DB API of migration 208 (wave 1 implements; wave 2 calls exactly these)
