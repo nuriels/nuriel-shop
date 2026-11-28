@@ -617,7 +617,20 @@ export async function stepupCodeFromMail(request: APIRequestContext, since: numb
   return code;
 }
 
+/**
+ * The DB allows 5 step-up codes per admin in 10 minutes; the specs ask for more in one run. Test-only: the admin's
+ * EARLIER challenges (all superseded by the next request anyway) are moved 11 minutes back, so they stop counting.
+ */
+export function freeStepupQuota() {
+  timeTravel(
+    `UPDATE payments.platform_stepup_challenges
+        SET created_at = created_at - interval '11 minutes', expires_at = expires_at - interval '11 minutes'
+      WHERE actor_id = '${USERS.platform.id}' AND created_at > now() - interval '10 minutes'`,
+  );
+}
+
 export async function requestStepup(request: APIRequestContext, admin: string, patch: unknown) {
+  freeStepupQuota();
   const since = Date.now();
   const issued = must(
     await call<{ challengeId: string; expiresAt: string; maskedEmail: string }>(
