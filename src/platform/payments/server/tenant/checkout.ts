@@ -231,6 +231,7 @@ export function orderPaymentView(data: unknown, demo: boolean): OnlinePaymentVie
     // the DB's own word when it gives one (payable / busy / held); otherwise an awaiting online order with an
     // attempt and no due time is held (X-14: payment_due_at := NULL at the first recorded return)
     held:
+      r["payment_held"] === true ||
       r["payable"] === false ||
       r["busy"] === true ||
       r["held"] === true ||
