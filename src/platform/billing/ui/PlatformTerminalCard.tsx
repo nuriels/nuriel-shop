@@ -71,7 +71,6 @@ const REASON_TEXT: Record<string, string> = {
   target_settled: "החיוב כבר שולם בדרך אחרת",
   target_changed: "החיוב השתנה",
   payer_gone: "העסק נמחק",
-  unsigned_return: "החזרה הגיעה בלי חתימה",
 };
 
 const TEST_CODE_TEXT: Record<string, string> = {

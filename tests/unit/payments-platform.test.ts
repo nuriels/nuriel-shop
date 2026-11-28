@@ -631,22 +631,20 @@ describe("D5 return — platform host only, unknown references never verified (D
     }
   });
 
-  it("a return without a non-empty Sign is recorded but never verified (no secrets, no VERIFY, no settle)", async () => {
+  it("L3: a return without a non-empty Sign is refused before any DB write (no record, no secrets, no VERIFY, no alert)", async () => {
     for (const raw of [
       rawOf(RETURN_PAIRS.filter(([k]) => k !== "Sign")),
       rawOf(RETURN_PAIRS.map(([k, v]): [string, string] => [k, k === "Sign" ? "" : v])),
     ]) {
-      const { deps, db, hyp, alerts, secretsCalls } = returnDeps();
+      const { deps, db, hyp, alerts, secretsCalls, lines } = returnDeps();
       const out = await handlePlatformReturn(input(raw), deps);
-      expect(out).toEqual({
-        location: `${ORIGIN}/admin?tab=billing&pay=return`,
-        result: "refused",
-        attemptId: ATTEMPT,
-      });
-      expect(db.names()).toEqual(["platform_attempt_record_return"]);
+      expect(out).toEqual({ location: "/", result: "refused", attemptId: null });
+      expect(db.calls).toEqual([]);
       expect(secretsCalls).toEqual([]);
       expect(hyp.http).not.toHaveBeenCalled();
-      expect(alerts).toEqual([["unsigned_return", ATTEMPT]]);
+      expect(alerts).toEqual([]);
+      expect(lines.some((line) => line.includes("ALERT"))).toBe(false);
+      expect(lines.some((line) => line.includes("return_refused reason=unsigned"))).toBe(true);
     }
   });
 });
@@ -777,6 +775,45 @@ describe("D5 return — VERIFY with NURIEL's terminal of that attempt, then the 
     expect((await handlePlatformReturn(input(), exhausted.deps)).result).toBe("review");
     expect(exhausted.alerts).toEqual([["verify_exhausted", ATTEMPT]]);
     expect(exhausted.hyp.http).not.toHaveBeenCalled();
+  });
+
+  it("M1 (R-P1): VERIFY credentials refused (terminal changed while the owner was on Hyp's page) → the platform team is alerted, nothing settles", async () => {
+    for (const thrown of [
+      new PlatformPaymentError("credentials"),
+      new PlatformPaymentError("unavailable"),
+      new Error("x"),
+    ]) {
+      const refused = returnDeps(
+        {},
+        {
+          credentials: async () => {
+            throw thrown;
+          },
+        },
+      );
+      expect((await handlePlatformReturn(input(), refused.deps)).result).toBe("error");
+      expect(refused.alerts).toEqual([["verify_credentials", ATTEMPT]]);
+      expect(refused.hyp.http).not.toHaveBeenCalled();
+      expect(refused.db.names()).not.toContain("platform_attempt_mark_paid");
+    }
+
+    // the job's re-VERIFY takes the same path
+    const token = sealed(ATTEMPT, "raw_return", RAW);
+    const again = returnDeps(
+      { platform_return_get: () => ({ data: token }) },
+      {
+        credentials: async () => {
+          throw new PlatformPaymentError("credentials");
+        },
+      },
+    );
+    const out = await reverifyPlatformReturn(
+      { attemptId: ATTEMPT, reference: REFERENCE, sha: sha256Hex(RAW), mode: "test" },
+      again.deps,
+    );
+    expect(out.result).toBe("error");
+    expect(again.alerts).toEqual([["verify_credentials", ATTEMPT]]);
+    expect(again.hyp.http).not.toHaveBeenCalled();
   });
 
   it("a soft state (failed / expired / cancelled) is still verified: money may have moved", async () => {
