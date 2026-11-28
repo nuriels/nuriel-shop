@@ -525,8 +525,13 @@ export async function payToReturn(
   return { reference, payUrl: started.url, location: approved.location };
 }
 
-/** E-mails (the mail mock) whose recipient list holds `email`, sent since `since` */
-export async function mailsTo(request: APIRequestContext, email: string, since: number) {
+/** E-mails (the mail mock) whose recipient list holds `email`, sent since `since` (optionally naming `mark`) */
+export async function mailsTo(
+  request: APIRequestContext,
+  email: string,
+  since: number,
+  mark?: string,
+) {
   const calls = (await (await request.get(`${HYP}/__calls`)).json()) as {
     method: string;
     url: string;
@@ -546,7 +551,8 @@ export async function mailsTo(request: APIRequestContext, email: string, since: 
       c.method === "POST" &&
       c.url.startsWith("/emails") &&
       c.at >= since &&
-      recipients(c.body).some((r) => r.includes(email.toLowerCase())),
+      recipients(c.body).some((r) => r.includes(email.toLowerCase())) &&
+      (!mark || c.body.includes(mark)),
   );
 }
 
@@ -600,12 +606,16 @@ export const platformPatch = (t: HypTerminal, extra: Record<string, unknown> = {
 });
 
 /** The step-up code e-mailed to the platform admin after `since` (6 digits) */
-export async function stepupCodeFromMail(request: APIRequestContext, since: number) {
+export async function stepupCodeFromMail(
+  request: APIRequestContext,
+  since: number,
+  email: string = USERS.platform.email,
+) {
   let code = "";
   await expect
     .poll(
       async () => {
-        const mails = await mailsTo(request, USERS.platform.email, since);
+        const mails = await mailsTo(request, email, since);
         const mail = mails.filter((m) => m.body.includes("קוד אימות")).pop() ?? mails.pop();
         // six digits that are not part of a colour (#123456) or a longer number
         code = /(?<![#\w])(\d{6})(?!\w)/.exec(mail?.body ?? "")?.[1] ?? "";
@@ -621,21 +631,38 @@ export async function stepupCodeFromMail(request: APIRequestContext, since: numb
  * The DB allows 5 step-up codes per admin in 10 minutes; the specs ask for more in one run. Test-only: the admin's
  * EARLIER challenges (all superseded by the next request anyway) are moved 11 minutes back, so they stop counting.
  */
-export function freeStepupQuota() {
+export function freeStepupQuota(actorId: string = USERS.platform.id) {
   timeTravel(
     `UPDATE payments.platform_stepup_challenges
         SET created_at = created_at - interval '11 minutes', expires_at = expires_at - interval '11 minutes'
-      WHERE actor_id = '${USERS.platform.id}' AND created_at > now() - interval '10 minutes'`,
+      WHERE actor_id = '${actorId}' AND created_at > now() - interval '10 minutes'`,
   );
+}
+
+/**
+ * An extra platform admin for one spec. The app allows 5 step-up code requests per admin in 15 minutes (in memory),
+ * so the step-up spec spreads its codes over its own admins. Removed again by `dropPlatformAdmin`.
+ */
+export async function extraPlatformAdmin(request: APIRequestContext, tag: string) {
+  const account: Account = {
+    email: `platform.${tag}.${STAMP}@e2e.test`,
+    password: "E2e-Pay-Admin-1!",
+  };
+  const id = await ensureUser(request, account);
+  sql(`INSERT INTO public.platform_admins (user_id) VALUES ('${id}') ON CONFLICT DO NOTHING`);
+  return { id, account, token: await accessToken(request, account) };
+}
+export function dropPlatformAdmin(id: string) {
+  sql(`DELETE FROM public.platform_admins WHERE user_id = '${id}'`);
 }
 
 export async function requestStepup(
   request: APIRequestContext,
   admin: string,
   patch: unknown,
-  opts: { freeQuota?: boolean } = {},
+  opts: { freeQuota?: boolean; actorId?: string; email?: string } = {},
 ) {
-  if (opts.freeQuota !== false) freeStepupQuota();
+  if (opts.freeQuota !== false) freeStepupQuota(opts.actorId);
   const since = Date.now();
   const issued = must(
     await call<{ challengeId: string; expiresAt: string; maskedEmail: string }>(
@@ -645,7 +672,27 @@ export async function requestStepup(
     ),
     "request the step-up code",
   );
-  return { challengeId: issued.challengeId, code: await stepupCodeFromMail(request, since) };
+  return {
+    challengeId: issued.challengeId,
+    code: await stepupCodeFromMail(request, since, opts.email),
+  };
+}
+
+/**
+ * NURIEL's terminal for this run, set up at most once: the free connection check first (it passes when the terminal
+ * already holds this run's fake credentials); otherwise the full step-up save. Then the platform switch on.
+ */
+export async function ensurePlatformTerminal(request: APIRequestContext, admin: string) {
+  const tested = await call<{ ok: boolean; status?: { enabled?: boolean } }>(
+    request,
+    FN.terminalTest,
+    { host: PLATFORM_HOST, token: admin },
+  );
+  if (tested.ok && tested.value.ok && tested.value.status?.enabled) {
+    setFlag("platform_terminal_payments", true);
+    return;
+  }
+  await setupPlatformTerminal(request, admin);
 }
 
 /** NURIEL's terminal: step-up code from the mail mock → save → connection check → the platform switch on */

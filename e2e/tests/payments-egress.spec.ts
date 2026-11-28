@@ -19,9 +19,10 @@ import {
   ownerToken,
   payToReturn,
   placeOnlineOrder,
+  PLATFORM_HOST,
   platformToken,
   setFlag,
-  setupPlatformTerminal,
+  ensurePlatformTerminal,
   setupStoreTerminal,
   STORE_B,
   STORE_B_HOST,
@@ -44,11 +45,21 @@ test("DM-ENV-8: every Hyp call of a store payment, a platform payment and both c
   markDemoDatabase();
   await ensureStoreBFixtures(request, CUSTOMER);
   const admin = await platformToken(request);
+  await setupStoreTerminal(request, "storeB", admin);
+  await ensurePlatformTerminal(request, admin);
+  setFlag("max_payments", true);
   await hyp.reset(request);
   // the two connection checks (SIGN only, nothing charged) — inside the measured window
-  await setupStoreTerminal(request, "storeB", admin);
-  await setupPlatformTerminal(request, admin);
-  setFlag("max_payments", true);
+  for (const [fn, data] of [
+    [FN.testStoreTerminal, { tenantId: STORE_B.id }],
+    [FN.terminalTest, undefined],
+  ] as const) {
+    const checked = must(
+      await call<{ ok: boolean }>(request, fn, { host: PLATFORM_HOST, token: admin, data }),
+      `connection check ${fn.name}`,
+    );
+    expect(checked.ok, fn.name).toBe(true);
+  }
   const t = await hyp.terminals(request);
   try {
     // a store payment

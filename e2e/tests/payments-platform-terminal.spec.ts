@@ -10,9 +10,11 @@ import {
   PLATFORM_HOST,
   platformPatch,
   platformToken,
+  dropPlatformAdmin,
+  ensurePlatformTerminal,
+  extraPlatformAdmin,
   requestStepup,
   setFlag,
-  setupPlatformTerminal,
   sql,
   STORE_B_HOST,
   TID,
@@ -24,15 +26,33 @@ import {
 // change it was issued for, within 10 minutes. Store hosts never reach these functions. retries 0.
 test.describe.configure({ retries: 0 });
 
+// The app allows 5 code requests per admin in 15 minutes: this spec spreads its codes over two admins of its own
+type Admin = Awaited<ReturnType<typeof extraPlatformAdmin>>;
 let admin = "";
+let first: Admin;
+let second: Admin;
 let terminals: Awaited<ReturnType<typeof hyp.terminals>>;
 
 test.beforeAll(async ({ request }) => {
   markDemoDatabase();
   await hyp.reset(request);
   admin = await platformToken(request);
+  first = await extraPlatformAdmin(request, "stepup1");
+  second = await extraPlatformAdmin(request, "stepup2");
   terminals = await hyp.terminals(request);
 });
+
+const codeFor = (
+  request: Parameters<typeof call>[0],
+  who: Admin,
+  patch: unknown,
+  freeQuota = true,
+) =>
+  requestStepup(request, who.token, patch, {
+    actorId: who.id,
+    email: who.account.email,
+    freeQuota,
+  });
 
 test.beforeEach(async ({ request }) => {
   await hyp.reset(request);
@@ -40,15 +60,16 @@ test.beforeEach(async ({ request }) => {
 
 test.afterAll(async ({ request }) => {
   // leave a working terminal behind for the other payment specs of the run
-  await setupPlatformTerminal(request, admin);
+  await ensurePlatformTerminal(request, admin);
   setFlag("platform_terminal_payments", false);
+  for (const who of [first, second]) if (who) dropPlatformAdmin(who.id);
 });
 
 const save = (
   request: Parameters<typeof call>[0],
   data: unknown,
   host = PLATFORM_HOST,
-  token = admin,
+  token = first.token,
 ) =>
   call<{ status?: string; configured?: boolean; terminal_hint?: string }>(
     request,
@@ -102,7 +123,7 @@ test("DM-SEP-6: saving needs the e-mailed code; the status shows only a 2-digit 
     sql(`SELECT credentials_updated_at FROM payments.platform_accounts WHERE provider = 'max'`),
   ).toBe(before);
   // with the code from the e-mail → saved
-  const { challengeId, code } = await requestStepup(request, admin, patch);
+  const { challengeId, code } = await codeFor(request, first, patch);
   must(await save(request, { patch, challengeId, code }), "save with the e-mailed code");
   const status = must(
     await call<Record<string, unknown>>(request, FN.terminalStatus, {
@@ -133,19 +154,19 @@ test("DM-SEP-6: a wrong, reused, expired or superseded code is refused; a code f
   test.setTimeout(90_000);
   const patch = platformPatch(terminals.platform);
   // wrong code
-  const wrong = await requestStepup(request, admin, patch);
+  const wrong = await codeFor(request, first, patch);
   const other = wrong.code === "000000" ? "111111" : "000000";
   expect((await save(request, { patch, challengeId: wrong.challengeId, code: other })).ok).toBe(
     false,
   );
   // reused code: the first save works, the same challenge never again
-  const once = await requestStepup(request, admin, patch);
+  const once = await codeFor(request, first, patch);
   must(await save(request, { patch, challengeId: once.challengeId, code: once.code }), "first use");
   expect((await save(request, { patch, challengeId: once.challengeId, code: once.code })).ok).toBe(
     false,
   );
   // expired: the code's 10 minutes have passed (test-only clock move on that one challenge)
-  const late = await requestStepup(request, admin, patch);
+  const late = await codeFor(request, first, patch);
   timeTravel(`UPDATE payments.platform_stepup_challenges
                  SET created_at = created_at - interval '11 minutes', expires_at = expires_at - interval '11 minutes'
                WHERE id = '${late.challengeId}'`);
@@ -153,20 +174,30 @@ test("DM-SEP-6: a wrong, reused, expired or superseded code is refused; a code f
     false,
   );
   // superseded: asking for a new code cancels the previous one
-  const first = await requestStepup(request, admin, patch);
-  await requestStepup(request, admin, patch, { freeQuota: false });
+  const older = await codeFor(request, second, patch);
+  await codeFor(request, second, patch, false);
   expect(
-    (await save(request, { patch, challengeId: first.challengeId, code: first.code })).ok,
+    (
+      await save(
+        request,
+        { patch, challengeId: older.challengeId, code: older.code },
+        PLATFORM_HOST,
+        second.token,
+      )
+    ).ok,
   ).toBe(false);
   // bound to the change: a code issued to switch the terminal off cannot save new credentials
-  const off = await requestStepup(
-    request,
-    admin,
-    platformPatch(terminals.platform, { enabled: false }),
-  );
+  const off = await codeFor(request, second, platformPatch(terminals.platform, { enabled: false }));
   const changed = platformPatch(terminals.platform, { apiKey: `${terminals.platform.key}X` });
   expect(
-    (await save(request, { patch: changed, challengeId: off.challengeId, code: off.code })).ok,
+    (
+      await save(
+        request,
+        { patch: changed, challengeId: off.challengeId, code: off.code },
+        PLATFORM_HOST,
+        second.token,
+      )
+    ).ok,
   ).toBe(false);
 });
 
@@ -192,8 +223,10 @@ test("DM-SEP-6: store hosts and non-admins never reach the terminal functions", 
     ).toBe(false);
   }
   // a valid code of the platform admin is useless on a store host
-  const { challengeId, code } = await requestStepup(request, admin, patch);
-  expect((await save(request, { patch, challengeId, code }, STORE_B_HOST)).ok).toBe(false);
+  const { challengeId, code } = await codeFor(request, second, patch);
+  expect((await save(request, { patch, challengeId, code }, STORE_B_HOST, second.token)).ok).toBe(
+    false,
+  );
   expect((await save(request, { patch, challengeId, code }, PLATFORM_HOST, owner)).ok).toBe(false);
   // no refused call reached Hyp
   expect(await hyp.calls(request, { action: "SIGN" })).toEqual([]);

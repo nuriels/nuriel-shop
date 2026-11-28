@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { login, storeUrl } from "./helpers";
 import {
@@ -48,6 +50,7 @@ import {
 test.describe.configure({ retries: 0 });
 
 const CUSTOMER = customerFor("checkout");
+const SERVER_LOG = fileURLToPath(new URL("../test-results/server.log", import.meta.url));
 let customer = "";
 let storeB = { masof: "" };
 
@@ -73,13 +76,17 @@ const order = (request: APIRequestContext) => placeOnlineOrder(request, customer
 const verifies = async (request: APIRequestContext, reference: string) =>
   hyp.calls(request, { order: reference, action: "VERIFY" });
 
-/** Exactly `n` order e-mails reached the customer (polls, then checks that no extra one follows) */
-async function expectMails(request: APIRequestContext, since: number, n: number) {
-  await expect
-    .poll(async () => (await mailsTo(request, CUSTOMER.email, since)).length, { timeout: 20_000 })
-    .toBe(n);
+/** Exactly `n` e-mails about this order reached the customer (polls, then checks that no extra one follows) */
+async function expectMails(
+  request: APIRequestContext,
+  since: number,
+  n: number,
+  orderNumber: string,
+) {
+  const count = async () => (await mailsTo(request, CUSTOMER.email, since, orderNumber)).length;
+  await expect.poll(count, { timeout: 20_000 }).toBe(n);
   await new Promise((r) => setTimeout(r, 1_500));
-  expect((await mailsTo(request, CUSTOMER.email, since)).length).toBe(n);
+  expect(await count()).toBe(n);
 }
 
 test("DM-PAY-4 (M03): the order is paid only after VERIFY with store B's own terminal; one e-mail", async ({
@@ -111,7 +118,7 @@ test("DM-PAY-4 (M03): the order is paid only after VERIFY with store B's own ter
   // SIGN went to store B's terminal too, and never with an invoice / installments parameter
   const sign = await hyp.calls(request, { order: reference, action: "SIGN" });
   expect(sign.map((c) => [c.masof, c.result])).toEqual([[storeB.masof, "ok"]]);
-  await expectMails(request, since, 1);
+  await expectMails(request, since, 1, placed.order_number);
 
   // the customer's status view: paid, and nothing of Hyp's secrets or the raw return in it
   const status = must(
@@ -144,20 +151,19 @@ test("DM-PAY-10: an unknown reference is recorded without VERIFY; the attempt th
 
   // "sent to Hyp and never returned": signed, no return, its time is over → the platform admin's list
   const lost = await order(request);
-  const started = must(await startPayment(request, customer, lost.id), "start");
-  const lostRef = orderOfPayUrl(started.url);
+  must(await startPayment(request, customer, lost.id), "start");
   ageAttempt(lastAttempt(lost.id)!.id, "tenant_attempts");
   expect(runAttemptExpiry()).toBeGreaterThanOrEqual(1);
   expect(lastAttempt(lost.id)?.state).toBe("expired");
   const view = must(
-    await call<{ unreturned: { reference: string }[] }>(request, FN.storePayments, {
+    await call<{ unreturned: { orderNumber: string | null }[] }>(request, FN.storePayments, {
       host: PLATFORM_HOST,
       token: await platformToken(request),
       data: { tenantId: STORE_B.id },
     }),
     "MAX tab of store B",
   );
-  expect(view.unreturned.map((u) => u.reference)).toContain(lostRef);
+  expect(view.unreturned.map((u) => u.orderNumber)).toContain(lost.order_number);
 });
 
 test("M04/M05: decline (no error URL) stays on the page; cancel; the attempt and then the order expire — stock back once", async ({
@@ -213,7 +219,7 @@ test("M09 (E7): a valid return after the order expired → for review (late); th
     applied: false,
   });
   expect(orderRow(placed.id)).toMatchObject({ status: "cancelled", payment_status: "expired" });
-  await expectMails(request, since, 0);
+  await expectMails(request, since, 0, placed.order_number);
 });
 
 test("M07 + M06: a double click opens one attempt; paying a second page of it is a duplicate charge, not a second payment", async ({
@@ -245,7 +251,7 @@ test("M07 + M06: a double click opens one attempt; paying a second page of it is
     });
   }
   expect(orderRow(placed.id).payment_status).toBe("paid");
-  await expectMails(request, since, 1);
+  await expectMails(request, since, 1, placed.order_number);
 });
 
 test("M08 (E5): refreshing or replaying the return — 3× in a row and 5× at once — no second VERIFY, no second e-mail", async ({
@@ -262,7 +268,7 @@ test("M08 (E5): refreshing or replaying the return — 3× in a row and 5× at o
   expect(parallel.map((r) => r.status)).toEqual([303, 303, 303, 303, 303]);
   expect(await verifies(request, reference)).toHaveLength(1);
   expect(lastAttempt(placed.id)?.state).toBe("test_paid");
-  await expectMails(request, since, 1);
+  await expectMails(request, since, 1, placed.order_number);
 });
 
 test("E4: a changed Amount / Order / CCode / Id / Coin is never paid; local rejections make no VERIFY; then the original pays", async ({
@@ -295,6 +301,12 @@ test("E4: a changed Amount / Order / CCode / Id / Coin is never paid; local reje
     expect((await deliver(request, location, { raw: variant })).status).toBe(303);
   }
   expect(await verifies(request, reference)).toHaveLength(3);
+  // X-11: the unsigned return is refused before any DB call — only the scope's log line records it
+  if (existsSync(SERVER_LOG)) {
+    expect(readFileSync(SERVER_LOG, "utf8")).toMatch(
+      /\[pay:tenant\] return_refused why=no_signature/,
+    );
+  }
   // the untouched return pays exactly once
   expect((await deliver(request, location)).location).toBe(`/checkout/pay/${placed.id}?r=1`);
   expect(lastAttempt(placed.id)).toMatchObject({ state: "test_paid", applied: true });
@@ -385,7 +397,7 @@ test("M10 (E3): VERIFY times out, then Hyp drops the connection → still 'check
   expect(lastAttempt(placed.id)).toMatchObject({ state: "test_paid", applied: true });
   await deliver(request, location);
   expect((await verifies(request, reference)).length).toBe(3);
-  await expectMails(request, since, 1);
+  await expectMails(request, since, 1, placed.order_number);
 });
 
 test("NEW-E-LENIENT: even when VERIFY answers 0 for anything, a changed Amount or Coin is never paid", async ({

@@ -20,7 +20,7 @@ import {
   platformToken,
   providerRowsForCharge,
   setFlag,
-  setupPlatformTerminal,
+  ensurePlatformTerminal,
   setupStoreTerminal,
   startPayment,
   STORE_B,
@@ -43,7 +43,7 @@ test.beforeAll(async ({ request }) => {
   await hyp.reset(request);
   admin = await platformToken(request);
   await setupStoreTerminal(request, "storeB", admin);
-  await setupPlatformTerminal(request, admin);
+  await ensurePlatformTerminal(request, admin);
   setFlag("max_payments", true);
   customer = await accessToken(request, CUSTOMER);
   owner = await ownerToken(request);

@@ -24,7 +24,7 @@ import {
   providerRowsForCharge,
   rawOf,
   setFlag,
-  setupPlatformTerminal,
+  ensurePlatformTerminal,
   sql,
   STORE_A_HOST,
   STORE_B,
@@ -49,7 +49,7 @@ test.beforeAll(async ({ request }) => {
   await ensureStoreBFixtures(request, CUSTOMER);
   await hyp.reset(request);
   admin = await platformToken(request);
-  await setupPlatformTerminal(request, admin);
+  await ensurePlatformTerminal(request, admin);
   owner = await ownerToken(request);
   terminals = await hyp.terminals(request);
 });
