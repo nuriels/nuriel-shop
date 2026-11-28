@@ -8,7 +8,10 @@ const h = vi.hoisted(() => {
   type Answer = { data: unknown; error: { message: string; code: string | null } | null };
   return {
     calls: [] as { fn: string; args: Record<string, unknown> | undefined }[],
-    answers: new Map<string, (args: Record<string, unknown> | undefined) => Answer>(),
+    answers: new Map<
+      string,
+      (args: Record<string, unknown> | undefined) => Answer | Promise<Answer>
+    >(),
     hyp: [] as { endpoint: string; query: string }[],
     hypAnswer: (() => ({ ok: false, error: "network" })) as (query: string) => unknown,
     platformHost: false,
@@ -444,6 +447,67 @@ describe("tenant return (record → VERIFY → settle)", () => {
       expect(callsOf("max_attempt_mark_paid"), state).toHaveLength(0);
     }
     expect(h.hyp).toHaveLength(0);
+  });
+
+  it("M06: a DIFFERENT return for a concluded attempt is verified with its own terminal and settled (duplicate → review)", async () => {
+    const { handleTenantReturn } = await import("@/platform/payments/server/tenant/return");
+    for (const state of ["test_paid", "paid", "needs_review", "failed"]) {
+      h.calls.length = 0;
+      h.hyp.length = 0;
+      h.answers.set("max_attempt_record_return", received(state, "received"));
+      await verifiable();
+      h.answers.set(
+        "max_attempt_mark_paid",
+        ok({
+          result: "duplicate_charge",
+          attempt_id: ATTEMPT,
+          order_id: ORDER,
+          tenant_id: STORE_B,
+        }),
+      );
+      h.hypAnswer = () => ({ ok: true, status: 200, body: "CCode=0", html: false });
+      const out = await handleTenantReturn({
+        provider: "max",
+        raw: returnQuery("&Fild4=second"),
+        hostTenantId: STORE_B,
+        host: "store-b.shop.localhost",
+      });
+      expect(callsOf("max_attempt_secrets")[0]?.args, state).toMatchObject({
+        _tenant: STORE_B,
+        _attempt: ATTEMPT,
+        _purpose: "verify",
+      });
+      expect(h.hyp, state).toHaveLength(1);
+      expect(callsOf("max_attempt_mark_paid"), state).toHaveLength(1);
+      expect(out.paid, state).toBeNull();
+      expect(out.review, state).toEqual({
+        tenantId: STORE_B,
+        orderId: ORDER,
+        reason: "duplicate_charge",
+      });
+    }
+  });
+
+  it("a return without a non-empty Sign is refused before any DB write or VERIFY", async () => {
+    const { handleTenantReturn, returnSigned } =
+      await import("@/platform/payments/server/tenant/return");
+    const unsigned = returnQuery().replace(/&Sign=[^&]*$/, "");
+    const empty = returnQuery().replace(/&Sign=[^&]*$/, "&Sign=");
+    const otherCase = returnQuery().replace(/&Sign=/, "&sign=");
+    for (const raw of [unsigned, empty, otherCase]) {
+      const out = await handleTenantReturn({
+        provider: "max",
+        raw,
+        hostTenantId: STORE_B,
+        host: "store-b.shop.localhost",
+      });
+      expect(out.location, raw.slice(-20)).toBe("/checkout/pay/unknown");
+    }
+    expect(h.calls).toHaveLength(0);
+    expect(h.hyp).toHaveLength(0);
+    const { parseReturnQuery } = await import("@/platform/payments/max/protocol");
+    const parsed = parseReturnQuery(returnQuery());
+    expect(parsed.ok && returnSigned(parsed)).toBe(true);
   });
 
   it("a replay of a return that was not verified yet is verified (the browser can retry), without keeping it twice", async () => {
