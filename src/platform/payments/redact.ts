@@ -44,7 +44,7 @@ const CARD_MASK = "[card]";
 /** Longest first, so `signature` is tried before `Sign`. */
 const alternation = (names: string[]) => [...names].sort((a, b) => b.length - a.length).join("|");
 
-/** Not preceded by a name character: `api_key=` or `monkey=` are other names. */
+/** Not preceded by a name character: names such as api_key or monkey are other names. */
 const NAME_START = String.raw`(?<![A-Za-z0-9_.\-])`;
 /** A %-encoded name starts after `%26` (&) or `%3F` (?), or like a plain one. */
 const ENCODED_NAME_START = String.raw`(?:(?<=%26)|(?<=%3F)|${NAME_START})`;

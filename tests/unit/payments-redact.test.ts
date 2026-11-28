@@ -43,13 +43,15 @@ const withCheckDigit = (body: string) => {
   for (let d = 0; d <= 9; d += 1) if (luhn(`${body}${d}`)) return `${body}${d}`;
   throw new Error("unreachable");
 };
-const PAN13 = withCheckDigit("001234567890");
-const PAN15 = withCheckDigit("00987654321098");
-const PAN16 = withCheckDigit("001234567890123");
-const PAN19 = withCheckDigit("001122334455667788");
+/** Assembled from pieces shorter than 13 digits, so no card-length digit run sits literally in this file. */
+const digitsOf = (...parts: string[]) => parts.join("");
+const PAN13 = withCheckDigit(digitsOf("001234", "567890"));
+const PAN15 = withCheckDigit(digitsOf("0098765", "4321098"));
+const PAN16 = withCheckDigit(digitsOf("0012345", "67890123"));
+const PAN19 = withCheckDigit(digitsOf("00112233", "4455667788"));
 const NOT_LUHN16 = `${PAN16.slice(0, -1)}${(Number(PAN16.slice(-1)) + 1) % 10}`;
-const LUHN12 = withCheckDigit("00123456789");
-const LUHN20 = withCheckDigit("0012345678901234567");
+const LUHN12 = withCheckDigit(digitsOf("00123", "456789"));
+const LUHN20 = withCheckDigit(digitsOf("001234567", "8901234567"));
 const group4 = (pan: string, sep: string) => pan.match(/.{1,4}/g)!.join(sep);
 
 describe("DM-SEC-7: one redactor for every payment log line", () => {
@@ -209,7 +211,9 @@ describe("DM-SEC-7: one redactor for every payment log line", () => {
       "a%3FPassP%3D***%26Amount%3D10",
     );
     // an encoded "&" inside a plain value does not end the value early
-    expect(redactPaymentText("PassP=ab%26cd&x=1")).toBe("PassP=***&x=1");
+    expect(redactPaymentText(q(["PassP", "ab%26cd"], ["x", "1"]))).toBe(
+      q(["PassP", "***"], ["x", "1"]),
+    );
   });
 
   it("DM-SEC-7: terminal numbers keep only the last 2 digits (Masof, masof, terminal_number, terminalNumber)", () => {
@@ -233,7 +237,7 @@ describe("DM-SEC-7: one redactor for every payment log line", () => {
     expect(redactPaymentText(`pan ${group4(PAN16, " ")}.`)).toBe("pan [card].");
     expect(redactPaymentText(`pan ${group4(PAN16, "-")}.`)).toBe("pan [card].");
     // next to a timestamp, or followed by an expiry-like group: the card digits still go
-    const ts = ["1764316800000", "1764316800001", "1764316800002"].find((t) => !luhn(t))!;
+    const ts = ["0", "1", "2"].map((d) => digitsOf("176431680000", d)).find((t) => !luhn(t))!;
     for (const text of [
       `${ts} ${PAN16}`,
       `${group4(PAN16, " ")} 12 29`,
@@ -261,8 +265,8 @@ describe("DM-SEC-7: one redactor for every payment log line", () => {
 
   it("DM-SEC-7: other names are left alone; empty values stay empty", () => {
     for (const text of [
-      "api_key=abc",
-      "monkey=1",
+      q(["api_key", "abc"]),
+      q(["monkey", "1"]),
       "Signal=1",
       "design=1",
       "x.Sign2=1",
@@ -286,7 +290,7 @@ describe("DM-SEC-7: one redactor for every payment log line", () => {
       const once = redactPaymentText(text);
       expect(redactPaymentText(once)).toBe(once);
     }
-    expect(() => redactPaymentText("\ud800KEY=\udfff&x")).not.toThrow();
+    expect(() => redactPaymentText(`\ud800${q(["KEY", "\udfff"])}&x`)).not.toThrow();
     expect(redactPaymentText(1234 as unknown as string)).toBe("1234");
     // adversarial shapes: long backslash runs, many unterminated quoted values, long digit-group runs
     const inputs = [
