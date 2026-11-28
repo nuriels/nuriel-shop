@@ -342,7 +342,7 @@ describe("D5 start — the store owner opens a payment of one open charge (DM-PL
     expect(timeout.alerts).toEqual([]);
 
     // an answer that echoes a credential is never turned into a URL
-    const echo = payDeps({ http: fakeHttp((q) => ok(`${hypSignAnswer(q)}&PassP=x`)).http });
+    const echo = payDeps({ http: fakeHttp((q) => ok(`${hypSignAnswer(q)}&PassP=fake`)).http });
     expect(await codeOf(() => startPlatformPayment({ chargeId: CHARGE }, echo.deps))).toBe(
       "sign_failed",
     );
@@ -537,7 +537,7 @@ describe("D5 return — platform host only, unknown references never verified (D
   it("DM-PAY-3: a refused query (duplicate, reserved, no order) writes nothing", async () => {
     for (const raw of [
       `${RAW}&Amount=1.00`,
-      `${RAW}&PassP=x`,
+      `${RAW}&PassP=fake`,
       `${RAW}&masof=${TERMINAL}`,
       rawOf(RETURN_PAIRS.filter(([k]) => k !== "Order")),
       "",
@@ -568,8 +568,8 @@ describe("D5 return — platform host only, unknown references never verified (D
     expect(hyp.http).not.toHaveBeenCalled();
   });
 
-  it("M08: a settled or reviewed attempt is not verified again (replay, refresh)", async () => {
-    for (const state of ["paid", "test_paid", "needs_review"]) {
+  it("M06/M08: an EXACT replay (same payload hash) of a concluded attempt is not verified again", async () => {
+    for (const state of ["paid", "test_paid", "needs_review", "failed"]) {
       const { deps, db, hyp } = returnDeps({
         platform_attempt_record_return: () => ({
           data: {
@@ -589,6 +589,50 @@ describe("D5 return — platform host only, unknown references never verified (D
       });
       expect(db.names()).toEqual(["platform_attempt_record_return"]);
       expect(hyp.http).not.toHaveBeenCalled();
+    }
+  });
+
+  it("M06: a DIFFERENT return for a concluded attempt is verified with its own terminal and settled (→ duplicate_charge + alert)", async () => {
+    for (const state of ["paid", "test_paid", "needs_review", "failed"]) {
+      const { deps, db, hyp, alerts, secretsCalls } = returnDeps({
+        platform_attempt_record_return: () => ({
+          data: {
+            result: "received",
+            attempt_id: ATTEMPT,
+            state,
+            mode: "test",
+            return_origin: ORIGIN,
+          },
+        }),
+        platform_attempt_mark_paid: () => ({
+          data: { result: "duplicate_charge", attempt_id: ATTEMPT, return_origin: ORIGIN },
+        }),
+      });
+      const out = await handlePlatformReturn(input(), deps);
+      expect(out.result, state).toBe("review");
+      expect(secretsCalls).toEqual([`${ATTEMPT}:verify`]);
+      expect(hyp.http).toHaveBeenCalledTimes(1);
+      expect(db.names()).toContain("platform_attempt_mark_paid");
+      expect(alerts).toEqual([["duplicate_charge", ATTEMPT]]);
+    }
+  });
+
+  it("a return without a non-empty Sign is recorded but never verified (no secrets, no VERIFY, no settle)", async () => {
+    for (const raw of [
+      rawOf(RETURN_PAIRS.filter(([k]) => k !== "Sign")),
+      rawOf(RETURN_PAIRS.map(([k, v]): [string, string] => [k, k === "Sign" ? "" : v])),
+    ]) {
+      const { deps, db, hyp, alerts, secretsCalls } = returnDeps();
+      const out = await handlePlatformReturn(input(raw), deps);
+      expect(out).toEqual({
+        location: `${ORIGIN}/admin?tab=billing&pay=return`,
+        result: "refused",
+        attemptId: ATTEMPT,
+      });
+      expect(db.names()).toEqual(["platform_attempt_record_return"]);
+      expect(secretsCalls).toEqual([]);
+      expect(hyp.http).not.toHaveBeenCalled();
+      expect(alerts).toEqual([["unsigned_return", ATTEMPT]]);
     }
   });
 });

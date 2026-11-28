@@ -24,6 +24,7 @@ import {
   buildVerifyQuery,
   classifyVerifyResponse,
   parseReturnQuery,
+  returnHasSignature,
   type ParsedReturn,
   type VerifyResult,
 } from "@/platform/payments/max/protocol";
@@ -90,8 +91,12 @@ const HYP_OPTIONS = { method: "GET", timeoutMs: 15_000, maxBytes: 64 * 1024 } as
 /** a store origin as platform_attempt_open stores it: https://<host>, or http://…localhost[:port] locally */
 const STORE_ORIGIN =
   /^(?:https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+|http:\/\/(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*localhost(?::[0-9]{1,5})?)$/;
-/** settled or for review: a replay or a second return gets no VERIFY (M08) */
-const CONCLUDED: readonly string[] = ["paid", "test_paid", "needs_review"];
+/**
+ * An EXACT replay (the same payload hash) of a concluded attempt gets no VERIFY: idempotent, same result page (M06,
+ * M08). A DIFFERENT return for a concluded attempt is verified and settled like any other — the DB turns an
+ * approved one into needs_review "duplicate_charge" (+ alert): money may have moved twice.
+ */
+const CONCLUDED: readonly string[] = ["paid", "test_paid", "needs_review", "failed"];
 
 export const sha256Hex = (raw: string) => createHash("sha256").update(raw, "utf8").digest("hex");
 
@@ -286,9 +291,15 @@ export async function handlePlatformReturn(
   }
   const location = returnLocation(text(row, "return_origin"));
   const state = text(row, "state") ?? "";
-  if (CONCLUDED.includes(state)) {
-    deps.log.info("return_concluded", { attempt: shortId(attemptId), state });
+  if (result === "replay" && CONCLUDED.includes(state)) {
+    deps.log.info("return_replay", { attempt: shortId(attemptId), state });
     return { location, result: "concluded", attemptId };
+  }
+  // without Hyp's transaction signature VERIFY cannot succeed: recorded above, never verified (lead rule)
+  if (!returnHasSignature(parsed)) {
+    deps.log.warn("return_unsigned", { attempt: shortId(attemptId) });
+    await deps.alert("unsigned_return", attemptId);
+    return { location, result: "refused", attemptId };
   }
   if (result === "received") await keepRaw(attemptId, sha, input.raw, env, mode, deps);
   let settled: { result: SettleResult };
@@ -336,7 +347,12 @@ export async function reverifyPlatformReturn(
     return { result: "error" };
   }
   const parsed = parseReturnQuery(raw);
-  if (!parsed.ok || parsed.order !== item.reference || sha256Hex(raw) !== item.sha) {
+  if (
+    !parsed.ok ||
+    parsed.order !== item.reference ||
+    sha256Hex(raw) !== item.sha ||
+    !returnHasSignature(parsed)
+  ) {
     deps.log.alert("raw_mismatch", { attempt });
     return { result: "error" };
   }
