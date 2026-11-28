@@ -75,6 +75,8 @@ export interface OnlinePaymentAttemptView {
   approvalCode: string | null;
   /** staff of the store and platform admins only */
   reviewReason: string | null;
+  /** staff only: the person's decision once the review was resolved (X-16), null while open */
+  reviewOutcome: ReviewOutcome | null;
 }
 
 /** one order's online payment (max_order_payment_status): null when the viewer may not see the order */
@@ -86,6 +88,11 @@ export interface OnlinePaymentView {
   paymentMethod: string | null;
   paymentStatus: string | null;
   paymentDueAt: string | null;
+  /**
+   * the order cannot be paid online right now (X-14/X-15): held by the DB since a return came back, being verified,
+   * or in review — the pay page shows "verification pending / in review" and no Pay button
+   */
+  held: boolean;
   attempt: OnlinePaymentAttemptView | null;
 }
 
@@ -103,6 +110,8 @@ export function onlinePaymentStage(view: OnlinePaymentView): OnlinePaymentStage 
     view.orderStatus === "cancelled"
   )
     return "expired";
+  // held / busy (X-14, X-15): a return of this order is unverified or in review — no new payment page
+  if (view.held) return "review";
   if (state === "failed") return "failed";
   return "ready";
 }
@@ -197,6 +206,16 @@ export interface StoreOnlinePaymentsView {
  */
 export const TERMINAL_SAVE_NEEDS_FORCE =
   "תשלום של החנות נמצא עכשיו בתהליך (בדף התשלום או באימות). שמירה בכל זאת תעביר אותו לבדיקה ידנית.";
+
+/** a person's review decision (X-16): was the card charged? */
+export type ReviewOutcome = "not_charged" | "charged";
+export const REVIEW_OUTCOMES: readonly ReviewOutcome[] = ["not_charged", "charged"];
+
+/** the two explicit choices in the order panel: each says what happens to the order */
+export const REVIEW_OUTCOME_LABELS: Readonly<Record<ReviewOutcome, string>> = Object.freeze({
+  not_charged: "לא בוצע חיוב — ההזמנה חוזרת להמתין לתשלום",
+  charged: "בוצע חיוב — ההזמנה נשארת בהמתנה לטיפול ידני: ביטול וזיכוי בפורטל Hyp",
+});
 
 /** "••12" — only the last 2 digits are ever shown */
 export function terminalHintText(hint: string | null): string {
