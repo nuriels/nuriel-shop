@@ -5,12 +5,15 @@
  * tick only after 5 minutes (no DB or network call at boot). No timer with NODE_ENV=test or PAYMENTS_JOBS=off
  * (the operational switch; E2E sets it off and triggers the steps itself — DB calls and a replayed return).
  * runPlatformPaymentJobs(): (1) re-VERIFY the returns that were recorded but not verified
- * (platform_attempts_pending_verify → reverifyPlatformReturn; review items alert the platform team there),
- * (2) platform_attempts_expire(), (3) platform_payment_returns_purge(). Nothing when payments are off.
+ * (platform_attempts_pending_verify → reverifyPlatformReturn) — only when payments are READY (X-19);
+ * (2) platform_attempts_expire() (expiry + parking sweep), (3) platform_payment_returns_purge(), (4) the review
+ * alert claim (X-17: the only path that rings for a review). (2)–(4) are DB-only and run even when payments are
+ * not ready. Nothing at all with PAYMENTS_JOBS=off.
  * One run at a time (`running`, the only mutable state allowed in scope code: U17-B8). Imports no TanStack code.
  */
 import type { PaymentMode } from "@/platform/payments/provider";
 import { paymentsReady, type PaymentsEnv } from "@/platform/payments/server/env";
+import { claimPlatformReviewAlerts } from "./alerts";
 import { asRows, int, platformCall, platformPaymentsRpc, text, uuid, type PlatformRpc } from "./db";
 import { platformLog, type PlatformLogger } from "./log";
 import { reverifyPlatformReturn, type SettleResult } from "./return";
@@ -33,6 +36,8 @@ export interface PlatformJobDeps {
   ready(): Ready;
   rpc: PlatformRpc;
   reverify: Reverify;
+  /** X-17: claim the not-yet-alerted reviews and ring once for each → rows claimed */
+  claimAlerts(): Promise<number>;
   log: PlatformLogger;
 }
 
@@ -44,6 +49,7 @@ export const defaultJobDeps: PlatformJobDeps = {
   ready: () => paymentsReady("platform"),
   rpc: platformPaymentsRpc,
   reverify: (item) => reverifyPlatformReturn(item),
+  claimAlerts: () => claimPlatformReviewAlerts(),
   log: platformLog,
 };
 
@@ -53,16 +59,12 @@ export type PlatformJobsSummary = {
   review: number;
   expired: number;
   purged: number;
+  alerted: number;
 };
 
 const isMode = (value: unknown): value is PaymentMode => value === "test" || value === "live";
 
-export async function runPlatformPaymentJobs(
-  deps: PlatformJobDeps = defaultJobDeps,
-): Promise<PlatformJobsSummary> {
-  const summary: PlatformJobsSummary = { pending: 0, paid: 0, review: 0, expired: 0, purged: 0 };
-  if (!deps.jobsOn() || !deps.ready().ok) return summary;
-
+async function reverifyPending(deps: PlatformJobDeps, summary: PlatformJobsSummary): Promise<void> {
   const pending = await platformCall(deps.rpc, "platform_attempts_pending_verify", {
     _limit: PENDING_BATCH,
   });
@@ -84,6 +86,24 @@ export async function runPlatformPaymentJobs(
       deps.log.error("jobs_reverify", {});
     }
   }
+}
+
+export async function runPlatformPaymentJobs(
+  deps: PlatformJobDeps = defaultJobDeps,
+): Promise<PlatformJobsSummary> {
+  const summary: PlatformJobsSummary = {
+    pending: 0,
+    paid: 0,
+    review: 0,
+    expired: 0,
+    purged: 0,
+    alerted: 0,
+  };
+  if (!deps.jobsOn()) return summary;
+  // X-19: not ready → no VERIFY, but the DB-only steps still run (sweep, purge, alert claim)
+  const ready = deps.ready();
+  if (ready.ok) await reverifyPending(deps, summary);
+  else deps.log.warn("jobs_verify_skipped", { reason: ready.reason });
 
   const expired = await platformCall(deps.rpc, "platform_attempts_expire", {});
   if (expired.error) deps.log.error("jobs_expire", { sqlstate: expired.error.code ?? "none" });
@@ -97,7 +117,14 @@ export async function runPlatformPaymentJobs(
     summary.purged =
       typeof purged.data === "number" ? purged.data : (int({ n: purged.data }, "n") ?? 0);
 
-  if (summary.pending + summary.expired + summary.purged > 0) deps.log.info("jobs", summary);
+  try {
+    summary.alerted = await deps.claimAlerts();
+  } catch {
+    deps.log.alert("review_claim_failed", {});
+  }
+
+  if (summary.pending + summary.expired + summary.purged + summary.alerted > 0)
+    deps.log.info("jobs", summary);
   return summary;
 }
 

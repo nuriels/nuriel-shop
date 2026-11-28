@@ -5,10 +5,26 @@
  * (attempt, reason) — idempotency key pay-review:<attempt>:<reason> — through the existing Resend path to the
  * platform team's address list (SUPPORT_NOTIFY_EMAIL, the operator setting the other platform notices use; when it
  * is empty only the log line is written). Fixed text: the reason and the first 8 characters of the attempt id —
- * no customer data, no amount, no card data. Never throws: an alert must not break a return or a job.
+ * no customer data, no amount, no card data. Never throws: an alert must not break a return or a job. Resolves
+ * true only when every recipient's e-mail was sent.
+ *
+ * claimPlatformReviewAlerts() (contract X-17): the ONLY path that rings for a platform review. The DB returns each
+ * attempt that got a review_reason and was not alerted yet, and stamps it (exactly once, whoever parked it: a
+ * settle result, the sweep, the purge, a credentials change). Per claimed row: the e-mail above + its ALERT line; a
+ * stamped row whose e-mail did not go out gets one more ALERT line (the attempt's short id) — a person must look.
+ * Called after every handled return and in every job tick.
  */
 import { createHash } from "node:crypto";
 import { escapeHtml, sendBusinessEmail } from "@/platform/email/send.server";
+import {
+  asRows,
+  dbFailure,
+  platformCall,
+  platformPaymentsRpc,
+  text,
+  uuid,
+  type PlatformRpc,
+} from "./db";
 import { platformLog, shortId, type PlatformLogger } from "./log";
 
 const recipientKey = (email: string) =>
@@ -33,8 +49,6 @@ export const ALERT_REASON_TEXT: Readonly<Record<string, string>> = Object.freeze
   payer_gone: "העסק נמחק",
   environment_mismatch: "הסביבה של האפליקציה ושל המסד אינן תואמות — שום תשלום לא נסגר",
   credentials: "ספק התשלומים דחה את פרטי המסוף",
-  verify_credentials:
-    "אי אפשר לאמת חזרה מדף התשלום: פרטי המסוף אינם זמינים — ייתכן שהמסוף שונה בזמן התשלום",
 });
 
 const REASON = /^[a-z][a-z_]{1,39}$/;
@@ -93,16 +107,16 @@ export async function alertPlatformAdmins(
   reason: string,
   attemptId: string | null,
   deps: AlertDeps = defaultAlertDeps,
-): Promise<void> {
+): Promise<boolean> {
   const cause = typeof reason === "string" && REASON.test(reason) ? reason : "unknown";
   const attempt = shortId(attemptId);
   deps.log.alert("review", { reason: cause, attempt });
   try {
     const to = deps.recipients();
-    if (to.length === 0) return;
+    if (to.length === 0) return false;
     const { subject, html } = alertEmail(cause, attempt, deps.panelUrl());
     // one stable key per recipient (the same key twice would be delivered once only)
-    await Promise.all(
+    const results = await Promise.all(
       to.map((email) =>
         deps.send({
           to: email,
@@ -114,7 +128,60 @@ export async function alertPlatformAdmins(
         }),
       ),
     );
+    return results.every((result) => result.sent);
   } catch {
     deps.log.error("alert_email", { reason: cause, attempt });
+    return false;
   }
+}
+
+export interface ClaimDeps {
+  rpc: PlatformRpc;
+  alert(reason: string, attemptId: string): Promise<boolean>;
+  log: PlatformLogger;
+}
+
+export const defaultClaimDeps: ClaimDeps = {
+  rpc: platformPaymentsRpc,
+  alert: (reason, attemptId) => alertPlatformAdmins(reason, attemptId),
+  log: platformLog,
+};
+
+const CLAIM_BATCH = 50;
+
+/** X-17: claim the not-yet-alerted platform reviews and ring once for each (never throws); → rows claimed */
+export async function claimPlatformReviewAlerts(
+  deps: ClaimDeps = defaultClaimDeps,
+  limit: number = CLAIM_BATCH,
+): Promise<number> {
+  let claimed = 0;
+  try {
+    const answer = await platformCall(deps.rpc, "platform_attempt_review_alerts_claim", {
+      _limit: limit,
+    });
+    if (answer.error) {
+      dbFailure(answer.error, "platform_attempt_review_alerts_claim", deps.log);
+      return 0;
+    }
+    for (const row of asRows(answer.data)) {
+      const attemptId = uuid(row, "attempt_id");
+      if (attemptId === null) {
+        deps.log.alert("review_claim_row", {});
+        continue;
+      }
+      claimed += 1;
+      const reason = text(row, "review_reason") ?? text(row, "reason") ?? "review";
+      let delivered = false;
+      try {
+        delivered = await deps.alert(reason, attemptId);
+      } catch {
+        delivered = false;
+      }
+      // the row is stamped: without this line nobody would learn that the e-mail did not go out
+      if (!delivered) deps.log.alert("review_email_failed", { attempt: shortId(attemptId) });
+    }
+  } catch {
+    deps.log.alert("review_claim_failed", {});
+  }
+  return claimed;
 }
