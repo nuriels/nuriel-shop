@@ -35,8 +35,23 @@
 //   MA-11 API answers are text/plain; system errors are HTML.
 // Deterministic: no randomness. signature, Sign and Id are HMACs of a fixed seed the app never sees;
 // the only per-run values are the canary KEY/PassP, built from the run id app-up.sh passes in.
-// Control (tests only): POST /__hyp/reset · POST /__hyp/scenario · GET /__hyp/calls ·
-// GET /__hyp/scenarios · GET /__hyp/terminals (the run's fake credentials, for the specs).
+// Control (tests only):
+//   POST /__hyp/reset                 scenarios, issued pages/returns and the call log are cleared
+//   POST /__hyp/scenario  {target?, sign?, verify?, page?, times?}  (400 on an unknown value)
+//        target: "global" (default) | "terminal:<masof|label>" | "order:<Order>"; order > terminal >
+//        global, the latest wins within a level; times: n = one-shot for the next n uses
+//        sign:   ok creds no_what echo_secret no_signature no_action_pay + the transport set
+//        verify: ok fail_code fail_200 creds no_what trailing_crlf ccode_00 ccode_space ccode_dup
+//                lenient flaky:<n> + the transport set
+//        transport set: html_200 html_with_ccode0 garbage_200 json_200 http_500 http_503 timeout
+//                slow:<ms> reset oversize redirect_3xx
+//        page (comma list): approve decline cancel (taken without a click) moredata_off win1255 utf8
+//                dup_param extra_secret_param hold_600 hold_700 hold_800 hesh hesh_empty hesh_zero
+//                heshasm hkid multi repeatable decline_redirect[:<CCode>]
+//   GET /__hyp/calls?order=&action=SIGN|VERIFY|PAGE|OTHER&masof=   (parameter NAMES only)
+//   GET /__hyp/scenarios · GET /__hyp/terminals (the run's fake credentials, for the specs)
+// Page: <base>?<SIGN response> shows buttons (data-testid hyp-approve / hyp-decline / hyp-cancel);
+// API tests append &__choice=approve|decline|cancel to get the outcome (302 on approve) directly.
 // ============================================================
 import { createHmac } from "node:crypto";
 import { createServer } from "node:http";
