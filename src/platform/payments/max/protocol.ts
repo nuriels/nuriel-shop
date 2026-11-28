@@ -536,10 +536,14 @@ export function classifyVerifyResponse(body: string): VerifyResult {
 
 export type ReturnOutcome = "approved" | "hold" | "declined";
 
-/** Hold codes: 600 J2 check, 700 J5 authorization, 800 postponed — money not captured; never paid, never failed. */
-const HOLD_CODES: ReadonlySet<string> = new Set(["600", "700", "800"]);
+/**
+ * Hold codes — never paid, never failed, always for manual review: 600 J2 check, 700 J5 authorization,
+ * 800 postponed (money not captured), and 10 "Partial approval" (Shva — money may have moved, so it is
+ * not treated as a decline). The DB settle functions use the same set (migration 208).
+ */
+const HOLD_CODES: ReadonlySet<string> = new Set(["10", "600", "700", "800"]);
 
-/** The return's own `CCode`: exactly "0" → approved; 600/700/800 → hold; anything else (null too) → declined. */
+/** The return's own `CCode`: exactly "0" → approved; 10/600/700/800 → hold; anything else (null too) → declined. */
 export function classifyReturnCcode(ccode: string | null): ReturnOutcome {
   if (ccode === "0") return "approved";
   if (typeof ccode === "string" && HOLD_CODES.has(ccode)) return "hold";

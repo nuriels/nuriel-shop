@@ -823,9 +823,9 @@ describe("DM-PAY-4: VERIFY — only exactly CCode=0; HTML is never verified", ()
 });
 
 describe("DM-PAY-6: 600/700/800, HKId and MULTI → for review, never paid", () => {
-  it("DM-PAY-6: the return CCode — 0 approved; 600/700/800 hold; everything else declined", () => {
+  it("DM-PAY-6: the return CCode — 0 approved; 10 (partial approval) and 600/700/800 hold; everything else declined", () => {
     expect(classifyReturnCcode("0")).toBe("approved");
-    for (const c of ["600", "700", "800"]) expect(classifyReturnCcode(c), c).toBe("hold");
+    for (const c of ["10", "600", "700", "800"]) expect(classifyReturnCcode(c), c).toBe("hold");
     for (const c of [
       null,
       "",
@@ -834,6 +834,9 @@ describe("DM-PAY-6: 600/700/800, HKId and MULTI → for review, never paid", () 
       "0 ",
       "-0",
       "+0",
+      "1",
+      "010",
+      "10 ",
       "4",
       "6",
       "33",
