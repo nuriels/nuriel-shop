@@ -24,6 +24,7 @@ import {
 } from "@/platform/payments/server/env";
 import { hypRequest } from "@/platform/payments/server/http";
 import {
+  DEMO_MAX_AMOUNT_MINOR,
   attemptStateOf,
   type OnlinePaymentOptions,
   type OnlinePaymentView,
@@ -55,9 +56,15 @@ export async function tenantPaymentOptions(
   actorId: string | null,
 ): Promise<OnlinePaymentOptions> {
   const ready = paymentsReady("tenant");
-  if (!ready.ok) return { available: false, demo: false };
+  if (!ready.ok) return { available: false, demo: false, maxAmountMinor: null };
   const answer = await paymentsRpc("max_payments_active", { _tenant: tenantId, _actor: actorId });
-  return { available: answer.error === null && answer.data === true, demo: ready.env === "demo" };
+  const demo = ready.env === "demo";
+  return {
+    available: answer.error === null && answer.data === true,
+    demo,
+    // DEMO = test mode only, and the DB refuses a test payment above ₪50 (L9: never offered above it)
+    maxAmountMinor: demo ? DEMO_MAX_AMOUNT_MINOR : null,
+  };
 }
 
 /**

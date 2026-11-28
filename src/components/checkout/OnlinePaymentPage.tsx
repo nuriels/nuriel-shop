@@ -21,6 +21,7 @@ import { guestPaymentToken, ORDER_ID_FORMAT } from "@/lib/online-payments";
 import { getOnlinePaymentStatus, startOnlinePayment } from "@/lib/online-payments.functions";
 import { PAYMENT_MESSAGES } from "@/platform/payments/max/messages";
 import {
+  ONLINE_OVER_DEMO_CAP,
   agorotText,
   onlinePaymentStage,
   type OnlinePaymentView,
@@ -78,8 +79,10 @@ export function OnlinePaymentPage({
       const { url } = await start({ data: { orderId, guestToken: guestPaymentToken(orderId) } });
       window.location.assign(url);
     } catch (e) {
-      setError(e instanceof Error ? e.message : PAYMENT_MESSAGES.unavailable);
-      setStage("failed");
+      const message = e instanceof Error ? e.message : PAYMENT_MESSAGES.unavailable;
+      setError(message);
+      // above the DEMO cap a retry cannot succeed: no "try again" button (L9)
+      setStage(message === ONLINE_OVER_DEMO_CAP ? "unavailable" : "failed");
     }
   }, [start, orderId]);
 

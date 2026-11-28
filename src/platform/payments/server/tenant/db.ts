@@ -6,7 +6,7 @@
  * one error type for the scope, and small readers for the jsonb answers (Json → typed values, nothing trusted).
  */
 import { PAYMENT_MESSAGES } from "@/platform/payments/max/messages";
-import { TERMINAL_SAVE_NEEDS_FORCE } from "@/platform/payments/tenant-views";
+import { ONLINE_OVER_DEMO_CAP, TERMINAL_SAVE_NEEDS_FORCE } from "@/platform/payments/tenant-views";
 import type { PaymentsDbError, PaymentsRpcResult } from "@/platform/payments/server/db";
 import { tenantLog } from "./log";
 
@@ -26,6 +26,7 @@ export class TenantPaymentError extends Error {
 /** DB text (migration 208 RAISE messages) → fixed Hebrew; first match wins */
 const DB_MESSAGES: readonly (readonly [RegExp, string])[] = [
   [/environments differ/i, UNAVAILABLE],
+  [/limited to 50 ILS/i, ONLINE_OVER_DEMO_CAP],
   [/not available (?:in this store )?right now/i, UNAVAILABLE],
   [/order not found/i, "ההזמנה לא נמצאה"],
   [/store not found/i, "החנות לא נמצאה"],

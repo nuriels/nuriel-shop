@@ -266,12 +266,49 @@ describe("tenant start (open → secrets → SIGN → signed)", () => {
           guestToken: null,
         }),
       ).rejects.toThrow("התשלום המקוון אינו זמין כרגע");
-      expect(await tenantPaymentOptions(STORE_B, null)).toEqual({ available: false, demo: false });
+      expect(await tenantPaymentOptions(STORE_B, null)).toEqual({
+        available: false,
+        demo: false,
+        maxAmountMinor: null,
+      });
       expect(h.calls).toHaveLength(0);
       expect(h.hyp).toHaveLength(0);
     } finally {
       process.env["PAYMENTS_ENV"] = "demo";
     }
+  });
+
+  it("L9: DEMO caps online payments at ₪50 — options carry the cap, a refused start answers the fixed reason", async () => {
+    const { startTenantPayment, tenantPaymentOptions } =
+      await import("@/platform/payments/server/tenant/checkout");
+    const { ONLINE_OVER_DEMO_CAP, onlineAmountOverCap } =
+      await import("@/platform/payments/tenant-views");
+    h.answers.set("max_payments_active", ok(true));
+    const options = await tenantPaymentOptions(STORE_B, null);
+    expect(options).toEqual({ available: true, demo: true, maxAmountMinor: 5000 });
+    expect(onlineAmountOverCap(options, 50)).toBe(false);
+    expect(onlineAmountOverCap(options, 50.01)).toBe(true);
+    expect(onlineAmountOverCap(options, 120)).toBe(true);
+    expect(onlineAmountOverCap({ maxAmountMinor: null }, 120)).toBe(false);
+    expect(onlineAmountOverCap(options, Number.NaN)).toBe(false);
+
+    h.calls.length = 0;
+    h.answers.set("max_attempt_open", refused("test payments are limited to 50 ILS (order 1042)"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await expect(
+        startTenantPayment({
+          tenantId: STORE_B,
+          orderId: ORDER,
+          customerId: CUSTOMER,
+          guestToken: null,
+        }),
+      ).rejects.toThrow(ONLINE_OVER_DEMO_CAP);
+    } finally {
+      warn.mockRestore();
+    }
+    expect(callsOf("max_attempt_secrets")).toHaveLength(0);
+    expect(h.hyp).toHaveLength(0);
   });
 
   it("L8: SIGN tripwires — another terminal than the attempt's, a live mode or a non-test terminal in DEMO → no SIGN", async () => {

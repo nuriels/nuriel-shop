@@ -38,6 +38,27 @@ export function attemptStateOf(value: unknown): AttemptState | null {
 export interface OnlinePaymentOptions {
   available: boolean;
   demo: boolean;
+  /** the highest order total (agorot) that can be paid online here; null = no cap on the app side */
+  maxAmountMinor: number | null;
+}
+
+/** DEMO: test payments are capped at ₪50 by the DB (migration 208: max_attempt_open and the CHECKs) */
+export const DEMO_MAX_AMOUNT_MINOR = 5000;
+
+/** the fixed reason shown instead of the online option (and for a refused start) above the DEMO cap (L9) */
+export const ONLINE_OVER_DEMO_CAP =
+  "בסביבת DEMO אפשר לשלם באופן מקוון רק על הזמנה של עד ₪50. אפשר לבחור אמצעי תשלום אחר.";
+
+/** true when an order of `totalIls` (shekels, as the checkout shows it) is above the online cap */
+export function onlineAmountOverCap(
+  options: Pick<OnlinePaymentOptions, "maxAmountMinor">,
+  totalIls: number,
+): boolean {
+  return (
+    options.maxAmountMinor !== null &&
+    Number.isFinite(totalIls) &&
+    Math.round(totalIls * 100) > options.maxAmountMinor
+  );
 }
 
 export interface OnlinePaymentAttemptView {
