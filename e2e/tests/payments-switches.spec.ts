@@ -121,7 +121,15 @@ test("DM-ENV-6: the store's own terminal switch (enabled = false) stops new atte
     expect((await deliver(request, location)).status).toBe(303);
     expect(lastAttempt(inFlight.id)?.state).toBe("test_paid");
   } finally {
-    await setupStoreTerminal(request, "storeB", admin);
+    // on again — the same credentials, so no force and nothing parked
+    must(
+      await call(request, FN.saveStoreTerminal, {
+        host: PLATFORM_HOST,
+        token: admin,
+        data: { tenantId: STORE_B.id, enabled: true },
+      }),
+      "switch store B's terminal on",
+    );
   }
 });
 

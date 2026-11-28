@@ -46,6 +46,8 @@ let admin = "";
 let terminals: Awaited<ReturnType<typeof hyp.terminals>>;
 /** The payer of DM-PLAT-3/5: its own store + owner (10 platform starts per owner per 15 minutes in the app) */
 let payer: Awaited<ReturnType<typeof payerStore>>;
+/** a charge whose payment is in review (set by the forged-amount test; the UI test checks its row, review H2) */
+let reviewCharge = "";
 
 test.beforeAll(async ({ request }) => {
   markDemoDatabase();
@@ -251,6 +253,17 @@ test("DM-PLAT-3: a forged amount never writes a ledger row (VERIFY fails; with a
     applied: false,
   });
   expect(providerRowsForCharge(chargeId)).toBe(0);
+  // review H2: while its payment is in review the charge is not payable, and a new start is refused
+  const options = must(
+    await call<{ charges: { id: string; payable: boolean }[] }>(request, FN.payOptions, {
+      host: payer.host,
+      token: payer.token,
+    }),
+    "owner options",
+  );
+  expect(options.charges.find((c) => c.id === chargeId)?.payable).toBe(false);
+  expect((await start(request, payer.token, chargeId, payer.host)).ok).toBe(false);
+  reviewCharge = chargeId;
 });
 
 test("DM-PLAT-5: a locked (suspended) store can still pay; the return lands on the platform host", async ({
@@ -289,6 +302,15 @@ test("DM-PLAT-3 (UI): the owner pays a charge from 'המנוי שלי'; the resu
   await page.goto(storeUrl(payer.slug, "/admin?tab=billing"));
   const section = page.getByTestId(TID.myBillingPay);
   await expect(section).toHaveAttribute("data-available", "true", { timeout: 20_000 });
+  if (reviewCharge) {
+    // review H2: no Pay button for the charge in review — only "התשלום בבדיקה"
+    const held = page.locator(
+      `[data-testid="my-billing-pay-charge"][data-charge-id="${reviewCharge}"]`,
+    );
+    await expect(held).toHaveAttribute("data-payable", "false");
+    await expect(held.getByTestId("my-billing-pay-checking")).toHaveText("התשלום בבדיקה");
+    await expect(held.getByTestId(TID.myBillingPayButton)).toHaveCount(0);
+  }
   const row = page.locator(`[data-testid="my-billing-pay-charge"][data-charge-id="${chargeId}"]`);
   await expect(row).toHaveAttribute("data-payable", "true");
   await row.getByTestId(TID.myBillingPayButton).click();

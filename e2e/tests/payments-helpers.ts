@@ -280,12 +280,13 @@ export type TenantAttempt = {
   verify_attempts: number;
   returned_at: string | null;
   signed_at: string | null;
+  extra_txn_ids: string[];
 };
 export function tenantAttempts(orderId: string): TenantAttempt[] {
   return json<TenantAttempt[]>(
     `SELECT COALESCE(json_agg(row_to_json(x) ORDER BY x.attempt_no), '[]') FROM (
        SELECT id, state, reference, applied, review_reason, return_flags, attempt_no, terminal_number,
-              provider_txn_id, verify_attempts, returned_at, signed_at
+              provider_txn_id, verify_attempts, returned_at, signed_at, extra_txn_ids
          FROM payments.tenant_attempts WHERE order_id = '${orderId}') x`,
   );
 }
@@ -298,6 +299,10 @@ export function orderRow(orderId: string): OrderRow {
       WHERE id = '${orderId}') x`,
   );
 }
+
+/** the order's payment window end (null = held: a payment in review stops the expiry, review M3) */
+export const paymentDueAt = (orderId: string) =>
+  sql(`SELECT COALESCE(payment_due_at::text, 'null') FROM public.orders WHERE id = '${orderId}'`);
 
 export const stockOf = (productId: string) =>
   Number(sql(`SELECT stock_quantity FROM public.global_products WHERE id = '${productId}'`));
@@ -446,6 +451,7 @@ export async function placeOnlineOrder(
   token: string,
   customer: Account,
   quantity = 1,
+  items?: { product_id: string; variant_id?: string; quantity: number }[],
 ): Promise<{ id: string; order_number: string }> {
   const { url, anonKey } = supabaseEnv();
   const method =
@@ -460,7 +466,10 @@ export async function placeOnlineOrder(
     },
     data: {
       _kind: "order",
-      _items: [{ product_id: PAY_PRODUCT.id, quantity, unit_price: 0 }],
+      _items: (items ?? [{ product_id: PAY_PRODUCT.id, quantity }]).map((i) => ({
+        ...i,
+        unit_price: 0,
+      })),
       _vat_rate: 0,
       _prices_include_vat: true,
       _details: {
@@ -571,6 +580,25 @@ export async function setupStoreTerminal(
 ) {
   const t = (await hyp.terminals(request))[label];
   const tenantId = label === "storeA" ? STORE_A.id : STORE_B.id;
+  // already holding this run's fake credentials (the free check passes) → only make sure it is on
+  const before = await call<{ ok: boolean }>(request, FN.testStoreTerminal, {
+    host: PLATFORM_HOST,
+    token: admin,
+    data: { tenantId },
+  });
+  if (before.ok && before.value.ok) {
+    must(
+      await call(request, FN.saveStoreTerminal, {
+        host: PLATFORM_HOST,
+        token: admin,
+        data: { tenantId, enabled: true },
+      }),
+      `switch the ${label} terminal on`,
+    );
+    return;
+  }
+  // new credentials: attempts left on the payment page by an EARLIER run would be stranded, so the DB asks for
+  // force (review M1) and parks them for review — setup only, never this run's payments
   must(
     await call(request, FN.saveStoreTerminal, {
       host: PLATFORM_HOST,
@@ -581,6 +609,7 @@ export async function setupStoreTerminal(
         apiKey: t.key,
         apiPassword: t.passp,
         enabled: true,
+        force: true,
       },
     }),
     `save the ${label} terminal`,
@@ -602,6 +631,8 @@ export const platformPatch = (t: HypTerminal, extra: Record<string, unknown> = {
   apiKey: t.key,
   apiPassword: t.passp,
   enabled: true,
+  // review M1: a credential change while a payer is on NURIEL's page needs force (bound to the step-up code too)
+  force: true,
   ...extra,
 });
 

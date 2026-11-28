@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { login, storeUrl } from "./helpers";
+import { login, storeUrl, supabaseEnv } from "./helpers";
 import {
   accessToken,
   ageAttempt,
@@ -32,6 +32,9 @@ import {
   runCanaries,
   setFlag,
   setupStoreTerminal,
+  sql,
+  USERS,
+  paymentDueAt,
   sha256,
   startPayment,
   stockOf,
@@ -249,6 +252,8 @@ test("M07 + M06: a double click opens one attempt; paying a second page of it is
       state: "test_paid",
       review_reason: "duplicate_charge",
     });
+    // review M4: the second approved transaction is kept for the refund (never paid twice)
+    expect(lastAttempt(placed.id)?.extra_txn_ids).toHaveLength(1);
   }
   expect(orderRow(placed.id).payment_status).toBe("paid");
   await expectMails(request, since, 1, placed.order_number);
@@ -349,6 +354,13 @@ test("DM-PAY-6 / DM-PAY-7: CCode 600/700/800/10, Hesh, HeshASM, HKId and MULTI �
     if (reason) {
       expect([a.state, a.review_reason, a.applied], page).toEqual(["needs_review", reason, false]);
       expect(orderRow(placed.id).payment_status, page).toBe("awaiting");
+      // review M3: the order is held while a person looks at the payment — the expiry job leaves it alone
+      expect(paymentDueAt(placed.id), page).toBe("null");
+      sql(`SELECT public.expire_unpaid_orders()`);
+      expect(orderRow(placed.id), page).toMatchObject({
+        status: "pending",
+        payment_status: "awaiting",
+      });
     } else {
       expect([a.state, a.applied], page).toEqual(["test_paid", true]);
     }
@@ -483,4 +495,56 @@ test("DM-SEC-4 (M03 in the browser): pay with the mock's buttons; pages, respons
   } finally {
     await context.close();
   }
+});
+
+test("review M5: a variant sold in an online-paid order can still be removed in the product editor", async ({
+  request,
+}) => {
+  const productId = "e2e0b000-0000-0000-0000-0000000000f2";
+  sql(`INSERT INTO public.global_products (id, tenant_id, created_by, sku, name, category, description,
+         price_tier1, price_tier2, price_tier3, stock_quantity)
+       VALUES ('${productId}', '${STORE_B.id}', '${USERS.ownerB.id}', '90000192', 'מוצר וריאציות לתשלום מקוון',
+               'קטגוריה של B', 'בדיקת M5', 11, 11, 11, 100)
+       ON CONFLICT (id) DO UPDATE SET stock_quantity = GREATEST(public.global_products.stock_quantity, 100)`);
+  const owner = await accessToken(request, USERS.ownerB);
+  const { url, anonKey } = supabaseEnv();
+  // the product editor's own call (AdminProductDialog → save_product_variants), as the store's admin
+  const saveVariants = (values: string[]) =>
+    request.post(`${url}/rest/v1/rpc/save_product_variants`, {
+      headers: {
+        apikey: anonKey,
+        authorization: `Bearer ${owner}`,
+        "content-type": "application/json",
+        "x-tenant-id": STORE_B.id,
+      },
+      data: {
+        _product_id: productId,
+        _attributes: [{ name: "צבע", values }],
+        _variants: values.map((v) => ({ options: { צבע: v }, stock_quantity: 20 })),
+      },
+    });
+  const created = await saveVariants(["אדום", "כחול"]);
+  expect(created.ok(), await created.text()).toBe(true);
+  const red = sql(`SELECT id FROM public.product_variants WHERE product_id = '${productId}'
+                    AND options ->> 'צבע' = 'אדום'`);
+  expect(red).toMatch(/^[0-9a-f-]{36}$/);
+
+  const placed = await placeOnlineOrder(request, customer, CUSTOMER, 1, [
+    { product_id: productId, variant_id: red, quantity: 1 },
+  ]);
+  const { location } = await payToReturn(request, customer, placed.id);
+  await deliver(request, location);
+  expect(orderRow(placed.id).payment_status).toBe("paid");
+  const total = sql(`SELECT total FROM public.orders WHERE id = '${placed.id}'`);
+
+  // the owner removes the sold variant: allowed; the paid order keeps its amount and lines (variant link cleared)
+  const removed = await saveVariants(["כחול"]);
+  expect(removed.ok(), await removed.text()).toBe(true);
+  expect(sql(`SELECT count(*) FROM public.product_variants WHERE id = '${red}'`)).toBe("0");
+  expect(
+    sql(`SELECT COALESCE(variant_id::text, 'null') FROM public.order_items
+          WHERE order_id = '${placed.id}' AND product_id = '${productId}'`),
+  ).toBe("null");
+  expect(sql(`SELECT total FROM public.orders WHERE id = '${placed.id}'`)).toBe(total);
+  expect(orderRow(placed.id).payment_status).toBe("paid");
 });
