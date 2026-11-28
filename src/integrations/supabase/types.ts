@@ -4046,9 +4046,18 @@ export type Database = {
       /** בעל החנות (authenticated): הטוקן שלו + כותרת החנות */
       platform_card_my_payments: { Args: never; Returns: Json };
       platform_card_my_options: { Args: never; Returns: Json };
-      /** שמירת מסוף הפלטפורמה — האפליקציה דורשת קודם קוד אימות נוסף שנצרך (platform_stepup_consume) */
+      /**
+       * שמירת מסוף הפלטפורמה — רק עם קוד האימות הנוסף שנצרך זה עתה (platform_stepup_consume): _challenge הוא אותו
+       * אתגר, _purpose_hash אותו hash (כפי שנשמר במסד), כך שהמסד דורש בדיוק את האתגר שנצרך (ביקורת L7)
+       */
       platform_terminal_save: {
-        Args: { _actor: string; _patch: Json; _app_environment: "demo" | "production" };
+        Args: {
+          _actor: string;
+          _patch: Json;
+          _app_environment: "demo" | "production";
+          _challenge: string;
+          _purpose_hash: string;
+        };
         Returns: Json;
       };
       platform_terminal_verified: {

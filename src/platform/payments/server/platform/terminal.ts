@@ -44,7 +44,11 @@ import {
   platformSecretCipher,
   stepupKey,
 } from "@/platform/payments/server/platform-keys";
-import { createStepupService, stepupPurposeHash } from "@/platform/payments/server/stepup";
+import {
+  createStepupService,
+  stepupDbPurposeHash,
+  stepupPurposeHash,
+} from "@/platform/payments/server/stepup";
 import { allowAction } from "@/platform/security/rate-limit.server";
 import { isPlatformHost } from "@/platform/tenancy/current-site.server";
 import {
@@ -99,6 +103,8 @@ export interface TerminalDeps {
   rpc: PlatformRpc;
   stepup(env: PaymentsEnv): StepupService;
   purposeHash(actorId: string, intent: TerminalIntent): string;
+  /** the purpose hash as the DB stored it for the challenge (the save names exactly the consumed challenge) */
+  dbPurposeHash(env: PaymentsEnv, actorId: string, purposeHash: string): string;
   cipher(env: PaymentsEnv, mode: PaymentMode): PlatformCipher;
   checkCredentials(actorId: string, env: PaymentsEnv): Promise<TerminalSecrets>;
   accountEmail(userId: string): Promise<string | null>;
@@ -151,6 +157,8 @@ export const defaultTerminalDeps: TerminalDeps = {
   rpc: platformPaymentsRpc,
   stepup: (env) => createStepupService(stepupRpc, stepupKey(env)),
   purposeHash: (actorId, intent) => stepupPurposeHash(actorId, TERMINAL_PURPOSE, intent),
+  dbPurposeHash: (env, actorId, purposeHash) =>
+    stepupDbPurposeHash(stepupKey(env), actorId, purposeHash),
   cipher: platformSecretCipher,
   checkCredentials: (actorId, env) => platformTerminalCheckCredentials(actorId, env),
   accountEmail,
@@ -370,14 +378,10 @@ export async function savePlatformTerminal(
     throw new PlatformPaymentError("stepup_failed");
 
   // DM-SEP-6: the code must approve exactly this change, for this admin, right now (single use)
+  const purposeHash = deps.purposeHash(actorId, intentOf(change, env));
   const consumed = await deps
     .stepup(env)
-    .consume(
-      actorId,
-      input.challengeId,
-      deps.purposeHash(actorId, intentOf(change, env)),
-      input.code,
-    );
+    .consume(actorId, input.challengeId, purposeHash, input.code);
   if (!consumed.ok) {
     deps.log.warn("stepup_refused", { reason: consumed.reason ?? "refused" });
     throw new PlatformPaymentError(STEPUP_REASON[consumed.reason ?? ""] ?? "stepup_failed");
@@ -402,10 +406,13 @@ export async function savePlatformTerminal(
   if (change.clearCredentials) patch["clear_credentials"] = true;
   if (change.force) patch["force"] = true;
 
+  // L7: the DB requires exactly the challenge consumed above (same id, same purpose), not any consumed one
   const saved = await platformCall(deps.rpc, "platform_terminal_save", {
     _actor: actorId,
     _patch: patch,
     _app_environment: env,
+    _challenge: input.challengeId,
+    _purpose_hash: deps.dbPurposeHash(env, actorId, purposeHash),
   });
   if (saved.error) throw dbFailure(saved.error, "platform_terminal_save", deps.log);
   deps.log.info("terminal_saved", {

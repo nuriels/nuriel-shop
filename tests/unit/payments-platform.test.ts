@@ -57,6 +57,11 @@ import {
 } from "@/platform/payments/server/platform/terminal";
 import { alertPlatformAdmins } from "@/platform/payments/server/platform/alerts";
 import { parseTerminalChange, parseTerminalSave } from "@/platform/billing/pay-terminal.functions";
+import {
+  createStepupService,
+  stepupDbPurposeHash,
+  type StepupRpc,
+} from "@/platform/payments/server/stepup";
 
 // ------------------------------------------------------------------------------------------ fixtures
 
@@ -1032,6 +1037,7 @@ function terminalDeps(
     rpc: db.rpc,
     stepup,
     purposeHash: (actor, intent) => sha256Hex(`${actor}|${JSON.stringify(intent)}`),
+    dbPurposeHash: (env, actor, hash) => `db:${env}:${actor}:${hash}`,
     cipher: fakeCipher,
     checkCredentials: async () => terminalSecrets(),
     accountEmail: async () => "admin@example.invalid",
@@ -1130,6 +1136,11 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
     const saved = t.db.args("platform_terminal_save")!;
     expect(saved["_actor"]).toBe(ACTOR);
     expect(saved["_app_environment"]).toBe("demo");
+    // L7: the save names exactly the consumed challenge and its purpose (as the DB stored it)
+    expect(t.consumed).toHaveLength(1);
+    expect(saved["_challenge"]).toBe(CHALLENGE);
+    expect(saved["_challenge"]).toBe(t.consumed[0]!.challenge);
+    expect(saved["_purpose_hash"]).toBe(`db:demo:${ACTOR}:${t.consumed[0]!.hash}`);
     expect(saved["_patch"]).toEqual({
       mode: "test",
       terminal_max_installments: 1,
@@ -1150,6 +1161,27 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
     });
     for (const line of t.lines)
       for (const leak of [FAKE_KEY, FAKE_PASSWORD, "246813"]) expect(line).not.toContain(leak);
+  });
+
+  it("L7: the purpose hash the save passes is the one the step-up service stored for the challenge", async () => {
+    const key = Buffer.alloc(32, 7);
+    const seen: Record<string, unknown>[] = [];
+    const rpc: StepupRpc = async (fn, args) => {
+      seen.push(args);
+      return fn === "platform_stepup_issue"
+        ? { data: { challenge_id: CHALLENGE, expires_at: "2026-11-28T10:10:00Z" }, error: null }
+        : { data: { ok: true }, error: null };
+    };
+    const service = createStepupService(rpc, key);
+    const hash = sha256Hex("the change set");
+    const issued = await service.issue(ACTOR.toUpperCase(), hash);
+    await service.consume(ACTOR, issued.challengeId, hash, issued.code);
+    const db = stepupDbPurposeHash(key, ACTOR, hash);
+    expect(seen.map((a) => a["_purpose_hash"])).toEqual([db, db]);
+    expect(stepupDbPurposeHash(key, ACTOR.toUpperCase(), hash)).toBe(db);
+    expect(db).not.toBe(hash);
+    expect(() => stepupDbPurposeHash(key, "not-a-uuid", hash)).toThrow();
+    expect(() => stepupDbPurposeHash(Buffer.alloc(4), ACTOR, hash)).toThrow();
   });
 
   it("DM-SEP-6: a wrong code, a code for another change, or no code → no save at all", async () => {
