@@ -59,6 +59,16 @@ export function tenantDbMessage(error: PaymentsDbError): string {
   return GENERIC_FAILURE;
 }
 
+/**
+ * A transport or transient failure, where no function decided anything: no SQLSTATE (network, the adapter's own
+ * "database unavailable"), a PostgREST code, or the connection / serialization / resources / shutdown classes.
+ * Every other error is the database's answer — a refusal the caller must act on, never retry silently.
+ */
+export function dbUnreachable(error: PaymentsDbError): boolean {
+  const code = error.code ?? "";
+  return !/^[0-9A-Z]{5}$/.test(code) || /^(?:08|40|53|57)/.test(code);
+}
+
 /** the data of a call, or a TenantPaymentError with the fixed text (logged with the function name and SQLSTATE) */
 export function unwrap<T>(fn: string, result: PaymentsRpcResult<T>): T {
   if (result.error) {

@@ -113,6 +113,7 @@ const REVIEW_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
   verify_exhausted: "האימות מול ספק התשלומים נכשל שוב ושוב",
   credentials_changed: "פרטי המסוף שונו בזמן האימות",
   mode_not_allowed: "מצב המסוף לא מותר בסביבה הזו",
+  payments_off: "התשלום חזר כשהתשלום המקוון היה כבוי, ולכן לא אומת",
 });
 
 export function reviewReasonLabel(reason: string | null): string {

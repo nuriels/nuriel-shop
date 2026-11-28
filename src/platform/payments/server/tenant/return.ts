@@ -12,7 +12,10 @@
  *   max_attempt_mark_paid with the return's flags (Hesh/HKId/MULTI → review, DM-PAY-6/7) → purge → a clean 303
  *   target. Only an EXACT replay (same payload hash) of a concluded payment skips VERIFY (X-10, M08: idempotent); a
  *   different return for a concluded attempt is verified and settled (an approved one → 'duplicate_charge', M06).
- * reverifyTenantReturn: the 5-minute job's retry of a return that arrived but could not be verified.
+ * reverifyTenantReturn: the 5-minute job's retry of a KEPT return that arrived but could not be verified.
+ * Never silent (M1/M2/L6): VERIFY exhausted, VERIFY credentials refused (the attempt's terminal changed or is no
+ * longer configured, a tripwire fired) and a return that arrived while payments were off all become review items
+ * (store bell, by the caller) plus an ALERT line; a return that is neither settled nor kept gets an ALERT line.
  * Only CCode exactly "0" in VERIFY counts (X-2): a timeout, HTML or any other answer reaches the DB as "not
  * verified", which can neither pay nor fail the attempt. Every match check (amount, currency, installments,
  * transaction id, terminal, order still awaiting) is the DB's (DM-PAY-5).
@@ -65,6 +68,16 @@ type SettleOutcome = {
   orderId: string | null;
 };
 
+/** settle results after which the return is still open: only a KEPT raw return can be verified again later */
+const STILL_OPEN: readonly string[] = [
+  "unverified",
+  "verify_unavailable",
+  "verify_busy",
+  "settle_error",
+];
+/** mark_paid answers that mean "VERIFY used up" (the DB parked the attempt) */
+const EXHAUSTED: readonly string[] = ["exhausted", "verify_exhausted"];
+
 const sha256Hex = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
 
 /**
@@ -88,20 +101,43 @@ async function verifyAndSettle(input: {
   attemptId: string;
   sha: string;
   parsed: Extract<ParsedReturn, { ok: true }>;
+  /** the attempt's terminal as recorded (tripwire), null when unknown (the job) */
+  terminal: string | null;
 }): Promise<SettleOutcome> {
+  const attempt = shortId(input.attemptId);
   const none = (result: string): SettleOutcome => ({
     result,
     reason: null,
     applied: false,
     orderId: null,
   });
-  let secrets;
-  try {
-    secrets = await verifyCredentials(input.env, input.tenantId, input.attemptId);
-  } catch {
-    return none("verify_unavailable");
+  const review = (reason: string): SettleOutcome => ({
+    result: "needs_review",
+    reason,
+    applied: false,
+    orderId: null,
+  });
+  const secrets = await verifyCredentials(
+    input.env,
+    input.tenantId,
+    input.attemptId,
+    input.terminal,
+  );
+  if (secrets.result === "busy") {
+    tenantLog.info("verify_busy", { attempt, retry_after: secrets.retryAfterSeconds });
+    return none("verify_busy");
   }
-  if (secrets.result !== "ok") return none(`verify_${secrets.result}`);
+  if (secrets.result === "unavailable") return none("verify_unavailable");
+  if (secrets.result === "exhausted") {
+    // M2: the DB just parked the attempt in needs_review 'verify_exhausted' — a person must look at it
+    tenantLog.alert("verify_exhausted", { attempt });
+    return review("verify_exhausted");
+  }
+  if (secrets.result === "refused") {
+    // M1: this return can never be verified as it is (terminal changed / no longer configured / tripwire)
+    tenantLog.alert("verify_credentials_refused", { attempt, reason: secrets.reason });
+    return review(secrets.reason);
+  }
 
   let http: HypHttpResult;
   try {
@@ -138,12 +174,20 @@ async function verifyAndSettle(input: {
     return none("settle_error");
   }
   const r = asRecord(answer.data);
-  const outcome: SettleOutcome = {
-    result: str(r?.["result"]) ?? "unknown",
-    reason: str(r?.["reason"]),
-    applied: bool(r?.["applied"]),
-    orderId: uuid(r?.["order_id"]),
-  };
+  const answered = str(r?.["result"]) ?? "unknown";
+  const outcome: SettleOutcome = EXHAUSTED.includes(answered)
+    ? {
+        result: "needs_review",
+        reason: "verify_exhausted",
+        applied: false,
+        orderId: uuid(r?.["order_id"]),
+      }
+    : {
+        result: answered,
+        reason: str(r?.["reason"]),
+        applied: bool(r?.["applied"]),
+        orderId: uuid(r?.["order_id"]),
+      };
   tenantLog.info("settle", {
     attempt: shortId(input.attemptId),
     verify: http.ok ? (verifyCcode ?? "unclear") : http.error,
@@ -268,19 +312,36 @@ export async function handleTenantReturn(input: {
   }
   const ready = paymentsReady("tenant");
   if (!ready.ok) {
-    // recorded, not verified: the job (or the same return again) verifies it once payments are on
+    // L6: recorded but neither verified nor kept (no usable key): the job cannot verify it later, so it goes in
+    // front of a person now — the store's bell (the caller) and an ALERT line
     tenantLog.alert("return_not_verified", { attempt: shortId(attemptId), why: ready.reason });
-    return { ...base, location };
+    return { ...base, location, review: { tenantId, orderId, reason: "payments_off" } };
   }
-  if (result === "received")
-    await keepRawReturn(ready.env, mode, tenantId, attemptId, sha, input.raw);
+  // a replay was kept when it first arrived (or that failure was alerted then)
+  const kept =
+    result === "received"
+      ? await keepRawReturn(ready.env, mode, tenantId, attemptId, sha, input.raw)
+      : true;
 
-  const settle = await verifyAndSettle({ env: ready.env, tenantId, attemptId, sha, parsed });
+  const settle = await verifyAndSettle({
+    env: ready.env,
+    tenantId,
+    attemptId,
+    sha,
+    parsed,
+    terminal: str(rec?.["terminal_number"]),
+  });
+  if (!kept && STILL_OPEN.includes(settle.result))
+    // not settled and nothing kept for the job: only this ALERT line (and the order panel) shows it
+    tenantLog.alert("return_not_retryable", { attempt: shortId(attemptId), result: settle.result });
   await purgeReturns();
   return { ...base, location, ...sideEffects(tenantId, orderId, settle) };
 }
 
-/** the encrypted raw return for a later VERIFY retry (decision 14): bound to this store and attempt (Q1) */
+/**
+ * The encrypted raw return for a later VERIFY retry (decision 14): bound to this store and attempt (Q1).
+ * → whether it is kept (false: the DB refused it, e.g. 20 already kept, or it could not be sealed / stored).
+ */
 async function keepRawReturn(
   env: PaymentsEnv,
   mode: PaymentMode,
@@ -288,7 +349,7 @@ async function keepRawReturn(
   attemptId: string,
   sha: string,
   raw: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const sealed = tenantSecretCipher(env, mode).seal("raw_return", raw, {
       tenantId,
@@ -301,8 +362,11 @@ async function keepRawReturn(
       _return_enc: sealed,
     });
     if (kept.error) tenantLog.warn("return_not_kept", { code: kept.error.code });
+    else if (kept.data !== true) tenantLog.warn("return_not_kept", { why: "refused" });
+    return kept.error === null && kept.data === true;
   } catch {
     tenantLog.warn("return_not_kept", { why: "seal" });
+    return false;
   }
 }
 
@@ -370,6 +434,7 @@ export async function reverifyTenantReturn(
     attemptId: item.attemptId,
     sha: item.payloadSha256,
     parsed,
+    terminal: null,
   });
   return sideEffects(item.tenantId, null, settle);
 }

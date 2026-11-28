@@ -15,7 +15,13 @@ import {
   type SignResult,
 } from "@/platform/payments/max/protocol";
 import { paymentsRpc } from "@/platform/payments/server/db";
-import { hypEndpoint, paymentsEnv, paymentsReady } from "@/platform/payments/server/env";
+import {
+  hypEndpoint,
+  modeAllowed,
+  paymentsEnv,
+  paymentsReady,
+  terminalAllowed,
+} from "@/platform/payments/server/env";
 import { hypRequest } from "@/platform/payments/server/http";
 import {
   attemptStateOf,
@@ -127,13 +133,30 @@ export async function startTenantPayment(
   }
 
   let creds;
+  let mode;
   try {
-    ({ creds } = await signCredentials(env, input.tenantId, attemptId));
+    ({ creds, mode } = await signCredentials(env, input.tenantId, attemptId));
   } catch (error) {
     // a payer never sees a terminal-credentials problem (payerMessageKey): it reads "unavailable"
     if (error instanceof TenantPaymentError && error.kind === "credentials")
       throw new TenantPaymentError(UNAVAILABLE, "unavailable");
     throw error;
+  }
+  // tripwires (never proof; the DB enforces): the attempt's own terminal, the environment's prefix and mode
+  // (DM-ENV-3) — as on the platform side (L8)
+  if (
+    creds.masof !== str(opened?.["terminal_number"]) ||
+    !terminalAllowed(env, creds.masof) ||
+    !modeAllowed(env, mode)
+  ) {
+    await paymentsRpc("max_attempt_signed", {
+      _tenant: input.tenantId,
+      _attempt: attemptId,
+      _ok: false,
+      _code: null,
+    });
+    tenantLog.alert("terminal_not_allowed", { attempt: shortId(attemptId), mode });
+    throw new TenantPaymentError(UNAVAILABLE, "unavailable");
   }
   const endpoint = hypEndpoint();
   let sign: SignResult | { ok: false; code: string; ccode?: string };

@@ -201,7 +201,13 @@ describe("tenant start (open → secrets → SIGN → signed)", () => {
     const { startTenantPayment } = await import("@/platform/payments/server/tenant/checkout");
     h.answers.set(
       "max_attempt_open",
-      ok({ attempt_id: ATTEMPT, reference: REFERENCE, amount_minor: 1000, mode: "test" }),
+      ok({
+        attempt_id: ATTEMPT,
+        reference: REFERENCE,
+        amount_minor: 1000,
+        terminal_number: TERMINAL,
+        mode: "test",
+      }),
     );
     h.answers.set("max_attempt_secrets", async () => ({
       data: { result: "ok", ...(await sealedFor(STORE_B)) },
@@ -224,7 +230,13 @@ describe("tenant start (open → secrets → SIGN → signed)", () => {
     const { startTenantPayment } = await import("@/platform/payments/server/tenant/checkout");
     h.answers.set(
       "max_attempt_open",
-      ok({ attempt_id: ATTEMPT, reference: REFERENCE, amount_minor: 1000, mode: "test" }),
+      ok({
+        attempt_id: ATTEMPT,
+        reference: REFERENCE,
+        amount_minor: 1000,
+        terminal_number: TERMINAL,
+        mode: "test",
+      }),
     );
     h.answers.set("max_attempt_secrets", async () => ({
       data: { result: "ok", ...(await sealedFor(STORE_A)) },
@@ -259,6 +271,64 @@ describe("tenant start (open → secrets → SIGN → signed)", () => {
       expect(h.hyp).toHaveLength(0);
     } finally {
       process.env["PAYMENTS_ENV"] = "demo";
+    }
+  });
+
+  it("L8: SIGN tripwires — another terminal than the attempt's, a live mode or a non-test terminal in DEMO → no SIGN", async () => {
+    const { startTenantPayment } = await import("@/platform/payments/server/tenant/checkout");
+    const alert = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const variants: Record<string, string>[] = [
+        { open: "0010090002", row: TERMINAL, mode: "test" },
+        { open: TERMINAL, row: TERMINAL, mode: "live" },
+        { open: "1234567890", row: "1234567890", mode: "test" },
+      ];
+      for (const v of variants) {
+        h.calls.length = 0;
+        h.hyp.length = 0;
+        h.answers.set(
+          "max_attempt_open",
+          ok({
+            attempt_id: ATTEMPT,
+            reference: REFERENCE,
+            amount_minor: 1000,
+            terminal_number: v["open"],
+            mode: "test",
+          }),
+        );
+        h.answers.set("max_attempt_secrets", async () => ({
+          data: {
+            result: "ok",
+            ...(await sealedFor(STORE_B)),
+            terminal_number: v["row"],
+            mode: v["mode"],
+          },
+          error: null,
+        }));
+        h.answers.set("max_attempt_signed", ok({ result: "failed" }));
+        h.hypAnswer = () => ({ ok: true, status: 200, body: signBody(), html: false });
+        await expect(
+          startTenantPayment({
+            tenantId: STORE_B,
+            orderId: ORDER,
+            customerId: CUSTOMER,
+            guestToken: null,
+          }),
+          JSON.stringify(v),
+        ).rejects.toThrow("התשלום המקוון אינו זמין כרגע");
+        expect(h.hyp, JSON.stringify(v)).toHaveLength(0);
+        // a live-mode row does not even open with the test cipher; the other two are recorded as a failed SIGN
+        if (v["mode"] === "test")
+          expect(callsOf("max_attempt_signed")[0]?.args, JSON.stringify(v)).toMatchObject({
+            _ok: false,
+            _code: null,
+          });
+      }
+      expect(
+        alert.mock.calls.some((c) => String(c[0]).includes("ALERT terminal_not_allowed")),
+      ).toBe(true);
+    } finally {
+      alert.mockRestore();
     }
   });
 });
@@ -575,6 +645,175 @@ describe("tenant return (record → VERIFY → settle)", () => {
     expect(verifyCodeOf({ ok: false, error: "timeout" })).toBeNull();
     expect(verifyCodeOf({ ok: false, error: "too_large" })).toBeNull();
   });
+
+  /** the scope's ALERT lines written during fn (console.error) */
+  async function alertsDuring(fn: () => Promise<unknown>): Promise<string[]> {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await fn();
+      return spy.mock.calls.map((c) => String(c[0])).filter((line) => line.includes("ALERT"));
+    } finally {
+      spy.mockRestore();
+      warn.mockRestore();
+    }
+  }
+  const storeReturn = async () => {
+    const { handleTenantReturn } = await import("@/platform/payments/server/tenant/return");
+    return handleTenantReturn({
+      provider: "max",
+      raw: returnQuery(),
+      hostTenantId: STORE_B,
+      host: "store-b.shop.localhost",
+    });
+  };
+
+  it("R-T1 / M2: VERIFY exhausted (the DB parked the attempt) → a review item for the store's bell + an ALERT line", async () => {
+    h.answers.set("max_attempt_record_return", received());
+    await verifiable();
+    h.answers.set("max_attempt_secrets", ok({ result: "exhausted" }));
+    let out: Awaited<ReturnType<typeof storeReturn>> | undefined;
+    const alerts = await alertsDuring(async () => (out = await storeReturn()));
+    expect(out?.review).toEqual({ tenantId: STORE_B, orderId: ORDER, reason: "verify_exhausted" });
+    expect(alerts.some((line) => line.includes("ALERT verify_exhausted"))).toBe(true);
+    expect(h.hyp).toHaveLength(0);
+    expect(callsOf("max_attempt_mark_paid")).toHaveLength(0);
+  });
+
+  it("M2: the settle answering exhausted / verify_exhausted is a review item too", async () => {
+    for (const result of ["exhausted", "verify_exhausted"]) {
+      h.answers.set("max_attempt_record_return", received());
+      await verifiable();
+      h.answers.set("max_attempt_mark_paid", ok({ result, order_id: ORDER }));
+      h.hypAnswer = () => ({ ok: false, error: "timeout" });
+      let out: Awaited<ReturnType<typeof storeReturn>> | undefined;
+      const alerts = await alertsDuring(async () => (out = await storeReturn()));
+      expect(out?.review, result).toEqual({
+        tenantId: STORE_B,
+        orderId: ORDER,
+        reason: "verify_exhausted",
+      });
+      expect(alerts.length, result).toBeGreaterThan(0);
+    }
+  });
+
+  it("R-T2 / M1: VERIFY credentials refused (terminal changed / no longer configured) → review + ALERT, no VERIFY", async () => {
+    h.answers.set("max_attempt_record_return", received());
+    await verifiable();
+    h.answers.set("max_attempt_secrets", () => ({
+      data: null,
+      error: {
+        message: "online payment: the terminal of this attempt is no longer configured",
+        code: "23514",
+      },
+    }));
+    let out: Awaited<ReturnType<typeof storeReturn>> | undefined;
+    const alerts = await alertsDuring(async () => (out = await storeReturn()));
+    expect(h.hyp).toHaveLength(0);
+    expect(out?.review).toEqual({
+      tenantId: STORE_B,
+      orderId: ORDER,
+      reason: "credentials_changed",
+    });
+    expect(alerts.some((line) => line.includes("ALERT verify_credentials_refused"))).toBe(true);
+  });
+
+  it("M1: an unknown secrets answer, credentials that do not open and the VERIFY tripwires are refusals too", async () => {
+    const cases: [string, () => Promise<unknown> | unknown, string][] = [
+      ["unknown result", ok({ result: "credentials_changed" }), "credentials_changed"],
+      [
+        "another store's tokens",
+        async () => ({ data: { result: "ok", ...(await sealedFor(STORE_A)) }, error: null }),
+        "credentials_changed",
+      ],
+      [
+        "another terminal than the recorded one",
+        async () => ({
+          data: { result: "ok", ...(await sealedFor(STORE_B)), terminal_number: "0010090002" },
+          error: null,
+        }),
+        "credentials_changed",
+      ],
+      [
+        "live mode in DEMO",
+        async () => ({
+          data: { result: "ok", ...(await sealedFor(STORE_B)), mode: "live" },
+          error: null,
+        }),
+        "mode_not_allowed",
+      ],
+    ];
+    for (const [name, answer, reason] of cases) {
+      h.calls.length = 0;
+      h.hyp.length = 0;
+      h.answers.set("max_attempt_record_return", received());
+      await verifiable();
+      h.answers.set("max_attempt_secrets", answer as never);
+      let out: Awaited<ReturnType<typeof storeReturn>> | undefined;
+      const alerts = await alertsDuring(async () => (out = await storeReturn()));
+      expect(h.hyp, name).toHaveLength(0);
+      expect(out?.review, name).toEqual({ tenantId: STORE_B, orderId: ORDER, reason });
+      expect(alerts.length, name).toBeGreaterThan(0);
+    }
+  });
+
+  it("M1: a DB that cannot be reached is not a refusal — no review, an error line, the kept return stays for the job", async () => {
+    h.answers.set("max_attempt_record_return", received());
+    await verifiable();
+    h.answers.set("max_attempt_secrets", () => ({
+      data: null,
+      error: { message: "payments: database unavailable", code: null },
+    }));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let out: Awaited<ReturnType<typeof storeReturn>> | undefined;
+    try {
+      out = await storeReturn();
+      expect(
+        errors.mock.calls.some((c) => String(c[0]).includes("verify_credentials_unavailable")),
+      ).toBe(true);
+      expect(errors.mock.calls.some((c) => String(c[0]).includes("ALERT"))).toBe(false);
+    } finally {
+      errors.mockRestore();
+    }
+    expect(out?.review).toBeNull();
+    expect(callsOf("max_return_keep")).toHaveLength(1);
+    expect(h.hyp).toHaveLength(0);
+  });
+
+  it("L6: a return while payments are off is recorded, cannot be kept or verified → review item + ALERT", async () => {
+    h.answers.set("max_attempt_record_return", received());
+    await verifiable();
+    process.env["PAYMENTS_SECRETS_KEY"] = "";
+    let out: Awaited<ReturnType<typeof storeReturn>> | undefined;
+    let alerts: string[] = [];
+    try {
+      alerts = await alertsDuring(async () => (out = await storeReturn()));
+    } finally {
+      process.env["PAYMENTS_SECRETS_KEY"] = randomBytes(32).toString("hex");
+    }
+    expect(callsOf("max_attempt_record_return")).toHaveLength(1);
+    expect(callsOf("max_return_keep")).toHaveLength(0);
+    expect(callsOf("max_attempt_secrets")).toHaveLength(0);
+    expect(h.hyp).toHaveLength(0);
+    expect(out?.review).toEqual({ tenantId: STORE_B, orderId: ORDER, reason: "payments_off" });
+    expect(alerts.some((line) => line.includes("ALERT return_not_verified"))).toBe(true);
+  });
+
+  it("a return that is neither settled nor kept (the DB refused to keep it) → an ALERT line", async () => {
+    h.answers.set("max_attempt_record_return", received());
+    await verifiable();
+    h.answers.set("max_return_keep", ok(false));
+    h.answers.set("max_attempt_mark_paid", ok({ result: "unverified" }));
+    h.hypAnswer = () => ({ ok: false, error: "timeout" });
+    const alerts = await alertsDuring(storeReturn);
+    expect(alerts.some((line) => line.includes("ALERT return_not_retryable"))).toBe(true);
+
+    // kept → the job retries it: no such line
+    h.answers.set("max_return_keep", ok(true));
+    expect(
+      (await alertsDuring(storeReturn)).some((line) => line.includes("return_not_retryable")),
+    ).toBe(false);
+  });
 });
 
 describe("tenant jobs", () => {
@@ -662,6 +901,62 @@ describe("tenant jobs", () => {
     expect(await runTenantPaymentJobs()).toEqual({ paid: [], review: [] });
     expect(h.hyp).toHaveLength(0);
     expect(callsOf("max_attempt_mark_paid")).toHaveLength(0);
+  });
+
+  it("R-T3 / M2: the job's re-VERIFY hitting 'exhausted' or refused credentials reports a review item", async () => {
+    const { runTenantPaymentJobs } = await import("@/platform/payments/server/tenant/jobs");
+    const { reverifyTenantReturn } = await import("@/platform/payments/server/tenant/return");
+    const { tenantSecretCipher } = await import("@/platform/payments/server/tenant-keys");
+    const raw = returnQuery();
+    const sealed = tenantSecretCipher("demo", "test").seal("raw_return", raw, {
+      tenantId: STORE_B,
+      accountId: ATTEMPT,
+    });
+    const item = {
+      tenantId: STORE_B,
+      attemptId: ATTEMPT,
+      reference: REFERENCE,
+      payloadSha256: sha256(raw),
+      mode: "test" as const,
+    };
+    h.answers.set("max_return_get", ok(sealed));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      h.answers.set("max_attempt_secrets", ok({ result: "exhausted" }));
+      expect((await reverifyTenantReturn(item))?.review).toEqual({
+        tenantId: STORE_B,
+        orderId: null,
+        reason: "verify_exhausted",
+      });
+      h.answers.set(
+        "max_attempt_secrets",
+        refused("online payment: the terminal of this attempt is no longer configured"),
+      );
+      expect((await reverifyTenantReturn(item))?.review?.reason).toBe("credentials_changed");
+
+      h.answers.set(
+        "max_attempts_pending_verify",
+        ok([
+          {
+            attempt_id: ATTEMPT,
+            tenant_id: STORE_B,
+            reference: REFERENCE,
+            payload_sha256: sha256(raw),
+            mode: "test",
+          },
+        ]),
+      );
+      h.answers.set("max_attempt_secrets", ok({ result: "exhausted" }));
+      h.answers.set("max_attempts_expire", ok(0));
+      h.answers.set("platform_payment_returns_purge", ok(0));
+      expect(await runTenantPaymentJobs()).toEqual({
+        paid: [],
+        review: [{ tenantId: STORE_B, orderId: null, reason: "verify_exhausted" }],
+      });
+    } finally {
+      errors.mockRestore();
+    }
+    expect(h.hyp).toHaveLength(0);
   });
 });
 
