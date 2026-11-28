@@ -9,7 +9,8 @@
 set -euo pipefail
 PGBIN=${PGBIN:-/usr/lib/postgresql/16/bin}
 PORT=${PGPORT:-5499}
-SOCK=/tmp/pg
+SOCK=${KOBI_PGSOCKET:-/tmp/pg}
+MIGRATION_LOG=/tmp/shop-migration-$PORT.log
 DATA=${KOBI_PGDATA:-/tmp/kobi-pgdata}
 HERE=$(cd "$(dirname "$0")" && pwd)
 MIGRATIONS=$(cd "$HERE/../../supabase/migrations" && pwd)
@@ -31,8 +32,8 @@ fresh_db() {
 }
 apply() { # apply <file...>
   for f in "$@"; do
-    if ! "${PSQL[@]}" -d shop_test -f "$f" >/tmp/shop-migration.log 2>&1; then
-      echo "FAILED: $(basename "$f")"; tail -5 /tmp/shop-migration.log; exit 1
+    if ! "${PSQL[@]}" -d shop_test -f "$f" >"$MIGRATION_LOG" 2>&1; then
+      echo "FAILED: $(basename "$f")"; tail -5 "$MIGRATION_LOG"; exit 1
     fi
   done
 }

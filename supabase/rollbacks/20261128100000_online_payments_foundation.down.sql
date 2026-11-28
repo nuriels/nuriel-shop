@@ -7,7 +7,7 @@
 -- environment_changed כלשהו) לא חוזר אחורה (ביקורת L5). חריג יחיד: אתגרי ה-step-up (מזהים קצרי-חיים, HMAC בלבד).
 -- בלי נתונים: שלושת הטריגרים על orders / order_items נמחקים; הטקסט שהוכנס ל-orders_default_payment, place_order
 -- ו-place_guest_order מוסר מילה במילה (נכשל בקול אם לא נמצא); orders_payment_check חוזר מילה במילה ל-
--- 20261019520000_grow_payments.sql:94-110; 42 פונקציות ה-API נמחקות; הסכמה payments נמחקת; שני הדגלים נמחקים;
+-- 20261019520000_grow_payments.sql:94-110; 44 פונקציות ה-API נמחקות; הסכמה payments נמחקת; שני הדגלים נמחקים;
 -- ובסוף — הוכחת md5 שהגדרות ארבעת האובייקטים זהות למה שהיה לפני 208 (הסכמה זהה בדיוק למיגרציה 207).
 -- ============================================================
 BEGIN;
@@ -140,7 +140,8 @@ BEGIN
                  'platform_terminal_status', 'platform_stepup_issue', 'platform_stepup_consume',
                  'platform_attempts_pending_verify', 'platform_payment_unknown_return', 'platform_return_keep',
                  'platform_return_get',
-                 'platform_payment_returns_purge') LOOP
+                 'platform_payment_returns_purge', 'max_review_alerts_claim',
+                 'platform_attempt_review_alerts_claim') LOOP
     EXECUTE format('DROP FUNCTION %s', _f.sig);
   END LOOP;
 END $drop$;

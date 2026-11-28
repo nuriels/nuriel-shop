@@ -273,6 +273,8 @@ CREATE TABLE IF NOT EXISTS payments.platform_attempts (
   review_note        text CHECK (review_note IS NULL OR char_length(review_note) <= 500),
   review_resolved_at timestamptz,
   review_resolved_by uuid,
+  -- X-17: the review alert (platform e-mail + ALERT line) was claimed by the app — exactly once per reason
+  review_alerted_at  timestamptz,
   ledger_payment_id  uuid UNIQUE REFERENCES billing.ledger (id),
   CONSTRAINT platform_attempts_reference_key UNIQUE (reference),
   CONSTRAINT platform_attempts_target_no_key UNIQUE (target_kind, target_id, attempt_no),
@@ -303,6 +305,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS platform_attempts_provider_txn_idx
 CREATE INDEX IF NOT EXISTS platform_attempts_expiry_idx
   ON payments.platform_attempts (expires_at) WHERE state IN ('created', 'redirected', 'returned');
 CREATE INDEX IF NOT EXISTS platform_attempts_payer_idx ON payments.platform_attempts (payer_tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS platform_attempts_alert_idx ON payments.platform_attempts (updated_at)
+  WHERE review_reason IS NOT NULL AND review_alerted_at IS NULL;
 CREATE INDEX IF NOT EXISTS platform_attempts_review_idx ON payments.platform_attempts (created_at DESC)
   WHERE state = 'needs_review' OR (review_reason IS NOT NULL AND review_resolved_at IS NULL);
 CREATE INDEX IF NOT EXISTS platform_attempts_unreturned_idx ON payments.platform_attempts (signed_at DESC)
@@ -495,6 +499,10 @@ CREATE TABLE IF NOT EXISTS payments.tenant_attempts (
   review_note        text CHECK (review_note IS NULL OR char_length(review_note) <= 500),
   review_resolved_at timestamptz,
   review_resolved_by uuid,
+  -- X-16: the person's decision when resolving: not_charged (the order is released) or charged (it stays held)
+  review_outcome     text CHECK (review_outcome IS NULL OR review_outcome IN ('not_charged', 'charged')),
+  -- X-17: the review alert (store bell + e-mail + ALERT line) was claimed by the app — exactly once per reason
+  review_alerted_at  timestamptz,
   CONSTRAINT tenant_attempts_reference_key UNIQUE (reference),
   CONSTRAINT tenant_attempts_tenant_id_key UNIQUE (tenant_id, id),
   CONSTRAINT tenant_attempts_order_no_key UNIQUE (order_id, attempt_no),
@@ -525,6 +533,8 @@ CREATE INDEX IF NOT EXISTS tenant_attempts_expiry_idx
   ON payments.tenant_attempts (expires_at) WHERE state IN ('created', 'redirected', 'returned');
 CREATE INDEX IF NOT EXISTS tenant_attempts_tenant_idx ON payments.tenant_attempts (tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS tenant_attempts_order_idx ON payments.tenant_attempts (tenant_id, order_id);
+CREATE INDEX IF NOT EXISTS tenant_attempts_alert_idx ON payments.tenant_attempts (updated_at)
+  WHERE review_reason IS NOT NULL AND review_alerted_at IS NULL;
 CREATE INDEX IF NOT EXISTS tenant_attempts_review_idx ON payments.tenant_attempts (tenant_id, created_at DESC)
   WHERE state = 'needs_review' OR (review_reason IS NOT NULL AND review_resolved_at IS NULL);
 CREATE INDEX IF NOT EXISTS tenant_attempts_unreturned_idx ON payments.tenant_attempts (tenant_id, signed_at DESC)
@@ -569,7 +579,7 @@ CREATE TABLE IF NOT EXISTS payments.tenant_config_audit (
                  CHECK (changed_fields <@ ARRAY['mode', 'terminal_number', 'api_key', 'api_password', 'key_id',
                    'enabled', 'status', 'terminal_max_installments', 'verified_methods', 'verified_brands',
                    'max_installments', 'min_installments_amount_minor', 'allowed_methods', 'allowed_brands',
-                   'review']::text[]),
+                   'review', 'review_outcome', 'payment_due_at']::text[]),
   created_at     timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_config_audit_actor CHECK ((actor_role = 'system') = (actor_id IS NULL))
 );
@@ -980,11 +990,13 @@ DECLARE
   _mutable constant text[] := ARRAY['state', 'applied', 'updated_at', 'signed_at', 'returned_at', 'verified_at',
     'paid_at', 'verify_lease_until', 'verify_attempts', 'provider_txn_id', 'approval_code', 'installments',
     'card_brand', 'card_last4', 'failure_code', 'return_flags', 'verification', 'review_reason', 'review_note',
-    'review_resolved_at', 'review_resolved_by', 'order_id', 'ledger_payment_id', 'extra_txn_ids'];
+    'review_resolved_at', 'review_resolved_by', 'order_id', 'ledger_payment_id', 'extra_txn_ids', 'review_outcome',
+    'review_alerted_at'];
   -- after paid / test_paid / needs_review: the review fields, the VERIFY counters, the extra transaction ids (append
   -- only) and — on an attempt parked before any verified charge — its first transaction id (set once, rule below)
   _after_final constant text[] := ARRAY['review_reason', 'review_note', 'review_resolved_at', 'review_resolved_by',
-    'updated_at', 'verify_lease_until', 'verify_attempts', 'order_id', 'extra_txn_ids', 'provider_txn_id'];
+    'updated_at', 'verify_lease_until', 'verify_attempts', 'order_id', 'extra_txn_ids', 'provider_txn_id',
+    'review_outcome', 'review_alerted_at'];
   _o jsonb;
   _n jsonb;
 BEGIN
@@ -1023,6 +1035,11 @@ BEGIN
   END IF;
   IF OLD.applied AND NOT NEW.applied THEN
     RAISE EXCEPTION 'payment attempt: an applied payment stays applied' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  -- X-17: a new review reason is a new alert (e.g. amount_mismatch, then a second charge: duplicate_charge)
+  IF NEW.review_reason IS DISTINCT FROM OLD.review_reason AND NEW.review_reason IS NOT NULL
+     AND NEW.review_alerted_at IS NOT DISTINCT FROM OLD.review_alerted_at THEN
+    NEW.review_alerted_at := NULL;
   END IF;
   IF NEW.extra_txn_ids[1:cardinality(OLD.extra_txn_ids)] IS DISTINCT FROM OLD.extra_txn_ids THEN
     RAISE EXCEPTION 'payment attempt: extra transaction ids are only appended' USING ERRCODE = 'insufficient_privilege';
@@ -1329,6 +1346,39 @@ RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
             OR (x.state IN ('failed', 'expired', 'cancelled') AND x.returned_at IS NOT NULL
                 AND payments.platform_unverified_return(x.id))));
 $$;
+-- X-15: the same rule for a store order — not payable again while one of its attempts is being verified (returned,
+-- or a late return no VERIFY confirmed) or waits for an unresolved review
+CREATE OR REPLACE FUNCTION payments.tenant_order_busy(_order uuid)
+RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT _order IS NOT NULL AND EXISTS (
+    SELECT 1 FROM payments.tenant_attempts x
+     WHERE x.order_id = _order
+       AND (x.state = 'returned'
+            OR (x.state = 'needs_review' AND x.review_resolved_at IS NULL)
+            OR (x.state IN ('failed', 'expired', 'cancelled') AND x.returned_at IS NOT NULL
+                AND x.review_resolved_at IS NULL AND payments.tenant_unverified_return(x.id))));
+$$;
+-- X-14: the end of a hold — a paid result (by the settle itself), a VERIFY-confirmed decline, or a person's
+-- not_charged decision. The order gets a fresh window, capped at 24 hours after it was placed (a cap already past:
+-- the next expiry tick cancels it). Only an online order still pending / awaiting, held, and not busy. true = released.
+-- The caller holds the order's row lock.
+CREATE OR REPLACE FUNCTION payments.release_order(_tenant uuid, _order uuid)
+RETURNS boolean LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE
+  _n integer;
+BEGIN
+  IF _order IS NULL OR payments.tenant_order_busy(_order) THEN
+    RETURN false;
+  END IF;
+  PERFORM set_config('kobi.payment_update', 'on', true);
+  UPDATE public.orders o
+     SET payment_due_at = LEAST(now() + interval '2 hours', o.created_at + interval '24 hours')
+   WHERE o.id = _order AND o.tenant_id = _tenant AND o.payment_method = 'online' AND o.payment_status = 'awaiting'
+     AND o.status = 'pending' AND o.payment_due_at IS NULL;
+  GET DIAGNOSTICS _n = ROW_COUNT;
+  PERFORM set_config('kobi.payment_update', 'off', true);
+  RETURN _n > 0;
+END $$;
 
 -- ------------------------------------------------------------------------------------------------------------
 -- §9. TENANT SCOPE API (public; EXECUTE for service_role only, §13). Every function takes the store explicitly.
@@ -1400,11 +1450,18 @@ BEGIN
   IF o.kind <> 'order' OR o.payment_method <> 'online' OR o.payment_status <> 'awaiting' OR o.status <> 'pending' THEN
     RAISE EXCEPTION 'order % is not awaiting an online payment', o.order_number USING ERRCODE = 'check_violation';
   END IF;
-  -- held for a person (review M3): a payment of this order is in review — no second card payment meanwhile
-  IF o.payment_due_at IS NULL
-     OR EXISTS (SELECT 1 FROM payments.tenant_attempts x
-                 WHERE x.order_id = o.id AND x.state = 'needs_review' AND x.review_resolved_at IS NULL) THEN
+  -- no second card payment while a payment of this order waits for a person (review M3, X-16), is being verified
+  -- (returned, or a late return no VERIFY confirmed — X-15), or after a person decided "charged" (held for good)
+  IF EXISTS (SELECT 1 FROM payments.tenant_attempts x
+              WHERE x.order_id = o.id AND x.state = 'needs_review' AND x.review_resolved_at IS NULL) THEN
     RAISE EXCEPTION 'the payment of order % is being reviewed', o.order_number USING ERRCODE = 'check_violation';
+  END IF;
+  IF payments.tenant_order_busy(o.id) THEN
+    RAISE EXCEPTION 'the payment of order % is being verified', o.order_number USING ERRCODE = 'check_violation';
+  END IF;
+  IF o.payment_due_at IS NULL THEN
+    RAISE EXCEPTION 'the payment of order % is held for the store (a review found it charged)', o.order_number
+      USING ERRCODE = 'check_violation';
   END IF;
   IF NOT public.max_payments_active(_tenant, o.customer_id) THEN
     RAISE EXCEPTION 'online payment is not available in this store right now' USING ERRCODE = 'check_violation';
@@ -1597,17 +1654,11 @@ BEGIN
   ELSIF a.returned_at IS NULL AND a.state IN ('failed', 'expired', 'cancelled') THEN
     UPDATE payments.tenant_attempts SET returned_at = now() WHERE id = a.id;
   END IF;
-  IF _n > 0 AND _order IS NOT NULL AND a.state = 'needs_review' THEN
-    -- a return for an attempt already parked for review (e.g. credentials_changed while the payer was on the page):
-    -- money may have moved — the order is held for the person (review M1 / M3)
+  -- X-14 (R2-2): a recorded return may mean money moved — the order is held in the database (payment_due_at NULL)
+  -- from now on, whatever the application does afterwards: expire_unpaid_orders (unchanged) skips it. The hold ends
+  -- with a paid result, a VERIFY-confirmed decline or a person's review decision (payments.release_order).
+  IF _n > 0 AND _order IS NOT NULL THEN
     PERFORM payments.hold_order(_tenant, _order);
-  ELSIF _n > 0 AND _order IS NOT NULL THEN
-    PERFORM set_config('kobi.payment_update', 'on', true);
-    UPDATE public.orders o
-       SET payment_due_at = LEAST(GREATEST(o.payment_due_at, now() + interval '2 hours'), o.created_at + interval '24 hours')
-     WHERE o.id = _order AND o.tenant_id = _tenant AND o.payment_method = 'online'
-       AND o.payment_status = 'awaiting' AND o.status = 'pending' AND o.payment_due_at IS NOT NULL;
-    PERFORM set_config('kobi.payment_update', 'off', true);
   END IF;
   RETURN jsonb_build_object('result', CASE WHEN _n = 0 THEN 'replay' ELSE 'received' END,
     'attempt_id', a.id, 'tenant_id', a.tenant_id, 'order_id', a.order_id,
@@ -1747,6 +1798,8 @@ BEGIN
              failure_code = CASE WHEN _ccode ~ '^[0-9A-Za-z_-]{1,16}$' THEN _ccode END
        WHERE id = a.id;
     END IF;
+    -- X-14: a decline VERIFY confirmed ends the hold of the return — unless another payment keeps the order busy
+    PERFORM payments.release_order(a.tenant_id, a.order_id);
     RETURN jsonb_build_object('result', 'not_paid', 'attempt_id', a.id, 'order_id', a.order_id,
                               'tenant_id', a.tenant_id);
   END IF;
@@ -1938,25 +1991,57 @@ BEGIN
 END $$;
 
 -- 9j. Review resolution (store owner or platform admin), with a note; field names only in the audit
-CREATE OR REPLACE FUNCTION public.max_review_resolve(_actor uuid, _tenant uuid, _attempt uuid, _note text)
+-- X-16: the person's decision ends the hold. _outcome 'not_charged' (checked in the Hyp portal: no money moved) → the
+-- order is released (payable again, or it expires normally); 'charged' → the order stays held for good (never
+-- expired, never payable online again; the store cancels and refunds by hand). The outcome is required while the
+-- attempt's order is still pending / awaiting; otherwise it may be NULL. The 4-argument form is gone.
+-- Audit (field names only): action review_resolved, changed_fields = review, + review_outcome when given,
+-- + payment_due_at when the order was released.
+DROP FUNCTION IF EXISTS public.max_review_resolve(uuid, uuid, uuid, text);
+CREATE OR REPLACE FUNCTION public.max_review_resolve(_actor uuid, _tenant uuid, _attempt uuid, _note text,
+  _outcome text)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
-  _role text := payments.actor_role(_actor, _tenant);
+  _role     text := payments.actor_role(_actor, _tenant);
+  _order    uuid;
+  o         public.orders;
+  a         payments.tenant_attempts;
+  _released boolean := false;
 BEGIN
   IF _role IS NULL THEN
     RAISE EXCEPTION 'only the store owner or the platform admin can resolve' USING ERRCODE = 'insufficient_privilege';
   END IF;
-  UPDATE payments.tenant_attempts
-     SET review_resolved_at = now(), review_resolved_by = _actor,
-         review_note = NULLIF(left(btrim(COALESCE(_note, '')), 500), '')
-   WHERE id = _attempt AND tenant_id = _tenant AND review_resolved_at IS NULL
-     AND (state = 'needs_review' OR review_reason IS NOT NULL);
-  IF NOT FOUND THEN
+  IF _outcome IS NOT NULL AND _outcome NOT IN ('not_charged', 'charged') THEN
+    RAISE EXCEPTION 'review outcome: not_charged or charged' USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  -- lock order: the order's row, then the attempt's
+  SELECT x.order_id INTO _order FROM payments.tenant_attempts x WHERE x.id = _attempt AND x.tenant_id = _tenant;
+  IF _order IS NOT NULL THEN
+    SELECT * INTO o FROM public.orders x WHERE x.id = _order AND x.tenant_id = _tenant FOR UPDATE;
+  END IF;
+  SELECT * INTO a FROM payments.tenant_attempts x WHERE x.id = _attempt AND x.tenant_id = _tenant FOR UPDATE;
+  IF NOT FOUND OR a.review_resolved_at IS NOT NULL OR NOT (a.state = 'needs_review' OR a.review_reason IS NOT NULL) THEN
     RETURN false;
   END IF;
-  INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result) VALUES (_tenant, _attempt, 'review', 'resolved');
+  IF _outcome IS NULL AND o.id IS NOT NULL AND o.payment_method = 'online' AND o.status = 'pending'
+     AND o.payment_status = 'awaiting' THEN
+    RAISE EXCEPTION 'order % still awaits its payment: resolve with an outcome, not_charged or charged', o.order_number
+      USING ERRCODE = 'check_violation';
+  END IF;
+  UPDATE payments.tenant_attempts
+     SET review_resolved_at = now(), review_resolved_by = _actor, review_outcome = _outcome,
+         review_note = NULLIF(left(btrim(COALESCE(_note, '')), 500), '')
+   WHERE id = a.id;
+  INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result)
+  VALUES (_tenant, a.id, 'review', CASE _outcome WHEN 'not_charged' THEN 'resolved_not_charged'
+                                                 WHEN 'charged' THEN 'resolved_charged' ELSE 'resolved' END);
+  IF _outcome = 'not_charged' AND o.id IS NOT NULL THEN
+    _released := payments.release_order(_tenant, o.id);
+  END IF;
   INSERT INTO payments.tenant_config_audit (tenant_id, provider, actor_id, actor_role, action, changed_fields)
-  VALUES (_tenant, 'max', _actor, _role, 'review_resolved', ARRAY['review']);
+  VALUES (_tenant, 'max', _actor, _role, 'review_resolved',
+          ARRAY['review'] || CASE WHEN _outcome IS NOT NULL THEN ARRAY['review_outcome'] ELSE '{}'::text[] END
+                          || CASE WHEN _released THEN ARRAY['payment_due_at'] ELSE '{}'::text[] END);
   RETURN true;
 END $$;
 
@@ -1993,6 +2078,9 @@ BEGIN
   RETURN jsonb_build_object(
     'order_number', o.order_number, 'status', o.status, 'payment_method', o.payment_method,
     'payment_status', o.payment_status, 'payment_due_at', o.payment_due_at,
+    -- X-14: a return is being verified or reviewed — the order has no due time and cannot expire meanwhile
+    'payment_held', (o.payment_method = 'online' AND o.status = 'pending' AND o.payment_status = 'awaiting'
+                     AND o.payment_due_at IS NULL),
     'attempt', CASE WHEN a.id IS NOT NULL THEN
                  jsonb_build_object('state', a.state, 'mode', a.mode, 'applied', a.applied,
                    'expires_at', a.expires_at, 'amount_minor', a.amount_minor, 'currency', a.currency,
@@ -2828,6 +2916,54 @@ BEGIN
   RETURN true;
 END $$;
 
+-- 10g2. X-17 (R2-7, N1): every attempt that gets a review reason — by a settle, the sweep, the purge or a credentials
+--     change — is alerted exactly once (once per reason: a new reason re-arms it, attempts_guard). The app claims the
+--     rows (FOR UPDATE SKIP LOCKED: two claimers never get the same row) after every handled return and in every tick,
+--     and sends the bell / e-mail / ALERT line per row. _limit 1..200 (default 50).
+CREATE OR REPLACE FUNCTION public.max_review_alerts_claim(_limit integer DEFAULT 50)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  r jsonb;
+BEGIN
+  WITH c AS (
+    SELECT a.id FROM payments.tenant_attempts a
+     WHERE a.review_reason IS NOT NULL AND a.review_alerted_at IS NULL
+     ORDER BY a.updated_at, a.id
+     LIMIT LEAST(GREATEST(COALESCE(_limit, 50), 1), 200)
+     FOR UPDATE OF a SKIP LOCKED
+  ), s AS (
+    UPDATE payments.tenant_attempts a SET review_alerted_at = now() FROM c WHERE a.id = c.id
+    RETURNING a.id, a.tenant_id, a.order_id, a.order_number, a.review_reason, a.state, a.updated_at
+  )
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('attempt_id', s.id, 'tenant_id', s.tenant_id, 'order_id', s.order_id,
+                                               'order_number', s.order_number, 'review_reason', s.review_reason,
+                                               'state', s.state) ORDER BY s.updated_at, s.id), '[]'::jsonb)
+    INTO r FROM s;
+  RETURN r;
+END $$;
+CREATE OR REPLACE FUNCTION public.platform_attempt_review_alerts_claim(_limit integer DEFAULT 50)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  r jsonb;
+BEGIN
+  WITH c AS (
+    SELECT a.id FROM payments.platform_attempts a
+     WHERE a.review_reason IS NOT NULL AND a.review_alerted_at IS NULL
+     ORDER BY a.updated_at, a.id
+     LIMIT LEAST(GREATEST(COALESCE(_limit, 50), 1), 200)
+     FOR UPDATE OF a SKIP LOCKED
+  ), s AS (
+    UPDATE payments.platform_attempts a SET review_alerted_at = now() FROM c WHERE a.id = c.id
+    RETURNING a.id, a.target_kind, a.target_id, a.payer_tenant_id, a.review_reason, a.state, a.updated_at
+  )
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('attempt_id', s.id, 'target_kind', s.target_kind,
+                                               'target_id', s.target_id, 'tenant_id', s.payer_tenant_id,
+                                               'review_reason', s.review_reason, 'state', s.state)
+                            ORDER BY s.updated_at, s.id), '[]'::jsonb)
+    INTO r FROM s;
+  RETURN r;
+END $$;
+
 -- 10h. Platform admin list of payments to NURIEL (no secrets; last 2 digits of the terminal)
 CREATE OR REPLACE FUNCTION public.platform_card_payments(_actor uuid, _tenant uuid DEFAULT NULL, _limit integer DEFAULT 100)
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
@@ -3372,6 +3508,7 @@ BEGIN
                  'platform_terminal_save', 'platform_terminal_verified', 'platform_terminal_check_secrets',
                  'platform_terminal_status', 'platform_stepup_issue', 'platform_stepup_consume',
                  'platform_attempts_pending_verify', 'platform_return_keep', 'platform_return_get',
+                 'max_review_alerts_claim', 'platform_attempt_review_alerts_claim',
                  -- both
                  'platform_payment_unknown_return', 'platform_payment_returns_purge') LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', _f.sig);
@@ -3479,7 +3616,8 @@ DECLARE
     'platform_card_my_options', 'platform_terminal_save', 'platform_terminal_verified',
     'platform_terminal_check_secrets', 'platform_terminal_status', 'platform_stepup_issue',
     'platform_stepup_consume', 'platform_attempts_pending_verify', 'platform_payment_unknown_return',
-    'platform_return_keep', 'platform_return_get', 'platform_payment_returns_purge'];
+    'platform_return_keep', 'platform_return_get', 'platform_payment_returns_purge', 'max_review_alerts_claim',
+    'platform_attempt_review_alerts_claim'];
   _bad text;
 BEGIN
   -- the API: each function exactly once (no overload), SECURITY DEFINER with an empty search_path
