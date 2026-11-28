@@ -719,3 +719,27 @@ export async function setupPlatformTerminal(request: APIRequestContext, admin: s
 export async function ownerToken(request: APIRequestContext) {
   return accessToken(request, USERS.ownerB);
 }
+
+/**
+ * A fresh ecommerce store with its own protected owner, for platform payments (the app allows 10 platform starts
+ * per owner per 15 minutes, more than one owner can do in a run). Created through platform_create_tenant.
+ */
+export async function payerStore(request: APIRequestContext, tag: string) {
+  const slug = `pay-${tag}-${STAMP}`.toLowerCase().slice(0, 40);
+  const owner: Account = { email: `owner.${tag}.${STAMP}@e2e.test`, password: "E2e-Pay-Owner-1!" };
+  const ownerId = await ensureUser(request, owner);
+  const existing = sql(`SELECT id FROM public.tenants WHERE slug = '${slug}'`);
+  if (!existing) {
+    asPlatform(
+      `SELECT public.platform_create_tenant('${slug}', 'חנות תשלום ${tag}', '${owner.email}')`,
+    );
+  }
+  const id = sql(`SELECT id FROM public.tenants WHERE slug = '${slug}'`);
+  expect(id).toMatch(/^[0-9a-f-]{36}$/);
+  sql(`INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_approved, is_protected)
+       VALUES ('${id}', '${ownerId}', '${owner.email}', '${slug.replace(/-/g, "_")}', 'admin', true, true)
+       ON CONFLICT DO NOTHING`);
+  sql(`UPDATE public.user_roles SET is_protected = true, role = 'admin', is_approved = true
+        WHERE tenant_id = '${id}' AND user_id = '${ownerId}'`);
+  return { id, slug, host: hostOf(slug), owner, ownerId, token: await accessToken(request, owner) };
+}

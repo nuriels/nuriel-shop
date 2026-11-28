@@ -18,6 +18,7 @@ import {
   must,
   orderOfPayUrl,
   ownerToken,
+  payerStore,
   PLATFORM_HOST,
   platformAttempts,
   platformToken,
@@ -43,6 +44,8 @@ const CUSTOMER = customerFor("platform");
 let owner = "";
 let admin = "";
 let terminals: Awaited<ReturnType<typeof hyp.terminals>>;
+/** The payer of DM-PLAT-3/5: its own store + owner (10 platform starts per owner per 15 minutes in the app) */
+let payer: Awaited<ReturnType<typeof payerStore>>;
 
 test.beforeAll(async ({ request }) => {
   markDemoDatabase();
@@ -52,6 +55,7 @@ test.beforeAll(async ({ request }) => {
   await ensurePlatformTerminal(request, admin);
   owner = await ownerToken(request);
   terminals = await hyp.terminals(request);
+  payer = await payerStore(request, "plat");
 });
 
 test.beforeEach(async ({ request }) => {
@@ -61,12 +65,12 @@ test.beforeEach(async ({ request }) => {
 test.afterAll(() => {
   setFlag("platform_terminal_payments", false);
   sql(
-    `UPDATE public.tenants SET status = 'active' WHERE id = '${STORE_B.id}' AND status <> 'active'`,
+    `UPDATE public.tenants SET status = 'active' WHERE id = '${payer.id}' AND status <> 'active'`,
   );
 });
 
-const newCharge = (amount = 12.34) =>
-  createOpenCharge(STORE_B.id, amount, `DEMO platform ${randomBytes(4).toString("hex")}`);
+const newCharge = (amount = 12.34, tenantId: string = STORE_B.id) =>
+  createOpenCharge(tenantId, amount, `DEMO platform ${randomBytes(4).toString("hex")}`);
 
 async function start(
   request: APIRequestContext,
@@ -82,12 +86,12 @@ async function start(
 }
 
 /** What the store keeps of its subscription and add-ons (nothing may change when NURIEL is paid online) */
-const storeEntitlements = () =>
+const storeEntitlements = (tenantId: string) =>
   sql(`SELECT json_build_object(
          'sub', (SELECT row_to_json(s) FROM (SELECT plan_type, status, current_period_end, trial_ends_at
-                   FROM public.tenant_subscriptions WHERE tenant_id = '${STORE_B.id}') s),
-         'addons', (SELECT count(*) FROM public.tenant_addons WHERE tenant_id = '${STORE_B.id}'),
-         'tenant', (SELECT status FROM public.tenants WHERE id = '${STORE_B.id}'))`);
+                   FROM public.tenant_subscriptions WHERE tenant_id = '${tenantId}') s),
+         'addons', (SELECT count(*) FROM public.tenant_addons WHERE tenant_id = '${tenantId}'),
+         'tenant', (SELECT status FROM public.tenants WHERE id = '${tenantId}'))`);
 
 test("DM-PLAT-1: only the store's owner may pay — platform admin, manager, another store's owner and a customer are refused", async ({
   request,
@@ -137,9 +141,9 @@ test("DM-PLAT-1: only the store's owner may pay — platform admin, manager, ano
 test("DM-PLAT-3: paid → one provider ledger row, nothing activated; verified with NURIEL's terminal; back to the store's billing tab", async ({
   request,
 }) => {
-  const before = storeEntitlements();
-  const chargeId = newCharge();
-  const started = must(await start(request, owner, chargeId), "start");
+  const before = storeEntitlements(payer.id);
+  const chargeId = newCharge(12.34, payer.id);
+  const started = must(await start(request, payer.token, chargeId, payer.host), "start");
   const reference = orderOfPayUrl(started.url);
   expect(new URL(started.url).searchParams.get("Amount")).toBe("12.34");
   const approved = await choose(request, started.url, "approve");
@@ -147,7 +151,9 @@ test("DM-PLAT-3: paid → one provider ledger row, nothing activated; verified w
   const back = await deliver(request, approved.location);
   expect(back.status).toBe(303);
   expect(back.location).toMatch(
-    /^http:\/\/store-b\.shop\.localhost(:3100)?\/admin\?tab=billing&pay=return$/,
+    new RegExp(
+      `^http://${payer.host.replace(/\./g, "\\.")}(:3100)?/admin\\?tab=billing&pay=return$`,
+    ),
   );
 
   expect(platformAttempts(chargeId)).toEqual([
@@ -159,7 +165,7 @@ test("DM-PLAT-3: paid → one provider ledger row, nothing activated; verified w
            FROM billing.ledger WHERE reference = '${reference}' AND confirmation = 'provider') l`),
   ) as Record<string, unknown>;
   expect(row).toEqual({
-    tenant_id: STORE_B.id,
+    tenant_id: payer.id,
     kind: "payment",
     category: "other",
     amount: 12.34,
@@ -168,7 +174,7 @@ test("DM-PLAT-3: paid → one provider ledger row, nothing activated; verified w
     source: "provider",
   });
   // decision ה-3: nothing is renewed, upgraded or activated
-  expect(storeEntitlements()).toBe(before);
+  expect(storeEntitlements(payer.id)).toBe(before);
   // VERIFY with NURIEL's terminal; store B's terminal is never used for this payment
   const all = await hyp.calls(request, { order: reference });
   expect([...new Set(all.map((c) => c.masof))]).toEqual([terminals.platform.masof]);
@@ -180,25 +186,25 @@ test("DM-PLAT-3: paid → one provider ledger row, nothing activated; verified w
   // the owner's list shows it
   const payments = must(
     await call<{ id: string; state: string; test: boolean }[]>(request, FN.myPayments, {
-      host: STORE_B_HOST,
-      token: owner,
+      host: payer.host,
+      token: payer.token,
     }),
     "my card payments",
   );
   expect(payments.some((p) => p.state === "test_paid" && p.test)).toBe(true);
   // a charge already paid online cannot be started again
-  expect((await start(request, owner, chargeId)).ok).toBe(false);
+  expect((await start(request, payer.token, chargeId, payer.host)).ok).toBe(false);
 });
 
 test("DM-PLAT-3: a second payment of the same charge (the old page of a superseded attempt) → for review, still one row", async ({
   request,
 }) => {
-  const chargeId = newCharge();
-  const first = must(await start(request, owner, chargeId), "first start");
+  const chargeId = newCharge(12.34, payer.id);
+  const first = must(await start(request, payer.token, chargeId, payer.host), "first start");
   const [old] = platformAttempts(chargeId);
   // the first attempt's time runs out; the owner starts again → a new attempt (the old page is still open at Hyp)
   ageAttempt(old!.id, "platform_attempts");
-  const second = must(await start(request, owner, chargeId), "second start");
+  const second = must(await start(request, payer.token, chargeId, payer.host), "second start");
   expect(orderOfPayUrl(second.url)).not.toBe(orderOfPayUrl(first.url));
   const paid = await choose(request, second.url, "approve");
   await deliver(request, paid.location);
@@ -219,12 +225,12 @@ test("DM-PLAT-3: a second payment of the same charge (the old page of a supersed
 test("DM-PLAT-3: a forged amount never writes a ledger row (VERIFY fails; with a lenient VERIFY the DB refuses it)", async ({
   request,
 }) => {
-  const chargeId = newCharge();
+  const chargeId = newCharge(12.34, payer.id);
   // a lower amount in the request body is ignored: the amount comes from the charge
   const started = must(
     await call<{ url: string }>(request, FN.payStart, {
-      host: STORE_B_HOST,
-      token: owner,
+      host: payer.host,
+      token: payer.token,
       data: { chargeId, amount: 0.01, amountMinor: 1 },
     }),
     "start",
@@ -251,23 +257,26 @@ test("DM-PLAT-5: a locked (suspended) store can still pay; the return lands on t
   request,
 }) => {
   test.setTimeout(90_000);
-  const chargeId = newCharge();
-  sql(`UPDATE public.tenants SET status = 'suspended' WHERE id = '${STORE_B.id}'`);
+  const chargeId = newCharge(12.34, payer.id);
+  sql(`UPDATE public.tenants SET status = 'suspended' WHERE id = '${payer.id}'`);
   try {
     // the tenant cache (15 s): wait until the storefront is locked
     await expect
-      .poll(async () => (await hostGet(request, STORE_B_HOST, "/")).status(), { timeout: 30_000 })
+      .poll(async () => (await hostGet(request, payer.host, "/")).status(), { timeout: 30_000 })
       .toBe(403);
-    const started = must(await start(request, owner, chargeId), "start on a locked store");
+    const started = must(
+      await start(request, payer.token, chargeId, payer.host),
+      "start on a locked store",
+    );
     const approved = await choose(request, started.url, "approve");
     expect(new URL(approved.location).hostname).toBe(PLATFORM_HOST);
     expect((await deliver(request, approved.location)).status).toBe(303);
     expect(providerRowsForCharge(chargeId)).toBe(1);
   } finally {
-    sql(`UPDATE public.tenants SET status = 'active' WHERE id = '${STORE_B.id}'`);
+    sql(`UPDATE public.tenants SET status = 'active' WHERE id = '${payer.id}'`);
   }
   await expect
-    .poll(async () => (await hostGet(request, STORE_B_HOST, "/")).status(), { timeout: 30_000 })
+    .poll(async () => (await hostGet(request, payer.host, "/")).status(), { timeout: 30_000 })
     .toBe(200);
 });
 
@@ -275,9 +284,9 @@ test("DM-PLAT-3 (UI): the owner pays a charge from 'המנוי שלי'; the resu
   page,
 }) => {
   test.setTimeout(90_000);
-  const chargeId = newCharge(7.5);
-  await login(page, storeUrl(STORE_B.slug), USERS.ownerB);
-  await page.goto(storeUrl(STORE_B.slug, "/admin?tab=billing"));
+  const chargeId = newCharge(7.5, payer.id);
+  await login(page, storeUrl(payer.slug), payer.owner);
+  await page.goto(storeUrl(payer.slug, "/admin?tab=billing"));
   const section = page.getByTestId(TID.myBillingPay);
   await expect(section).toHaveAttribute("data-available", "true", { timeout: 20_000 });
   const row = page.locator(`[data-testid="my-billing-pay-charge"][data-charge-id="${chargeId}"]`);
@@ -285,9 +294,12 @@ test("DM-PLAT-3 (UI): the owner pays a charge from 'המנוי שלי'; the resu
   await row.getByTestId(TID.myBillingPayButton).click();
   await expect(page.getByTestId(HYP_PAGE_TESTIDS.page)).toBeVisible({ timeout: 30_000 });
   await page.getByTestId(HYP_PAGE_TESTIDS.approve).click();
-  await expect(page).toHaveURL(/store-b\.shop\.localhost:3100\/admin\?tab=billing/, {
-    timeout: 30_000,
-  });
+  await expect(page).toHaveURL(
+    new RegExp(`${payer.slug}\\.shop\\.localhost:3100/admin\\?tab=billing`),
+    {
+      timeout: 30_000,
+    },
+  );
   await expect(page.getByTestId(TID.myBillingPayResult)).toHaveAttribute("data-state", /paid/, {
     timeout: 30_000,
   });
