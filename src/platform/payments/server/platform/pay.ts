@@ -18,7 +18,11 @@ import type {
   PayOptions,
   PayStartResult,
 } from "@/platform/billing/pay.functions";
-import { buildSignParams, encodeParams, validateSignResponse } from "@/platform/payments/max/protocol";
+import {
+  buildSignParams,
+  encodeParams,
+  validateSignResponse,
+} from "@/platform/payments/max/protocol";
 import {
   hypEndpoint,
   modeAllowed,
@@ -102,7 +106,10 @@ export function storeOriginOf(headers: Headers, url: string, hosts: SiteHosts): 
   const match = HOST.exec(raw);
   const allowed = new Set<string>();
   const add = (value: string | null) => {
-    const host = value?.trim().toLowerCase().replace(/:[0-9]+$/, "");
+    const host = value
+      ?.trim()
+      .toLowerCase()
+      .replace(/:[0-9]+$/, "");
     if (host && HOST.test(host)) allowed.add(host);
   };
   add(hosts.slugHost);
@@ -115,7 +122,11 @@ export function storeOriginOf(headers: Headers, url: string, hosts: SiteHosts): 
     }
   }
   if (match && allowed.has(match[1]!)) return originOf(match[1]!, match[2]);
-  const slug = hosts.slugHost?.trim().toLowerCase().replace(/:[0-9]+$/, "") ?? "";
+  const slug =
+    hosts.slugHost
+      ?.trim()
+      .toLowerCase()
+      .replace(/:[0-9]+$/, "") ?? "";
   if (!HOST.test(slug)) return null;
   // the subdomain; on a local stack the request's port is the app's port
   return originOf(slug, match && isLocal(match[1]!) ? match[2] : undefined);
@@ -161,7 +172,7 @@ export const defaultPayDeps: PayDeps = {
 // ------------------------------------------------------------------------------------------ start
 
 /** SIGN failures that mean NURIEL's terminal credentials were refused (the DB switches the terminal off) */
-const CREDENTIAL_CODES: ReadonlySet<string> = new Set(["901", "902"]);
+const CREDENTIAL_CODES: readonly string[] = ["901", "902"];
 
 export async function startPlatformPayment(
   input: { chargeId: string },
@@ -249,7 +260,8 @@ export async function startPlatformPayment(
     reused: flag(row, "reused"),
   });
   if (!sign.ok) {
-    if (ccode !== null && CREDENTIAL_CODES.has(ccode)) await deps.alert("credentials", attemptId);
+    if (ccode !== null && CREDENTIAL_CODES.includes(ccode))
+      await deps.alert("credentials", attemptId);
     throw new PlatformPaymentError("sign_failed");
   }
   return { url: sign.payUrl, demo: env === "demo" };
@@ -286,7 +298,7 @@ export async function platformPayOptions(deps: PayDeps = defaultPayDeps): Promis
   };
 }
 
-const PAYMENT_STATES: ReadonlySet<string> = new Set([
+const PAYMENT_STATES: readonly string[] = [
   "in_progress",
   "paid",
   "test_paid",
@@ -294,7 +306,7 @@ const PAYMENT_STATES: ReadonlySet<string> = new Set([
   "failed",
   "expired",
   "cancelled",
-]);
+];
 
 export async function myPlatformPayments(deps: PayDeps = defaultPayDeps): Promise<MyCardPayment[]> {
   const rows = asRows(await deps.ownerRpc<unknown>("platform_card_my_payments"));
@@ -302,7 +314,7 @@ export async function myPlatformPayments(deps: PayDeps = defaultPayDeps): Promis
     const id = uuid(p, "id");
     const state = text(p, "state");
     const amountMinor = int(p, "amount_minor");
-    if (!id || !state || !PAYMENT_STATES.has(state) || amountMinor === null) return [];
+    if (!id || !state || !PAYMENT_STATES.includes(state) || amountMinor === null) return [];
     return [
       {
         id,

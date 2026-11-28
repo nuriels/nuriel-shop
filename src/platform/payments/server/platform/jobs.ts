@@ -72,7 +72,8 @@ export async function runPlatformPaymentJobs(
     const reference = text(row, "reference");
     const sha = text(row, "payload_sha256");
     const mode = text(row, "mode");
-    if (!attemptId || !reference || !REFERENCE.test(reference) || !sha || !SHA256.test(sha)) continue;
+    if (!attemptId || !reference || !REFERENCE.test(reference) || !sha || !SHA256.test(sha))
+      continue;
     if (!isMode(mode)) continue;
     summary.pending += 1;
     try {
@@ -86,11 +87,15 @@ export async function runPlatformPaymentJobs(
 
   const expired = await platformCall(deps.rpc, "platform_attempts_expire", {});
   if (expired.error) deps.log.error("jobs_expire", { sqlstate: expired.error.code ?? "none" });
-  else summary.expired = typeof expired.data === "number" ? expired.data : (int({ n: expired.data }, "n") ?? 0);
+  else
+    summary.expired =
+      typeof expired.data === "number" ? expired.data : (int({ n: expired.data }, "n") ?? 0);
 
   const purged = await platformCall(deps.rpc, "platform_payment_returns_purge", {});
   if (purged.error) deps.log.error("jobs_purge", { sqlstate: purged.error.code ?? "none" });
-  else summary.purged = typeof purged.data === "number" ? purged.data : (int({ n: purged.data }, "n") ?? 0);
+  else
+    summary.purged =
+      typeof purged.data === "number" ? purged.data : (int({ n: purged.data }, "n") ?? 0);
 
   if (summary.pending + summary.expired + summary.purged > 0) deps.log.info("jobs", summary);
   return summary;

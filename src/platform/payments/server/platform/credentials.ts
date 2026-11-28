@@ -3,13 +3,16 @@
  *
  * The sole caller of platform_attempt_secrets and platform_terminal_check_secrets (U17-B4). The DB hands out the
  * ciphertext; this file opens it with the platform cipher (platform-keys.ts, PLATFORM_TERMINAL_SECRETS_KEY) under
- * the account id of NURIEL's terminal and the field name (AAD), and returns the plaintext to the caller for one
+ * PLATFORM_ACCOUNT_ID (NURIEL's terminal) and the field name (AAD), and returns the plaintext to the caller for one
  * SIGN or VERIFY. Nothing is logged, cached or kept (U17-B8). A token that does not open (rotated root key, a
  * ciphertext copied from elsewhere — DM-ENV-4) is one fixed error: the admin re-enters the terminal details.
  */
 import type { MaxCredentials, PaymentMode } from "@/platform/payments/provider";
 import { modeAllowed, type PaymentsEnv } from "@/platform/payments/server/env";
-import { platformSecretCipher } from "@/platform/payments/server/platform-keys";
+import {
+  PLATFORM_ACCOUNT_ID,
+  platformSecretCipher,
+} from "@/platform/payments/server/platform-keys";
 import {
   PlatformPaymentError,
   asRow,
@@ -22,12 +25,6 @@ import {
   type Row,
 } from "./db";
 import { platformLog, type PlatformLogger } from "./log";
-
-/**
- * The account id of NURIEL's terminal in the AAD (lead decision: the literal "platform"; platform-keys.ts is
- * about to export it as PLATFORM_ACCOUNT_ID — switch to that name once it lands). A raw return uses its attempt id.
- */
-export const PLATFORM_TERMINAL_ACCOUNT = "platform";
 
 export interface PlatformCipher {
   readonly kid: string;
@@ -69,7 +66,7 @@ function openRow(row: Row | null, env: PaymentsEnv, deps: CredentialsDeps): Term
   }
   try {
     const cipher = deps.cipher(env, mode);
-    const ctx = { accountId: PLATFORM_TERMINAL_ACCOUNT };
+    const ctx = { accountId: PLATFORM_ACCOUNT_ID };
     const creds: MaxCredentials = {
       masof,
       key: cipher.open("api_key", keyToken, ctx),
@@ -97,7 +94,10 @@ export async function platformAttemptCredentials(
   const row = asRow(answer.data);
   const result = text(row, "result");
   if (result === "busy")
-    return { result: "busy", retryAfterSeconds: Math.max(1, int(row, "retry_after_seconds") ?? 45) };
+    return {
+      result: "busy",
+      retryAfterSeconds: Math.max(1, int(row, "retry_after_seconds") ?? 45),
+    };
   if (result === "exhausted") return { result: "exhausted" };
   if (result !== "ok") throw new PlatformPaymentError("generic");
   return { result: "ok", ...openRow(row, env, deps) };

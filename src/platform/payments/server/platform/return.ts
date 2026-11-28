@@ -32,7 +32,11 @@ import { hypRequest } from "@/platform/payments/server/http";
 import { platformSecretCipher } from "@/platform/payments/server/platform-keys";
 import { isPlatformHost } from "@/platform/tenancy/current-site.server";
 import { alertPlatformAdmins } from "./alerts";
-import { platformAttemptCredentials, type AttemptSecrets, type PlatformCipher } from "./credentials";
+import {
+  platformAttemptCredentials,
+  type AttemptSecrets,
+  type PlatformCipher,
+} from "./credentials";
 import {
   PlatformPaymentError,
   asRow,
@@ -87,7 +91,7 @@ const HYP_OPTIONS = { method: "GET", timeoutMs: 15_000, maxBytes: 64 * 1024 } as
 const STORE_ORIGIN =
   /^(?:https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+|http:\/\/(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*localhost(?::[0-9]{1,5})?)$/;
 /** settled or for review: a replay or a second return gets no VERIFY (M08) */
-const CONCLUDED: ReadonlySet<string> = new Set(["paid", "test_paid", "needs_review"]);
+const CONCLUDED: readonly string[] = ["paid", "test_paid", "needs_review"];
 
 export const sha256Hex = (raw: string) => createHash("sha256").update(raw, "utf8").digest("hex");
 
@@ -109,7 +113,11 @@ export function verifyCodeForDb(v: VerifyResult | null): string | null {
 
 /** the DB keeps a brand only as a lower-case word; Hyp's numeric codes are not mapped (undocumented, Q18) */
 const brandName = (brand: string | null) => {
-  const name = brand?.trim().toLowerCase().replace(/[\s.-]+/g, "_") ?? "";
+  const name =
+    brand
+      ?.trim()
+      .toLowerCase()
+      .replace(/[\s.-]+/g, "_") ?? "";
   return /^[a-z_]{2,20}$/.test(name) ? name : null;
 };
 
@@ -278,7 +286,7 @@ export async function handlePlatformReturn(
   }
   const location = returnLocation(text(row, "return_origin"));
   const state = text(row, "state") ?? "";
-  if (CONCLUDED.has(state)) {
+  if (CONCLUDED.includes(state)) {
     deps.log.info("return_concluded", { attempt: shortId(attemptId), state });
     return { location, result: "concluded", attemptId };
   }
@@ -320,7 +328,9 @@ export async function reverifyPlatformReturn(
   if (typeof got.data !== "string" || got.data === "") return { result: "gone" }; // purged (≤ 2 h) or never kept
   let raw: string;
   try {
-    raw = deps.cipher(ready.env, item.mode).open("raw_return", got.data, { accountId: item.attemptId });
+    raw = deps
+      .cipher(ready.env, item.mode)
+      .open("raw_return", got.data, { accountId: item.attemptId });
   } catch {
     deps.log.alert("raw_unreadable", { attempt });
     return { result: "error" };

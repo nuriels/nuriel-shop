@@ -29,7 +29,10 @@ const PLATFORM_FN =
 
 export type PlatformRpcResult = { data: unknown; error: PaymentsDbError | null };
 /** the injected DB caller (production: platformPaymentsRpc) */
-export type PlatformRpc = (fn: PlatformFn, args: Record<string, unknown>) => Promise<PlatformRpcResult>;
+export type PlatformRpc = (
+  fn: PlatformFn,
+  args: Record<string, unknown>,
+) => Promise<PlatformRpcResult>;
 
 type LooseCall = (fn: string, args?: object) => Promise<PlatformRpcResult>;
 
@@ -71,7 +74,9 @@ export function asRow(data: unknown): Row | null {
     }
   }
   if (Array.isArray(value) && value.length === 1) value = value[0];
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Row) : null;
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Row)
+    : null;
 }
 
 /** a jsonb array answer of objects (anything else is dropped) */
@@ -124,6 +129,10 @@ export type PlatformErrorCode =
   | "credentials"
   | "stepup_required"
   | "stepup_failed"
+  | "stepup_expired"
+  | "stepup_wrong"
+  | "stepup_locked"
+  | "stepup_mismatch"
   | "stepup_send"
   | "terminal_invalid"
   | "terminal_taken"
@@ -148,6 +157,10 @@ export const PLATFORM_ERROR_TEXT: Readonly<Record<PlatformErrorCode, string>> = 
   credentials: "יש להזין מחדש את פרטי המסוף",
   stepup_required: "יש לאשר את השינוי בקוד האימות שנשלח למייל",
   stepup_failed: "קוד האימות לא התקבל. אפשר לבקש קוד חדש.",
+  stepup_expired: "תוקף קוד האימות פג. אפשר לבקש קוד חדש.",
+  stepup_wrong: "קוד האימות שגוי. אפשר לנסות שוב.",
+  stepup_locked: "היו יותר מדי ניסיונות עם הקוד הזה. אפשר לבקש קוד חדש.",
+  stepup_mismatch: "הקוד נשלח לשינוי אחר. אחרי שינוי בפרטים יש לבקש קוד חדש.",
   stepup_send: "לא ניתן לשלוח את קוד האימות כרגע. אפשר לנסות שוב בעוד כמה דקות.",
   terminal_invalid: "בסביבת DEMO אפשר להגדיר רק מסוף בדיקות (מספר בן 10 ספרות שמתחיל ב-00100)",
   terminal_taken: "מספר המסוף הזה כבר משויך לחשבון אחר",
@@ -182,11 +195,17 @@ const DB_MESSAGES: readonly (readonly [RegExp, PlatformErrorCode])[] = [
   [/too many payment attempts/i, "too_many"],
   [/too many verification codes/i, "rate_limited"],
   [/test payments are limited to 50/i, "test_cap"],
-  [/not available right now|no longer configured|cannot be signed|online payments are off/i, "unavailable"],
+  [
+    /not available right now|no longer configured|cannot be signed|online payments are off/i,
+    "unavailable",
+  ],
   [/verification code sent by email first|step-up/i, "stepup_required"],
   [/one payment only/i, "invalid"],
   [/only test terminals|only live terminals/i, "terminal_invalid"],
-  [/already registered|cannot be moved to another owner|stays bound to its owner/i, "terminal_taken"],
+  [
+    /already registered|cannot be moved to another owner|stays bound to its owner/i,
+    "terminal_taken",
+  ],
   [/not fully configured/i, "credentials"],
   [/invalid settings|clear or replace the credentials/i, "invalid"],
 ];

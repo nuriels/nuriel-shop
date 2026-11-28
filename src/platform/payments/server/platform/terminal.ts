@@ -24,7 +24,11 @@ import type {
 } from "@/platform/billing/pay-terminal.functions";
 import { escapeHtml, sendBusinessEmail } from "@/platform/email/send.server";
 import type { PaymentMode } from "@/platform/payments/provider";
-import { buildSignParams, encodeParams, validateSignResponse } from "@/platform/payments/max/protocol";
+import {
+  buildSignParams,
+  encodeParams,
+  validateSignResponse,
+} from "@/platform/payments/max/protocol";
 import { accountEmail, stepupRpc } from "@/platform/payments/server/db";
 import {
   hypEndpoint,
@@ -34,12 +38,15 @@ import {
   type PaymentsEnv,
 } from "@/platform/payments/server/env";
 import { hypRequest } from "@/platform/payments/server/http";
-import { platformSecretCipher, stepupKey } from "@/platform/payments/server/platform-keys";
+import {
+  PLATFORM_ACCOUNT_ID,
+  platformSecretCipher,
+  stepupKey,
+} from "@/platform/payments/server/platform-keys";
 import { createStepupService, stepupPurposeHash } from "@/platform/payments/server/stepup";
 import { allowAction } from "@/platform/security/rate-limit.server";
 import { isPlatformHost } from "@/platform/tenancy/current-site.server";
 import {
-  PLATFORM_TERMINAL_ACCOUNT,
   platformTerminalCheckCredentials,
   type PlatformCipher,
   type TerminalSecrets,
@@ -63,12 +70,8 @@ import { platformLog, type PlatformLogger } from "./log";
 
 type Ready = { ok: true; env: PaymentsEnv } | { ok: false; reason: string };
 type StepupService = ReturnType<typeof createStepupService>;
-type StepupPurpose = Parameters<typeof stepupPurposeHash>[1];
 
-/**
- * The step-up purpose of a change of NURIEL's terminal (lead decision: "platform_terminal_change"; stepup.ts is
- * renaming its literal to it — until then its runtime check refuses this value and no code can be issued).
- */
+/** the step-up purpose of a change of NURIEL's terminal (stepup.ts) */
 const TERMINAL_PURPOSE = "platform_terminal_change";
 
 /** the change set a code is bound to (never a secret value) */
@@ -143,8 +146,7 @@ export const defaultTerminalDeps: TerminalDeps = {
   allow: allowAction,
   rpc: platformPaymentsRpc,
   stepup: (env) => createStepupService(stepupRpc, stepupKey(env)),
-  purposeHash: (actorId, intent) =>
-    stepupPurposeHash(actorId, TERMINAL_PURPOSE as unknown as StepupPurpose, intent),
+  purposeHash: (actorId, intent) => stepupPurposeHash(actorId, TERMINAL_PURPOSE, intent),
   cipher: platformSecretCipher,
   checkCredentials: (actorId, env) => platformTerminalCheckCredentials(actorId, env),
   accountEmail,
@@ -184,7 +186,7 @@ async function admin(
 
 // ------------------------------------------------------------------------------------------ views
 
-const STATUSES: ReadonlySet<string> = new Set(["unverified", "verified", "failed"]);
+const STATUSES: readonly string[] = ["unverified", "verified", "failed"];
 const hint = (value: string | null) => {
   const digits = (value ?? "").replace(/[^0-9]/g, "");
   return digits.length >= 2 ? `••${digits.slice(-2)}` : null;
@@ -203,7 +205,8 @@ function viewOf(row: Row | null, origin: string | null, env: PaymentsEnv | null)
     flagOn: flag(row, "flag"),
     enabled: flag(row, "enabled"),
     mode: mode === "test" || mode === "live" ? mode : null,
-    status: status !== null && STATUSES.has(status) ? (status as TerminalView["status"]) : null,
+    status:
+      status !== null && STATUSES.includes(status) ? (status as TerminalView["status"]) : null,
     lastVerifiedAt: text(row, "last_verified_at"),
     terminalHint: hint(text(row, "terminal_hint")),
     hasApiKey: flag(row, "has_api_key"),
@@ -317,7 +320,11 @@ export async function requestTerminalSaveCode(
     throw new PlatformPaymentError("stepup_send");
   }
   deps.log.info("stepup_sent", {});
-  return { challengeId: issued.challengeId, expiresAt: issued.expiresAt, maskedEmail: maskEmail(email) };
+  return {
+    challengeId: issued.challengeId,
+    expiresAt: issued.expiresAt,
+    maskedEmail: maskEmail(email),
+  };
 }
 
 const STEPUP_REASON: Readonly<Record<string, PlatformErrorCode>> = {
@@ -352,7 +359,12 @@ export async function savePlatformTerminal(
   // DM-SEP-6: the code must approve exactly this change, for this admin, right now (single use)
   const consumed = await deps
     .stepup(env)
-    .consume(actorId, input.challengeId, deps.purposeHash(actorId, intentOf(change, env)), input.code);
+    .consume(
+      actorId,
+      input.challengeId,
+      deps.purposeHash(actorId, intentOf(change, env)),
+      input.code,
+    );
   if (!consumed.ok) {
     deps.log.warn("stepup_refused", { reason: consumed.reason ?? "refused" });
     throw new PlatformPaymentError(STEPUP_REASON[consumed.reason ?? ""] ?? "stepup_failed");
@@ -368,7 +380,7 @@ export async function savePlatformTerminal(
   if (change.enabled !== null) patch["enabled"] = change.enabled;
   if (input.apiKey !== null || input.apiPassword !== null) {
     const cipher = deps.cipher(env, mode);
-    const ctx = { accountId: PLATFORM_TERMINAL_ACCOUNT };
+    const ctx = { accountId: PLATFORM_ACCOUNT_ID };
     if (input.apiKey !== null) patch["api_key_enc"] = cipher.seal("api_key", input.apiKey, ctx);
     if (input.apiPassword !== null)
       patch["api_password_enc"] = cipher.seal("api_password", input.apiPassword, ctx);
@@ -433,12 +445,16 @@ export async function testPlatformTerminal(
   });
   if (verified.error) throw dbFailure(verified.error, "platform_terminal_verified", deps.log);
   deps.log.info("terminal_test", { ok, code: safeCode });
-  return { ok, code: safeCode, status: viewOf(asRow(verified.data), await deps.platformOrigin(), env) };
+  return {
+    ok,
+    code: safeCode,
+    status: viewOf(asRow(verified.data), await deps.platformOrigin(), env),
+  };
 }
 
 // ------------------------------------------------------------------------------------------ lists
 
-const LIST_STATES: ReadonlySet<string> = new Set([
+const LIST_STATES: readonly string[] = [
   "created",
   "redirected",
   "returned",
@@ -448,10 +464,10 @@ const LIST_STATES: ReadonlySet<string> = new Set([
   "failed",
   "expired",
   "cancelled",
-]);
+];
 const stateOf = (row: Row) => {
   const state = text(row, "state");
-  return state !== null && LIST_STATES.has(state) ? state : "unknown";
+  return state !== null && LIST_STATES.includes(state) ? state : "unknown";
 };
 const modeOf = (row: Row) => (text(row, "mode") === "live" ? "live" : "test");
 
