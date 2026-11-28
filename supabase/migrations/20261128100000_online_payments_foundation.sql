@@ -32,6 +32,13 @@
 --   returns none); max_attempts_pending_verify / platform_attempts_pending_verify for the re-VERIFY job;
 --   return_origin validated as an origin of the store's own hosts and returned by the platform return / settle;
 --   max_order_payment_status shows attempt_id and review_reason to the store's staff and platform admins only.
+--   Independent review fix round (2026-11-28): the 6th unverified VERIFY parks the attempt, sweeps and the purge park
+--   an unverified return before expiry / deletion (H1); a platform charge is not payable while a payment of it is
+--   being verified or in review (H2); a terminal change while a payer is on the page needs force and parks (M1); a
+--   review of a verified, approved store payment holds its order — payment_due_at cleared, expire_unpaid_orders
+--   untouched (M3); further approved transactions are kept in extra_txn_ids (M4); the variant FK's SET NULL passes
+--   the line lock (M5); an expired guest token is refused by the status view (L4); platform_terminal_save names the
+--   consumed challenge and its purpose hash (L7).
 -- Additive only: no existing row changes; Grow, Bit, billing.*, billing_history and add-on objects are untouched.
 -- Patched by exact text (md5-pinned below, idempotent): orders_default_payment, place_order, place_guest_order and
 -- the orders_payment_check constraint. One BEGIN … COMMIT; safe to run again.
