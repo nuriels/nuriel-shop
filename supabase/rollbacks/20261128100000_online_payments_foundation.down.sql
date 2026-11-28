@@ -3,8 +3,8 @@
 -- הגנה: נעצר כל עוד יש נתוני תשלום — שורה כלשהי בטבלאות הסכמה payments (מסופים, רישום מסופים, ניסיונות, אירועים,
 -- יומני שינויים, הגדרות בעל החנות, אסימוני אורח, חזרות גולמיות, חזרות לא מזוהות), מסד מסומן demo / production,
 -- הזמנה בתשלום מקוון (public.orders.payment_method = 'online') או רישום מאושר-ספק ביומן הכספי (billing.ledger) —
--- rollback היה מוחק רשומות תשלום או משאיר הזמנות / רישומים בלי הראיות שלהם. חריגים: שורת הסביבה כשהיא לא מסומנת,
--- רישומי environment_changed של המערכת, ואתגרי ה-step-up (מזהים קצרי-חיים, HMAC בלבד).
+-- rollback היה מוחק רשומות תשלום או משאיר הזמנות / רישומים בלי הראיות שלהם. גם מסד שסומן פעם (demo_since, או רישום
+-- environment_changed כלשהו) לא חוזר אחורה (ביקורת L5). חריג יחיד: אתגרי ה-step-up (מזהים קצרי-חיים, HMAC בלבד).
 -- בלי נתונים: שלושת הטריגרים על orders / order_items נמחקים; הטקסט שהוכנס ל-orders_default_payment, place_order
 -- ו-place_guest_order מוסר מילה במילה (נכשל בקול אם לא נמצא); orders_payment_check חוזר מילה במילה ל-
 -- 20261019520000_grow_payments.sql:94-110; 42 פונקציות ה-API נמחקות; הסכמה payments נמחקת; שני הדגלים נמחקים;
@@ -23,20 +23,18 @@ BEGIN
                WHERE c.relnamespace = 'payments'::regnamespace AND c.relkind IN ('r', 'p')
                  AND c.relname NOT IN ('environment', 'platform_stepup_challenges')
                ORDER BY c.relname LOOP
-      IF _t = 'platform_config_audit' THEN
-        SELECT count(*) INTO _n FROM payments.platform_config_audit WHERE action <> 'environment_changed';
-      ELSE
-        EXECUTE format('SELECT count(*) FROM payments.%I', _t) INTO _n;
-      END IF;
+      EXECUTE format('SELECT count(*) FROM payments.%I', _t) INTO _n;
       IF _n > 0 THEN
         RAISE EXCEPTION 'rollback stopped: יש % שורות ב-payments.% — נתוני תשלום מקוון (מסופים, ניסיונות, יומנים); rollback היה מוחק אותם. לא מבוצע',
           _n, _t;
       END IF;
     END LOOP;
     IF to_regclass('payments.environment') IS NOT NULL THEN
-      SELECT count(*) INTO _n FROM payments.environment WHERE name IS NOT NULL;
+      -- review L5: a database that was ever marked (demo_since, or any environment_changed audit row — counted in the
+      -- loop above) keeps its history: a rollback + re-apply would make an ex-DEMO database eligible for production
+      SELECT count(*) INTO _n FROM payments.environment WHERE name IS NOT NULL OR demo_since IS NOT NULL;
       IF _n > 0 THEN
-        RAISE EXCEPTION 'rollback stopped: יש % שורות בסימון הסביבה (payments.environment מסומן demo / production) — מבטלים את הסימון קודם',
+        RAISE EXCEPTION 'rollback stopped: יש % שורות בסימון הסביבה (payments.environment סומן demo / production, גם אם בוטל) — מסד שסומן פעם לא חוזר אחורה',
           _n;
       END IF;
     END IF;

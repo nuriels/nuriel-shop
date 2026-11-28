@@ -185,13 +185,14 @@ BEGIN
                         COALESCE(_amount, (o ->> 'amount_minor')::bigint), _currency, _inst, _flags);
   RETURN r || jsonb_build_object('reference', o ->> 'reference', 'payload', _p, 'opened', o);
 END $f$;
--- a consumed step-up code of this platform admin (fake HMAC / purpose hash: the DB compares opaque strings)
+-- a consumed step-up code of this platform admin (fake HMAC / purpose hash repeat('p', 64): the DB compares opaque
+-- strings): {ok, challenge_id} — platform_terminal_save names that exact challenge and purpose (review L7)
 CREATE OR REPLACE FUNCTION pg_temp.stepup(_actor uuid) RETURNS jsonb LANGUAGE plpgsql AS $f$
 DECLARE c jsonb;
 BEGIN
   c := pg_temp.svc(format('SELECT public.platform_stepup_issue(%L, %L, %L)', _actor, repeat('p', 64), repeat('c', 64)));
   RETURN pg_temp.svc(format('SELECT public.platform_stepup_consume(%L, %L, %L, %L)', _actor, c ->> 'challenge_id',
-                            repeat('p', 64), repeat('c', 64)));
+                            repeat('p', 64), repeat('c', 64))) || jsonb_build_object('challenge_id', c ->> 'challenge_id');
 END $f$;
 CREATE OR REPLACE FUNCTION pg_temp.p_open(_actor uuid, _tenant uuid, _charge uuid, _origin text DEFAULT NULL,
   _env text DEFAULT 'demo') RETURNS jsonb LANGUAGE sql AS $f$
@@ -552,13 +553,15 @@ SELECT n, r FROM unnest(pg_temp.probe(ARRAY[
            VALUES (%L, 'x', 'x', 1, 'max', 'test', %L, '0badc0de', 100, repeat('a', 32), now() + interval '1 hour') RETURNING 'inserted'$q$,
          :SB, :'t_b'),
   -- 9 production: NURIEL's terminal — a test terminal is refused (after a consumed step-up code)
-  format($q$SELECT (pg_temp.stepup(%L) ->> 'ok') || '/' || COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%%L, %%L, %%L)', %L,
-           jsonb_build_object('terminal_number', %L, 'api_key_enc', pg_temp.tok('k'), 'api_password_enc', pg_temp.tok('p')), 'production')), 'saved')$q$,
-         :PLAT, :PLAT, :'t_plat'),
+  format($q$SELECT (su ->> 'ok') || '/' || COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%%L, %%L, %%L, %%L, %%L)', %L,
+           jsonb_build_object('terminal_number', %L, 'api_key_enc', pg_temp.tok('k'), 'api_password_enc', pg_temp.tok('p')), 'production',
+           su ->> 'challenge_id', repeat('p', 64))), 'saved') FROM (SELECT pg_temp.stepup(%L) AS su) x$q$,
+         :PLAT, :'t_plat', :PLAT),
   -- 10 production: NURIEL's live terminal is saved (a new step-up code: one code, one save)
-  format($q$SELECT (pg_temp.stepup(%L) ->> 'ok') || '/' || (pg_temp.svc(format('SELECT public.platform_terminal_save(%%L, %%L, %%L)', %L,
-           jsonb_build_object('terminal_number', %L, 'api_key_enc', pg_temp.tok('k'), 'api_password_enc', pg_temp.tok('p')), 'production')) ->> 'mode')$q$,
-         :PLAT, :PLAT, :'t_live_plat'),
+  format($q$SELECT (su ->> 'ok') || '/' || (pg_temp.svc(format('SELECT public.platform_terminal_save(%%L, %%L, %%L, %%L, %%L)', %L,
+           jsonb_build_object('terminal_number', %L, 'api_key_enc', pg_temp.tok('k'), 'api_password_enc', pg_temp.tok('p')), 'production',
+           su ->> 'challenge_id', repeat('p', 64))) ->> 'mode') FROM (SELECT pg_temp.stepup(%L) AS su) x$q$,
+         :PLAT, :'t_live_plat', :PLAT),
   -- 11 off is always allowed, and a never-DEMO database can be marked production again
   $q$UPDATE payments.environment SET name = NULL RETURNING COALESCE(name, 'off')$q$,
   $q$UPDATE payments.environment SET name = 'production' RETURNING name$q$
@@ -645,11 +648,27 @@ SELECT pg_temp.svc(format('SELECT public.platform_stepup_consume(%L, %L, %L, %L)
 SELECT pg_temp.svc(format('SELECT public.platform_stepup_consume(%L, %L, %L, %L)', :PLAT2, :'su1'::jsonb ->> 'challenge_id', repeat('a', 64), repeat('1', 64))) AS su1_again \gset
 SELECT tests.check('step-up: the right code is consumed once (ok); the same challenge never verifies again (used)',
   format($$SELECT %L::jsonb = '{"ok": true}' AND %L::jsonb = '{"ok": false, "reason": "used"}'$$, :'su1_ok', :'su1_again'));
-SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L, %L, %L)', :PLAT3, '{"enabled": false}', 'demo')), '') AS save_no_code \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', :PLAT3, '{"enabled": false}', 'demo',
+         :'su1'::jsonb ->> 'challenge_id', repeat('a', 64))), '') AS save_no_code \gset
 SELECT tests.check('step-up (M6): NURIEL''s terminal is never saved without a consumed code (another admin''s code does not count)',
   format($$SELECT %L LIKE '%%verification code%%' AND NOT EXISTS (SELECT 1 FROM payments.platform_accounts)$$, :'save_no_code'));
-SELECT pg_temp.svc(format('SELECT public.platform_terminal_save(%L, %L, %L)', :PLAT2, '{}', 'demo')) AS su1_save \gset
-SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L, %L, %L)', :PLAT2, '{}', 'demo')), '') AS su1_save2 \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', :PLAT2, '{}', 'demo',
+         :'su1'::jsonb ->> 'challenge_id', repeat('b', 64))), '') AS l7_purpose,
+       COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', :PLAT2, '{}', 'demo',
+         NULL, repeat('a', 64))), '') AS l7_none,
+       COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', :PLAT2, '{}', 'demo',
+         gen_random_uuid(), repeat('a', 64))), '') AS l7_other \gset
+SELECT tests.check('step-up (review L7): the save names the exact challenge the admin consumed and its purpose — another purpose, no challenge or an unknown one is refused (and spends nothing)',
+  format($$SELECT %L LIKE '%%verification code%%' AND %L LIKE '%%verification code%%' AND %L LIKE '%%verification code%%'
+             AND (SELECT spent_at IS NULL FROM payments.platform_stepup_challenges WHERE id = %L)
+             AND (SELECT count(*) FROM pg_proc WHERE proname = 'platform_terminal_save') = 1
+             AND (SELECT pg_get_function_identity_arguments(oid) FROM pg_proc WHERE proname = 'platform_terminal_save')
+                 = '_actor uuid, _patch jsonb, _app_environment text, _challenge uuid, _purpose_hash text'$$,
+         :'l7_purpose', :'l7_none', :'l7_other', :'su1'::jsonb ->> 'challenge_id'));
+SELECT pg_temp.svc(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', :PLAT2, '{}', 'demo',
+         :'su1'::jsonb ->> 'challenge_id', repeat('a', 64))) AS su1_save \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', :PLAT2, '{}', 'demo',
+         :'su1'::jsonb ->> 'challenge_id', repeat('a', 64))), '') AS su1_save2 \gset
 SELECT tests.check('step-up (M6): one consumed code authorizes exactly one save',
   format($$SELECT %1$L::jsonb ->> 'configured' = 'true' AND %2$L LIKE '%%verification code%%'
              AND (SELECT spent_at IS NOT NULL FROM payments.platform_stepup_challenges WHERE id = %3$L)$$,
@@ -708,10 +727,11 @@ SELECT tests.check('step-up: a challenge only moves forward (no rewrite of its h
 -- ============================================================
 -- 6. Terminals: NURIEL's and the stores' (platform admin only), the registry (DM-SEP-1), status, audit
 -- ============================================================
-SELECT pg_temp.stepup(:PLAT) AS ok \gset
-SELECT pg_temp.svc(format('SELECT public.platform_terminal_save(%L, %L, %L)', :PLAT,
+SELECT pg_temp.stepup(:PLAT) AS su_p1 \gset
+SELECT pg_temp.svc(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', :PLAT,
          jsonb_build_object('terminal_number', :'t_plat', 'api_key_enc', pg_temp.tok('plat-key'),
-                            'api_password_enc', pg_temp.tok('plat-pass'), 'enabled', true), 'demo')) AS pt \gset
+                            'api_password_enc', pg_temp.tok('plat-pass'), 'enabled', true), 'demo',
+         :'su_p1'::jsonb ->> 'challenge_id', repeat('p', 64))) AS pt \gset
 SELECT tests.check('platform terminal: saved after a step-up code — test mode, unverified; the status shows the last 2 digits only (L5), no ciphertext, no kid',
   format($$SELECT %1$L::jsonb ->> 'mode' = 'test' AND %1$L::jsonb ->> 'status' = 'unverified' AND (%1$L::jsonb ->> 'enabled')::boolean
              AND %1$L::jsonb ->> 'terminal_hint' = '********' || right(%2$L, 2)
@@ -770,8 +790,9 @@ SELECT tests.check('DM-SEP-1: a store''s terminal number cannot be used by anoth
   format($$SELECT %1$L::jsonb ->> 'terminal_hint' = '********' || right(%2$L, 2) AND %3$L LIKE '%%already registered to another store%%'
              AND (SELECT terminal_number = %4$L FROM payments.tenant_accounts WHERE tenant_id = %5$L)$$,
          :'sa1', :'t_a', :'reg_a_for_b', :'t_b', :SB));
-SELECT pg_temp.stepup(:PLAT) AS ok \gset
-SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L, %L, %L)', :PLAT, jsonb_build_object('terminal_number', :'t_b'), 'demo')), '') AS reg_b_for_plat \gset
+SELECT pg_temp.stepup(:PLAT) AS su_p2 \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', :PLAT, jsonb_build_object('terminal_number', :'t_b'), 'demo',
+         :'su_p2'::jsonb ->> 'challenge_id', repeat('p', 64))), '') AS reg_b_for_plat \gset
 SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_store_terminal_save(%L, %L, %L, %L)', :PLAT, :SB,
          jsonb_build_object('terminal_number', :'t_plat'), 'demo')), '') AS reg_plat_for_b \gset
 SELECT tests.check('DM-SEP-1: a store terminal never becomes the platform terminal, and the platform terminal never a store terminal',
