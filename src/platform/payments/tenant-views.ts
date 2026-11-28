@@ -169,6 +169,14 @@ export interface StoreOnlinePaymentsView {
   defaultStore: boolean;
 }
 
+/**
+ * The store terminal save was refused because a payment of the store is in progress (a payer on Hyp's page, or a
+ * return being verified): saving anyway ("force") parks those payments for a manual review ('credentials_changed').
+ * The MAX tab recognises this exact text and asks for a confirmation.
+ */
+export const TERMINAL_SAVE_NEEDS_FORCE =
+  "תשלום של החנות נמצא עכשיו בתהליך (בדף התשלום או באימות). שמירה בכל זאת תעביר אותו לבדיקה ידנית.";
+
 /** "••12" — only the last 2 digits are ever shown */
 export function terminalHintText(hint: string | null): string {
   const digits = (hint ?? "").replace(/[^0-9]/g, "").slice(-2);

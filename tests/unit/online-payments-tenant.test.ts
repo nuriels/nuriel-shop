@@ -1010,6 +1010,32 @@ describe("store terminal admin (platform admin)", () => {
     expect(h.calls).toHaveLength(0);
   });
 
+  it("M1: a save refused while a payment is in progress answers the fixed text the MAX tab confirms, then force is sent", async () => {
+    const { saveStoreTerminal } = await import("@/platform/payments/server/tenant/admin");
+    const { TERMINAL_SAVE_NEEDS_FORCE } = await import("@/platform/payments/tenant-views");
+    for (const message of [
+      "a payment of this store is being verified; save again with force to park it for review",
+      "a payer of this store is on the payment page; save again with force to park it for review",
+    ]) {
+      h.answers.set("platform_store_terminal_save", refused(message));
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        await expect(
+          saveStoreTerminal(ADMIN, STORE_B, { terminalNumber: "0010090002" }),
+        ).rejects.toThrow(TERMINAL_SAVE_NEEDS_FORCE);
+      } finally {
+        warn.mockRestore();
+      }
+    }
+    h.calls.length = 0;
+    h.answers.set("platform_store_terminal_save", ok({ configured: true, terminal_hint: "02" }));
+    await saveStoreTerminal(ADMIN, STORE_B, { terminalNumber: "0010090002", force: true });
+    expect(callsOf("platform_store_terminal_save")[0]?.args?.["_patch"]).toMatchObject({
+      terminal_number: "0010090002",
+      force: true,
+    });
+  });
+
   it("the connection check signs a ₪1 page (nothing charged) and records the result", async () => {
     const { testStoreTerminal } = await import("@/platform/payments/server/tenant/admin");
     h.answers.set("platform_store_terminal_check_secrets", async () => ({

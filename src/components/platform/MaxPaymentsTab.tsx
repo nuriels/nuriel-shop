@@ -14,6 +14,7 @@ import {
 } from "@/lib/online-payments-admin.functions";
 import {
   ATTEMPT_STATE_LABELS,
+  TERMINAL_SAVE_NEEDS_FORCE,
   TERMINAL_STATUS_LABELS,
   agorotText,
   terminalHintText,
@@ -39,6 +40,8 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
   const [apiPassword, setApiPassword] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [force, setForce] = useState(false);
+  // the DB refused the save because a payment of the store is in progress: ask before saving with force
+  const [confirmForce, setConfirmForce] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; code: string | null } | null>(null);
 
   const refresh = useCallback(async () => {
@@ -56,8 +59,9 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
     void refresh();
   }, [refresh]);
 
-  const submit = async () => {
+  const submit = async (forceNow = false) => {
     setBusy(true);
+    setConfirmForce(false);
     try {
       await save({
         data: {
@@ -66,7 +70,7 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
           ...(apiKey ? { apiKey } : {}),
           ...(apiPassword ? { apiPassword } : {}),
           enabled,
-          ...(force ? { force: true } : {}),
+          ...(force || forceNow ? { force: true } : {}),
         },
       });
       // write-only: the typed values leave the page as soon as they are saved
@@ -77,7 +81,10 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
       toast.success("פרטי המסוף נשמרו");
       await refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "השמירה נכשלה");
+      const message = e instanceof Error ? e.message : "השמירה נכשלה";
+      // the typed values stay in the form, so the confirmation re-sends exactly the same change
+      if (message === TERMINAL_SAVE_NEEDS_FORCE && !force && !forceNow) setConfirmForce(true);
+      else toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -210,12 +217,42 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
               onChange={(e) => setForce(e.target.checked)}
               data-testid="max-force"
             />
-            לשמור גם כשתשלום של החנות נמצא באימות (התשלום יעבור לבדיקה)
+            לשמור גם כשתשלום של החנות בתהליך — בדף התשלום או באימות (התשלום יעבור לבדיקה)
           </label>
         </div>
         <p className="text-xs text-muted-foreground">
           בסביבת DEMO: מסוף בדיקות בלבד (מספרו מתחיל ב-00100), מצב בדיקה, תשלום אחד.
         </p>
+
+        {confirmForce && (
+          <div
+            role="alert"
+            className="space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm"
+            data-testid="max-force-confirm"
+          >
+            <p>{TERMINAL_SAVE_NEEDS_FORCE}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={busy}
+                onClick={() => void submit(true)}
+                data-testid="max-force-confirm-save"
+              >
+                לשמור בכל זאת
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setConfirmForce(false)}
+                data-testid="max-force-confirm-cancel"
+              >
+                ביטול
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           <Button disabled={busy} onClick={() => void submit()} data-testid="max-save">

@@ -6,6 +6,7 @@
  * one error type for the scope, and small readers for the jsonb answers (Json → typed values, nothing trusted).
  */
 import { PAYMENT_MESSAGES } from "@/platform/payments/max/messages";
+import { TERMINAL_SAVE_NEEDS_FORCE } from "@/platform/payments/tenant-views";
 import type { PaymentsDbError, PaymentsRpcResult } from "@/platform/payments/server/db";
 import { tenantLog } from "./log";
 
@@ -30,10 +31,7 @@ const DB_MESSAGES: readonly (readonly [RegExp, string])[] = [
   [/store not found/i, "החנות לא נמצאה"],
   [/too many payment attempts/i, "נעשו יותר מדי ניסיונות תשלום להזמנה הזו. כדאי לפנות לחנות."],
   [/payment window .* is closing/i, "הזמן לתשלום ההזמנה מסתיים. אפשר לבצע הזמנה חדשה."],
-  [
-    /save again with force/i,
-    "תשלום של החנות נמצא עכשיו באימות. כדי לשמור בכל זאת יש לסמן שמירה בכוח.",
-  ],
+  [/with force/i, TERMINAL_SAVE_NEEDS_FORCE],
   [/is being verified/i, "התשלום נמצא בבדיקה. אפשר לרענן את העמוד בעוד רגע."],
   [/not awaiting an online payment/i, "ההזמנה כבר לא ממתינה לתשלום"],
   [/no payable amount/i, "לא נמצא סכום לתשלום בהזמנה"],
