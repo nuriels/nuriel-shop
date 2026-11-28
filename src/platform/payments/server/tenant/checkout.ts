@@ -14,6 +14,7 @@ import {
   validateSignResponse,
   type SignResult,
 } from "@/platform/payments/max/protocol";
+import { PAYMENT_MESSAGES } from "@/platform/payments/max/messages";
 import { paymentsRpc } from "@/platform/payments/server/db";
 import {
   hypEndpoint,
@@ -119,18 +120,20 @@ export async function startTenantPayment(
     input.guestToken && GUEST_TOKEN.test(input.guestToken) ? sha256Hex(input.guestToken) : null;
   if (input.customerId === null && guestSha === null) throw new TenantPaymentError(ORDER_NOT_FOUND);
 
-  const opened = asRecord(
-    unwrap(
-      "max_attempt_open",
-      await paymentsRpc("max_attempt_open", {
-        _tenant: input.tenantId,
-        _order: input.orderId,
-        _customer: input.customerId,
-        _guest_token_sha256: guestSha,
-        _app_environment: env,
-      }),
-    ),
-  );
+  const openAnswer = await paymentsRpc("max_attempt_open", {
+    _tenant: input.tenantId,
+    _order: input.orderId,
+    _customer: input.customerId,
+    _guest_token_sha256: guestSha,
+    _app_environment: env,
+  });
+  // X-15: the order is busy — a return of it is being verified or is in review. The payer sees the fixed "pending"
+  // / "in review" text (the pay page shows no Pay button for these), never a retry
+  if (openAnswer.error && /is being reviewed/i.test(openAnswer.error.message))
+    throw new TenantPaymentError(PAYMENT_MESSAGES.needs_review);
+  if (openAnswer.error && /is being verified/i.test(openAnswer.error.message))
+    throw new TenantPaymentError(PAYMENT_MESSAGES.verification_pending);
+  const opened = asRecord(unwrap("max_attempt_open", openAnswer));
   const attemptId = uuid(opened?.["attempt_id"]);
   const order = reference(opened?.["reference"]);
   const amountMinor = int(opened?.["amount_minor"]);
@@ -215,13 +218,27 @@ export function orderPaymentView(data: unknown, demo: boolean): OnlinePaymentVie
   const r = asRecord(data);
   if (!r) return null;
   const a = asRecord(r["attempt"]);
+  const paymentStatus = str(r["payment_status"]);
+  const paymentDueAt = str(r["payment_due_at"]);
+  const outcome = str(a?.["review_outcome"]);
   return {
     demo,
     orderNumber: str(r["order_number"]),
     orderStatus: str(r["status"]),
     paymentMethod: str(r["payment_method"]),
-    paymentStatus: str(r["payment_status"]),
-    paymentDueAt: str(r["payment_due_at"]),
+    paymentStatus,
+    paymentDueAt,
+    // the DB's own word when it gives one (payable / busy / held); otherwise an awaiting online order with an
+    // attempt and no due time is held (X-14: payment_due_at := NULL at the first recorded return)
+    held:
+      r["payable"] === false ||
+      r["busy"] === true ||
+      r["held"] === true ||
+      (r["payable"] !== true &&
+        paymentStatus === "awaiting" &&
+        paymentDueAt === null &&
+        a !== null &&
+        str(r["status"]) !== "cancelled"),
     attempt: a
       ? {
           id: uuid(a["attempt_id"] ?? a["id"]),
@@ -237,6 +254,7 @@ export function orderPaymentView(data: unknown, demo: boolean): OnlinePaymentVie
               : null,
           approvalCode: str(a["approval_code"]),
           reviewReason: str(a["review_reason"]),
+          reviewOutcome: outcome === "not_charged" || outcome === "charged" ? outcome : null,
         }
       : null,
   };
@@ -267,6 +285,7 @@ export async function customerOrderPayment(input: {
     return null;
   }
   const view = orderPaymentView(answer.data, paymentsEnv() === "demo");
-  if (view?.attempt) view.attempt = { ...view.attempt, id: null, reviewReason: null };
+  if (view?.attempt)
+    view.attempt = { ...view.attempt, id: null, reviewReason: null, reviewOutcome: null };
   return view;
 }

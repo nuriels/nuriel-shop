@@ -55,12 +55,12 @@ export const Route = createFileRoute("/payments/return/$provider")({
               headers: { ...headers, "Content-Type": "text/plain; charset=utf-8" },
             });
           }
-          if (outcome.paid || outcome.review) {
+          if (outcome.paid || outcome.review.length > 0) {
             const { actOnTenantOutcomes } = await import("@/lib/online-payments.server");
-            // e-mails / the store's bell, in this request's store context, without delaying the redirect
+            // e-mails / the claimed reviews' bell + e-mail (X-17), without delaying the redirect
             void actOnTenantOutcomes({
               paid: outcome.paid ? [outcome.paid] : [],
-              review: outcome.review ? [outcome.review] : [],
+              review: outcome.review,
             });
           }
           return see303(outcome.location);
