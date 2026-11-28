@@ -220,7 +220,9 @@ export function orderPaymentView(data: unknown, demo: boolean): OnlinePaymentVie
   const a = asRecord(r["attempt"]);
   const paymentStatus = str(r["payment_status"]);
   const paymentDueAt = str(r["payment_due_at"]);
-  const outcome = str(a?.["review_outcome"]);
+  // X-25: staff get the decision and its time (on the attempt, or next to it); X-22 clears both on a reopen
+  const outcome = str(a?.["review_outcome"]) ?? str(r["review_outcome"]);
+  const resolvedAt = str(a?.["review_resolved_at"]) ?? str(r["review_resolved_at"]);
   return {
     demo,
     orderNumber: str(r["order_number"]),
@@ -256,6 +258,12 @@ export function orderPaymentView(data: unknown, demo: boolean): OnlinePaymentVie
           approvalCode: str(a["approval_code"]),
           reviewReason: str(a["review_reason"]),
           reviewOutcome: outcome === "not_charged" || outcome === "charged" ? outcome : null,
+          reviewResolvedAt: resolvedAt,
+          // X-22: the DB's reopen marker, or the reason it sets for a charge after a decision
+          reviewReopened:
+            a["review_reopened"] === true ||
+            str(a["review_reopened_at"]) !== null ||
+            str(a["review_reason"]) === "charge_after_resolution",
         }
       : null,
   };
@@ -287,6 +295,13 @@ export async function customerOrderPayment(input: {
   }
   const view = orderPaymentView(answer.data, paymentsEnv() === "demo");
   if (view?.attempt)
-    view.attempt = { ...view.attempt, id: null, reviewReason: null, reviewOutcome: null };
+    view.attempt = {
+      ...view.attempt,
+      id: null,
+      reviewReason: null,
+      reviewOutcome: null,
+      reviewResolvedAt: null,
+      reviewReopened: false,
+    };
   return view;
 }
