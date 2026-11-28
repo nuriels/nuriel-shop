@@ -387,6 +387,7 @@ expect_t "consistent: paid and applied, or parked credentials_changed with the c
 echo "     (outcome: $(q "SELECT a.state || COALESCE(' ' || a.review_reason, '') FROM payments.tenant_attempts a WHERE a.reference = '$REF14'"))"
 
 echo "C15. two review-alert claimers at once"
+q "SELECT cpt.svc(format('SELECT public.platform_store_terminal_verified(%L, %L, true, %L)', '$PLAT', '$X', '0'))" >/dev/null
 q "DO \$\$ BEGIN WHILE jsonb_array_length(cpt.svc('SELECT public.max_review_alerts_claim(200)')) > 0 LOOP END LOOP; END \$\$" >/dev/null
 for i in $(seq 15 24); do
   A=$(q "SELECT cpt.returned('$X', '$(u "$i")', '$PRODUCT', '$SHIP', cpt.h('c15-$i'), 'fake-c15-$i')")
