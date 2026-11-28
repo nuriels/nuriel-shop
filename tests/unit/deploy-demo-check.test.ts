@@ -47,6 +47,8 @@ case "$cmd" in
           body=$(cat); echo "$body" >> "$S/proof_sql"
           if [[ -f "$S/marker_switch_allowed" ]]; then exit 0; fi
           if grep -q "SET name = 'production'" <<<"$body"; then echo "ERROR:  this DEMO database cannot become production" >&2; exit 3; fi
+          if [[ -f "$S/accounts_unguarded" ]]; then exit 0; fi
+          if grep -qE "'max', 'live'|'1234567890'" <<<"$body"; then echo "ERROR:  a DEMO database holds test terminals only" >&2; exit 3; fi
           exit 0
         fi
         case "$sql" in
@@ -336,6 +338,13 @@ describe("deploy/demo/demo-check.sh", () => {
   it("--proofs: the database refuses production (rolled back) and the app's startup line proves the env guard", () => {
     const t = setup();
     const r = t.run("--proofs");
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toContain("DEMO CHECK OK — stage d6, with proofs");
+    expect(r.out).toContain(
+      "a store test account with a 00100 terminal: accepted (positive control)",
+    );
+    expect(r.out).toContain("a store terminal account in live mode: refused");
+    expect(r.out).toContain("a store terminal number without the test prefix: refused");
     expect(r.out).toContain("marking the DEMO database production: refused");
     expect(r.out).toContain(
       "positive control: [payments] env=demo endpoint=hyp tenant=ready platform=ready",
@@ -348,12 +357,22 @@ describe("deploy/demo/demo-check.sh", () => {
     noSecret(r.out);
   });
 
+  it("--proofs: refuses to prove anything on a database that is not marked demo yet", () => {
+    const t = setup();
+    t.file("marker", "unset\n");
+    const r = t.run("--proofs");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("the database is not marked demo yet");
+  });
+
   it("--proofs: fails when the database accepts production or the app honours the mock override", () => {
     const t = setup();
     t.file("marker_switch_allowed", "");
     t.file("mock_honoured", "");
+    t.file("accounts_unguarded", "");
     const r = t.run("--proofs");
     expect(r.code).toBe(1);
+    expect(r.out).toContain("a store terminal account in live mode: NOT refused");
     expect(r.out).toContain("marking the DEMO database production: NOT refused");
     expect(r.out).toContain("mock-server override: '[payments] env=demo endpoint=local-mock");
   });
