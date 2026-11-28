@@ -7,7 +7,7 @@
  *   "<env>|tenant|<tenantId>|max|<mode>|<accountId>|<field>|<kid>". accountId is a UUID: the store's id for its
  *   terminal credentials (one terminal per store), the attempt id for an encrypted raw return. A token copied
  *   to another store, account, field, mode, scope or environment does not open.
- * • DEMO works only with `test`, production only with `live` (decision ה-4, DM-ENV-3): any other pair is refused
+ * • DEMO and the pilot work only with `test`, production only with `live` (decision ה-4, DM-ENV-3, P-3): any other pair is refused
  *   here too, so a DEMO instance cannot even build a key for live credentials.
  * • Callers check paymentsReady("tenant") (env.ts) first: it adds the checks that need the other secrets
  *   (the two roots differ, no reuse of another app secret, no placeholder).
@@ -41,8 +41,23 @@ export function tenantSecretCipher(
   seal(field: string, value: string, ctx: TenantContext): string;
   open(field: string, token: string, ctx: TenantContext): string;
 } {
-  // the same rule as modeAllowed() in env.ts (inline here: env.ts imports this file)
-  const allowed = env === "demo" ? mode === "test" : env === "production" && mode === "live";
+  // the same rule as envMode() in env.ts (inline here: env.ts imports this file); exhaustive — a new environment
+  // does not compile until it is placed (P-7: the pilot is a test environment)
+  let allowed: boolean;
+  switch (env) {
+    case "demo":
+    case "pilot":
+      allowed = mode === "test";
+      break;
+    case "production":
+      allowed = mode === "live";
+      break;
+    default: {
+      const unknown: never = env;
+      void unknown;
+      allowed = false;
+    }
+  }
   const root = tenantRootSecret();
   if (!allowed || !root || root.length < MIN_ROOT_CHARS) {
     throw new Error("payments: tenant key unavailable");

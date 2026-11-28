@@ -98,8 +98,8 @@ export async function sendOrderEmailsInternal(
       </div>`;
     } else if (payment.method === "online" && payment.status === "paid") {
       // MAX/Hyp DEMO: תשלום מקוון בכרטיס — המייל יוצא רק אחרי שהשרת אימת את התשלום מול ספק התשלומים
-      const { paymentsEnv } = await import("@/platform/payments/server/env");
-      const demo = paymentsEnv() === "demo";
+      const { testPaymentsEnv } = await import("@/platform/payments/server/env");
+      const demo = testPaymentsEnv();
       paymentHtml = `<div style="margin-top:12px;padding:10px 12px;border:2px solid #16a34a;border-radius:8px;background:#f0fdf4;">
         <p style="margin:0 0 4px;font-weight:bold;color:#166534;">💳 שולם אונליין בכרטיס אשראי</p>
         <p style="margin:0;">התשלום אומת מול ספק התשלומים. פרטי האישור מופיעים בכרטיס ההזמנה בפאנל.${demo ? " <strong>סביבת DEMO — אין חיובים אמיתיים.</strong>" : ""}</p>

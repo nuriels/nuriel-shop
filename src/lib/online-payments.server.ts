@@ -28,6 +28,21 @@ export function paymentFnError(error: unknown): Error {
   return new Error(GENERIC_FAILURE);
 }
 
+/**
+ * P-6a (1)(5): every access to a store terminal (status, save, connection check, the unreturned list) — the platform
+ * host AND a platform admin, checked before any payments call; the DB checks the same actor again. The store is
+ * the one named in the request; the DB and the encryption context (tenant id in the AAD) bind the account to it.
+ */
+export async function requirePlatformTerminalAdmin(userId: string, limit: number): Promise<void> {
+  const { isPlatformRequest } = await import("@/integrations/supabase/tenant.server");
+  if (!isPlatformRequest()) throw new Error("רק מפאנל הפלטפורמה");
+  const { isPlatformAdminUser } = await import("@/integrations/supabase/client.server");
+  if (!(await isPlatformAdminUser(userId))) throw new Error("אין הרשאה לפעולה הזו");
+  const { allowAction } = await import("@/lib/rate-limit.server");
+  if (!allowAction(`pay-admin:${userId}`, limit, 15 * 60 * 1000))
+    throw new Error("יותר מדי ניסיונות. אפשר לנסות שוב בעוד כמה דקות.");
+}
+
 /** the store of the request's host; null on the platform host or when no store was resolved */
 export async function hostStoreId(): Promise<string | null> {
   const { isPlatformRequest, maybeCurrentTenant } =

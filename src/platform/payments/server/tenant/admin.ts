@@ -18,6 +18,7 @@ import {
 } from "@/platform/payments/max/protocol";
 import { paymentsRpc } from "@/platform/payments/server/db";
 import {
+  envMode,
   hypEndpoint,
   paymentsReady,
   terminalAllowed,
@@ -55,7 +56,7 @@ function readyEnv(): PaymentsEnv {
 }
 
 /** DEMO: test only; production: live only (decision ה-4) */
-const modeFor = (env: PaymentsEnv): PaymentMode => (env === "demo" ? "test" : "live");
+const modeFor = (env: PaymentsEnv): PaymentMode => envMode(env);
 
 export function unreturnedViewOf(data: unknown): UnreturnedAttemptView[] {
   return asArray(data).flatMap((row) => {

@@ -1,9 +1,13 @@
 /**
  * MAX/Hyp payments — the environment guard (server only; plan §6.1 ENV-1, ENV-3, ENV-7, ENV-9).
  *
- * • paymentsEnv(): PAYMENTS_ENV must say "demo" or "production". It is never derived from NODE_ENV (that is
- *   "production" in every container). "production" counts only on the production platform host, and "demo" is
- *   refused there; anything else means payments are off (null).
+ * • paymentsEnv(): PAYMENTS_ENV must say "demo", "pilot" or "production". It is never derived from NODE_ENV (that
+ *   is "production" in every container). "production" counts only on the production platform host, and "demo" is
+ *   refused there; "pilot" (contract §7.2 P-7: test payments on the live site, one store) counts only on the
+ *   production host or a localhost / *.localhost host (tests, with the loopback mock); anything else means payments
+ *   are off (null).
+ * • envMode(): the ONE mode each environment allows — an exhaustive switch (the compiler finds a new value):
+ *   demo → test, pilot → test, production → live. modeAllowed / terminalAllowed / isTestEnv follow it.
  * • hypEndpoint(): the fixed Hyp address. The test-only MAX_PAY_TEST_URL (the local mock) is honoured only when it
  *   is http(s) to 127.0.0.1 / localhost AND the platform host itself is localhost / *.localhost — a host that
  *   cannot be served from the internet (the pattern of src/platform/ai/router.server.ts). It belongs in TEST_ONLY
@@ -20,7 +24,7 @@ import { MIN_ROOT_CHARS, safeEqual } from "./crypto";
 import { platformRootSecret } from "./platform-keys";
 import { tenantRootSecret } from "./tenant-keys";
 
-export type PaymentsEnv = "demo" | "production";
+export type PaymentsEnv = "demo" | "pilot" | "production";
 /** = PaymentScope / PaymentMode in ../provider.ts */
 type PaymentScope = "platform" | "tenant";
 type PaymentMode = "test" | "live";
@@ -36,7 +40,9 @@ export type PaymentsOffReason =
   | "root_short"
   | "root_placeholder"
   | "roots_equal"
-  | "root_reused";
+  | "root_reused"
+  /** P-5: the platform scope is off in the pilot */
+  | "pilot";
 
 type EnvState = { env: PaymentsEnv } | { off: "unset" | "invalid" | "host_mismatch" };
 
@@ -84,14 +90,79 @@ function platformHost(): string {
   return (process.env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase() ?? "").replace(/\.$/, "");
 }
 
+function isPaymentsEnv(value: string): value is PaymentsEnv {
+  return value === "demo" || value === "pilot" || value === "production";
+}
+
+/** a host that cannot be served from the internet (tests and the local E2E stack) */
+function isLocalHost(host: string): boolean {
+  return host === "localhost" || host.endsWith(".localhost");
+}
+
+/** where each environment may run (exhaustive) */
+function hostAllows(env: PaymentsEnv, host: string): boolean {
+  const onProductionHost = host === PRODUCTION_PLATFORM_HOST;
+  switch (env) {
+    case "production":
+      return onProductionHost;
+    case "demo":
+      return !onProductionHost;
+    case "pilot":
+      return onProductionHost || isLocalHost(host);
+    default:
+      return unknownEnv(env);
+  }
+}
+
+function unknownEnv(env: never): never {
+  void env;
+  throw new Error("payments: unknown environment");
+}
+
 function envState(): EnvState {
   const marker = process.env["PAYMENTS_ENV"]?.trim();
   if (!marker) return { off: "unset" };
-  if (marker !== "demo" && marker !== "production") return { off: "invalid" };
-  const onProductionHost = platformHost() === PRODUCTION_PLATFORM_HOST;
-  // production only on the production host; demo never there
-  if ((marker === "production") !== onProductionHost) return { off: "host_mismatch" };
+  if (!isPaymentsEnv(marker)) return { off: "invalid" };
+  if (!hostAllows(marker, platformHost())) return { off: "host_mismatch" };
   return { env: marker };
+}
+
+/** the one mode this environment allows (DM-ENV-3, P-3): exhaustive, no default */
+export function envMode(env: PaymentsEnv): PaymentMode {
+  switch (env) {
+    case "demo":
+      return "test";
+    case "pilot":
+      return "test";
+    case "production":
+      return "live";
+    default:
+      return unknownEnv(env);
+  }
+}
+
+/** a test-terminal environment (demo or pilot): the screens show the DEMO notice, the ₪50 cap applies */
+export function isTestEnv(env: PaymentsEnv): boolean {
+  return envMode(env) === "test";
+}
+
+/** isTestEnv of the current environment; false when payments are off */
+export function testPaymentsEnv(): boolean {
+  const env = paymentsEnv();
+  return env !== null && isTestEnv(env);
+}
+
+/**
+ * The DEMO server itself (HostMode.demo: visible to every visitor of the site). The pilot runs on the live site and
+ * never advertises test payments to anyone but its testers (P-4), so it is not a "DEMO server" here.
+ */
+export function demoServer(): boolean {
+  return paymentsEnv() === "demo";
+}
+
+/** the pilot (P-1…P-10): terminals are set by the platform admin only, never by a store's own staff */
+export function isPilotEnv(env: PaymentsEnv | null): boolean {
+  return env === "pilot";
 }
 
 /** "demo" | "production"; null = payments off (missing/unknown, or not matching the platform host) */
@@ -105,8 +176,7 @@ const LOOPBACK_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d{2,5})?(?:\/[\
 /** the test-only mock address, when (and only when) every condition holds */
 function mockOverride(): string | null {
   const override = process.env["MAX_PAY_TEST_URL"]?.trim();
-  const host = platformHost();
-  const localPlatform = host === "localhost" || host.endsWith(".localhost");
+  const localPlatform = isLocalHost(platformHost());
   if (!override || !localPlatform || !LOOPBACK_URL.test(override)) return null;
   try {
     const url = new URL(override);
@@ -125,9 +195,9 @@ export function hypEndpoint(): string {
   return mockOverride() ?? HYP_ENDPOINT;
 }
 
-/** DM-ENV-3 (decision ה-4): DEMO uses only `test`, production only `live` */
+/** DM-ENV-3 (decision ה-4, P-3): DEMO and the pilot use only `test`, production only `live` */
 export function modeAllowed(env: PaymentsEnv, mode: PaymentMode): boolean {
-  return env === "demo" ? mode === "test" : env === "production" && mode === "live";
+  return mode === envMode(env);
 }
 
 /**
@@ -136,8 +206,8 @@ export function modeAllowed(env: PaymentsEnv, mode: PaymentMode): boolean {
  */
 export function terminalAllowed(env: PaymentsEnv, terminal: string): boolean {
   if (typeof terminal !== "string" || !/^[0-9]{10}$/.test(terminal)) return false;
-  const testPrefix = terminal.startsWith("00100");
-  return env === "demo" ? testPrefix : env === "production" && !testPrefix;
+  // a test environment (demo, pilot) needs a 00100… terminal, production never takes one
+  return terminal.startsWith("00100") === isTestEnv(env);
 }
 
 function isPlaceholder(root: string): boolean {
@@ -179,6 +249,8 @@ export function paymentsReady(
   const env = paymentsEnv();
   if (!env) return { ok: false, reason: "env" };
   if (scope !== "tenant" && scope !== "platform") return { ok: false, reason: "scope" };
+  // P-5: NURIEL's own terminal is off in the pilot (the DB refuses it too)
+  if (scope === "platform" && isPilotEnv(env)) return { ok: false, reason: "pilot" };
   const own = scope === "tenant" ? tenantRootSecret() : platformRootSecret();
   const other = scope === "tenant" ? platformRootSecret() : tenantRootSecret();
   const problem = rootProblem(own);
