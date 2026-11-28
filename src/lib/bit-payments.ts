@@ -13,8 +13,11 @@ import { attachmentBytesMatch, attachmentExtension, cleanAttachmentName } from "
 // אמצעי תשלום ומצבי תשלום
 // ------------------------------------------------------------
 
-/** offline = תשלום טלפוני מול נציג | bit = העברה בביט | credit_card = הזמנות ישנות (Hyp הוסר בחלק 28) */
-export type PaymentMethod = "offline" | "credit_card" | "bit" | "grow";
+/**
+ * offline = תשלום טלפוני מול נציג | bit = העברה בביט | credit_card = הזמנות ישנות (Hyp הוסר בחלק 28) |
+ * online = תשלום מקוון בכרטיס אשראי (MAX/Hyp DEMO)
+ */
+export type PaymentMethod = "offline" | "credit_card" | "bit" | "grow" | "online";
 
 /**
  * awaiting = ממתינה לתשלום (pending_payment) · awaiting_verification = ממתינה
@@ -28,6 +31,7 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   credit_card: "תשלום באשראי",
   bit: "תשלום בביט",
   grow: "תשלום מקוון (אשראי / ביט)",
+  online: "תשלום מקוון בכרטיס אשראי",
 };
 
 /** כמה זמן יש ללקוח להעביר בביט ולשלוח אסמכתא (כמו במסד) */
@@ -51,7 +55,9 @@ export function paymentStatusLabel(
           ? "שולמה באשראי"
           : method === "grow"
             ? "שולמה אונליין"
-            : "שולמה";
+            : method === "online"
+              ? "שולמה אונליין"
+              : "שולמה";
     case "expired":
       return "לא שולמה בזמן";
     case "rejected":

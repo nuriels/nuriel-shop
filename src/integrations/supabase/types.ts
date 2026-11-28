@@ -2126,7 +2126,7 @@ export type Database = {
           coupon_min_order: number | null;
           coupon_exclude_sale: boolean | null;
           discount_amount: number;
-          payment_method: "offline" | "credit_card" | "bit" | "grow";
+          payment_method: "offline" | "credit_card" | "bit" | "grow" | "online";
           payment_status:
             "not_required" | "awaiting" | "awaiting_verification" | "paid" | "expired" | "rejected";
           payment_due_at: string | null;
@@ -2204,7 +2204,7 @@ export type Database = {
           coupon_min_order?: number | null;
           coupon_exclude_sale?: boolean | null;
           discount_amount?: number;
-          payment_method?: "offline" | "credit_card" | "bit" | "grow";
+          payment_method?: "offline" | "credit_card" | "bit" | "grow" | "online";
           payment_status?:
             "not_required" | "awaiting" | "awaiting_verification" | "paid" | "expired" | "rejected";
           payment_due_at?: string | null;
@@ -2282,7 +2282,7 @@ export type Database = {
           coupon_min_order?: number | null;
           coupon_exclude_sale?: boolean | null;
           discount_amount?: number;
-          payment_method?: "offline" | "credit_card" | "bit" | "grow";
+          payment_method?: "offline" | "credit_card" | "bit" | "grow" | "online";
           payment_status?:
             "not_required" | "awaiting" | "awaiting_verification" | "paid" | "expired" | "rejected";
           payment_due_at?: string | null;
@@ -3928,6 +3928,8 @@ export type Database = {
         Returns: Json;
       };
       max_attempts_expire: { Args: never; Returns: number };
+      /** החזרות שהתקבלו ועוד לא אומתו (VERIFY נכשל בתקלה) — ל-VERIFY חוזר של העבודה התקופתית */
+      max_attempts_pending_verify: { Args: { _limit?: number }; Returns: Json };
       max_attempt_cancel: {
         Args: { _actor: string; _tenant: string; _order: string };
         Returns: number;
@@ -4031,6 +4033,7 @@ export type Database = {
         Returns: Json;
       };
       platform_attempts_expire: { Args: never; Returns: number };
+      platform_attempts_pending_verify: { Args: { _limit?: number }; Returns: Json };
       platform_card_payment_resolve: {
         Args: { _actor: string; _attempt: string; _note: string | null };
         Returns: boolean;
