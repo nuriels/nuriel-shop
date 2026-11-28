@@ -13,6 +13,7 @@ import {
   ATTEMPT_STATE_LABELS,
   REVIEW_OUTCOME_LABELS,
   agorotText,
+  onlinePaymentPanelState,
   reviewReasonLabel,
   type OnlinePaymentView,
   type ReviewOutcome,
@@ -68,12 +69,17 @@ export function OnlinePaymentInfo({
 
   const attempt = view?.attempt ?? null;
   const state = attempt?.state ?? null;
-  const paid = view?.paymentStatus === "paid";
-  const outcome = attempt?.reviewOutcome ?? null;
-  const review = state === "needs_review" && outcome === null;
-  const charged = outcome === "charged";
-  const held = view?.held === true && !paid;
-  const live = state === "created" || state === "redirected";
+  // X-25: derived from the DB's latest answer on every render — a reopened review (X-22) is open again
+  const {
+    paid,
+    live,
+    held,
+    charged,
+    openReview: review,
+    decision,
+    reopened,
+    guidance,
+  } = onlinePaymentPanelState(view);
 
   const act = async (work: () => Promise<unknown>, done: string) => {
     setBusy(true);
@@ -139,11 +145,18 @@ export function OnlinePaymentInfo({
           הבדיקה.
         </p>
       )}
-      {held && (
-        <p className="font-semibold" data-testid="online-payment-held">
-          {charged
-            ? "ההזמנה מוחזקת לטיפול ידני: בוצע חיוב — יש לבטל ולזכות בפורטל Hyp, או לטפל בהזמנה ידנית."
-            : "ההזמנה מוחזקת: תשלום שחזר מדף התשלום עוד לא הוכרע. היא לא תבוטל אוטומטית ואי אפשר לשלם עליה שוב עד להחלטה."}
+      {decision && (
+        <p className="font-semibold" data-testid="online-payment-review-decision">
+          ההחלטה: {decision}
+        </p>
+      )}
+      {held && guidance && (
+        <p
+          className="font-semibold"
+          data-testid="online-payment-held"
+          data-reopened={reopened ? "true" : "false"}
+        >
+          {guidance}
         </p>
       )}
       {canManage && (live || (review && attempt?.id)) && (

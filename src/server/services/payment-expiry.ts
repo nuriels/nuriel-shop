@@ -9,7 +9,7 @@
 
 import { supabaseAdminUnscoped } from "@/integrations/supabase/client.server";
 import { paymentsStartupLine } from "@/platform/payments/server/env";
-import type { TenantJobResult } from "@/platform/payments/server/tenant/jobs";
+import { alertIfJobsOff, type TenantJobResult } from "@/platform/payments/server/tenant/jobs";
 
 let expiryTimer: ReturnType<typeof setInterval> | null = null;
 let startupLineLogged = false;
@@ -53,6 +53,8 @@ export function startPaymentExpiryJob(): void {
   if (!startupLineLogged) {
     startupLineLogged = true;
     console.log(paymentsStartupLine());
+    // X-25: a separate line (the startup line's format is parsed by deploy/demo/demo-check.sh)
+    alertIfJobsOff();
   }
   if (expiryTimer || process.env["NODE_ENV"] === "test") return;
   expiryTimer = setInterval(() => void paymentsTick(), 5 * 60 * 1000);
