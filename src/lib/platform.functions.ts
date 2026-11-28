@@ -33,7 +33,7 @@ export const getHostMode = createServerFn({ method: "GET" }).handler(async () =>
     baseDomain: tenantBaseDomain(),
     /** פאנל הפלטפורמה — לקישור "חזרה לפאנל" של מנהל-על שנמצא בחנות */
     platformUrl: adminHost ? `https://${adminHost}/platform` : null,
-    /** MAX/Hyp DEMO: סביבת התשלומים DEMO (PAYMENTS_ENV, דרך שומר הסביבה) — הפס הקבוע בכל עמוד */
+    /** MAX/Hyp DEMO: סביבת התשלומים DEMO (PAYMENTS_ENV, דרך שומר הסביבה) — מידע בלבד, אין פס באתר כולו (X-12) */
     demo: paymentsEnv() === "demo",
   };
 });
