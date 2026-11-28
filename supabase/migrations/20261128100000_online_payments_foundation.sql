@@ -10,7 +10,8 @@
 --      platform_terminal_*. A function that takes _actor is never granted to authenticated (finding H1).
 --   2. both settle functions take _return_flags text[] (document | hk | multi). A returned Hesh / HeshASM →
 --      needs_review 'document_issued'; only the flag is kept, never the value (H2, decision ה-6).
---   3. CCode 600 / 700 / 800, HKId or MULTI → needs_review 'unexpected_hold', before the generic "failed" branch (M3).
+--   3. CCode 10 (partial approval) / 600 / 700 / 800, HKId or MULTI → needs_review 'unexpected_hold', before the generic
+--      "failed" branch — never failed, never paid (M3; '10': lead decision 2026-11-28).
 --   4. a database that was ever DEMO never becomes production; production marks a fresh database only (M5).
 --   5. a paid online order: total and lines locked for everyone, staff included, until a refund path exists (M11).
 --   6. payments.unknown_returns + platform_payment_unknown_return(): a return with no attempt is recorded (L1).
@@ -152,14 +153,16 @@ CREATE TABLE IF NOT EXISTS payments.platform_accounts (
   mode                          text NOT NULL DEFAULT 'test' CHECK (mode IN ('test', 'live')),
   enabled                       boolean NOT NULL DEFAULT false,
   terminal_number               text CHECK (terminal_number IS NULL OR terminal_number ~ '^[0-9]{10}$'),
-  -- AES-256-GCM sealed by the app (contract §4): 'v1:<kid>:<iv>:<tag>:<ct>' (base64url). Root secret of THIS scope
-  -- only (PLATFORM_TERMINAL_SECRETS_KEY); AAD binds environment, scope, mode, account and field. Never returned by any
-  -- function except the secret functions, which return ciphertext only.
-  api_key_enc                   text CHECK (api_key_enc IS NULL OR api_key_enc
-                                  ~ '^v1:[A-Za-z0-9._-]{1,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{2,4000}$'),
-  api_password_enc              text CHECK (api_password_enc IS NULL OR api_password_enc
-                                  ~ '^v1:[A-Za-z0-9._-]{1,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{2,4000}$'),
-  key_version                   smallint NOT NULL DEFAULT 1 CHECK (key_version BETWEEN 1 AND 9999),
+  -- AES-256-GCM sealed by the app (contract §4, crypto.ts): 'v1:<kid 8 hex>:<iv 16>:<tag 22>:<ct>' (base64url, no
+  -- padding). Root secret of THIS scope only (PLATFORM_TERMINAL_SECRETS_KEY); the app binds the token to accountId
+  -- 'platform' (one platform account per provider). Never returned by any function except the secret functions, which
+  -- return ciphertext only.
+  api_key_enc                   text CHECK (api_key_enc IS NULL OR (char_length(api_key_enc) <= 2048 AND api_key_enc
+                                  ~ '^v1:[0-9a-f]{8}:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:[A-Za-z0-9_-]+$')),
+  api_password_enc              text CHECK (api_password_enc IS NULL OR (char_length(api_password_enc) <= 2048
+                                  AND api_password_enc ~ '^v1:[0-9a-f]{8}:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:[A-Za-z0-9_-]+$')),
+  -- the key id (kid) both tokens were sealed with; it is also inside each token (lead decision 2026-11-28)
+  key_id                        text CHECK (key_id IS NULL OR key_id ~ '^[0-9a-f]{8}$'),
   credentials_updated_at        timestamptz,
   credentials_updated_by        uuid,
   status                        text NOT NULL DEFAULT 'unverified' CHECK (status IN ('unverified', 'verified', 'failed')),
@@ -179,6 +182,9 @@ CREATE TABLE IF NOT EXISTS payments.platform_accounts (
   CONSTRAINT platform_accounts_live_terminal CHECK (mode <> 'live' OR terminal_number IS NULL OR terminal_number NOT LIKE '00100%'),
   CONSTRAINT platform_accounts_test_terminal CHECK (mode <> 'test' OR terminal_number IS NULL OR terminal_number LIKE '00100%'),
   CONSTRAINT platform_accounts_test_one_payment CHECK (mode <> 'test' OR (terminal_max_installments = 1 AND max_installments = 1)),
+  CONSTRAINT platform_accounts_key_id CHECK (
+    (api_key_enc IS NULL OR split_part(api_key_enc, ':', 2) = key_id)
+    AND (api_password_enc IS NULL OR split_part(api_password_enc, ':', 2) = key_id)),
   CONSTRAINT platform_accounts_enabled_needs_creds CHECK (
     NOT enabled OR (terminal_number IS NOT NULL AND api_key_enc IS NOT NULL AND api_password_enc IS NOT NULL)),
   CONSTRAINT platform_accounts_verified_at CHECK (status <> 'verified' OR last_verified_at IS NOT NULL),
@@ -202,13 +208,13 @@ CREATE TABLE IF NOT EXISTS payments.platform_attempts (
   target_label       text NOT NULL CHECK (char_length(target_label) BETWEEN 1 AND 200),
   -- the store address the owner started from, checked against that store's own hosts at open (L2); the platform
   -- return sends the browser back there. NULL: the app falls back to the store's subdomain.
-  return_origin      text CHECK (return_origin IS NULL OR (char_length(return_origin) <= 300
-                       AND return_origin ~ '^(https://[a-z0-9.-]+|http://[a-z0-9.-]*localhost(:[0-9]{1,5})?)$')),
+  return_origin      text CHECK (return_origin IS NULL OR (char_length(return_origin) <= 255
+                       AND return_origin ~ '^(https://[a-z0-9.-]+|http://([a-z0-9.-]+\.)?localhost)(:[0-9]{1,5})?$')),
   attempt_no         smallint NOT NULL CHECK (attempt_no BETWEEN 1 AND 5),
   provider           text NOT NULL CHECK (provider IN ('max')),
   mode               text NOT NULL CHECK (mode IN ('test', 'live')),
   terminal_number    text NOT NULL CHECK (terminal_number ~ '^[0-9]{10}$'),
-  key_version        smallint NOT NULL CHECK (key_version BETWEEN 1 AND 9999),
+  key_id             text NOT NULL CHECK (key_id ~ '^[0-9a-f]{8}$'),
   amount_minor       bigint NOT NULL CHECK (amount_minor > 0 AND amount_minor <= 100000000),
   currency           text NOT NULL DEFAULT 'ILS' CHECK (currency IN ('ILS')),
   max_installments   smallint NOT NULL DEFAULT 1 CHECK (max_installments BETWEEN 1 AND 36),
@@ -317,7 +323,7 @@ CREATE TABLE IF NOT EXISTS payments.platform_config_audit (
                    'terminal_changed', 'mode_changed', 'enabled', 'disabled', 'verified', 'verify_failed',
                    'capabilities_changed', 'environment_changed', 'review_resolved')),
   changed_fields text[] NOT NULL DEFAULT '{}'::text[]
-                 CHECK (changed_fields <@ ARRAY['mode', 'terminal_number', 'api_key', 'api_password', 'key_version',
+                 CHECK (changed_fields <@ ARRAY['mode', 'terminal_number', 'api_key', 'api_password', 'key_id',
                    'enabled', 'status', 'terminal_max_installments', 'max_installments',
                    'min_installments_amount_minor', 'environment', 'review']::text[]),
   created_at     timestamptz NOT NULL DEFAULT now(),
@@ -358,13 +364,13 @@ CREATE TABLE IF NOT EXISTS payments.tenant_accounts (
   mode                      text NOT NULL DEFAULT 'test' CHECK (mode IN ('test', 'live')),
   enabled                   boolean NOT NULL DEFAULT false,
   terminal_number           text CHECK (terminal_number IS NULL OR terminal_number ~ '^[0-9]{10}$'),
-  -- root secret PAYMENTS_SECRETS_KEY (store terminals only); AAD binds environment, 'tenant', tenant, mode, account
-  -- and field (a ciphertext copied to another store, field or scope fails to decrypt)
-  api_key_enc               text CHECK (api_key_enc IS NULL OR api_key_enc
-                              ~ '^v1:[A-Za-z0-9._-]{1,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{2,4000}$'),
-  api_password_enc          text CHECK (api_password_enc IS NULL OR api_password_enc
-                              ~ '^v1:[A-Za-z0-9._-]{1,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{2,4000}$'),
-  key_version               smallint NOT NULL DEFAULT 1 CHECK (key_version BETWEEN 1 AND 9999),
+  -- root secret PAYMENTS_SECRETS_KEY (store terminals only), same token format; the app binds it to accountId = the
+  -- tenant id (one account per store and provider): a ciphertext copied to another store, field or scope fails
+  api_key_enc               text CHECK (api_key_enc IS NULL OR (char_length(api_key_enc) <= 2048 AND api_key_enc
+                              ~ '^v1:[0-9a-f]{8}:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:[A-Za-z0-9_-]+$')),
+  api_password_enc          text CHECK (api_password_enc IS NULL OR (char_length(api_password_enc) <= 2048
+                              AND api_password_enc ~ '^v1:[0-9a-f]{8}:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:[A-Za-z0-9_-]+$')),
+  key_id                    text CHECK (key_id IS NULL OR key_id ~ '^[0-9a-f]{8}$'),
   credentials_updated_at    timestamptz,
   credentials_updated_by    uuid,
   status                    text NOT NULL DEFAULT 'unverified' CHECK (status IN ('unverified', 'verified', 'failed')),
@@ -387,6 +393,9 @@ CREATE TABLE IF NOT EXISTS payments.tenant_accounts (
   CONSTRAINT tenant_accounts_live_terminal CHECK (mode <> 'live' OR terminal_number IS NULL OR terminal_number NOT LIKE '00100%'),
   CONSTRAINT tenant_accounts_test_terminal CHECK (mode <> 'test' OR terminal_number IS NULL OR terminal_number LIKE '00100%'),
   CONSTRAINT tenant_accounts_test_one_payment CHECK (mode <> 'test' OR terminal_max_installments = 1),
+  CONSTRAINT tenant_accounts_key_id CHECK (
+    (api_key_enc IS NULL OR split_part(api_key_enc, ':', 2) = key_id)
+    AND (api_password_enc IS NULL OR split_part(api_password_enc, ':', 2) = key_id)),
   CONSTRAINT tenant_accounts_enabled_needs_creds CHECK (
     NOT enabled OR (terminal_number IS NOT NULL AND api_key_enc IS NOT NULL AND api_password_enc IS NOT NULL)),
   CONSTRAINT tenant_accounts_verified_at CHECK (status <> 'verified' OR last_verified_at IS NOT NULL),
@@ -424,7 +433,7 @@ CREATE TABLE IF NOT EXISTS payments.tenant_attempts (
   provider           text NOT NULL CHECK (provider IN ('max')),
   mode               text NOT NULL CHECK (mode IN ('test', 'live')),
   terminal_number    text NOT NULL CHECK (terminal_number ~ '^[0-9]{10}$'),
-  key_version        smallint NOT NULL CHECK (key_version BETWEEN 1 AND 9999),
+  key_id             text NOT NULL CHECK (key_id ~ '^[0-9a-f]{8}$'),
   amount_minor       bigint NOT NULL CHECK (amount_minor > 0 AND amount_minor <= 100000000),
   currency           text NOT NULL DEFAULT 'ILS' CHECK (currency IN ('ILS')),
   max_installments   smallint NOT NULL DEFAULT 1 CHECK (max_installments BETWEEN 1 AND 36),
@@ -535,7 +544,7 @@ CREATE TABLE IF NOT EXISTS payments.tenant_config_audit (
                    'terminal_changed', 'mode_changed', 'enabled', 'disabled', 'verified', 'verify_failed',
                    'capabilities_changed', 'store_settings_changed', 'store_settings_clamped', 'review_resolved')),
   changed_fields text[] NOT NULL DEFAULT '{}'::text[]
-                 CHECK (changed_fields <@ ARRAY['mode', 'terminal_number', 'api_key', 'api_password', 'key_version',
+                 CHECK (changed_fields <@ ARRAY['mode', 'terminal_number', 'api_key', 'api_password', 'key_id',
                    'enabled', 'status', 'terminal_max_installments', 'verified_methods', 'verified_brands',
                    'max_installments', 'min_installments_amount_minor', 'allowed_methods', 'allowed_brands',
                    'review']::text[]),
@@ -566,9 +575,11 @@ CREATE TABLE IF NOT EXISTS payments.tenant_returns (
   attempt_id     uuid NOT NULL,
   payload_sha256 text NOT NULL CHECK (payload_sha256 ~ '^[0-9a-f]{64}$'),
   -- the raw query exactly as received (VERIFY needs every parameter in its original order), sealed by the app with
-  -- the store scope's key. With MoreData it carries card expiry, BIN and last 4 digits: hence the 2-hour ceiling.
+  -- the store scope's key, bound to accountId = the attempt id. With MoreData it carries card expiry, BIN and last 4
+  -- digits: hence the 2-hour ceiling.
   return_enc     text NOT NULL
-                 CHECK (return_enc ~ '^v1:[A-Za-z0-9._-]{1,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{2,20000}$'),
+                 CHECK (char_length(return_enc) <= 32768
+                        AND return_enc ~ '^v1:[0-9a-f]{8}:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:[A-Za-z0-9_-]+$'),
   received_at    timestamptz NOT NULL DEFAULT now(),
   purge_after    timestamptz NOT NULL DEFAULT now() + interval '2 hours',
   PRIMARY KEY (attempt_id, payload_sha256),
@@ -582,7 +593,8 @@ CREATE TABLE IF NOT EXISTS payments.platform_returns (
   attempt_id     uuid NOT NULL REFERENCES payments.platform_attempts (id),
   payload_sha256 text NOT NULL CHECK (payload_sha256 ~ '^[0-9a-f]{64}$'),
   return_enc     text NOT NULL
-                 CHECK (return_enc ~ '^v1:[A-Za-z0-9._-]{1,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{8,64}:[A-Za-z0-9_-]{2,20000}$'),
+                 CHECK (char_length(return_enc) <= 32768
+                        AND return_enc ~ '^v1:[0-9a-f]{8}:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:[A-Za-z0-9_-]+$'),
   received_at    timestamptz NOT NULL DEFAULT now(),
   purge_after    timestamptz NOT NULL DEFAULT now() + interval '2 hours',
   PRIMARY KEY (attempt_id, payload_sha256),
@@ -767,11 +779,12 @@ BEGIN
   RETURN _id;
 END $$;
 
--- The store address a platform payment started from (finding L2): https://<host> (no path, no port), or for the
--- local / E2E stack http://[<label>.]*localhost[:port]. The host must belong to THIS store the way tenant_for_host
--- resolves it — its own domain, its verified custom domain, or <slug>.<base> — and never by the default-store
--- fallback. NULL / empty = no origin (the app falls back to the store's subdomain). The database does not know the
--- platform's base domain: the app passes the origin of the request host it already resolved to this store.
+-- The store address a platform payment started from (finding L2): an origin only — scheme://host[:port], no path,
+-- query or fragment, at most 255 characters. https, except http when the host is localhost or ends with .localhost
+-- (the local / E2E stack: http://<slug>.shop.localhost:3100). The host (port stripped) must resolve to THIS store the
+-- way public.tenant_for_host resolves it — its own domain, its verified custom domain, or <slug>.<base> — and never by
+-- the default-store fallback. NULL / empty = no origin (the app falls back to the store's subdomain). The database does
+-- not know the platform's base domain: the app passes the origin of the request host it already resolved to this store.
 CREATE OR REPLACE FUNCTION payments.store_origin(_tenant uuid, _origin text)
 RETURNS text LANGUAGE plpgsql STABLE SET search_path = '' AS $$
 DECLARE
@@ -781,10 +794,10 @@ BEGIN
   IF _o = '' THEN
     RETURN NULL;
   END IF;
-  IF char_length(_o) <= 300
-     AND _o ~ '^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$' THEN
-    _host := substr(_o, 9);
-  ELSIF char_length(_o) <= 300
+  IF char_length(_o) <= 255
+     AND _o ~ '^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?$' THEN
+    _host := split_part(substr(_o, 9), ':', 1);
+  ELSIF char_length(_o) <= 255
         AND _o ~ '^http://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)*localhost(:[0-9]{1,5})?$' THEN
     _host := split_part(substr(_o, 8), ':', 1);
   ELSE
@@ -1117,6 +1130,10 @@ CREATE TRIGGER tenant_store_settings_guard BEFORE INSERT OR UPDATE ON payments.t
 CREATE OR REPLACE FUNCTION payments.orders_amount_lock()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
+  -- platform_delete_tenant (decision 15): removing the store's order lines re-derives the total on the way out
+  IF COALESCE(current_setting('nuriel.deleting_tenant', true), '') = NEW.tenant_id::text THEN
+    RETURN NULL;
+  END IF;
   IF EXISTS (SELECT 1 FROM payments.tenant_attempts a
               WHERE a.tenant_id = NEW.tenant_id AND a.order_id = NEW.id
                 AND a.state IN ('created', 'redirected', 'returned')) THEN
@@ -1301,11 +1318,11 @@ BEGIN
                 ELSE 1 END;
 
   INSERT INTO payments.tenant_attempts (tenant_id, store_label, order_id, order_number, attempt_no, provider, mode,
-         terminal_number, key_version, amount_minor, currency, max_installments, reference, customer_id, expires_at)
+         terminal_number, key_id, amount_minor, currency, max_installments, reference, customer_id, expires_at)
   VALUES (o.tenant_id,
           COALESCE((SELECT left(format('%s (%s)', t.name, t.slug), 200) FROM public.tenants t WHERE t.id = o.tenant_id),
                    o.tenant_id::text),
-          o.id, COALESCE(o.order_number, o.id::text), _n + 1, 'max', acc.mode, acc.terminal_number, acc.key_version,
+          o.id, COALESCE(o.order_number, o.id::text), _n + 1, 'max', acc.mode, acc.terminal_number, acc.key_id,
           _amount, 'ILS', _tash, replace(gen_random_uuid()::text, '-', ''), o.customer_id, _expires)
   RETURNING * INTO a;
   INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result) VALUES (a.tenant_id, a.id, 'open', 'created');
@@ -1361,7 +1378,7 @@ BEGIN
      WHERE id = a.id;
   END IF;
   RETURN jsonb_build_object('result', 'ok', 'terminal_number', acc.terminal_number, 'mode', acc.mode,
-                            'key_version', acc.key_version, 'api_key_enc', acc.api_key_enc,
+                            'key_id', acc.key_id, 'api_key_enc', acc.api_key_enc,
                             'api_password_enc', acc.api_password_enc);
 END $$;
 
@@ -1459,7 +1476,7 @@ END $$;
 --     Outcomes: test_paid / paid (applied) | needs_review (reason) | not_paid | unverified | already_paid |
 --     duplicate_charge | environment_mismatch | unknown | unknown_payload | malformed.
 --     _return_flags (contract ReturnFlag): document → needs_review 'document_issued'; hk / multi, and CCode
---     600 / 700 / 800 → needs_review 'unexpected_hold' — both checked before the generic "failed" branch.
+--     10 / 600 / 700 / 800 → needs_review 'unexpected_hold' — both checked before the generic "failed" branch.
 CREATE OR REPLACE FUNCTION public.max_attempt_mark_paid(_tenant uuid, _reference text, _payload_sha256 text,
   _verify_ccode text, _ccode text, _terminal text, _txn_id text, _amount_minor bigint, _currency text,
   _installments integer, _approval_code text, _card_brand text, _card_last4 text, _return_flags text[],
@@ -1523,20 +1540,22 @@ BEGIN
     RETURN jsonb_build_object('result', 'needs_review', 'reason', a.review_reason, 'attempt_id', a.id,
                               'order_id', a.order_id, 'tenant_id', a.tenant_id);
   END IF;
+  -- money may have moved without a plain approval: 10 = partial approval, 600 J2 / 700 J5 / 800 postponed (holds),
+  -- HKId = a standing order, MULTI = a multi-transaction (M3; lead decision 2026-11-28 for '10')
+  _doc := 'document' = ANY (_flags);
+  _hold := _ccode IN ('10', '600', '700', '800') OR 'hk' = ANY (_flags) OR 'multi' = ANY (_flags);
   IF a.state IN ('paid', 'test_paid') THEN
-    IF a.provider_txn_id = _txn_id OR _ccode IS DISTINCT FROM '0' THEN
+    IF a.provider_txn_id = _txn_id OR (_ccode IS DISTINCT FROM '0' AND NOT _hold) THEN
       RETURN jsonb_build_object('result', 'already_paid', 'state', a.state, 'attempt_id', a.id,
                                 'order_id', a.order_id, 'tenant_id', a.tenant_id);
     END IF;
-    -- a second, different approved charge for an attempt that is already settled → a refund case
+    -- a second, different approved (or held) charge for an attempt that is already settled → a refund case
     UPDATE payments.tenant_attempts SET review_reason = 'duplicate_charge' WHERE id = a.id AND review_reason IS NULL;
     RETURN jsonb_build_object('result', 'duplicate_charge', 'attempt_id', a.id, 'order_id', a.order_id,
                               'tenant_id', a.tenant_id);
   END IF;
-  _doc := 'document' = ANY (_flags);
-  _hold := _ccode IN ('600', '700', '800') OR 'hk' = ANY (_flags) OR 'multi' = ANY (_flags);
-  -- a plain decline: failed. A hold (600 J2 / 700 J5 / 800 postponed), a standing order (HKId), a multi-transaction
-  -- (MULTI) or an issued document is never a plain decline — it goes to a person below (M3, H2)
+  -- a plain decline: failed. A hold / partial approval / standing order / multi-transaction, or an issued document, is
+  -- never a plain decline — it goes to a person below (needs_review), never 'failed', never paid (M3, H2)
   IF _ccode IS DISTINCT FROM '0' AND NOT _hold AND NOT _doc THEN
     IF a.state IN ('created', 'redirected', 'returned') THEN
       UPDATE payments.tenant_attempts
@@ -1728,29 +1747,47 @@ BEGIN
 END $$;
 
 -- 9k. Order payment status without secrets. The DB authorizes the viewer: the order's customer, the holder of the
---     guest token, staff of that store, or a platform admin; anyone else gets NULL.
+--     guest token, staff of that store (admin / agent), or a platform admin; anyone else gets NULL. attempt_id and
+--     review_reason only for staff and platform admins — never for the customer or the guest (lead decision).
 CREATE OR REPLACE FUNCTION public.max_order_payment_status(_tenant uuid, _order uuid, _viewer uuid,
   _guest_token_sha256 text)
-RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
-  SELECT jsonb_build_object(
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  o      public.orders;
+  a      payments.tenant_attempts;
+  _staff boolean;
+BEGIN
+  SELECT * INTO o FROM public.orders x WHERE x.id = _order AND x.tenant_id = _tenant;
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+  _staff := _viewer IS NOT NULL
+            AND (public.is_platform_admin(_viewer)
+                 OR EXISTS (SELECT 1 FROM public.user_roles ur
+                             WHERE ur.tenant_id = o.tenant_id AND ur.user_id = _viewer AND ur.role IN ('admin', 'agent')
+                               AND NOT ur.is_blocked));
+  IF NOT _staff
+     AND NOT ((o.customer_id IS NOT NULL AND o.customer_id = _viewer)
+              OR (o.customer_id IS NULL AND _guest_token_sha256 IS NOT NULL
+                  AND EXISTS (SELECT 1 FROM payments.tenant_order_access g
+                               WHERE g.order_id = o.id AND g.tenant_id = o.tenant_id
+                                 AND g.token_sha256 = _guest_token_sha256))) THEN
+    RETURN NULL;
+  END IF;
+  SELECT * INTO a FROM payments.tenant_attempts x WHERE x.tenant_id = o.tenant_id AND x.order_id = o.id
+   ORDER BY x.attempt_no DESC LIMIT 1;
+  RETURN jsonb_build_object(
     'order_number', o.order_number, 'status', o.status, 'payment_method', o.payment_method,
     'payment_status', o.payment_status, 'payment_due_at', o.payment_due_at,
-    'attempt', (SELECT jsonb_build_object('state', a.state, 'mode', a.mode, 'applied', a.applied,
-                  'expires_at', a.expires_at, 'amount_minor', a.amount_minor, 'currency', a.currency,
-                  'paid_at', a.paid_at, 'installments', a.installments, 'card_brand', a.card_brand,
-                  'card_last4', a.card_last4, 'approval_code', a.approval_code)
-                  FROM payments.tenant_attempts a WHERE a.tenant_id = o.tenant_id AND a.order_id = o.id
-                 ORDER BY a.attempt_no DESC LIMIT 1))
-    FROM public.orders o
-   WHERE o.id = _order AND o.tenant_id = _tenant
-     AND ((o.customer_id IS NOT NULL AND o.customer_id = _viewer)
-          OR (o.customer_id IS NULL AND EXISTS (SELECT 1 FROM payments.tenant_order_access g
-                                                 WHERE g.order_id = o.id AND g.token_sha256 = _guest_token_sha256))
-          OR EXISTS (SELECT 1 FROM public.user_roles ur
-                      WHERE ur.tenant_id = o.tenant_id AND ur.user_id = _viewer AND ur.role IN ('admin', 'agent')
-                        AND NOT ur.is_blocked)
-          OR public.is_platform_admin(_viewer));
-$$;
+    'attempt', CASE WHEN a.id IS NOT NULL THEN
+                 jsonb_build_object('state', a.state, 'mode', a.mode, 'applied', a.applied,
+                   'expires_at', a.expires_at, 'amount_minor', a.amount_minor, 'currency', a.currency,
+                   'paid_at', a.paid_at, 'installments', a.installments, 'card_brand', a.card_brand,
+                   'card_last4', a.card_last4, 'approval_code', a.approval_code)
+                 || CASE WHEN _staff THEN jsonb_build_object('attempt_id', a.id, 'review_reason', a.review_reason)
+                         ELSE '{}'::jsonb END
+               END);
+END $$;
 
 -- 9l. Terminal status for the store owner and the platform admin: last 2 digits of the terminal, has_* flags,
 --     capabilities, the owner's installment settings. Never ciphertext.
@@ -1857,7 +1894,7 @@ CREATE OR REPLACE FUNCTION public.platform_store_terminal_save(_actor uuid, _ten
   _app_environment text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
-  _keys    constant text[] := ARRAY['mode', 'terminal_number', 'api_key_enc', 'api_password_enc', 'key_version',
+  _keys    constant text[] := ARRAY['mode', 'terminal_number', 'api_key_enc', 'api_password_enc', 'key_id',
                                     'enabled', 'terminal_max_installments', 'verified_methods', 'verified_brands',
                                     'clear_credentials', 'force'];
   _clear   boolean;
@@ -1919,7 +1956,12 @@ BEGIN
     terminal_number = _new_tn,
     api_key_enc = CASE WHEN _clear THEN NULL ELSE COALESCE(_patch ->> 'api_key_enc', x.api_key_enc) END,
     api_password_enc = CASE WHEN _clear THEN NULL ELSE COALESCE(_patch ->> 'api_password_enc', x.api_password_enc) END,
-    key_version = COALESCE((_patch ->> 'key_version')::smallint, x.key_version),
+    -- the kid of the tokens: given, or read from the new token; cleared with the credentials (CHECK: = each token's kid)
+    key_id = CASE WHEN _clear THEN NULL
+                  ELSE COALESCE(NULLIF(_patch ->> 'key_id', ''),
+                                CASE WHEN _patch ? 'api_key_enc' THEN split_part(_patch ->> 'api_key_enc', ':', 2)
+                                     WHEN _patch ? 'api_password_enc' THEN split_part(_patch ->> 'api_password_enc', ':', 2) END,
+                                x.key_id) END,
     credentials_updated_at = CASE WHEN _clear OR _patch ? 'api_key_enc' OR _patch ? 'api_password_enc'
                                   THEN now() ELSE x.credentials_updated_at END,
     credentials_updated_by = CASE WHEN _clear OR _patch ? 'api_key_enc' OR _patch ? 'api_password_enc'
@@ -1966,7 +2008,7 @@ BEGIN
     CASE WHEN cur.terminal_number IS DISTINCT FROM old.terminal_number THEN 'terminal_number' END,
     CASE WHEN cur.api_key_enc IS DISTINCT FROM old.api_key_enc THEN 'api_key' END,
     CASE WHEN cur.api_password_enc IS DISTINCT FROM old.api_password_enc THEN 'api_password' END,
-    CASE WHEN cur.key_version IS DISTINCT FROM old.key_version THEN 'key_version' END,
+    CASE WHEN cur.key_id IS DISTINCT FROM old.key_id THEN 'key_id' END,
     CASE WHEN cur.status IS DISTINCT FROM old.status THEN 'status' END,
     CASE WHEN cur.terminal_max_installments IS DISTINCT FROM old.terminal_max_installments
          THEN 'terminal_max_installments' END,
@@ -2027,9 +2069,31 @@ BEGIN
   IF NOT FOUND OR acc.terminal_number IS NULL OR acc.api_key_enc IS NULL OR acc.api_password_enc IS NULL THEN
     RAISE EXCEPTION 'the terminal is not fully configured' USING ERRCODE = 'no_data_found';
   END IF;
-  RETURN jsonb_build_object('terminal_number', acc.terminal_number, 'mode', acc.mode, 'key_version', acc.key_version,
+  RETURN jsonb_build_object('terminal_number', acc.terminal_number, 'mode', acc.mode, 'key_id', acc.key_id,
                             'api_key_enc', acc.api_key_enc, 'api_password_enc', acc.api_password_enc);
 END $$;
+
+-- 9q2. The re-VERIFY job (lead decision): returns recorded for an attempt whose VERIFY did not conclude — none ran yet,
+--      or it failed for transport / environment reasons (verification 'error') — while the sealed raw return is still
+--      kept and the attempt can still be verified (not in review, under the VERIFY cap, no live lease). One row per
+--      (attempt, payload), oldest return first.
+CREATE OR REPLACE FUNCTION public.max_attempts_pending_verify(_limit integer DEFAULT 20)
+RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('attempt_id', p.attempt_id, 'tenant_id', p.tenant_id,
+                                               'reference', p.reference, 'payload_sha256', p.payload_sha256,
+                                               'mode', p.mode) ORDER BY p.received_at, p.attempt_id), '[]'::jsonb)
+    FROM (SELECT r.attempt_id, r.tenant_id, a.reference, r.payload_sha256, a.mode, r.received_at
+            FROM payments.tenant_returns r
+            JOIN payments.tenant_attempts a ON a.id = r.attempt_id AND a.tenant_id = r.tenant_id
+           WHERE r.purge_after > now()
+             AND a.state <> 'needs_review' AND a.verify_attempts < 6
+             AND (a.verify_lease_until IS NULL OR a.verify_lease_until <= now())
+             AND NOT EXISTS (SELECT 1 FROM payments.tenant_events e
+                              WHERE e.attempt_id = r.attempt_id AND e.source = 'verify'
+                                AND e.payload_sha256 = r.payload_sha256 AND e.verification IN ('verified', 'rejected'))
+           ORDER BY r.received_at, r.attempt_id
+           LIMIT LEAST(GREATEST(COALESCE(_limit, 20), 1), 200)) p;
+$$;
 
 -- 9r. Decision 14 (store scope): keep the sealed raw return of a payload recorded as received for that attempt (at
 --     most 20 per attempt; first one wins), read it back while it is younger than its purge time.
@@ -2146,9 +2210,9 @@ BEGIN
                 WHEN _amount >= acc.min_installments_amount_minor THEN acc.max_installments ELSE 1 END;
   INSERT INTO payments.platform_attempts (payer_tenant_id, payer_label, payer_engine, payer_user_id, target_kind,
          target_id, ledger_charge_id, target_label, return_origin, attempt_no, provider, mode, terminal_number,
-         key_version, amount_minor, currency, max_installments, reference, expires_at)
+         key_id, amount_minor, currency, max_installments, reference, expires_at)
   VALUES (_tenant, left(format('%s (%s)', t.name, t.slug), 200), t.site_type, _actor, _target_kind, _target_id,
-          ch.id, _label, _origin, _n + 1, 'max', acc.mode, acc.terminal_number, acc.key_version, _amount, 'ILS',
+          ch.id, _label, _origin, _n + 1, 'max', acc.mode, acc.terminal_number, acc.key_id, _amount, 'ILS',
           _tash, replace(gen_random_uuid()::text, '-', ''), now() + interval '30 minutes')
   RETURNING * INTO a;
   INSERT INTO payments.platform_events (attempt_id, source, result) VALUES (a.id, 'open', 'created');
@@ -2202,7 +2266,7 @@ BEGIN
      WHERE id = a.id;
   END IF;
   RETURN jsonb_build_object('result', 'ok', 'terminal_number', acc.terminal_number, 'mode', acc.mode,
-                            'key_version', acc.key_version, 'api_key_enc', acc.api_key_enc,
+                            'key_id', acc.key_id, 'api_key_enc', acc.api_key_enc,
                             'api_password_enc', acc.api_password_enc);
 END $$;
 
@@ -2331,8 +2395,11 @@ BEGIN
     RETURN jsonb_build_object('result', 'needs_review', 'reason', a.review_reason, 'attempt_id', a.id,
                               'payer_tenant_id', a.payer_tenant_id, 'return_origin', a.return_origin);
   END IF;
+  -- as 9g: 10 = partial approval, 600 / 700 / 800 holds, HKId, MULTI — money may have moved
+  _doc := 'document' = ANY (_flags);
+  _hold := _ccode IN ('10', '600', '700', '800') OR 'hk' = ANY (_flags) OR 'multi' = ANY (_flags);
   IF a.state IN ('paid', 'test_paid') THEN
-    IF a.provider_txn_id = _txn_id OR _ccode IS DISTINCT FROM '0' THEN
+    IF a.provider_txn_id = _txn_id OR (_ccode IS DISTINCT FROM '0' AND NOT _hold) THEN
       RETURN jsonb_build_object('result', 'already_paid', 'state', a.state, 'attempt_id', a.id,
                                 'payer_tenant_id', a.payer_tenant_id, 'return_origin', a.return_origin);
     END IF;
@@ -2340,8 +2407,6 @@ BEGIN
     RETURN jsonb_build_object('result', 'duplicate_charge', 'attempt_id', a.id, 'payer_tenant_id', a.payer_tenant_id,
                               'return_origin', a.return_origin);
   END IF;
-  _doc := 'document' = ANY (_flags);
-  _hold := _ccode IN ('600', '700', '800') OR 'hk' = ANY (_flags) OR 'multi' = ANY (_flags);
   IF _ccode IS DISTINCT FROM '0' AND NOT _hold AND NOT _doc THEN
     IF a.state IN ('created', 'redirected', 'returned') THEN
       UPDATE payments.platform_attempts
@@ -2587,7 +2652,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.platform_terminal_save(_actor uuid, _patch jsonb, _app_environment text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
-  _keys    constant text[] := ARRAY['mode', 'terminal_number', 'api_key_enc', 'api_password_enc', 'key_version',
+  _keys    constant text[] := ARRAY['mode', 'terminal_number', 'api_key_enc', 'api_password_enc', 'key_id',
                                     'enabled', 'terminal_max_installments', 'max_installments',
                                     'min_installments_amount_minor', 'clear_credentials', 'force'];
   _clear   boolean;
@@ -2653,7 +2718,12 @@ BEGIN
     terminal_number = _new_tn,
     api_key_enc = CASE WHEN _clear THEN NULL ELSE COALESCE(_patch ->> 'api_key_enc', x.api_key_enc) END,
     api_password_enc = CASE WHEN _clear THEN NULL ELSE COALESCE(_patch ->> 'api_password_enc', x.api_password_enc) END,
-    key_version = COALESCE((_patch ->> 'key_version')::smallint, x.key_version),
+    -- the kid of the tokens: given, or read from the new token; cleared with the credentials (CHECK: = each token's kid)
+    key_id = CASE WHEN _clear THEN NULL
+                  ELSE COALESCE(NULLIF(_patch ->> 'key_id', ''),
+                                CASE WHEN _patch ? 'api_key_enc' THEN split_part(_patch ->> 'api_key_enc', ':', 2)
+                                     WHEN _patch ? 'api_password_enc' THEN split_part(_patch ->> 'api_password_enc', ':', 2) END,
+                                x.key_id) END,
     credentials_updated_at = CASE WHEN _clear OR _patch ? 'api_key_enc' OR _patch ? 'api_password_enc'
                                   THEN now() ELSE x.credentials_updated_at END,
     credentials_updated_by = CASE WHEN _clear OR _patch ? 'api_key_enc' OR _patch ? 'api_password_enc'
@@ -2679,7 +2749,7 @@ BEGIN
     CASE WHEN cur.terminal_number IS DISTINCT FROM old.terminal_number THEN 'terminal_number' END,
     CASE WHEN cur.api_key_enc IS DISTINCT FROM old.api_key_enc THEN 'api_key' END,
     CASE WHEN cur.api_password_enc IS DISTINCT FROM old.api_password_enc THEN 'api_password' END,
-    CASE WHEN cur.key_version IS DISTINCT FROM old.key_version THEN 'key_version' END,
+    CASE WHEN cur.key_id IS DISTINCT FROM old.key_id THEN 'key_id' END,
     CASE WHEN cur.status IS DISTINCT FROM old.status THEN 'status' END,
     CASE WHEN cur.terminal_max_installments IS DISTINCT FROM old.terminal_max_installments
          THEN 'terminal_max_installments' END,
@@ -2705,7 +2775,7 @@ BEGIN
 END $$;
 
 -- 10m. Status of NURIEL's terminal for the platform admin (never ciphertext). unknown_returns: the misconfiguration
---      alert's counts (L1). (Renamed from platform_billing_terminal_status.) Created before 10n/10o, which return it.
+--      alert's counts (L1). (Renamed from platform_billing_terminal_status.)
 CREATE OR REPLACE FUNCTION public.platform_terminal_status(_actor uuid)
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -2767,9 +2837,28 @@ BEGIN
   IF NOT FOUND OR acc.terminal_number IS NULL OR acc.api_key_enc IS NULL OR acc.api_password_enc IS NULL THEN
     RAISE EXCEPTION 'the terminal is not fully configured' USING ERRCODE = 'no_data_found';
   END IF;
-  RETURN jsonb_build_object('terminal_number', acc.terminal_number, 'mode', acc.mode, 'key_version', acc.key_version,
+  RETURN jsonb_build_object('terminal_number', acc.terminal_number, 'mode', acc.mode, 'key_id', acc.key_id,
                             'api_key_enc', acc.api_key_enc, 'api_password_enc', acc.api_password_enc);
 END $$;
+
+-- 10o2. The re-VERIFY job, platform scope (as 9q2; no tenant_id)
+CREATE OR REPLACE FUNCTION public.platform_attempts_pending_verify(_limit integer DEFAULT 20)
+RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('attempt_id', p.attempt_id, 'reference', p.reference,
+                                               'payload_sha256', p.payload_sha256, 'mode', p.mode)
+                            ORDER BY p.received_at, p.attempt_id), '[]'::jsonb)
+    FROM (SELECT r.attempt_id, a.reference, r.payload_sha256, a.mode, r.received_at
+            FROM payments.platform_returns r
+            JOIN payments.platform_attempts a ON a.id = r.attempt_id
+           WHERE r.purge_after > now()
+             AND a.state <> 'needs_review' AND a.verify_attempts < 6
+             AND (a.verify_lease_until IS NULL OR a.verify_lease_until <= now())
+             AND NOT EXISTS (SELECT 1 FROM payments.platform_events e
+                              WHERE e.attempt_id = r.attempt_id AND e.source = 'verify'
+                                AND e.payload_sha256 = r.payload_sha256 AND e.verification IN ('verified', 'rejected'))
+           ORDER BY r.received_at, r.attempt_id
+           LIMIT LEAST(GREATEST(COALESCE(_limit, 20), 1), 200)) p;
+$$;
 
 -- 10p. Decision 14 (platform scope): the sealed raw return, as 9r
 CREATE OR REPLACE FUNCTION public.platform_return_keep(_attempt uuid, _payload_sha256 text, _return_enc text)
@@ -2935,8 +3024,8 @@ BEGIN
                  'max_payments_active', 'max_order_access_issue', 'max_attempt_open', 'max_attempt_secrets',
                  'max_attempt_signed', 'max_attempt_record_return', 'max_attempt_mark_paid', 'max_attempts_expire',
                  'max_attempt_cancel', 'max_review_resolve', 'max_order_payment_status', 'max_account_status',
-                 'max_store_settings_save', 'max_unreturned_attempts', 'max_return_keep', 'max_return_get',
-                 'platform_store_terminal_save', 'platform_store_terminal_verified',
+                 'max_store_settings_save', 'max_unreturned_attempts', 'max_attempts_pending_verify',
+                 'max_return_keep', 'max_return_get', 'platform_store_terminal_save', 'platform_store_terminal_verified',
                  'platform_store_terminal_check_secrets',
                  -- platform scope (NURIEL's terminal)
                  'platform_attempt_open', 'platform_attempt_secrets', 'platform_attempt_signed',
@@ -2944,7 +3033,7 @@ BEGIN
                  'platform_card_payment_resolve', 'platform_card_payments', 'platform_unreturned_attempts',
                  'platform_terminal_save', 'platform_terminal_verified', 'platform_terminal_check_secrets',
                  'platform_terminal_status', 'platform_stepup_issue', 'platform_stepup_consume',
-                 'platform_return_keep', 'platform_return_get',
+                 'platform_attempts_pending_verify', 'platform_return_keep', 'platform_return_get',
                  -- both
                  'platform_payment_unknown_return', 'platform_payment_returns_purge') LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', _f.sig);
@@ -3043,15 +3132,16 @@ DECLARE
     'max_payments_active', 'max_order_access_issue', 'max_attempt_open', 'max_attempt_secrets', 'max_attempt_signed',
     'max_attempt_record_return', 'max_attempt_mark_paid', 'max_attempts_expire', 'max_attempt_cancel',
     'max_review_resolve', 'max_order_payment_status', 'max_account_status', 'max_store_settings_save',
-    'max_unreturned_attempts', 'max_return_keep', 'max_return_get', 'platform_store_terminal_save',
+    'max_unreturned_attempts', 'max_attempts_pending_verify', 'max_return_keep', 'max_return_get',
+    'platform_store_terminal_save',
     'platform_store_terminal_verified', 'platform_store_terminal_check_secrets', 'platform_attempt_open',
     'platform_attempt_secrets', 'platform_attempt_signed', 'platform_attempt_record_return',
     'platform_attempt_mark_paid', 'platform_attempts_expire', 'platform_card_payment_resolve',
     'platform_card_payments', 'platform_unreturned_attempts', 'platform_card_my_payments',
     'platform_card_my_options', 'platform_terminal_save', 'platform_terminal_verified',
     'platform_terminal_check_secrets', 'platform_terminal_status', 'platform_stepup_issue',
-    'platform_stepup_consume', 'platform_payment_unknown_return', 'platform_return_keep', 'platform_return_get',
-    'platform_payment_returns_purge'];
+    'platform_stepup_consume', 'platform_attempts_pending_verify', 'platform_payment_unknown_return',
+    'platform_return_keep', 'platform_return_get', 'platform_payment_returns_purge'];
   _bad text;
 BEGIN
   -- the API: each function exactly once (no overload), SECURITY DEFINER with an empty search_path

@@ -7,7 +7,7 @@
 -- רישומי environment_changed של המערכת, ואתגרי ה-step-up (מזהים קצרי-חיים, HMAC בלבד).
 -- בלי נתונים: שלושת הטריגרים על orders / order_items נמחקים; הטקסט שהוכנס ל-orders_default_payment, place_order
 -- ו-place_guest_order מוסר מילה במילה (נכשל בקול אם לא נמצא); orders_payment_check חוזר מילה במילה ל-
--- 20261019520000_grow_payments.sql:94-110; 40 פונקציות ה-API נמחקות; הסכמה payments נמחקת; שני הדגלים נמחקים;
+-- 20261019520000_grow_payments.sql:94-110; 42 פונקציות ה-API נמחקות; הסכמה payments נמחקת; שני הדגלים נמחקים;
 -- ובסוף — הוכחת md5 שהגדרות ארבעת האובייקטים זהות למה שהיה לפני 208 (הסכמה זהה בדיוק למיגרציה 207).
 -- ============================================================
 BEGIN;
@@ -131,7 +131,8 @@ BEGIN
                  'max_payments_active', 'max_order_access_issue', 'max_attempt_open', 'max_attempt_secrets',
                  'max_attempt_signed', 'max_attempt_record_return', 'max_attempt_mark_paid', 'max_attempts_expire',
                  'max_attempt_cancel', 'max_review_resolve', 'max_order_payment_status', 'max_account_status',
-                 'max_store_settings_save', 'max_unreturned_attempts', 'max_return_keep', 'max_return_get',
+                 'max_store_settings_save', 'max_unreturned_attempts', 'max_attempts_pending_verify',
+                 'max_return_keep', 'max_return_get',
                  'platform_store_terminal_save', 'platform_store_terminal_verified',
                  'platform_store_terminal_check_secrets', 'platform_attempt_open', 'platform_attempt_secrets',
                  'platform_attempt_signed', 'platform_attempt_record_return', 'platform_attempt_mark_paid',
@@ -139,7 +140,8 @@ BEGIN
                  'platform_unreturned_attempts', 'platform_card_my_payments', 'platform_card_my_options',
                  'platform_terminal_save', 'platform_terminal_verified', 'platform_terminal_check_secrets',
                  'platform_terminal_status', 'platform_stepup_issue', 'platform_stepup_consume',
-                 'platform_payment_unknown_return', 'platform_return_keep', 'platform_return_get',
+                 'platform_attempts_pending_verify', 'platform_payment_unknown_return', 'platform_return_keep',
+                 'platform_return_get',
                  'platform_payment_returns_purge') LOOP
     EXECUTE format('DROP FUNCTION %s', _f.sig);
   END LOOP;
