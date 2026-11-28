@@ -417,7 +417,7 @@ export async function testPlatformTerminal(
   let ok = false;
   let code: string | null = null;
   if (!terminalAllowed(env, secrets.creds.masof) || !modeAllowed(env, secrets.mode)) {
-    code = "terminal_not_allowed";
+    code = "bad_terminal"; // not a terminal of this environment (≤ 16 characters: the DB keeps the code)
   } else {
     const endpoint = deps.endpoint();
     const order = deps.randomReference();

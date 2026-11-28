@@ -10,18 +10,27 @@ export type LogFields = Readonly<Record<string, LogValue>>;
 
 const EVENT = /^[a-z][a-z0-9_.:-]{0,63}$/;
 const NAME = /^[a-z][a-z0-9_]{0,31}$/;
-/** one token per value: nothing that could split a line or fake another field (no log injection), bounded */
-const token = (value: LogValue) =>
-  String(value)
-    .replace(/[^A-Za-z0-9_.:+-]/g, "_")
+
+/**
+ * One field value: redacted FIRST (with its name, so `masof=…` or an embedded `PassP=…` is masked), then any run of
+ * 9+ digits keeps its last 2 only (terminal-number or card-like), then one token — nothing that could split the line
+ * or fake another field (no log injection) — bounded.
+ */
+function valueToken(name: string, value: Exclude<LogValue, null | undefined>): string {
+  const redacted = redactPaymentText(`${name}=${String(value)}`);
+  return redacted
+    .slice(redacted.indexOf("=") + 1)
+    .replace(/[0-9]{9,}/g, (run) => `#${run.slice(-2)}`)
+    .replace(/[^A-Za-z0-9_.:+#-]/g, "_")
     .slice(0, 80);
+}
 
 /** the redacted line (exported for the tests) */
 export function platformLine(event: string, fields: LogFields = {}, alert = false): string {
   const parts = [`[pay:platform]${alert ? " ALERT" : ""} ${EVENT.test(event) ? event : "event"}`];
   for (const [name, value] of Object.entries(fields)) {
     if (value === undefined || value === null || !NAME.test(name)) continue;
-    parts.push(`${name}=${token(value)}`);
+    parts.push(`${name}=${valueToken(name, value)}`);
   }
   return redactPaymentText(parts.join(" "));
 }
