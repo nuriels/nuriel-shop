@@ -32,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { platformBillingHistory } from "@/lib/billing.functions";
 import { BillingAdminCard } from "@/platform/billing/ui/BillingAdminCard";
+import { MaxPaymentsTab } from "@/components/platform/MaxPaymentsTab";
 import {
   getGrowSettings,
   saveGrowSettings,
@@ -185,6 +186,9 @@ export function CustomerFile({ tenantId }: { tenantId: string }) {
           <TabsTrigger value="grow" data-testid="tab-grow">
             סליקה
           </TabsTrigger>
+          <TabsTrigger value="max" data-testid="tab-max">
+            MAX
+          </TabsTrigger>
           <TabsTrigger value="billing" data-testid="tab-billing">
             הסכם ותשלומים
           </TabsTrigger>
@@ -277,6 +281,10 @@ export function CustomerFile({ tenantId }: { tenantId: string }) {
         </TabsContent>
         <TabsContent value="grow">
           <GrowTab tenantId={tenantId} onChanged={refresh} />
+        </TabsContent>
+        <TabsContent value="max">
+          {/* MAX/Hyp DEMO: המסוף של החנות עצמה (בית העסק של ההזמנות שלה) */}
+          <MaxPaymentsTab tenantId={tenantId} />
         </TabsContent>
         <TabsContent value="billing">
           <BillingAdminCard tenantId={tenantId} />

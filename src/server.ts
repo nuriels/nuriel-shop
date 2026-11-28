@@ -47,6 +47,8 @@ const isZapPage = (pathname: string) => pathname === "/zap" || pathname.startsWi
 const STORE_ASSET_PATH = /^\/pwa\//;
 // הזמנות ביט שלא שולמו תוך 24 שעות מבוטלות (המלאי חוזר) — בדיקה כל 5 דקות
 void import("./server/services/payment-expiry").then((m) => m.startPaymentExpiryJob());
+// MAX/Hyp DEMO (D5): תשלומים לפלטפורמה — אימות חוזר, פקיעה וניקוי, כל 5 דקות (לא בבדיקות; מתג PAYMENTS_JOBS)
+void import("./platform/payments/server/platform/jobs").then((m) => m.startPlatformPaymentJobs());
 // תהליכי הרקע של המנועים (Hospitality: תור המיילים ותפוגת בקשות — רק כשהמנוע דולק)
 void import("./app/engines").then((m) => m.startEngineWorkers());
 // NURIEL AI: התראות החידוש (30 / 14 / 7 / 1 / 0 ימים לפני הסיום) — בדיקה כל שעה, פעם אחת לכל התראה

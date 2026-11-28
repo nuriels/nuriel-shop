@@ -197,8 +197,10 @@ M88=20261122110000_hosp_seo_engine
 M89=20261123100000_hosp_unit_delete_safe
 # failed-email alerts can be marked read / handled (206)
 M90=20261125100000_hosp_email_alerts
-# product brand + condition (207) — the newest, rolled back first
+# product brand + condition (207)
 M91=20261127100000_product_brand_condition
+# online card payments, MAX / Hyp DEMO stage (208) — the newest, rolled back first
+M92=20261128100000_online_payments_foundation
 MIGRATIONS="$ROOT/supabase/migrations"
 
 q() { "${PSQL[@]}" -tAc "$1"; }
@@ -242,7 +244,28 @@ same_as_ref() {
   fi
 }
 
-# ---------- product brand + condition (migration 207) — the newest, rolled back first ----------
+# ---------- online card payments, MAX / Hyp DEMO (migration 208) — the newest, rolled back first ----------
+expect "before the rollback: the closed payments schema (16 tables, RLS on all, no API-role access), 42 server functions, the 3 order triggers, online in orders_payment_check, both switches off" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'payments'::regnamespace AND relkind = 'r' AND relrowsecurity) = 16
+      AND NOT has_schema_privilege('service_role', 'payments', 'USAGE') AND NOT has_schema_privilege('authenticated', 'payments', 'USAGE')
+      AND has_function_privilege('service_role', 'public.max_attempt_mark_paid(uuid,text,text,text,text,text,text,bigint,text,integer,text,text,text,text[],text)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.max_attempt_mark_paid(uuid,text,text,text,text,text,text,bigint,text,integer,text,text,text,text[],text)', 'EXECUTE')
+      AND (SELECT count(*) FROM pg_trigger WHERE tgname IN ('orders_online_payment_keep', 'orders_payment_amount_lock', 'order_items_a_payment_lock')) = 3
+      AND pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'orders_payment_check')) LIKE '%online%'
+      AND (SELECT count(*) FROM public.platform_feature_flags WHERE key IN ('max_payments', 'platform_terminal_payments') AND NOT enabled) = 2"
+ref_upto "$M92"
+echo "rollback: $M92"
+down "$M92"
+expect "the payments schema, its functions, the 3 order triggers and both switches are gone; orders_payment_check is the Grow migration's again" \
+  "SELECT to_regnamespace('payments') IS NULL
+      AND to_regprocedure('public.max_attempt_open(uuid,uuid,uuid,text,text)') IS NULL
+      AND to_regprocedure('public.platform_stepup_issue(uuid,text,text)') IS NULL
+      AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname IN ('orders_online_payment_keep', 'orders_payment_amount_lock', 'order_items_a_payment_lock'))
+      AND pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'orders_payment_check')) NOT LIKE '%online%'
+      AND NOT EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key IN ('max_payments', 'platform_terminal_payments'))"
+same_as_ref "migration 207"
+
+# ---------- product brand + condition (migration 207) ----------
 expect "before the rollback: the brand / condition columns and their rules, the product-only proposal rule" \
   "SELECT (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'global_products'
             AND column_name IN ('brand', 'item_condition')) = 2
@@ -2888,6 +2911,13 @@ expect "product brand + condition back: the columns, the product-only rule, the 
             AND column_name IN ('brand', 'item_condition')) = 2
       AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'store_seo_proposals_product_fields')
       AND pg_get_functiondef('public.store_seo_snapshot(uuid,boolean,integer)'::regprocedure) LIKE '%facts%'"
+up "$M92"
+expect "online card payments back: the closed schema (16 tables), the server functions, the 3 order triggers, both switches off, the database unmarked" \
+  "SELECT (SELECT count(*) FROM pg_class WHERE relnamespace = 'payments'::regnamespace AND relkind = 'r' AND relrowsecurity) = 16
+      AND has_function_privilege('service_role', 'public.max_attempt_mark_paid(uuid,text,text,text,text,text,text,bigint,text,integer,text,text,text,text[],text)', 'EXECUTE')
+      AND (SELECT count(*) FROM pg_trigger WHERE tgname IN ('orders_online_payment_keep', 'orders_payment_amount_lock', 'order_items_a_payment_lock')) = 3
+      AND (SELECT name IS NULL FROM payments.environment)
+      AND (SELECT count(*) FROM public.platform_feature_flags WHERE key IN ('max_payments', 'platform_terminal_payments') AND NOT enabled) = 2"
 expect "the business_profile engine is back: the closed schema, the third site type, the guest read only" \
   "SELECT to_regnamespace('business_profile') IS NOT NULL
       AND has_function_privilege('anon', 'public.bp_public_site()', 'EXECUTE')

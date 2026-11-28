@@ -25,10 +25,11 @@ export const FORBIDDEN_PAGE: BlockedPage = {
 /**
  * נתיבים שזמינים גם בחנות נעולה (מוקפאת / שהמנוי שלה פג): פאנל הניהול של
  * החנות (שם — רק "המנוי שלי" ו"תמיכה" כשהמנוי פג), התחברות, עמוד הנעילה,
- * ועמוד השליח (משלוחים שכבר יצאו לדרך מסתיימים גם כשהחנות נעולה)
+ * ועמוד השליח (משלוחים שכבר יצאו לדרך מסתיימים גם כשהחנות נעולה). MAX/Hyp DEMO: גם החזרה מדף התשלום
+ * (/payments/return/…) — ייתכן שהכסף כבר עבר; תשלום חדש לא נפתח בחנות נעולה (/checkout/pay חסום)
  */
 export const SUSPENDED_ALLOWED_PATHS =
-  /^\/(admin|admin-handoff|courier|login|reset-password|locked|unsubscribe|owner-agreement)(\/|$)/;
+  /^\/(admin|admin-handoff|courier|login|reset-password|locked|unsubscribe|owner-agreement|payments\/return)(\/|$)/;
 
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);

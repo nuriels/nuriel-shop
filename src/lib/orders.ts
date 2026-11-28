@@ -310,8 +310,8 @@ export type OrderRow = OrderContactFields & {
   pos_payment_method?: string | null;
   /** חלק 33: העובד שהקליד את ההזמנה (קופה / הזמנה שנפתחה ללקוח מהניהול) */
   created_by_staff_id?: string | null;
-  /** אמצעי התשלום ומצבו (חלק 17ב): offline (טלפוני) / bit; credit_card — הזמנות ישנות בלבד */
-  payment_method?: "offline" | "credit_card" | "bit" | "grow";
+  /** אמצעי התשלום ומצבו (חלק 17ב): offline (טלפוני) / bit; credit_card — הזמנות ישנות בלבד; online — MAX/Hyp */
+  payment_method?: "offline" | "credit_card" | "bit" | "grow" | "online";
   payment_status?:
     "not_required" | "awaiting" | "awaiting_verification" | "paid" | "expired" | "rejected";
   paid_at?: string | null;

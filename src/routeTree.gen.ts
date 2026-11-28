@@ -75,6 +75,7 @@ import { Route as OwnerAgreementTokenRouteImport } from './routes/owner-agreemen
 import { Route as PagesSlugRouteImport } from './routes/pages.$slug'
 import { Route as PlatformAiRouteImport } from './routes/platform_.ai'
 import { Route as PlatformHospitalityRouteImport } from './routes/platform_.hospitality'
+import { Route as PlatformPaymentsRouteImport } from './routes/platform_.payments'
 import { Route as PlatformPlansRouteImport } from './routes/platform_.plans'
 import { Route as PlatformSeoRouteImport } from './routes/platform_.seo'
 import { Route as PlatformSupportRouteImport } from './routes/platform_.support'
@@ -114,6 +115,7 @@ import { Route as ApiUnsubscribeTokenRouteImport } from './routes/api.unsubscrib
 import { Route as ApiWebhooksGrowRouteImport } from './routes/api.webhooks.grow'
 import { Route as CheckoutBitOrderIdRouteImport } from './routes/checkout_.bit.$orderId'
 import { Route as CheckoutGrowOrderIdRouteImport } from './routes/checkout_.grow.$orderId'
+import { Route as CheckoutPayOrderIdRouteImport } from './routes/checkout_.pay.$orderId'
 import { Route as ManageBookingsBookingIdRouteImport } from './routes/manage.bookings_.$bookingId'
 import { Route as ManageBookingsNewRouteImport } from './routes/manage.bookings_.new'
 import { Route as ManageEventsEventIdRouteImport } from './routes/manage.events_.$eventId'
@@ -123,6 +125,7 @@ import { Route as ManagePropertiesPropertyIdRouteImport } from './routes/manage.
 import { Route as ManageSupportTicketIdRouteImport } from './routes/manage.support_.$ticketId'
 import { Route as ManageUnitsUnitIdRouteImport } from './routes/manage.units_.$unitId'
 import { Route as MarketingConfirmTokenRouteImport } from './routes/marketing.confirm.$token'
+import { Route as PaymentsReturnProviderRouteImport } from './routes/payments.return.$provider'
 import { Route as PlatformCustomersTenantIdRouteImport } from './routes/platform_.customers.$tenantId'
 import { Route as PlatformWebsitesTenantIdRouteImport } from './routes/platform_.websites_.$tenantId'
 import { Route as StayBrandAssetRouteImport } from './routes/stay.brand.$asset'
@@ -130,6 +133,7 @@ import { Route as StayDocsDocSlugRouteImport } from './routes/stay.docs.$docSlug
 import { Route as StayPackagesPackageSlugRouteImport } from './routes/stay.packages.$packageSlug'
 import { Route as StayRoomsTypeSlugRouteImport } from './routes/stay.rooms.$typeSlug'
 import { Route as StayUnitsUnitSlugRouteImport } from './routes/stay.units.$unitSlug'
+import { Route as PlatformPaymentsReturnProviderRouteImport } from './routes/platform_.payments_.return.$provider'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -461,6 +465,11 @@ const PlatformHospitalityRoute = PlatformHospitalityRouteImport.update({
   path: '/platform/hospitality',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlatformPaymentsRoute = PlatformPaymentsRouteImport.update({
+  id: '/platform_/payments',
+  path: '/platform/payments',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlatformPlansRoute = PlatformPlansRouteImport.update({
   id: '/platform_/plans',
   path: '/platform/plans',
@@ -658,6 +667,11 @@ const CheckoutGrowOrderIdRoute = CheckoutGrowOrderIdRouteImport.update({
   path: '/checkout/grow/$orderId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CheckoutPayOrderIdRoute = CheckoutPayOrderIdRouteImport.update({
+  id: '/checkout_/pay/$orderId',
+  path: '/checkout/pay/$orderId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ManageBookingsBookingIdRoute = ManageBookingsBookingIdRouteImport.update({
   id: '/bookings_/$bookingId',
   path: '/bookings/$bookingId',
@@ -704,6 +718,11 @@ const MarketingConfirmTokenRoute = MarketingConfirmTokenRouteImport.update({
   path: '/marketing/confirm/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PaymentsReturnProviderRoute = PaymentsReturnProviderRouteImport.update({
+  id: '/payments/return/$provider',
+  path: '/payments/return/$provider',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlatformCustomersTenantIdRoute =
   PlatformCustomersTenantIdRouteImport.update({
     id: '/platform_/customers/$tenantId',
@@ -741,6 +760,12 @@ const StayUnitsUnitSlugRoute = StayUnitsUnitSlugRouteImport.update({
   path: '/units/$unitSlug',
   getParentRoute: () => StayRoute,
 } as any)
+const PlatformPaymentsReturnProviderRoute =
+  PlatformPaymentsReturnProviderRouteImport.update({
+    id: '/platform_/payments_/return/$provider',
+    path: '/platform/payments/return/$provider',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -807,6 +832,7 @@ export interface FileRoutesByFullPath {
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/ai': typeof PlatformAiRoute
   '/platform/hospitality': typeof PlatformHospitalityRoute
+  '/platform/payments': typeof PlatformPaymentsRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/seo': typeof PlatformSeoRoute
   '/platform/support': typeof PlatformSupportRoute
@@ -848,6 +874,7 @@ export interface FileRoutesByFullPath {
   '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
   '/checkout/grow/$orderId': typeof CheckoutGrowOrderIdRoute
+  '/checkout/pay/$orderId': typeof CheckoutPayOrderIdRoute
   '/manage/bookings/$bookingId': typeof ManageBookingsBookingIdRoute
   '/manage/bookings/new': typeof ManageBookingsNewRoute
   '/manage/events/$eventId': typeof ManageEventsEventIdRoute
@@ -857,6 +884,7 @@ export interface FileRoutesByFullPath {
   '/manage/support/$ticketId': typeof ManageSupportTicketIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
+  '/payments/return/$provider': typeof PaymentsReturnProviderRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/platform/websites/$tenantId': typeof PlatformWebsitesTenantIdRoute
   '/stay/brand/$asset': typeof StayBrandAssetRoute
@@ -864,6 +892,7 @@ export interface FileRoutesByFullPath {
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
+  '/platform/payments/return/$provider': typeof PlatformPaymentsReturnProviderRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -926,6 +955,7 @@ export interface FileRoutesByTo {
   '/pages/$slug': typeof PagesSlugRoute
   '/platform/ai': typeof PlatformAiRoute
   '/platform/hospitality': typeof PlatformHospitalityRoute
+  '/platform/payments': typeof PlatformPaymentsRoute
   '/platform/plans': typeof PlatformPlansRoute
   '/platform/seo': typeof PlatformSeoRoute
   '/platform/support': typeof PlatformSupportRoute
@@ -967,6 +997,7 @@ export interface FileRoutesByTo {
   '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout/bit/$orderId': typeof CheckoutBitOrderIdRoute
   '/checkout/grow/$orderId': typeof CheckoutGrowOrderIdRoute
+  '/checkout/pay/$orderId': typeof CheckoutPayOrderIdRoute
   '/manage/bookings/$bookingId': typeof ManageBookingsBookingIdRoute
   '/manage/bookings/new': typeof ManageBookingsNewRoute
   '/manage/events/$eventId': typeof ManageEventsEventIdRoute
@@ -976,6 +1007,7 @@ export interface FileRoutesByTo {
   '/manage/support/$ticketId': typeof ManageSupportTicketIdRoute
   '/manage/units/$unitId': typeof ManageUnitsUnitIdRoute
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
+  '/payments/return/$provider': typeof PaymentsReturnProviderRoute
   '/platform/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/platform/websites/$tenantId': typeof PlatformWebsitesTenantIdRoute
   '/stay/brand/$asset': typeof StayBrandAssetRoute
@@ -983,6 +1015,7 @@ export interface FileRoutesByTo {
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
+  '/platform/payments/return/$provider': typeof PlatformPaymentsReturnProviderRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -1050,6 +1083,7 @@ export interface FileRoutesById {
   '/pages/$slug': typeof PagesSlugRoute
   '/platform_/ai': typeof PlatformAiRoute
   '/platform_/hospitality': typeof PlatformHospitalityRoute
+  '/platform_/payments': typeof PlatformPaymentsRoute
   '/platform_/plans': typeof PlatformPlansRoute
   '/platform_/seo': typeof PlatformSeoRoute
   '/platform_/support': typeof PlatformSupportRoute
@@ -1091,6 +1125,7 @@ export interface FileRoutesById {
   '/api/webhooks/grow': typeof ApiWebhooksGrowRoute
   '/checkout_/bit/$orderId': typeof CheckoutBitOrderIdRoute
   '/checkout_/grow/$orderId': typeof CheckoutGrowOrderIdRoute
+  '/checkout_/pay/$orderId': typeof CheckoutPayOrderIdRoute
   '/manage/bookings_/$bookingId': typeof ManageBookingsBookingIdRoute
   '/manage/bookings_/new': typeof ManageBookingsNewRoute
   '/manage/events_/$eventId': typeof ManageEventsEventIdRoute
@@ -1100,6 +1135,7 @@ export interface FileRoutesById {
   '/manage/support_/$ticketId': typeof ManageSupportTicketIdRoute
   '/manage/units_/$unitId': typeof ManageUnitsUnitIdRoute
   '/marketing/confirm/$token': typeof MarketingConfirmTokenRoute
+  '/payments/return/$provider': typeof PaymentsReturnProviderRoute
   '/platform_/customers/$tenantId': typeof PlatformCustomersTenantIdRoute
   '/platform_/websites_/$tenantId': typeof PlatformWebsitesTenantIdRoute
   '/stay/brand/$asset': typeof StayBrandAssetRoute
@@ -1107,6 +1143,7 @@ export interface FileRoutesById {
   '/stay/packages/$packageSlug': typeof StayPackagesPackageSlugRoute
   '/stay/rooms/$typeSlug': typeof StayRoomsTypeSlugRoute
   '/stay/units/$unitSlug': typeof StayUnitsUnitSlugRoute
+  '/platform_/payments_/return/$provider': typeof PlatformPaymentsReturnProviderRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1175,6 +1212,7 @@ export interface FileRouteTypes {
     | '/pages/$slug'
     | '/platform/ai'
     | '/platform/hospitality'
+    | '/platform/payments'
     | '/platform/plans'
     | '/platform/seo'
     | '/platform/support'
@@ -1216,6 +1254,7 @@ export interface FileRouteTypes {
     | '/api/webhooks/grow'
     | '/checkout/bit/$orderId'
     | '/checkout/grow/$orderId'
+    | '/checkout/pay/$orderId'
     | '/manage/bookings/$bookingId'
     | '/manage/bookings/new'
     | '/manage/events/$eventId'
@@ -1225,6 +1264,7 @@ export interface FileRouteTypes {
     | '/manage/support/$ticketId'
     | '/manage/units/$unitId'
     | '/marketing/confirm/$token'
+    | '/payments/return/$provider'
     | '/platform/customers/$tenantId'
     | '/platform/websites/$tenantId'
     | '/stay/brand/$asset'
@@ -1232,6 +1272,7 @@ export interface FileRouteTypes {
     | '/stay/packages/$packageSlug'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
+    | '/platform/payments/return/$provider'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1294,6 +1335,7 @@ export interface FileRouteTypes {
     | '/pages/$slug'
     | '/platform/ai'
     | '/platform/hospitality'
+    | '/platform/payments'
     | '/platform/plans'
     | '/platform/seo'
     | '/platform/support'
@@ -1335,6 +1377,7 @@ export interface FileRouteTypes {
     | '/api/webhooks/grow'
     | '/checkout/bit/$orderId'
     | '/checkout/grow/$orderId'
+    | '/checkout/pay/$orderId'
     | '/manage/bookings/$bookingId'
     | '/manage/bookings/new'
     | '/manage/events/$eventId'
@@ -1344,6 +1387,7 @@ export interface FileRouteTypes {
     | '/manage/support/$ticketId'
     | '/manage/units/$unitId'
     | '/marketing/confirm/$token'
+    | '/payments/return/$provider'
     | '/platform/customers/$tenantId'
     | '/platform/websites/$tenantId'
     | '/stay/brand/$asset'
@@ -1351,6 +1395,7 @@ export interface FileRouteTypes {
     | '/stay/packages/$packageSlug'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
+    | '/platform/payments/return/$provider'
   id:
     | '__root__'
     | '/'
@@ -1417,6 +1462,7 @@ export interface FileRouteTypes {
     | '/pages/$slug'
     | '/platform_/ai'
     | '/platform_/hospitality'
+    | '/platform_/payments'
     | '/platform_/plans'
     | '/platform_/seo'
     | '/platform_/support'
@@ -1458,6 +1504,7 @@ export interface FileRouteTypes {
     | '/api/webhooks/grow'
     | '/checkout_/bit/$orderId'
     | '/checkout_/grow/$orderId'
+    | '/checkout_/pay/$orderId'
     | '/manage/bookings_/$bookingId'
     | '/manage/bookings_/new'
     | '/manage/events_/$eventId'
@@ -1467,6 +1514,7 @@ export interface FileRouteTypes {
     | '/manage/support_/$ticketId'
     | '/manage/units_/$unitId'
     | '/marketing/confirm/$token'
+    | '/payments/return/$provider'
     | '/platform_/customers/$tenantId'
     | '/platform_/websites_/$tenantId'
     | '/stay/brand/$asset'
@@ -1474,6 +1522,7 @@ export interface FileRouteTypes {
     | '/stay/packages/$packageSlug'
     | '/stay/rooms/$typeSlug'
     | '/stay/units/$unitSlug'
+    | '/platform_/payments_/return/$provider'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1519,6 +1568,7 @@ export interface RootRouteChildren {
   PagesSlugRoute: typeof PagesSlugRoute
   PlatformAiRoute: typeof PlatformAiRoute
   PlatformHospitalityRoute: typeof PlatformHospitalityRoute
+  PlatformPaymentsRoute: typeof PlatformPaymentsRoute
   PlatformPlansRoute: typeof PlatformPlansRoute
   PlatformSeoRoute: typeof PlatformSeoRoute
   PlatformSupportRoute: typeof PlatformSupportRoute
@@ -1545,9 +1595,12 @@ export interface RootRouteChildren {
   ApiWebhooksGrowRoute: typeof ApiWebhooksGrowRoute
   CheckoutBitOrderIdRoute: typeof CheckoutBitOrderIdRoute
   CheckoutGrowOrderIdRoute: typeof CheckoutGrowOrderIdRoute
+  CheckoutPayOrderIdRoute: typeof CheckoutPayOrderIdRoute
   MarketingConfirmTokenRoute: typeof MarketingConfirmTokenRoute
+  PaymentsReturnProviderRoute: typeof PaymentsReturnProviderRoute
   PlatformCustomersTenantIdRoute: typeof PlatformCustomersTenantIdRoute
   PlatformWebsitesTenantIdRoute: typeof PlatformWebsitesTenantIdRoute
+  PlatformPaymentsReturnProviderRoute: typeof PlatformPaymentsReturnProviderRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -2014,6 +2067,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformHospitalityRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/platform_/payments': {
+      id: '/platform_/payments'
+      path: '/platform/payments'
+      fullPath: '/platform/payments'
+      preLoaderRoute: typeof PlatformPaymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/platform_/plans': {
       id: '/platform_/plans'
       path: '/platform/plans'
@@ -2287,6 +2347,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CheckoutGrowOrderIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/checkout_/pay/$orderId': {
+      id: '/checkout_/pay/$orderId'
+      path: '/checkout/pay/$orderId'
+      fullPath: '/checkout/pay/$orderId'
+      preLoaderRoute: typeof CheckoutPayOrderIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/bookings_/$bookingId': {
       id: '/manage/bookings_/$bookingId'
       path: '/bookings/$bookingId'
@@ -2350,6 +2417,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MarketingConfirmTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/payments/return/$provider': {
+      id: '/payments/return/$provider'
+      path: '/payments/return/$provider'
+      fullPath: '/payments/return/$provider'
+      preLoaderRoute: typeof PaymentsReturnProviderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/platform_/customers/$tenantId': {
       id: '/platform_/customers/$tenantId'
       path: '/platform/customers/$tenantId'
@@ -2398,6 +2472,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/stay/units/$unitSlug'
       preLoaderRoute: typeof StayUnitsUnitSlugRouteImport
       parentRoute: typeof StayRoute
+    }
+    '/platform_/payments_/return/$provider': {
+      id: '/platform_/payments_/return/$provider'
+      path: '/platform/payments/return/$provider'
+      fullPath: '/platform/payments/return/$provider'
+      preLoaderRoute: typeof PlatformPaymentsReturnProviderRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -2580,6 +2661,7 @@ const rootRouteChildren: RootRouteChildren = {
   PagesSlugRoute: PagesSlugRoute,
   PlatformAiRoute: PlatformAiRoute,
   PlatformHospitalityRoute: PlatformHospitalityRoute,
+  PlatformPaymentsRoute: PlatformPaymentsRoute,
   PlatformPlansRoute: PlatformPlansRoute,
   PlatformSeoRoute: PlatformSeoRoute,
   PlatformSupportRoute: PlatformSupportRoute,
@@ -2606,9 +2688,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWebhooksGrowRoute: ApiWebhooksGrowRoute,
   CheckoutBitOrderIdRoute: CheckoutBitOrderIdRoute,
   CheckoutGrowOrderIdRoute: CheckoutGrowOrderIdRoute,
+  CheckoutPayOrderIdRoute: CheckoutPayOrderIdRoute,
   MarketingConfirmTokenRoute: MarketingConfirmTokenRoute,
+  PaymentsReturnProviderRoute: PaymentsReturnProviderRoute,
   PlatformCustomersTenantIdRoute: PlatformCustomersTenantIdRoute,
   PlatformWebsitesTenantIdRoute: PlatformWebsitesTenantIdRoute,
+  PlatformPaymentsReturnProviderRoute: PlatformPaymentsReturnProviderRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

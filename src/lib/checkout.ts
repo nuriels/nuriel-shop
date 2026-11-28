@@ -152,9 +152,10 @@ export type CheckoutPayload = {
 
 /**
  * "תשלום טלפוני מול נציג" (בלי חיוב באתר) או "תשלום בביט" (חלק 17ב — ההזמנה
- * נשמרת ואז עוברים לעמוד התשלום בביט)
+ * נשמרת ואז עוברים לעמוד התשלום בביט). online = תשלום מקוון בכרטיס אשראי (MAX/Hyp DEMO):
+ * ההזמנה נשמרת "ממתינה לתשלום" ועוברים לעמוד /checkout/pay/<id>
  */
-export type PaymentMethodChoice = "offline" | "bit" | "grow";
+export type PaymentMethodChoice = "offline" | "bit" | "grow" | "online";
 
 export function checkoutPayload(
   form: CheckoutForm,

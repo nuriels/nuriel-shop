@@ -448,6 +448,23 @@ function ruleB11(t: Tree): string[] {
   return bad;
 }
 
+/**
+ * U17-B12 (contract X-11, both scopes): a module that parses Hyp's browser return also refuses an unsigned one
+ * (returnHasSignature) — the unit tests prove it happens before any DB write or VERIFY
+ */
+const PROTOCOL = `${PAY}max/protocol.ts`;
+const PARSES_RETURN = /\bparseReturnQuery\s*\(/;
+const CHECKS_SIGNATURE = /\breturnHasSignature\s*\(/;
+function ruleB12(t: Tree): string[] {
+  const bad: string[] = [];
+  for (const [f, src] of each(t, (f) => f !== PROTOCOL)) {
+    const stripped = stripComments(src);
+    if (PARSES_RETURN.test(stripped) && !CHECKS_SIGNATURE.test(stripped))
+      bad.push(`${f}: parses a return without refusing an unsigned one (returnHasSignature)`);
+  }
+  return bad;
+}
+
 /** DM-SEC-7 (app side): the scope code logs only through its scope logger, and that logger redacts */
 const SCOPE_LOGGERS: readonly string[] = [
   `${PAY_SERVER}tenant/log.ts`,
@@ -649,6 +666,11 @@ describe("U17 / DM-SEP-3: platform ⟷ tenant separation (real tree)", () => {
 
   it("DM-SEP-3 / U17-B11: browser-reachable payment files never statically import server code", () => {
     expect(ruleB11(CODE)).toEqual([]);
+  });
+
+  it("U17-B12 (X-11): every module that parses a Hyp return refuses an unsigned one", () => {
+    expect(code(CODE, TENANT_RETURN)).toMatch(PARSES_RETURN);
+    expect(ruleB12(CODE)).toEqual([]);
   });
 
   it("DM-SEC-7 (app side): scope code logs only through its redacting scope logger", () => {
@@ -949,6 +971,25 @@ describe("U17: every rule bites (synthetic trees)", () => {
     ).toEqual([
       "src/components/checkout/OnlinePaymentPage.tsx: static import of server code src/platform/payments/server/tenant/checkout",
       "src/platform/billing/pay.functions.ts: static import of server code src/platform/billing/billing.server",
+    ]);
+  });
+
+  it("U17-B12 bites: a return parser without the signature check (a comment does not count)", () => {
+    expect(
+      ruleB12(
+        tree({
+          [PLATFORM_RETURN]:
+            "const parsed = parseReturnQuery(raw); if (parsed.ok) await verify(parsed);",
+          [`${PAY_SERVER}platform/jobs.ts`]:
+            "// returnHasSignature(parsed) is checked later\nconst again = parseReturnQuery(row.raw);",
+          [TENANT_RETURN]:
+            "const parsed = parseReturnQuery(raw);\nif (!parsed.ok || !returnHasSignature(parsed)) return base;",
+          [PROTOCOL]: "export function parseReturnQuery(raw: string): ParsedReturn { return p; }",
+        }),
+      ),
+    ).toEqual([
+      `${PLATFORM_RETURN}: parses a return without refusing an unsigned one (returnHasSignature)`,
+      `${PAY_SERVER}platform/jobs.ts: parses a return without refusing an unsigned one (returnHasSignature)`,
     ]);
   });
 
