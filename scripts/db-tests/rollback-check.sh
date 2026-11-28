@@ -101,7 +101,8 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 PORT=${PGPORT:-5499}
-PSQL=(psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_test)
+SOCK=${KOBI_PGSOCKET:-/tmp/pg}
+PSQL=(psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_test)
 M1=20261101090000_platform_products_flags
 M2=20261101100000_ecommerce_engine_guard
 M3=20261101110000_hosp_schema
@@ -210,7 +211,7 @@ expect() { # expect <label> <sql returning true>
 down() { "${PSQL[@]}" -f "$ROOT/supabase/rollbacks/$1.down.sql" >/dev/null; }
 up() { "${PSQL[@]}" -f "$MIGRATIONS/$1.sql" >/dev/null; }
 
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "DROP DATABASE IF EXISTS rollback_test" \
   -c "CREATE DATABASE rollback_test ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
 "${PSQL[@]}" -f "$HERE/supabase-stubs.sql" >/dev/null
@@ -219,23 +220,23 @@ q "INSERT INTO public.shipping_methods (tenant_id, name, kind, price) SELECT id,
 # the whole schema (every object, privilege, policy and function body) before rolling back —
 # compared with the schema after rolling everything back and re-applying (end of the script)
 SCHEMA_DIR=$(mktemp -d)
-schema_dump() { pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
+schema_dump() { pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_test --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$1"; }
 schema_dump "$SCHEMA_DIR/before.sql"
 
 # ref_upto <migration>: rollback_ref = every migration before <migration> (the schema a rollback must return to)
 ref_upto() {
-  psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+  psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
     -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
     -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
   for f in $(ls "$MIGRATIONS"/*.sql | sort); do
     [ "$(basename "$f" .sql)" = "$1" ] && break
-    psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+    psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
   done
 }
 # same_as_ref <label>: the schema now = rollback_ref's schema, exactly
 same_as_ref() {
-  pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/ref.sql"
+  pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/ref.sql"
   schema_dump "$SCHEMA_DIR/now.sql"
   if diff -q "$SCHEMA_DIR/ref.sql" "$SCHEMA_DIR/now.sql" >/dev/null; then
     echo "  ok   schema after the rollback = the schema of $1, exactly"
@@ -991,13 +992,13 @@ q "DELETE FROM public.product_merges" >/dev/null
 q "INSERT INTO public.product_duplicate_dismissals (tenant_id, product_ids)
    SELECT id, ARRAY[gen_random_uuid(), gen_random_uuid()] FROM public.tenants WHERE is_default" >/dev/null
 # the reference: every migration before this one (whichever migration comes right before it)
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M65" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M65 (\"not a duplicate\" marks are dropped with it)"
 down "$M65"
@@ -1010,7 +1011,7 @@ expect "the duplicates tables and all their functions are gone; the products are
                                        'product_duplicate_ai_candidates', '_product_duplicate_cards',
                                        '_product_keep_reasons', 'product_name_key'))
       AND to_regclass('public.global_products') IS NOT NULL"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/before-m65.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/before-m65.sql"
 schema_dump "$SCHEMA_DIR/after-m65-down.sql"
 if diff -q "$SCHEMA_DIR/before-m65.sql" "$SCHEMA_DIR/after-m65-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of the migration before it, exactly"
@@ -1037,13 +1038,13 @@ else
   echo "  ok   the guard stops the rollback while there is an import"
 fi
 q "DELETE FROM public.product_imports" >/dev/null
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M64" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M64"
 down "$M64"
@@ -1053,7 +1054,7 @@ expect "the import tables and functions are gone; import_products is still there
       AND to_regprocedure('public.product_import_match(jsonb)') IS NULL
       AND to_regprocedure('public._product_import_name_key(text)') IS NULL
       AND to_regprocedure('public.import_products(jsonb)') IS NOT NULL"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m63.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m63.sql"
 schema_dump "$SCHEMA_DIR/after-m64-down.sql"
 if diff -q "$SCHEMA_DIR/m63.sql" "$SCHEMA_DIR/after-m64-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of the SEO stage 4 migration, exactly"
@@ -1073,13 +1074,13 @@ expect "before the rollback: the consent table (RLS, no direct privileges), the 
       AND NOT has_function_privilege('anon', 'hospitality.site_consent_record(uuid,boolean,text,text)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'hospitality.site_consent_record(uuid,boolean,text,text)', 'EXECUTE')
       AND has_function_privilege('anon', 'hospitality.analytics_enabled()', 'EXECUTE')"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M63" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M63"
 down "$M63"
@@ -1088,7 +1089,7 @@ expect "the consent table, both functions and the analytics flag are gone" \
       AND to_regprocedure('hospitality.site_consent_record(uuid,boolean,text,text)') IS NULL
       AND to_regprocedure('hospitality.analytics_enabled()') IS NULL
       AND NOT EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key = 'hospitality_analytics_enabled')"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m62.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m62.sql"
 schema_dump "$SCHEMA_DIR/after-m63-down.sql"
 if diff -q "$SCHEMA_DIR/m62.sql" "$SCHEMA_DIR/after-m63-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of the unit SEO migration, exactly"
@@ -1102,13 +1103,13 @@ expect "before the rollback: the two unit SEO functions, for staff only (never a
       AND has_function_privilege('authenticated', 'hospitality.unit_seo_get(uuid)', 'EXECUTE')
       AND NOT has_function_privilege('anon', 'hospitality.unit_seo_set(uuid,text,text,integer)', 'EXECUTE')
       AND NOT has_function_privilege('anon', 'hospitality.unit_seo_get(uuid)', 'EXECUTE')"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M62" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M62"
 down "$M62"
@@ -1117,7 +1118,7 @@ expect "both unit SEO functions are gone; the unit columns stay (they were there
       AND to_regprocedure('hospitality.unit_seo_get(uuid)') IS NULL
       AND (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'units'
             AND column_name IN ('seo_title', 'seo_description')) = 2"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m61.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m61.sql"
 schema_dump "$SCHEMA_DIR/after-m62-down.sql"
 if diff -q "$SCHEMA_DIR/m61.sql" "$SCHEMA_DIR/after-m62-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 61, exactly"
@@ -1156,13 +1157,13 @@ if down "$M61" 2>/dev/null; then
 fi
 q "UPDATE public.ai_settings SET mode = 'off'" >/dev/null
 q "INSERT INTO public.platform_audit_log (tenant_id, actor_id, action, details) VALUES (NULL, NULL, 'ai_settings_changed', '{\"rb\": true}')" >/dev/null
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M61" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M61"
 down "$M61"
@@ -1179,7 +1180,7 @@ expect "the AI add-on is gone: the 9 tables and every ai_ function; the platform
       AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'ai\_%')
       AND EXISTS (SELECT 1 FROM public.platform_audit_log WHERE action = 'ai_settings_changed')"
 q "DELETE FROM public.platform_audit_log WHERE action = 'ai_settings_changed'" >/dev/null
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m60.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m60.sql"
 schema_dump "$SCHEMA_DIR/after-m61-down.sql"
 if diff -q "$SCHEMA_DIR/m60.sql" "$SCHEMA_DIR/after-m61-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 60, exactly"
@@ -1210,13 +1211,13 @@ fi
 expect "nothing was removed (transaction rolled back)" \
   "SELECT to_regclass('hospitality.site_documents') IS NOT NULL AND (SELECT count(*) FROM hospitality.site_documents) = 1"
 q "DELETE FROM hospitality.site_documents" >/dev/null
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M60" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M60"
 down "$M60"
@@ -1227,7 +1228,7 @@ expect "the documents are gone: the 5 tables and the functions; the booking requ
       AND to_regprocedure('hospitality.public_site_documents()') IS NULL
       AND to_regprocedure('hospitality.request_booking_with_documents(jsonb,uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)') IS NULL
       AND (SELECT prosrc NOT LIKE '%document%' FROM pg_proc WHERE oid = 'hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m59.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m59.sql"
 schema_dump "$SCHEMA_DIR/after-m60-down.sql"
 if diff -q "$SCHEMA_DIR/m59.sql" "$SCHEMA_DIR/after-m60-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 59, exactly"
@@ -1259,13 +1260,13 @@ fi
 expect "nothing was removed (transaction rolled back)" \
   "SELECT to_regclass('hospitality.packages') IS NOT NULL AND (SELECT count(*) FROM hospitality.packages) = 1"
 q "DELETE FROM hospitality.packages" >/dev/null
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M59" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M59"
 down "$M59"
@@ -1278,7 +1279,7 @@ expect "the packages are gone: table, booking columns, functions; the email queu
       AND (SELECT prosrc NOT LIKE '%package%' FROM pg_proc WHERE oid = 'hospitality._enqueue(hospitality.bookings,text,text,jsonb,boolean)'::regprocedure)
       AND (SELECT prosrc NOT LIKE '%package%' FROM pg_proc WHERE oid = 'hospitality._guest_view(hospitality.bookings)'::regprocedure)
       AND (SELECT prosrc NOT LIKE '%package%' FROM pg_proc WHERE oid = 'hospitality.staff_booking_detail(uuid)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m58.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m58.sql"
 schema_dump "$SCHEMA_DIR/after-m59-down.sql"
 if diff -q "$SCHEMA_DIR/m58.sql" "$SCHEMA_DIR/after-m59-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 58, exactly"
@@ -1290,20 +1291,20 @@ fi
 expect "before the rollback: the stores list is online stores only; the site list has the plan screen's fields" \
   "SELECT (SELECT prosrc LIKE '%site_type = ''ecommerce''%' FROM pg_proc WHERE oid = 'public.platform_list_tenants()'::regprocedure)
       AND (SELECT prosrc LIKE '%current_period_end%' FROM pg_proc WHERE oid = 'hospitality.admin_sites()'::regprocedure)"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M58" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M58"
 down "$M58"
 expect "both functions are the originals" \
   "SELECT (SELECT prosrc NOT LIKE '%site_type%' FROM pg_proc WHERE oid = 'public.platform_list_tenants()'::regprocedure)
       AND (SELECT prosrc NOT LIKE '%current_period_end%' FROM pg_proc WHERE oid = 'hospitality.admin_sites()'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m57.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m57.sql"
 schema_dump "$SCHEMA_DIR/after-m58-down.sql"
 if diff -q "$SCHEMA_DIR/m57.sql" "$SCHEMA_DIR/after-m58-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 57, exactly"
@@ -1318,13 +1319,13 @@ expect "before the rollback: the column (off everywhere), the switch for staff, 
       AND NOT EXISTS (SELECT 1 FROM hospitality.settings WHERE shabbat_observant)
       AND has_function_privilege('authenticated', 'hospitality.settings_set_shabbat(boolean)', 'EXECUTE')
       AND (SELECT prosrc LIKE '%shabbat_observant%' FROM pg_proc WHERE oid = 'hospitality._site_payload(uuid)'::regprocedure)"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M57" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M57"
 down "$M57"
@@ -1334,7 +1335,7 @@ expect "the column and the switch are gone; the site payload and the settings va
       AND to_regprocedure('hospitality.settings_set_shabbat(boolean)') IS NULL
       AND (SELECT prosrc NOT LIKE '%shabbat%' FROM pg_proc WHERE oid = 'hospitality._site_payload(uuid)'::regprocedure)
       AND (SELECT prosrc NOT LIKE '%shabbat%' FROM pg_proc WHERE oid = 'hospitality._settings_values(hospitality.settings)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m56.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m56.sql"
 schema_dump "$SCHEMA_DIR/after-m57-down.sql"
 if diff -q "$SCHEMA_DIR/m56.sql" "$SCHEMA_DIR/after-m57-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 56, exactly"
@@ -1351,13 +1352,13 @@ expect "before the rollback: codes and sessions (functions only), every area fun
       AND NOT has_function_privilege('authenticated', 'hospitality.guest_code_consume(text,text,text)', 'EXECUTE')
       AND has_function_privilege('service_role', 'hospitality.guest_area_proof_slot(text,uuid,text,text,integer)', 'EXECUTE')
       AND (SELECT prosrc LIKE '%_guest_payment_json%' FROM pg_proc WHERE oid = 'hospitality.guest_payment_info(text,uuid)'::regprocedure)"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M56" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M56"
 down "$M56"
@@ -1368,7 +1369,7 @@ expect "the guest area is gone; the three 55 functions are the originals" \
       AND to_regprocedure('hospitality._guest_payment_json(uuid,hospitality.bookings)') IS NULL
       AND (SELECT prosrc NOT LIKE '%_guest_payment_json%' FROM pg_proc WHERE oid = 'hospitality.guest_payment_info(text,uuid)'::regprocedure)
       AND (SELECT prosrc LIKE '%_transfer_state%' FROM pg_proc WHERE oid = 'hospitality.guest_proof_slot(text,uuid,text,text,integer)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m55.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m55.sql"
 schema_dump "$SCHEMA_DIR/after-m56-down.sql"
 if diff -q "$SCHEMA_DIR/m55.sql" "$SCHEMA_DIR/after-m56-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 55, exactly"
@@ -1398,13 +1399,13 @@ expect "nothing was removed (transaction rolled back)" \
   "SELECT to_regclass('hospitality.payment_proofs') IS NOT NULL
       AND EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-payment-proofs')"
 q "DELETE FROM storage.objects WHERE bucket_id = 'hosp-payment-proofs'" >/dev/null
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M55" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M55"
 down "$M55"
@@ -1418,7 +1419,7 @@ expect "the transfer module is gone: table, column, functions, bucket; the payme
       AND to_regprocedure('hospitality.public_payment_methods(date)') IS NULL
       AND (SELECT prosrc NOT LIKE '%_transfer_state%' FROM pg_proc WHERE oid = 'hospitality.guest_payment_info(text,uuid)'::regprocedure)
       AND NOT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-payment-proofs')"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m54.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m54.sql"
 schema_dump "$SCHEMA_DIR/after-m55-down.sql"
 if diff -q "$SCHEMA_DIR/m54.sql" "$SCHEMA_DIR/after-m55-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 54, exactly"
@@ -1437,13 +1438,13 @@ expect "before the rollback: 4 license tables (server only), atomic consume, the
       AND has_function_privilege('service_role', 'public.license_consume_download(text)', 'EXECUTE')
       AND EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key = 'digital_licenses')
       AND NOT EXISTS (SELECT 1 FROM public.tenant_feature_flags WHERE key = 'digital_licenses')"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M54" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M54"
 down "$M54"
@@ -1453,7 +1454,7 @@ expect "the module is gone: tables, functions and the flag" \
       AND to_regprocedure('public.license_link_peek(text)') IS NULL
       AND to_regprocedure('public.license_check_refs()') IS NULL
       AND NOT EXISTS (SELECT 1 FROM public.platform_feature_flags WHERE key = 'digital_licenses')"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m53.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m53.sql"
 schema_dump "$SCHEMA_DIR/after-m54-down.sql"
 if diff -q "$SCHEMA_DIR/m53.sql" "$SCHEMA_DIR/after-m54-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 53, exactly"
@@ -1466,13 +1467,13 @@ expect "before the rollback: links stripped per room after sending, notes cleare
   "SELECT (SELECT prosrc LIKE '%PRV-17%' AND prosrc LIKE '%WITH ORDINALITY%' FROM pg_proc WHERE oid = 'hospitality.mark_notification(uuid,boolean,text,text)'::regprocedure)
       AND (SELECT prosrc LIKE '%cancellation_reason = NULL%' FROM pg_proc WHERE oid = 'hospitality._anonymize_guest(uuid,uuid)'::regprocedure)
       AND (SELECT prosrc LIKE '%''payments''%' FROM pg_proc WHERE oid = 'hospitality.export_guest(uuid)'::regprocedure)"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M53" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M53"
 down "$M53"
@@ -1480,7 +1481,7 @@ expect "the three functions are the originals (top-level link only, notes kept, 
   "SELECT (SELECT prosrc NOT LIKE '%PRV-17%' FROM pg_proc WHERE oid = 'hospitality.mark_notification(uuid,boolean,text,text)'::regprocedure)
       AND (SELECT prosrc NOT LIKE '%cancellation_reason = NULL%' FROM pg_proc WHERE oid = 'hospitality._anonymize_guest(uuid,uuid)'::regprocedure)
       AND (SELECT prosrc NOT LIKE '%''payments''%' FROM pg_proc WHERE oid = 'hospitality.export_guest(uuid)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m52.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m52.sql"
 schema_dump "$SCHEMA_DIR/after-m53-down.sql"
 if diff -q "$SCHEMA_DIR/m52.sql" "$SCHEMA_DIR/after-m53-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 52, exactly"
@@ -1498,13 +1499,13 @@ expect "before the rollback: helper grants narrowed, the coupon guard in both qu
             AND proname IN ('quote', 'quote_type') AND prosrc LIKE '%SEC-L4%') = 2
       AND (SELECT prosrc LIKE '%SEC-L3%' FROM pg_proc WHERE oid = 'public.order_coupon_verify(uuid)'::regprocedure)
       AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'user_roles_auth_email')"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M52" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M52"
 down "$M52"
@@ -1518,7 +1519,7 @@ expect "the grants, the quote functions and order_coupon_verify are the original
       AND (SELECT prosrc NOT LIKE '%SEC-L3%' FROM pg_proc WHERE oid = 'public.order_coupon_verify(uuid)'::regprocedure)
       AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'user_roles_auth_email')
       AND to_regprocedure('public.user_roles_auth_email()') IS NULL"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m51.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m51.sql"
 schema_dump "$SCHEMA_DIR/after-m52-down.sql"
 if diff -q "$SCHEMA_DIR/m51.sql" "$SCHEMA_DIR/after-m52-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 51, exactly"
@@ -1532,13 +1533,13 @@ expect "before the rollback: login-email map is server-only, no anon reset reque
       AND NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'password_reset_requests' AND policyname = 'anyone can request reset')
       AND (SELECT bool_and(prosrc NOT LIKE '%SET marketing_consent = true%') FROM pg_proc
             WHERE pronamespace = 'hospitality'::regnamespace AND proname IN ('request_booking', 'request_booking_group'))"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M51" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M51"
 down "$M51"
@@ -1547,7 +1548,7 @@ expect "the grant, the reset policy and the earlier request functions are back" 
       AND EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'password_reset_requests' AND policyname = 'anyone can request reset')
       AND (SELECT bool_and(prosrc LIKE '%SET marketing_consent = true%') FROM pg_proc
             WHERE pronamespace = 'hospitality'::regnamespace AND proname IN ('request_booking', 'request_booking_group'))"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m50.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m50.sql"
 schema_dump "$SCHEMA_DIR/after-m51-down.sql"
 if diff -q "$SCHEMA_DIR/m50.sql" "$SCHEMA_DIR/after-m51-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 50, exactly"
@@ -1560,13 +1561,13 @@ expect "before the rollback: billing / audit rows are not cascaded or purged; bi
   "SELECT NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname IN ('billing_history_tenant_id_fkey', 'platform_audit_log_tenant_id_fkey'))
       AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'billing_history' AND column_name = 'store_label')
       AND (SELECT prosrc LIKE '%tenant_deleted%' FROM pg_proc WHERE oid = 'public.platform_delete_tenant(uuid,text)'::regprocedure)"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M50" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M50"
 down "$M50"
@@ -1575,7 +1576,7 @@ expect "the cascading foreign keys are back, the label column is gone, the delet
             AND pg_get_constraintdef(oid) LIKE '%ON DELETE CASCADE%') = 2
       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'billing_history' AND column_name = 'store_label')
       AND (SELECT prosrc NOT LIKE '%tenant_deleted%' FROM pg_proc WHERE oid = 'public.platform_delete_tenant(uuid,text)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m49.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m49.sql"
 schema_dump "$SCHEMA_DIR/after-m50-down.sql"
 if diff -q "$SCHEMA_DIR/m49.sql" "$SCHEMA_DIR/after-m50-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 49, exactly"
@@ -1588,13 +1589,13 @@ expect "before the rollback: the hold guard exists and both site request functio
   "SELECT to_regprocedure('hospitality._online_hold_guard(uuid,uuid[],date,date)') IS NOT NULL
       AND (SELECT count(*) FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace
             AND proname IN ('request_booking', 'request_booking_group') AND prosrc LIKE '%_online_hold_guard%') = 2"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M49" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M49"
 down "$M49"
@@ -1602,7 +1603,7 @@ expect "the guard is gone and the site request functions no longer call it" \
   "SELECT to_regprocedure('hospitality._online_hold_guard(uuid,uuid[],date,date)') IS NULL
       AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace = 'hospitality'::regnamespace
                        AND proname IN ('request_booking', 'request_booking_group') AND prosrc LIKE '%_online_hold_guard%')"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m48.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m48.sql"
 schema_dump "$SCHEMA_DIR/after-m49-down.sql"
 if diff -q "$SCHEMA_DIR/m48.sql" "$SCHEMA_DIR/after-m49-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 48, exactly"
@@ -1617,13 +1618,13 @@ expect "before the rollback: consent is double opt-in (confirm function, token +
       AND to_regprocedure('public.marketing_set_consent(text,boolean,text,text,uuid)') IS NULL
       AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
                    AND table_name = 'marketing_consents' AND column_name = 'confirm_token_hash')"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M48" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M48"
 down "$M48"
@@ -1637,7 +1638,7 @@ expect "single opt-in is back: the part-40 consent function, no confirm function
                        AND column_name IN ('confirm_token_hash', 'confirm_sent_at', 'confirm_context', 'confirmed_at',
                                            'consent_ip_hash', 'consent_user_agent', 'consent_method',
                                            'kind', 'ip_hash', 'user_agent', 'method'))"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m47.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m47.sql"
 schema_dump "$SCHEMA_DIR/after-m48-down.sql"
 if diff -q "$SCHEMA_DIR/m47.sql" "$SCHEMA_DIR/after-m48-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 47, exactly"
@@ -1673,13 +1674,13 @@ expect "before the rollback: the trusted-account helper exists and the six bindi
                           'public.platform_link_store_admin(uuid,text)'::regprocedure,
                           'public.portal_create_store(text,text,text)'::regprocedure,
                           'public.store_link_existing_account(text,text,text)'::regprocedure))"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M46" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M46"
 down "$M46"
@@ -1692,7 +1693,7 @@ expect "the helper is gone and the six binding functions resolve the account by 
                           'public.platform_link_store_admin(uuid,text)'::regprocedure,
                           'public.portal_create_store(text,text,text)'::regprocedure,
                           'public.store_link_existing_account(text,text,text)'::regprocedure))"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m45.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m45.sql"
 schema_dump "$SCHEMA_DIR/after-m46-down.sql"
 if diff -q "$SCHEMA_DIR/m45.sql" "$SCHEMA_DIR/after-m46-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 45, exactly"
@@ -1707,13 +1708,13 @@ expect "before the rollback: claim is token-gated; the booking functions carry n
       AND (SELECT bool_and(prosrc NOT LIKE '%email_confirmed_at IS NOT NULL%') FROM pg_proc
             WHERE oid IN ('hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)'::regprocedure,
                           'hospitality.request_booking_group(jsonb,date,date,text,text,text,text,boolean,text,boolean,text)'::regprocedure))"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M45" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M45"
 down "$M45"
@@ -1723,7 +1724,7 @@ expect "the no-arg claim is restored; the booking functions carry the email auto
       AND (SELECT bool_and(prosrc LIKE '%email_confirmed_at IS NOT NULL%') FROM pg_proc
             WHERE oid IN ('hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)'::regprocedure,
                           'hospitality.request_booking_group(jsonb,date,date,text,text,text,text,boolean,text,boolean,text)'::regprocedure))"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m44.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m44.sql"
 schema_dump "$SCHEMA_DIR/after-m45-down.sql"
 if diff -q "$SCHEMA_DIR/m44.sql" "$SCHEMA_DIR/after-m45-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 44, exactly"
@@ -1736,13 +1737,13 @@ expect "before the rollback: bookings have a group; the group functions exist" \
   "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'bookings' AND column_name = 'group_id')
       AND to_regprocedure('hospitality.request_booking_group(jsonb,date,date,text,text,text,text,boolean,text,boolean,text)') IS NOT NULL
       AND to_regprocedure('hospitality.booking_group_decide(uuid,boolean,text)') IS NOT NULL"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M44" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M44"
 down "$M44"
@@ -1753,7 +1754,7 @@ expect "the group column, its index and the four functions are gone" \
       AND to_regprocedure('hospitality.request_booking_group(jsonb,date,date,text,text,text,text,boolean,text,boolean,text)') IS NULL
       AND to_regprocedure('hospitality.booking_group(uuid)') IS NULL
       AND to_regprocedure('hospitality.booking_group_decide(uuid,boolean,text)') IS NULL"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m43.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m43.sql"
 schema_dump "$SCHEMA_DIR/after-m44-down.sql"
 if diff -q "$SCHEMA_DIR/m43.sql" "$SCHEMA_DIR/after-m44-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 43, exactly"
@@ -1766,13 +1767,13 @@ expect "before the rollback: units have an open-dates column; opening and the re
   "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'hospitality' AND table_name = 'units' AND column_name = 'open_until')
       AND to_regprocedure('hospitality.units_open_dates(uuid[],date)') IS NOT NULL
       AND to_regprocedure('hospitality.open_dates_remind()') IS NOT NULL"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M43" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M43"
 down "$M43"
@@ -1787,7 +1788,7 @@ expect "the column and the two functions are gone; the six availability function
                           'hospitality.public_type_availability(uuid,date,date)'::regprocedure,
                           'hospitality.channel_feed(uuid,text)'::regprocedure,
                           'hospitality.dashboard_tasks()'::regprocedure))"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m42.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m42.sql"
 schema_dump "$SCHEMA_DIR/after-m43-down.sql"
 if diff -q "$SCHEMA_DIR/m42.sql" "$SCHEMA_DIR/after-m43-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 42, exactly"
@@ -1799,13 +1800,13 @@ fi
 expect "before the rollback: a logo is its own kind ('brand'), outside the site gallery" \
   "SELECT pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conrelid = 'hospitality.media'::regclass AND conname = 'media_owner_kind_check')) LIKE '%brand%'
       AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'hospitality.media'::regclass AND conname = 'media_owner_check')"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M42" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M42"
 down "$M42"
@@ -1819,7 +1820,7 @@ expect "no logo kind left; the table checks are the original ones; the media fun
                           'hospitality._media_ensure_cover(uuid,text,uuid,uuid)'::regprocedure,
                           'hospitality._public_media(uuid,text,uuid,uuid)'::regprocedure,
                           'hospitality._site_payload(uuid)'::regprocedure))"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m41.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m41.sql"
 schema_dump "$SCHEMA_DIR/after-m42-down.sql"
 if diff -q "$SCHEMA_DIR/m41.sql" "$SCHEMA_DIR/after-m42-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 41, exactly"
@@ -1828,13 +1829,13 @@ else
 fi
 
 # ---------- the size of a unit (migration 41) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M41" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M41"
 down "$M41"
@@ -1846,7 +1847,7 @@ expect "the size column is gone; the unit functions are the migration-11 version
                           'hospitality.unit_create(uuid,jsonb)'::regprocedure,
                           'hospitality.unit_update(uuid,jsonb,integer)'::regprocedure,
                           'hospitality._site_payload(uuid)'::regprocedure))"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m40.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m40.sql"
 schema_dump "$SCHEMA_DIR/after-m41-down.sql"
 if diff -q "$SCHEMA_DIR/m40.sql" "$SCHEMA_DIR/after-m41-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 40, exactly"
@@ -1857,13 +1858,13 @@ fi
 # ---------- the portal opens a zimmer business by itself (migration 40) ----------
 expect "before the rollback: a new business gets 30 days of trial" \
   "SELECT (SELECT trial_days FROM hospitality.plans WHERE code = 'trial') = 30"
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M40" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M40"
 down "$M40"
@@ -1880,7 +1881,7 @@ expect "the portal opening, its trigger and helpers are gone; the request column
             WHERE oid IN ('hospitality.setup_guide()'::regprocedure, 'hospitality.setup_save(text,text)'::regprocedure,
                           'hospitality.site_editor()'::regprocedure,
                           'hospitality._site_request_json(hospitality.site_requests)'::regprocedure))"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m39.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m39.sql"
 schema_dump "$SCHEMA_DIR/after-m40-down.sql"
 if diff -q "$SCHEMA_DIR/m39.sql" "$SCHEMA_DIR/after-m40-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 39, exactly"
@@ -1889,13 +1890,13 @@ else
 fi
 
 # ---------- a personal link in the booking-confirmed email (migration 39) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M39" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M39"
 down "$M39"
@@ -1905,7 +1906,7 @@ expect "the second token is gone; _guest_booking, approve_booking and _anonymize
             WHERE oid IN ('hospitality._guest_booking(uuid,text,uuid,boolean)'::regprocedure,
                           'hospitality.approve_booking(uuid,integer)'::regprocedure,
                           'hospitality._anonymize_guest(uuid,uuid)'::regprocedure))"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m38.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m38.sql"
 schema_dump "$SCHEMA_DIR/after-m39-down.sql"
 if diff -q "$SCHEMA_DIR/m38.sql" "$SCHEMA_DIR/after-m39-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 38, exactly"
@@ -1914,20 +1915,20 @@ else
 fi
 
 # ---------- unit photos on the public site (migration 38) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M38" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M38"
 down "$M38"
 expect "_public_media is the migration-19 version again (matches a unit photo by property and unit)" \
   "SELECT (SELECT prosrc LIKE '%property_id IS NOT DISTINCT FROM _property%' AND prosrc NOT LIKE '%WHEN ''unit''%'
              FROM pg_proc WHERE oid = 'hospitality._public_media(uuid,text,uuid,uuid)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m37.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m37.sql"
 schema_dump "$SCHEMA_DIR/after-m38-down.sql"
 if diff -q "$SCHEMA_DIR/m37.sql" "$SCHEMA_DIR/after-m38-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 37, exactly"
@@ -1936,13 +1937,13 @@ else
 fi
 
 # ---------- payment instructions for guests (migration 37) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M37" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M37"
 down "$M37"
@@ -1951,7 +1952,7 @@ expect "payment instructions table and functions are gone; the setup guide view 
       AND to_regprocedure('hospitality.guest_payment_info(text,uuid)') IS NULL
       AND to_regprocedure('hospitality.payment_settings_save(jsonb,integer)') IS NULL
       AND (SELECT prosrc NOT LIKE '%payment_settings%' FROM pg_proc WHERE oid = 'hospitality._setup_view(uuid)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m36.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m36.sql"
 schema_dump "$SCHEMA_DIR/after-m37-down.sql"
 if diff -q "$SCHEMA_DIR/m36.sql" "$SCHEMA_DIR/after-m37-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 36, exactly"
@@ -1960,19 +1961,19 @@ else
 fi
 
 # ---------- the shared rate counter (migration 36) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M36" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M36"
 down "$M36"
 expect "rate_check is the migration-25 version again (counts every attempt)" \
   "SELECT (SELECT prosrc NOT LIKE '%pg_advisory_xact_lock%' FROM pg_proc WHERE oid = 'hospitality.rate_check(jsonb)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m35.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m35.sql"
 schema_dump "$SCHEMA_DIR/after-m36-down.sql"
 if diff -q "$SCHEMA_DIR/m35.sql" "$SCHEMA_DIR/after-m36-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 35, exactly"
@@ -1981,13 +1982,13 @@ else
 fi
 
 # ---------- the setup guide (migration 35) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M35" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M35"
 down "$M35"
@@ -1997,7 +1998,7 @@ expect "setup guide table and functions are gone; management_context is the migr
       AND to_regprocedure('hospitality.setup_save(text,text)') IS NULL
       AND to_regprocedure('hospitality._setup_site_ready(uuid)') IS NULL
       AND (SELECT prosrc NOT LIKE '%_setup_%' FROM pg_proc WHERE oid = 'hospitality.management_context()'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m34.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m34.sql"
 schema_dump "$SCHEMA_DIR/after-m35-down.sql"
 if diff -q "$SCHEMA_DIR/m34.sql" "$SCHEMA_DIR/after-m35-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 34, exactly"
@@ -2006,13 +2007,13 @@ else
 fi
 
 # ---------- F7: reports and export (migration 34) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M34" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M34"
 down "$M34"
@@ -2020,7 +2021,7 @@ expect "report functions are gone; the dashboard helpers are the migration-32 ve
   "SELECT to_regprocedure('hospitality.reports_view(date,date,uuid[],text[],text[])') IS NULL
       AND to_regprocedure('hospitality._report_nights(uuid,date,date,uuid[],text[])') IS NULL
       AND (SELECT prosrc NOT LIKE '%_report_%' FROM pg_proc WHERE oid = 'hospitality._dashboard_numbers(uuid,text,date,date,integer,boolean)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m33.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m33.sql"
 schema_dump "$SCHEMA_DIR/after-m34-down.sql"
 if diff -q "$SCHEMA_DIR/m33.sql" "$SCHEMA_DIR/after-m34-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 33, exactly"
@@ -2029,13 +2030,13 @@ else
 fi
 
 # ---------- E4: the support system of the hospitality businesses (migration 33) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M33" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M33"
 down "$M33"
@@ -2047,7 +2048,7 @@ expect "support tables, functions and the private bucket are gone" \
       AND to_regprocedure('hospitality.support_open(text,text,text,text,jsonb)') IS NULL
       AND to_regprocedure('hospitality.admin_support_tickets(text,text,date,date,text,boolean,integer,integer)') IS NULL
       AND NOT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'hosp-support')"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m32.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m32.sql"
 schema_dump "$SCHEMA_DIR/after-m33-down.sql"
 if diff -q "$SCHEMA_DIR/m32.sql" "$SCHEMA_DIR/after-m33-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 32, exactly"
@@ -2056,13 +2057,13 @@ else
 fi
 
 # ---------- F3: the owner's dashboard (migration 32) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M32" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M32"
 down "$M32"
@@ -2072,7 +2073,7 @@ expect "dashboard functions, finance grants and the new indexes are gone; 13 per
       AND to_regclass('hospitality.staff_grants') IS NULL
       AND to_regclass('hospitality.bookings_created_idx') IS NULL
       AND cardinality(hospitality.permissions()) = 13"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m31.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m31.sql"
 schema_dump "$SCHEMA_DIR/after-m32-down.sql"
 if diff -q "$SCHEMA_DIR/m31.sql" "$SCHEMA_DIR/after-m32-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 31, exactly"
@@ -2081,13 +2082,13 @@ else
 fi
 
 # ---------- E2: zimmer site requests from the portal (migration 31) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M31" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M31"
 down "$M31"
@@ -2095,7 +2096,7 @@ expect "the requests table and its functions are gone" \
   "SELECT to_regclass('hospitality.site_requests') IS NULL
       AND to_regprocedure('hospitality.site_request_submit(text,jsonb)') IS NULL
       AND to_regprocedure('hospitality.admin_site_requests()') IS NULL"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m30.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m30.sql"
 schema_dump "$SCHEMA_DIR/after-m31-down.sql"
 if diff -q "$SCHEMA_DIR/m30.sql" "$SCHEMA_DIR/after-m31-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 30, exactly"
@@ -2104,13 +2105,13 @@ else
 fi
 
 # ---------- E3: plans with prices, setup fee, details and enforced limits (migration 30) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M30" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M30"
 down "$M30"
@@ -2122,7 +2123,7 @@ expect "plan limits, plan editing and the new columns are gone; premium removed;
                         AND table_name = 'plans' AND column_name IN ('setup_fee', 'max_properties', 'max_media'))
       AND (SELECT count(*) FROM hospitality.plans WHERE NOT is_published AND price_monthly IS NULL) = 4
       AND (SELECT max_units = 5 AND max_managers = 2 FROM hospitality.plans WHERE code = 'basic')"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m29.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m29.sql"
 schema_dump "$SCHEMA_DIR/after-m30-down.sql"
 if diff -q "$SCHEMA_DIR/m29.sql" "$SCHEMA_DIR/after-m30-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 29, exactly"
@@ -2131,13 +2132,13 @@ else
 fi
 
 # ---------- E1: business details when opening a store from the portal (migration 29) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M29" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M29"
 down "$M29"
@@ -2145,7 +2146,7 @@ expect "the portal business-details functions are gone; the plain portal_create_
   "SELECT to_regprocedure('public.portal_create_store_business(text,text,text,jsonb)') IS NULL
       AND to_regprocedure('public.portal_set_store_logo(text,uuid,text)') IS NULL
       AND to_regprocedure('public.portal_create_store(text,text,text)') IS NOT NULL"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m28.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m28.sql"
 schema_dump "$SCHEMA_DIR/after-m29-down.sql"
 if diff -q "$SCHEMA_DIR/m28.sql" "$SCHEMA_DIR/after-m29-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 28, exactly"
@@ -2154,13 +2155,13 @@ else
 fi
 
 # ---------- D4: phone payments on the payments ledger (migration 28) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M28" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M28"
 down "$M28"
@@ -2168,7 +2169,7 @@ expect "the card guard is gone; the payment functions are those of migrations 4 
   "SELECT NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_note_no_card')
       AND (SELECT prosrc NOT LIKE '%payment_status%' FROM pg_proc WHERE oid = 'hospitality._payments_sync(uuid, uuid)'::regprocedure)
       AND (SELECT prosrc NOT LIKE '%_payment_insert%' FROM pg_proc WHERE oid = 'hospitality.confirm_payment(uuid, numeric)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m27.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m27.sql"
 schema_dump "$SCHEMA_DIR/after-m28-down.sql"
 if diff -q "$SCHEMA_DIR/m27.sql" "$SCHEMA_DIR/after-m28-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 27, exactly"
@@ -2177,13 +2178,13 @@ else
 fi
 
 # ---------- D3: conflict emails, occupancy source on the board (migration 27) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M27" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M27"
 down "$M27"
@@ -2191,7 +2192,7 @@ expect "the conflict trigger is gone; blocks are reported as in migration 14" \
   "SELECT NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'channel_conflicts_notify')
       AND to_regprocedure('hospitality.channel_conflicts_notify()') IS NULL
       AND (SELECT provolatile = 'i' FROM pg_proc WHERE oid = 'hospitality._block_json(hospitality.blocks, text)'::regprocedure)"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m26.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m26.sql"
 schema_dump "$SCHEMA_DIR/after-m27-down.sql"
 if diff -q "$SCHEMA_DIR/m26.sql" "$SCHEMA_DIR/after-m27-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 26, exactly"
@@ -2200,18 +2201,18 @@ else
 fi
 
 # ---------- D2: the site's theme when a business is opened (migration 26) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M26" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M26"
 down "$M26"
 expect "admin_site_theme is gone" "SELECT to_regprocedure('hospitality.admin_site_theme(uuid, text)') IS NULL"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m25.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m25.sql"
 schema_dump "$SCHEMA_DIR/after-m26-down.sql"
 if diff -q "$SCHEMA_DIR/m25.sql" "$SCHEMA_DIR/after-m26-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 25, exactly"
@@ -2220,13 +2221,13 @@ else
 fi
 
 # ---------- D1 security: shared rate counters, server-only booking requests (migration 25) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M25" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M25"
 q "SELECT hospitality.rate_check('[{\"key\": \"rollback-check-key-0001\", \"limit\": 5, \"window\": 60}]')" >/dev/null
@@ -2234,7 +2235,7 @@ down "$M25"
 expect "the counters and their functions are gone; booking requests are callable by the API roles again" \
   "SELECT to_regclass('hospitality.rate_buckets') IS NULL AND to_regprocedure('hospitality.rate_check(jsonb)') IS NULL
       AND has_function_privilege('anon', 'hospitality.request_booking(uuid,date,date,text,text,text,text,boolean,text,integer,integer,text,text,boolean,text)', 'EXECUTE')"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m24.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m24.sql"
 schema_dump "$SCHEMA_DIR/after-m25-down.sql"
 if diff -q "$SCHEMA_DIR/m24.sql" "$SCHEMA_DIR/after-m25-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 24, exactly"
@@ -2243,17 +2244,17 @@ else
 fi
 
 # ---------- channel sync (migration 24) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M24" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M24"
 down "$M24"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m23.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m23.sql"
 schema_dump "$SCHEMA_DIR/after-m24-down.sql"
 if diff -q "$SCHEMA_DIR/m23.sql" "$SCHEMA_DIR/after-m24-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 23, exactly"
@@ -2262,17 +2263,17 @@ else
 fi
 
 # ---------- payments ledger (migration 23) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M23" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M23"
 down "$M23"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m22.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m22.sql"
 schema_dump "$SCHEMA_DIR/after-m23-down.sql"
 if diff -q "$SCHEMA_DIR/m22.sql" "$SCHEMA_DIR/after-m23-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 22, exactly"
@@ -2281,17 +2282,17 @@ else
 fi
 
 # ---------- RT: hotel room types (migration 22) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M22" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M22"
 down "$M22"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m21.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m21.sql"
 schema_dump "$SCHEMA_DIR/after-m22-down.sql"
 if diff -q "$SCHEMA_DIR/m21.sql" "$SCHEMA_DIR/after-m22-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 21, exactly"
@@ -2300,17 +2301,17 @@ else
 fi
 
 # ---------- 5a: site document, drafts and versions (migration 21) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M21" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M21"
 down "$M21"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m20.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m20.sql"
 schema_dump "$SCHEMA_DIR/after-m21-down.sql"
 if diff -q "$SCHEMA_DIR/m20.sql" "$SCHEMA_DIR/after-m21-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 20, exactly"
@@ -2319,17 +2320,17 @@ else
 fi
 
 # ---------- 4c: website switches in the platform panel (migration 20) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M20" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M20"
 down "$M20"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m19.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m19.sql"
 schema_dump "$SCHEMA_DIR/after-m20-down.sql"
 if diff -q "$SCHEMA_DIR/m19.sql" "$SCHEMA_DIR/after-m20-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 19, exactly"
@@ -2338,17 +2339,17 @@ else
 fi
 
 # ---------- 4a: public website reads (migration 19) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M19" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M19"
 down "$M19"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m18.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m18.sql"
 schema_dump "$SCHEMA_DIR/after-m19-down.sql"
 if diff -q "$SCHEMA_DIR/m18.sql" "$SCHEMA_DIR/after-m19-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 18, exactly"
@@ -2357,17 +2358,17 @@ else
 fi
 
 # ---------- 2k: emails screen and dashboard (migration 18) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M18" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M18"
 down "$M18"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m17.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m17.sql"
 schema_dump "$SCHEMA_DIR/after-m18-down.sql"
 if diff -q "$SCHEMA_DIR/m17.sql" "$SCHEMA_DIR/after-m18-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 17, exactly"
@@ -2376,17 +2377,17 @@ else
 fi
 
 # ---------- 2j: guests and privacy (migration 17) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M17" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M17"
 down "$M17"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m16.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m16.sql"
 schema_dump "$SCHEMA_DIR/after-m17-down.sql"
 if diff -q "$SCHEMA_DIR/m16.sql" "$SCHEMA_DIR/after-m17-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 16, exactly"
@@ -2395,17 +2396,17 @@ else
 fi
 
 # ---------- 2h: bookings list and card (migration 16) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M16" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M16"
 down "$M16"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m15.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m15.sql"
 schema_dump "$SCHEMA_DIR/after-m16-down.sql"
 if diff -q "$SCHEMA_DIR/m15.sql" "$SCHEMA_DIR/after-m16-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 15, exactly"
@@ -2414,17 +2415,17 @@ else
 fi
 
 # ---------- P1: opening a business from the platform panel (migration 15) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M15" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M15"
 down "$M15"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m14.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m14.sql"
 schema_dump "$SCHEMA_DIR/after-m15-down.sql"
 if diff -q "$SCHEMA_DIR/m14.sql" "$SCHEMA_DIR/after-m15-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 14, exactly"
@@ -2433,17 +2434,17 @@ else
 fi
 
 # ---------- 3a: calendar and blocks (migration 14) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M14" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M14"
 down "$M14"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m13.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m13.sql"
 schema_dump "$SCHEMA_DIR/after-m14-down.sql"
 if diff -q "$SCHEMA_DIR/m13.sql" "$SCHEMA_DIR/after-m14-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 13, exactly"
@@ -2455,17 +2456,17 @@ expect "staff write blocks directly again; calendar functions gone" \
      AND to_regprocedure('hospitality.calendar(date, date, uuid[], boolean)') IS NULL"
 
 # ---------- 2f: prices and policies (migration 13) ----------
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M13" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M13"
 down "$M13"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m12.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m12.sql"
 schema_dump "$SCHEMA_DIR/after-m13-down.sql"
 if diff -q "$SCHEMA_DIR/m12.sql" "$SCHEMA_DIR/after-m13-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 12, exactly"
@@ -2489,17 +2490,17 @@ expect "nothing was removed (transaction rolled back)" \
   "SELECT to_regprocedure('hospitality.media_list(text, uuid)') IS NOT NULL"
 q "DELETE FROM public.tenants WHERE id = '72e10000-0000-0000-0000-000000000001'" >/dev/null
 # the exact schema of migration 11: a database with every migration up to M11
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M12" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M12"
 down "$M12"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m11.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m11.sql"
 schema_dump "$SCHEMA_DIR/after-m12-down.sql"
 if diff -q "$SCHEMA_DIR/m11.sql" "$SCHEMA_DIR/after-m12-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 11, exactly"
@@ -2521,24 +2522,24 @@ expect "nothing was removed (transaction rolled back)" \
   "SELECT to_regclass('hospitality.arrival_info') IS NOT NULL AND to_regprocedure('hospitality.amenity_presets()') IS NOT NULL"
 q "DELETE FROM public.tenants WHERE id = '72d10000-0000-0000-0000-000000000001'" >/dev/null
 # the exact schema of migration 10: a second database with every migration up to M10
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres \
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres \
   -c "SET client_min_messages = warning" -c "DROP DATABASE IF EXISTS rollback_ref" \
   -c "CREATE DATABASE rollback_ref ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0" >/dev/null
-psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$HERE/supabase-stubs.sql" >/dev/null
 for f in $(ls "$MIGRATIONS"/*.sql | sort); do
   [ "$(basename "$f" .sql)" = "$M11" ] && break
-  psql -X -q -v ON_ERROR_STOP=1 -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
+  psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref -f "$f" >/dev/null 2>&1 || { echo "FAILED: $f"; exit 1; }
 done
 echo "rollback: $M11"
 down "$M11"
-pg_dump -h /tmp/pg -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m10.sql"
+pg_dump -h "$SOCK" -p "$PORT" -U postgres -d rollback_ref --schema-only --no-comments | grep -Ev "^\\\\(un)?restrict " > "$SCHEMA_DIR/m10.sql"
 schema_dump "$SCHEMA_DIR/after-m11-down.sql"
 if diff -q "$SCHEMA_DIR/m10.sql" "$SCHEMA_DIR/after-m11-down.sql" >/dev/null; then
   echo "  ok   schema after the rollback = the schema of migration 10, exactly (functions, grants, columns)"
 else
   echo "  FAIL schema after the rollback differs from migration 10:"; diff "$SCHEMA_DIR/m10.sql" "$SCHEMA_DIR/after-m11-down.sql" | head -20; exit 1
 fi
-psql -X -q -h /tmp/pg -p "$PORT" -U postgres -d postgres -c "DROP DATABASE IF EXISTS rollback_ref" >/dev/null
+psql -X -q -h "$SOCK" -p "$PORT" -U postgres -d postgres -c "DROP DATABASE IF EXISTS rollback_ref" >/dev/null
 expect "staff write beds and amenities directly again; no arrival info; _quote without guest limits" \
   "SELECT has_table_privilege('authenticated', 'hospitality.unit_beds', 'INSERT')
      AND has_table_privilege('authenticated', 'hospitality.amenities', 'UPDATE')

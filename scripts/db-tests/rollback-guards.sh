@@ -12,7 +12,8 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 PORT=${PGPORT:-5499}
-PG=(psql -X -q -h /tmp/pg -p "$PORT" -U postgres)
+SOCK=${KOBI_PGSOCKET:-/tmp/pg}
+PG=(psql -X -q -h "$SOCK" -p "$PORT" -U postgres)
 TMPL=rbg_template
 WORK=rbg_work
 FAILED=0
