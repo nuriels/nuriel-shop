@@ -436,7 +436,7 @@ describe("mock Hyp — VERIFY", () => {
     expect(await verify(storeA, forged)).toBe("CCode=0");
   });
 
-  it.each(["600", "700", "800"])(
+  it.each(["10", "600", "700", "800"])(
     "DM-PAY-6 (mock): a %s hold returns to the success URL and verifies as authentic",
     async (code) => {
       const order = newOrder();

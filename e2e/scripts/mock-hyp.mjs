@@ -33,6 +33,7 @@
 //   MA-9  An authentic decline or hold return verifies with 0: VERIFY proves authenticity, not approval.
 //   MA-10 POST bodies are read as application/x-www-form-urlencoded (Hyp does not document the type).
 //   MA-11 API answers are text/plain; system errors are HTML.
+//   MA-12 hold_10 ("partial approval", Shva code 10; contract X-4) returns like the 600/700/800 holds.
 // Deterministic: no randomness. signature, Sign and Id are HMACs of a fixed seed the app never sees;
 // the only per-run values are the canary KEY/PassP, built from the run id app-up.sh passes in.
 // Control (tests only):
@@ -46,7 +47,7 @@
 //        transport set: html_200 html_with_ccode0 garbage_200 json_200 http_500 http_503 timeout
 //                slow:<ms> reset oversize redirect_3xx
 //        page (comma list): approve decline cancel (taken without a click) moredata_off win1255 utf8
-//                dup_param extra_secret_param hold_600 hold_700 hold_800 hesh hesh_empty hesh_zero
+//                dup_param extra_secret_param hold_10 hold_600 hold_700 hold_800 hesh hesh_empty hesh_zero
 //                heshasm hkid multi repeatable decline_redirect[:<CCode>]
 //   GET /__hyp/calls?order=&action=SIGN|VERIFY|PAGE|OTHER&masof=   (parameter NAMES only)
 //   GET /__hyp/scenarios · GET /__hyp/terminals (the run's fake credentials, for the specs)
@@ -158,6 +159,7 @@ const SWITCHES = {
     "utf8",
     "dup_param",
     "extra_secret_param",
+    "hold_10",
     "hold_600",
     "hold_700",
     "hold_800",
