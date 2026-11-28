@@ -2134,7 +2134,274 @@ SELECT tests.check('DM-PLAT-3 (X-17): a parked platform attempt is claimed exact
          :'pk_r6', :'pk_claim1', :'pk_claim2', :'pk'::jsonb ->> 'attempt_id', :'chk', :SB));
 
 -- ============================================================
--- 20. Cleanup: the switches off, the database unmarked (later files see online payments off)
+-- 20. Fix round 4 (contract §7.1b X-22 … X-25; owner's acceptance criteria A–E; findings R3-1 … R3-4, N4)
+-- ============================================================
+CREATE OR REPLACE FUNCTION pg_temp.drain() RETURNS void LANGUAGE plpgsql AS $f$
+BEGIN
+  WHILE jsonb_array_length(pg_temp.svc('SELECT public.max_review_alerts_claim(200)')) > 0 LOOP END LOOP;
+  WHILE jsonb_array_length(pg_temp.svc('SELECT public.platform_attempt_review_alerts_claim(200)')) > 0 LOOP END LOOP;
+END $f$;
+-- age an attempt's return(s) by _ago (test-only rewrite of timestamps, triggers off)
+CREATE OR REPLACE FUNCTION pg_temp.age_return(_scope text, _attempt text, _ago interval) RETURNS void LANGUAGE plpgsql AS $f$
+BEGIN
+  SET LOCAL session_replication_role = replica;
+  IF _scope = 'tenant' THEN
+    UPDATE payments.tenant_attempts SET returned_at = returned_at - _ago WHERE id = _attempt::uuid;
+    UPDATE payments.tenant_events SET created_at = created_at - _ago WHERE attempt_id = _attempt::uuid;
+  ELSE
+    UPDATE payments.platform_attempts SET returned_at = returned_at - _ago WHERE id = _attempt::uuid;
+    UPDATE payments.platform_events SET created_at = created_at - _ago WHERE attempt_id = _attempt::uuid;
+  END IF;
+  SET LOCAL session_replication_role = origin;
+END $f$;
+SELECT pg_temp.drain() AS ok \gset
+SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_verified(%L, %L, true, %L)', :PLAT, :SB, '0')) AS ok \gset
+
+-- A + B + C (store): parked → claimed → resolved not_charged → a later payload reopens; a verified charge after it
+SELECT pg_temp.order_of(:SB, :C4, :P10, :SHIP_B, 1, 'online') AS a4o \gset
+SELECT pg_temp.h('fake-return|r4-a-timeout') AS pa4t, pg_temp.h('fake-return|r4-a-genuine') AS pa4g \gset
+SELECT pg_temp.t_returned(:SB, :'a4o', :C4, :'pa4t', 'fake-a4-0000') AS a4 \gset
+SELECT pg_temp.t_fail_verify(:SB, :'a4'::jsonb, :'pa4t', 1) AS ok \gset
+SELECT pg_temp.age_return('tenant', :'a4'::jsonb ->> 'attempt_id', interval '95 minutes') AS ok \gset
+SELECT pg_temp.svc('SELECT to_jsonb(public.max_attempts_expire())') AS ok \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS a4_claim0 \gset
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_review_resolve(%L, %L, %L, %L, %L))', :B_OWNER, :SB, :'a4'::jsonb ->> 'attempt_id', 'portal: nothing', 'not_charged')) AS ok \gset
+SELECT (SELECT payment_due_at IS NOT NULL FROM public.orders WHERE id = :'a4o') AS a4_released \gset
+SELECT pg_temp.t_ret(:SB, :'a4'::jsonb ->> 'reference', :'pa4g', '0', 'fake-a4-0001', 1000) AS ok \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS a4_claim1 \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.max_attempt_open(%L, %L, %L, NULL, %L)', :SB, :'a4o', :C4, 'demo')), '') AS a4_open1 \gset
+SELECT tests.check('Criterion A (store, X-22): a ''not_charged'' decision is never treated as proof that no late charge will come — a later payload on that attempt reopens the review (cleared decision, a reopened event), the order is held again and alerted once',
+  format($$SELECT pg_temp.claimed(%1$L::jsonb, %3$L) = 1 AND %4$L::boolean
+             AND jsonb_array_length(%2$L::jsonb) = 1 AND pg_temp.claimed(%2$L::jsonb, %3$L) = 1
+             AND (SELECT state = 'needs_review' AND review_resolved_at IS NULL AND review_resolved_by IS NULL AND review_outcome IS NULL
+                    FROM payments.tenant_attempts WHERE id = %3$L)
+             AND EXISTS (SELECT 1 FROM payments.tenant_events WHERE attempt_id = %3$L AND source = 'review' AND result = 'reopened')
+             AND (SELECT payment_due_at IS NULL FROM public.orders WHERE id = %5$L)$$,
+         :'a4_claim0', :'a4_claim1', :'a4'::jsonb ->> 'attempt_id', :'a4_released', :'a4o'));
+SELECT tests.check('Criterion C (store): no new payment attempt can be opened before the earlier attempt is fully clarified — refused while the reopened review is open',
+  format($$SELECT %L LIKE '%%being reviewed%%'$$, :'a4_open1'));
+-- the same attempt: resolve again, then the genuine charge verifies → charge_after_resolution, reopened, alerted once
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_review_resolve(%L, %L, %L, %L, %L))', :B_OWNER, :SB, :'a4'::jsonb ->> 'attempt_id', 'portal: still nothing', 'not_charged')) AS ok \gset
+SELECT pg_temp.drain() AS ok \gset
+SELECT pg_temp.t_settle(:SB, :'a4'::jsonb ->> 'reference', :'pa4g', '0', '0', :'t_b', 'fake-a4-0001', 1000) AS a4_charge \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS a4_claim2 \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.max_attempt_open(%L, %L, %L, NULL, %L)', :SB, :'a4o', :C4, 'demo')), '') AS a4_open2 \gset
+SELECT tests.check('Criterion A + B (store, X-22): a verified charge after a ''not_charged'' decision reopens the review with reason charge_after_resolution, keeps the transaction id, and leaves exactly one claimable alert; a new attempt is refused (C)',
+  format($$SELECT %1$L::jsonb ->> 'result' = 'needs_review' AND %1$L::jsonb ->> 'reason' = 'charge_after_resolution'
+             AND jsonb_array_length(%2$L::jsonb) = 1 AND pg_temp.claimed(%2$L::jsonb, %3$L) = 1
+             AND (SELECT review_reason = 'charge_after_resolution' AND provider_txn_id = 'fake-a4-0001' AND review_resolved_at IS NULL
+                         AND review_outcome IS NULL AND NOT applied FROM payments.tenant_attempts WHERE id = %3$L)
+             AND (SELECT payment_due_at IS NULL FROM public.orders WHERE id = %4$L)
+             AND %5$L <> ''$$,
+         :'a4_charge', :'a4_claim2', :'a4'::jsonb ->> 'attempt_id', :'a4o', :'a4_open2'));
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_review_resolve(%L, %L, %L, %L, %L))', :B_OWNER, :SB, :'a4'::jsonb ->> 'attempt_id', 'x', 'not_charged')) AS ok \gset
+SELECT pg_temp.svc(format('SELECT public.max_order_payment_status(%L, %L, %L, NULL)', :SB, :'a4o', :B_OWNER)) AS a4_staff,
+       pg_temp.svc(format('SELECT public.max_order_payment_status(%L, %L, %L, NULL)', :SB, :'a4o', :C4)) AS a4_cust \gset
+SELECT tests.check('X-25 (R3-4): the order status gives store staff review_outcome and review_resolved_at — never the customer; a verified charge kept on the attempt keeps the order held even after not_charged (X-23)',
+  format($$SELECT %1$L::jsonb -> 'attempt' ->> 'review_outcome' = 'not_charged' AND %1$L::jsonb -> 'attempt' ->> 'review_resolved_at' IS NOT NULL
+             AND NOT (%2$L::jsonb -> 'attempt' ? 'review_outcome') AND NOT (%2$L::jsonb -> 'attempt' ? 'review_resolved_at')
+             AND (%1$L::jsonb ->> 'payment_held')::boolean$$,
+         :'a4_staff', :'a4_cust'));
+
+-- A + B + C (platform): resolved → a later payload reopens → a verified charge: charge_after_resolution, one alert,
+-- the charge not payable, a second attempt refused, no ledger row (the reviewer's repro9 scenario)
+SELECT pg_temp.call(NULL, :PLAT, format($q$SELECT public.platform_billing_record_entry(%L, %L)$q$, :SB,
+         '{"kind":"charge","category":"other","amount":4,"description":"חיוב בדיקה 4 (סבב 4)"}')) IS NOT NULL AS ok \gset
+SELECT (SELECT id FROM billing.ledger WHERE tenant_id = :SB AND description = 'חיוב בדיקה 4 (סבב 4)') AS ch4 \gset
+SELECT pg_temp.h('fake-platform-return|r4-timeout') AS pp4t, pg_temp.h('fake-platform-return|r4-genuine') AS pp4g \gset
+SELECT pg_temp.p_returned(:B_OWNER, :SB, :'ch4', NULL, :'pp4t', 'fake-p4r-0000') AS pa4 \gset
+SELECT pg_temp.p_fail_verify(:'pa4'::jsonb, :'pp4t', :'t_plat', 1) AS ok \gset
+SELECT pg_temp.age_return('platform', :'pa4'::jsonb ->> 'attempt_id', interval '95 minutes') AS ok \gset
+SELECT pg_temp.svc('SELECT to_jsonb(public.platform_attempts_expire())') AS ok \gset
+SELECT pg_temp.drain() AS ok \gset
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.platform_card_payment_resolve(%L, %L, %L))', :PLAT, :'pa4'::jsonb ->> 'attempt_id', 'portal: nothing')) AS ok \gset
+SELECT pg_temp.svc(format('SELECT public.platform_attempt_record_return(%L, %L, %L, %L, %L, NULL)', :'pa4'::jsonb ->> 'reference', :'pp4g', '0', 'fake-p4r-0001', 400)) AS ok \gset
+SELECT pg_temp.svc('SELECT public.platform_attempt_review_alerts_claim(200)') AS pa4_claim1 \gset
+SELECT pg_temp.p_settle(:'pa4'::jsonb ->> 'reference', :'pp4g', '0', '0', :'t_plat', 'fake-p4r-0001', 400) AS pa4_charge \gset
+SELECT pg_temp.svc('SELECT public.platform_attempt_review_alerts_claim(200)') AS pa4_claim2 \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.platform_attempt_open(%L, %L, %L, %L, NULL, %L)', :B_OWNER, :SB, 'ledger_charge', :'ch4', 'demo')), '') AS pa4_open \gset
+SELECT pg_temp.call(:SB, :B_OWNER, 'SELECT public.platform_card_my_options()') AS pa4_opts \gset
+SELECT tests.check('Criterion A + B + C (platform, X-22, repro9): after the platform admin resolved, a later payload reopens the review (one alert), the verified charge gets charge_after_resolution (one more alert), the charge is not payable and a second attempt is refused — no ledger row',
+  format($$SELECT jsonb_array_length(%1$L::jsonb) = 1 AND pg_temp.claimed(%1$L::jsonb, %4$L) = 1
+             AND %2$L::jsonb ->> 'reason' = 'charge_after_resolution'
+             AND jsonb_array_length(%3$L::jsonb) = 1 AND pg_temp.claimed(%3$L::jsonb, %4$L) = 1
+             AND (SELECT review_resolved_at IS NULL AND provider_txn_id = 'fake-p4r-0001' AND NOT applied FROM payments.platform_attempts WHERE id = %4$L)
+             AND %5$L LIKE '%%being verified or reviewed%%'
+             AND EXISTS (SELECT 1 FROM jsonb_array_elements(%6$L::jsonb -> 'charges') e WHERE e ->> 'id' = %7$L AND NOT (e ->> 'payable')::boolean)
+             AND NOT EXISTS (SELECT 1 FROM billing.ledger WHERE provider_ref = 'max:test:fake-p4r-0001')$$,
+         :'pa4_claim1', :'pa4_charge', :'pa4_claim2', :'pa4'::jsonb ->> 'attempt_id', :'pa4_open', :'pa4_opts', :'ch4'));
+
+-- B: a late return that confirms a charge alerts exactly once, whatever the attempt's state
+-- (parked: its first charge; failed: a decline then an approved retry; expired; cancelled; paid: a second charge)
+SELECT pg_temp.order_of(:SB, :C4, :P10, :SHIP_B, 1, 'online') AS b1o \gset
+SELECT pg_temp.order_of(:SB, :C4, :P10, :SHIP_B, 1, 'online') AS b2o \gset
+SELECT pg_temp.order_of(:SB, :C4, :P10, :SHIP_B, 1, 'online') AS b3o \gset
+SELECT pg_temp.order_of(:SB, :C5, :P10, :SHIP_B, 1, 'online') AS b4o \gset
+SELECT pg_temp.h('fake-return|r4-b1') AS pb1, pg_temp.h('fake-return|r4-b2-decline') AS pb2d, pg_temp.h('fake-return|r4-b2-ok') AS pb2,
+       pg_temp.h('fake-return|r4-b3') AS pb3, pg_temp.h('fake-return|r4-b4') AS pb4, pg_temp.h('fake-return|r4-b4-second') AS pb4s \gset
+-- parked (never resolved) — its first verified charge
+SELECT pg_temp.t_returned(:SB, :'b1o', :C4, :'pb1', 'fake-b1-0001') AS b1 \gset
+SELECT pg_temp.t_fail_verify(:SB, :'b1'::jsonb, :'pb1', 6) AS ok \gset
+SELECT pg_temp.drain() AS ok \gset
+SELECT pg_temp.t_settle(:SB, :'b1'::jsonb ->> 'reference', :'pb1', '0', '0', :'t_b', 'fake-b1-0001', 1000) AS ok \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS b_claim_parked \gset
+-- failed: a VERIFY-confirmed decline, then an approved retry on the same page
+SELECT pg_temp.t_returned(:SB, :'b2o', :C4, :'pb2d', 'fake-b2-0000') AS b2 \gset
+SELECT pg_temp.t_settle(:SB, :'b2'::jsonb ->> 'reference', :'pb2d', '0', '33', :'t_b', 'fake-b2-0000', 1000) AS ok \gset
+SELECT pg_temp.t_ret(:SB, :'b2'::jsonb ->> 'reference', :'pb2', '0', 'fake-b2-0001', 1000) AS ok \gset
+SELECT pg_temp.drain() AS ok \gset
+SELECT pg_temp.t_settle(:SB, :'b2'::jsonb ->> 'reference', :'pb2', '0', '0', :'t_b', 'fake-b2-0001', 1000) AS b2_paid \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS b_claim_failed \gset
+-- expired: the attempt timed out by the sweep, the late approved return arrives
+SELECT pg_temp.t_open(:SB, :'b3o', :C4) AS b3 \gset
+SELECT pg_temp.t_sign(:SB, :'b3'::jsonb ->> 'attempt_id') AS ok \gset
+SET session_replication_role = replica;
+UPDATE payments.tenant_attempts SET created_at = now() - interval '40 minutes', expires_at = now() - interval '1 minute'
+ WHERE id = (:'b3'::jsonb ->> 'attempt_id')::uuid;
+SET session_replication_role = origin;
+SELECT pg_temp.svc('SELECT to_jsonb(public.max_attempts_expire())') AS ok \gset
+SELECT pg_temp.t_ret(:SB, :'b3'::jsonb ->> 'reference', :'pb3', '0', 'fake-b3-0001', 1000) AS ok \gset
+SELECT pg_temp.drain() AS ok \gset
+SELECT pg_temp.t_settle(:SB, :'b3'::jsonb ->> 'reference', :'pb3', '0', '0', :'t_b', 'fake-b3-0001', 1000) AS b3_paid \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS b_claim_expired \gset
+-- cancelled by staff while the payer was on the page, then paid
+SELECT pg_temp.t_open(:SB, :'b4o', :C5) AS b4 \gset
+SELECT pg_temp.t_sign(:SB, :'b4'::jsonb ->> 'attempt_id') AS ok \gset
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_attempt_cancel(%L, %L, %L))', :B_OWNER, :SB, :'b4o')) AS ok \gset
+SELECT pg_temp.t_ret(:SB, :'b4'::jsonb ->> 'reference', :'pb4', '0', 'fake-b4-0001', 1000) AS ok \gset
+SELECT pg_temp.drain() AS ok \gset
+SELECT pg_temp.t_settle(:SB, :'b4'::jsonb ->> 'reference', :'pb4', '0', '0', :'t_b', 'fake-b4-0001', 1000) AS b4_paid \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS b_claim_cancelled \gset
+-- paid: a second, different charge on the same attempt
+SELECT pg_temp.t_ret(:SB, :'b4'::jsonb ->> 'reference', :'pb4s', '0', 'fake-b4-0002', 1000) AS ok \gset
+SELECT pg_temp.drain() AS ok \gset
+SELECT pg_temp.t_settle(:SB, :'b4'::jsonb ->> 'reference', :'pb4s', '0', '0', :'t_b', 'fake-b4-0002', 1000) AS b4_second \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS b_claim_paid \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS b_claim_after \gset
+SELECT tests.check('Criterion B (store): every late return that confirms a charge is detected and alerts — exactly one claimable alert row after it, whether the attempt was parked, failed, expired, cancelled or paid',
+  format($$SELECT jsonb_array_length(%1$L::jsonb) = 1 AND pg_temp.claimed(%1$L::jsonb, %7$L) = 1
+             AND %2$L::jsonb ->> 'result' = 'test_paid' AND jsonb_array_length(%3$L::jsonb) = 1 AND pg_temp.claimed(%3$L::jsonb, %8$L) = 1
+             AND %4$L::jsonb ->> 'result' = 'test_paid' AND jsonb_array_length(%5$L::jsonb) = 1 AND pg_temp.claimed(%5$L::jsonb, %9$L) = 1
+             AND %6$L::jsonb ->> 'result' = 'test_paid' AND jsonb_array_length(%11$L::jsonb) = 1 AND pg_temp.claimed(%11$L::jsonb, %10$L) = 1
+             AND %12$L::jsonb ->> 'result' = 'duplicate_charge' AND jsonb_array_length(%13$L::jsonb) = 1 AND pg_temp.claimed(%13$L::jsonb, %10$L) = 1
+             AND %14$L::jsonb = '[]'
+             AND (SELECT count(*) FROM payments.tenant_attempts WHERE id IN (%8$L, %9$L, %10$L) AND review_reason IN ('late_paid', 'duplicate_charge')) = 3$$,
+         :'b_claim_parked', :'b2_paid', :'b_claim_failed', :'b3_paid', :'b_claim_expired', :'b4_paid',
+         :'b1'::jsonb ->> 'attempt_id', :'b2'::jsonb ->> 'attempt_id', :'b3'::jsonb ->> 'attempt_id', :'b4'::jsonb ->> 'attempt_id',
+         :'b_claim_cancelled', :'b4_second', :'b_claim_paid', :'b_claim_after'));
+-- B (platform): a late charge on an expired attempt, and a second charge on a paid one
+SELECT pg_temp.call(NULL, :PLAT, format($q$SELECT public.platform_billing_record_entry(%L, %L)$q$, :SB,
+         '{"kind":"charge","category":"other","amount":3,"description":"חיוב בדיקה 3 (חיוב מאוחר)"}')) IS NOT NULL AS ok \gset
+SELECT (SELECT id FROM billing.ledger WHERE tenant_id = :SB AND description = 'חיוב בדיקה 3 (חיוב מאוחר)') AS ch3 \gset
+SELECT pg_temp.h('fake-platform-return|r4-late') AS pp3, pg_temp.h('fake-platform-return|r4-late-2') AS pp3s \gset
+SELECT pg_temp.p_returned(:B_OWNER, :SB, :'ch3', NULL, NULL, NULL) AS pb3 \gset
+SET session_replication_role = replica;
+UPDATE payments.platform_attempts SET created_at = now() - interval '40 minutes', expires_at = now() - interval '1 minute'
+ WHERE id = (:'pb3'::jsonb ->> 'attempt_id')::uuid;
+SET session_replication_role = origin;
+SELECT pg_temp.svc('SELECT to_jsonb(public.platform_attempts_expire())') AS ok \gset
+SELECT pg_temp.svc(format('SELECT public.platform_attempt_record_return(%L, %L, %L, %L, %L, NULL)', :'pb3'::jsonb ->> 'reference', :'pp3', '0', 'fake-pb3-0001', 300)) AS ok \gset
+SELECT pg_temp.drain() AS ok \gset
+SELECT pg_temp.p_settle(:'pb3'::jsonb ->> 'reference', :'pp3', '0', '0', :'t_plat', 'fake-pb3-0001', 300) AS pb3_paid \gset
+SELECT pg_temp.svc('SELECT public.platform_attempt_review_alerts_claim(200)') AS pb3_claim1 \gset
+SELECT pg_temp.svc(format('SELECT public.platform_attempt_record_return(%L, %L, %L, %L, %L, NULL)', :'pb3'::jsonb ->> 'reference', :'pp3s', '0', 'fake-pb3-0002', 300)) AS ok \gset
+SELECT pg_temp.p_settle(:'pb3'::jsonb ->> 'reference', :'pp3s', '0', '0', :'t_plat', 'fake-pb3-0002', 300) AS pb3_second \gset
+SELECT pg_temp.svc('SELECT public.platform_attempt_review_alerts_claim(200)') AS pb3_claim2 \gset
+SELECT tests.check('Criterion B (platform): a late charge on an expired platform attempt is applied once and alerted once; a second charge on the paid attempt is alerted once more — one ledger row',
+  format($$SELECT %1$L::jsonb ->> 'result' = 'test_paid' AND jsonb_array_length(%2$L::jsonb) = 1 AND pg_temp.claimed(%2$L::jsonb, %5$L) = 1
+             AND %3$L::jsonb ->> 'result' = 'duplicate_charge' AND jsonb_array_length(%4$L::jsonb) = 1 AND pg_temp.claimed(%4$L::jsonb, %5$L) = 1
+             AND (SELECT count(*) FROM billing.ledger WHERE provider_ref IN ('max:test:fake-pb3-0001', 'max:test:fake-pb3-0002')) = 1$$,
+         :'pb3_paid', :'pb3_claim1', :'pb3_second', :'pb3_claim2', :'pb3'::jsonb ->> 'attempt_id'));
+
+-- D / X-23 (R3-1, repro6): a 'charged' decision on attempt Y is never undone by attempt X — not by X's verified decline,
+-- not by 'not_charged' on X, not by a payload on X; the order stays held, no new attempt
+SELECT pg_temp.order_of(:SB, :C5, :P10, :SHIP_B, 1, 'online') AS d4o \gset
+SELECT pg_temp.t_open(:SB, :'d4o', :C5) AS d4x \gset
+SELECT pg_temp.t_sign(:SB, :'d4x'::jsonb ->> 'attempt_id') AS ok \gset
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_attempt_cancel(%L, %L, %L))', :B_OWNER, :SB, :'d4o')) AS ok \gset
+SELECT pg_temp.h('fake-return|r4-d-y') AS pdy, pg_temp.h('fake-return|r4-d-x-decline') AS pdx, pg_temp.h('fake-return|r4-d-x2') AS pdx2 \gset
+SELECT pg_temp.t_returned(:SB, :'d4o', :C5, :'pdy', 'fake-d4y-0001') AS d4y \gset
+SELECT pg_temp.t_settle(:SB, :'d4y'::jsonb ->> 'reference', :'pdy', '0', '0', :'t_b', 'fake-d4y-0001', 999) AS ok \gset
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_review_resolve(%L, %L, %L, %L, %L))', :B_OWNER, :SB, :'d4y'::jsonb ->> 'attempt_id', 'portal: charged', 'charged')) AS ok \gset
+SELECT (SELECT review_resolved_at FROM payments.tenant_attempts WHERE id = (:'d4y'::jsonb ->> 'attempt_id')::uuid) AS d4y_resolved_at \gset
+SELECT pg_temp.t_ret(:SB, :'d4x'::jsonb ->> 'reference', :'pdx', '33', 'fake-d4x-0000', 1000) AS ok \gset
+SELECT pg_temp.t_settle(:SB, :'d4x'::jsonb ->> 'reference', :'pdx', '0', '33', :'t_b', 'fake-d4x-0000', 1000) AS d4x_decline \gset
+SELECT (SELECT payment_due_at IS NULL FROM public.orders WHERE id = :'d4o') AS d4_held_after_decline \gset
+SELECT pg_temp.t_ret(:SB, :'d4x'::jsonb ->> 'reference', :'pdx2', '0', 'fake-d4x-0002', 1000) AS ok \gset
+SELECT pg_temp.age_return('tenant', :'d4x'::jsonb ->> 'attempt_id', interval '95 minutes') AS ok \gset
+SELECT pg_temp.svc('SELECT to_jsonb(public.max_attempts_expire())') AS ok \gset
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_review_resolve(%L, %L, %L, %L, %L))', :B_OWNER, :SB, :'d4x'::jsonb ->> 'attempt_id', 'portal: x not charged', 'not_charged')) AS d4x_resolve \gset
+SELECT COALESCE(pg_temp.svc_err(format('SELECT public.max_attempt_open(%L, %L, %L, NULL, %L)', :SB, :'d4o', :C5, 'demo')), '') AS d4_open \gset
+SELECT tests.check('Criterion D (X-23, R3-1 / repro6): a decision on one attempt is never changed by another — the charged attempt''s review_resolved_at / review_outcome stay; X''s verified decline, X''s payload and ''not_charged'' on X never release the order; a new attempt is refused',
+  format($$SELECT %1$L::jsonb ->> 'result' = 'not_paid' AND %2$L::boolean AND %3$L::boolean
+             AND (SELECT review_outcome = 'charged' AND review_resolved_at = %4$L::timestamptz FROM payments.tenant_attempts WHERE id = %5$L)
+             AND (SELECT payment_due_at IS NULL AND status = 'pending' FROM public.orders WHERE id = %6$L)
+             AND %7$L LIKE '%%held for the store%%'$$,
+         :'d4x_decline', :'d4_held_after_decline', :'d4x_resolve', :'d4y_resolved_at', :'d4y'::jsonb ->> 'attempt_id', :'d4o', :'d4_open'));
+
+-- X-24 (R3-2 / N4, repro7): a failed attempt gets a second payload that is never kept nor verified → parked, alerted once
+SELECT pg_temp.order_of(:SB, :C5, :P10, :SHIP_B, 1, 'online') AS f4o \gset
+SELECT pg_temp.h('fake-return|r4-f-decline') AS pfd, pg_temp.h('fake-return|r4-f-second') AS pfs \gset
+SELECT pg_temp.t_returned(:SB, :'f4o', :C5, :'pfd', 'fake-f4-0000') AS f4 \gset
+SELECT pg_temp.t_settle(:SB, :'f4'::jsonb ->> 'reference', :'pfd', '0', '33', :'t_b', 'fake-f4-0000', 1000) AS ok \gset
+SELECT (SELECT payment_due_at IS NOT NULL FROM public.orders WHERE id = :'f4o') AS f4_released \gset
+SELECT pg_temp.t_ret(:SB, :'f4'::jsonb ->> 'reference', :'pfs', '0', 'fake-f4-0001', 1000) AS ok \gset
+SELECT pg_temp.age_return('tenant', :'f4'::jsonb ->> 'attempt_id', interval '3 hours') AS ok \gset
+SELECT pg_temp.drain() AS ok \gset
+SELECT pg_temp.svc('SELECT to_jsonb(public.max_attempts_expire())') AS ok \gset
+SELECT pg_temp.svc('SELECT to_jsonb(public.platform_payment_returns_purge())') AS ok \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS f4_claim1 \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS f4_claim2 \gset
+SELECT tests.check('X-24 (R3-2 / N4, repro7): a failed attempt whose later payload was never kept nor verified is parked by the sweep after 90 minutes (verify_exhausted), its order held, alerted exactly once',
+  format($$SELECT %1$L::boolean AND pg_temp.claimed(%2$L::jsonb, %4$L) = 1 AND pg_temp.claimed(%3$L::jsonb, %4$L) = 0
+             AND (SELECT state = 'needs_review' AND review_reason = 'verify_exhausted' FROM payments.tenant_attempts WHERE id = %4$L)
+             AND (SELECT payment_due_at IS NULL FROM public.orders WHERE id = %5$L)$$,
+         :'f4_released', :'f4_claim1', :'f4_claim2', :'f4'::jsonb ->> 'attempt_id', :'f4o'));
+
+-- E (backstop): an order held with no review and no 'charged' decision (an injected inconsistency) is parked
+-- held_unexplained by the sweep after 90 minutes, and alerted once
+SELECT pg_temp.order_of(:SB, :C5, :P10, :SHIP_B, 1, 'online') AS e4o \gset
+SELECT pg_temp.h('fake-return|r4-e') AS pe4 \gset
+SELECT pg_temp.t_returned(:SB, :'e4o', :C5, :'pe4', 'fake-e4-0000') AS e4 \gset
+SELECT pg_temp.t_settle(:SB, :'e4'::jsonb ->> 'reference', :'pe4', '0', '33', :'t_b', 'fake-e4-0000', 1000) AS ok \gset
+SET session_replication_role = replica;
+UPDATE public.orders SET payment_due_at = NULL WHERE id = :'e4o';
+SET session_replication_role = origin;
+SELECT pg_temp.age_return('tenant', :'e4'::jsonb ->> 'attempt_id', interval '2 hours') AS ok \gset
+SELECT pg_temp.drain() AS ok \gset
+SELECT pg_temp.svc('SELECT to_jsonb(public.max_attempts_expire())') AS ok \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS e4_claim1 \gset
+SELECT pg_temp.svc('SELECT public.max_review_alerts_claim(200)') AS e4_claim2 \gset
+SELECT tests.check('Criterion E (DB backstop): every order that gets held has an alert and a handling route — a held order with no review and no charged decision is parked held_unexplained by the sweep after 90 minutes and claimed exactly once',
+  format($$SELECT pg_temp.claimed(%1$L::jsonb, %3$L) = 1 AND pg_temp.claimed(%2$L::jsonb, %3$L) = 0
+             AND (SELECT state = 'needs_review' AND review_reason = 'held_unexplained' FROM payments.tenant_attempts WHERE id = %3$L)$$,
+         :'e4_claim1', :'e4_claim2', :'e4'::jsonb ->> 'attempt_id'));
+
+-- Criterion E (invariant over every scenario of this file): time passes (every return of this file's stores 2 hours
+-- older), the sweep runs — then no held order is left without an unresolved review (alerted or claimable) or a
+-- 'charged' decision
+SET session_replication_role = replica;
+UPDATE payments.tenant_events SET created_at = created_at - interval '2 hours'
+ WHERE tenant_id IN (:SA, :SB, :SE, :SF) AND source IN ('return', 'notify');
+UPDATE payments.tenant_attempts SET returned_at = returned_at - interval '2 hours'
+ WHERE tenant_id IN (:SA, :SB, :SE, :SF) AND returned_at IS NOT NULL;
+SET session_replication_role = origin;
+SELECT pg_temp.svc('SELECT to_jsonb(public.max_attempts_expire())') AS ok \gset
+SELECT tests.check('Criterion E (invariant, all scenarios of this file): no held order exists without an unresolved review that is alerted or claimable, or a charged decision',
+  format($$SELECT NOT EXISTS (
+             SELECT 1 FROM public.orders o
+              WHERE o.tenant_id IN (%L, %L, %L, %L) AND o.payment_method = 'online' AND o.status = 'pending'
+                AND o.payment_status = 'awaiting' AND o.payment_due_at IS NULL
+                AND NOT EXISTS (SELECT 1 FROM payments.tenant_attempts x
+                                 WHERE x.order_id = o.id
+                                   AND ((x.review_reason IS NOT NULL AND x.review_resolved_at IS NULL)
+                                        OR x.review_outcome = 'charged')))
+           AND EXISTS (SELECT 1 FROM public.orders o WHERE o.tenant_id = %2$L AND o.payment_method = 'online'
+                        AND o.payment_status = 'awaiting' AND o.payment_due_at IS NULL)$$,
+         :SA, :SB, :SE, :SF));
+
+-- ============================================================
+-- 21. Cleanup: the switches off, the database unmarked (later files see online payments off)
 -- ============================================================
 SELECT pg_temp.call(NULL, :PLAT, $$SELECT to_jsonb(ARRAY[public.platform_set_flag('max_payments', false),
          public.platform_set_flag('platform_terminal_payments', false)])$$) AS ok \gset
