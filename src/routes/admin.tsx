@@ -33,6 +33,7 @@ import { StockCheckPanel } from "@/components/StockCheckPanel";
 import { EmailSettingsPanel } from "@/components/EmailSettingsPanel";
 import { CustomDomainPanel } from "@/components/CustomDomainPanel";
 import { OfflinePaymentMethodsCard } from "@/components/payments/OfflinePaymentMethodsCard";
+import { OnlinePaymentSettingsCard } from "@/components/payments/OnlinePaymentSettingsCard";
 import { ShippingMethodsPanel } from "@/components/ShippingMethodsPanel";
 import { CustomPricesPanel } from "@/components/CustomPricesPanel";
 import { BillingPanel } from "@/components/billing/BillingPanel";
@@ -488,6 +489,8 @@ function AdminPage() {
                 <CustomDomainSettingsCard onOpenDomainTab={() => goTab("domain")} />
                 {/* חלק 17ב: אמצעי התשלום בקופה — טלפוני מול נציג / ביט */}
                 <OfflinePaymentMethodsCard />
+                {/* MAX/Hyp DEMO: מצב התשלום המקוון לבעל העסק — מוצג רק כשהוגדר מסוף לחנות */}
+                {staffCan(staffRole, "billing.manage") && <OnlinePaymentSettingsCard />}
               </TabsContent>
               <TabsContent value="legal">
                 <LegalPagesPanel />
