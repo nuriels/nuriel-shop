@@ -514,6 +514,118 @@ function ruleB13(t: Tree): string[] {
   return bad;
 }
 
+/**
+ * P-7 (pilot): an environment selects a mode only through env.ts's exhaustive envMode() — no store-side or shared
+ * file compares the environment with a literal (so "pilot" can never fall into a live / production-only branch),
+ * and envMode maps "pilot" to "test". The platform side is the platform agent's (P-5: off in the pilot).
+ */
+const ENV_LITERAL_COMPARE =
+  /[!=]==\s*["'](?:demo|pilot|production)["']|["'](?:demo|pilot|production)["']\s*[!=]==/;
+const ENV_FILE = `${PAY_SERVER}env.ts`;
+const ENV_HELPER_USERS: readonly string[] = [
+  "src/server/services/notifications.ts",
+  "src/lib/order-emails.server.ts",
+  "src/lib/platform.functions.ts",
+  "src/server/services/payment-expiry.ts",
+];
+function rulePilot(t: Tree): string[] {
+  const bad: string[] = [];
+  for (const [f, src] of each(
+    t,
+    (f) =>
+      f !== ENV_FILE && !isPlatformSide(f) && (isPaymentsFile(f) || ENV_HELPER_USERS.includes(f)),
+  )) {
+    const hit = stripComments(src).match(ENV_LITERAL_COMPARE);
+    if (hit) bad.push(`${f}: compares the payments environment with a literal (${hit[0].trim()})`);
+  }
+  const env = code(t, ENV_FILE);
+  if (env !== "") {
+    const body = env.slice(env.search(/function\s+envMode\b/));
+    const end = body.indexOf("\n}");
+    const fn = end < 0 ? body : body.slice(0, end);
+    if (!/case\s+"pilot":\s*return\s+"test";/.test(fn))
+      bad.push(`${ENV_FILE}: envMode() must map "pilot" to "test"`);
+    if (/\bdefault:\s*return\s+"(?:test|live)"/.test(fn))
+      bad.push(`${ENV_FILE}: envMode() must not default to a mode`);
+  }
+  return bad;
+}
+
+/**
+ * P-6a (2): no environment variable holds a store's terminal details — the payments code reads only the known names
+ * (the two root keys and the operational switches), always by a literal name.
+ */
+const KNOWN_ENV_NAMES: readonly string[] = [
+  "PAYMENTS_ENV",
+  "PLATFORM_ADMIN_HOST",
+  "MAX_PAY_TEST_URL",
+  "PAYMENTS_SECRETS_KEY",
+  "PLATFORM_TERMINAL_SECRETS_KEY",
+  "PAYMENTS_JOBS",
+  "NODE_ENV",
+  "SUPPORT_NOTIFY_EMAIL",
+];
+function ruleP6aEnv(t: Tree): string[] {
+  const bad: string[] = [];
+  for (const [f, src] of each(t, isPaymentsFile)) {
+    const stripped = stripComments(src);
+    for (const m of stripped.matchAll(
+      /process\.env(?:\[\s*(["'`]?)([^\]]*?)\1\s*\]|\.([A-Za-z_$][\w$]*))?/g,
+    )) {
+      const name = m[2] ?? m[3];
+      if (name === undefined) {
+        // only env.ts walks the whole environment (the root-reuse check compares values, never returns one)
+        if (f !== ENV_FILE) bad.push(`${f}: reads the whole process.env`);
+        continue;
+      }
+      if (m[1] === "" && m[2] !== undefined)
+        bad.push(`${f}: reads process.env by a computed name (${name})`);
+      else if (!KNOWN_ENV_NAMES.includes(name))
+        bad.push(`${f}: reads ${name} (payments code reads only ${KNOWN_ENV_NAMES.join(", ")})`);
+    }
+  }
+  return bad;
+}
+
+/**
+ * P-6a (1)(5): a store terminal is reached only by the platform admin — the store-terminal orchestrators are imported
+ * only by the platform-admin server functions (and the owner's read, which is status only), and every handler
+ * there checks the platform admin before anything else.
+ */
+const ADMIN_FUNCTIONS = "src/lib/online-payments-admin.functions.ts";
+const OWNER_FUNCTIONS = "src/lib/online-payments-owner.functions.ts";
+function ruleP6aAdmin(t: Tree): string[] {
+  const bad: string[] = [];
+  for (const [f, src] of t) {
+    // the tenant scope's own modules may share helpers (admin.ts reads owner.ts's status mapping)
+    if (f.startsWith(`${PAY_SERVER}tenant/`)) continue;
+    for (const imp of importsOf(f, src)) {
+      if (imp.target === `${PAY_SERVER}tenant/admin` && f !== ADMIN_FUNCTIONS)
+        bad.push(`${f}: reaches the store-terminal admin (only ${ADMIN_FUNCTIONS})`);
+      if (
+        imp.target === `${PAY_SERVER}tenant/owner` &&
+        f !== ADMIN_FUNCTIONS &&
+        f !== OWNER_FUNCTIONS
+      )
+        bad.push(`${f}: reaches the store-terminal status (only the admin and owner functions)`);
+    }
+  }
+  const admin = code(t, ADMIN_FUNCTIONS);
+  if (admin !== "") {
+    const handlers = admin.split(/\.handler\(/).slice(1);
+    if (handlers.length === 0) bad.push(`${ADMIN_FUNCTIONS}: no handler found`);
+    for (const [i, body] of handlers.entries()) {
+      const check = body.search(/\brequirePlatformAdmin\s*\(/);
+      const firstImport = body.search(/server\/tenant\/(?:admin|owner)/);
+      if (check < 0 || (firstImport >= 0 && firstImport < check))
+        bad.push(
+          `${ADMIN_FUNCTIONS}: handler ${i + 1} reaches a terminal before requirePlatformAdmin`,
+        );
+    }
+  }
+  return bad;
+}
+
 /** DM-SEC-7 (app side): the scope code logs only through its scope logger, and that logger redacts */
 const SCOPE_LOGGERS: readonly string[] = [
   `${PAY_SERVER}tenant/log.ts`,
@@ -715,6 +827,20 @@ describe("U17 / DM-SEP-3: platform ⟷ tenant separation (real tree)", () => {
 
   it("DM-SEP-3 / U17-B11: browser-reachable payment files never statically import server code", () => {
     expect(ruleB11(CODE)).toEqual([]);
+  });
+
+  it("P-7 (pilot): no literal environment switch outside env.ts; envMode maps pilot to test", () => {
+    expect(code(CODE, ENV_FILE)).toMatch(/function\s+envMode\b/);
+    expect(rulePilot(CODE)).toEqual([]);
+  });
+
+  it("P-6a (2): payments code reads no environment variable but the known names (no per-store terminal env)", () => {
+    expect(ruleP6aEnv(CODE)).toEqual([]);
+  });
+
+  it("P-6a (1)(5): store terminals are reached only through the platform-admin functions, each checked first", () => {
+    expect(code(CODE, ADMIN_FUNCTIONS)).toMatch(/requirePlatformAdmin/);
+    expect(ruleP6aAdmin(CODE)).toEqual([]);
   });
 
   it("U17-B13 (X-17, X-19): review notifications only from the alert claim; expiry first in the tick", () => {
@@ -1062,6 +1188,52 @@ describe("U17: every rule bites (synthetic trees)", () => {
         }),
       ),
     ).toEqual([]);
+  });
+
+  it("P-7 / P-6a bites: a literal env switch, a pilot that defaults to live, a terminal env name, an unchecked handler", () => {
+    expect(
+      rulePilot(
+        tree({
+          [`${PAY_SERVER}tenant/admin.ts`]: 'const mode = env === "demo" ? "test" : "live";',
+          [ENV_FILE]:
+            'export function envMode(env) {\n  switch (env) {\n    case "demo":\n      return "test";\n    default:\n      return "live";\n  }\n}',
+          [`${PAY_SERVER}platform/pay.ts`]: 'const demo = env === "demo";',
+        }),
+      ),
+    ).toEqual([
+      `${PAY_SERVER}tenant/admin.ts: compares the payments environment with a literal (=== "demo")`,
+      `${ENV_FILE}: envMode() must map "pilot" to "test"`,
+      `${ENV_FILE}: envMode() must not default to a mode`,
+    ]);
+    expect(
+      ruleP6aEnv(
+        tree({
+          [`${PAY_SERVER}tenant/pilot.ts`]:
+            'const t = process.env["MAX_PILOT_TERMINAL"]; const k = process.env.MAX_PILOT_API_KEY;',
+          [`${PAY_SERVER}tenant/x.ts`]:
+            "const v = process.env[name]; for (const e of Object.keys(process.env)) {}",
+          [ENV_FILE]: 'const m = process.env["PAYMENTS_ENV"]; Object.entries(process.env);',
+        }),
+      ),
+    ).toEqual([
+      `${PAY_SERVER}tenant/pilot.ts: reads MAX_PILOT_TERMINAL (payments code reads only ${KNOWN_ENV_NAMES.join(", ")})`,
+      `${PAY_SERVER}tenant/pilot.ts: reads MAX_PILOT_API_KEY (payments code reads only ${KNOWN_ENV_NAMES.join(", ")})`,
+      `${PAY_SERVER}tenant/x.ts: reads process.env by a computed name (name)`,
+      `${PAY_SERVER}tenant/x.ts: reads the whole process.env`,
+    ]);
+    expect(
+      ruleP6aAdmin(
+        tree({
+          "src/lib/online-payments-staff.functions.ts":
+            'const { saveStoreTerminal } = await import("@/platform/payments/server/tenant/admin");',
+          [ADMIN_FUNCTIONS]:
+            '.handler(async () => { const m = await import("@/platform/payments/server/tenant/admin"); await requirePlatformAdmin(u, 1); })',
+        }),
+      ),
+    ).toEqual([
+      "src/lib/online-payments-staff.functions.ts: reaches the store-terminal admin (only src/lib/online-payments-admin.functions.ts)",
+      `${ADMIN_FUNCTIONS}: handler 1 reaches a terminal before requirePlatformAdmin`,
+    ]);
   });
 
   it("U17-B12 bites: a return parser without the signature check (a comment does not count)", () => {

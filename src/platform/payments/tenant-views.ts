@@ -201,10 +201,12 @@ export const PILOT_SOON_TEXT = "הסליקה בקרוב";
 /** a store outside the pilot list (or an unmarked DB): the DB refuses, the screens say so */
 export const PILOT_NOT_LISTED = "החנות עוד לא בפיילוט — הסליקה בקרוב";
 
+const PILOT_KIND: StorePilotStatus["kind"] = "pilot";
+
 export function isStorePilotStatus(
   view: StoreTerminalView | StorePilotStatus | null,
 ): view is StorePilotStatus {
-  return view !== null && "kind" in view && view.kind === "pilot";
+  return view !== null && "kind" in view && view.kind === PILOT_KIND;
 }
 
 export const TERMINAL_STATUS_LABELS: Readonly<
