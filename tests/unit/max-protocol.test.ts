@@ -15,6 +15,7 @@ import {
   encodeParams,
   minorToDecimal,
   parseReturnQuery,
+  returnHasSignature,
   validateSignResponse,
 } from "@/platform/payments/max/protocol";
 import {
@@ -733,6 +734,28 @@ describe("DM-PAY-3: return parsing — raw kept, duplicate and reserved names re
       });
     // the documented 3DS example has an empty Order: parsed, order null (cannot match an attempt)
     expect(field("Order", "")).not.toBeNull();
+  });
+});
+
+describe("DM-PAY-3: returnHasSignature — no non-empty Sign, no VERIFY (lead rule, both scopes)", () => {
+  const signed = (raw: string) => {
+    const r = parseReturnQuery(raw);
+    if (!r.ok) throw new Error(`fixture refused: ${r.reason}`);
+    return returnHasSignature(r);
+  };
+  const without = BASE_RETURN.filter(([k]) => k !== "Sign");
+
+  it("DM-PAY-3: a documented return with its Sign → true", () => {
+    expect(signed(q(...BASE_RETURN))).toBe(true);
+    expect(signed(q(...MOREDATA_RETURN))).toBe(true);
+    expect(signed(q(["Sign", FAKE_SIGNATURE], ...without))).toBe(true);
+  });
+
+  it("DM-PAY-3: no Sign, an empty Sign, or another spelling → false", () => {
+    expect(signed(q(...without))).toBe(false);
+    expect(signed(q(...without, ["Sign", ""]))).toBe(false);
+    for (const name of ["sign", "SIGN", "signature", "Sign2"])
+      expect(signed(q(...without, [name, FAKE_SIGNATURE])), name).toBe(false);
   });
 });
 

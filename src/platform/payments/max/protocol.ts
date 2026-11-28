@@ -481,6 +481,15 @@ export function parseReturnQuery(raw: string): ParsedReturn {
   };
 }
 
+/**
+ * The return carries Hyp's transaction signature: a parameter named exactly `Sign` (the documented case — every
+ * example and the mock) with a non-empty value. Without it VERIFY cannot succeed, so such a return is refused BEFORE
+ * any VERIFY call (lead rule, both scopes). The value itself is never compared here: only Hyp checks it.
+ */
+export function returnHasSignature(parsed: ParsedReturn & { ok: true }): boolean {
+  return parsed.pairs.some(([name, value]) => name === "Sign" && value !== "");
+}
+
 /** `Hesh`/`HeshASM` "non-empty and not 0" (decision ה-6). An undecodable value is judged on its raw text. */
 function documentIssued(value: string | undefined): boolean {
   if (value === undefined) return false;
