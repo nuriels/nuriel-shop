@@ -467,7 +467,11 @@ function ruleSec7(t: Tree): string[] {
   return bad;
 }
 
-/** DM-NEG-1: no refund, cancel, payout, token or payment-link code anywhere in src/ (redact.ts may mask zPass) */
+/**
+ * DM-NEG-1: no refund, cancel, payout, token or payment-link code anywhere in src/. `zPass` may be named only by
+ * the two files that refuse it (not a capability): the redactor masks it in log lines (contract §4), and
+ * max/protocol.ts rejects a SIGN response that echoes it (lead decision, wave 2)
+ */
 const NEG1: readonly (readonly [re: RegExp, what: string])[] = [
   [/\bzikoyAPI\b/i, "refund (zikoyAPI)"],
   [/\bCancelTrans\b/i, "cancellation (CancelTrans)"],
@@ -478,11 +482,12 @@ const NEG1: readonly (readonly [re: RegExp, what: string])[] = [
   [/action\s*=\s*soft\b/i, "token charge / payout (action=soft)"],
 ];
 const REDACTOR = `${PAY}redact.ts`;
+const ZPASS_REFUSERS: readonly string[] = [REDACTOR, `${PAY}max/protocol.ts`];
 function ruleNeg1(t: Tree): string[] {
   const bad: string[] = [];
   for (const [f, src] of t) {
     for (const [re, what] of NEG1) {
-      if (f === REDACTOR && re.source.includes("zPass")) continue;
+      if (ZPASS_REFUSERS.includes(f) && re.source.includes("zPass")) continue;
       if (re.test(src)) bad.push(`${f}: ${what}`);
     }
     if (isPaymentsFile(f)) {
@@ -973,12 +978,20 @@ describe("U17: every rule bites (synthetic trees)", () => {
       }),
     );
     expect(bad).toHaveLength(9);
+    // zPass is allowed only in the two refusing files — anywhere else in payments code it bites
+    expect(
+      ruleNeg1(tree({ "src/platform/payments/server/tenant/checkout.ts": 'const z = "zPass";' })),
+    ).toEqual([
+      "src/platform/payments/server/tenant/checkout.ts: refund / payout password (zPass)",
+    ]);
     expect(
       ruleNeg1(
         tree({
-          // existing stock transfers, and the redactor that masks zPass in log lines
+          // existing stock transfers; the redactor that masks zPass in log lines; the SIGN check that refuses it
           "src/lib/locations.ts": "export async function cancelTransfer(id: string) {}",
           [REDACTOR]: "const MASKED = /(KEY|PassP|zPass)=[^&]*/g;",
+          "src/platform/payments/max/protocol.ts":
+            'const SECRET_NAMES = new Set(["key", "passp", "zpass"]);',
           "src/platform/payments/provider.ts":
             "export const CAPS = { refund: false, cancel: false };",
         }),

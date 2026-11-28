@@ -31,6 +31,7 @@ import { engineRouteRedirect } from "@/app/site-routes";
 import { engineSiteData, engineSiteLinks, engineSiteMeta } from "@/app/site-head";
 import { SIGNED_IN_HINT_SCRIPT } from "@/lib/price-hold";
 import { STATIC_PAGE_SEO, staticPageTitle } from "@/lib/static-pages-seo";
+import { DemoBanner } from "@/platform/payments/ui/DemoBanner";
 
 // גופני אתרי המנוע (Hospitality): Heebo + Frank Ruhl Libre, משתנים, עברית ולטינית — public/fonts/hosp
 const ENGINE_FONT_LINKS = [
@@ -290,6 +291,8 @@ function RootComponent() {
   if (mode.siteType !== "ecommerce") {
     return (
       <QueryClientProvider client={queryClient}>
+        {/* MAX/Hyp DEMO: פס קבוע בכל עמוד כשהשרת בסביבת התשלומים DEMO */}
+        {mode.demo && <DemoBanner />}
         <EngineSiteShell siteType={mode.siteType}>
           <Outlet />
         </EngineSiteShell>
@@ -299,6 +302,8 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      {/* MAX/Hyp DEMO: פס קבוע בכל עמוד (חנות, קופה, ניהול, פאנל הפלטפורמה) בסביבת התשלומים DEMO */}
+      {mode.demo && <DemoBanner />}
       {/* הסל משותף לכל העמודים (קטלוג → קופה) ונשמר בדפדפן */}
       <CartProvider>
         {/* חלק 35: שמירת שבת וחג אוטומטית — גלישה פתוחה, סל וקופה נעולים */}

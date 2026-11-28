@@ -13,6 +13,7 @@ export const getHostMode = createServerFn({ method: "GET" }).handler(async () =>
   const { isPlatformRequest, maybeCurrentTenant, storeLockReason, tenantBaseDomain } =
     await import("@/integrations/supabase/tenant.server");
   const { siteTypeOf } = await import("@/platform/tenancy/site-type.server");
+  const { paymentsEnv } = await import("@/platform/payments/server/env");
   const adminHost = process.env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase() || null;
   const tenant = isPlatformRequest() ? null : maybeCurrentTenant();
   // סוג האתר (Stage 2a) — מטמון של 15 שניות, כל תקלה → ecommerce (ההתנהגות הקיימת)
@@ -32,6 +33,8 @@ export const getHostMode = createServerFn({ method: "GET" }).handler(async () =>
     baseDomain: tenantBaseDomain(),
     /** פאנל הפלטפורמה — לקישור "חזרה לפאנל" של מנהל-על שנמצא בחנות */
     platformUrl: adminHost ? `https://${adminHost}/platform` : null,
+    /** MAX/Hyp DEMO: סביבת התשלומים DEMO (PAYMENTS_ENV, דרך שומר הסביבה) — הפס הקבוע בכל עמוד */
+    demo: paymentsEnv() === "demo",
   };
 });
 

@@ -12,6 +12,8 @@ export type HostMode = {
   baseDomain: string | null;
   /** כתובת פאנל הפלטפורמה (מנהל-על) */
   platformUrl: string | null;
+  /** MAX/Hyp DEMO: השרת רץ בסביבת התשלומים DEMO — פס "אין חיובים אמיתיים" בכל עמוד */
+  demo: boolean;
 };
 
 // הדומיין לא משתנה בזמן שהעמוד פתוח — בדפדפן שואלים את השרת פעם אחת בלבד

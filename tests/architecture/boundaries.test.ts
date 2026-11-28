@@ -130,6 +130,12 @@ const PLATFORM_ADAPTERS: [adapter: string, wraps: (target: string) => boolean][]
     "src/platform/auth/login.ts",
     (t) => t === "src/lib/auth.functions" || t === "src/lib/login-code.functions",
   ],
+  // MAX/Hyp DEMO: מתאם השירות היחיד של התשלומים — הלקוח הלא-מצומצם (בלי חנות בכותרת) והטיפוסים של מיגרציה 208
+  [
+    "src/platform/payments/server/db.ts",
+    (t) =>
+      t === "src/integrations/supabase/client.server" || t === "src/integrations/supabase/types",
+  ],
 ];
 const adapterAllows = (from: string, target: string) =>
   PLATFORM_ADAPTERS.some(([file, wraps]) => file === from && wraps(target));
