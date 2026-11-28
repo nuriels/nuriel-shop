@@ -14,9 +14,12 @@
 #   C8  platform settle vs platform_billing_reverse_entry of the charge → no deadlock, consistent outcome
 #   C9  two platform admins registering one terminal number for two stores → one wins
 #   C10 two attempts of one charge settling in parallel → one ledger row, the other needs_review duplicate_charge
+#       (store W's own charge: independent of C8's race, review L1)
 #   C11 one step-up code consumed twice in parallel → exactly one ok
 #   C12 one consumed step-up code, two parallel saves of NURIEL's terminal → exactly one save
 #   C13 eight parallel step-up requests of one admin → exactly five codes (5 per 10 minutes)
+#   C14 settle vs a forced credential change of the store's terminal → no deadlock; paid, or parked credentials_changed
+#       with the charge kept and the order held (review M1)
 # Usage:  bash scripts/db-tests/online-payments-concurrency.sh   (after run.sh — the same local Postgres)
 # ============================================================
 set -uo pipefail
@@ -114,7 +117,7 @@ DECLARE c jsonb;
 BEGIN
   c := cpt.svc(format('SELECT public.platform_stepup_issue(%L, %L, %L)', _actor, repeat('p', 64), repeat('c', 64)));
   RETURN cpt.svc(format('SELECT public.platform_stepup_consume(%L, %L, %L, %L)', _actor, c ->> 'challenge_id',
-                        repeat('p', 64), repeat('c', 64)));
+                        repeat('p', 64), repeat('c', 64))) || jsonb_build_object('challenge_id', c ->> 'challenge_id');
 END $f$;
 -- a platform attempt of the owner for a charge, signed, and (with a payload) returned on the platform host
 CREATE FUNCTION cpt.p_returned(_owner uuid, _site uuid, _charge uuid, _origin text, _payload text, _txn text)
@@ -168,10 +171,10 @@ SELECT cpt.svc(format('SELECT public.platform_store_terminal_save(%L, %L, %L, %L
          jsonb_build_object('terminal_number', '$T_X', 'api_key_enc', cpt.tok('x-key'), 'api_password_enc', cpt.tok('x-pass'),
                             'enabled', true), 'demo'));
 SELECT cpt.svc(format('SELECT public.platform_store_terminal_verified(%L, %L, true, %L)', '$PLAT', '$X', '0'));
-SELECT cpt.stepup('$PLAT');
-SELECT cpt.svc(format('SELECT public.platform_terminal_save(%L, %L, %L)', '$PLAT',
+SELECT cpt.svc(format('SELECT public.platform_terminal_save(%L, %L, %L, %L, %L)', '$PLAT',
          jsonb_build_object('terminal_number', '$T_PLAT', 'api_key_enc', cpt.tok('p-key'), 'api_password_enc', cpt.tok('p-pass'),
-                            'enabled', true), 'demo'));
+                            'enabled', true), 'demo', su ->> 'challenge_id', repeat('p', 64)))
+  FROM (SELECT cpt.stepup('$PLAT') AS su) x;
 SELECT cpt.svc(format('SELECT public.platform_terminal_verified(%L, true, %L)', '$PLAT', '0'));
 SQL
 
@@ -209,10 +212,11 @@ settle_sql() { # settle_sql <reference> <payload> <txn>
 p_settle_sql() { # p_settle_sql <reference> <payload> <txn> <amount_minor>
   svc "public.platform_attempt_mark_paid('$1', '$2', '0', '0', '$T_PLAT', '$3', $4, 'ILS', 1, 'A0002', 'mastercard', '0000', '{}', 'demo')"
 }
-charge() { # charge <amount> <description> → the new charge id of store X
-  q "SELECT cpt.call(NULL, '$PLAT', format(\$q\$SELECT public.platform_billing_record_entry(%L, %L)\$q\$, '$X',
+charge() { # charge <amount> <description> [store] → the new charge id of the store (default X)
+  local site=${3:-$X}
+  q "SELECT cpt.call(NULL, '$PLAT', format(\$q\$SELECT public.platform_billing_record_entry(%L, %L)\$q\$, '$site',
        jsonb_build_object('kind', 'charge', 'category', 'other', 'amount', $1, 'description', '$2')))" >/dev/null
-  q "SELECT id FROM billing.ledger WHERE tenant_id = '$X' AND description = '$2'"
+  q "SELECT id FROM billing.ledger WHERE tenant_id = '$site' AND description = '$2'"
 }
 
 echo "C1. two parallel opens of one order"
@@ -271,7 +275,7 @@ q "SET session_replication_role = replica; UPDATE payments.tenant_attempts SET c
 parallel c5 "$(settle_sql "$REF5" "$PL5" fake-c5-0001)" "$(svc "public.max_attempts_expire()")"
 expect_eq "both sessions succeeded" "$(rc_ok c5)" "2"
 no_deadlock c5 "C5"
-expect_t "paid either way (the sweep skips the locked attempt, or the late settle pays the expired one)" \
+expect_t "paid either way (the sweep never expires a returned attempt, review H1)" \
   "SELECT o.payment_status = 'paid' AND a.state = 'test_paid' AND a.applied
      FROM public.orders o JOIN payments.tenant_attempts a ON a.order_id = o.id WHERE o.id = '$O5'"
 
@@ -327,9 +331,9 @@ expect_t "one registry row for the number, and only one store carries it" \
           = (SELECT tenant_id FROM payments.tenant_accounts WHERE terminal_number = '$T_9')"
 
 echo "C10. two attempts of one charge settling in parallel"
-CH10=$(charge 10 'חיוב מקבילי C10')
-PA10A=$(q "SELECT cpt.p_returned('$OX', '$X', '$CH10', NULL, NULL, NULL)")
-PA10B=$(q "SELECT cpt.p_returned('$OX', '$X', '$CH10', 'http://cp-store-x.shop.localhost:3100', cpt.h('c10-b'), 'fake-c10-0002')")
+CH10=$(charge 10 'חיוב מקבילי C10' "$W")
+PA10A=$(q "SELECT cpt.p_returned('$OW', '$W', '$CH10', NULL, NULL, NULL)")
+PA10B=$(q "SELECT cpt.p_returned('$OW', '$W', '$CH10', 'http://cp-store-w.shop.localhost:3100', cpt.h('c10-b'), 'fake-c10-0002')")
 PREF10A=$(q "SELECT '$PA10A'::jsonb ->> 'reference'"); PREF10B=$(q "SELECT '$PA10B'::jsonb ->> 'reference'")
 q "SELECT cpt.svc(format('SELECT public.platform_attempt_record_return(%L, %L, %L, %L, %L, NULL)', '$PREF10A', cpt.h('c10-a'), '0', 'fake-c10-0001', 1000))" >/dev/null
 expect_t "the first attempt was superseded (expired) and still took its late return" \
@@ -341,7 +345,7 @@ no_deadlock c10 "C10"
 expect_eq "exactly one test_paid" "$(outs c10 '"result": "test_paid"')" "1"
 expect_eq "exactly one needs_review duplicate_charge" "$(outs c10 '"reason": "duplicate_charge"')" "1"
 expect_eq "exactly one provider payment row for the charge" \
-  "$(q "SELECT count(*) FROM billing.ledger WHERE tenant_id = '$X' AND source = 'provider' AND provider_ref IN ('max:test:fake-c10-0001', 'max:test:fake-c10-0002')")" "1"
+  "$(q "SELECT count(*) FROM billing.ledger WHERE tenant_id = '$W' AND source = 'provider' AND provider_ref IN ('max:test:fake-c10-0001', 'max:test:fake-c10-0002')")" "1"
 
 echo "C11. one step-up code consumed twice in parallel"
 CHAL=$(q "SELECT cpt.svc(format('SELECT public.platform_stepup_issue(%L, %L, %L)', '$PLAT2', repeat('a', 64), repeat('b', 64))) ->> 'challenge_id'")
@@ -352,8 +356,8 @@ expect_eq "exactly one ok" "$(outs c11 '"ok": true')" "1"
 expect_eq "the other: used" "$(outs c11 '"reason": "used"')" "1"
 
 echo "C12. one consumed code, two parallel saves of NURIEL's terminal"
-parallel c12 "$(svc "public.platform_terminal_save('$PLAT2', jsonb_build_object('terminal_number', '$T_PLAT2'), 'demo')")" \
-             "$(svc "public.platform_terminal_save('$PLAT2', jsonb_build_object('enabled', false), 'demo')")"
+parallel c12 "$(svc "public.platform_terminal_save('$PLAT2', jsonb_build_object('terminal_number', '$T_PLAT2'), 'demo', '$CHAL', repeat('a', 64))")" \
+             "$(svc "public.platform_terminal_save('$PLAT2', jsonb_build_object('enabled', false), 'demo', '$CHAL', repeat('a', 64))")"
 expect_eq "exactly one save" "$(rc_ok c12)" "1"
 expect_eq "the other needs a new code" "$(errs c12 'verification code')" "1"
 expect_t "the code is spent once" "SELECT spent_at IS NOT NULL FROM payments.platform_stepup_challenges WHERE id = '$CHAL'"
@@ -365,6 +369,21 @@ expect_eq "exactly five codes" "$(rc_ok c13)" "5"
 expect_eq "three refused (5 per 10 minutes)" "$(errs c13 'too many verification codes')" "3"
 expect_eq "five challenges stored, one of them open" \
   "$(q "SELECT count(*) || '/' || count(*) FILTER (WHERE superseded_at IS NULL) FROM payments.platform_stepup_challenges WHERE actor_id = '$PLAT3'")" "5/1"
+
+echo "C14. settle vs a forced credential change of the store's terminal"
+A14=$(q "SELECT cpt.returned('$X', '$(u 14)', '$PRODUCT', '$SHIP', cpt.h('c14'), 'fake-c14-0001')")
+REF14=$(q "SELECT '$A14'::jsonb ->> 'reference'"); O14=$(q "SELECT '$A14'::jsonb ->> 'order_id'"); PL14=$(q "SELECT cpt.h('c14')")
+KEY14=$(q "SELECT cpt.tok('x-key-2')"); PASS14=$(q "SELECT cpt.tok('x-pass-2')")
+parallel c14 "$(settle_sql "$REF14" "$PL14" fake-c14-0001)" \
+  "$(svc "public.platform_store_terminal_save('$PLAT', '$X', jsonb_build_object('api_key_enc', '$KEY14', 'api_password_enc', '$PASS14', 'force', true), 'demo')")"
+expect_eq "both sessions succeeded" "$(rc_ok c14)" "2"
+no_deadlock c14 "C14"
+expect_t "consistent: paid and applied, or parked credentials_changed with the charge kept on the attempt and the order held" \
+  "SELECT (a.state = 'test_paid' AND a.applied AND o.payment_status = 'paid')
+       OR (a.state = 'needs_review' AND a.review_reason = 'credentials_changed' AND a.provider_txn_id = 'fake-c14-0001'
+           AND NOT a.applied AND o.payment_status = 'awaiting' AND o.status = 'pending' AND o.payment_due_at IS NULL)
+     FROM public.orders o JOIN payments.tenant_attempts a ON a.order_id = o.id WHERE o.id = '$O14'"
+echo "     (outcome: $(q "SELECT a.state || COALESCE(' ' || a.review_reason, '') FROM payments.tenant_attempts a WHERE a.reference = '$REF14'"))"
 
 rm -rf "$TMP"
 "${PG[@]}" -d postgres -c "DROP DATABASE IF EXISTS $DB" >/dev/null 2>&1

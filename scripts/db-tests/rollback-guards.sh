@@ -147,6 +147,10 @@ check_guard $M92 payments.tenant_config_audit "$(S payments.tenant_config_audit)
 check_guard $M92 payments.platform_config_audit "$(S payments.platform_config_audit '{"action":"'"'"'credentials_replaced'"'"'"}')"
 check_guard $M92 payments.unknown_returns "$(S payments.unknown_returns)"
 check_guard $M92 payments.environment "UPDATE payments.environment SET name = 'demo', demo_since = now();"
+# review L5: a database that was ever marked keeps its history — DEMO switched off again (demo_since stays), or only
+# the system's environment_changed audit row
+check_guard $M92 payments.environment "UPDATE payments.environment SET name = NULL, demo_since = now() - interval '1 day';"
+check_guard $M92 payments.platform_config_audit "$(S payments.platform_config_audit '{"action":"'"'"'environment_changed'"'"'"}')"
 check_guard $M92 public.orders "$(S public.orders '{"payment_method":"'"'"'online'"'"'"}')"
 check_guard $M92 billing.ledger "$(S billing.ledger '{"source":"'"'"'provider'"'"'"}')"
 

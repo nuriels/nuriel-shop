@@ -32,6 +32,13 @@
 --   returns none); max_attempts_pending_verify / platform_attempts_pending_verify for the re-VERIFY job;
 --   return_origin validated as an origin of the store's own hosts and returned by the platform return / settle;
 --   max_order_payment_status shows attempt_id and review_reason to the store's staff and platform admins only.
+--   Independent review fix round (2026-11-28): the 6th unverified VERIFY parks the attempt, sweeps and the purge park
+--   an unverified return before expiry / deletion (H1); a platform charge is not payable while a payment of it is
+--   being verified or in review (H2); a terminal change while a payer is on the page needs force and parks (M1); a
+--   review of a verified, approved store payment holds its order — payment_due_at cleared, expire_unpaid_orders
+--   untouched (M3); further approved transactions are kept in extra_txn_ids (M4); the variant FK's SET NULL passes
+--   the line lock (M5); an expired guest token is refused by the status view (L4); platform_terminal_save names the
+--   consumed challenge and its purpose hash (L7).
 -- Additive only: no existing row changes; Grow, Bit, billing.*, billing_history and add-on objects are untouched.
 -- Patched by exact text (md5-pinned below, idempotent): orders_default_payment, place_order, place_guest_order and
 -- the orders_payment_check constraint. One BEGIN … COMMIT; safe to run again.
@@ -239,6 +246,11 @@ CREATE TABLE IF NOT EXISTS payments.platform_attempts (
   verify_lease_until timestamptz,
   verify_attempts    smallint NOT NULL DEFAULT 0 CHECK (verify_attempts BETWEEN 0 AND 20),
   provider_txn_id    text CHECK (provider_txn_id IS NULL OR provider_txn_id ~ '^[0-9A-Za-z-]{1,40}$'),
+  -- M4: further approved transaction ids that arrived for this attempt after its first charge (a refund case);
+  -- only ever appended
+  extra_txn_ids      text[] NOT NULL DEFAULT '{}'::text[]
+                     CHECK (cardinality(extra_txn_ids) <= 20
+                            AND array_to_string(extra_txn_ids, ',') ~ '^([0-9A-Za-z-]{1,40}(,[0-9A-Za-z-]{1,40})*)?$'),
   approval_code      text CHECK (approval_code IS NULL OR approval_code ~ '^[0-9A-Za-z]{1,16}$'),
   installments       smallint CHECK (installments IS NULL OR installments BETWEEN 1 AND 36),
   card_brand         text CHECK (card_brand IS NULL OR card_brand ~ '^[a-z_]{2,20}$'),
@@ -459,6 +471,11 @@ CREATE TABLE IF NOT EXISTS payments.tenant_attempts (
   verify_lease_until timestamptz,
   verify_attempts    smallint NOT NULL DEFAULT 0 CHECK (verify_attempts BETWEEN 0 AND 20),
   provider_txn_id    text CHECK (provider_txn_id IS NULL OR provider_txn_id ~ '^[0-9A-Za-z-]{1,40}$'),
+  -- M4: further approved transaction ids that arrived for this attempt after its first charge (a refund case);
+  -- only ever appended
+  extra_txn_ids      text[] NOT NULL DEFAULT '{}'::text[]
+                     CHECK (cardinality(extra_txn_ids) <= 20
+                            AND array_to_string(extra_txn_ids, ',') ~ '^([0-9A-Za-z-]{1,40}(,[0-9A-Za-z-]{1,40})*)?$'),
   approval_code      text CHECK (approval_code IS NULL OR approval_code ~ '^[0-9A-Za-z]{1,16}$'),
   installments       smallint CHECK (installments IS NULL OR installments BETWEEN 1 AND 36),
   card_brand         text CHECK (card_brand IS NULL OR card_brand ~ '^[a-z_]{2,20}$'),
@@ -963,9 +980,11 @@ DECLARE
   _mutable constant text[] := ARRAY['state', 'applied', 'updated_at', 'signed_at', 'returned_at', 'verified_at',
     'paid_at', 'verify_lease_until', 'verify_attempts', 'provider_txn_id', 'approval_code', 'installments',
     'card_brand', 'card_last4', 'failure_code', 'return_flags', 'verification', 'review_reason', 'review_note',
-    'review_resolved_at', 'review_resolved_by', 'order_id', 'ledger_payment_id'];
+    'review_resolved_at', 'review_resolved_by', 'order_id', 'ledger_payment_id', 'extra_txn_ids'];
+  -- after paid / test_paid / needs_review: the review fields, the VERIFY counters, the extra transaction ids (append
+  -- only) and — on an attempt parked before any verified charge — its first transaction id (set once, rule below)
   _after_final constant text[] := ARRAY['review_reason', 'review_note', 'review_resolved_at', 'review_resolved_by',
-    'updated_at', 'verify_lease_until', 'verify_attempts', 'order_id'];
+    'updated_at', 'verify_lease_until', 'verify_attempts', 'order_id', 'extra_txn_ids', 'provider_txn_id'];
   _o jsonb;
   _n jsonb;
 BEGIN
@@ -1004,6 +1023,9 @@ BEGIN
   END IF;
   IF OLD.applied AND NOT NEW.applied THEN
     RAISE EXCEPTION 'payment attempt: an applied payment stays applied' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NEW.extra_txn_ids[1:cardinality(OLD.extra_txn_ids)] IS DISTINCT FROM OLD.extra_txn_ids THEN
+    RAISE EXCEPTION 'payment attempt: extra transaction ids are only appended' USING ERRCODE = 'insufficient_privilege';
   END IF;
   IF OLD.state IN ('paid', 'test_paid', 'needs_review')
      AND (_n - _after_final) IS DISTINCT FROM (_o - _after_final) THEN
@@ -1176,11 +1198,14 @@ BEGIN
   ELSE
     _row := NEW;
   END IF;
+  -- free: the store's deletion; an UPDATE that keeps every amount column — and keeps the variant, or only clears it
+  -- (order_items_variant_fkey ON DELETE SET NULL when a sold variant is removed from the product, review M5)
   IF COALESCE(current_setting('nuriel.deleting_tenant', true), '') = _row.tenant_id::text
      OR (TG_OP = 'UPDATE'
-         AND (NEW.order_id, NEW.product_id, NEW.variant_id, NEW.quantity, NEW.unit_price, NEW.is_deposit, NEW.is_gift)
+         AND (NEW.order_id, NEW.product_id, NEW.quantity, NEW.unit_price, NEW.is_deposit, NEW.is_gift)
              IS NOT DISTINCT FROM
-             (OLD.order_id, OLD.product_id, OLD.variant_id, OLD.quantity, OLD.unit_price, OLD.is_deposit, OLD.is_gift)) THEN
+             (OLD.order_id, OLD.product_id, OLD.quantity, OLD.unit_price, OLD.is_deposit, OLD.is_gift)
+         AND (NEW.variant_id IS NOT DISTINCT FROM OLD.variant_id OR NEW.variant_id IS NULL)) THEN
     IF TG_OP = 'DELETE' THEN
       RETURN OLD;
     END IF;
@@ -1208,6 +1233,102 @@ END $$;
 DROP TRIGGER IF EXISTS order_items_a_payment_lock ON public.order_items;
 CREATE TRIGGER order_items_a_payment_lock BEFORE INSERT OR UPDATE OR DELETE ON public.order_items
   FOR EACH ROW EXECUTE FUNCTION payments.order_items_amount_lock();
+
+-- 8k. Parking (independent review H1, M1, M3). An attempt whose return may have moved money is never expired, never
+--     cancelled and never loses its kept raw return before it is parked for a person (needs_review). Parking an
+--     attempt that has a return also holds its order: payment_due_at is cleared, so expire_unpaid_orders (unchanged,
+--     md5-pinned by the tests) skips it — the order is not cancelled and its stock is not released.
+--     "Unverified return": a payload recorded as received that no VERIFY confirmed (a rejected or failed VERIFY, an
+--     environment mismatch, or none yet).
+CREATE OR REPLACE FUNCTION payments.tenant_unverified_return(_attempt uuid)
+RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM payments.tenant_events r
+     WHERE r.attempt_id = _attempt AND r.source IN ('return', 'notify') AND r.result = 'received'
+       AND NOT EXISTS (SELECT 1 FROM payments.tenant_events v
+                        WHERE v.attempt_id = _attempt AND v.source = 'verify'
+                          AND v.payload_sha256 = r.payload_sha256 AND v.verification = 'verified'));
+$$;
+CREATE OR REPLACE FUNCTION payments.platform_unverified_return(_attempt uuid)
+RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM payments.platform_events r
+     WHERE r.attempt_id = _attempt AND r.source IN ('return', 'notify') AND r.result = 'received'
+       AND NOT EXISTS (SELECT 1 FROM payments.platform_events v
+                        WHERE v.attempt_id = _attempt AND v.source = 'verify'
+                          AND v.payload_sha256 = r.payload_sha256 AND v.verification = 'verified'));
+$$;
+-- the order of a store attempt in review: kept from the expiry job (the caller holds the order's row lock)
+CREATE OR REPLACE FUNCTION payments.hold_order(_tenant uuid, _order uuid)
+RETURNS void LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  IF _order IS NULL THEN
+    RETURN;
+  END IF;
+  PERFORM set_config('kobi.payment_update', 'on', true);
+  UPDATE public.orders o SET payment_due_at = NULL
+   WHERE o.id = _order AND o.tenant_id = _tenant AND o.payment_method = 'online' AND o.payment_status = 'awaiting'
+     AND o.status = 'pending' AND o.payment_due_at IS NOT NULL;
+  PERFORM set_config('kobi.payment_update', 'off', true);
+END $$;
+-- park one attempt: an open / failed / expired / cancelled one → needs_review; a settled one keeps its state and gets
+-- the reason (a refund case); an attempt already in review is left as it is. true = parked now. The caller holds the
+-- order's row lock first (lock order: orders → attempts).
+CREATE OR REPLACE FUNCTION payments.tenant_park(_attempt uuid, _reason text)
+RETURNS boolean LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE
+  a payments.tenant_attempts;
+BEGIN
+  SELECT * INTO a FROM payments.tenant_attempts x WHERE x.id = _attempt FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+  IF a.state IN ('created', 'redirected', 'returned', 'failed', 'expired', 'cancelled') THEN
+    UPDATE payments.tenant_attempts SET state = 'needs_review', review_reason = _reason, verify_lease_until = NULL
+     WHERE id = a.id;
+  ELSIF a.state IN ('paid', 'test_paid') AND a.review_reason IS NULL THEN
+    UPDATE payments.tenant_attempts SET review_reason = _reason WHERE id = a.id;
+  ELSE
+    RETURN false;
+  END IF;
+  INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result) VALUES (a.tenant_id, a.id, 'review', _reason);
+  IF a.returned_at IS NOT NULL THEN
+    PERFORM payments.hold_order(a.tenant_id, a.order_id);
+  END IF;
+  RETURN true;
+END $$;
+CREATE OR REPLACE FUNCTION payments.platform_park(_attempt uuid, _reason text)
+RETURNS boolean LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE
+  a payments.platform_attempts;
+BEGIN
+  SELECT * INTO a FROM payments.platform_attempts x WHERE x.id = _attempt FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+  IF a.state IN ('created', 'redirected', 'returned', 'failed', 'expired', 'cancelled') THEN
+    UPDATE payments.platform_attempts SET state = 'needs_review', review_reason = _reason, verify_lease_until = NULL
+     WHERE id = a.id;
+  ELSIF a.state IN ('paid', 'test_paid') AND a.review_reason IS NULL THEN
+    UPDATE payments.platform_attempts SET review_reason = _reason WHERE id = a.id;
+  ELSE
+    RETURN false;
+  END IF;
+  INSERT INTO payments.platform_events (attempt_id, source, result) VALUES (a.id, 'review', _reason);
+  RETURN true;
+END $$;
+-- H2: a platform charge is not payable while one of its attempts is being verified (returned, or a late return no
+-- VERIFY confirmed yet) or is in an unresolved review
+CREATE OR REPLACE FUNCTION payments.platform_target_busy(_kind text, _target uuid)
+RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM payments.platform_attempts x
+     WHERE x.target_kind = _kind AND x.target_id = _target
+       AND (x.state = 'returned'
+            OR (x.state = 'needs_review' AND x.review_resolved_at IS NULL)
+            OR (x.state IN ('failed', 'expired', 'cancelled') AND x.returned_at IS NOT NULL
+                AND payments.platform_unverified_return(x.id))));
+$$;
 
 -- ------------------------------------------------------------------------------------------------------------
 -- §9. TENANT SCOPE API (public; EXECUTE for service_role only, §13). Every function takes the store explicitly.
@@ -1279,6 +1400,12 @@ BEGIN
   IF o.kind <> 'order' OR o.payment_method <> 'online' OR o.payment_status <> 'awaiting' OR o.status <> 'pending' THEN
     RAISE EXCEPTION 'order % is not awaiting an online payment', o.order_number USING ERRCODE = 'check_violation';
   END IF;
+  -- held for a person (review M3): a payment of this order is in review — no second card payment meanwhile
+  IF o.payment_due_at IS NULL
+     OR EXISTS (SELECT 1 FROM payments.tenant_attempts x
+                 WHERE x.order_id = o.id AND x.state = 'needs_review' AND x.review_resolved_at IS NULL) THEN
+    RAISE EXCEPTION 'the payment of order % is being reviewed', o.order_number USING ERRCODE = 'check_violation';
+  END IF;
   IF NOT public.max_payments_active(_tenant, o.customer_id) THEN
     RAISE EXCEPTION 'online payment is not available in this store right now' USING ERRCODE = 'check_violation';
   END IF;
@@ -1344,11 +1471,19 @@ END $$;
 CREATE OR REPLACE FUNCTION public.max_attempt_secrets(_tenant uuid, _attempt uuid, _purpose text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
-  a   payments.tenant_attempts;
-  acc payments.tenant_accounts;
+  a      payments.tenant_attempts;
+  acc    payments.tenant_accounts;
+  _order uuid;
 BEGIN
   IF _purpose IS NULL OR _purpose NOT IN ('sign', 'verify') THEN
     RAISE EXCEPTION 'online payment: unknown purpose' USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  -- 'verify' may park the attempt and hold its order: the order's row first (lock order orders → attempts)
+  IF _purpose = 'verify' THEN
+    SELECT x.order_id INTO _order FROM payments.tenant_attempts x WHERE x.id = _attempt AND x.tenant_id = _tenant;
+    IF _order IS NOT NULL THEN
+      PERFORM 1 FROM public.orders o WHERE o.id = _order AND o.tenant_id = _tenant FOR UPDATE;
+    END IF;
   END IF;
   SELECT * INTO a FROM payments.tenant_attempts x WHERE x.id = _attempt AND x.tenant_id = _tenant FOR UPDATE;
   IF NOT FOUND THEN
@@ -1373,11 +1508,8 @@ BEGIN
                                 ceil(extract(epoch FROM a.verify_lease_until - now()))::int);
     END IF;
     IF a.verify_attempts >= 6 THEN
-      IF a.state IN ('created', 'redirected', 'returned') THEN
-        UPDATE payments.tenant_attempts SET state = 'needs_review', review_reason = 'verify_exhausted' WHERE id = a.id;
-        INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result)
-        VALUES (a.tenant_id, a.id, 'review', 'verify_exhausted');
-      END IF;
+      -- a backstop only: the 6th unverified result already parked it (max_attempt_mark_paid, review H1)
+      PERFORM payments.tenant_park(a.id, 'verify_exhausted');
       RETURN jsonb_build_object('result', 'exhausted');
     END IF;
     UPDATE payments.tenant_attempts
@@ -1465,12 +1597,16 @@ BEGIN
   ELSIF a.returned_at IS NULL AND a.state IN ('failed', 'expired', 'cancelled') THEN
     UPDATE payments.tenant_attempts SET returned_at = now() WHERE id = a.id;
   END IF;
-  IF _n > 0 AND _order IS NOT NULL THEN
+  IF _n > 0 AND _order IS NOT NULL AND a.state = 'needs_review' THEN
+    -- a return for an attempt already parked for review (e.g. credentials_changed while the payer was on the page):
+    -- money may have moved — the order is held for the person (review M1 / M3)
+    PERFORM payments.hold_order(_tenant, _order);
+  ELSIF _n > 0 AND _order IS NOT NULL THEN
     PERFORM set_config('kobi.payment_update', 'on', true);
     UPDATE public.orders o
        SET payment_due_at = LEAST(GREATEST(o.payment_due_at, now() + interval '2 hours'), o.created_at + interval '24 hours')
      WHERE o.id = _order AND o.tenant_id = _tenant AND o.payment_method = 'online'
-       AND o.payment_status = 'awaiting' AND o.status = 'pending';
+       AND o.payment_status = 'awaiting' AND o.status = 'pending' AND o.payment_due_at IS NOT NULL;
     PERFORM set_config('kobi.payment_update', 'off', true);
   END IF;
   RETURN jsonb_build_object('result', CASE WHEN _n = 0 THEN 'replay' ELSE 'received' END,
@@ -1536,30 +1672,71 @@ BEGIN
           'checked', _summary);
   -- the VERIFY lease taken by max_attempt_secrets('verify') ends here, whatever the outcome
   UPDATE payments.tenant_attempts SET verify_lease_until = NULL WHERE id = a.id AND verify_lease_until IS NOT NULL;
-  -- a payload the provider did not confirm changes nothing: a forged redirect can neither pay nor fail an attempt
+  -- a payload the provider did not confirm changes nothing: a forged redirect can neither pay nor fail an attempt —
+  -- except the last allowed VERIFY (review H1): the 6th unverified result, or every VERIFY lease used, parks the
+  -- attempt for a person (needs_review 'verify_exhausted') and holds its order; nothing waits for a 7th call
   IF _verify_ccode IS DISTINCT FROM '0' THEN
+    IF a.verify_attempts >= 6
+       OR (SELECT count(*) FROM payments.tenant_events e
+            WHERE e.attempt_id = a.id AND e.source = 'verify' AND e.result = 'checked'
+              AND e.verification IN ('rejected', 'error')) >= 6 THEN
+      IF payments.tenant_park(a.id, 'verify_exhausted') THEN
+        RETURN jsonb_build_object('result', 'needs_review', 'reason', 'verify_exhausted', 'attempt_id', a.id,
+                                  'order_id', a.order_id, 'tenant_id', a.tenant_id);
+      END IF;
+    END IF;
     RETURN jsonb_build_object('result', 'unverified', 'attempt_id', a.id);
   END IF;
   IF _txn_id IS NULL OR _txn_id !~ '^[0-9A-Za-z-]{1,40}$' THEN
     RETURN jsonb_build_object('result', 'malformed', 'attempt_id', a.id);
   END IF;
-  IF a.state = 'needs_review' THEN
-    RETURN jsonb_build_object('result', 'needs_review', 'reason', a.review_reason, 'attempt_id', a.id,
-                              'order_id', a.order_id, 'tenant_id', a.tenant_id);
-  END IF;
   -- money may have moved without a plain approval: 10 = partial approval, 600 J2 / 700 J5 / 800 postponed (holds),
   -- HKId = a standing order, MULTI = a multi-transaction (M3; lead decision 2026-11-28 for '10')
   _doc := 'document' = ANY (_flags);
   _hold := _ccode IN ('10', '600', '700', '800') OR 'hk' = ANY (_flags) OR 'multi' = ANY (_flags);
+  IF a.state = 'needs_review' THEN
+    -- review M4: another approved (or held) charge for an attempt already in review. Parked before any verified
+    -- charge (verify_exhausted / credentials_changed): this is its charge, kept on the attempt. Otherwise a second
+    -- charge: duplicate_charge, the extra transaction id kept. The order stays held (M3).
+    IF (_ccode = '0' OR _hold) AND _txn_id IS DISTINCT FROM a.provider_txn_id
+       AND NOT (_txn_id = ANY (a.extra_txn_ids)) THEN
+      IF a.provider_txn_id IS NULL AND a.review_reason IN ('verify_exhausted', 'credentials_changed') THEN
+        _reason := a.review_reason;
+        BEGIN
+          UPDATE payments.tenant_attempts SET provider_txn_id = _txn_id WHERE id = a.id;
+        EXCEPTION WHEN unique_violation THEN
+          UPDATE payments.tenant_attempts SET extra_txn_ids = extra_txn_ids || _txn_id WHERE id = a.id;
+        END;
+        INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result)
+        VALUES (a.tenant_id, a.id, 'review', 'charge_while_in_review');
+      ELSE
+        _reason := 'duplicate_charge';
+        UPDATE payments.tenant_attempts SET review_reason = 'duplicate_charge', extra_txn_ids = extra_txn_ids || _txn_id
+         WHERE id = a.id;
+        INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result)
+        VALUES (a.tenant_id, a.id, 'review', 'duplicate_charge');
+      END IF;
+      PERFORM payments.hold_order(a.tenant_id, a.order_id);
+      RETURN jsonb_build_object('result', CASE WHEN _reason = 'duplicate_charge' THEN 'duplicate_charge' ELSE 'needs_review' END,
+                                'reason', _reason, 'attempt_id', a.id, 'order_id', a.order_id, 'tenant_id', a.tenant_id);
+    END IF;
+    RETURN jsonb_build_object('result', 'needs_review', 'reason', a.review_reason, 'attempt_id', a.id,
+                              'order_id', a.order_id, 'tenant_id', a.tenant_id);
+  END IF;
   IF a.state IN ('paid', 'test_paid') THEN
-    IF a.provider_txn_id = _txn_id OR (_ccode IS DISTINCT FROM '0' AND NOT _hold) THEN
+    IF a.provider_txn_id = _txn_id OR _txn_id = ANY (a.extra_txn_ids) OR (_ccode IS DISTINCT FROM '0' AND NOT _hold) THEN
       RETURN jsonb_build_object('result', 'already_paid', 'state', a.state, 'attempt_id', a.id,
                                 'order_id', a.order_id, 'tenant_id', a.tenant_id);
     END IF;
-    -- a second, different approved (or held) charge for an attempt that is already settled → a refund case
-    UPDATE payments.tenant_attempts SET review_reason = 'duplicate_charge' WHERE id = a.id AND review_reason IS NULL;
-    RETURN jsonb_build_object('result', 'duplicate_charge', 'attempt_id', a.id, 'order_id', a.order_id,
-                              'tenant_id', a.tenant_id);
+    -- a second, different approved (or held) charge for an attempt that is already settled → a refund case; the extra
+    -- transaction id is kept on the attempt (review M4)
+    UPDATE payments.tenant_attempts
+       SET review_reason = COALESCE(review_reason, 'duplicate_charge'), extra_txn_ids = extra_txn_ids || _txn_id
+     WHERE id = a.id;
+    INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result)
+    VALUES (a.tenant_id, a.id, 'review', 'duplicate_charge');
+    RETURN jsonb_build_object('result', 'duplicate_charge', 'reason', 'duplicate_charge', 'attempt_id', a.id,
+                              'order_id', a.order_id, 'tenant_id', a.tenant_id);
   END IF;
   -- a plain decline: failed. A hold / partial approval / standing order / multi-transaction, or an issued document, is
   -- never a plain decline — it goes to a person below (needs_review), never 'failed', never paid (M3, H2)
@@ -1605,6 +1782,11 @@ BEGIN
         THEN 'duplicate_charge'
       WHEN a.state IN ('expired', 'cancelled') THEN 'late'
       ELSE 'order_not_awaiting' END;
+  ELSIF EXISTS (SELECT 1 FROM payments.tenant_attempts x
+                 WHERE x.order_id = o.id AND x.id <> a.id AND x.state = 'needs_review' AND x.review_resolved_at IS NULL
+                   AND x.provider_txn_id IS NOT NULL) THEN
+    -- another attempt of this order is in review with a charge (its order is held): a second charge (as H2)
+    _reason := 'duplicate_charge';
   ELSE
     _due := round(public.order_amount_due(o.total, o.prices_include_vat, o.vat_rate) * 100)::bigint;
     IF _due IS DISTINCT FROM a.amount_minor THEN
@@ -1629,6 +1811,9 @@ BEGIN
        WHERE id = a.id;
     END;
     INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result) VALUES (a.tenant_id, a.id, 'review', _reason);
+    -- review M3: verified and approved (or held) but not applied — money may have moved: the order is held for the
+    -- person (expire_unpaid_orders skips it: not cancelled, stock kept)
+    PERFORM payments.hold_order(a.tenant_id, a.order_id);
     RETURN jsonb_build_object('result', 'needs_review', 'reason', _reason, 'attempt_id', a.id,
                               'order_id', a.order_id, 'tenant_id', a.tenant_id);
   END IF;
@@ -1652,6 +1837,7 @@ BEGIN
            return_flags = _flags
      WHERE id = a.id;
     INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result) VALUES (a.tenant_id, a.id, 'review', _reason);
+    PERFORM payments.hold_order(a.tenant_id, a.order_id);
     RETURN jsonb_build_object('result', 'needs_review', 'reason', _reason, 'attempt_id', a.id,
                               'order_id', a.order_id, 'tenant_id', a.tenant_id);
   END;
@@ -1675,11 +1861,14 @@ CREATE OR REPLACE FUNCTION public.max_attempts_expire()
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   _n integer;
+  _p integer := 0;
+  r  record;
 BEGIN
+  -- a returned attempt is never expired or cancelled here (review H1): see the parking pass below
   WITH due AS (
     SELECT a.id, a.expires_at < now() AS timed_out
       FROM payments.tenant_attempts a
-     WHERE a.state IN ('created', 'redirected', 'returned')
+     WHERE a.state IN ('created', 'redirected')
        AND (a.expires_at < now()
             OR NOT EXISTS (SELECT 1 FROM public.orders o
                             WHERE o.id = a.order_id AND o.status = 'pending' AND o.payment_status = 'awaiting'))
@@ -1695,7 +1884,25 @@ BEGIN
   INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result)
   SELECT d.tenant_id, d.id, 'expire', d.state FROM done d;
   GET DIAGNOSTICS _n = ROW_COUNT;
-  RETURN _n;
+  -- parking pass (review H1): a return no VERIFY confirmed within 90 minutes — before the order's window, extended to
+  -- 2 hours after the return, can close — parks the attempt for a person and holds its order. Locks: the order's
+  -- row, then the attempt's; a row another session holds is left for the next run.
+  FOR r IN SELECT a.id, a.tenant_id, a.order_id FROM payments.tenant_attempts a
+            WHERE a.state IN ('returned', 'expired', 'cancelled') AND a.returned_at < now() - interval '90 minutes'
+              AND payments.tenant_unverified_return(a.id)
+            ORDER BY a.returned_at LIMIT 200 LOOP
+    IF r.order_id IS NOT NULL THEN
+      PERFORM 1 FROM public.orders o WHERE o.id = r.order_id AND o.tenant_id = r.tenant_id FOR UPDATE SKIP LOCKED;
+      CONTINUE WHEN NOT FOUND;
+    END IF;
+    PERFORM 1 FROM payments.tenant_attempts x
+     WHERE x.id = r.id AND x.state IN ('returned', 'expired', 'cancelled') FOR UPDATE SKIP LOCKED;
+    CONTINUE WHEN NOT FOUND OR NOT payments.tenant_unverified_return(r.id);
+    IF payments.tenant_park(r.id, 'verify_exhausted') THEN
+      _p := _p + 1;
+    END IF;
+  END LOOP;
+  RETURN _n + _p;
 END $$;
 
 -- 9i. Staff unlock: cancel the active attempt so the order can be edited (the customer then opens a new attempt)
@@ -1778,7 +1985,7 @@ BEGIN
               OR (o.customer_id IS NULL AND _guest_token_sha256 IS NOT NULL
                   AND EXISTS (SELECT 1 FROM payments.tenant_order_access g
                                WHERE g.order_id = o.id AND g.tenant_id = o.tenant_id
-                                 AND g.token_sha256 = _guest_token_sha256))) THEN
+                                 AND g.token_sha256 = _guest_token_sha256 AND g.expires_at > now()))) THEN
     RETURN NULL;
   END IF;
   SELECT * INTO a FROM payments.tenant_attempts x WHERE x.tenant_id = o.tenant_id AND x.order_id = o.id
@@ -1912,6 +2119,7 @@ DECLARE
   cur      payments.tenant_accounts;
   _changed text[];
   _binding boolean;
+  _r       record;
 BEGIN
   IF payments.actor_role(_actor, _tenant) IS DISTINCT FROM 'platform_admin' THEN
     RAISE EXCEPTION 'only the platform admin sets up a payment terminal' USING ERRCODE = 'insufficient_privilege';
@@ -1936,6 +2144,12 @@ BEGIN
   IF _clear AND (_patch ? 'api_key_enc' OR _patch ? 'api_password_enc') THEN
     RAISE EXCEPTION 'online payment: clear or replace the credentials, not both' USING ERRCODE = 'invalid_parameter_value';
   END IF;
+  -- lock order as everywhere: the orders of payments in progress, then the account (max_attempt_open: order → account)
+  PERFORM 1 FROM public.orders o
+   WHERE o.tenant_id = _tenant
+     AND o.id IN (SELECT x.order_id FROM payments.tenant_attempts x
+                   WHERE x.tenant_id = _tenant AND x.state IN ('redirected', 'returned'))
+   ORDER BY o.id FOR UPDATE OF o;
   INSERT INTO payments.tenant_accounts (tenant_id, provider, mode, created_by, updated_by)
   VALUES (_tenant, 'max', CASE WHEN payments.env() = 'production' THEN 'live' ELSE 'test' END, _actor, _actor)
   ON CONFLICT (tenant_id, provider) DO NOTHING;
@@ -1946,14 +2160,21 @@ BEGIN
   _binding := _clear OR _patch ? 'api_key_enc' OR _patch ? 'api_password_enc'
               OR _new_tn IS DISTINCT FROM old.terminal_number
               OR COALESCE(_patch ->> 'mode', old.mode) IS DISTINCT FROM old.mode;
+  -- review M1: a payer on the payment page (signed, not expired) or a return being verified would be stranded by a
+  -- new number or new credentials: only with force, and then parked for review (credentials_changed)
   IF _binding AND EXISTS (SELECT 1 FROM payments.tenant_attempts x
-                           WHERE x.tenant_id = _tenant AND x.state = 'returned') THEN
+                           WHERE x.tenant_id = _tenant
+                             AND (x.state = 'returned' OR (x.state = 'redirected' AND x.expires_at > now()))) THEN
     IF NOT _force THEN
-      RAISE EXCEPTION 'a payment of this store is being verified; save again with force to park it for review'
+      RAISE EXCEPTION 'a payment of this store is on the payment page or being verified; save again with force to park it for review'
         USING ERRCODE = 'check_violation';
     END IF;
-    UPDATE payments.tenant_attempts SET state = 'needs_review', review_reason = 'credentials_changed'
-     WHERE tenant_id = _tenant AND state = 'returned';
+    FOR _r IN SELECT x.id FROM payments.tenant_attempts x
+               WHERE x.tenant_id = _tenant
+                 AND (x.state = 'returned' OR (x.state = 'redirected' AND x.expires_at > now()))
+               ORDER BY x.id LOOP
+      PERFORM payments.tenant_park(_r.id, 'credentials_changed');
+    END LOOP;
   END IF;
   -- the registry binds the number to this store (raises if it belongs to the platform or another store)
   PERFORM payments.register_terminal('tenant', _tenant, 'max', _new_tn, _actor);
@@ -2093,7 +2314,7 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
             FROM payments.tenant_returns r
             JOIN payments.tenant_attempts a ON a.id = r.attempt_id AND a.tenant_id = r.tenant_id
            WHERE r.purge_after > now()
-             AND a.state <> 'needs_review' AND a.verify_attempts < 6
+             AND a.state <> 'needs_review' AND a.review_reason IS DISTINCT FROM 'verify_exhausted'
              AND (a.verify_lease_until IS NULL OR a.verify_lease_until <= now())
              AND NOT EXISTS (SELECT 1 FROM payments.tenant_events e
                               WHERE e.attempt_id = r.attempt_id AND e.source = 'verify'
@@ -2169,6 +2390,10 @@ BEGIN
   IF EXISTS (SELECT 1 FROM payments.platform_attempts x
               WHERE x.target_kind = _target_kind AND x.target_id = _target_id AND x.applied) THEN
     RAISE EXCEPTION 'this item is already paid' USING ERRCODE = 'check_violation';
+  END IF;
+  -- review H2: not while a payment of it is being verified or waits for the platform admin's review
+  IF payments.platform_target_busy(_target_kind, _target_id) THEN
+    RAISE EXCEPTION 'the payment of this item is being verified or reviewed' USING ERRCODE = 'check_violation';
   END IF;
   _bal := payments.ledger_balance(_tenant, ch.category);
   IF _bal IS NULL OR _bal < ch.amount THEN
@@ -2262,10 +2487,8 @@ BEGIN
                                 ceil(extract(epoch FROM a.verify_lease_until - now()))::int);
     END IF;
     IF a.verify_attempts >= 6 THEN
-      IF a.state IN ('created', 'redirected', 'returned') THEN
-        UPDATE payments.platform_attempts SET state = 'needs_review', review_reason = 'verify_exhausted' WHERE id = a.id;
-        INSERT INTO payments.platform_events (attempt_id, source, result) VALUES (a.id, 'review', 'verify_exhausted');
-      END IF;
+      -- a backstop only: the 6th unverified result already parked it (platform_attempt_mark_paid, review H1)
+      PERFORM payments.platform_park(a.id, 'verify_exhausted');
       RETURN jsonb_build_object('result', 'exhausted');
     END IF;
     UPDATE payments.platform_attempts
@@ -2393,26 +2616,60 @@ BEGIN
           'checked', _summary);
   UPDATE payments.platform_attempts SET verify_lease_until = NULL WHERE id = a.id AND verify_lease_until IS NOT NULL;
   IF _verify_ccode IS DISTINCT FROM '0' THEN
+    -- as 9g (review H1): the 6th unverified result, or every VERIFY lease used, parks the attempt for a person
+    IF a.verify_attempts >= 6
+       OR (SELECT count(*) FROM payments.platform_events e
+            WHERE e.attempt_id = a.id AND e.source = 'verify' AND e.result = 'checked'
+              AND e.verification IN ('rejected', 'error')) >= 6 THEN
+      IF payments.platform_park(a.id, 'verify_exhausted') THEN
+        RETURN jsonb_build_object('result', 'needs_review', 'reason', 'verify_exhausted', 'attempt_id', a.id,
+                                  'payer_tenant_id', a.payer_tenant_id, 'return_origin', a.return_origin);
+      END IF;
+    END IF;
     RETURN jsonb_build_object('result', 'unverified', 'attempt_id', a.id);
   END IF;
   IF _txn_id IS NULL OR _txn_id !~ '^[0-9A-Za-z-]{1,40}$' THEN
     RETURN jsonb_build_object('result', 'malformed', 'attempt_id', a.id);
   END IF;
-  IF a.state = 'needs_review' THEN
-    RETURN jsonb_build_object('result', 'needs_review', 'reason', a.review_reason, 'attempt_id', a.id,
-                              'payer_tenant_id', a.payer_tenant_id, 'return_origin', a.return_origin);
-  END IF;
   -- as 9g: 10 = partial approval, 600 / 700 / 800 holds, HKId, MULTI — money may have moved
   _doc := 'document' = ANY (_flags);
   _hold := _ccode IN ('10', '600', '700', '800') OR 'hk' = ANY (_flags) OR 'multi' = ANY (_flags);
+  IF a.state = 'needs_review' THEN
+    -- as 9g (review M4): another approved (or held) charge for an attempt already in review
+    IF (_ccode = '0' OR _hold) AND _txn_id IS DISTINCT FROM a.provider_txn_id
+       AND NOT (_txn_id = ANY (a.extra_txn_ids)) THEN
+      IF a.provider_txn_id IS NULL AND a.review_reason IN ('verify_exhausted', 'credentials_changed') THEN
+        _reason := a.review_reason;
+        BEGIN
+          UPDATE payments.platform_attempts SET provider_txn_id = _txn_id WHERE id = a.id;
+        EXCEPTION WHEN unique_violation THEN
+          UPDATE payments.platform_attempts SET extra_txn_ids = extra_txn_ids || _txn_id WHERE id = a.id;
+        END;
+        INSERT INTO payments.platform_events (attempt_id, source, result) VALUES (a.id, 'review', 'charge_while_in_review');
+      ELSE
+        _reason := 'duplicate_charge';
+        UPDATE payments.platform_attempts SET review_reason = 'duplicate_charge', extra_txn_ids = extra_txn_ids || _txn_id
+         WHERE id = a.id;
+        INSERT INTO payments.platform_events (attempt_id, source, result) VALUES (a.id, 'review', 'duplicate_charge');
+      END IF;
+      RETURN jsonb_build_object('result', CASE WHEN _reason = 'duplicate_charge' THEN 'duplicate_charge' ELSE 'needs_review' END,
+                                'reason', _reason, 'attempt_id', a.id, 'payer_tenant_id', a.payer_tenant_id,
+                                'return_origin', a.return_origin);
+    END IF;
+    RETURN jsonb_build_object('result', 'needs_review', 'reason', a.review_reason, 'attempt_id', a.id,
+                              'payer_tenant_id', a.payer_tenant_id, 'return_origin', a.return_origin);
+  END IF;
   IF a.state IN ('paid', 'test_paid') THEN
-    IF a.provider_txn_id = _txn_id OR (_ccode IS DISTINCT FROM '0' AND NOT _hold) THEN
+    IF a.provider_txn_id = _txn_id OR _txn_id = ANY (a.extra_txn_ids) OR (_ccode IS DISTINCT FROM '0' AND NOT _hold) THEN
       RETURN jsonb_build_object('result', 'already_paid', 'state', a.state, 'attempt_id', a.id,
                                 'payer_tenant_id', a.payer_tenant_id, 'return_origin', a.return_origin);
     END IF;
-    UPDATE payments.platform_attempts SET review_reason = 'duplicate_charge' WHERE id = a.id AND review_reason IS NULL;
-    RETURN jsonb_build_object('result', 'duplicate_charge', 'attempt_id', a.id, 'payer_tenant_id', a.payer_tenant_id,
-                              'return_origin', a.return_origin);
+    UPDATE payments.platform_attempts
+       SET review_reason = COALESCE(review_reason, 'duplicate_charge'), extra_txn_ids = extra_txn_ids || _txn_id
+     WHERE id = a.id;
+    INSERT INTO payments.platform_events (attempt_id, source, result) VALUES (a.id, 'review', 'duplicate_charge');
+    RETURN jsonb_build_object('result', 'duplicate_charge', 'reason', 'duplicate_charge', 'attempt_id', a.id,
+                              'payer_tenant_id', a.payer_tenant_id, 'return_origin', a.return_origin);
   END IF;
   IF _ccode IS DISTINCT FROM '0' AND NOT _hold AND NOT _doc THEN
     IF a.state IN ('created', 'redirected', 'returned') THEN
@@ -2446,7 +2703,12 @@ BEGIN
   ELSIF NOT EXISTS (SELECT 1 FROM public.tenants t WHERE t.id = a.payer_tenant_id) THEN
     _reason := 'payer_gone';
   ELSIF EXISTS (SELECT 1 FROM payments.platform_attempts x
-                 WHERE x.target_kind = a.target_kind AND x.target_id = a.target_id AND x.applied AND x.id <> a.id) THEN
+                 WHERE x.target_kind = a.target_kind AND x.target_id = a.target_id AND x.id <> a.id
+                   AND (x.applied
+                        -- review H2: another attempt of this charge is in review with an approved, verified charge
+                        OR (x.state = 'needs_review' AND x.review_resolved_at IS NULL
+                            AND (x.provider_txn_id IS NOT NULL
+                                 OR (x.verified_at IS NOT NULL AND x.review_reason <> 'duplicate_txn'))))) THEN
     _reason := 'duplicate_charge';
   ELSIF ch.id IS NULL OR EXISTS (SELECT 1 FROM billing.ledger r WHERE r.reverses_id = ch.id) THEN
     _reason := 'target_changed';
@@ -2515,10 +2777,13 @@ CREATE OR REPLACE FUNCTION public.platform_attempts_expire()
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   _n integer;
+  _p integer := 0;
+  r  record;
 BEGIN
+  -- a returned attempt is never expired here (review H1): see the parking pass below
   WITH due AS (
     SELECT a.id FROM payments.platform_attempts a
-     WHERE a.state IN ('created', 'redirected', 'returned') AND a.expires_at < now()
+     WHERE a.state IN ('created', 'redirected') AND a.expires_at < now()
      ORDER BY a.expires_at
      LIMIT 500
      FOR UPDATE OF a SKIP LOCKED
@@ -2528,7 +2793,19 @@ BEGIN
   )
   INSERT INTO payments.platform_events (attempt_id, source, result) SELECT d.id, 'expire', 'expired' FROM done d;
   GET DIAGNOSTICS _n = ROW_COUNT;
-  RETURN _n;
+  -- parking pass (as 9h): a return no VERIFY confirmed within 90 minutes parks the attempt for the platform admin
+  FOR r IN SELECT a.id FROM payments.platform_attempts a
+            WHERE a.state IN ('returned', 'expired', 'cancelled') AND a.returned_at < now() - interval '90 minutes'
+              AND payments.platform_unverified_return(a.id)
+            ORDER BY a.returned_at LIMIT 200 LOOP
+    PERFORM 1 FROM payments.platform_attempts x
+     WHERE x.id = r.id AND x.state IN ('returned', 'expired', 'cancelled') FOR UPDATE SKIP LOCKED;
+    CONTINUE WHEN NOT FOUND OR NOT payments.platform_unverified_return(r.id);
+    IF payments.platform_park(r.id, 'verify_exhausted') THEN
+      _p := _p + 1;
+    END IF;
+  END LOOP;
+  RETURN _n + _p;
 END $$;
 
 -- 10g. Review resolution of a platform payment (platform admin only)
@@ -2645,7 +2922,9 @@ BEGIN
                'payable', _avail AND payments.ledger_balance(_t, l.category) >= l.amount
                           AND (acc.mode IS DISTINCT FROM 'test' OR round(l.amount * 100) <= 5000)
                           AND NOT EXISTS (SELECT 1 FROM payments.platform_attempts p
-                                           WHERE p.target_kind = 'ledger_charge' AND p.target_id = l.id AND p.applied))
+                                           WHERE p.target_kind = 'ledger_charge' AND p.target_id = l.id AND p.applied)
+                          AND NOT payments.platform_target_busy('ledger_charge', l.id),
+               'in_review', payments.platform_target_busy('ledger_charge', l.id))
              ORDER BY l.occurred_on DESC, l.entry_no DESC)
         FROM (SELECT * FROM billing.ledger x
                WHERE x.tenant_id = _t AND x.kind = 'charge' AND x.source <> 'legacy_import'
@@ -2656,7 +2935,11 @@ END $$;
 -- 10l. Platform admin: NURIEL's own terminal (one per provider). Same rules as 9o, platform audit table. Requires a
 --      step-up code the same platform admin consumed in the last 10 minutes (platform_stepup_consume) and not yet used
 --      by a save: each consumed code authorizes exactly one save (M6). (Renamed from platform_billing_terminal_save.)
-CREATE OR REPLACE FUNCTION public.platform_terminal_save(_actor uuid, _patch jsonb, _app_environment text)
+-- L7 of the review: the save names the exact challenge the app consumed (and its purpose hash); the 3-argument form
+-- of the first draft is gone (no overload)
+DROP FUNCTION IF EXISTS public.platform_terminal_save(uuid, jsonb, text);
+CREATE OR REPLACE FUNCTION public.platform_terminal_save(_actor uuid, _patch jsonb, _app_environment text,
+  _challenge uuid, _purpose_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   _keys    constant text[] := ARRAY['mode', 'terminal_number', 'api_key_enc', 'api_password_enc', 'key_id',
@@ -2671,6 +2954,7 @@ DECLARE
   old      payments.platform_accounts;
   cur      payments.platform_accounts;
   _changed text[];
+  _r       record;
 BEGIN
   IF _actor IS NULL OR NOT public.is_platform_admin(_actor) THEN
     RAISE EXCEPTION 'only the platform admin sets up NURIEL''s terminal' USING ERRCODE = 'insufficient_privilege';
@@ -2686,11 +2970,12 @@ BEGIN
                                   OR COALESCE((_patch ->> 'max_installments')::integer, 1) <> 1) THEN
     RAISE EXCEPTION 'DEMO: card payments are one payment only (max installments 1)' USING ERRCODE = 'check_violation';
   END IF;
-  -- the step-up proof: a code this admin consumed within 10 minutes, not used by another save
+  -- the step-up proof (M6, review L7): exactly this challenge — of this admin, for this purpose, consumed within
+  -- 10 minutes and not used by another save
   SELECT x.id INTO _proof FROM payments.platform_stepup_challenges x
-   WHERE x.actor_id = _actor AND x.consumed_at IS NOT NULL AND x.spent_at IS NULL
-     AND x.consumed_at > now() - interval '10 minutes'
-   ORDER BY x.consumed_at DESC LIMIT 1 FOR UPDATE;
+   WHERE x.id = _challenge AND x.actor_id = _actor AND x.purpose_hash = _purpose_hash
+     AND x.consumed_at IS NOT NULL AND x.spent_at IS NULL AND x.consumed_at > now() - interval '10 minutes'
+   FOR UPDATE;
   IF _proof IS NULL THEN
     RAISE EXCEPTION 'confirm with the verification code sent by email first (step-up)' USING ERRCODE = 'insufficient_privilege';
   END IF;
@@ -2710,13 +2995,18 @@ BEGIN
   _binding := _clear OR _patch ? 'api_key_enc' OR _patch ? 'api_password_enc'
               OR _new_tn IS DISTINCT FROM old.terminal_number
               OR COALESCE(_patch ->> 'mode', old.mode) IS DISTINCT FROM old.mode;
-  IF _binding AND EXISTS (SELECT 1 FROM payments.platform_attempts x WHERE x.state = 'returned') THEN
+  -- review M1 (as 9o): payers on the payment page or returns being verified — only with force, then parked
+  IF _binding AND EXISTS (SELECT 1 FROM payments.platform_attempts x
+                           WHERE x.state = 'returned' OR (x.state = 'redirected' AND x.expires_at > now())) THEN
     IF NOT _force THEN
-      RAISE EXCEPTION 'a payment to NURIEL is being verified; save again with force to park it for review'
+      RAISE EXCEPTION 'a payment to NURIEL is on the payment page or being verified; save again with force to park it for review'
         USING ERRCODE = 'check_violation';
     END IF;
-    UPDATE payments.platform_attempts SET state = 'needs_review', review_reason = 'credentials_changed'
-     WHERE state = 'returned';
+    FOR _r IN SELECT x.id FROM payments.platform_attempts x
+               WHERE x.state = 'returned' OR (x.state = 'redirected' AND x.expires_at > now())
+               ORDER BY x.id LOOP
+      PERFORM payments.platform_park(_r.id, 'credentials_changed');
+    END LOOP;
   END IF;
   PERFORM payments.register_terminal('platform', NULL, 'max', _new_tn, _actor);
 
@@ -2858,7 +3148,7 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
             FROM payments.platform_returns r
             JOIN payments.platform_attempts a ON a.id = r.attempt_id
            WHERE r.purge_after > now()
-             AND a.state <> 'needs_review' AND a.verify_attempts < 6
+             AND a.state <> 'needs_review' AND a.review_reason IS DISTINCT FROM 'verify_exhausted'
              AND (a.verify_lease_until IS NULL OR a.verify_lease_until <= now())
              AND NOT EXISTS (SELECT 1 FROM payments.platform_events e
                               WHERE e.attempt_id = r.attempt_id AND e.source = 'verify'
@@ -2992,18 +3282,59 @@ RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   _a integer;
   _b integer;
+  r  record;
 BEGIN
-  DELETE FROM payments.tenant_returns r
-   WHERE r.purge_after <= now()
-      OR EXISTS (SELECT 1 FROM payments.tenant_events e WHERE e.attempt_id = r.attempt_id AND e.source = 'verify'
-                   AND e.payload_sha256 = r.payload_sha256 AND e.verification IN ('verified', 'rejected'))
-      OR EXISTS (SELECT 1 FROM payments.tenant_attempts a WHERE a.id = r.attempt_id AND a.verify_attempts >= 6);
+  -- review H1: a kept return no VERIFY confirmed is never deleted before its attempt is parked for a person. At
+  -- 90 minutes (before the order's window, 2 hours after the return, and before the 2-hour ceiling) it is parked
+  -- (needs_review 'verify_exhausted', the order held); rows another session holds wait for the next run.
+  FOR r IN SELECT DISTINCT a.id, a.tenant_id, a.order_id
+             FROM payments.tenant_returns k JOIN payments.tenant_attempts a ON a.id = k.attempt_id
+            WHERE (k.received_at <= now() - interval '90 minutes' OR k.purge_after <= now())
+              AND a.state <> 'needs_review' AND a.review_reason IS NULL
+              AND NOT EXISTS (SELECT 1 FROM payments.tenant_events e
+                               WHERE e.attempt_id = k.attempt_id AND e.source = 'verify'
+                                 AND e.payload_sha256 = k.payload_sha256 AND e.verification = 'verified')
+            LIMIT 200 LOOP
+    IF r.order_id IS NOT NULL THEN
+      PERFORM 1 FROM public.orders o WHERE o.id = r.order_id AND o.tenant_id = r.tenant_id FOR UPDATE SKIP LOCKED;
+      CONTINUE WHEN NOT FOUND;
+    END IF;
+    PERFORM 1 FROM payments.tenant_attempts x
+     WHERE x.id = r.id AND x.state <> 'needs_review' AND x.review_reason IS NULL FOR UPDATE SKIP LOCKED;
+    CONTINUE WHEN NOT FOUND;
+    PERFORM payments.tenant_park(r.id, 'verify_exhausted');
+  END LOOP;
+  FOR r IN SELECT DISTINCT a.id
+             FROM payments.platform_returns k JOIN payments.platform_attempts a ON a.id = k.attempt_id
+            WHERE (k.received_at <= now() - interval '90 minutes' OR k.purge_after <= now())
+              AND a.state <> 'needs_review' AND a.review_reason IS NULL
+              AND NOT EXISTS (SELECT 1 FROM payments.platform_events e
+                               WHERE e.attempt_id = k.attempt_id AND e.source = 'verify'
+                                 AND e.payload_sha256 = k.payload_sha256 AND e.verification = 'verified')
+            LIMIT 200 LOOP
+    PERFORM 1 FROM payments.platform_attempts x
+     WHERE x.id = r.id AND x.state <> 'needs_review' AND x.review_reason IS NULL FOR UPDATE SKIP LOCKED;
+    CONTINUE WHEN NOT FOUND;
+    PERFORM payments.platform_park(r.id, 'verify_exhausted');
+  END LOOP;
+  -- deleted: a payload a VERIFY confirmed; or one rejected / past its ceiling once its attempt is parked or flagged
+  DELETE FROM payments.tenant_returns k
+   WHERE EXISTS (SELECT 1 FROM payments.tenant_events e WHERE e.attempt_id = k.attempt_id AND e.source = 'verify'
+                   AND e.payload_sha256 = k.payload_sha256 AND e.verification = 'verified')
+      OR ((k.purge_after <= now()
+           OR EXISTS (SELECT 1 FROM payments.tenant_events e WHERE e.attempt_id = k.attempt_id AND e.source = 'verify'
+                        AND e.payload_sha256 = k.payload_sha256 AND e.verification = 'rejected'))
+          AND EXISTS (SELECT 1 FROM payments.tenant_attempts a WHERE a.id = k.attempt_id
+                        AND (a.state = 'needs_review' OR a.review_reason IS NOT NULL)));
   GET DIAGNOSTICS _a = ROW_COUNT;
-  DELETE FROM payments.platform_returns r
-   WHERE r.purge_after <= now()
-      OR EXISTS (SELECT 1 FROM payments.platform_events e WHERE e.attempt_id = r.attempt_id AND e.source = 'verify'
-                   AND e.payload_sha256 = r.payload_sha256 AND e.verification IN ('verified', 'rejected'))
-      OR EXISTS (SELECT 1 FROM payments.platform_attempts a WHERE a.id = r.attempt_id AND a.verify_attempts >= 6);
+  DELETE FROM payments.platform_returns k
+   WHERE EXISTS (SELECT 1 FROM payments.platform_events e WHERE e.attempt_id = k.attempt_id AND e.source = 'verify'
+                   AND e.payload_sha256 = k.payload_sha256 AND e.verification = 'verified')
+      OR ((k.purge_after <= now()
+           OR EXISTS (SELECT 1 FROM payments.platform_events e WHERE e.attempt_id = k.attempt_id AND e.source = 'verify'
+                        AND e.payload_sha256 = k.payload_sha256 AND e.verification = 'rejected'))
+          AND EXISTS (SELECT 1 FROM payments.platform_attempts a WHERE a.id = k.attempt_id
+                        AND (a.state = 'needs_review' OR a.review_reason IS NOT NULL)));
   GET DIAGNOSTICS _b = ROW_COUNT;
   DELETE FROM payments.unknown_returns u WHERE u.received_at <= now() - interval '30 days';
   DELETE FROM payments.platform_stepup_challenges s WHERE s.created_at <= now() - interval '1 day';
