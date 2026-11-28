@@ -4,19 +4,23 @@
  * • Platform host and a verified session only; the DB checks the platform admin on every call (service role with
  *   an explicit _actor that comes from the session, never from input).
  * • Saving needs a step-up first (DM-SEP-6): a 6-digit code e-mailed to the admin, bound to the admin and to the
- *   exact change set (which fields and which secrets change — not the secret values), 10 minutes, ≤ 5 tries,
- *   single use (stepup.ts + the DB). This file is the sole caller of platform_terminal_save (U17-B4) and consumes
- *   the challenge right before it. The secret values travel once, in the save's POST body; they are sealed here
- *   with the platform cipher (account id of NURIEL's terminal) and never logged, returned or kept.
+ *   exact change set — which fields change AND, for each secret being set, a keyed commitment of its value (X-20:
+ *   HMAC-SHA256 with the step-up key, per field), so a code approved for one KEY / password accepts no other —
+ *   10 minutes, ≤ 5 tries, single use (stepup.ts + the DB). This file is the sole caller of platform_terminal_save
+ *   (U17-B4) and consumes the challenge right before it. The secret values travel in the code request (only to
+ *   compute the commitment, then dropped) and in the save's POST body; they are sealed here with the platform
+ *   cipher (account id of NURIEL's terminal) and never logged, returned, audited or kept; the commitments are only
+ *   ever inputs of the purpose hash (never logged or stored on their own).
  * • Test connection: SIGN of ₪1 with a random reference — nothing is charged (the page is never opened). Only a
  *   terminal checked this way takes payments (the DB requires status "verified").
  * • Lists: payments to NURIEL (review items, resolve) and "sent to Hyp and never returned" (reconciliation, M9).
  */
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import type {
   CardPaymentRow,
   CodeSent,
   TerminalChange,
+  TerminalCodeRequest,
   TerminalSave,
   TerminalTest,
   TerminalView,
@@ -79,17 +83,39 @@ type StepupService = ReturnType<typeof createStepupService>;
 /** the step-up purpose of a change of NURIEL's terminal (stepup.ts) */
 const TERMINAL_PURPOSE = "platform_terminal_change";
 
-/** the change set a code is bound to (never a secret value) */
+/** the change set a code is bound to (never a secret value; a secret being set only as its keyed commitment) */
 export type TerminalIntent = {
   mode: PaymentMode;
   terminal_number: string | null;
   enabled: boolean | null;
   set_api_key: boolean;
   set_api_password: boolean;
+  /** X-20: HMAC-SHA256(step-up key, the new KEY) — null when the KEY does not change */
+  api_key_commit: string | null;
+  /** X-20: HMAC-SHA256(step-up key, the new password) — null when it does not change */
+  api_password_commit: string | null;
   clear_credentials: boolean;
   force: boolean;
   max_installments: 1;
 };
+
+/** the keyed commitments of the secret values a change sets (X-20) */
+export type SecretCommitments = { apiKey: string | null; apiPassword: string | null };
+
+const COMMIT_LABEL = "nuriel/payments/v1/stepup/secret-commit";
+
+/** X-20: a keyed commitment of one secret value (the field name is bound in, so KEY and password never swap) */
+export function secretCommitment(
+  key: Buffer,
+  field: "api_key" | "api_password",
+  value: string,
+): string {
+  if (!Buffer.isBuffer(key) || key.length < 32 || typeof value !== "string" || value === "")
+    throw new PlatformPaymentError("invalid");
+  return createHmac("sha256", key)
+    .update(`${COMMIT_LABEL}\n${field}\n${value}`, "utf8")
+    .digest("hex");
+}
 
 export interface TerminalDeps {
   isPlatformHost(): Promise<boolean>;
@@ -103,6 +129,8 @@ export interface TerminalDeps {
   rpc: PlatformRpc;
   stepup(env: PaymentsEnv): StepupService;
   purposeHash(actorId: string, intent: TerminalIntent): string;
+  /** X-20: the keyed commitment of one secret value being set (step-up key of this environment) */
+  commitSecret(env: PaymentsEnv, field: "api_key" | "api_password", value: string): string;
   /** the purpose hash as the DB stored it for the challenge (the save names exactly the consumed challenge) */
   dbPurposeHash(env: PaymentsEnv, actorId: string, purposeHash: string): string;
   cipher(env: PaymentsEnv, mode: PaymentMode): PlatformCipher;
@@ -157,6 +185,7 @@ export const defaultTerminalDeps: TerminalDeps = {
   rpc: platformPaymentsRpc,
   stepup: (env) => createStepupService(stepupRpc, stepupKey(env)),
   purposeHash: (actorId, intent) => stepupPurposeHash(actorId, TERMINAL_PURPOSE, intent),
+  commitSecret: (env, field, value) => secretCommitment(stepupKey(env), field, value),
   dbPurposeHash: (env, actorId, purposeHash) =>
     stepupDbPurposeHash(stepupKey(env), actorId, purposeHash),
   cipher: platformSecretCipher,
@@ -172,6 +201,7 @@ const MINUTES_15 = 15 * 60_000;
 const HYP_OPTIONS = { method: "GET", timeoutMs: 15_000, maxBytes: 64 * 1024 } as const;
 const MASOF = /^[0-9]{10}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const HEX64 = /^[0-9a-f]{64}$/;
 const SIX_DIGITS = /^[0-9]{6}$/;
 /** the same rule as the protocol builders: printable, bounded, no control or format characters */
 const CREDENTIAL = /^[^\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]{1,256}$/u;
@@ -281,13 +311,28 @@ function checkChange(change: TerminalChange, env: PaymentsEnv): void {
   if (!changes) throw new PlatformPaymentError("invalid");
 }
 
-export function intentOf(change: TerminalChange, env: PaymentsEnv): TerminalIntent {
+export function intentOf(
+  change: TerminalChange,
+  env: PaymentsEnv,
+  commits: SecretCommitments,
+): TerminalIntent {
+  // a secret that changes is bound by its value's commitment; one without a commitment cannot be approved
+  const apiKeyCommit = change.setApiKey ? commits?.apiKey : null;
+  const apiPasswordCommit = change.setApiPassword ? commits?.apiPassword : null;
+  if (
+    (change.setApiKey && (typeof apiKeyCommit !== "string" || !HEX64.test(apiKeyCommit))) ||
+    (change.setApiPassword &&
+      (typeof apiPasswordCommit !== "string" || !HEX64.test(apiPasswordCommit)))
+  )
+    throw new PlatformPaymentError("invalid");
   return {
     mode: modeFor(env),
     terminal_number: change.terminalNumber,
     enabled: change.enabled,
     set_api_key: change.setApiKey,
     set_api_password: change.setApiPassword,
+    api_key_commit: apiKeyCommit ?? null,
+    api_password_commit: apiPasswordCommit ?? null,
     clear_credentials: change.clearCredentials,
     force: change.force,
     max_installments: 1,
@@ -311,13 +356,43 @@ function codeEmail(code: string) {
   };
 }
 
+/** X-20: the commitments of the secret values a change sets (values checked like the save checks them) */
+function commitmentsOf(
+  values: { apiKey: string | null; apiPassword: string | null },
+  env: PaymentsEnv,
+  deps: TerminalDeps,
+): SecretCommitments {
+  if (
+    (values.apiKey !== null && !CREDENTIAL.test(values.apiKey)) ||
+    (values.apiPassword !== null && !CREDENTIAL.test(values.apiPassword))
+  )
+    throw new PlatformPaymentError("invalid");
+  return {
+    apiKey: values.apiKey === null ? null : deps.commitSecret(env, "api_key", values.apiKey),
+    apiPassword:
+      values.apiPassword === null
+        ? null
+        : deps.commitSecret(env, "api_password", values.apiPassword),
+  };
+}
+
 export async function requestTerminalSaveCode(
-  change: TerminalChange,
+  request: TerminalCodeRequest,
   deps: TerminalDeps = defaultTerminalDeps,
 ): Promise<CodeSent> {
   const { actorId, env } = await admin(deps, ["code", 5]);
+  // a secret is "set" exactly when its new value is given (the value is bound into the code: X-20)
+  const change: TerminalChange = {
+    terminalNumber: request.terminalNumber,
+    enabled: request.enabled,
+    setApiKey: request.apiKey !== null,
+    setApiPassword: request.apiPassword !== null,
+    clearCredentials: request.clearCredentials,
+    force: request.force,
+  };
   checkChange(change, env);
-  const purposeHash = deps.purposeHash(actorId, intentOf(change, env));
+  const commits = commitmentsOf(request, env, deps);
+  const purposeHash = deps.purposeHash(actorId, intentOf(change, env, commits));
   const email = await deps.accountEmail(actorId);
   if (!email) throw new PlatformPaymentError("stepup_send");
   let issued: { challengeId: string; code: string; expiresAt: string };
@@ -369,16 +444,12 @@ export async function savePlatformTerminal(
     force: input.force,
   };
   checkChange(change, env);
-  if (
-    (input.apiKey !== null && !CREDENTIAL.test(input.apiKey)) ||
-    (input.apiPassword !== null && !CREDENTIAL.test(input.apiPassword))
-  )
-    throw new PlatformPaymentError("invalid");
+  const commits = commitmentsOf(input, env, deps);
   if (!UUID.test(input.challengeId) || !SIX_DIGITS.test(input.code))
     throw new PlatformPaymentError("stepup_failed");
 
-  // DM-SEP-6: the code must approve exactly this change, for this admin, right now (single use)
-  const purposeHash = deps.purposeHash(actorId, intentOf(change, env));
+  // DM-SEP-6 + X-20: the code must approve exactly this change — these secret values — for this admin, now
+  const purposeHash = deps.purposeHash(actorId, intentOf(change, env, commits));
   const consumed = await deps
     .stepup(env)
     .consume(actorId, input.challengeId, purposeHash, input.code);

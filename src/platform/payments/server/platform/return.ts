@@ -13,8 +13,11 @@
  *   again). The settle function is the only writer of the provider ledger row (DM-PLAT-3) and gets the return
  *   flags (document / hk / multi → review, DM-PAY-6/7). Sole caller of platform_attempt_mark_paid,
  *   platform_return_keep and platform_return_get (U17-B4).
- * • After paid: nothing else — no store e-mail, no activation, no renewal (decision ה-3). Review, duplicate charge,
- *   environment mismatch, exhausted VERIFY → alertPlatformAdmins.
+ * • After paid: nothing else — no store e-mail, no activation, no renewal (decision ה-3). Reviews ring only through
+ *   the DB's claim (X-17: claimPlatformReviewAlerts after every handled return — exactly once per review, whoever
+ *   parked it); an environment mismatch (nothing parked) → alertPlatformAdmins; "unverified" → an ALERT line.
+ * • X-18: a signed return is RECORDED first (the charge is then not payable: platform_target_busy; the sweep parks
+ *   it), and only then is readiness checked: not ready → no VERIFY, one ALERT line, the owner's pending page.
  * • The caller answers 303 + no-store + no-referrer to `location`: the store address the owner started from (saved on
  *   the attempt, validated twice), never a request parameter.
  */
@@ -32,7 +35,7 @@ import { hypEndpoint, paymentsReady, type PaymentsEnv } from "@/platform/payment
 import { hypRequest } from "@/platform/payments/server/http";
 import { platformSecretCipher } from "@/platform/payments/server/platform-keys";
 import { isPlatformHost } from "@/platform/tenancy/current-site.server";
-import { alertPlatformAdmins } from "./alerts";
+import { alertPlatformAdmins, claimPlatformReviewAlerts } from "./alerts";
 import {
   platformAttemptCredentials,
   type AttemptSecrets,
@@ -61,7 +64,10 @@ export interface PlatformReturnDeps {
   credentials(attemptId: string, purpose: "verify", env: PaymentsEnv): Promise<AttemptSecrets>;
   cipher(env: PaymentsEnv, mode: PaymentMode): PlatformCipher;
   http: typeof hypRequest;
-  alert(reason: string, attemptId: string | null): Promise<void>;
+  /** a cause that is not a review (environment mismatch): the platform e-mail + ALERT line at once */
+  alert(reason: string, attemptId: string | null): Promise<unknown>;
+  /** X-17: ring for every review the DB has not alerted yet (the only path for reviews) */
+  claimAlerts(): Promise<number>;
   log: PlatformLogger;
 }
 
@@ -74,6 +80,7 @@ export const defaultReturnDeps: PlatformReturnDeps = {
   cipher: platformSecretCipher,
   http: hypRequest,
   alert: alertPlatformAdmins,
+  claimAlerts: () => claimPlatformReviewAlerts(),
   log: platformLog,
 };
 
@@ -139,12 +146,12 @@ async function verifyAndSettle(
     secrets = await deps.credentials(item.attemptId, "verify", env);
   } catch (error) {
     // review M1: the terminal or its credentials changed (or cannot be opened) after the payer was sent to Hyp —
-    // this return cannot be verified now, so the platform team is told (one e-mail per attempt)
-    deps.log.error("verify_credentials", {
+    // this return cannot be verified now: an ALERT line at once; the e-mail comes from the review claim (X-17) when
+    // the DB parks the attempt (the credentials change with force, or the sweep at 90 minutes)
+    deps.log.alert("verify_credentials", {
       attempt,
       code: error instanceof PlatformPaymentError ? error.code : "internal",
     });
-    await deps.alert("verify_credentials", item.attemptId);
     return { result: "error" };
   }
   if (secrets.result === "busy") {
@@ -152,7 +159,8 @@ async function verifyAndSettle(
     return { result: "pending" };
   }
   if (secrets.result === "exhausted") {
-    await deps.alert("verify_exhausted", item.attemptId);
+    // the DB parked it (verify_exhausted); the claim rings for it
+    deps.log.info("verify_exhausted", { attempt });
     return { result: "review", reason: "verify_exhausted" };
   }
   const endpoint = deps.endpoint();
@@ -199,8 +207,9 @@ async function verifyAndSettle(
       return { result: "concluded" };
     case "needs_review":
     case "duplicate_charge": {
+      // parked by the DB with its review_reason: the claim rings for it (X-17), never this path
       const reason = result === "duplicate_charge" ? result : (text(row, "reason") ?? "review");
-      await deps.alert(reason, item.attemptId);
+      deps.log.info("settle", { attempt, result, reason });
       return { result: "review", reason };
     }
     case "environment_mismatch":
@@ -210,8 +219,8 @@ async function verifyAndSettle(
       deps.log.info("settle", { attempt, result });
       return { result: "not_paid" };
     case "unverified":
-      // not verified now: the attempt stays returned (a forged return can neither pay nor fail it)
-      deps.log.warn("settle", { attempt, result });
+      // not verified now: the attempt stays returned (a forged return can neither pay nor fail it) — X-19: ALERT
+      deps.log.alert("settle_unverified", { attempt });
       return { result: "pending" };
     default:
       deps.log.warn("settle", { attempt, result: result ?? "none" });
@@ -256,13 +265,6 @@ export async function handlePlatformReturn(
     attemptId: null,
   });
   if (input.provider !== "max" || !(await deps.isPlatformHost())) return refused("refused");
-  const ready = deps.ready();
-  if (!ready.ok) {
-    // nothing recorded: the attempt expires into the "sent and never returned" list (manual reconciliation)
-    deps.log.alert("return_off", { reason: ready.reason });
-    return refused("off");
-  }
-  const env = ready.env;
   const parsed = parseReturnQuery(input.raw);
   if (!parsed.ok || parsed.order === null) {
     deps.log.warn("return_refused", { reason: parsed.ok ? "no_order" : parsed.reason });
@@ -275,6 +277,7 @@ export async function handlePlatformReturn(
     return refused("refused");
   }
   const sha = sha256Hex(input.raw);
+  // X-18: recorded BEFORE readiness — a possibly charged return must keep the charge from being paid again
   const recorded = await platformCall(deps.rpc, "platform_attempt_record_return", {
     _reference: parsed.order,
     _payload_sha256: sha,
@@ -287,7 +290,27 @@ export async function handlePlatformReturn(
     dbFailure(recorded.error, "platform_attempt_record_return", deps.log);
     return refused("error");
   }
-  const row = asRow(recorded.data);
+  const item = { raw: input.raw, host: input.host, reference: parsed.order, sha, parsed };
+  const outcome = await afterRecord(item, asRow(recorded.data), deps);
+  // X-17: every review the DB holds and nobody was told about yet (this return's, or an earlier one's)
+  try {
+    await deps.claimAlerts();
+  } catch {
+    deps.log.alert("review_claim_failed", {});
+  }
+  return outcome;
+}
+
+async function afterRecord(
+  input: { raw: string; host: string; reference: string; sha: string; parsed: Parsed },
+  row: ReturnType<typeof asRow>,
+  deps: PlatformReturnDeps,
+): Promise<PlatformReturnOutcome> {
+  const refused = (result: PlatformReturnOutcome["result"]): PlatformReturnOutcome => ({
+    location: PLATFORM_RETURN_FALLBACK,
+    result,
+    attemptId: null,
+  });
   const result = text(row, "result");
   if (result === "unknown") {
     // another scope's or a forged reference: counted for the misconfiguration alert, never verified
@@ -295,7 +318,7 @@ export async function handlePlatformReturn(
     const noted = await platformCall(deps.rpc, "platform_payment_unknown_return", {
       _scope: "platform",
       _host: host,
-      _payload_sha256: sha,
+      _payload_sha256: input.sha,
     });
     if (noted.error) deps.log.error("unknown_return", {});
     deps.log.warn("return_unknown", {});
@@ -313,11 +336,25 @@ export async function handlePlatformReturn(
     deps.log.info("return_replay", { attempt: shortId(attemptId), state });
     return { location, result: "concluded", attemptId };
   }
-  if (result === "received") await keepRaw(attemptId, sha, input.raw, env, mode, deps);
+  // X-18: recorded above (the charge is busy, the sweep parks it at 90 minutes if nothing verifies it); not ready
+  // → no VERIFY and no kept raw return (nothing to seal it with), one ALERT, the owner sees "בודקים את התשלום"
+  const ready = deps.ready();
+  if (!ready.ok) {
+    deps.log.alert("return_not_verified", { attempt: shortId(attemptId), why: ready.reason });
+    return { location, result: "off", attemptId };
+  }
+  const env = ready.env;
+  if (result === "received") await keepRaw(attemptId, input.sha, input.raw, env, mode, deps);
   let settled: { result: SettleResult };
   try {
     settled = await verifyAndSettle(
-      { attemptId, reference: parsed.order, sha, raw: input.raw, parsed },
+      {
+        attemptId,
+        reference: input.reference,
+        sha: input.sha,
+        raw: input.raw,
+        parsed: input.parsed,
+      },
       env,
       deps,
     );

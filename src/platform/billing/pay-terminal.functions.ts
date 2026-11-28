@@ -38,9 +38,9 @@ export interface TerminalView {
 }
 
 /**
- * The form's change (arch §3.2 `patch`). For the code request the secrets may be given as values or only as
- * `setApiKey` / `setApiPassword`: either way only WHICH secrets change is used there (values are dropped, never
- * stored or logged); the save needs the values. The UI sends the booleans, so each secret travels once.
+ * The form's change (arch §3.2 `patch`). X-20: a secret that changes is sent as its VALUE in the code request too
+ * (the code is bound to a keyed commitment of each value; the value is dropped right after, never stored, logged
+ * or audited) and again in the save. `setApiKey` / `setApiPassword` without a value is refused.
  */
 export interface TerminalPatch {
   terminalNumber?: string | null;
@@ -53,7 +53,7 @@ export interface TerminalPatch {
   force?: boolean;
 }
 
-/** what a step-up code approves: which fields change, and WHICH secrets change (never their values) */
+/** what changes: which fields, and WHICH secrets (the form's summary; the code also binds the values: X-20) */
 export interface TerminalChange {
   terminalNumber: string | null;
   enabled: boolean | null;
@@ -61,6 +61,12 @@ export interface TerminalChange {
   setApiPassword: boolean;
   clearCredentials: boolean;
   force: boolean;
+}
+
+/** the code request (server side only): the change + the new secret values, for their commitments */
+export interface TerminalCodeRequest extends TerminalChange {
+  apiKey: string | null;
+  apiPassword: string | null;
 }
 
 export interface TerminalSave {
@@ -164,16 +170,28 @@ const patchOf = (input: unknown): Record<string, unknown> => {
   return patch !== null && typeof patch === "object" ? (patch as Record<string, unknown>) : {};
 };
 
-/** `{ patch }` → the change a code is bound to (secret values, if sent, only say "this secret changes") */
-export function parseTerminalChange(input: unknown): TerminalChange {
+/** a secret is set only together with its new value (the code is bound to it: X-20) */
+const NEED_VALUE = "כדי לשלוח קוד יש להזין את הערך החדש של מפתח ה-API או של הסיסמה";
+
+/** `{ patch }` → the change a code is bound to, with the new secret values (used only for their commitments) */
+export function parseTerminalChange(input: unknown): TerminalCodeRequest {
   const i = patchOf(input);
+  const apiKey = secretOf(i["apiKey"]);
+  const apiPassword = secretOf(i["apiPassword"]);
+  if (
+    (bool(i["setApiKey"]) && apiKey === null) ||
+    (bool(i["setApiPassword"]) && apiPassword === null)
+  )
+    throw new Error(NEED_VALUE);
   return {
     terminalNumber: terminalNumberOf(i["terminalNumber"]),
     enabled: optionalBool(i["enabled"]),
-    setApiKey: bool(i["setApiKey"]) || secretOf(i["apiKey"]) !== null,
-    setApiPassword: bool(i["setApiPassword"]) || secretOf(i["apiPassword"]) !== null,
+    setApiKey: apiKey !== null,
+    setApiPassword: apiPassword !== null,
     clearCredentials: bool(i["clearCredentials"]),
     force: bool(i["force"]),
+    apiKey,
+    apiPassword,
   };
 }
 
@@ -204,7 +222,7 @@ export const platformTerminalStatus = createServerFn({ method: "POST" }).handler
     guarded(async () => (await terminal()).platformTerminalStatus()),
 );
 
-/** step 1 of a save: e-mails a code bound to this change (no secret value is sent here) */
+/** step 1 of a save: e-mails a code bound to this change and to the new secret values (X-20; not stored) */
 export const platformTerminalRequestCode = createServerFn({ method: "POST" })
   .inputValidator((input: { patch: TerminalPatch }) => parseTerminalChange(input))
   .handler(async ({ data }): Promise<CodeSent> =>

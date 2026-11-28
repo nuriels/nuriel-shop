@@ -6,9 +6,11 @@
  * PLATFORM_ACCOUNT_ID (NURIEL's terminal) and the field name (AAD), and returns the plaintext to the caller for one
  * SIGN or VERIFY. Nothing is logged, cached or kept (U17-B8). A token that does not open (rotated root key, a
  * ciphertext copied from elsewhere — DM-ENV-4) is one fixed error: the admin re-enters the terminal details.
+ * X-20: before an attempt's SIGN or VERIFY the same terminal-prefix tripwire as the tenant side (DM-ENV-3: DEMO =
+ * a 00100… terminal, production = never one) — checked before anything is decrypted; never proof (the DB enforces).
  */
 import type { MaxCredentials, PaymentMode } from "@/platform/payments/provider";
-import { modeAllowed, type PaymentsEnv } from "@/platform/payments/server/env";
+import { modeAllowed, terminalAllowed, type PaymentsEnv } from "@/platform/payments/server/env";
 import {
   PLATFORM_ACCOUNT_ID,
   platformSecretCipher,
@@ -100,6 +102,11 @@ export async function platformAttemptCredentials(
     };
   if (result === "exhausted") return { result: "exhausted" };
   if (result !== "ok") throw new PlatformPaymentError("generic");
+  const masof = text(row, "terminal_number");
+  if (masof !== null && MASOF.test(masof) && !terminalAllowed(env, masof)) {
+    deps.log.alert("terminal_not_allowed", { purpose, mode: text(row, "mode") ?? "none" });
+    throw new PlatformPaymentError("unavailable");
+  }
   return { result: "ok", ...openRow(row, env, deps) };
 }
 
