@@ -15,6 +15,7 @@ import type { HypHttpResult } from "@/platform/payments/server/http";
 import type { PaymentMode } from "@/platform/payments/provider";
 import { buildVerifyQuery, encodeParams, parseReturnQuery } from "@/platform/payments/max/protocol";
 import {
+  PLATFORM_ERROR_TEXT,
   PlatformPaymentError,
   dbFailure,
   type PlatformRpc,
@@ -56,7 +57,11 @@ import {
   type TerminalDeps,
 } from "@/platform/payments/server/platform/terminal";
 import { alertPlatformAdmins } from "@/platform/payments/server/platform/alerts";
-import { parseTerminalChange, parseTerminalSave } from "@/platform/billing/pay-terminal.functions";
+import {
+  parseTerminalChange,
+  parseTerminalSave,
+  TERMINAL_FORCE_NEEDED_TEXT,
+} from "@/platform/billing/pay-terminal.functions";
 import {
   createStepupService,
   stepupDbPurposeHash,
@@ -1279,6 +1284,11 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
         "a payment to NURIEL is being verified; save again with force to park it for review",
         "force_needed",
       ],
+      // M1: the DB also asks for force while a payment is redirected (the owner is on Hyp's page)
+      [
+        "a payment to NURIEL is in progress (redirected); save again with force to park it for review",
+        "force_needed",
+      ],
       ["this terminal number is already registered to tenant", "terminal_taken"],
       ["confirm with the verification code sent by email first (step-up)", "stepup_required"],
       [
@@ -1293,6 +1303,16 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
       await requestTerminalSaveCode(CHANGE, t.deps);
       expect(await codeOf(() => savePlatformTerminal(SAVE, t.deps)), message).toBe(code);
     }
+  });
+
+  it("M1: the page recognises the force refusal by its exact text (shared with the server's fixed text)", () => {
+    expect(TERMINAL_FORCE_NEEDED_TEXT).toBe(PLATFORM_ERROR_TEXT.force_needed);
+    expect(new PlatformPaymentError("force_needed").message).toBe(TERMINAL_FORCE_NEEDED_TEXT);
+    expect(
+      Object.entries(PLATFORM_ERROR_TEXT).filter(
+        ([, value]) => value === TERMINAL_FORCE_NEEDED_TEXT,
+      ),
+    ).toHaveLength(1);
   });
 
   it("test connection: SIGN of ₪1 with a random reference, recorded as verified / failed; a non-00100 terminal is never sent", async () => {

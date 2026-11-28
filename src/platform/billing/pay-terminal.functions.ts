@@ -5,6 +5,14 @@
 // POST body; they are never returned. The types below are the only shapes the browser sees.
 import { createServerFn } from "@tanstack/react-start";
 
+/**
+ * The save's refusal while a payment to NURIEL is still in progress (redirected to Hyp or returned and not yet
+ * verified): the page shows a confirmation instead of the plain error. Equal to PLATFORM_ERROR_TEXT.force_needed
+ * (server, db.ts) — a unit test keeps the two the same.
+ */
+export const TERMINAL_FORCE_NEEDED_TEXT =
+  "יש תשלום לפלטפורמה שעדיין בתהליך (דף תשלום שנפתח וטרם הסתיים, או תשלום שממתין לאימות). שמירה עכשיו תעביר אותו לבדיקה ידנית.";
+
 export interface TerminalView {
   configured: boolean;
   /** the DB's environment marker */

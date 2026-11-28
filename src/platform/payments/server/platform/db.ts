@@ -164,8 +164,9 @@ export const PLATFORM_ERROR_TEXT: Readonly<Record<PlatformErrorCode, string>> = 
   stepup_send: "לא ניתן לשלוח את קוד האימות כרגע. אפשר לנסות שוב בעוד כמה דקות.",
   terminal_invalid: "בסביבת DEMO אפשר להגדיר רק מסוף בדיקות (מספר בן 10 ספרות שמתחיל ב-00100)",
   terminal_taken: "מספר המסוף הזה כבר משויך לחשבון אחר",
+  // = TERMINAL_FORCE_NEEDED_TEXT (pay-terminal.functions.ts): the page recognises it and asks for confirmation
   force_needed:
-    "יש תשלום שנמצא עכשיו באימות. כדי לשמור בכל זאת יש לסמן ״שמירה בכל זאת״ — התשלום יעבור לבדיקה.",
+    "יש תשלום לפלטפורמה שעדיין בתהליך (דף תשלום שנפתח וטרם הסתיים, או תשלום שממתין לאימות). שמירה עכשיו תעביר אותו לבדיקה ידנית.",
   invalid: "הפרטים שהוזנו אינם תקינים",
   rate_limited: "יותר מדי ניסיונות. אפשר לנסות שוב בעוד כמה דקות.",
   generic: "הפעולה לא הושלמה. אפשר לנסות שוב בעוד כמה דקות.",
@@ -190,7 +191,7 @@ const DB_MESSAGES: readonly (readonly [RegExp, PlatformErrorCode])[] = [
   [/not available for this business/i, "not_payable"],
   [/unknown payable item|cannot be paid online|amount out of range/i, "not_payable"],
   [/already paid|already covered/i, "already_paid"],
-  [/is being verified; save again with force/i, "force_needed"],
+  [/save again with force/i, "force_needed"],
   [/payment of this item is being verified/i, "verifying"],
   [/too many payment attempts/i, "too_many"],
   [/too many verification codes/i, "rate_limited"],

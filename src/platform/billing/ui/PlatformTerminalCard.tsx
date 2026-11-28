@@ -28,6 +28,7 @@ import {
   platformTerminalSave,
   platformTerminalStatus,
   platformTerminalTest,
+  TERMINAL_FORCE_NEEDED_TEXT,
   platformUnreturnedAttempts,
   type CardPaymentRow,
   type CodeSent,
@@ -156,11 +157,11 @@ export function PlatformTerminalCard() {
     setCode("");
   };
 
-  const requestCode = async () => {
+  const requestCode = async (current: Form = form) => {
     setBusy("code");
     setError(null);
     try {
-      setChallenge(await platformTerminalRequestCode({ data: { patch: changeOf(form, view) } }));
+      setChallenge(await platformTerminalRequestCode({ data: { patch: changeOf(current, view) } }));
       setCode("");
     } catch (e) {
       setError(errorMessage(e));
@@ -202,6 +203,18 @@ export function PlatformTerminalCard() {
     }
   };
 
+  /**
+   * The save was refused because a payment to NURIEL is still in progress (review M1): after an explicit
+   * confirmation the same change is approved again WITH force — a new code, since the code binds the change.
+   */
+  const confirmForce = () => {
+    const next = { ...form, force: true };
+    setForm(next);
+    setChallenge(null);
+    setCode("");
+    void requestCode(next);
+  };
+
   const runTest = async () => {
     setBusy("test");
     setError(null);
@@ -235,6 +248,7 @@ export function PlatformTerminalCard() {
     change.setApiPassword ||
     change.clearCredentials;
   const enabledNow = form.enabled ?? view?.enabled ?? false;
+  const forceNeeded = error === TERMINAL_FORCE_NEEDED_TEXT;
 
   return (
     <div className="flex flex-col gap-6" data-testid="platform-terminal-page">
@@ -256,7 +270,7 @@ export function PlatformTerminalCard() {
           </p>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
-          {error ? (
+          {error && !forceNeeded ? (
             <p
               role="alert"
               className="text-sm text-destructive"
@@ -384,15 +398,50 @@ export function PlatformTerminalCard() {
                   />
                   <Label htmlFor="pt-clear">מחיקת פרטי ההתחברות השמורים</Label>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="pt-force"
-                    checked={form.force}
-                    onCheckedChange={(v) => edit({ force: v === true })}
-                    data-testid="platform-terminal-force"
-                  />
-                  <Label htmlFor="pt-force">שמירה בכל זאת (תשלום שנמצא באימות יעבור לבדיקה)</Label>
-                </div>
+                {forceNeeded ? (
+                  <div
+                    role="alert"
+                    className="flex flex-col gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm sm:col-span-2"
+                    data-testid="platform-terminal-force-needed"
+                  >
+                    <p>{TERMINAL_FORCE_NEEDED_TEXT}</p>
+                    <p>לשמור בכל זאת? יישלח קוד אימות חדש לשינוי הזה.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        className="min-h-11"
+                        disabled={busy !== null}
+                        onClick={confirmForce}
+                        data-testid="platform-terminal-force"
+                      >
+                        לשמור בכל זאת
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11"
+                        disabled={busy !== null}
+                        onClick={() => setError(null)}
+                      >
+                        ביטול
+                      </Button>
+                    </div>
+                  </div>
+                ) : form.force ? (
+                  <p
+                    className="text-sm text-muted-foreground sm:col-span-2"
+                    data-testid="platform-terminal-forced"
+                  >
+                    השמירה תתבצע בכל זאת: תשלום שעדיין בתהליך יעבור לבדיקה ידנית.{" "}
+                    <button
+                      type="button"
+                      className="underline"
+                      onClick={() => edit({ force: false })}
+                    >
+                      ביטול
+                    </button>
+                  </p>
+                ) : null}
 
                 {challenge ? (
                   <div className="flex flex-col gap-2 sm:col-span-2">
