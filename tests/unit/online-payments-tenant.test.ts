@@ -1315,6 +1315,167 @@ describe("review decisions and held orders (X-14 / X-15 / X-16)", () => {
   });
 });
 
+describe("round 4: the order panel shows the decision, every held order has a route (X-22, X-25)", () => {
+  const view = (attempt: Record<string, unknown> | null, extra: Record<string, unknown> = {}) =>
+    ({
+      demo: true,
+      orderNumber: "1042",
+      orderStatus: "pending",
+      paymentMethod: "online",
+      paymentStatus: "awaiting",
+      paymentDueAt: null,
+      held: true,
+      attempt: attempt
+        ? {
+            id: ATTEMPT,
+            state: "needs_review",
+            test: true,
+            amountMinor: 1000,
+            paidAt: null,
+            installments: 1,
+            cardBrand: null,
+            cardLast4: null,
+            approvalCode: null,
+            reviewReason: "amount_mismatch",
+            reviewOutcome: null,
+            reviewResolvedAt: null,
+            reviewReopened: false,
+            ...attempt,
+          }
+        : null,
+      ...extra,
+    }) as never;
+
+  it("R3-4: an open review offers the decision; a resolved one shows it and no buttons; a reopen is open again", async () => {
+    const { onlinePaymentPanelState, HELD_GUIDANCE } =
+      await import("@/platform/payments/tenant-views");
+    const open = onlinePaymentPanelState(view({}));
+    expect(open).toMatchObject({
+      openReview: true,
+      decision: null,
+      guidance: HELD_GUIDANCE.review,
+    });
+
+    const notCharged = onlinePaymentPanelState(
+      view(
+        { reviewOutcome: "not_charged", reviewResolvedAt: "2026-11-28T10:00:00Z" },
+        { held: false },
+      ),
+    );
+    expect(notCharged).toMatchObject({
+      openReview: false,
+      decision: "לא בוצע חיוב — ההזמנה חזרה להמתין לתשלום",
+    });
+    const charged = onlinePaymentPanelState(
+      view({ reviewOutcome: "charged", reviewResolvedAt: "2026-11-28T10:00:00Z" }),
+    );
+    expect(charged).toMatchObject({
+      openReview: false,
+      charged: true,
+      decision: "בוצע חיוב — ההזמנה מוחזקת לטיפול ידני",
+      guidance: HELD_GUIDANCE.charged,
+    });
+    // X-22: the DB cleared the decision when a new return / charge came in — the panel derives it again
+    const reopened = onlinePaymentPanelState(
+      view({ reviewReason: "charge_after_resolution", reviewReopened: true }),
+    );
+    expect(reopened).toMatchObject({
+      openReview: true,
+      reopened: true,
+      decision: null,
+      guidance: "התקבלה חזרה חדשה אחרי ההחלטה — נדרשת בדיקה מחדש",
+    });
+  });
+
+  it("a held order always has a next step — under review, verifying, or no attempt row at all", async () => {
+    const { onlinePaymentPanelState } = await import("@/platform/payments/tenant-views");
+    for (const v of [
+      view({}),
+      view({ state: "returned", reviewReason: null }),
+      view({ state: "failed", reviewReason: null }),
+      view(null),
+      view({ reviewReason: "held_unexplained" }),
+    ]) {
+      const guidance = onlinePaymentPanelState(v).guidance;
+      expect(typeof guidance === "string" && guidance.length > 0).toBe(true);
+    }
+    expect(onlinePaymentPanelState(view({}, { held: false })).guidance).toBeNull();
+  });
+
+  it("held_unexplained and charge_after_resolution have staff texts; an unknown reason reads 'נדרשת בדיקה'", async () => {
+    const { reviewReasonLabel } = await import("@/platform/payments/tenant-views");
+    expect(reviewReasonLabel("held_unexplained")).toBe(
+      "ההזמנה מוחזקת בלי בדיקה פתוחה — לא ידוע אם בוצע חיוב",
+    );
+    expect(reviewReasonLabel("charge_after_resolution")).toBe("התקבל חיוב אחרי ההחלטה הקודמת");
+    expect(reviewReasonLabel("late_paid")).toBe("התשלום אושר באיחור ונרשם — יש לוודא שלא בוצע חיוב נוסף");
+    expect(reviewReasonLabel("a_reason_from_a_newer_db")).toBe("נדרשת בדיקה");
+    expect(reviewReasonLabel(null)).toBe("נדרשת בדיקה");
+    expect(reviewReasonLabel("toString")).toBe("נדרשת בדיקה");
+  });
+
+  it("X-25: the staff view reads review_outcome / review_resolved_at and the reopen marker; a customer gets none", async () => {
+    const { orderPaymentView } = await import("@/platform/payments/server/tenant/checkout");
+    const staff = orderPaymentView(
+      {
+        status: "pending",
+        payment_method: "online",
+        payment_status: "awaiting",
+        payment_due_at: null,
+        attempt: {
+          attempt_id: ATTEMPT,
+          state: "needs_review",
+          review_reason: "amount_mismatch",
+          review_outcome: "charged",
+          review_resolved_at: "2026-11-28T10:00:00Z",
+        },
+      },
+      true,
+    );
+    expect(staff?.attempt).toMatchObject({
+      reviewOutcome: "charged",
+      reviewResolvedAt: "2026-11-28T10:00:00Z",
+      reviewReopened: false,
+    });
+    const again = orderPaymentView(
+      {
+        status: "pending",
+        payment_method: "online",
+        payment_status: "awaiting",
+        payment_due_at: null,
+        attempt: {
+          attempt_id: ATTEMPT,
+          state: "needs_review",
+          review_reason: "charge_after_resolution",
+        },
+      },
+      true,
+    );
+    expect(again?.attempt).toMatchObject({
+      reviewOutcome: null,
+      reviewResolvedAt: null,
+      reviewReopened: true,
+    });
+  });
+
+  it("X-25: PAYMENTS_JOBS=off on a configured server → one ALERT jobs_off; jobs on or payments off → nothing", async () => {
+    const { alertIfJobsOff } = await import("@/platform/payments/server/tenant/jobs");
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(alertIfJobsOff()).toBe(false);
+      process.env["PAYMENTS_JOBS"] = "off";
+      expect(alertIfJobsOff()).toBe(true);
+      process.env["PAYMENTS_ENV"] = "";
+      expect(alertIfJobsOff()).toBe(false);
+      expect(errors.mock.calls.map((c) => String(c[0]))).toEqual(["[pay:tenant] ALERT jobs_off"]);
+    } finally {
+      delete process.env["PAYMENTS_JOBS"];
+      process.env["PAYMENTS_ENV"] = "demo";
+      errors.mockRestore();
+    }
+  });
+});
+
 describe("browser-facing errors", () => {
   it("only fixed Hebrew texts reach a browser", async () => {
     const { paymentFnError } = await import("@/lib/online-payments.server");

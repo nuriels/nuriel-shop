@@ -32,6 +32,16 @@ export function paymentJobsEnabled(): boolean {
   return process.env["PAYMENTS_JOBS"]?.trim().toLowerCase() !== "off";
 }
 
+/**
+ * X-25: at server start — PAYMENTS_JOBS=off on a server whose store payments are configured (env set, tenant side
+ * ready) means nothing parks or alerts: one ALERT line. The switch is for tests and emergencies only.
+ */
+export function alertIfJobsOff(): boolean {
+  if (paymentJobsEnabled() || !paymentsReady("tenant").ok) return false;
+  tenantLog.alert("jobs_off");
+  return true;
+}
+
 export async function runTenantPaymentJobs(): Promise<TenantJobResult> {
   const result: TenantJobResult = { paid: [], review: [] };
   if (!paymentJobsEnabled() || running) return result;

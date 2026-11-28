@@ -250,3 +250,43 @@ Accepted and documented, not changed: R2-5 (the DB `store_origin` slug rule foll
 ignores the base domain; the application allow-list `storeOriginOf` is the guard) — LOW, go-live item.
 Open with Hyp (request draft, question 7): what VERIFY answers for an authentic **declined** transaction and for a
 signature mismatch (S1), and which fields `Sign` covers (S2).
+
+### 7.1b Fix round 4 (re-verification of round 3: R3-1…R3-4, N4)
+
+| # | Where | Decision | Why |
+| --- | --- | --- | --- |
+| X-22 | DB record_return / mark_paid, both scopes; `attempts_guard` | **A resolved review reopens by itself** when a new payload is recorded for that attempt or a charge (transaction id) is stored on it: `review_resolved_at/by` and `review_outcome` are cleared, a `review` event `reopened` is written, and `review_alerted_at := NULL`. A verified charge that arrives after a resolution sets the reason `charge_after_resolution`. The alert also re-arms whenever a charge is added to an attempt in review, not only when the reason text changes. The busy rules then see an unresolved review again | R3-3 HIGH: after "not charged", a real charge on the same attempt was kept silently; on the platform side the charge became payable again and was paid twice |
+| X-23 | DB `payments.release_order`, `payments.tenant_order_busy` | a `charged` decision is final for the order: no release while any attempt of the order has `review_outcome = 'charged'` or holds a verified charge that was not applied | R3-1: a later verified decline, or "not charged" on another attempt, released an order that a person had marked charged |
+| X-24 | DB parking passes (sweep and purge), both scopes | the passes also park a `failed` attempt — every non-applied attempt with an unverified return older than 90 minutes and no resolved review, whether or not the raw return was kept | R3-2 / N4: a return recorded on an already failed attempt held the order for ever with no alert |
+| X-25 | DB `max_order_payment_status`; store order panel; server start | staff get `review_outcome` and `review_resolved_at`; the panel shows the decision and hides the resolve buttons once resolved. `PAYMENTS_JOBS=off` while payments are configured writes one `ALERT jobs_off` line at server start: with the jobs off nothing parks or alerts, so the switch is for tests and emergencies only (runbooks: never off on a server that takes payments) | R3-4; second half of R3-2 |
+
+Owner's acceptance criteria for round 4 (2026-11-28), each proven by a named automated test:
+A. "not charged" is never proof that no late charge will come — a later payload or verified charge reopens the review.
+B. every late return that confirms a charge is detected and alerts exactly once.
+C. no new attempt and no second charge before the earlier attempt is fully clarified.
+D. a decision on one attempt is never changed by an answer of another attempt.
+E. every held order has an alert and a clear handling route — DB backstop: the sweep parks the latest returned
+   attempt of an order held over 90 minutes with no unresolved review and no `charged` decision, reason
+   `held_unexplained`; an invariant check runs after all SQL scenarios.
+F. the repros of both independent reviewers are permanent tests (SQL in `scripts/db-tests`, vitest in `tests/unit`).
+
+### 7.2 Production pilot (owner decision 2026-11-28: DEMO payments on the live site, one store only)
+
+The owner approved running the MAX/Hyp integration on the production site with a Hyp **test** terminal, in the
+owner's own store only. Everything above assumed a separate DEMO server and refuses this on purpose (`demo` is
+refused on the production host; a production database refuses test terminals; a database marked `demo` can never
+become production). The pilot is therefore a third, explicit state — not a relaxation of the two others.
+
+| # | Where | Decision |
+| --- | --- | --- |
+| P-1 | DB `payments.environment` | new value **`pilot`** + `pilot_since`. Set by a person with SQL, like `demo` (no API role, no function writes it). `NULL → pilot` only on a database that never held a live terminal or a live payment and was never `demo`. `pilot → NULL` allowed (switch off; rows stay). `pilot → production`, `pilot ↔ demo`: refused in this release (go-live gets its own approved change). The rollback guard of 208 also stops once `pilot_since` is set |
+| P-2 | DB new `payments.pilot_stores (tenant_id PK, added_at, note)` | the allow-list, by store id. Written only by a person with SQL (no grant, no API function). In `pilot`, a store **not** in the list cannot save a terminal account, is never "active" (`max_payments_active` false) and cannot open an attempt — refused in the database, not only hidden. A recorded attempt of a store that left the list still records its return and settles (no new payment) |
+| P-3 | DB guards | `pilot` accepts **test** accounts only: mode `test`, terminal `00100…`, the ₪50 cap; `live` is refused exactly as in `demo`. One terminal belongs to one store (`terminal_registry`, unchanged) |
+| P-4 | DB `max_payments_active(_tenant, _actor)`, `max_attempt_open`, new `payments.pilot_testers (tenant_id, user_id)` | (revised 2026-11-28) in `pilot`, card payment exists only for **named test customers**: signed-in customer accounts listed in `payments.pilot_testers` for that store (written by a person with SQL only, audited like `pilot_stores`). Staff orders stay offline exactly as today — `orders_default_payment`'s staff rule is not touched, so POS / manual flows cannot change. Guests and every other customer: not offered, and refused by the database. A real customer of the live store can never reach the test terminal |
+| P-5 | DB platform functions, `paymentsReady('platform')` | the platform scope is **off** in `pilot`: saving the platform terminal, opening a platform attempt and `payable` are refused / false in the database; the application reports the platform side not ready (`pilot`) and its screens show "בקרוב" |
+| P-6 | terminal administration | (replaced 2026-11-28, owner decision) the **platform admin** enters a store's terminal in platform management, under that store, through the existing `platform_store_terminal_save` path — no environment-variable provisioning, no new mechanism. In `pilot` the save is accepted only for a store in `pilot_stores` (test mode, `00100…`). The store owner never sees or edits the terminal number or keys: every owner-originated save / clear / change is refused on the server and in the database, and the owner-facing read returns only whether online payment is active |
+| P-6a | terminal administration — final owner decision 2026-11-28 | (1) MAX / Hyp terminal details are entered by the platform admin under the store's settings. (2) No environment variable holds any store's terminal details; the only environment secrets are the root encryption keys. (3) Terminal details are stored encrypted in the database. (4) Keys are **never returned to the frontend** — not to the platform admin, not right after a save: every read and every save response carries only a masked placeholder plus "set / not set", and the screen offers "replace". (5) Every access to terminal details requires the matching admin permission **and** a check that the account belongs to that store. (6) No terminal detail in logs, in Git or in any API response. Each point has a named automated test |
+| P-7 | `server/env.ts` | `PAYMENTS_ENV=pilot` is accepted only on the production platform host, or on a `*.localhost` platform host (tests, with the loopback mock). `demo` stays refused on the production host; `production` unchanged. The endpoint in `pilot` on the production host is Hyp's; mode allowed: `test` only; the terminal-prefix tripwire requires `00100…`. Startup line: `env=pilot` |
+| P-8 | stores outside the list | checkout: no card option. Store admin: the online-payment screen shows "הסליקה בקרוב" and no input; the server functions refuse. Same for every store while the database is unmarked |
+| P-9 | switch off | removing `PAYMENTS_ENV` (application) or setting the marker to NULL (database) turns everything off at once; existing Bit / Grow / POS / manual flows do not depend on either |
+| P-10 | out of scope | 3DS, refunds, recurring charges, tokens, invoices, SmartBee: no code path, unchanged |
