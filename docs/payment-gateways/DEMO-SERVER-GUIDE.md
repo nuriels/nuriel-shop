@@ -284,7 +284,7 @@ docker compose build > /root/nuriel-demo-build.log 2>&1; tail -n 3 /root/nuriel-
 docker compose up -d && sleep 20 && docker ps --format '{{.Names}} {{.Status}}' | grep -E "nuriel-demo-(app|mailsink)"
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:$APP_PORT/healthz        # 200
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:$APP_PORT/readyz         # 200
-docker logs "$APP" 2>&1 | grep -E '^\[?payments' | tail -n 3                       # שורת סטטוס התשלומים, בלי ערכים
+docker logs "$APP" 2>&1 | grep -m1 '\[payments\] env='                             # [payments] env=demo endpoint=hyp tenant=ready platform=ready
 ```
 
 - **לפני מיגרציה 208, התשלומים המקוונים כבויים.** אין להם טבלאות. זה המצב הצפוי.

@@ -18,26 +18,26 @@ import { platformSecretCipher, stepupKey } from "@/platform/payments/server/plat
 import { tenantSecretCipher } from "@/platform/payments/server/tenant-keys";
 
 const ROOT_VARS = ["PAYMENTS_SECRETS_KEY", "PLATFORM_TERMINAL_SECRETS_KEY"] as const;
-/** the other secrets the app reads (env.ts compares the roots with each of them) */
-const APP_SECRETS = [
+/**
+ * Other secrets of the process: env.ts finds them by NAME (KEY / SECRET / TOKEN / PASSWORD), with no list of
+ * products. The service-role key (the old fallback of other modules) and one synthetic name per keyword.
+ */
+const OTHER_SECRETS = [
   "SUPABASE_SERVICE_ROLE_KEY",
-  "SUPABASE_PUBLISHABLE_KEY",
-  "LOGIN_CODE_SECRET",
-  "LICENSE_KEYS_SECRET",
-  "GROW_SECRETS_KEY",
-  "HOSPITALITY_SECRET",
-  "BUSINESS_PROFILE_SECRET",
-  "AI_ASSISTANT_SECRET",
-  "GSC_OAUTH_CLIENT_SECRET",
-  "RESEND_API_KEY",
+  "UNIT_PUBLIC_API_KEY",
+  "UNIT_OTHER_SECRET",
+  "UNIT_LOGIN_TOKEN",
+  "UNIT_DB_PASSWORD",
 ] as const;
+const SECRET_NAME = /(KEY|SECRET|TOKEN|PASSWORD)/;
 /** every variable env.ts reads (NODE_ENV is not one of them; tests set it explicitly to prove it) */
 const ALL_VARS = [
   "PAYMENTS_ENV",
   "PLATFORM_ADMIN_HOST",
   "MAX_PAY_TEST_URL",
   ...ROOT_VARS,
-  ...APP_SECRETS,
+  ...OTHER_SECRETS,
+  "UNIT_SITE_URL",
 ];
 const REASONS = [
   "env",
@@ -297,11 +297,11 @@ describe("DM-ENV-9: root secret sanity at start (length, placeholders, reuse, no
 
   it("DM-ENV-9: a fixed secret of e2e/scripts/app-up.sh is never accepted as a root (MX-19)", () => {
     const script = readFileSync(join(process.cwd(), "e2e/scripts/app-up.sh"), "utf8");
-    const fixtures = [...APP_SECRETS, ...ROOT_VARS].flatMap((name) => {
-      const m = new RegExp(`(?:^|\\s)${name}=([^\\s"'$\`]+)`, "m").exec(script);
-      return m && m[1]!.length >= 32 ? [{ name, value: m[1]! }] : [];
-    });
-    expect(fixtures.length).toBeGreaterThanOrEqual(1); // LICENSE_KEYS_SECRET and GROW_SECRETS_KEY today
+    // every fixed (literal) value of a secret-named variable that is long enough to pass the length check
+    const fixtures = [...script.matchAll(/(?:^|\s)([A-Z][A-Z0-9_]*)=([^\s"'$`]+)/gm)]
+      .map((m) => ({ name: m[1]!, value: m[2]! }))
+      .filter(({ name, value }) => SECRET_NAME.test(name) && value.length >= 32);
+    expect(fixtures.length).toBeGreaterThanOrEqual(1); // two of them today
     for (const { name, value } of fixtures) {
       demo({ PAYMENTS_SECRETS_KEY: value });
       // refused by the deny-list itself (the variable is not set in this instance)
@@ -316,8 +316,8 @@ describe("DM-ENV-9: root secret sanity at start (length, placeholders, reuse, no
     expect(paymentsReady("platform")).toEqual({ ok: false, reason: "roots_equal" });
   });
 
-  it("DM-ENV-9: a root equal to any other secret of the app is refused", () => {
-    for (const name of APP_SECRETS) {
+  it("DM-ENV-9: a root equal to the value of any other secret-named variable is refused", () => {
+    for (const name of OTHER_SECRETS) {
       vi.unstubAllEnvs();
       for (const v of ALL_VARS) vi.stubEnv(v, undefined);
       const value = root();
@@ -330,9 +330,25 @@ describe("DM-ENV-9: root secret sanity at start (length, placeholders, reuse, no
     }
   });
 
+  it("DM-ENV-9: the reuse check goes by the variable's name, never by a list of products", () => {
+    const value = root();
+    demo({ PAYMENTS_SECRETS_KEY: value, UNIT_SITE_URL: value });
+    // not secret-named: not compared (a URL is not a secret)
+    expect(paymentsReady("tenant")).toEqual({ ok: true, env: "demo" });
+    const source = readFileSync(join(process.cwd(), "src/platform/payments/server/env.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+    expect(source).toMatch(/Object\.entries\(process\.env\)/);
+    // the only secret names env.ts spells out are the two roots (excluded from the scan, compared separately)
+    const spelled = [
+      ...source.matchAll(/"([A-Z][A-Z0-9_]*(?:KEY|SECRET|TOKEN|PASSWORD)[A-Z0-9_]*)"/g),
+    ];
+    expect(new Set(spelled.map((m) => m[1]))).toEqual(new Set(ROOT_VARS));
+  });
+
   it("DM-ENV-9: no fallback — other secrets never stand in for a missing root", () => {
     demo({ PAYMENTS_SECRETS_KEY: undefined, PLATFORM_TERMINAL_SECRETS_KEY: undefined });
-    for (const name of APP_SECRETS) vi.stubEnv(name, root());
+    for (const name of OTHER_SECRETS) vi.stubEnv(name, root());
     expect(paymentsReady("tenant")).toEqual({ ok: false, reason: "root_missing" });
     expect(paymentsReady("platform")).toEqual({ ok: false, reason: "root_missing" });
     expect(() => tenantSecretCipher("demo", "test")).toThrowError(
@@ -432,7 +448,7 @@ describe("paymentsStartupLine (DM-ENV-1 / DM-ENV-7 / DM-ENV-9): one value-free l
         MAX_PAY_TEST_URL: `http://127.0.0.1:4010/${tag()}`,
         PAYMENTS_SECRETS_KEY: `${tag()}${root()}`,
         PLATFORM_TERMINAL_SECRETS_KEY: `${tag()}${root()}`,
-        ...Object.fromEntries(APP_SECRETS.map((v) => [v, tag()])),
+        ...Object.fromEntries(OTHER_SECRETS.map((v) => [v, tag()])),
       }),
       // production on a canary host; roots equal to another secret
       () => {

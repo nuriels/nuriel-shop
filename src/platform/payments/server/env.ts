@@ -9,8 +9,9 @@
  *   cannot be served from the internet (the pattern of src/platform/ai/router.server.ts). It belongs in TEST_ONLY
  *   of tests/unit/env-forwarding.test.ts (contract §2) and is never forwarded to a container.
  * • paymentsReady(scope): the environment plus that scope's root secret: at least 32 characters, not a
- *   placeholder or a known E2E fixture, different from the other scope's root and from every other secret the
- *   app reads. No fallback to any other secret. Every refusal is a fixed lower-case code.
+ *   placeholder or a known E2E fixture, different from the other scope's root and from the value of every other
+ *   variable whose name says KEY / SECRET / TOKEN / PASSWORD. No fallback to any other secret. Every refusal is a
+ *   fixed lower-case code.
  * • paymentsStartupLine(): one value-free line for the server log / the DEMO server check.
  * • No value of any environment variable is ever returned, logged or put in an error.
  */
@@ -40,51 +41,44 @@ export type PaymentsOffReason =
 type EnvState = { env: PaymentsEnv } | { off: "unset" | "invalid" | "host_mismatch" };
 
 /**
- * Every other secret the server reads (src/, docker-compose.yml). A payments root equal to one of them is refused:
- * one leaked value must never open the terminal credentials as well. Public keys are listed too (a root equal to
- * a public value is no secret at all).
+ * Every other secret of the process, found by its NAME (no list of products here): a payments root equal to the
+ * value of such a variable is refused — one leaked value must never open the terminal credentials as well. Public
+ * keys count too (a root equal to a public value is no secret at all). The two roots are compared separately.
  */
-const OTHER_APP_SECRETS = [
-  "SUPABASE_SERVICE_ROLE_KEY",
-  "SUPABASE_PUBLISHABLE_KEY",
-  "LOGIN_CODE_SECRET",
-  "LICENSE_KEYS_SECRET",
-  "GROW_SECRETS_KEY",
-  "HOSPITALITY_SECRET",
-  "BUSINESS_PROFILE_SECRET",
-  "AI_ASSISTANT_SECRET",
-  "GSC_OAUTH_CLIENT_SECRET",
-  "RESEND_API_KEY",
-] as const;
+const SECRET_NAME = /(KEY|SECRET|TOKEN|PASSWORD)/;
 
 /** fragments of typical placeholder values (compared lower-case, letters and digits only) */
-const PLACEHOLDER_WORDS = [
-  "changeme",
-  "replaceme",
-  "placeholder",
-  "example",
-  "yoursecret",
-  "yourkey",
-  "secretkey",
-  "secrethere",
-  "keyhere",
-  "notasecret",
-  "insecure",
-  "dummy",
-  "default",
-  "password",
-  "sample",
-];
+function placeholderWords(): string[] {
+  return [
+    "changeme",
+    "replaceme",
+    "placeholder",
+    "example",
+    "yoursecret",
+    "yourkey",
+    "secretkey",
+    "secrethere",
+    "keyhere",
+    "notasecret",
+    "insecure",
+    "dummy",
+    "default",
+    "password",
+    "sample",
+  ];
+}
 
 /**
  * SHA-256 of the fixed secrets in e2e/scripts/app-up.sh that are long enough to pass the length check
  * (MX-19: an E2E fixture must never become a real root). tests/unit/payments-env.test.ts reads that script and
- * checks that every such fixture is refused.
+ * checks that every such fixture is refused. A fresh array per call: no module-level collection (U17-B8).
  */
-const KNOWN_FIXTURE_DIGESTS = new Set([
-  "e0fa9ddf4c63f761cf1cc4fe06b583b73a35bdebdd7adf6b55711a8514c6c3d8",
-  "d8380ad4bfcdda3a0f4ff13a4c03f2c71ebdb3ffe330705601983d3a4430f649",
-]);
+function knownFixtureDigests(): string[] {
+  return [
+    "e0fa9ddf4c63f761cf1cc4fe06b583b73a35bdebdd7adf6b55711a8514c6c3d8",
+    "d8380ad4bfcdda3a0f4ff13a4c03f2c71ebdb3ffe330705601983d3a4430f649",
+  ];
+}
 
 function platformHost(): string {
   return (process.env["PLATFORM_ADMIN_HOST"]?.trim().toLowerCase() ?? "").replace(/\.$/, "");
@@ -148,7 +142,7 @@ export function terminalAllowed(env: PaymentsEnv, terminal: string): boolean {
 
 function isPlaceholder(root: string): boolean {
   const flat = root.toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (PLACEHOLDER_WORDS.some((word) => flat.includes(word))) return true;
+  if (placeholderWords().some((word) => flat.includes(word))) return true;
   // "aaaa…", "0000…", "abab…", "0123456789" repeated: too few distinct characters or a short repeating block
   if (new Set(root).size < 8) return true;
   for (let period = 1; period <= 16; period++) {
@@ -156,7 +150,7 @@ function isPlaceholder(root: string): boolean {
     if (safeEqual(root.slice(period), root.slice(0, root.length - period))) return true;
   }
   const digest = createHash("sha256").update(root, "utf8").digest("hex");
-  return [...KNOWN_FIXTURE_DIGESTS].some((known) => safeEqual(known, digest));
+  return knownFixtureDigests().some((known) => safeEqual(known, digest));
 }
 
 /** the root of one scope is usable on its own (no comparison with other values yet) */
@@ -165,6 +159,17 @@ function rootProblem(root: string | undefined): PaymentsOffReason | null {
   if (root.length < MIN_ROOT_CHARS) return "root_short";
   if (isPlaceholder(root)) return "root_placeholder";
   return null;
+}
+
+/** the root equals the value of another secret-named variable of the process (the roots themselves aside) */
+function reusesAnotherSecret(root: string): boolean {
+  for (const [name, raw] of Object.entries(process.env)) {
+    if (!SECRET_NAME.test(name)) continue;
+    if (name === "PAYMENTS_SECRETS_KEY" || name === "PLATFORM_TERMINAL_SECRETS_KEY") continue;
+    const value = raw?.trim();
+    if (value && safeEqual(root, value)) return true;
+  }
+  return false;
 }
 
 /** payments may run for this scope: { ok, env }, or a fixed reason code (never a value) */
@@ -180,10 +185,7 @@ export function paymentsReady(
   if (problem !== null || own === undefined)
     return { ok: false, reason: problem ?? "root_missing" };
   if (other && safeEqual(own, other)) return { ok: false, reason: "roots_equal" };
-  for (const name of OTHER_APP_SECRETS) {
-    const value = process.env[name]?.trim();
-    if (value && safeEqual(own, value)) return { ok: false, reason: "root_reused" };
-  }
+  if (reusesAnotherSecret(own)) return { ok: false, reason: "root_reused" };
   return { ok: true, env };
 }
 

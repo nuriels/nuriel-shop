@@ -37,6 +37,28 @@ export IMPORT_IMAGE_ALLOW_HOSTS=localhost
 # וכתובת שרת מטווח התיעוד (TEST-NET-3) להוראות ה-DNS. דומיינים אמיתיים — תמיד DNS אמיתי
 export DNS_TEST_FIXTURES="$ROOT/e2e/.dns-fixtures.json"
 export SERVER_PUBLIC_IPS=203.0.113.10
+# תשלומים אונליין MAX/Hyp — DEMO (docs/payment-gateways/DEMO-IMPLEMENTATION-CONTRACT.md §2): השרת מדבר רק עם
+# Hyp המדומה (e2e/scripts/mock-hyp.mjs, בתוך mock-services). demo = מסופי בדיקות (00100…) בלבד. עבודות התשלום
+# ברקע כבויות — הבדיקות מפעילות אותן בעצמן. MAX_PAY_TEST_URL נלקח בחשבון רק לכתובת מקומית ופאנל *.localhost
+export PAYMENTS_ENV=demo PAYMENTS_JOBS=off MAX_PAY_TEST_URL=http://127.0.0.1:4010/hyp/p/
+# שני סודות השורש — אקראיים בכל ריצה (אף פעם לא ערך קבוע בקוד), ומזהה הריצה של Hyp המדומה (ממנו נבנים KEY / PassP
+# מזויפים וייחודיים). כולם "קנריות": אחרי הריצה הסריקות מחפשות אותם ביומן השרת, במסד ובקבצים שמועלים מה-CI
+PAYMENTS_SECRETS_KEY=$(openssl rand -hex 32)
+PLATFORM_TERMINAL_SECRETS_KEY=$(openssl rand -hex 32)
+HYP_MOCK_RUN_ID=$(openssl rand -hex 6)
+[ "${#PAYMENTS_SECRETS_KEY}" -eq 64 ] && [ "$PAYMENTS_SECRETS_KEY" != "$PLATFORM_TERMINAL_SECRETS_KEY" ]
+export PAYMENTS_SECRETS_KEY PLATFORM_TERMINAL_SECRETS_KEY HYP_MOCK_RUN_ID
+RESULTS="$ROOT/e2e/test-results"
+mkdir -p "$RESULTS"
+(
+  umask 077
+  printf '%s\n' "$PAYMENTS_SECRETS_KEY" "$PLATFORM_TERMINAL_SECRETS_KEY" >"$RESULTS/hyp-canaries.txt"
+  node -e 'import(process.argv[1]).then((m) => console.log(m.hypCanaries(process.env.HYP_MOCK_RUN_ID).join("\n")))' \
+    "$ROOT/e2e/fixtures/hyp-fake.mjs" >>"$RESULTS/hyp-canaries.txt"
+)
 if [ "${E2E_SKIP_BUILD:-}" != "1" ]; then bun run build >/dev/null; fi
 node "$ROOT/e2e/scripts/mock-services.mjs" &
+# פלט השרת נשמר גם ב-e2e/test-results/server.log (נסרק אחרי הריצה; Playwright מתעלם מ-stdout).
+# stderr ממשיך להגיע ל-Playwright כמו קודם
+exec > >(tee -a "$RESULTS/server.log") 2> >(tee -a "$RESULTS/server.log" >&2)
 exec node .output/server/index.mjs
