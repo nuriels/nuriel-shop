@@ -251,8 +251,8 @@ if [[ "$PROOFS" == yes ]]; then
     else
       # a store that has no terminal account yet; every row is rolled back
       pick="FROM public.tenants t WHERE NOT t.is_default AND NOT EXISTS (SELECT 1 FROM payments.tenant_accounts a WHERE a.tenant_id = t.id) ORDER BY t.created_at LIMIT 1"
-      db_accepts "a store test account with a 00100 terminal" "INSERT INTO payments.tenant_accounts (tenant_id, provider, mode, terminal_number) SELECT t.id, 'max', 'test', '0010000001' $pick; SELECT CASE WHEN EXISTS (SELECT 1 FROM payments.tenant_accounts WHERE terminal_number = '0010000001') THEN 1 ELSE 1 / 0 END;"
-      db_refuses "a store terminal account in live mode" "INSERT INTO payments.tenant_accounts (tenant_id, provider, mode, terminal_number) SELECT t.id, 'max', 'live', '0010000001' $pick;"
+      db_accepts "a store test account with a 00100 terminal" "INSERT INTO payments.tenant_accounts (tenant_id, provider, mode, terminal_number) SELECT t.id, 'max', 'test', '0010000001' $pick; SELECT CASE WHEN EXISTS (SELECT 1 FROM payments.tenant_accounts WHERE terminal_number = '0010000001') THEN 1 ELSE 1 / 0 END;" # scan-secrets:allow (obviously fake 00100 test number; the row is rolled back)
+      db_refuses "a store terminal account in live mode" "INSERT INTO payments.tenant_accounts (tenant_id, provider, mode, terminal_number) SELECT t.id, 'max', 'live', '0010000001' $pick;" # scan-secrets:allow (obviously fake number; the insert must be refused)
       db_refuses "a store terminal number without the test prefix" "INSERT INTO payments.tenant_accounts (tenant_id, provider, mode, terminal_number) SELECT t.id, 'max', 'test', '1234567890' $pick;"
     fi
   else
