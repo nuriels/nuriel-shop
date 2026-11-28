@@ -36,6 +36,7 @@ export const FN = {
   status: { file: TENANT_FNS, name: "getOnlinePaymentStatus" },
   orderPayment: { file: STAFF_FNS, name: "getOrderOnlinePayment" },
   cancelAttempt: { file: STAFF_FNS, name: "cancelOrderOnlinePayment" },
+  resolveReview: { file: STAFF_FNS, name: "resolveOrderOnlinePayment" },
   ownerSettings: { file: OWNER_FNS, name: "getOnlinePaymentSettings" },
   storePayments: { file: ADMIN_FNS, name: "getStoreOnlinePayments" },
   saveStoreTerminal: { file: ADMIN_FNS, name: "saveStoreTerminal" },
@@ -208,13 +209,13 @@ export const sha256 = (s: string) => createHash("sha256").update(s).digest("hex"
 export async function deliver(
   request: APIRequestContext,
   location: string,
-  opts: { host?: string; path?: string; ip?: string; raw?: string } = {},
+  opts: { host?: string; path?: string; ip?: string; raw?: string; port?: number } = {},
 ): Promise<{ status: number; location: string; body: string }> {
   const url = new URL(location);
   const host = opts.host ?? url.hostname;
   const path = opts.path ?? url.pathname;
   const raw = opts.raw ?? rawOf(location);
-  const res = await request.get(`http://127.0.0.1:${PORT}${path}?${raw}`, {
+  const res = await request.get(`http://127.0.0.1:${opts.port ?? PORT}${path}?${raw}`, {
     headers: { host, "x-forwarded-host": host, "x-real-ip": opts.ip ?? nextIp() },
     maxRedirects: 0,
   });
@@ -356,6 +357,53 @@ export function expireOrderNow(orderId: string) {
        SELECT public.expire_unpaid_orders();`);
 }
 export const runAttemptExpiry = () => Number(sql(`SELECT public.max_attempts_expire()`));
+/** the DB purge of kept raw returns (the app runs it after every return and in every tick) */
+export const runReturnsPurge = () => Number(sql(`SELECT public.platform_payment_returns_purge()`));
+export const runPlatformAttemptExpiry = () =>
+  Number(sql(`SELECT public.platform_attempts_expire()`));
+
+/** The return of this attempt came back `minutes` ago (returned_at only; the kept raw return keeps its time) */
+export function ageReturn(attemptId: string, minutes: number, table = "tenant_attempts") {
+  timeTravel(
+    `UPDATE payments.${table} SET returned_at = returned_at - interval '${minutes} minutes' WHERE id = '${attemptId}'`,
+  );
+}
+/** The kept raw return(s) of this attempt arrived `minutes` ago (with its ceiling: purge_after ≤ received_at + 2 h) */
+export function ageKeptReturns(attemptId: string, minutes: number) {
+  timeTravel(
+    `UPDATE payments.tenant_returns SET received_at = received_at - interval '${minutes} minutes',
+            purge_after = purge_after - interval '${minutes} minutes' WHERE attempt_id = '${attemptId}'`,
+  );
+}
+export const keptReturns = (attemptId: string) =>
+  Number(sql(`SELECT count(*) FROM payments.tenant_returns WHERE attempt_id = '${attemptId}'`));
+
+/** The store bell rows (staff_notifications) about this order for one staff user */
+export const storeBells = (userId: string, orderNumber: string) =>
+  Number(
+    sql(`SELECT count(*) FROM public.staff_notifications WHERE tenant_id = '${STORE_B.id}'
+          AND user_id = '${userId}' AND title = 'תשלום מקוון לבדיקה' AND body LIKE '%${orderNumber}%'`),
+  );
+
+/** The app server's log (app-up.sh tees it); null when the run reused a server started elsewhere */
+export const SERVER_LOG = fileURLToPath(new URL("../test-results/server.log", import.meta.url));
+export function logLines(pattern: RegExp): number | null {
+  if (!existsSync(SERVER_LOG)) return null;
+  return readFileSync(SERVER_LOG, "utf8")
+    .split("\n")
+    .filter((l) => pattern.test(l)).length;
+}
+
+/**
+ * A signed-looking return of a reference nobody issued, to the store host: the app records it as unknown (no
+ * VERIFY) and — like after every handled return — claims the reviews not alerted yet (X-17). With the payment jobs
+ * off in E2E, this is how a spec makes the app "look again" without a tick.
+ */
+export async function pokeReturn(request: APIRequestContext, location: string) {
+  const raw = tamper(rawOf(location), "Order", randomBytes(16).toString("hex"));
+  const back = await deliver(request, location, { raw });
+  expect([back.status, back.location]).toEqual([303, "/checkout/pay/unknown"]);
+}
 
 export type PlatformAttempt = {
   id: string;

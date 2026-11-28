@@ -51,6 +51,10 @@ import {
 // staff order is always a phone order). Paid = VERIFY with store B's own fake terminal said exactly CCode=0 and every
 // local check matched. M03–M11 of the manual DEMO list, automated against the mock. No retry: a retry could hide a race.
 test.describe.configure({ retries: 0 });
+// No Playwright trace: a trace records every request and response — the mock's fake terminal credentials (canaries)
+// and the raw signed returns these specs deliver — and CI's artifact scan would then (rightly) block the upload of
+// the whole report. Screenshots and error-context.md on failure are kept.
+test.use({ trace: "off" });
 
 const CUSTOMER = customerFor("checkout");
 const SERVER_LOG = fileURLToPath(new URL("../test-results/server.log", import.meta.url));

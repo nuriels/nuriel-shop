@@ -34,6 +34,10 @@ import {
 // terminal). The server says at start that its endpoint is the local mock. In CI the real Hyp host resolves only to
 // loopback (tests.yml). Nothing here opens a connection to any Hyp host.
 test.describe.configure({ retries: 0 });
+// No Playwright trace: a trace records every request and response — the mock's fake terminal credentials (canaries)
+// and the raw signed returns these specs deliver — and CI's artifact scan would then (rightly) block the upload of
+// the whole report. Screenshots and error-context.md on failure are kept.
+test.use({ trace: "off" });
 
 const CUSTOMER = customerFor("egress");
 const SERVER_LOG = fileURLToPath(new URL("../test-results/server.log", import.meta.url));

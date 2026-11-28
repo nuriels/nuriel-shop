@@ -25,6 +25,10 @@ import {
 // with an action-bound step-up code e-mailed to that admin (read here from the mail mock). A code works once, for the
 // change it was issued for, within 10 minutes. Store hosts never reach these functions. retries 0.
 test.describe.configure({ retries: 0 });
+// No Playwright trace: a trace records every request and response — the mock's fake terminal credentials (canaries)
+// and the raw signed returns these specs deliver — and CI's artifact scan would then (rightly) block the upload of
+// the whole report. Screenshots and error-context.md on failure are kept.
+test.use({ trace: "off" });
 
 // The app allows 5 code requests per admin in 15 minutes: this spec spreads its codes over two admins of its own
 type Admin = Awaited<ReturnType<typeof extraPlatformAdmin>>;

@@ -41,6 +41,16 @@ export SERVER_PUBLIC_IPS=203.0.113.10
 # Hyp המדומה (e2e/scripts/mock-hyp.mjs, בתוך mock-services). demo = מסופי בדיקות (00100…) בלבד. עבודות התשלום
 # ברקע כבויות — הבדיקות מפעילות אותן בעצמן. MAX_PAY_TEST_URL נלקח בחשבון רק לכתובת מקומית ופאנל *.localhost
 export PAYMENTS_ENV=demo PAYMENTS_JOBS=off MAX_PAY_TEST_URL=http://127.0.0.1:4010/hyp/p/
+RESULTS="$ROOT/e2e/test-results"
+if [ "${E2E_APP_VARIANT:-}" = "platform-not-ready" ]; then
+  # שרת שני על אותו build, מסד ושירותים מדומים — לתרחיש כשל אחד (payments-failures.spec.ts, R2-4): בלי סוד השורש
+  # של הפלטפורמה, כך שצד הפלטפורמה של התשלומים "לא מוכן". צד החנות מקבל את סוד השורש של השרת הרץ (השורה הראשונה
+  # בקובץ הקנריות) — לא נוצר סוד חדש ושום ערך לא מודפס. שום דבר אחר לא מופעל; הפלט מצטרף ל-server.log (שנסרק)
+  PAYMENTS_SECRETS_KEY=$(head -n 1 "$RESULTS/hyp-canaries.txt")
+  export PAYMENTS_SECRETS_KEY PORT="${E2E_APP_PORT:-3101}"
+  unset PLATFORM_TERMINAL_SECRETS_KEY
+  exec node .output/server/index.mjs >>"$RESULTS/server.log" 2>&1
+fi
 # שני סודות השורש — אקראיים בכל ריצה (אף פעם לא ערך קבוע בקוד), ומזהה הריצה של Hyp המדומה (ממנו נבנים KEY / PassP
 # מזויפים וייחודיים). כולם "קנריות": אחרי הריצה הסריקות מחפשות אותם ביומן השרת, במסד ובקבצים שמועלים מה-CI
 PAYMENTS_SECRETS_KEY=$(openssl rand -hex 32)
@@ -48,7 +58,6 @@ PLATFORM_TERMINAL_SECRETS_KEY=$(openssl rand -hex 32)
 HYP_MOCK_RUN_ID=$(openssl rand -hex 6)
 [ "${#PAYMENTS_SECRETS_KEY}" -eq 64 ] && [ "$PAYMENTS_SECRETS_KEY" != "$PLATFORM_TERMINAL_SECRETS_KEY" ]
 export PAYMENTS_SECRETS_KEY PLATFORM_TERMINAL_SECRETS_KEY HYP_MOCK_RUN_ID
-RESULTS="$ROOT/e2e/test-results"
 mkdir -p "$RESULTS"
 (
   umask 077

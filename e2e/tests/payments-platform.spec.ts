@@ -39,6 +39,10 @@ import {
 // (DM-PLAT-1, DM-PLAT-3, DM-PLAT-5). The return lands on the platform host; the DB writes exactly one provider row
 // in billing.ledger; nothing is activated, renewed or upgraded (decision ה-3). retries 0.
 test.describe.configure({ retries: 0 });
+// No Playwright trace: a trace records every request and response — the mock's fake terminal credentials (canaries)
+// and the raw signed returns these specs deliver — and CI's artifact scan would then (rightly) block the upload of
+// the whole report. Screenshots and error-context.md on failure are kept.
+test.use({ trace: "off" });
 
 const CUSTOMER = customerFor("platform");
 let owner = "";

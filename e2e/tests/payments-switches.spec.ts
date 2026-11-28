@@ -30,6 +30,10 @@ import {
 // MAX/Hyp DEMO — kill switches (DM-ENV-6). Turning a switch off stops NEW attempts within the 15-second flag cache;
 // a payment already on its way back is still verified and settled (money may have moved). retries 0.
 test.describe.configure({ retries: 0 });
+// No Playwright trace: a trace records every request and response — the mock's fake terminal credentials (canaries)
+// and the raw signed returns these specs deliver — and CI's artifact scan would then (rightly) block the upload of
+// the whole report. Screenshots and error-context.md on failure are kept.
+test.use({ trace: "off" });
 
 const CUSTOMER = customerFor("switches");
 const SWITCH_MS = 15_000;

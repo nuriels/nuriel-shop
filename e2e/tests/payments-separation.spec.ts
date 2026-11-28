@@ -40,6 +40,10 @@ import {
 // (no terminal's credentials are used for a return that is not theirs). Store B is the payer; store A — the default
 // store kobi, which an unknown host falls back to — is the other store.
 test.describe.configure({ retries: 0 });
+// No Playwright trace: a trace records every request and response — the mock's fake terminal credentials (canaries)
+// and the raw signed returns these specs deliver — and CI's artifact scan would then (rightly) block the upload of
+// the whole report. Screenshots and error-context.md on failure are kept.
+test.use({ trace: "off" });
 
 const CUSTOMER = customerFor("separation");
 let customer = "";
