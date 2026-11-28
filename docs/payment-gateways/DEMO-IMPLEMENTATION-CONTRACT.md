@@ -251,6 +251,15 @@ ignores the base domain; the application allow-list `storeOriginOf` is the guard
 Open with Hyp (request draft, question 7): what VERIFY answers for an authentic **declined** transaction and for a
 signature mismatch (S1), and which fields `Sign` covers (S2).
 
+### 7.1b Fix round 4 (re-verification of round 3: R3-1…R3-4, N4)
+
+| # | Where | Decision | Why |
+| --- | --- | --- | --- |
+| X-22 | DB record_return / mark_paid, both scopes; `attempts_guard` | **A resolved review reopens by itself** when a new payload is recorded for that attempt or a charge (transaction id) is stored on it: `review_resolved_at/by` and `review_outcome` are cleared, a `review` event `reopened` is written, and `review_alerted_at := NULL`. A verified charge that arrives after a resolution sets the reason `charge_after_resolution`. The alert also re-arms whenever a charge is added to an attempt in review, not only when the reason text changes. The busy rules then see an unresolved review again | R3-3 HIGH: after "not charged", a real charge on the same attempt was kept silently; on the platform side the charge became payable again and was paid twice |
+| X-23 | DB `payments.release_order`, `payments.tenant_order_busy` | a `charged` decision is final for the order: no release while any attempt of the order has `review_outcome = 'charged'` or holds a verified charge that was not applied | R3-1: a later verified decline, or "not charged" on another attempt, released an order that a person had marked charged |
+| X-24 | DB parking passes (sweep and purge), both scopes | the passes also park a `failed` attempt — every non-applied attempt with an unverified return older than 90 minutes and no resolved review, whether or not the raw return was kept | R3-2 / N4: a return recorded on an already failed attempt held the order for ever with no alert |
+| X-25 | DB `max_order_payment_status`; store order panel; server start | staff get `review_outcome` and `review_resolved_at`; the panel shows the decision and hides the resolve buttons once resolved. `PAYMENTS_JOBS=off` while payments are configured writes one `ALERT jobs_off` line at server start: with the jobs off nothing parks or alerts, so the switch is for tests and emergencies only (runbooks: never off on a server that takes payments) | R3-4; second half of R3-2 |
+
 ### 7.2 Production pilot (owner decision 2026-11-28: DEMO payments on the live site, one store only)
 
 The owner approved running the MAX/Hyp integration on the production site with a Hyp **test** terminal, in the
