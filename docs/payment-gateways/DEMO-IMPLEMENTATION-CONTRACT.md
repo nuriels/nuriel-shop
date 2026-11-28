@@ -210,3 +210,17 @@ removed; production accounts: `live` only and `00100…` refused; one `BEGIN …
 
 Use the `DM-*` IDs of plan Appendix D in test names (e.g. `it("DM-PAY-7: …")`), so the final report can map
 every DEMO-blocking control to a test that actually ran.
+
+## 7. Recorded deviations and lead decisions (during implementation)
+
+Each line below is binding from the commit that records it. Wave-2 code follows these, not the older text above.
+
+| # | Where | Decision | Why |
+| --- | --- | --- | --- |
+| X-1 | `parseReturnQuery` | `Masof` is a reserved return name too (`reserved_key`) | `buildVerifyQuery` sends its own `Masof`; a second one in the raw return would make VERIFY ambiguous. No documented redirect carries it. Fail closed |
+| X-2 | `classifyVerifyResponse` | verified only when the **whole body** is `CCode=0` (one trailing CR/LF allowed) | evidence 01 §1.5: anything else, extra keys included, is not verified |
+| X-3 | `validateSignResponse` | the echoed `Amount` is compared as agorot; any echoed parameter we never send that changes the page (installments, J5, recurring, invoice, e-mail…) is a `mismatch` | within "echo mismatch", stated for clarity |
+| X-4 | `classifyReturnCcode` + both DB `mark_paid` functions | CCode **`10`** ("Partial approval", Shva) joins 600/700/800: `hold` → `needs_review` `unexpected_hold`, never `failed`, never paid | money may have moved; a decline would release the order while the customer was charged |
+| X-5 | additions (no signature changed) | `Capabilities.hostedPage`, `isProviderId`, `MaxProtocolInputError`, `SIGN_PARAM_ORDER`, `RETURN_MAX_LENGTH`, `HYP_HTTP_DEFAULTS`, the messages API; the redactor also masks Fild1–3, street, city, zip, UID, terminal_number | protocol agent report |
+| X-6 | `server/env.ts` | new export `paymentsStartupLine()` — one fixed line `[payments] env=… endpoint=… tenant=… platform=…`, codes only, never a value; logged once at server start (wave 2 wires it) | lets the DEMO server prove the env guard on the built image (`deploy/demo/demo-check.sh --proofs`) |
+| X-7 | imports | `max/protocol.ts` and `redact.ts` contain `PassP` / `APISign` literals: import them **only from server code** (`**/server/**`); `messages.ts` and `registry.ts` are client-safe | the bundle scan (DM-SEC-1) must stay at zero |

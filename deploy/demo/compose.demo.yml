@@ -1,0 +1,67 @@
+# ============================================================================================
+# DEMO בלבד — תוספת ל-docker-compose.yml לשרת ה-DEMO של MAX/Hyp (docs/payment-gateways/DEMO-SERVER-GUIDE.md).
+# לא בשימוש בייצור, ב-CI או מקומית.
+#
+# הפעלה בשרת ה-DEMO בלבד, מתיקיית הריפו (/root/nuriel-demo-git):
+#   ב-.env של האפליקציה (לא ב-git):
+#     COMPOSE_FILE=docker-compose.yml:deploy/demo/compose.demo.yml
+#     COMPOSE_PROJECT_NAME=nuriel-demo-app
+#   ואז הפקודות הרגילות: docker compose build && docker compose up -d
+#
+# מה הקובץ קובע, ולמה הערכים כתובים כאן ולא ב-.env:
+#   • שמות ופורטים שונים מהייצור (nuriel-demo-*, ‏3800) — פקודה של הייצור שהודבקה כאן בטעות
+#     נכשלת ("No such container"), ולא פוגעת בשום דבר.
+#   • PAYMENTS_ENV=demo קבוע. האפליקציה דוחה demo בכתובת הפלטפורמה של הייצור, ו-production
+#     לא יכול לעלות כאן בטעות דרך ה-.env.
+#   • כל המיילים הולכים לשרת הדמה (mailsink). שום מייל לא יוצא מהשרת.
+#   • Grow, רישיונות, Search Console, תוסף ה-AI ברקע, Hospitality ו-Websites — כבויים.
+#   • MAX_PAY_TEST_URL לא קיים כאן ולא יהיה: ב-DEMO-H האפליקציה פונה ל-Hyp עצמה, רק במסופי בדיקות,
+#     ורק אחרי אישור לכל הרצה. העקיפה לשרת מדומה פועלת רק בכתובות מקומיות (localhost).
+# ============================================================================================
+
+services:
+  app:
+    container_name: nuriel-demo-app
+    ports:
+      - "127.0.0.1:3800:3000"
+    depends_on:
+      - mailsink
+    environment:
+      PAYMENTS_ENV: demo
+      PAYMENTS_JOBS: "on"
+      RESEND_API_KEY: demo-mail-sink
+      RESEND_API_URL: http://nuriel-demo-mailsink:4025
+      EMAIL_FROM_ADDRESS: orders@demo.invalid
+      GROW_SECRETS_KEY: ""
+      GROW_API_URL: ""
+      LICENSE_KEYS_SECRET: ""
+      HOSPITALITY_ENGINE: ""
+      BUSINESS_PROFILE_ENGINE: ""
+      AI_RENEWAL_JOB: "off"
+      SEO_WORKER: "off"
+      SEO_BACKGROUND_AI: ""
+      GSC_OAUTH_CLIENT_ID: ""
+      GSC_OAUTH_CLIENT_SECRET: ""
+      GSC_OAUTH_REDIRECT_HOST: ""
+      CUSTOM_DOMAIN_CNAME_TARGET: ""
+      IMPORT_IMAGE_ALLOW_HOSTS: ""
+
+  mailsink:
+    image: node:22-slim
+    container_name: nuriel-demo-mailsink
+    restart: unless-stopped
+    init: true
+    user: node
+    command: ["node", "/sink/mail-sink.mjs"]
+    environment:
+      MAIL_SINK_PORT: "4025"
+    volumes:
+      - ./deploy/demo/mail-sink.mjs:/sink/mail-sink.mjs:ro
+    # רק ברשת הפנימית של docker — לא נחשף לשרת ולא לאינטרנט
+    expose:
+      - "4025"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

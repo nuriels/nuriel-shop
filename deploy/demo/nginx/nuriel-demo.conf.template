@@ -1,0 +1,126 @@
+# ============================================================================================
+# DEMO בלבד — Nginx לשרת ה-DEMO של MAX/Hyp (docs/payment-gateways/DEMO-SERVER-GUIDE.md §6).
+# תבנית: מחליפים את @@…@@ בערכים של שרת ה-DEMO (הפקודה במדריך), ושומרים כ-
+#   /etc/nginx/sites-available/nuriel-demo.conf
+# certbot --nginx -d <כל הכתובות> מוסיף את בלוקי ה-443 ואת ההפניה מ-80.
+#
+# ההבדלים מהייצור (deploy/nginx/nuriel-shop.nuri1.fit.conf), כולם בכוונה:
+#   • הגנת סיסמה (basic auth) על כל כתובות האפליקציה. רק robots.txt פתוח.
+#   • noindex בכל תשובה, ו-robots.txt שחוסם הכול.
+#   • יומן גישה בלי שורת השאילתה ובלי Referer (nuriel-demo-log.conf). יומן השגיאות ברמת crit בלבד:
+#     ברמות נמוכות יותר Nginx כותב את שורת הבקשה המלאה, כולל השאילתה של החזרה מ-Hyp.
+#   • X-Forwarded-For = הכתובת שהתחברה בפועל (לא רשימה שהדפדפן יכול לזייף).
+#   • בכתובת ה-API פתוחים רק auth / rest / storage. ה-Studio וה-meta API סגורים (גישה רק ב-SSH).
+# ============================================================================================
+
+# ---- האפליקציה: מנהל הפלטפורמה + החנויות ----
+server {
+    listen 80;
+    listen [::]:80;
+    server_name @@DEMO_PLATFORM_HOST@@ @@DEMO_STORE_HOSTS@@;
+
+    access_log /var/log/nginx/nuriel-demo.access.log nuriel_demo_noquery;
+    error_log /var/log/nginx/nuriel-demo.error.log crit;
+
+    client_max_body_size 25m;
+
+    auth_basic "NURIEL DEMO";
+    auth_basic_user_file /etc/nginx/nuriel-demo.htpasswd;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+
+    location = /robots.txt {
+        auth_basic off;
+        default_type text/plain;
+        return 200 "User-agent: *\nDisallow: /\n";
+    }
+
+    # נתיבי החזרה מ-Hyp: אין בהם שום סמכות (האימות הוא VERIFY בצד השרת), והם לא מציגים דף.
+    # הגנת הסיסמה נשארת. רק אם הדפדפן לא שולח אותה שוב אחרי ההפניה מ-Hyp (M03 נכשל עם 401),
+    # מסירים את ה-# מ-"auth_basic off;" בשני הבלוקים, ומריצים nginx -t && systemctl reload nginx.
+    location = /payments/return/max {
+        # auth_basic off;
+        proxy_pass http://127.0.0.1:@@DEMO_APP_PORT@@;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+    location = /platform/payments/return/max {
+        # auth_basic off;
+        proxy_pass http://127.0.0.1:@@DEMO_APP_PORT@@;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    # כמו בייצור: בקשה ל-/_serverFn/ בלי הכותרת x-tsr-serverFn אינה בקשה של האתר עצמו
+    location /_serverFn/ {
+        if ($http_x_tsr_serverfn != "true") { return 403; }
+        proxy_pass http://127.0.0.1:@@DEMO_APP_PORT@@;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:@@DEMO_APP_PORT@@;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        # האפליקציה מזהה את החנות לפי הכותרת הזו — דורסים כל ערך שהגיע מהדפדפן
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+}
+
+# ---- Supabase של שרת ה-DEMO (Kong המקומי) ----
+# בלי הגנת סיסמה: הדפדפן פונה לכאן ישירות (fetch), והגישה נשלטת ב-Supabase Auth וב-RLS, כמו בייצור.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name @@DEMO_API_HOST@@;
+
+    access_log /var/log/nginx/nuriel-demo-api.access.log nuriel_demo_noquery;
+    error_log /var/log/nginx/nuriel-demo-api.error.log crit;
+
+    client_max_body_size 100m;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+
+    # רק מה שהאפליקציה משתמשת בו
+    location ~ ^/(auth|rest|storage)/v1/ {
+        proxy_pass http://127.0.0.1:@@DEMO_KONG_PORT@@;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    # Studio, ‏/pg/ (meta) וכל השאר — סגורים. Studio: רק דרך מנהרת SSH לפורט המקומי.
+    location / {
+        return 404;
+    }
+}

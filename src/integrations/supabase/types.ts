@@ -3865,6 +3865,227 @@ export type Database = {
         Args: { _token: string; _delivered: boolean; _note?: string | null };
         Returns: Json;
       };
+      /**
+       * מיגרציה 208 (MAX/Hyp DEMO — DEMO-IMPLEMENTATION-CONTRACT §5): תשלום מקוון. כל הפונקציות SECURITY
+       * DEFINER ל-service_role בלבד, וכל אחת מקבלת את החנות / המבצע במפורש — חוץ משתיים של בעל החנות
+       * (platform_card_my_payments, platform_card_my_options: הטוקן שלו + כותרת החנות, כמו my_billing_summary).
+       * jsonb → Json. צד החנות (tenant): max_* ו-platform_store_terminal_* (מנהל הפלטפורמה מגדיר מסוף של חנות)
+       */
+      max_payments_active: { Args: { _tenant: string; _actor?: string | null }; Returns: boolean };
+      max_order_access_issue: {
+        Args: { _tenant: string; _order: string; _token_sha256: string };
+        Returns: boolean;
+      };
+      max_attempt_open: {
+        Args: {
+          _tenant: string;
+          _order: string;
+          _customer: string | null;
+          _guest_token_sha256: string | null;
+          _app_environment: "demo" | "production";
+        };
+        Returns: Json;
+      };
+      max_attempt_secrets: {
+        Args: { _tenant: string; _attempt: string; _purpose: "sign" | "verify" };
+        Returns: Json;
+      };
+      max_attempt_signed: {
+        Args: { _tenant: string; _attempt: string; _ok: boolean; _code: string | null };
+        Returns: Json;
+      };
+      max_attempt_record_return: {
+        Args: {
+          _host_tenant: string;
+          _reference: string;
+          _payload_sha256: string;
+          _ccode: string | null;
+          _txn_id: string | null;
+          _amount_minor: number | null;
+          _installments: number | null;
+        };
+        Returns: Json;
+      };
+      /** הנתיב היחיד שמסמן הזמנה online כשולמה; _return_flags: Hesh/HeshASM, HKId, MULTI שחזרו (סימון בלבד) */
+      max_attempt_mark_paid: {
+        Args: {
+          _tenant: string;
+          _reference: string;
+          _payload_sha256: string;
+          _verify_ccode: string | null;
+          _ccode: string | null;
+          _terminal: string;
+          _txn_id: string | null;
+          _amount_minor: number | null;
+          _currency: string | null;
+          _installments: number | null;
+          _approval_code: string | null;
+          _card_brand: string | null;
+          _card_last4: string | null;
+          _return_flags: ("document" | "hk" | "multi")[];
+          _app_environment: "demo" | "production";
+        };
+        Returns: Json;
+      };
+      max_attempts_expire: { Args: never; Returns: number };
+      max_attempt_cancel: {
+        Args: { _actor: string; _tenant: string; _order: string };
+        Returns: number;
+      };
+      max_review_resolve: {
+        Args: { _actor: string; _tenant: string; _attempt: string; _note: string | null };
+        Returns: boolean;
+      };
+      max_order_payment_status: {
+        Args: {
+          _tenant: string;
+          _order: string;
+          _viewer: string | null;
+          _guest_token_sha256: string | null;
+        };
+        Returns: Json;
+      };
+      max_account_status: { Args: { _actor: string; _tenant: string }; Returns: Json };
+      max_store_settings_save: {
+        Args: {
+          _actor: string;
+          _tenant: string;
+          _max_installments: number | null;
+          _min_installments_amount_minor: number | null;
+          _allowed_methods: string[] | null;
+          _allowed_brands: string[] | null;
+        };
+        Returns: Json;
+      };
+      /** ניסיונות שנשלחו ל-Hyp ולא חזרו (רשימת ההתאמה) */
+      max_unreturned_attempts: {
+        Args: { _actor: string; _tenant: string; _limit?: number };
+        Returns: Json;
+      };
+      platform_store_terminal_save: {
+        Args: {
+          _actor: string;
+          _tenant: string;
+          _patch: Json;
+          _app_environment: "demo" | "production";
+        };
+        Returns: Json;
+      };
+      platform_store_terminal_verified: {
+        Args: { _actor: string; _tenant: string; _ok: boolean; _code: string | null };
+        Returns: Json;
+      };
+      platform_store_terminal_check_secrets: {
+        Args: { _actor: string; _tenant: string };
+        Returns: Json;
+      };
+      /** מיגרציה 208 — צד הפלטפורמה (platform): המסוף של NURIEL; בעל החנות משלם חיוב פתוח ב-billing.ledger */
+      platform_attempt_open: {
+        Args: {
+          _actor: string;
+          _tenant: string;
+          _target_kind: "ledger_charge";
+          _target_id: string;
+          _return_origin: string | null;
+          _app_environment: "demo" | "production";
+        };
+        Returns: Json;
+      };
+      platform_attempt_secrets: {
+        Args: { _attempt: string; _purpose: "sign" | "verify" };
+        Returns: Json;
+      };
+      platform_attempt_signed: {
+        Args: { _attempt: string; _ok: boolean; _code: string | null };
+        Returns: Json;
+      };
+      platform_attempt_record_return: {
+        Args: {
+          _reference: string;
+          _payload_sha256: string;
+          _ccode: string | null;
+          _txn_id: string | null;
+          _amount_minor: number | null;
+          _installments: number | null;
+        };
+        Returns: Json;
+      };
+      /** הנתיב היחיד שרושם תשלום ספק ב-billing.ledger */
+      platform_attempt_mark_paid: {
+        Args: {
+          _reference: string;
+          _payload_sha256: string;
+          _verify_ccode: string | null;
+          _ccode: string | null;
+          _terminal: string;
+          _txn_id: string | null;
+          _amount_minor: number | null;
+          _currency: string | null;
+          _installments: number | null;
+          _approval_code: string | null;
+          _card_brand: string | null;
+          _card_last4: string | null;
+          _return_flags: ("document" | "hk" | "multi")[];
+          _app_environment: "demo" | "production";
+        };
+        Returns: Json;
+      };
+      platform_attempts_expire: { Args: never; Returns: number };
+      platform_card_payment_resolve: {
+        Args: { _actor: string; _attempt: string; _note: string | null };
+        Returns: boolean;
+      };
+      platform_card_payments: {
+        Args: { _actor: string; _tenant?: string | null; _limit?: number };
+        Returns: Json;
+      };
+      platform_unreturned_attempts: { Args: { _actor: string; _limit?: number }; Returns: Json };
+      /** בעל החנות (authenticated): הטוקן שלו + כותרת החנות */
+      platform_card_my_payments: { Args: never; Returns: Json };
+      platform_card_my_options: { Args: never; Returns: Json };
+      /** שמירת מסוף הפלטפורמה — האפליקציה דורשת קודם קוד אימות נוסף שנצרך (platform_stepup_consume) */
+      platform_terminal_save: {
+        Args: { _actor: string; _patch: Json; _app_environment: "demo" | "production" };
+        Returns: Json;
+      };
+      platform_terminal_verified: {
+        Args: { _actor: string; _ok: boolean; _code: string | null };
+        Returns: Json;
+      };
+      platform_terminal_check_secrets: { Args: { _actor: string }; Returns: Json };
+      platform_terminal_status: { Args: { _actor: string }; Returns: Json };
+      /** קוד אימות נוסף (10 דקות, עד 5 ניסיונות, חד-פעמי); במסד רק ה-HMAC של הקוד */
+      platform_stepup_issue: {
+        Args: { _actor: string; _purpose_hash: string; _code_hmac: string };
+        Returns: Json;
+      };
+      platform_stepup_consume: {
+        Args: { _actor: string; _challenge: string; _purpose_hash: string; _code_hmac: string };
+        Returns: Json;
+      };
+      /** חזרה שלא נמצא לה ניסיון (שני הצדדים): צד, כתובת, hash — בלי פרטים אישיים */
+      platform_payment_unknown_return: {
+        Args: { _scope: "platform" | "tenant"; _host: string; _payload_sha256: string };
+        Returns: boolean;
+      };
+      /** החזרה הגולמית המוצפנת (החלטה 14) — ל-VERIFY חוזר, נמחקת אחרי שעתיים לכל היותר */
+      max_return_keep: {
+        Args: { _tenant: string; _attempt: string; _payload_sha256: string; _return_enc: string };
+        Returns: boolean;
+      };
+      max_return_get: {
+        Args: { _tenant: string; _attempt: string; _payload_sha256: string };
+        Returns: string | null;
+      };
+      platform_return_keep: {
+        Args: { _attempt: string; _payload_sha256: string; _return_enc: string };
+        Returns: boolean;
+      };
+      platform_return_get: {
+        Args: { _attempt: string; _payload_sha256: string };
+        Returns: string | null;
+      };
+      platform_payment_returns_purge: { Args: never; Returns: number };
     };
     Enums: {
       product_serial_status: "in_stock" | "sold";
