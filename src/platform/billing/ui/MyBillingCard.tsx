@@ -33,6 +33,7 @@ import {
 } from "../logic";
 import type { BillingCycle, BillingSummary } from "../types";
 import { EntriesList, MoneyBreakdown, NativeSelect, Stat } from "./parts";
+import { PayOnlineSection } from "./PayOnlineButton";
 
 export function MyBillingCard(props: { title?: string } = {}) {
   const [data, setData] = useState<BillingSummary | null>(null);
@@ -236,9 +237,8 @@ function Summary({
             חיובים ותשלומים
           </h3>
           <EntriesList entries={data.entries} />
-          <p className="text-xs text-muted-foreground">
-            אין כאן סליקה: תשלום מופיע אחרי שצוות Nuriel רשם שהוא התקבל.
-          </p>
+          {/* MAX/Hyp DEMO (D5): online payment of an open charge when available — otherwise the same line as before */}
+          <PayOnlineSection onChanged={onChanged} />
         </section>
 
         <UpgradeSection data={data} onChanged={onChanged} />
