@@ -192,7 +192,7 @@ describe("hypRequest — methods and body", () => {
     });
   });
 
-  it("HTML: text/html content type, a body that starts with '<', or one that contains <html", async () => {
+  it("DM-PAY-4 (transport): HTML: text/html content type, a body that starts with '<', or one that contains <html", async () => {
     for (const path of ["/html-type", "/html-body", "/html-inner"]) {
       const r = await hypRequest(`${base}${path}`, QUERY);
       expect(r.ok && r.html, path).toBe(true);
@@ -224,14 +224,14 @@ describe("hypRequest — size cap", () => {
 });
 
 describe("hypRequest — timeouts and network errors become fixed codes, once, without retry", () => {
-  it("no answer at all → timeout", async () => {
+  it("DM-PAY-4 (transport): no answer at all → timeout", async () => {
     const started = Date.now();
     expectBareError(await hypRequest(`${base}/hang`, QUERY, { timeoutMs: 200 }), "timeout");
     expect(Date.now() - started).toBeLessThan(5000);
     expect(hits.get("/hang")).toBe(1);
   });
 
-  it("headers but a body that never ends → timeout (the timeout covers the body)", async () => {
+  it("DM-PAY-4 (transport): headers but a body that never ends → timeout (the timeout covers the body)", async () => {
     expectBareError(
       await hypRequest(`${base}/slow-body`, QUERY, { timeoutMs: 200, method: "POST" }),
       "timeout",
