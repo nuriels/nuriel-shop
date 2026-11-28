@@ -6,10 +6,10 @@ import type { StoreOnlinePaymentsView, StoreTerminalView } from "@/platform/paym
  * MAX/Hyp DEMO — the platform admin sets up a STORE's MAX terminal (CustomerFile "MAX" tab; tenant scope).
  *  getStoreOnlinePayments — status (has_* flags, last 2 digits), the "sent to Hyp, never returned" list, and the
  *                           success URL to paste in Hyp's portal
- *  saveStoreTerminal      — terminal number, KEY / PassP (write-only: sealed at once, never shown again), on / off
+ *  saveStoreTerminal      — terminal number, API key and password (write-only: sealed at once, never shown again), on / off
  *  testStoreTerminal      — a free connection check (SIGN only; nothing is charged)
  * Platform host only, platform admins only (checked here, then again in the DB with the verified actor); POST +
- * CSRF; rate-limited per admin. KEY / PassP travel only in the save request's body.
+ * CSRF; rate-limited per admin. The API key and password travel only in the save request's body.
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -23,7 +23,7 @@ import { DemoBanner } from "@/platform/payments/ui/DemoBanner";
 
 /**
  * MAX/Hyp DEMO — the platform admin's "MAX" tab in a store's customer file: the STORE's own terminal (the store is
- * the seller; NURIEL's terminal is set up separately on /platform/payments). KEY / PassP are write-only: sealed on
+ * the seller; NURIEL's terminal is set up separately on /platform/payments). The API key and password are write-only: sealed on
  * the server at once and never shown again. In DEMO only a test terminal (00100…) is accepted, mode "test", one
  * payment. The success URL below is what Hyp's portal must hold for this terminal (no trailing slash).
  */
@@ -115,8 +115,8 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
       <CardContent className="space-y-4" data-testid="max-tab">
         {s.demo && <DemoBanner />}
         <p className="text-xs text-muted-foreground">
-          החנות היא בית העסק: התשלומים של הלקוחות שלה עוברים במסוף שלה בלבד. KEY ו-PassP נשמרים
-          מוצפנים בשרת ואינם מוצגים שוב לאף אחד. להחלפה יש להקליד אותם מחדש.
+          החנות היא בית העסק: התשלומים של הלקוחות שלה עוברים במסוף שלה בלבד. מפתח ה-API וסיסמת ה-API
+          נשמרים מוצפנים בשרת ואינם מוצגים שוב לאף אחד. להחלפה יש להקליד אותם מחדש.
         </p>
         {view.defaultStore && (
           <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
@@ -137,8 +137,8 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
               {terminalHintText(s.terminalHint)}
             </span>
           )}
-          {s.hasApiKey && <Badge variant="secondary">KEY נשמר</Badge>}
-          {s.hasApiPassword && <Badge variant="secondary">PassP נשמר</Badge>}
+          {s.hasApiKey && <Badge variant="secondary">מפתח API נשמר</Badge>}
+          {s.hasApiPassword && <Badge variant="secondary">סיסמת API נשמרה</Badge>}
           <Badge variant={s.enabled ? "default" : "outline"}>{s.enabled ? "פעיל" : "כבוי"}</Badge>
           {s.mode && <Badge variant="outline">{s.mode === "test" ? "בדיקה" : "אמיתי"}</Badge>}
           <span className="text-xs text-muted-foreground">
@@ -164,7 +164,7 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="max-api-key">KEY</Label>
+            <Label htmlFor="max-api-key">מפתח API</Label>
             <Input
               id="max-api-key"
               type="password"
@@ -178,7 +178,7 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="max-api-password">PassP</Label>
+            <Label htmlFor="max-api-password">סיסמת API</Label>
             <Input
               id="max-api-password"
               type="password"
