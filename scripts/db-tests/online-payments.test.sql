@@ -2670,6 +2670,30 @@ SELECT tests.check('Criterion E (invariant, all scenarios of this file): no held
                         AND o.payment_status = 'awaiting' AND o.payment_due_at IS NULL)$$,
          :SA, :SB, :SE, :SF));
 
+-- E2E finding (pay page): max_order_payment_status answers `busy` (= tenant_order_busy) for an online order awaiting
+-- payment, so the page never offers a Pay button that max_attempt_open would refuse — an attempt parked without a
+-- return (credentials_changed on a redirected attempt) is busy, and a person's "not charged" releases it
+SELECT pg_temp.order_of(:SB, :C4, :P10, :SHIP_B, 1, 'online') AS bz_o \gset
+SELECT pg_temp.svc(format('SELECT public.max_order_payment_status(%L, %L, %L, NULL)', :SB, :'bz_o', :C4)) ->> 'busy' AS bz_new \gset
+SELECT pg_temp.t_open(:SB, :'bz_o', :C4) AS bz \gset
+SELECT pg_temp.t_sign(:SB, :'bz'::jsonb ->> 'attempt_id') AS ok \gset
+SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_save(%L, %L, %L, %L)', :PLAT, :SB,
+         jsonb_build_object('api_key_enc', pg_temp.tok('b-key-bz', '0deadbe1'), 'api_password_enc', pg_temp.tok('b-pass-bz', '0deadbe1'), 'force', true), 'demo')) AS ok \gset
+SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_verified(%L, %L, true, %L)', :PLAT, :SB, '0')) AS ok \gset
+SELECT pg_temp.svc(format('SELECT public.max_order_payment_status(%L, %L, %L, NULL)', :SB, :'bz_o', :C4)) AS bz_parked,
+       pg_temp.svc(format('SELECT public.max_order_payment_status(%L, %L, %L, NULL)', :SB, :'bz_o', :B_OWNER)) ->> 'busy' AS bz_parked_staff,
+       COALESCE(pg_temp.svc_err(format('SELECT public.max_attempt_open(%L, %L, %L, NULL, %L)', :SB, :'bz_o', :C4, 'demo')), '') AS bz_open_parked \gset
+SELECT pg_temp.svc(format('SELECT to_jsonb(public.max_review_resolve(%L, %L, %L, %L, %L))', :B_OWNER, :SB, :'bz'::jsonb ->> 'attempt_id',
+         'בדקתי בפורטל: לא חויב', 'not_charged')) AS ok \gset
+SELECT pg_temp.svc(format('SELECT public.max_order_payment_status(%L, %L, %L, NULL)', :SB, :'bz_o', :C4)) ->> 'busy' AS bz_released \gset
+SELECT pg_temp.svc(format('SELECT public.max_order_payment_status(%L, %L, %L, NULL)', :SB, :'o1', :C1)) ->> 'busy' AS bz_paid \gset
+SELECT tests.check('pay page (E2E finding): max_order_payment_status.busy — false for a fresh online order; true for an attempt parked without a return (credentials_changed, redirected) for the payer and staff alike, while the open refuses; false after the owner resolves it not_charged; false for a paid order',
+  format($$SELECT %1$L = 'false' AND %2$L::jsonb ->> 'busy' = 'true' AND NOT (%2$L::jsonb ->> 'payment_held')::boolean
+             AND %3$L = 'true' AND %4$L LIKE '%%being reviewed%%' AND %5$L = 'false' AND %6$L = 'false'
+             AND (SELECT state = 'needs_review' AND review_reason = 'credentials_changed' AND returned_at IS NULL
+                    FROM payments.tenant_attempts WHERE id = %7$L)$$,
+         :'bz_new', :'bz_parked', :'bz_parked_staff', :'bz_open_parked', :'bz_released', :'bz_paid', :'bz'::jsonb ->> 'attempt_id'));
+
 -- ============================================================
 -- 21. Cleanup: the switches off, the database unmarked (later files see online payments off)
 -- ============================================================

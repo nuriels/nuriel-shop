@@ -2322,6 +2322,10 @@ BEGIN
     -- X-14: a return is being verified or reviewed — the order has no due time and cannot expire meanwhile
     'payment_held', (o.payment_method = 'online' AND o.status = 'pending' AND o.payment_status = 'awaiting'
                      AND o.payment_due_at IS NULL),
+    -- E2E finding: not payable right now — a payment of this order is being verified, waits for a person, or was
+    -- decided charged (tenant_order_busy, the open's own refusal); the pay page offers no Pay button meanwhile
+    'busy', (o.payment_method = 'online' AND o.status = 'pending' AND o.payment_status = 'awaiting'
+             AND payments.tenant_order_busy(o.id)),
     'attempt', CASE WHEN a.id IS NOT NULL THEN
                  jsonb_build_object('state', a.state, 'mode', a.mode, 'applied', a.applied,
                    'expires_at', a.expires_at, 'amount_minor', a.amount_minor, 'currency', a.currency,
