@@ -269,7 +269,7 @@ CREATE TABLE IF NOT EXISTS payments.platform_attempts (
                        'amount_mismatch', 'currency_mismatch', 'terminal_mismatch', 'installments_exceeded',
                        'duplicate_txn', 'duplicate_charge', 'late', 'target_settled', 'target_changed', 'payer_gone',
                        'verify_exhausted', 'credentials_changed', 'mode_not_allowed', 'document_issued',
-                       'unexpected_hold')),
+                       'unexpected_hold', 'charge_after_resolution', 'late_paid')),
   review_note        text CHECK (review_note IS NULL OR char_length(review_note) <= 500),
   review_resolved_at timestamptz,
   review_resolved_by uuid,
@@ -495,7 +495,8 @@ CREATE TABLE IF NOT EXISTS payments.tenant_attempts (
   review_reason      text CHECK (review_reason IS NULL OR review_reason IN (
                        'amount_mismatch', 'currency_mismatch', 'terminal_mismatch', 'installments_exceeded',
                        'duplicate_txn', 'duplicate_charge', 'order_not_awaiting', 'late', 'verify_exhausted',
-                       'credentials_changed', 'mode_not_allowed', 'document_issued', 'unexpected_hold')),
+                       'credentials_changed', 'mode_not_allowed', 'document_issued', 'unexpected_hold',
+                       'charge_after_resolution', 'late_paid', 'held_unexplained')),
   review_note        text CHECK (review_note IS NULL OR char_length(review_note) <= 500),
   review_resolved_at timestamptz,
   review_resolved_by uuid,
@@ -1036,9 +1037,13 @@ BEGIN
   IF OLD.applied AND NOT NEW.applied THEN
     RAISE EXCEPTION 'payment attempt: an applied payment stays applied' USING ERRCODE = 'insufficient_privilege';
   END IF;
-  -- X-17: a new review reason is a new alert (e.g. amount_mismatch, then a second charge: duplicate_charge)
-  IF NEW.review_reason IS DISTINCT FROM OLD.review_reason AND NEW.review_reason IS NOT NULL
-     AND NEW.review_alerted_at IS NOT DISTINCT FROM OLD.review_alerted_at THEN
+  -- X-17 / X-22: a new alert when the review reason changes, when a charge is added to an attempt in review (its
+  -- first transaction id on a parked attempt, or one more in extra_txn_ids) and when a resolved review reopens
+  IF NEW.review_alerted_at IS NOT DISTINCT FROM OLD.review_alerted_at
+     AND ((NEW.review_reason IS DISTINCT FROM OLD.review_reason AND NEW.review_reason IS NOT NULL)
+          OR (OLD.state = 'needs_review' AND OLD.provider_txn_id IS NULL AND NEW.provider_txn_id IS NOT NULL)
+          OR cardinality(NEW.extra_txn_ids) > cardinality(OLD.extra_txn_ids)
+          OR (OLD.review_resolved_at IS NOT NULL AND NEW.review_resolved_at IS NULL)) THEN
     NEW.review_alerted_at := NULL;
   END IF;
   IF NEW.extra_txn_ids[1:cardinality(OLD.extra_txn_ids)] IS DISTINCT FROM OLD.extra_txn_ids THEN
@@ -1344,20 +1349,74 @@ RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
        AND (x.state = 'returned'
             OR (x.state = 'needs_review' AND x.review_resolved_at IS NULL)
             OR (x.state IN ('failed', 'expired', 'cancelled') AND x.returned_at IS NOT NULL
-                AND payments.platform_unverified_return(x.id))));
+                AND x.review_resolved_at IS NULL AND payments.platform_unverified_return(x.id))));
 $$;
 -- X-15: the same rule for a store order — not payable again while one of its attempts is being verified (returned,
 -- or a late return no VERIFY confirmed) or waits for an unresolved review
-CREATE OR REPLACE FUNCTION payments.tenant_order_busy(_order uuid)
+-- X-23: a 'charged' decision is final for the order, and so is a verified charge that was not applied
+CREATE OR REPLACE FUNCTION payments.tenant_order_charged(_order uuid)
 RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
   SELECT _order IS NOT NULL AND EXISTS (
+    SELECT 1 FROM payments.tenant_attempts x
+     WHERE x.order_id = _order AND NOT x.applied
+       AND (x.review_outcome = 'charged' OR x.provider_txn_id IS NOT NULL OR cardinality(x.extra_txn_ids) > 0));
+$$;
+CREATE OR REPLACE FUNCTION payments.tenant_order_busy(_order uuid)
+RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT _order IS NOT NULL AND (payments.tenant_order_charged(_order) OR EXISTS (
     SELECT 1 FROM payments.tenant_attempts x
      WHERE x.order_id = _order
        AND (x.state = 'returned'
             OR (x.state = 'needs_review' AND x.review_resolved_at IS NULL)
             OR (x.state IN ('failed', 'expired', 'cancelled') AND x.returned_at IS NOT NULL
-                AND x.review_resolved_at IS NULL AND payments.tenant_unverified_return(x.id))));
+                AND x.review_resolved_at IS NULL AND payments.tenant_unverified_return(x.id)))));
 $$;
+-- X-24: since when an attempt has a return no VERIFY confirmed (the oldest such payload); NULL = none
+CREATE OR REPLACE FUNCTION payments.tenant_unverified_since(_attempt uuid)
+RETURNS timestamptz LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT min(r.created_at) FROM payments.tenant_events r
+   WHERE r.attempt_id = _attempt AND r.source IN ('return', 'notify') AND r.result = 'received'
+     AND NOT EXISTS (SELECT 1 FROM payments.tenant_events v
+                      WHERE v.attempt_id = _attempt AND v.source = 'verify'
+                        AND v.payload_sha256 = r.payload_sha256 AND v.verification = 'verified');
+$$;
+CREATE OR REPLACE FUNCTION payments.platform_unverified_since(_attempt uuid)
+RETURNS timestamptz LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT min(r.created_at) FROM payments.platform_events r
+   WHERE r.attempt_id = _attempt AND r.source IN ('return', 'notify') AND r.result = 'received'
+     AND NOT EXISTS (SELECT 1 FROM payments.platform_events v
+                      WHERE v.attempt_id = _attempt AND v.source = 'verify'
+                        AND v.payload_sha256 = r.payload_sha256 AND v.verification = 'verified');
+$$;
+-- X-22: a resolved review reopens by itself (new payload, or a charge stored on the attempt): a new decision is needed;
+-- the alert re-arms (attempts_guard). true = reopened now.
+CREATE OR REPLACE FUNCTION payments.tenant_reopen(_attempt uuid)
+RETURNS boolean LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE
+  _t uuid;
+BEGIN
+  UPDATE payments.tenant_attempts
+     SET review_resolved_at = NULL, review_resolved_by = NULL, review_outcome = NULL, review_alerted_at = NULL
+   WHERE id = _attempt AND review_resolved_at IS NOT NULL
+  RETURNING tenant_id INTO _t;
+  IF _t IS NULL THEN
+    RETURN false;
+  END IF;
+  INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result) VALUES (_t, _attempt, 'review', 'reopened');
+  RETURN true;
+END $$;
+CREATE OR REPLACE FUNCTION payments.platform_reopen(_attempt uuid)
+RETURNS boolean LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  UPDATE payments.platform_attempts
+     SET review_resolved_at = NULL, review_resolved_by = NULL, review_alerted_at = NULL
+   WHERE id = _attempt AND review_resolved_at IS NOT NULL;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+  INSERT INTO payments.platform_events (attempt_id, source, result) VALUES (_attempt, 'review', 'reopened');
+  RETURN true;
+END $$;
 -- X-14: the end of a hold — a paid result (by the settle itself), a VERIFY-confirmed decline, or a person's
 -- not_charged decision. The order gets a fresh window, capped at 24 hours after it was placed (a cap already past:
 -- the next expiry tick cancels it). Only an online order still pending / awaiting, held, and not busy. true = released.
@@ -1455,6 +1514,10 @@ BEGIN
   IF EXISTS (SELECT 1 FROM payments.tenant_attempts x
               WHERE x.order_id = o.id AND x.state = 'needs_review' AND x.review_resolved_at IS NULL) THEN
     RAISE EXCEPTION 'the payment of order % is being reviewed', o.order_number USING ERRCODE = 'check_violation';
+  END IF;
+  IF payments.tenant_order_charged(o.id) THEN
+    RAISE EXCEPTION 'the payment of order % is held for the store (a review found it charged)', o.order_number
+      USING ERRCODE = 'check_violation';
   END IF;
   IF payments.tenant_order_busy(o.id) THEN
     RAISE EXCEPTION 'the payment of order % is being verified', o.order_number USING ERRCODE = 'check_violation';
@@ -1660,6 +1723,10 @@ BEGIN
   IF _n > 0 AND _order IS NOT NULL THEN
     PERFORM payments.hold_order(_tenant, _order);
   END IF;
+  -- X-22: a new payload for an attempt whose review a person resolved reopens that review
+  IF _n > 0 THEN
+    PERFORM payments.tenant_reopen(a.id);
+  END IF;
   RETURN jsonb_build_object('result', CASE WHEN _n = 0 THEN 'replay' ELSE 'received' END,
     'attempt_id', a.id, 'tenant_id', a.tenant_id, 'order_id', a.order_id,
     'state', CASE WHEN a.state IN ('created', 'redirected') THEN 'returned' ELSE a.state END,
@@ -1751,7 +1818,23 @@ BEGIN
     -- charge: duplicate_charge, the extra transaction id kept. The order stays held (M3).
     IF (_ccode = '0' OR _hold) AND _txn_id IS DISTINCT FROM a.provider_txn_id
        AND NOT (_txn_id = ANY (a.extra_txn_ids)) THEN
-      IF a.provider_txn_id IS NULL AND a.review_reason IN ('verify_exhausted', 'credentials_changed') THEN
+      IF a.review_resolved_at IS NOT NULL
+         OR EXISTS (SELECT 1 FROM payments.tenant_events e WHERE e.attempt_id = a.id AND e.source = 'review' AND e.result = 'reopened') THEN
+        -- X-22 (R3-3): a verified charge after a person's decision (still resolved, or reopened by its payload) — the review reopens with its own reason, the charge
+        -- is kept on the attempt and alerted again; a 'not_charged' decision is never proof that no charge will come
+        PERFORM payments.tenant_reopen(a.id);
+        _reason := 'charge_after_resolution';
+        BEGIN
+          UPDATE payments.tenant_attempts
+             SET review_reason = _reason, provider_txn_id = COALESCE(provider_txn_id, _txn_id),
+                 extra_txn_ids = CASE WHEN provider_txn_id IS NULL THEN extra_txn_ids ELSE extra_txn_ids || _txn_id END
+           WHERE id = a.id;
+        EXCEPTION WHEN unique_violation THEN
+          UPDATE payments.tenant_attempts SET review_reason = _reason, extra_txn_ids = extra_txn_ids || _txn_id WHERE id = a.id;
+        END;
+        INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result)
+        VALUES (a.tenant_id, a.id, 'review', 'charge_after_resolution');
+      ELSIF a.provider_txn_id IS NULL AND a.review_reason IN ('verify_exhausted', 'credentials_changed') THEN
         _reason := a.review_reason;
         BEGIN
           UPDATE payments.tenant_attempts SET provider_txn_id = _txn_id WHERE id = a.id;
@@ -1781,12 +1864,18 @@ BEGIN
     END IF;
     -- a second, different approved (or held) charge for an attempt that is already settled → a refund case; the extra
     -- transaction id is kept on the attempt (review M4)
+    -- X-22: after a person's decision on this attempt, the further charge reopens it (charge_after_resolution)
+    PERFORM payments.tenant_reopen(a.id);
     UPDATE payments.tenant_attempts
-       SET review_reason = COALESCE(review_reason, 'duplicate_charge'), extra_txn_ids = extra_txn_ids || _txn_id
+       SET review_reason = CASE WHEN a.review_resolved_at IS NOT NULL THEN 'charge_after_resolution'
+                                ELSE COALESCE(review_reason, 'duplicate_charge') END,
+           extra_txn_ids = extra_txn_ids || _txn_id
      WHERE id = a.id;
     INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result)
     VALUES (a.tenant_id, a.id, 'review', 'duplicate_charge');
-    RETURN jsonb_build_object('result', 'duplicate_charge', 'reason', 'duplicate_charge', 'attempt_id', a.id,
+    RETURN jsonb_build_object('result', 'duplicate_charge',
+                              'reason', CASE WHEN a.review_resolved_at IS NOT NULL THEN 'charge_after_resolution'
+                                             ELSE 'duplicate_charge' END, 'attempt_id', a.id,
                               'order_id', a.order_id, 'tenant_id', a.tenant_id);
   END IF;
   -- a plain decline: failed. A hold / partial approval / standing order / multi-transaction, or an issued document, is
@@ -1897,6 +1986,12 @@ BEGIN
   PERFORM set_config('kobi.payment_update', 'on', true);
   UPDATE public.orders SET payment_status = 'paid', paid_at = now(), payment_due_at = NULL WHERE id = o.id;
   PERFORM set_config('kobi.payment_update', 'off', true);
+  -- round 4, criterion B: a late return (expired / cancelled / failed attempt) that confirmed a charge is applied and
+  -- also alerted once (reason late_paid on the paid attempt) — a person sees every late charge
+  IF a.state IN ('failed', 'expired', 'cancelled') THEN
+    UPDATE payments.tenant_attempts SET review_reason = 'late_paid' WHERE id = a.id;
+    INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result) VALUES (a.tenant_id, a.id, 'review', 'late_paid');
+  END IF;
   WITH done AS (
     UPDATE payments.tenant_attempts SET state = 'cancelled'
      WHERE order_id = o.id AND id <> a.id AND state IN ('created', 'redirected', 'returned')
@@ -1916,6 +2011,7 @@ DECLARE
   _n integer;
   _p integer := 0;
   r  record;
+  _a record;
 BEGIN
   -- a returned attempt is never expired or cancelled here (review H1): see the parking pass below
   WITH due AS (
@@ -1940,18 +2036,50 @@ BEGIN
   -- parking pass (review H1): a return no VERIFY confirmed within 90 minutes — before the order's window, extended to
   -- 2 hours after the return, can close — parks the attempt for a person and holds its order. Locks: the order's
   -- row, then the attempt's; a row another session holds is left for the next run.
+  -- X-24 (R3-2 / N4): every non-applied attempt (failed included) with an unverified return older than 90 minutes and
+  -- no resolved review, whether or not its raw return was kept
   FOR r IN SELECT a.id, a.tenant_id, a.order_id FROM payments.tenant_attempts a
-            WHERE a.state IN ('returned', 'expired', 'cancelled') AND a.returned_at < now() - interval '90 minutes'
-              AND payments.tenant_unverified_return(a.id)
+            WHERE a.state IN ('returned', 'expired', 'cancelled', 'failed') AND NOT a.applied
+              AND a.returned_at IS NOT NULL AND a.review_resolved_at IS NULL
+              AND COALESCE(CASE WHEN a.state = 'returned' THEN LEAST(a.returned_at, payments.tenant_unverified_since(a.id)) END,
+                           payments.tenant_unverified_since(a.id)) < now() - interval '90 minutes'
             ORDER BY a.returned_at LIMIT 200 LOOP
     IF r.order_id IS NOT NULL THEN
       PERFORM 1 FROM public.orders o WHERE o.id = r.order_id AND o.tenant_id = r.tenant_id FOR UPDATE SKIP LOCKED;
       CONTINUE WHEN NOT FOUND;
     END IF;
     PERFORM 1 FROM payments.tenant_attempts x
-     WHERE x.id = r.id AND x.state IN ('returned', 'expired', 'cancelled') FOR UPDATE SKIP LOCKED;
+     WHERE x.id = r.id AND x.state IN ('returned', 'expired', 'cancelled', 'failed') AND NOT x.applied
+       AND x.review_resolved_at IS NULL FOR UPDATE SKIP LOCKED;
     CONTINUE WHEN NOT FOUND OR NOT payments.tenant_unverified_return(r.id);
     IF payments.tenant_park(r.id, 'verify_exhausted') THEN
+      _p := _p + 1;
+    END IF;
+  END LOOP;
+  -- round 4, criterion E (backstop): an online order held for more than 90 minutes (since its last return) with no
+  -- attempt in an unresolved review and no 'charged' decision gets its latest returned attempt parked
+  -- (held_unexplained) — so every held order has a person told and a handling route (the claim alerts it)
+  FOR r IN SELECT o.id AS order_id, o.tenant_id FROM public.orders o
+            WHERE o.payment_method = 'online' AND o.status = 'pending' AND o.payment_status = 'awaiting'
+              AND o.payment_due_at IS NULL
+              AND NOT EXISTS (SELECT 1 FROM payments.tenant_attempts x
+                               WHERE x.order_id = o.id
+                                 AND ((x.review_reason IS NOT NULL AND x.review_resolved_at IS NULL) OR x.review_outcome = 'charged'))
+              AND (SELECT max(e.created_at) FROM payments.tenant_events e JOIN payments.tenant_attempts x ON x.id = e.attempt_id
+                    WHERE x.order_id = o.id AND e.source IN ('return', 'notify')) < now() - interval '90 minutes'
+            LIMIT 200 LOOP
+    PERFORM 1 FROM public.orders o WHERE o.id = r.order_id FOR UPDATE SKIP LOCKED;
+    CONTINUE WHEN NOT FOUND;
+    SELECT x.id, x.state INTO _a FROM payments.tenant_attempts x
+     WHERE x.order_id = r.order_id AND x.returned_at IS NOT NULL ORDER BY x.returned_at DESC LIMIT 1 FOR UPDATE SKIP LOCKED;
+    CONTINUE WHEN _a.id IS NULL;
+    IF _a.state = 'needs_review' THEN
+      PERFORM payments.tenant_reopen(_a.id);
+      UPDATE payments.tenant_attempts SET review_reason = 'held_unexplained' WHERE id = _a.id;
+      INSERT INTO payments.tenant_events (tenant_id, attempt_id, source, result)
+      VALUES (r.tenant_id, _a.id, 'review', 'held_unexplained');
+      _p := _p + 1;
+    ELSIF payments.tenant_park(_a.id, 'held_unexplained') THEN
       _p := _p + 1;
     END IF;
   END LOOP;
@@ -2086,7 +2214,9 @@ BEGIN
                    'expires_at', a.expires_at, 'amount_minor', a.amount_minor, 'currency', a.currency,
                    'paid_at', a.paid_at, 'installments', a.installments, 'card_brand', a.card_brand,
                    'card_last4', a.card_last4, 'approval_code', a.approval_code)
-                 || CASE WHEN _staff THEN jsonb_build_object('attempt_id', a.id, 'review_reason', a.review_reason)
+                 || CASE WHEN _staff THEN jsonb_build_object('attempt_id', a.id, 'review_reason', a.review_reason,
+                                                             'review_outcome', a.review_outcome,
+                                                             'review_resolved_at', a.review_resolved_at)
                          ELSE '{}'::jsonb END
                END);
 END $$;
@@ -2644,6 +2774,10 @@ BEGIN
           payments.event_summary(_ccode, NULL, _txn_id, _amount_minor, NULL, _installments, NULL))
   ON CONFLICT DO NOTHING;
   GET DIAGNOSTICS _n = ROW_COUNT;
+  -- X-22: a new payload for an attempt whose review the platform admin resolved reopens that review
+  IF _n > 0 THEN
+    PERFORM payments.platform_reopen(a.id);
+  END IF;
   IF a.state IN ('created', 'redirected') THEN
     UPDATE payments.platform_attempts SET state = 'returned', returned_at = now() WHERE id = a.id;
   ELSIF a.returned_at IS NULL AND a.state IN ('failed', 'expired', 'cancelled') THEN
@@ -2726,7 +2860,22 @@ BEGIN
     -- as 9g (review M4): another approved (or held) charge for an attempt already in review
     IF (_ccode = '0' OR _hold) AND _txn_id IS DISTINCT FROM a.provider_txn_id
        AND NOT (_txn_id = ANY (a.extra_txn_ids)) THEN
-      IF a.provider_txn_id IS NULL AND a.review_reason IN ('verify_exhausted', 'credentials_changed') THEN
+      IF a.review_resolved_at IS NOT NULL
+         OR EXISTS (SELECT 1 FROM payments.platform_events e WHERE e.attempt_id = a.id AND e.source = 'review' AND e.result = 'reopened') THEN
+        -- X-22 (R3-3): a verified charge after a person's decision (still resolved, or reopened by its payload) — the review reopens with its own reason, the charge
+        -- is kept on the attempt and alerted again; a 'not_charged' decision is never proof that no charge will come
+        PERFORM payments.platform_reopen(a.id);
+        _reason := 'charge_after_resolution';
+        BEGIN
+          UPDATE payments.platform_attempts
+             SET review_reason = _reason, provider_txn_id = COALESCE(provider_txn_id, _txn_id),
+                 extra_txn_ids = CASE WHEN provider_txn_id IS NULL THEN extra_txn_ids ELSE extra_txn_ids || _txn_id END
+           WHERE id = a.id;
+        EXCEPTION WHEN unique_violation THEN
+          UPDATE payments.platform_attempts SET review_reason = _reason, extra_txn_ids = extra_txn_ids || _txn_id WHERE id = a.id;
+        END;
+        INSERT INTO payments.platform_events (attempt_id, source, result) VALUES (a.id, 'review', 'charge_after_resolution');
+      ELSIF a.provider_txn_id IS NULL AND a.review_reason IN ('verify_exhausted', 'credentials_changed') THEN
         _reason := a.review_reason;
         BEGIN
           UPDATE payments.platform_attempts SET provider_txn_id = _txn_id WHERE id = a.id;
@@ -2752,11 +2901,17 @@ BEGIN
       RETURN jsonb_build_object('result', 'already_paid', 'state', a.state, 'attempt_id', a.id,
                                 'payer_tenant_id', a.payer_tenant_id, 'return_origin', a.return_origin);
     END IF;
+    -- X-22: after a person's decision on this attempt, the further charge reopens it (charge_after_resolution)
+    PERFORM payments.platform_reopen(a.id);
     UPDATE payments.platform_attempts
-       SET review_reason = COALESCE(review_reason, 'duplicate_charge'), extra_txn_ids = extra_txn_ids || _txn_id
+       SET review_reason = CASE WHEN a.review_resolved_at IS NOT NULL THEN 'charge_after_resolution'
+                                ELSE COALESCE(review_reason, 'duplicate_charge') END,
+           extra_txn_ids = extra_txn_ids || _txn_id
      WHERE id = a.id;
     INSERT INTO payments.platform_events (attempt_id, source, result) VALUES (a.id, 'review', 'duplicate_charge');
-    RETURN jsonb_build_object('result', 'duplicate_charge', 'reason', 'duplicate_charge', 'attempt_id', a.id,
+    RETURN jsonb_build_object('result', 'duplicate_charge',
+                              'reason', CASE WHEN a.review_resolved_at IS NOT NULL THEN 'charge_after_resolution'
+                                             ELSE 'duplicate_charge' END, 'attempt_id', a.id,
                               'payer_tenant_id', a.payer_tenant_id, 'return_origin', a.return_origin);
   END IF;
   IF _ccode IS DISTINCT FROM '0' AND NOT _hold AND NOT _doc THEN
@@ -2854,6 +3009,11 @@ BEGIN
     RETURNING id
   )
   INSERT INTO payments.platform_events (attempt_id, source, result) SELECT d.id, 'cancel', 'item_paid' FROM done d;
+  -- round 4, criterion B (as 9g): a late charge that was applied is alerted once
+  IF a.state IN ('failed', 'expired', 'cancelled') THEN
+    UPDATE payments.platform_attempts SET review_reason = 'late_paid' WHERE id = a.id;
+    INSERT INTO payments.platform_events (attempt_id, source, result) VALUES (a.id, 'review', 'late_paid');
+  END IF;
   RETURN jsonb_build_object('result', CASE WHEN a.mode = 'live' THEN 'paid' ELSE 'test_paid' END, 'applied', true,
                             'mode', a.mode, 'attempt_id', a.id, 'payer_tenant_id', a.payer_tenant_id,
                             'target_kind', a.target_kind, 'target_id', a.target_id, 'ledger_payment_id', _ledger,
@@ -2883,11 +3043,14 @@ BEGIN
   GET DIAGNOSTICS _n = ROW_COUNT;
   -- parking pass (as 9h): a return no VERIFY confirmed within 90 minutes parks the attempt for the platform admin
   FOR r IN SELECT a.id FROM payments.platform_attempts a
-            WHERE a.state IN ('returned', 'expired', 'cancelled') AND a.returned_at < now() - interval '90 minutes'
-              AND payments.platform_unverified_return(a.id)
+            WHERE a.state IN ('returned', 'expired', 'cancelled', 'failed') AND NOT a.applied
+              AND a.returned_at IS NOT NULL AND a.review_resolved_at IS NULL
+              AND COALESCE(CASE WHEN a.state = 'returned' THEN LEAST(a.returned_at, payments.platform_unverified_since(a.id)) END,
+                           payments.platform_unverified_since(a.id)) < now() - interval '90 minutes'
             ORDER BY a.returned_at LIMIT 200 LOOP
     PERFORM 1 FROM payments.platform_attempts x
-     WHERE x.id = r.id AND x.state IN ('returned', 'expired', 'cancelled') FOR UPDATE SKIP LOCKED;
+     WHERE x.id = r.id AND x.state IN ('returned', 'expired', 'cancelled', 'failed') AND NOT x.applied
+       AND x.review_resolved_at IS NULL FOR UPDATE SKIP LOCKED;
     CONTINUE WHEN NOT FOUND OR NOT payments.platform_unverified_return(r.id);
     IF payments.platform_park(r.id, 'verify_exhausted') THEN
       _p := _p + 1;
