@@ -13,6 +13,7 @@ vi.mock("@tanstack/react-start", () => ({
 }));
 import type { HypHttpResult } from "@/platform/payments/server/http";
 import type { PaymentMode } from "@/platform/payments/provider";
+import type { PaymentsEnv } from "@/platform/payments/server/env";
 import { buildVerifyQuery, encodeParams, parseReturnQuery } from "@/platform/payments/max/protocol";
 import {
   PLATFORM_ERROR_TEXT,
@@ -53,10 +54,14 @@ import {
   requestTerminalSaveCode,
   resolvePlatformCardPayment,
   savePlatformTerminal,
+  secretCommitment,
   testPlatformTerminal,
   type TerminalDeps,
 } from "@/platform/payments/server/platform/terminal";
-import { alertPlatformAdmins } from "@/platform/payments/server/platform/alerts";
+import {
+  alertPlatformAdmins,
+  claimPlatformReviewAlerts,
+} from "@/platform/payments/server/platform/alerts";
 import {
   payChargeOffer,
   type MyCardPayment,
@@ -70,6 +75,7 @@ import {
 import {
   createStepupService,
   stepupDbPurposeHash,
+  stepupPurposeHash,
   type StepupRpc,
 } from "@/platform/payments/server/stepup";
 
@@ -523,6 +529,7 @@ function returnDeps(
   const { log, lines } = fakeLog();
   const alerts: [string, string | null][] = [];
   const secretsCalls: string[] = [];
+  const claims: number[] = [];
   const deps: PlatformReturnDeps = {
     isPlatformHost: async () => true,
     ready: () => ({ ok: true, env: "demo" }),
@@ -535,27 +542,77 @@ function returnDeps(
     cipher: (env, mode) => fakeCipher(env, mode),
     http: hyp.http,
     alert: async (reason, attempt) => void alerts.push([reason, attempt]),
+    claimAlerts: async () => {
+      claims.push(db.calls.length);
+      return 0;
+    },
     log,
     ...over,
   };
-  return { deps, db, hyp, lines, alerts, secretsCalls };
+  return { deps, db, hyp, lines, alerts, secretsCalls, claims };
 }
 
 const input = (raw = RAW) => ({ provider: "max", raw, host: "platform.example.invalid" });
 
 describe("D5 return — platform host only, unknown references never verified (DM-SEP-4)", () => {
-  it("DM-SEP-4: a store host, another provider, or payments off → nothing written, nothing verified", async () => {
+  it("DM-SEP-4: a store host or another provider → nothing written, nothing verified", async () => {
     for (const [over, provider, result] of [
       [{ isPlatformHost: async () => false }, "max", "refused"],
       [{}, "grow", "refused"],
-      [{ ready: () => ({ ok: false, reason: "root_missing" }) }, "max", "off"],
     ] as [Partial<PlatformReturnDeps>, string, string][]) {
-      const { deps, db, hyp } = returnDeps({}, over);
+      const { deps, db, hyp, claims } = returnDeps({}, over);
       const out = await handlePlatformReturn({ ...input(), provider }, deps);
       expect(out).toEqual({ location: "/", result, attemptId: null });
       expect(db.calls).toEqual([]);
       expect(hyp.http).not.toHaveBeenCalled();
+      expect(claims).toEqual([]);
     }
+  });
+
+  it("X-18 (R2-4): payments not ready → the signed return is still RECORDED (charge busy, swept later); no VERIFY, one ALERT, the owner's pending page", async () => {
+    for (const reason of ["root_missing", "env"]) {
+      const { deps, db, hyp, alerts, secretsCalls, lines, claims } = returnDeps(
+        {},
+        { ready: () => ({ ok: false, reason }) },
+      );
+      const out = await handlePlatformReturn(input(), deps);
+      expect(out).toEqual({
+        location: `${ORIGIN}/admin?tab=billing&pay=return`,
+        result: "off",
+        attemptId: ATTEMPT,
+      });
+      // recorded with no environment argument (record_return takes none: nothing environment-bound runs)
+      expect(db.names()).toEqual(["platform_attempt_record_return"]);
+      expect(Object.keys(db.args("platform_attempt_record_return")!)).not.toContain(
+        "_app_environment",
+      );
+      expect(secretsCalls).toEqual([]);
+      expect(hyp.http).not.toHaveBeenCalled();
+      expect(alerts).toEqual([]);
+      const alertLines = lines.filter((l) => l.includes("ALERT"));
+      expect(alertLines).toEqual([
+        `[pay:platform] ALERT return_not_verified attempt=${ATTEMPT.slice(0, 8)} why=${reason}`,
+      ]);
+      // X-17: the claim still runs (DB only)
+      expect(claims).toHaveLength(1);
+    }
+    // an unsigned return is still refused before any write, ready or not (L3)
+    const unsigned = returnDeps({}, { ready: () => ({ ok: false, reason: "env" }) });
+    await handlePlatformReturn(
+      input(rawOf(RETURN_PAIRS.filter(([k]) => k !== "Sign"))),
+      unsigned.deps,
+    );
+    expect(unsigned.db.calls).toEqual([]);
+  });
+
+  it('X-19: a settle result "unverified" writes an ALERT line (the attempt stays returned)', async () => {
+    const { deps, lines } = returnDeps({
+      platform_attempt_mark_paid: () => ({ data: { result: "unverified", attempt_id: ATTEMPT } }),
+    });
+    expect((await handlePlatformReturn(input(), deps)).result).toBe("pending");
+    expect(lines).toContain(
+      `[pay:platform] ALERT settle_unverified attempt=${ATTEMPT.slice(0, 8)}`,
+    );
   });
 
   it("DM-PAY-3: a refused query (duplicate, reserved, no order) writes nothing", async () => {
@@ -618,7 +675,7 @@ describe("D5 return — platform host only, unknown references never verified (D
 
   it("M06: a DIFFERENT return for a concluded attempt is verified with its own terminal and settled (→ duplicate_charge + alert)", async () => {
     for (const state of ["paid", "test_paid", "needs_review", "failed"]) {
-      const { deps, db, hyp, alerts, secretsCalls } = returnDeps({
+      const { deps, db, hyp, alerts, secretsCalls, claims } = returnDeps({
         platform_attempt_record_return: () => ({
           data: {
             result: "received",
@@ -637,7 +694,9 @@ describe("D5 return — platform host only, unknown references never verified (D
       expect(secretsCalls).toEqual([`${ATTEMPT}:verify`]);
       expect(hyp.http).toHaveBeenCalledTimes(1);
       expect(db.names()).toContain("platform_attempt_mark_paid");
-      expect(alerts).toEqual([["duplicate_charge", ATTEMPT]]);
+      // X-17: the DB parked it; the claim (after the settle) rings, never the settle path itself
+      expect(alerts).toEqual([]);
+      expect(claims).toEqual([db.calls.length]);
     }
   });
 
@@ -737,13 +796,13 @@ describe("D5 return — VERIFY with NURIEL's terminal of that attempt, then the 
     expect(verifyCodeForDb({ verified: false, ccode: "0\r\nX", html: false })).toBeNull();
   });
 
-  it("DM-PAY-6/7: return flags reach the settle function; a review, a duplicate charge or an environment mismatch alerts the platform team", async () => {
+  it("DM-PAY-6/7 + X-17: return flags reach the settle function; a review rings only through the claim, an environment mismatch alerts at once", async () => {
     const flagged = rawOf([
       ...RETURN_PAIRS.filter(([k]) => k !== "Hesh"),
       ["Hesh", "EZ"],
       ["HKId", "7"],
     ]);
-    const { deps, db, alerts } = returnDeps({
+    const { deps, db, alerts, claims } = returnDeps({
       platform_attempt_mark_paid: () => ({
         data: {
           result: "needs_review",
@@ -756,14 +815,19 @@ describe("D5 return — VERIFY with NURIEL's terminal of that attempt, then the 
     const out = await handlePlatformReturn(input(flagged), deps);
     expect(db.args("platform_attempt_mark_paid")?.["_return_flags"]).toEqual(["document", "hk"]);
     expect(out.result).toBe("review");
-    expect(alerts).toEqual([["document_issued", ATTEMPT]]);
+    expect(alerts).toEqual([]);
+    expect(claims).toHaveLength(1);
 
-    for (const result of ["duplicate_charge", "environment_mismatch"]) {
+    for (const [result, direct] of [
+      ["duplicate_charge", []],
+      ["environment_mismatch", [["environment_mismatch", ATTEMPT]]],
+    ] as [string, [string, string][]][]) {
       const r = returnDeps({
         platform_attempt_mark_paid: () => ({ data: { result, attempt_id: ATTEMPT } }),
       });
       await handlePlatformReturn(input(), r.deps);
-      expect(r.alerts, result).toEqual([[result, ATTEMPT]]);
+      expect(r.alerts, result).toEqual(direct);
+      expect(r.claims, result).toHaveLength(1);
     }
     const declined = returnDeps({
       platform_attempt_mark_paid: () => ({ data: { result: "not_paid", attempt_id: ATTEMPT } }),
@@ -772,7 +836,7 @@ describe("D5 return — VERIFY with NURIEL's terminal of that attempt, then the 
     expect(declined.alerts).toEqual([]);
   });
 
-  it("a VERIFY already in flight (busy) waits; exhausted VERIFY alerts; neither calls Hyp", async () => {
+  it("a VERIFY already in flight (busy) waits; exhausted VERIFY is parked by the DB (the claim rings); neither calls Hyp", async () => {
     const busy = returnDeps(
       {},
       { credentials: async () => ({ result: "busy", retryAfterSeconds: 30 }) },
@@ -783,11 +847,12 @@ describe("D5 return — VERIFY with NURIEL's terminal of that attempt, then the 
 
     const exhausted = returnDeps({}, { credentials: async () => ({ result: "exhausted" }) });
     expect((await handlePlatformReturn(input(), exhausted.deps)).result).toBe("review");
-    expect(exhausted.alerts).toEqual([["verify_exhausted", ATTEMPT]]);
+    expect(exhausted.alerts).toEqual([]);
+    expect(exhausted.claims).toHaveLength(1);
     expect(exhausted.hyp.http).not.toHaveBeenCalled();
   });
 
-  it("M1 (R-P1): VERIFY credentials refused (terminal changed while the owner was on Hyp's page) → the platform team is alerted, nothing settles", async () => {
+  it("M1 (R-P1) + X-17: VERIFY credentials refused (terminal changed while the owner was on Hyp's page) → an ALERT line, the claim rings, nothing settles", async () => {
     for (const thrown of [
       new PlatformPaymentError("credentials"),
       new PlatformPaymentError("unavailable"),
@@ -802,7 +867,9 @@ describe("D5 return — VERIFY with NURIEL's terminal of that attempt, then the 
         },
       );
       expect((await handlePlatformReturn(input(), refused.deps)).result).toBe("error");
-      expect(refused.alerts).toEqual([["verify_credentials", ATTEMPT]]);
+      expect(refused.lines.filter((l) => l.includes("ALERT verify_credentials"))).toHaveLength(1);
+      expect(refused.alerts).toEqual([]);
+      expect(refused.claims).toHaveLength(1);
       expect(refused.hyp.http).not.toHaveBeenCalled();
       expect(refused.db.names()).not.toContain("platform_attempt_mark_paid");
     }
@@ -822,7 +889,7 @@ describe("D5 return — VERIFY with NURIEL's terminal of that attempt, then the 
       again.deps,
     );
     expect(out.result).toBe("error");
-    expect(again.alerts).toEqual([["verify_credentials", ATTEMPT]]);
+    expect(again.lines.filter((l) => l.includes("ALERT verify_credentials"))).toHaveLength(1);
     expect(again.hyp.http).not.toHaveBeenCalled();
   });
 
@@ -864,25 +931,46 @@ describe("D5 return — VERIFY with NURIEL's terminal of that attempt, then the 
 });
 
 describe("D5 re-VERIFY job (platform_attempts_pending_verify)", () => {
-  it("off with PAYMENTS_JOBS=off or when payments are off: no DB call", async () => {
-    for (const over of [
-      { jobsOn: () => false },
-      { ready: () => ({ ok: false as const, reason: "env" }) },
-    ]) {
-      const db = fakeRpc({});
-      const reverify = vi.fn();
-      const { log } = fakeLog();
-      const summary = await runPlatformPaymentJobs({
-        jobsOn: () => true,
-        ready: () => ({ ok: true, env: "demo" }),
-        rpc: db.rpc,
-        reverify,
-        log,
-        ...over,
-      });
-      expect(summary).toEqual({ pending: 0, paid: 0, review: 0, expired: 0, purged: 0 });
-      expect(db.calls).toEqual([]);
-    }
+  it("PAYMENTS_JOBS=off: no DB call at all", async () => {
+    const db = fakeRpc({});
+    const reverify = vi.fn();
+    const claimAlerts = vi.fn(async () => 0);
+    const { log } = fakeLog();
+    const summary = await runPlatformPaymentJobs({
+      jobsOn: () => false,
+      ready: () => ({ ok: true, env: "demo" }),
+      rpc: db.rpc,
+      reverify,
+      claimAlerts,
+      log,
+    });
+    expect(summary).toEqual({ pending: 0, paid: 0, review: 0, expired: 0, purged: 0, alerted: 0 });
+    expect(db.calls).toEqual([]);
+    expect(claimAlerts).not.toHaveBeenCalled();
+  });
+
+  it("X-19 (R2-7): jobs on but payments NOT ready → no VERIFY retries; the sweep, the purge and the alert claim still run", async () => {
+    const db = fakeRpc({
+      platform_attempts_pending_verify: () => ({ data: [] }),
+      platform_attempts_expire: () => ({ data: 3 }),
+      platform_payment_returns_purge: () => ({ data: 1 }),
+    });
+    const reverify = vi.fn();
+    const claimAlerts = vi.fn(async () => 2);
+    const { log, lines } = fakeLog();
+    const summary = await runPlatformPaymentJobs({
+      jobsOn: () => true,
+      ready: () => ({ ok: false, reason: "root_missing" }),
+      rpc: db.rpc,
+      reverify,
+      claimAlerts,
+      log,
+    });
+    expect(db.names()).toEqual(["platform_attempts_expire", "platform_payment_returns_purge"]);
+    expect(reverify).not.toHaveBeenCalled();
+    expect(claimAlerts).toHaveBeenCalledTimes(1);
+    expect(summary).toEqual({ pending: 0, paid: 0, review: 0, expired: 3, purged: 1, alerted: 2 });
+    expect(lines).toContain("[pay:platform] jobs_verify_skipped reason=root_missing");
   });
 
   it("re-verifies each well-formed pending return, then expires and purges", async () => {
@@ -899,12 +987,18 @@ describe("D5 re-VERIFY job (platform_attempts_pending_verify)", () => {
       platform_payment_returns_purge: () => ({ data: 1 }),
     });
     const reverify = vi.fn(async () => ({ result: "paid" as const }));
+    const order: string[] = [];
+    const claimAlerts = vi.fn(async () => {
+      order.push(...db.names(), "claim");
+      return 0;
+    });
     const { log } = fakeLog();
     const summary = await runPlatformPaymentJobs({
       jobsOn: () => true,
       ready: () => ({ ok: true, env: "demo" }),
       rpc: db.rpc,
       reverify,
+      claimAlerts,
       log,
     });
     expect(reverify).toHaveBeenCalledTimes(1);
@@ -919,7 +1013,14 @@ describe("D5 re-VERIFY job (platform_attempts_pending_verify)", () => {
       "platform_attempts_expire",
       "platform_payment_returns_purge",
     ]);
-    expect(summary).toEqual({ pending: 1, paid: 1, review: 0, expired: 2, purged: 1 });
+    expect(summary).toEqual({ pending: 1, paid: 1, review: 0, expired: 2, purged: 1, alerted: 0 });
+    // X-17: the claim runs in every tick, after the steps that may park attempts
+    expect(order).toEqual([
+      "platform_attempts_pending_verify",
+      "platform_attempts_expire",
+      "platform_payment_returns_purge",
+      "claim",
+    ]);
   });
 
   it("reverifyPlatformReturn opens the kept raw return (attempt id), checks it is the same one, and settles", async () => {
@@ -1064,6 +1165,30 @@ describe("D5 credentials — NURIEL's terminal opens only under PLATFORM_ACCOUNT
       await platformAttemptCredentials(ATTEMPT, "verify", "demo", deps({ result: "exhausted" })),
     ).toEqual({ result: "exhausted" });
   });
+
+  it("X-20 (R2-10): the terminal-prefix tripwire before SIGN / VERIFY — a non-00100 terminal on DEMO (or a 00100 one in production) is refused before anything is opened", async () => {
+    for (const [env, terminal, mode] of [
+      ["demo", "9999999901", "test"],
+      ["production", TERMINAL, "live"],
+    ] as const) {
+      for (const purpose of ["verify", "sign"] as const) {
+        const opened: string[] = [];
+        const { log, lines } = fakeLog();
+        const d = {
+          ...deps({ ...row, terminal_number: terminal, mode }),
+          cipher: (e: PaymentsEnv, m: PaymentMode) => {
+            opened.push(`${e}:${m}`);
+            return fakeCipher(e, m);
+          },
+          log,
+        };
+        const e = await thrown(() => platformAttemptCredentials(ATTEMPT, purpose, env, d));
+        expect((e as PlatformPaymentError).code, `${env} ${purpose}`).toBe("unavailable");
+        expect(opened).toEqual([]);
+        expect(lines.filter((l) => l.includes("ALERT terminal_not_allowed"))).toHaveLength(1);
+      }
+    }
+  });
 });
 
 // ------------------------------------------------------------------------------------------ terminal + step-up
@@ -1129,6 +1254,7 @@ function terminalDeps(
     stepup,
     purposeHash: (actor, intent) => sha256Hex(`${actor}|${JSON.stringify(intent)}`),
     dbPurposeHash: (env, actor, hash) => `db:${env}:${actor}:${hash}`,
+    commitSecret: (env, field, value) => sha256Hex(`commit:${env}:${field}:${value}`),
     cipher: fakeCipher,
     checkCredentials: async () => terminalSecrets(),
     accountEmail: async () => "admin@example.invalid",
@@ -1162,6 +1288,14 @@ const CHANGE = {
   setApiPassword: true,
   clearCredentials: false,
   force: false,
+  apiKey: FAKE_KEY,
+  apiPassword: FAKE_PASSWORD,
+};
+/** the fake keyed commitment of the terminal deps (X-20) */
+const fakeCommit = (field: string, value: string) => sha256Hex(`commit:demo:${field}:${value}`);
+const COMMITS = {
+  apiKey: fakeCommit("api_key", FAKE_KEY),
+  apiPassword: fakeCommit("api_password", FAKE_PASSWORD),
 };
 const SAVE = {
   terminalNumber: TERMINAL,
@@ -1194,7 +1328,10 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
     });
     expect(JSON.stringify(out)).not.toContain("246813");
     expect(t.issued).toEqual([
-      { actor: ACTOR, hash: sha256Hex(`${ACTOR}|${JSON.stringify(intentOf(CHANGE, "demo"))}`) },
+      {
+        actor: ACTOR,
+        hash: sha256Hex(`${ACTOR}|${JSON.stringify(intentOf(CHANGE, "demo", COMMITS))}`),
+      },
     ]);
     expect(t.sent).toHaveLength(1);
     expect(t.sent[0]).toMatchObject({
@@ -1206,17 +1343,61 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
     expect(String(t.sent[0]!["html"])).toContain("246813");
     for (const line of t.lines) expect(line).not.toContain("246813");
     // the intent names WHICH secrets change, never their values
-    expect(JSON.stringify(intentOf(CHANGE, "demo"))).not.toMatch(/FAKE_/);
-    expect(intentOf(CHANGE, "demo")).toEqual({
+    expect(JSON.stringify(intentOf(CHANGE, "demo", COMMITS))).not.toMatch(/FAKE_/);
+    expect(intentOf(CHANGE, "demo", COMMITS)).toEqual({
       mode: "test",
       terminal_number: TERMINAL,
       enabled: true,
       set_api_key: true,
       set_api_password: true,
+      api_key_commit: COMMITS.apiKey,
+      api_password_commit: COMMITS.apiPassword,
       clear_credentials: false,
       force: false,
       max_installments: 1,
     });
+  });
+
+  it("X-20 (R2-6): the code is bound to the secret VALUES — a code for one KEY / password refuses another", async () => {
+    // the request and the save with the same values: the same purpose hash
+    const same = terminalDeps();
+    await requestTerminalSaveCode(CHANGE, same.deps);
+    await savePlatformTerminal(SAVE, same.deps);
+    expect(same.consumed[0]!.hash).toBe(same.issued[0]!.hash);
+    expect(same.db.names()).toContain("platform_terminal_save");
+    // a code approved for one KEY does not save another KEY (or another password)
+    for (const other of [{ apiKey: "FAKE_KEY_other" }, { apiPassword: "FAKE_PASSWORD_other" }]) {
+      const t = terminalDeps();
+      await requestTerminalSaveCode(CHANGE, t.deps);
+      expect(await codeOf(() => savePlatformTerminal({ ...SAVE, ...other }, t.deps))).toBe(
+        "stepup_mismatch",
+      );
+      expect(t.db.names()).not.toContain("platform_terminal_save");
+    }
+    // different values → different intents; KEY and password cannot be swapped
+    const a = intentOf(CHANGE, "demo", COMMITS);
+    const b = intentOf(CHANGE, "demo", {
+      ...COMMITS,
+      apiKey: fakeCommit("api_key", "FAKE_KEY_other"),
+    });
+    expect(stepupPurposeHash(ACTOR, "platform_terminal_change", a)).not.toBe(
+      stepupPurposeHash(ACTOR, "platform_terminal_change", b),
+    );
+    // a secret that changes without its commitment cannot be approved
+    expect(() => intentOf(CHANGE, "demo", { apiKey: null, apiPassword: null })).toThrow();
+    // the real commitment: keyed, per field, never the value itself
+    const key = Buffer.alloc(32, 9);
+    const commit = secretCommitment(key, "api_key", FAKE_KEY);
+    expect(commit).toMatch(/^[0-9a-f]{64}$/);
+    expect(commit).not.toBe(secretCommitment(key, "api_password", FAKE_KEY));
+    expect(commit).not.toBe(secretCommitment(Buffer.alloc(32, 8), "api_key", FAKE_KEY));
+    expect(commit).not.toBe(sha256Hex(FAKE_KEY));
+    // no value or commitment in a log line, the e-mail or the answer
+    const t = terminalDeps();
+    const out = await requestTerminalSaveCode(CHANGE, t.deps);
+    for (const text of [...t.lines, JSON.stringify(t.sent), JSON.stringify(out)])
+      for (const leak of [FAKE_KEY, FAKE_PASSWORD, COMMITS.apiKey, COMMITS.apiPassword])
+        expect(text).not.toContain(leak);
   });
 
   it("DM-SEP-6: the save consumes the code, then seals the secrets under PLATFORM_ACCOUNT_ID, then saves — the patch carries no plaintext", async () => {
@@ -1316,6 +1497,8 @@ describe("D5 terminal — saving NURIEL's terminal needs a consumed step-up code
             setApiPassword: false,
             clearCredentials: false,
             force: false,
+            apiKey: null,
+            apiPassword: null,
           },
           t.deps,
         ),
@@ -1518,7 +1701,90 @@ describe("D5 log, alerts and DB errors (DM-SEC-7)", () => {
         panelUrl: () => null,
         log,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
+    // delivered only when every recipient's e-mail went out; nobody to send to is not delivered
+    const base = { panelUrl: () => null, log };
+    const okSend = async () => ({ sent: true, skipped: false, id: "x", reason: null });
+    const skipSend = async () => ({ sent: false, skipped: true, id: null, reason: "off" });
+    expect(
+      await alertPlatformAdmins("late", ATTEMPT, {
+        ...base,
+        send: okSend,
+        recipients: () => ["a@example.invalid"],
+      }),
+    ).toBe(true);
+    expect(
+      await alertPlatformAdmins("late", ATTEMPT, {
+        ...base,
+        send: skipSend,
+        recipients: () => ["a@example.invalid"],
+      }),
+    ).toBe(false);
+    expect(
+      await alertPlatformAdmins("late", ATTEMPT, { ...base, send: okSend, recipients: () => [] }),
+    ).toBe(false);
+  });
+
+  it("X-17 (R2-7): the review claim rings once per claimed row; a stamped row whose e-mail failed gets an ALERT with its short id", async () => {
+    const other = "66666666-6666-4666-8666-666666666666";
+    const db = fakeRpc({
+      platform_attempt_review_alerts_claim: () => ({
+        data: [
+          { attempt_id: ATTEMPT, review_reason: "verify_exhausted" },
+          { attempt_id: other, review_reason: "document_issued" },
+          { attempt_id: "bad", review_reason: "late" },
+        ],
+      }),
+    });
+    const rang: [string, string][] = [];
+    const { log, lines } = fakeLog();
+    const claimed = await claimPlatformReviewAlerts(
+      {
+        rpc: db.rpc,
+        alert: async (reason, attemptId) => {
+          rang.push([reason, attemptId]);
+          return attemptId === ATTEMPT; // the second e-mail fails
+        },
+        log,
+      },
+      25,
+    );
+    expect(db.calls).toEqual([
+      { fn: "platform_attempt_review_alerts_claim", args: { _limit: 25 } },
+    ]);
+    expect(claimed).toBe(2);
+    expect(rang).toEqual([
+      ["verify_exhausted", ATTEMPT],
+      ["document_issued", other],
+    ]);
+    expect(lines).toEqual([
+      "[pay:platform] ALERT review_email_failed attempt=66666666",
+      "[pay:platform] ALERT review_claim_row",
+    ]);
+
+    // a DB failure or a throwing e-mail never breaks a return or a tick
+    const down = fakeRpc({
+      platform_attempt_review_alerts_claim: () => ({ error: { message: "x", code: "08006" } }),
+    });
+    expect(await claimPlatformReviewAlerts({ rpc: down.rpc, alert: async () => true, log })).toBe(
+      0,
+    );
+    const thrower = fakeRpc({
+      platform_attempt_review_alerts_claim: () => ({
+        data: [{ attempt_id: ATTEMPT, reason: "late" }],
+      }),
+    });
+    const t = fakeLog();
+    expect(
+      await claimPlatformReviewAlerts({
+        rpc: thrower.rpc,
+        alert: async () => {
+          throw new Error("down");
+        },
+        log: t.log,
+      }),
+    ).toBe(1);
+    expect(t.lines).toEqual([`[pay:platform] ALERT review_email_failed attempt=44444444`]);
   });
 
   it("an unknown DB failure is generic and logged with the function and SQLSTATE only", () => {
@@ -1547,7 +1813,7 @@ describe("D5 terminal wire shapes (arch §3.2: { patch } and { patch, challengeI
     enabled: true,
   };
 
-  it("DM-SEP-6: the same patch in both calls gives the same step-up intent; secret values in a code request are only flags", () => {
+  it("DM-SEP-6 + X-20: the same patch in both calls gives the same step-up intent; the code request carries the values", () => {
     const change = parseTerminalChange({ patch });
     expect(change).toEqual({
       terminalNumber: TERMINAL,
@@ -1556,8 +1822,9 @@ describe("D5 terminal wire shapes (arch §3.2: { patch } and { patch, challengeI
       setApiPassword: true,
       clearCredentials: false,
       force: false,
+      apiKey: FAKE_KEY,
+      apiPassword: FAKE_PASSWORD,
     });
-    expect(JSON.stringify(change)).not.toMatch(/FAKE_/);
     const save = parseTerminalSave({
       patch,
       challengeId: CHALLENGE.toUpperCase(),
@@ -1577,13 +1844,14 @@ describe("D5 terminal wire shapes (arch §3.2: { patch } and { patch, challengeI
       clearCredentials: save.clearCredentials,
       force: save.force,
     };
-    expect(intentOf(fromSave, "demo")).toEqual(intentOf(change, "demo"));
-    // the UI's own shape: flags only
-    expect(parseTerminalChange({ patch: { setApiKey: true, enabled: false } })).toMatchObject({
-      setApiKey: true,
-      setApiPassword: false,
-      enabled: false,
-    });
+    expect(intentOf(fromSave, "demo", COMMITS)).toEqual(intentOf(change, "demo", COMMITS));
+    // X-20: a flag without its value is refused (the code must bind the value); the UI sends flags AND values
+    expect(() => parseTerminalChange({ patch: { setApiKey: true, enabled: false } })).toThrow(
+      /הערך החדש/,
+    );
+    expect(
+      parseTerminalChange({ patch: { setApiKey: true, apiKey: FAKE_KEY, enabled: false } }),
+    ).toMatchObject({ setApiKey: true, setApiPassword: false, enabled: false, apiKey: FAKE_KEY });
   });
 
   it("bad input is refused before any server call (fixed texts, no value echoed)", () => {
