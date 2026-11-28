@@ -171,7 +171,7 @@ export interface StoreTerminalView {
   demo: boolean;
   configured: boolean;
   active: boolean;
-  environment: "demo" | "production" | null;
+  environment: "demo" | "pilot" | "production" | null;
   enabled: boolean;
   mode: "test" | "live" | null;
   status: "unverified" | "verified" | "failed" | null;
@@ -180,7 +180,36 @@ export interface StoreTerminalView {
   terminalHint: string | null;
   hasApiKey: boolean;
   hasApiPassword: boolean;
+  /** P-6a (4): the fixed mask when the secret is set, null when not — never the value, never its token */
+  apiKeyMask: string | null;
+  apiPasswordMask: string | null;
   credentialsUpdatedAt: string | null;
+}
+
+/** P-6a (4): what a screen shows for a stored secret (a constant: it says "set", nothing about the value) */
+export const SECRET_MASK = "••••••••";
+
+/**
+ * The store owner's card in the pilot (contract §7.2 P-6, P-8): only whether MAX card payment is on. No terminal
+ * number, no hint digits, no key — the platform admin sets the terminal up in platform management.
+ */
+export interface StorePilotStatus {
+  kind: "pilot";
+  active: boolean;
+  /** test payments are on for this store: the card shows the DEMO notice */
+  demo: boolean;
+}
+export const PILOT_ACTIVE_TEXT = "סליקת MAX פעילה";
+export const PILOT_SOON_TEXT = "הסליקה בקרוב";
+/** a store outside the pilot list (or an unmarked DB): the DB refuses, the screens say so */
+export const PILOT_NOT_LISTED = "החנות עוד לא בפיילוט — הסליקה בקרוב";
+
+const PILOT_KIND: StorePilotStatus["kind"] = "pilot";
+
+export function isStorePilotStatus(
+  view: StoreTerminalView | StorePilotStatus | null,
+): view is StorePilotStatus {
+  return view !== null && "kind" in view && view.kind === PILOT_KIND;
 }
 
 export const TERMINAL_STATUS_LABELS: Readonly<

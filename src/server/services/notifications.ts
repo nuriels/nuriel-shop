@@ -35,7 +35,7 @@ import {
 } from "@/lib/order-email-data.server";
 import { formatUnitIls } from "@/lib/catalog";
 import { POS_PAYMENT_LABEL, isPosPaymentMethod } from "@/lib/pos";
-import { paymentsEnv } from "@/platform/payments/server/env";
+import { testPaymentsEnv } from "@/platform/payments/server/env";
 
 export type NotificationTemplate = "order_confirmation" | "order_staff" | "order_shipped" | "test";
 export type NotificationProvider = "tenant" | "platform";
@@ -413,7 +413,7 @@ function customerPaymentHtml(prepared: PreparedOrderEmail): string {
   }
   if (method === "online" && status === "paid") {
     // MAX/Hyp DEMO: תשלום מקוון בכרטיס — המייל יוצא רק אחרי שהשרת אימת את התשלום (אין מסמך חשבונאי ב-DEMO)
-    const demo = paymentsEnv() === "demo";
+    const demo = testPaymentsEnv();
     return box(
       "💳 שולם בכרטיס אשראי",
       `<p style="margin:0;">התשלום התקבל — תודה!</p>${

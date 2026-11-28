@@ -13,8 +13,6 @@ import type { StoreOnlinePaymentsView, StoreTerminalView } from "@/platform/paym
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const NO_PERMISSION = "אין הרשאה לפעולה הזו";
-const TOO_MANY = "יותר מדי ניסיונות. אפשר לנסות שוב בעוד כמה דקות.";
 
 function tenantIdOf(value: unknown): string {
   const id = String(value ?? "").trim();
@@ -31,14 +29,10 @@ const optionalText = (value: unknown, max: number): string | undefined => {
 const optionalFlag = (value: unknown): boolean | undefined =>
   typeof value === "boolean" ? value : undefined;
 
-/** the platform host and a platform admin, before anything else */
+/** the platform host and a platform admin, before anything else (P-6a (5): online-payments.server.ts) */
 async function requirePlatformAdmin(userId: string, limit: number): Promise<void> {
-  const { isPlatformRequest } = await import("@/integrations/supabase/tenant.server");
-  if (!isPlatformRequest()) throw new Error("רק מפאנל הפלטפורמה");
-  const { isPlatformAdminUser } = await import("@/integrations/supabase/client.server");
-  if (!(await isPlatformAdminUser(userId))) throw new Error(NO_PERMISSION);
-  const { allowAction } = await import("@/lib/rate-limit.server");
-  if (!allowAction(`pay-admin:${userId}`, limit, 15 * 60 * 1000)) throw new Error(TOO_MANY);
+  const { requirePlatformTerminalAdmin } = await import("@/lib/online-payments.server");
+  await requirePlatformTerminalAdmin(userId, limit);
 }
 
 export const getStoreOnlinePayments = createServerFn({ method: "POST" })

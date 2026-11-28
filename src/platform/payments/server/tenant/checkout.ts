@@ -18,10 +18,11 @@ import { PAYMENT_MESSAGES } from "@/platform/payments/max/messages";
 import { paymentsRpc } from "@/platform/payments/server/db";
 import {
   hypEndpoint,
+  isTestEnv,
   modeAllowed,
-  paymentsEnv,
   paymentsReady,
   terminalAllowed,
+  testPaymentsEnv,
 } from "@/platform/payments/server/env";
 import { hypRequest } from "@/platform/payments/server/http";
 import {
@@ -59,11 +60,14 @@ export async function tenantPaymentOptions(
   const ready = paymentsReady("tenant");
   if (!ready.ok) return { available: false, demo: false, maxAmountMinor: null };
   const answer = await paymentsRpc("max_payments_active", { _tenant: tenantId, _actor: actorId });
-  const demo = ready.env === "demo";
+  const available = answer.error === null && answer.data === true;
+  // P-4: a viewer who is not offered the payment gets no hint of a test environment either
+  if (!available) return { available: false, demo: false, maxAmountMinor: null };
+  const demo = isTestEnv(ready.env);
   return {
-    available: answer.error === null && answer.data === true,
+    available,
     demo,
-    // DEMO = test mode only, and the DB refuses a test payment above ₪50 (L9: never offered above it)
+    // DEMO and the pilot = test mode only, and the DB refuses a test payment above ₪50 (L9: never offered above it)
     maxAmountMinor: demo ? DEMO_MAX_AMOUNT_MINOR : null,
   };
 }
@@ -210,7 +214,7 @@ export async function startTenantPayment(
       tenantLog.alert("terminal_credentials_refused", { ccode });
     throw new TenantPaymentError(SIGN_FAILED, "unavailable");
   }
-  return { url: sign.payUrl, demo: env === "demo" };
+  return { url: sign.payUrl, demo: isTestEnv(env) };
 }
 
 /** max_order_payment_status → the view (null when this viewer may not see the order) */
@@ -293,7 +297,7 @@ export async function customerOrderPayment(input: {
     tenantLog.warn("status_failed", { code: answer.error.code });
     return null;
   }
-  const view = orderPaymentView(answer.data, paymentsEnv() === "demo");
+  const view = orderPaymentView(answer.data, testPaymentsEnv());
   if (view?.attempt)
     view.attempt = {
       ...view.attempt,

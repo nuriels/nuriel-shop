@@ -3882,7 +3882,7 @@ export type Database = {
           _order: string;
           _customer: string | null;
           _guest_token_sha256: string | null;
-          _app_environment: "demo" | "production";
+          _app_environment: "demo" | "pilot" | "production";
         };
         Returns: Json;
       };
@@ -3923,7 +3923,7 @@ export type Database = {
           _card_brand: string | null;
           _card_last4: string | null;
           _return_flags: ("document" | "hk" | "multi")[];
-          _app_environment: "demo" | "production";
+          _app_environment: "demo" | "pilot" | "production";
         };
         Returns: Json;
       };
@@ -3985,7 +3985,7 @@ export type Database = {
           _actor: string;
           _tenant: string;
           _patch: Json;
-          _app_environment: "demo" | "production";
+          _app_environment: "demo" | "pilot" | "production";
         };
         Returns: Json;
       };
@@ -4005,7 +4005,7 @@ export type Database = {
           _target_kind: "ledger_charge";
           _target_id: string;
           _return_origin: string | null;
-          _app_environment: "demo" | "production";
+          _app_environment: "demo" | "pilot" | "production";
         };
         Returns: Json;
       };
@@ -4044,7 +4044,7 @@ export type Database = {
           _card_brand: string | null;
           _card_last4: string | null;
           _return_flags: ("document" | "hk" | "multi")[];
-          _app_environment: "demo" | "production";
+          _app_environment: "demo" | "pilot" | "production";
         };
         Returns: Json;
       };
@@ -4070,7 +4070,7 @@ export type Database = {
         Args: {
           _actor: string;
           _patch: Json;
-          _app_environment: "demo" | "production";
+          _app_environment: "demo" | "pilot" | "production";
           _challenge: string;
           _purpose_hash: string;
         };

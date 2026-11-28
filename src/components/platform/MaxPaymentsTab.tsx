@@ -42,6 +42,9 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
   const [force, setForce] = useState(false);
   // the DB refused the save because a payment of the store is in progress: ask before saving with force
   const [confirmForce, setConfirmForce] = useState(false);
+  // P-6a (4): a stored secret shows only its mask; "החלפה" opens an empty input
+  const [replaceKey, setReplaceKey] = useState(false);
+  const [replacePassword, setReplacePassword] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; code: string | null } | null>(null);
 
   const refresh = useCallback(async () => {
@@ -76,6 +79,8 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
       // write-only: the typed values leave the page as soon as they are saved
       setApiKey("");
       setApiPassword("");
+      setReplaceKey(false);
+      setReplacePassword(false);
       setTerminal("");
       setForce(false);
       toast.success("פרטי המסוף נשמרו");
@@ -170,34 +175,24 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
               data-testid="max-terminal"
             />
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="max-api-key">מפתח API</Label>
-            <Input
-              id="max-api-key"
-              type="password"
-              dir="ltr"
-              autoComplete="new-password"
-              spellCheck={false}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={s.hasApiKey ? "נשמר — להחלפה יש להקליד מחדש" : ""}
-              data-testid="max-api-key"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="max-api-password">סיסמת API</Label>
-            <Input
-              id="max-api-password"
-              type="password"
-              dir="ltr"
-              autoComplete="new-password"
-              spellCheck={false}
-              value={apiPassword}
-              onChange={(e) => setApiPassword(e.target.value)}
-              placeholder={s.hasApiPassword ? "נשמר — להחלפה יש להקליד מחדש" : ""}
-              data-testid="max-api-password"
-            />
-          </div>
+          <SecretField
+            id="max-api-key"
+            label="מפתח API"
+            mask={s.apiKeyMask}
+            replacing={replaceKey}
+            onReplace={() => setReplaceKey(true)}
+            value={apiKey}
+            onChange={setApiKey}
+          />
+          <SecretField
+            id="max-api-password"
+            label="סיסמת API"
+            mask={s.apiPasswordMask}
+            replacing={replacePassword}
+            onReplace={() => setReplacePassword(true)}
+            value={apiPassword}
+            onChange={setApiPassword}
+          />
         </div>
 
         <div className="flex flex-wrap gap-4 text-sm">
@@ -343,5 +338,53 @@ export function MaxPaymentsTab({ tenantId }: { tenantId: string }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * P-6a (4): one write-only secret. Stored → the fixed mask and "החלפה" (which opens an empty input); not stored →
+ * the empty input. The value typed here leaves the page with the save and is never shown again.
+ */
+function SecretField(props: {
+  id: string;
+  label: string;
+  mask: string | null;
+  replacing: boolean;
+  onReplace: () => void;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const showInput = props.mask === null || props.replacing;
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={props.id}>{props.label}</Label>
+      {showInput ? (
+        <Input
+          id={props.id}
+          type="password"
+          dir="ltr"
+          autoComplete="new-password"
+          spellCheck={false}
+          value={props.value}
+          onChange={(e) => props.onChange(e.target.value)}
+          data-testid={props.id}
+        />
+      ) : (
+        <div className="flex items-center gap-2">
+          <span dir="ltr" className="font-mono text-sm" data-testid={`${props.id}-mask`}>
+            {props.mask}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={props.onReplace}
+            data-testid={`${props.id}-replace`}
+          >
+            החלפה
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
