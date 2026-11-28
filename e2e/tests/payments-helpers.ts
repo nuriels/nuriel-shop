@@ -393,10 +393,13 @@ export function createOpenCharge(tenantId: string, amount: number, label: string
 // ------------------------------------------------------------------------------------------------------------
 // Fixtures: a store-B customer (non-staff), a cheap product (test payments are capped at ₪50), store B's manager
 // ------------------------------------------------------------------------------------------------------------
-export const CUSTOMER_B = {
-  email: "customer.b.pay@e2e.test",
+/** Run stamp: a fresh customer per spec and run (the order rate guard allows 30 orders / 10 min per customer) */
+const STAMP = `${Date.now().toString(36)}${randomBytes(2).toString("hex")}`;
+export type Account = { email: string; password: string };
+export const customerFor = (tag: string): Account => ({
+  email: `pay.${tag}.${STAMP}@e2e.test`,
   password: "E2e-Pay-Customer-1!",
-} as const;
+});
 export const MANAGER_B = {
   email: "manager.b.pay@e2e.test",
   password: "E2e-Pay-Manager-1!",
@@ -408,10 +411,15 @@ export const PAY_PRODUCT = {
   price: 12,
 } as const;
 
-export async function ensureStoreBFixtures(request: APIRequestContext) {
-  const customerId = await ensureUser(request, CUSTOMER_B);
+/** A non-staff, approved customer of store B (staff orders are always phone orders) + the fixtures below */
+export async function ensureStoreBFixtures(request: APIRequestContext, customer: Account) {
+  const customerId = await ensureUser(request, customer);
+  const username = customer.email
+    .split("@")[0]!
+    .replace(/[^a-z0-9]/gi, "_")
+    .slice(0, 40);
   sql(`INSERT INTO public.user_roles (tenant_id, user_id, email, username, role, is_approved)
-       VALUES ('${STORE_B.id}', '${customerId}', '${CUSTOMER_B.email}', 'customer_b_pay', 'customer', true)
+       VALUES ('${STORE_B.id}', '${customerId}', '${customer.email}', '${username}', 'customer', true)
        ON CONFLICT DO NOTHING`);
   sql(`INSERT INTO public.customer_profiles (tenant_id, user_id, business_name, contact_name, phone,
          business_address, city, price_tier, age_confirmed, profile_completed)
@@ -436,6 +444,7 @@ export async function ensureStoreBFixtures(request: APIRequestContext) {
 export async function placeOnlineOrder(
   request: APIRequestContext,
   token: string,
+  customer: Account,
   quantity = 1,
 ): Promise<{ id: string; order_number: string }> {
   const { url, anonKey } = supabaseEnv();
@@ -458,7 +467,7 @@ export async function placeOnlineOrder(
         customer_name: "לקוח תשלום מקוון",
         customer_tax_id: "123456782",
         customer_phone: "0521234567",
-        customer_email: CUSTOMER_B.email,
+        customer_email: customer.email,
         billing_city: "חיפה",
         billing_address: "הנמל 1",
         billing_zip: "3100000",
@@ -516,15 +525,28 @@ export async function payToReturn(
   return { reference, payUrl: started.url, location: approved.location };
 }
 
-/** Customer e-mails (the mail mock) since `since` */
+/** E-mails (the mail mock) whose recipient list holds `email`, sent since `since` */
 export async function mailsTo(request: APIRequestContext, email: string, since: number) {
   const calls = (await (await request.get(`${HYP}/__calls`)).json()) as {
+    method: string;
     url: string;
     body: string;
     at: number;
   }[];
+  const recipients = (body: string): string[] => {
+    try {
+      const to = (JSON.parse(body) as { to?: unknown }).to;
+      return (Array.isArray(to) ? to : [to]).map((a) => String(a ?? "").toLowerCase());
+    } catch {
+      return [];
+    }
+  };
   return calls.filter(
-    (c) => c.url.startsWith("/emails") && c.at >= since && c.body.includes(email),
+    (c) =>
+      c.method === "POST" &&
+      c.url.startsWith("/emails") &&
+      c.at >= since &&
+      recipients(c.body).some((r) => r.includes(email.toLowerCase())),
   );
 }
 
