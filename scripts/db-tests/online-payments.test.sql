@@ -1262,7 +1262,7 @@ SELECT tests.check('guest: the online guest order awaits payment; without the to
          :'g1', :'g_open0', :'g_issue1', :'g_issue2', :'g_open1', :'g_open2', :'g_status1', :'g_status2', :'g_bad'));
 
 -- ============================================================
--- 16. Paying NURIEL (decisions ה-3, ה-8; DM-PLAT-1 … 4) — store B pays one open billing.ledger charge
+-- 15. Paying NURIEL (decisions ה-3, ה-8; DM-PLAT-1 … 4) — store B pays one open billing.ledger charge
 -- ============================================================
 SELECT (SELECT md5(string_agg(to_jsonb(s)::text, ',' ORDER BY s.tenant_id)) FROM public.tenant_subscriptions s WHERE s.tenant_id IN (:SA, :SB)) AS subs_md5,
        (SELECT count(*) FROM public.billing_history) AS bh_count, (SELECT count(*) FROM public.tenant_addons) AS addons_count \gset
@@ -1541,7 +1541,7 @@ SELECT tests.check('DM-PLAT-3: only this file''s store B has provider rows, exac
              AND NOT EXISTS (SELECT 1 FROM billing.ledger WHERE tenant_id = %L AND source = 'provider')$$, :SB, :SA));
 
 -- ============================================================
--- 17. Credentials replaced while a payment is being verified; RLS as a second layer
+-- 16. Credentials replaced while a payment is being verified; RLS as a second layer
 -- ============================================================
 SELECT pg_temp.order_of(:SB, :C1, :P10, :SHIP_B, 1, 'online') AS r1 \gset
 SELECT pg_temp.t_open(:SB, :'r1', :C1) AS ar1 \gset
@@ -1571,7 +1571,7 @@ SELECT tests.check('RLS (second layer): every payments table carries its RESTRIC
   $$SELECT (SELECT count(*) FROM pg_policies WHERE schemaname = 'payments' AND roles = '{public}' AND permissive = 'RESTRICTIVE') = 16$$);
 
 -- ============================================================
--- 18. Store deletion (decision 15): payment records outlive the store; its credentials go with it
+-- 17. Store deletion (decision 15): payment records outlive the store; its credentials go with it
 -- ============================================================
 SELECT pg_temp.svc(format('SELECT public.platform_store_terminal_save(%L, %L, %L, %L)', :PLAT, :SD,
          jsonb_build_object('terminal_number', :'t_d', 'api_key_enc', pg_temp.tok('d-key'), 'api_password_enc', pg_temp.tok('d-pass'), 'enabled', true), 'demo')) AS ok \gset
@@ -1598,7 +1598,7 @@ SELECT tests.check('decision 15: deleting store D keeps its attempts, events and
          :SD, :'t_d'));
 
 -- ============================================================
--- 19. Cleanup: the switches off, the database unmarked (later files see online payments off)
+-- 18. Cleanup: the switches off, the database unmarked (later files see online payments off)
 -- ============================================================
 SELECT pg_temp.call(NULL, :PLAT, $$SELECT to_jsonb(ARRAY[public.platform_set_flag('max_payments', false),
          public.platform_set_flag('platform_terminal_payments', false)])$$) AS ok \gset

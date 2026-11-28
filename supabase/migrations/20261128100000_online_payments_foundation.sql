@@ -27,6 +27,11 @@
 --  14. DEMO: one payment only — max installments = 1 everywhere (M10).
 --   +  the "sent to Hyp, never returned" lists: max_unreturned_attempts / platform_unreturned_attempts (M9).
 --   +  ciphertext columns take the app's sealed format "v1:<kid>:<iv>:<tag>:<ct>" (base64url, contract §4).
+--   Lead decisions of 2026-11-28: key_id (8 hex) instead of key_version, equal to the kid inside every stored token;
+--   one store account per (store, provider) and one platform account per provider (the app binds accountId, the DB
+--   returns none); max_attempts_pending_verify / platform_attempts_pending_verify for the re-VERIFY job;
+--   return_origin validated as an origin of the store's own hosts and returned by the platform return / settle;
+--   max_order_payment_status shows attempt_id and review_reason to the store's staff and platform admins only.
 -- Additive only: no existing row changes; Grow, Bit, billing.*, billing_history and add-on objects are untouched.
 -- Patched by exact text (md5-pinned below, idempotent): orders_default_payment, place_order, place_guest_order and
 -- the orders_payment_check constraint. One BEGIN … COMMIT; safe to run again.
